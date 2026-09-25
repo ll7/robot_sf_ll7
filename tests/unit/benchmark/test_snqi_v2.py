@@ -571,6 +571,7 @@ def calibration_records():
             "scenario_id": scenario,
             "seed": seed,
             "status": "success",
+            "outcome": {"route_complete": True, "collision_event": False, "timeout_event": False},
             "horizon": 600,
             "scenario_params": {"run_horizon": 600, "run_dt": 0.1, "record_forces": True},
             "algorithm_metadata": {"execution_mode": "native"},
@@ -637,6 +638,77 @@ def spawn_clearance_fixture(overlap=False):
         "obstacle_overlap": False,
         "overlap": overlap,
     }
+
+
+@pytest.mark.parametrize("entrypoint", ["score", "calibration"])
+@pytest.mark.parametrize("defect", ["missing_outcome", "empty_respawn_event"])
+def test_spawn_validity_requires_producer_outcome_and_event_schema(entrypoint, defect):
+    """New producer rows cannot omit outcome or carry an empty respawn event."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+    from robot_sf.benchmark.spawn_validity import build_spawn_validity
+
+    rows, kwargs = calibration_records()
+    row = rows[0]
+    row["outcome"] = {"route_complete": True, "collision_event": False, "timeout_event": False}
+    row["spawn_validity"] = build_spawn_validity(
+        spawn_clearance_fixture(overlap=True), [], route_complete=True
+    )
+    if defect == "missing_outcome":
+        del row["outcome"]
+    else:
+        row["spawn_validity"]["respawn_overlap_events"] = [{}]
+    with pytest.raises(ValueError, match="spawn_validity"):
+        if entrypoint == "score":
+            score_episode(row, fixture_spec())
+        else:
+            derive_calibration_anchors(rows, **kwargs)
+
+
+@pytest.mark.parametrize("entrypoint", ["score", "calibration"])
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        (None, None),
+        ("group_id", None),
+        ("ped_rows", None),
+        ("step", None),
+        ("positions", None),
+        ("group_id", True),
+        ("step", -1),
+        ("ped_rows", [False]),
+        ("ped_rows", [0, 0]),
+        ("positions", []),
+        ("positions", [0]),
+        ("positions", [[0.0]]),
+        ("positions", [[0.0, True]]),
+        ("positions", [[0.0, float("inf")]]),
+    ],
+)
+def test_spawn_validity_checks_respawn_events_without_collisions(entrypoint, key, value):
+    """Event schema admission is independent of whether a collision was attributed."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+    from robot_sf.benchmark.spawn_validity import build_spawn_validity
+
+    rows, kwargs = calibration_records()
+    event = {"group_id": 0, "ped_rows": [0], "step": 10, "positions": [[0.0, 0.0]]}
+    if key is not None:
+        if value is None:
+            del event[key]
+        else:
+            event[key] = value
+    rows[0]["spawn_validity"] = build_spawn_validity(spawn_clearance_fixture(), [event])
+    assert rows[0]["spawn_validity"]["respawn_overlap_collisions"] == []
+    if key is None:
+        if entrypoint == "score":
+            assert "snqi_v2" in score_episode(rows[0], fixture_spec())["metrics"]
+        else:
+            assert derive_calibration_anchors(rows, **kwargs)
+        return
+    with pytest.raises(ValueError, match="spawn_validity"):
+        if entrypoint == "score":
+            score_episode(rows[0], fixture_spec())
+        else:
+            derive_calibration_anchors(rows, **kwargs)
 
 
 @pytest.mark.parametrize("entrypoint", ["score", "calibration"])
@@ -938,14 +1010,13 @@ def test_spawn_validity_completed_exception_requires_consistent_outcome(entrypoi
 
 
 @pytest.mark.parametrize("prior_collision", [False, True])
-@pytest.mark.parametrize("with_outcome", [False, True])
-def test_spawn_validity_preserves_producer_completed_route_exception(with_outcome, prior_collision):
+def test_spawn_validity_preserves_producer_completed_route_exception(prior_collision):
     """The producer permits a completed route despite reset-overlap telemetry."""
     from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
     from robot_sf.benchmark.spawn_validity import build_spawn_validity
 
     rows, kwargs = calibration_records()
-    if prior_collision and with_outcome:
+    if prior_collision:
         for row in rows:
             row["metrics"]["total_collision_count"] = 1
     expected_score = score_episode(rows[0], fixture_spec())
@@ -954,12 +1025,11 @@ def test_spawn_validity_preserves_producer_completed_route_exception(with_outcom
         row["spawn_validity"] = build_spawn_validity(
             spawn_clearance_fixture(overlap=True), [], route_complete=True
         )
-        if with_outcome:
-            row["outcome"] = {
-                "route_complete": True,
-                "collision_event": prior_collision,
-                "timeout_event": False,
-            }
+        row["outcome"] = {
+            "route_complete": True,
+            "collision_event": prior_collision,
+            "timeout_event": False,
+        }
     assert score_episode(rows[0], fixture_spec())["metrics"] == expected_score["metrics"]
     assert derive_calibration_anchors(rows, **kwargs) == expected_anchors
 
@@ -971,10 +1041,13 @@ def test_spawn_validity_accepts_absent_legacy_and_valid_producer_block(clearance
     from robot_sf.benchmark.spawn_validity import build_spawn_validity
 
     rows, kwargs = calibration_records()
+    for row in rows:
+        del row["outcome"]
     legacy_score = score_episode(rows[0], fixture_spec())
     legacy_anchors = derive_calibration_anchors(rows, **kwargs)
     for row in rows:
         row["spawn_validity"] = build_spawn_validity(clearance, [])
+        row["outcome"] = {"route_complete": True, "collision_event": False, "timeout_event": False}
     scored = score_episode(rows[0], fixture_spec())
     assert scored["metrics"] == legacy_score["metrics"]
     assert derive_calibration_anchors(rows, **kwargs) == legacy_anchors

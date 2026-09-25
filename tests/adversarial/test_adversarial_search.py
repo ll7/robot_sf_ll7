@@ -1115,8 +1115,11 @@ def test_multi_ped_adversarial_runtime_config_resets_and_steps() -> None:
         first_reset_positions = env.simulator.ped_pos.copy()
 
         assert env.simulator.ped_pos.shape[0] >= 2
+        # Keep this reset-path check independent of the action-space RNG and route
+        # transitions; it verifies the seeded scenario itself, not random control.
+        action = np.zeros(env.action_space.shape, dtype=env.action_space.dtype)
         for _ in range(3):
-            _obs, _reward, terminated, truncated, _info = env.step(env.action_space.sample())
+            _obs, _reward, terminated, truncated, _info = env.step(action)
             if terminated or truncated:
                 break
 

@@ -307,6 +307,22 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
     return repo, template, source_commit
 
 
+def _commit_metadata_template_payload(
+    repo: Path,
+    template: Path,
+    metadata_payload: object,
+) -> str:
+    """Commit a metadata-template variant with its manifest hash updated."""
+    metadata_path = repo / "zenodo_metadata.template.json"
+    _write_canonical_json(metadata_path, metadata_payload)
+    manifest_payload = yaml.safe_load(template.read_text(encoding="utf-8"))
+    manifest_payload["publication"]["metadata_sha256"] = _sha256(metadata_path)
+    _write_yaml(template, manifest_payload)
+    _git(repo, "add", metadata_path.name, template.name)
+    _git(repo, "commit", "-qm", "fixture: update metadata template")
+    return _git(repo, "rev-parse", "HEAD")
+
+
 def _identity_inputs(repo: Path, template: Path, source_commit: str) -> dict[str, object]:
     return {
         "template_path": template,
@@ -431,6 +447,130 @@ def test_clean_candidate_generates_reproducible_bootstrap_metadata_with_only_doi
     assert output.read_bytes() == first_bytes
     assert second_report == first_report
     assert _git(repo, "status", "--porcelain", "--untracked-files=normal") == ""
+
+
+def test_bootstrap_metadata_rejects_duplicate_keys_after_identity_resolution(
+    tmp_path: Path,
+) -> None:
+    """Resolving a source-base key cannot silently overwrite template metadata."""
+    repo, template, base_commit = _release_template_repository(tmp_path)
+    metadata_payload = json.loads((repo / "zenodo_metadata.template.json").read_text())
+    metadata_payload["metadata"][base_commit] = "existing value"
+    metadata_payload["metadata"]["{{latest_main_base_commit}}"] = "resolved value"
+    source_commit = _commit_metadata_template_payload(repo, template, metadata_payload)
+    release_tag = derive_sha_tag("paper-matrix-v2-h600-s30", source_commit)
+    output = repo / "output" / "blocked" / "zenodo_metadata.bootstrap.json"
+
+    with pytest.raises(ValueError, match="creates a duplicate key"):
+        write_release_bootstrap_metadata(
+            template_path=template,
+            output_path=output,
+            source_commit=source_commit,
+            release_tag=release_tag,
+            repository_root=repo,
+        )
+
+    assert not output.exists()
+    assert _git(repo, "status", "--porcelain", "--untracked-files=normal") == ""
+
+
+def test_bootstrap_metadata_rejects_unsupported_template_tokens(tmp_path: Path) -> None:
+    """A source-frozen bootstrap cannot preserve arbitrary unresolved tokens."""
+    repo, template, _ = _release_template_repository(tmp_path)
+    metadata_payload = json.loads((repo / "zenodo_metadata.template.json").read_text())
+    metadata_payload["metadata"]["description"] += " unexpected={{unsupported_token}}"
+    source_commit = _commit_metadata_template_payload(repo, template, metadata_payload)
+    release_tag = derive_sha_tag("paper-matrix-v2-h600-s30", source_commit)
+    output = repo / "output" / "blocked" / "zenodo_metadata.bootstrap.json"
+
+    with pytest.raises(ValueError, match="unsupported unresolved template token"):
+        write_release_bootstrap_metadata(
+            template_path=template,
+            output_path=output,
+            source_commit=source_commit,
+            release_tag=release_tag,
+            repository_root=repo,
+        )
+
+    assert not output.exists()
+
+
+def test_bootstrap_metadata_requires_a_json_object_template(tmp_path: Path) -> None:
+    """A DOI-pending metadata template must have an object as its top-level value."""
+    repo, template, _ = _release_template_repository(tmp_path)
+    metadata_payload = [
+        "{{release_tag}}",
+        "{{source_sha}}",
+        "{{latest_main_base_commit}}",
+        "{{concept_doi}}",
+        "{{version_doi}}",
+    ]
+    source_commit = _commit_metadata_template_payload(repo, template, metadata_payload)
+    release_tag = derive_sha_tag("paper-matrix-v2-h600-s30", source_commit)
+    output = repo / "output" / "blocked" / "zenodo_metadata.bootstrap.json"
+
+    with pytest.raises(ValueError, match="must be a JSON object"):
+        write_release_bootstrap_metadata(
+            template_path=template,
+            output_path=output,
+            source_commit=source_commit,
+            release_tag=release_tag,
+            repository_root=repo,
+        )
+
+    assert not output.exists()
+
+
+def test_bootstrap_metadata_requires_both_doi_slots_in_description(tmp_path: Path) -> None:
+    """The reserved DOI tokens stay in the citation description, not arbitrary fields."""
+    repo, template, _ = _release_template_repository(tmp_path)
+    metadata_payload = json.loads((repo / "zenodo_metadata.template.json").read_text())
+    metadata = metadata_payload["metadata"]
+    metadata["description"] = metadata["description"].replace(
+        "concept={{concept_doi}}", "concept=reserved"
+    )
+    metadata["keywords"] = ["{{concept_doi}}"]
+    source_commit = _commit_metadata_template_payload(repo, template, metadata_payload)
+    release_tag = derive_sha_tag("paper-matrix-v2-h600-s30", source_commit)
+    output = repo / "output" / "blocked" / "zenodo_metadata.bootstrap.json"
+
+    with pytest.raises(ValueError, match="exactly one concept DOI and version DOI token"):
+        write_release_bootstrap_metadata(
+            template_path=template,
+            output_path=output,
+            source_commit=source_commit,
+            release_tag=release_tag,
+            repository_root=repo,
+        )
+
+    assert not output.exists()
+
+
+def test_bootstrap_metadata_refuses_to_overwrite_stale_output(tmp_path: Path) -> None:
+    """A bootstrap output from another identity is preserved instead of replaced."""
+    repo, template, source_commit = _release_template_repository(tmp_path)
+    release_tag = derive_sha_tag("paper-matrix-v2-h600-s30", source_commit)
+    output = repo / "output" / "release" / "zenodo_metadata.bootstrap.json"
+    write_release_bootstrap_metadata(
+        template_path=template,
+        output_path=output,
+        source_commit=source_commit,
+        release_tag=release_tag,
+        repository_root=repo,
+    )
+    stale_bytes = b'{"metadata": {"stale": true}}\n'
+    output.write_bytes(stale_bytes)
+
+    with pytest.raises(ValueError, match="refusing to overwrite stale bootstrap metadata"):
+        write_release_bootstrap_metadata(
+            template_path=template,
+            output_path=output,
+            source_commit=source_commit,
+            release_tag=release_tag,
+            repository_root=repo,
+        )
+
+    assert output.read_bytes() == stale_bytes
 
 
 @pytest.mark.parametrize("invalid_state", ["dirty", "tag_exists"])

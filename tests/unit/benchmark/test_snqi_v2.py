@@ -181,6 +181,72 @@ def spec_files(tmp_path):
     return paths
 
 
+@pytest.mark.parametrize("value", [False, True])
+@pytest.mark.parametrize("term", TERMS)
+def test_weight_loader_rejects_boolean_numbers(spec_files, term, value):
+    """JSON booleans cannot exploit Python equality with declared numeric weights."""
+    document = json.loads(spec_files[0].read_text())
+    document["weights"][f"w_{term}"]["value"] = value
+    spec_files[0].write_text(json.dumps(document))
+    with pytest.raises(ValueError):
+        load_snqi_v2_spec(*spec_files)
+
+
+@pytest.mark.parametrize("value", [False, True])
+@pytest.mark.parametrize("term", QUALITY_TERMS)
+@pytest.mark.parametrize("bound", ["lower", "upper"])
+def test_anchor_loader_rejects_boolean_numbers(spec_files, term, bound, value):
+    """Neither physical zero nor calibrated anchors may be encoded as booleans."""
+    document = anchor_document()
+    document["anchors"][term][bound] = value
+    spec_files[1].write_text(json.dumps(document))
+    with pytest.raises(ValueError):
+        load_snqi_v2_spec(*spec_files)
+
+
+@pytest.mark.parametrize("value", [False, True])
+def test_anchor_loader_rejects_boolean_correlation(spec_files, value):
+    """A boolean cannot select the force variant through a numeric rho comparison."""
+    from robot_sf.benchmark.snqi.v2_spec import PP_EQUIV_FORCE
+
+    document = anchor_document()
+    document["force_decision"].update(
+        spearman_rho_F_N=value, source=PP_EQUIV_FORCE if value else SIMULATED_FORCE
+    )
+    spec_files[1].write_text(json.dumps(document))
+    with pytest.raises(ValueError, match="rho"):
+        load_snqi_v2_spec(*spec_files)
+
+
+@pytest.mark.parametrize("value", [False, True])
+@pytest.mark.parametrize(
+    "field",
+    [
+        "total_collision_count",
+        "time_to_goal_ideal_ratio",
+        "near_misses",
+        "executed_steps",
+        SIMULATED_FORCE,
+        "jerk_mean",
+        "curvature_mean",
+    ],
+)
+def test_scoring_rejects_boolean_numbers(field, value):
+    """Every active numeric scoring input rejects JSON booleans before normalization."""
+    with pytest.raises(ValueError, match="finite and nonnegative"):
+        compute_snqi_v2(metrics(**{field: value}), fixture_spec())
+
+
+@pytest.mark.parametrize("success", [False, True])
+def test_scoring_preserves_declared_boolean_success(success):
+    """The canonical producer's binary outcome has explicit 0/1 score semantics."""
+    boolean_metrics = metrics(success=success)
+    assert compute_snqi_v2(boolean_metrics, fixture_spec()) == compute_snqi_v2(
+        metrics(success=int(success)), fixture_spec()
+    )
+    assert boolean_metrics["success"] is success
+
+
 def test_spec_load_and_immutable(spec_files):
     spec = load_snqi_v2_spec(*spec_files)
     assert spec.weights == WEIGHTS
@@ -546,6 +612,27 @@ def test_calibration_rejects_missing_execution_contract(field):
     rows, kwargs = calibration_records()
     rows[0].pop(field)
     with pytest.raises(ValueError, match="calibration requires"):
+        derive_calibration_anchors(rows, **kwargs)
+
+
+@pytest.mark.parametrize("value", [False, True])
+@pytest.mark.parametrize(
+    "field", ["steps", "near_misses", SIMULATED_FORCE, "jerk_mean", "curvature_mean", "pp_force"]
+)
+def test_calibration_rejects_boolean_numbers(field, value):
+    """No malformed numeric sample can affect the F switch or a p95 anchor."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+    from robot_sf.benchmark.snqi.v2_spec import PP_EQUIV_FORCE
+
+    rows, kwargs = calibration_records()
+    if field == "pp_force":
+        for row in rows:
+            row["metrics"][SIMULATED_FORCE] = row["metrics"]["near_misses"]
+            row["metrics"][PP_EQUIV_FORCE] = 3
+        field = PP_EQUIV_FORCE
+    container = rows[0] if field == "steps" else rows[0]["metrics"]
+    container[field] = value
+    with pytest.raises(ValueError, match="finite and nonnegative"):
         derive_calibration_anchors(rows, **kwargs)
 
 

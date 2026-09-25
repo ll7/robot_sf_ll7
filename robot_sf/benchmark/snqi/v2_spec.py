@@ -68,7 +68,12 @@ FAMILY = {
 
 def finite_nonnegative(value: Any, label: str) -> float:
     """Return a finite nonnegative numeric value, rejecting absent/invalid data."""
-    if not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value < 0
+    ):
         raise ValueError(f"SNQI-v2 {label} must be finite and nonnegative")
     return float(value)
 
@@ -138,7 +143,11 @@ class SnqiV2Spec:
             raise ValueError("SNQI-v2 upper anchors must be positive")
         if anchors["T"] != 3 or anchors["N"] != 0.25:
             raise ValueError("SNQI-v2 normative anchors require T=3 and N=0.25")
-        if not math.isfinite(self.calibration_rho) or abs(self.calibration_rho) > 1:
+        if (
+            isinstance(self.calibration_rho, bool)
+            or not math.isfinite(self.calibration_rho)
+            or abs(self.calibration_rho) > 1
+        ):
             raise ValueError("SNQI-v2 calibration rho must be finite in [-1,1]")
         expected = PP_EQUIV_FORCE if abs(self.calibration_rho) >= 0.90 else SIMULATED_FORCE
         if self.force_source != expected:
@@ -209,7 +218,10 @@ def load_snqi_v2_spec(weights_path: Path, anchors_path: Path, family_path: Path)
     anchors = anchors_doc["anchors"]
     if set(anchors) != set(QUALITY_TERMS):
         raise ValueError("SNQI-v2 anchors must contain exactly T,N,F,J,K")
-    if any(entry.get("lower") != 0 for entry in anchors.values()):
+    if any(
+        finite_nonnegative(entry.get("lower"), f"lower anchor {term}") != 0
+        for term, entry in anchors.items()
+    ):
         raise ValueError("SNQI-v2 lower anchors must be physical zero")
     _validate_calibration(anchors_doc)
     calibration = anchors_doc["calibration"]

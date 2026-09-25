@@ -252,7 +252,9 @@ def normalize_snqi_v2_terms(metrics: Metrics, spec: SnqiV2Spec) -> dict[str, flo
     def required(name: str) -> float:
         return finite_nonnegative(metrics.get(name), name)
 
-    success = required("success")
+    # The episode producer declares success as a boolean; other inputs are numeric.
+    raw_success = metrics.get("success")
+    success = float(raw_success) if isinstance(raw_success, bool) else required("success")
     if success not in (0, 1):
         raise ValueError("SNQI-v2 success must be binary")
     steps = required("executed_steps")

@@ -245,6 +245,8 @@ For the later reviewed launch, the bundle gate takes a JSON `--spec` with `archi
 `config`, producer `campaign_manifest`, canonical `startup_receipt`, new `campaign_id` and
 `job_id`, raw `traces`, and `sidecar_dir`. The baseline report defaults to pinned SHA-256
 `e1637fa907d87f8a5456ee0f3367524e8e335b480c1d2bd5162215f08a3f7ffd`.
+Manifest artifact keys are campaign-relative, so a complete cold-retrieved tree can move to a
+new host path without changing its manifest bytes; files outside the campaign tree fail closed.
 After producer checksum and cold-retrieval checks, run
 `uv run python scripts/validation/check_issue_9671_force_bundle.py write --spec <spec.json> --manifest <new-manifest.json>`;
 record the printed manifest SHA separately, then use `validate --spec ... --manifest ...

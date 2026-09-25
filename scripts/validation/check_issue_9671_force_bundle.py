@@ -31,6 +31,15 @@ def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _label(name: str, path: Path, campaign_root: Path) -> str:
+    """Use relocation-stable names and reject files outside the campaign tree."""
+    try:
+        relative = path.resolve(strict=True).relative_to(campaign_root.resolve(strict=True))
+    except ValueError as exc:
+        raise ValueError(f"artifact is outside its campaign tree: {path}") from exc
+    return f"{name}/{relative.as_posix()}"
+
+
 def _canonical_row_sha(row: dict[str, Any]) -> str:
     return hashlib.sha256(
         json.dumps(row, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
@@ -259,6 +268,16 @@ def build_manifest(  # noqa: C901, PLR0912, PLR0915 - custody gate checks disjoi
     manifests = {name: Path(item["campaign_manifest"]) for name, item in campaigns.items()}
     campaign_ids = {name: item["campaign_id"] for name, item in campaigns.items()}
     trace_paths = [Path(path) for item in campaigns.values() for path in item["traces"]]
+    trace_owner = {
+        str(path): name for name, item in campaigns.items() for path in map(Path, item["traces"])
+    }
+    if len(trace_owner) != len(trace_paths):
+        raise ValueError("raw JSONL assigned to multiple campaigns")
+    producer_owner = {
+        str(path.with_name(path.name + ".provenance.json")): name
+        for name, item in campaigns.items()
+        for path in map(Path, item["traces"])
+    }
     release_report = trace_checker.check(
         archive,
         trace_paths,
@@ -273,6 +292,7 @@ def build_manifest(  # noqa: C901, PLR0912, PLR0915 - custody gate checks disjoi
     if (
         release_report["release_archive_sha256"] != _sha(archive)
         or set(release_report["trace_inputs_sha256"]) != {str(path) for path in trace_paths}
+        or set(release_report["producer_manifests_sha256"]) != set(producer_owner)
         or any(
             _sha(Path(path)) != digest
             for path, digest in release_report["trace_inputs_sha256"].items()
@@ -332,7 +352,8 @@ def build_manifest(  # noqa: C901, PLR0912, PLR0915 - custody gate checks disjoi
                 config_sha256=release_report["diagnostic_inputs"][name]["config_sha256"],
                 observer_sha256=observer_sha,
             )
-            sidecar_hashes[str(path)] = _sha(path)
+            label = _label(name, path, manifests[name].parent)
+            sidecar_hashes[label] = _sha(path)
             receipt_rows.append(
                 {
                     "planner": key[0],
@@ -340,8 +361,8 @@ def build_manifest(  # noqa: C901, PLR0912, PLR0915 - custody gate checks disjoi
                     "seed": key[2],
                     "episode_id": row["episode_id"],
                     "raw_row_canonical_sha256": _canonical_row_sha(row),
-                    "sidecar_path": str(path),
-                    "sidecar_sha256": sidecar_hashes[str(path)],
+                    "sidecar_path": label,
+                    "sidecar_sha256": sidecar_hashes[label],
                     "step_count": row["steps"],
                     "actor_count": len(sidecar["actor_ids"]),
                     "campaign_id": item["campaign_id"],
@@ -396,8 +417,14 @@ def build_manifest(  # noqa: C901, PLR0912, PLR0915 - custody gate checks disjoi
             }
             for name, item in sorted(campaigns.items())
         },
-        "raw_jsonl_sha256": release_report["trace_inputs_sha256"],
-        "producer_manifest_sha256": release_report["producer_manifests_sha256"],
+        "raw_jsonl_sha256": {
+            _label(trace_owner[path], Path(path), manifests[trace_owner[path]].parent): digest
+            for path, digest in release_report["trace_inputs_sha256"].items()
+        },
+        "producer_manifest_sha256": {
+            _label(producer_owner[path], Path(path), manifests[producer_owner[path]].parent): digest
+            for path, digest in release_report["producer_manifests_sha256"].items()
+        },
         "sidecar_sha256": sidecar_hashes,
         "episodes": sorted(
             receipt_rows, key=lambda item: (item["planner"], item["scenario"], item["seed"])

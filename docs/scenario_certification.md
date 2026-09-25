@@ -181,11 +181,15 @@ stratification. The `run_adversarial_search` path stores one verdict in each can
 `certification_status.details.scenario_admissibility` field in its search manifest. It reuses the
 certificate already produced for that candidate and lets the adapter bind it to the selected
 scenario bytes and runtime-referenced map/route inputs. Missing, mismatched, or unreadable evidence
-remains an unknown retained row. `run_map_elites` accepts an `admissibility_precheck`; it records
-each verdict next to the proposed candidate, skips only explicit exclusions before evaluation, and
-continues unknown, missing, malformed, unavailable, or raised-precheck outcomes to the evaluator.
-This keeps feasibility records separate from planner-evaluation results and does not alter the
-benchmark denominator.
+remains an unknown retained row. Each search-manifest candidate also records a separate
+`evaluation_disposition`: `rejected_by_search_space`, `rejected_by_admissibility`,
+`rejected_by_certification`, `evaluator_invoked`, or `not_recorded` for directly constructed
+evaluation rows that did not pass through the search runner. A bound admissibility rejection skips
+evaluation; an unknown or retained verdict does not override a failed certification gate.
+`run_map_elites` accepts an `admissibility_precheck`; it records each verdict next to the proposed
+candidate, skips only explicit exclusions before evaluation, and continues unknown, missing,
+malformed, unavailable, or raised-precheck outcomes to the evaluator. This keeps feasibility
+records separate from planner-evaluation results and does not alter the benchmark denominator.
 New QD comparison artifacts use `adversarial_qd_comparison.v1`: equal proposal slots are reported
 separately from each method's actual evaluator-call count. Historical `adversarial_qd_archive.v1`
 comparison fixtures remain unchanged.

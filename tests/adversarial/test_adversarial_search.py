@@ -54,6 +54,7 @@ from robot_sf.adversarial.samplers import (
     OptunaCandidateSampler,
     RandomCandidateSampler,
 )
+from robot_sf.adversarial.scenario_admissibility import ScenarioAdmissibilityVerdict
 from robot_sf.adversarial.scenario_manifest import build_manifest
 from robot_sf.adversarial.seed_sensitivity import (
     SeedSensitivityPerturbation,
@@ -2241,6 +2242,7 @@ def test_invalid_optimizer_proposals_are_rejected_before_evaluation(tmp_path: Pa
     assert sampler.observed[0].objective_value is None
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     assert manifest["candidates"][0]["error"] == "start.x outside search space"
+    assert manifest["candidates"][0]["evaluation_disposition"] == "rejected_by_search_space"
 
 
 def test_default_search_keeps_candidate_evaluation_sequential(
@@ -2319,6 +2321,68 @@ def test_required_certification_fails_closed_when_adapter_missing(tmp_path: Path
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     assert manifest["candidates"][0]["certification_status"]["status"] == "not_available"
     assert manifest["candidates"][0]["error"] == "scenario_cert.v1 adapter is not available"
+    assert manifest["candidates"][0]["evaluation_disposition"] == "rejected_by_certification"
+    assert (
+        manifest["candidates"][0]["certification_status"]["details"]["scenario_admissibility"][
+            "search_disposition"
+        ]
+        == "retain"
+    )
+
+
+def test_bound_admissibility_rejection_is_recorded_and_skips_evaluator(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A bound admissibility rejection is its own gate even with passing certification."""
+    config = dataclasses.replace(_config(tmp_path, require_certification=True), budget=1)
+    candidate = _candidate(7)
+    evaluated: list[CandidateSpec] = []
+
+    def reject_bound_candidate(
+        case_id: str,
+        *,
+        scenario_id: str | None,
+        **_kwargs: Any,
+    ) -> ScenarioAdmissibilityVerdict:
+        assert scenario_id == "template_adversarial_0000"
+        return ScenarioAdmissibilityVerdict(
+            case_id=case_id,
+            scenario_id=scenario_id,
+            verdict="structurally_invalid",
+            target_planner_outcome="not_evaluated",
+            search_disposition="reject",
+            reason_codes=("fixture_structural_exclusion",),
+            assumptions={},
+            evidence={"fixture": "bound to the materialized case_id"},
+        )
+
+    def evaluator(
+        _config: SearchConfig,
+        candidate: CandidateSpec,
+        _scenario_yaml_path: Path,
+        _candidate_dir: Path,
+    ) -> CandidateEvaluation:
+        evaluated.append(candidate)
+        raise AssertionError("an admissibility rejection reached the evaluator")
+
+    monkeypatch.setattr(search, "classify_scenario_admissibility", reject_bound_candidate)
+    result = search.run_adversarial_search(
+        config,
+        evaluator=evaluator,
+        certifier=lambda _candidate, _path, _required: passed_status("certification passed"),
+        sampler=_SequenceSampler([candidate]),
+    )
+
+    assert evaluated == []
+    assert result.num_invalid_candidates == 1
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    row = manifest["candidates"][0]
+    assert row["certification_status"]["status"] == "passed"
+    assert (
+        row["certification_status"]["details"]["scenario_admissibility"]["search_disposition"]
+        == "reject"
+    )
+    assert row["evaluation_disposition"] == "rejected_by_admissibility"
 
 
 def test_required_certification_uses_real_scenario_certification_api(tmp_path: Path) -> None:
@@ -2413,6 +2477,7 @@ def test_required_certification_uses_real_scenario_certification_api(tmp_path: P
     valid_status = manifest["candidates"][1]["certification_status"]
     assert invalid_status["status"] == "failed"
     assert invalid_status["details"]["scenario_admissibility"]["search_disposition"] == "retain"
+    assert manifest["candidates"][0]["evaluation_disposition"] == "rejected_by_certification"
     assert "start_inside_static_obstacle" in invalid_status["reason"]
     assert manifest["candidates"][0]["error"] == "start_inside_static_obstacle"
     assert valid_status["status"] == "passed"
@@ -2423,6 +2488,7 @@ def test_required_certification_uses_real_scenario_certification_api(tmp_path: P
     assert admissibility["search_disposition"] == "retain"
     assert admissibility["verdict"] == "admissible_feasibility_unknown"
     assert admissibility["evidence"]["selected_scenario_row_binding"]["status"] == "valid"
+    assert manifest["candidates"][1]["evaluation_disposition"] == "evaluator_invoked"
     assert manifest["candidates"][1]["trajectory_csv_path"].endswith(
         "candidate_0001/trajectory.csv"
     )

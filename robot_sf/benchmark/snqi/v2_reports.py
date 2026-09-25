@@ -655,7 +655,8 @@ def _validate_spawn_validity(episode: Mapping[str, Any]) -> None:
     if reset_overlap or respawn_collisions:
         metrics = episode.get("metrics", {})
         completed = (
-            isinstance(metrics, Mapping)
+            episode.get("status") == "success"
+            and isinstance(metrics, Mapping)
             and metrics.get("success") in (True, 1)
             and metrics.get("total_collision_count") == 0
         )

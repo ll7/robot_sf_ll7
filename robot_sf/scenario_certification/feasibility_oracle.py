@@ -60,6 +60,7 @@ from robot_sf.scenario_certification.feasibility_diagnostics import (
 from robot_sf.scenario_certification.input_identity import (
     runtime_input_records_match,
     scenario_input_identity,
+    scenario_manifest_records_match,
 )
 from robot_sf.scenario_certification.v1 import (
     GEOMETRICALLY_INFEASIBLE,
@@ -73,6 +74,7 @@ from robot_sf.scenario_certification.v1 import (
     measure_planned_path_clearance,
 )
 from robot_sf.training.scenario_loader import (
+    _ScenarioSourceMapping,
     build_robot_config_from_scenario,
     load_scenarios,
     load_scenarios_for_validation,
@@ -275,7 +277,15 @@ def make_envelope_scenario(
     """
     if not math.isfinite(float(envelope_radius_m)) or envelope_radius_m <= 0.0:
         raise ValueError("envelope_radius_m must be finite, positive, and non-zero")
-    mutated = deepcopy(dict(scenario))
+    mutated_values = deepcopy(dict(scenario))
+    if isinstance(scenario, _ScenarioSourceMapping):
+        mutated = _ScenarioSourceMapping(
+            mutated_values,
+            source_file=scenario._scenario_source_file,
+            manifest_sources=scenario._scenario_manifest_sources,
+        )
+    else:
+        mutated = mutated_values
     robot_cfg = dict(mutated.get("robot_config") or {})
     robot_cfg["radius"] = float(envelope_radius_m)
     mutated["robot_config"] = robot_cfg
@@ -300,7 +310,9 @@ def run_feasibility_oracle(
     traversal (rollout) and reports both margins.
 
     Args:
-        scenario: Scenario mapping (already envelope-overridden or nominal).
+        scenario: Loader-returned scenario mapping (already envelope-overridden or nominal). The
+            default certifier blocks rows without parse-time manifest identity or whose source
+            manifest closure has changed since loading.
         config: Oracle configuration (scenario path, rollout seed/algo).
         envelope_radius_m: Robot envelope radius used for this verdict.
         episode_runner: Optional injected scripted rollout runner; defaults to the
@@ -703,7 +715,7 @@ def _verdict_runtime_input_identity_stable(verdict: FeasibilityVerdict) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _geometric_margin(
+def _geometric_margin(  # noqa: C901 - the evidence gates remain explicit and fail-closed.
     scenario: Mapping[str, Any],
     *,
     scenario_path: Path,
@@ -728,6 +740,11 @@ def _geometric_margin(
             return _blocked_geometric_margin(
                 envelope_radius_m,
                 "runtime_input_identity_unavailable",
+            )
+        if not scenario_manifest_records_match(identity_before, scenario):
+            return _blocked_geometric_margin(
+                envelope_radius_m,
+                "scenario_manifest_parse_identity_mismatch",
             )
     try:
         if require_runtime_input_binding:

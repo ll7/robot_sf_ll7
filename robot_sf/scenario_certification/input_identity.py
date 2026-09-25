@@ -132,6 +132,58 @@ def runtime_input_records_match(
     return sorted(expected) == sorted(actual)
 
 
+def scenario_manifest_records_match(  # noqa: C901 - each identity gap fails closed.
+    identity: Mapping[str, Any],
+    scenario: Mapping[str, Any],
+) -> bool:
+    """Require a loaded row's parse-time manifest closure to match current bytes.
+
+    The loader stores absolute manifest paths and the digests of the exact bytes
+    parsed on the returned scenario mapping. This binds an in-memory row to the
+    current expanded manifest closure before the oracle classifies it.
+
+    Returns:
+        ``True`` only when the parse-time and current manifest closures match.
+    """
+    binding = getattr(scenario, "_scenario_manifest_sources", None)
+    if not isinstance(binding, tuple) or not binding:
+        return False
+    root_value = identity.get("path")
+    files = identity.get("files")
+    if not isinstance(root_value, str) or not isinstance(files, list):
+        return False
+    try:
+        root = Path(root_value).resolve()
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+    expected: list[tuple[str, str]] = []
+    for record in binding:
+        if (
+            not isinstance(record, tuple)
+            or len(record) != 2
+            or not all(isinstance(value, str) and value for value in record)
+        ):
+            return False
+        expected.append((Path(record[0]).resolve().as_posix(), record[1].lower()))
+
+    current: list[tuple[str, str]] = []
+    for record in files:
+        if not isinstance(record, Mapping) or record.get("role") != "scenario_manifest":
+            continue
+        path_value = record.get("path")
+        digest = record.get("sha256")
+        if not isinstance(path_value, str) or not path_value:
+            return False
+        if not isinstance(digest, str) or not digest:
+            return False
+        path = Path(path_value)
+        if not path.is_absolute():
+            path = root.parent / path
+        current.append((path.resolve().as_posix(), digest.lower()))
+    return bool(current) and sorted(expected) == sorted(current)
+
+
 def _load_scenario_report(
     scenario_path: str | Path,
     *,

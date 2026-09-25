@@ -89,12 +89,19 @@ class ScenarioValidationReport:
     raw_entry_count: int
 
 
-class _ScenarioValidationMapping(dict[str, Any]):
-    """Expanded scenario mapping carrying its manifest source internally."""
+class _ScenarioSourceMapping(dict[str, Any]):
+    """Expanded scenario mapping carrying parse-source identity internally."""
 
-    def __init__(self, scenario: Mapping[str, Any], *, source_file: Path) -> None:
+    def __init__(
+        self,
+        scenario: Mapping[str, Any],
+        *,
+        source_file: Path,
+        manifest_sources: tuple[tuple[str, str], ...] | None = None,
+    ) -> None:
         super().__init__(scenario)
         self._scenario_source_file = source_file
+        self._scenario_manifest_sources = manifest_sources
 
 
 @dataclass
@@ -266,7 +273,14 @@ def load_scenarios(path: str | Path, *, base_dir: Path | None = None) -> list[Ma
         root = base_dir.resolve()
         if not root.exists():
             raise ValueError(f"Scenario base_dir does not exist: {root}")
-    return _load_scenarios_recursive(resolved, visited=set(), root=root)
+    manifest_sources: list[ScenarioManifestSource] = []
+    scenarios = _load_scenarios_recursive(
+        resolved,
+        visited=set(),
+        root=root,
+        manifest_sources=manifest_sources,
+    )
+    return _bind_scenario_manifest_sources(scenarios, manifest_sources, fallback_source=resolved)
 
 
 def load_scenarios_for_validation(
@@ -328,13 +342,54 @@ def load_scenarios_for_validation(
         )
 
     return ScenarioValidationReport(
-        scenarios=scenarios,
+        scenarios=_bind_scenario_manifest_sources(
+            scenarios,
+            collector.manifest_sources,
+            fallback_source=resolved,
+        ),
         manifest_sources=collector.manifest_sources,
         entry_issues=collector.entry_issues,
         load_issues=collector.load_issues,
         load_error=None,
         raw_entry_count=collector.raw_entry_count,
     )
+
+
+def _bind_scenario_manifest_sources(
+    scenarios: list[Mapping[str, Any]],
+    manifest_sources: list[ScenarioManifestSource],
+    *,
+    fallback_source: Path,
+) -> list[Mapping[str, Any]]:
+    """Attach the exact parsed manifest closure to every expanded scenario row.
+
+    Returns:
+        Scenario rows carrying parse-time source identity as internal attributes.
+    """
+    binding: tuple[tuple[str, str], ...] | None = None
+    if manifest_sources and all(source.content_sha256 is not None for source in manifest_sources):
+        source_digests: dict[str, str] = {}
+        for source in manifest_sources:
+            path = source.path.resolve().as_posix()
+            digest = str(source.content_sha256).lower()
+            if path in source_digests and source_digests[path] != digest:
+                break
+            source_digests[path] = digest
+        else:
+            binding = tuple(sorted(source_digests.items()))
+    bound_scenarios: list[Mapping[str, Any]] = []
+    for scenario in scenarios:
+        source_file = getattr(scenario, "_scenario_source_file", fallback_source)
+        if not isinstance(source_file, Path):
+            source_file = fallback_source
+        bound_scenarios.append(
+            _ScenarioSourceMapping(
+                scenario,
+                source_file=source_file,
+                manifest_sources=binding,
+            )
+        )
+    return bound_scenarios
 
 
 def _load_scenarios_recursive(
@@ -344,6 +399,7 @@ def _load_scenarios_recursive(
     root: Path,
     map_search_paths: list[Path] | None = None,
     collector: _ScenarioValidationCollector | None = None,
+    manifest_sources: list[ScenarioManifestSource] | None = None,
 ) -> list[Mapping[str, Any]]:
     """Load scenarios from path, expanding any include references.
 
@@ -352,16 +408,17 @@ def _load_scenarios_recursive(
     """
     resolved = path.resolve()
     issues_before = collector.issue_count if collector is not None else 0
+    source_sink = collector.manifest_sources if collector is not None else manifest_sources
     if resolved in visited:
         raise ValueError(f"Scenario include cycle detected at '{resolved}'.")
     visited.add(resolved)
     try:
         data, content_sha256 = _load_yaml_for_scenario_expansion(
             resolved,
-            capture_digest=collector is not None,
+            capture_digest=source_sink is not None,
         )
-        if collector is not None:
-            collector.manifest_sources.append(
+        if source_sink is not None:
+            source_sink.append(
                 ScenarioManifestSource(resolved, data, content_sha256=content_sha256)
             )
         scenarios, includes, local_map_search_paths = _load_scenario_manifest(
@@ -385,6 +442,7 @@ def _load_scenarios_recursive(
                         root=root,
                         map_search_paths=effective_search_paths,
                         collector=collector,
+                        manifest_sources=manifest_sources,
                     )
                 )
             except (OSError, ValueError, RuntimeError, TypeError, yaml.YAMLError) as exc:
@@ -614,14 +672,13 @@ def _apply_scenario_overrides(
     if not overrides:
         return scenarios
     merged = [_deep_merge_mapping(scenario, overrides) for scenario in scenarios]
-    if collector is not None:
-        merged = [
-            _ScenarioValidationMapping(
-                scenario,
-                source_file=_scenario_validation_source(original, source),
-            )
-            for original, scenario in zip(scenarios, merged, strict=True)
-        ]
+    merged = [
+        _ScenarioSourceMapping(
+            scenario,
+            source_file=_scenario_validation_source(original, source),
+        )
+        for original, scenario in zip(scenarios, merged, strict=True)
+    ]
     return _normalize_scenarios(
         merged,
         source=source,
@@ -718,11 +775,10 @@ def _apply_scenario_overrides_by_name(
             merged.append(scenario)
             continue
         merged_scenario = _deep_merge_mapping(scenario, overrides_by_name[override_name])
-        if collector is not None:
-            merged_scenario = _ScenarioValidationMapping(
-                merged_scenario,
-                source_file=_scenario_validation_source(scenario, source),
-            )
+        merged_scenario = _ScenarioSourceMapping(
+            merged_scenario,
+            source_file=_scenario_validation_source(scenario, source),
+        )
         merged.append(merged_scenario)
 
     if unused:
@@ -1112,9 +1168,7 @@ def _normalize_scenarios(
                 map_registry=map_registry,
             )
             normalized.append(
-                _ScenarioValidationMapping(normalized_scenario, source_file=scenario_source)
-                if collector is not None
-                else normalized_scenario
+                _ScenarioSourceMapping(normalized_scenario, source_file=scenario_source)
             )
         except (OSError, TypeError, ValueError, RuntimeError, yaml.YAMLError) as exc:
             if collector is None:
@@ -1130,11 +1184,7 @@ def _normalize_scenarios(
             # Keep malformed mappings available for the validator and asset
             # classifier; only non-mapping rows are omitted from the expanded
             # mapping list because they cannot produce a scenario summary.
-            normalized.append(
-                _ScenarioValidationMapping(dict(scenario), source_file=scenario_source)
-                if collector is not None
-                else dict(scenario)
-            )
+            normalized.append(_ScenarioSourceMapping(dict(scenario), source_file=scenario_source))
     return normalized
 
 

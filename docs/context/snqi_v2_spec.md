@@ -76,6 +76,8 @@ run ID, source commit, episode hash, split identity and grid hash. The helper al
 records the unsaturated exposure-fraction correlation for comparison; only clipped N
 is the preregistered decision input. A constant
 correlation, nonpositive p95, missing row or undefined selected source fails.
+The frozen-anchor loader requires `quantile_method: linear` so p95 values cannot
+be loaded under different interpolation semantics.
 Derive the reviewed artifact with:
 
 ```bash
@@ -172,9 +174,11 @@ per arm. Each file must have a complete producer sidecar whose input hashes, sou
 algorithm, raw hash, and every row identity match. Raw config hashes are recomputed
 from scenario parameters and those parameters are checked against the canonical
 matrix before projection. Optional raw arm aliases must agree with the containing
-arm. Archive relocation preserves the exact arm suffix and original row-to-artifact
-associations. Metadata, raw files, sidecars, and independent inputs are hashed again
-before any anchor output is replaced; rejected custody leaves existing output intact.
+arm. The declared planner algorithm must match every episode and the producer
+sidecar's campaign algorithm identity. Archive relocation preserves the exact arm
+suffix and original row-to-artifact associations. Metadata, raw files, sidecars, and
+independent inputs are hashed again before any anchor output is replaced; rejected
+custody leaves existing output intact.
 
 ### Exact calibration producer identity
 

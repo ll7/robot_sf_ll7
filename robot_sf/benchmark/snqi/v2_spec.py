@@ -283,6 +283,8 @@ def load_snqi_v2_spec(weights_path: Path, anchors_path: Path, family_path: Path)
 def _validate_calibration(anchors_doc: dict[str, Any]) -> None:
     """Require complete nonfallback calibration provenance and declared p95 anchors."""
     calibration = anchors_doc["calibration"]
+    if calibration.get("quantile_method") != "linear":
+        raise ValueError("SNQI-v2 calibration quantile_method must be linear")
     _validate_calibration_grid(calibration)
     _validate_command_mode_census(calibration)
     _validate_frozen_custody(calibration)

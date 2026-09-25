@@ -193,6 +193,7 @@ def anchor_document():
         },
         "calibration": {
             "episode_count": 1344,
+            "quantile_method": "linear",
             "arms": [f"synthetic-{i}" for i in range(14)],
             "scenarios": [f"synthetic-{i}" for i in range(48)],
             "benchmark_execution": "nonfallback",
@@ -416,6 +417,18 @@ def test_anchor_loader_requires_complete_freeze_custody(spec_files, mutation):
         document["force_decision"]["threshold_absolute_rho"] = 0.95
     spec_files[1].write_text(json.dumps(document))
     with pytest.raises(ValueError, match="calibration|force decision"):
+        load_snqi_v2_spec(*spec_files)
+
+
+@pytest.mark.parametrize("quantile_method", [None, "nearest"])
+def test_anchor_loader_requires_linear_quantile_method(spec_files, quantile_method):
+    document = anchor_document()
+    if quantile_method is None:
+        document["calibration"].pop("quantile_method")
+    else:
+        document["calibration"]["quantile_method"] = quantile_method
+    spec_files[1].write_text(json.dumps(document))
+    with pytest.raises(ValueError, match="quantile_method must be linear"):
         load_snqi_v2_spec(*spec_files)
 
 
@@ -697,6 +710,41 @@ def test_enrichment_rejects_conflicting_identity_rows(tmp_path, identity_field):
             repo_root=tmp_path,
             bootstrap_samples=10,
         )
+
+
+@pytest.mark.parametrize("identity_source", ["planner", "producer_sidecar"])
+def test_enrichment_rejects_mismatched_algorithm_identity(tmp_path, identity_source):
+    """Declared, raw episode, and producer algorithm identities must agree."""
+    from robot_sf.benchmark.result_provenance import manifest_path_for_result_jsonl
+
+    path = tmp_path / "identity-mismatch.jsonl"
+    write_campaign_arm(path, [row for row in records() if row["algo"] == "a"])
+    sidecar = manifest_path_for_result_jsonl(path)
+    expected_algorithm = "a"
+    if identity_source == "planner":
+        expected_algorithm = "b"
+    else:
+        payload = json.loads(sidecar.read_text())
+        payload["campaign_identity"]["algorithm"] = "b"
+        sidecar.write_text(json.dumps(payload))
+    original_episode = path.read_bytes()
+    original_sidecar = sidecar.read_bytes()
+    with pytest.raises(ValueError, match="algorithm"):
+        enrich_campaign_v2(
+            [
+                {
+                    "status": "ok",
+                    "planner": {"key": "declared-arm", "algo": expected_algorithm},
+                    "episodes_path": str(path),
+                }
+            ],
+            fixture_spec(),
+            tmp_path / "reports",
+            repo_root=tmp_path,
+            bootstrap_samples=2,
+        )
+    assert path.read_bytes() == original_episode
+    assert sidecar.read_bytes() == original_sidecar
 
 
 def calibration_records():
@@ -2042,6 +2090,7 @@ def guarded_episode():
     return {
         **records()[0],
         "planner_key": "declared-arm",
+        "algo": "guarded_ppo",
         "algorithm_metadata": {
             "status": "ok",
             "algorithm": "ppo",

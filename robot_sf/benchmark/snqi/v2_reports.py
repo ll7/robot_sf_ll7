@@ -480,10 +480,17 @@ def _stage_v2_provenance(
     spec: SnqiV2Spec,
     records: Sequence[Mapping[str, Any]],
     original_hash: str,
+    expected_algorithm: str,
 ) -> None:
     """Rebind a verified producer sidecar with explicit enrichment lineage."""
     payload = parse_v2_json(sidecar.read_text(encoding="utf-8"))
     validate_result_provenance_manifest(payload)
+    campaign_identity = payload.get("campaign_identity")
+    if (
+        not isinstance(campaign_identity, Mapping)
+        or campaign_identity.get("algorithm") != expected_algorithm
+    ):
+        raise ValueError("SNQI-v2 producer sidecar algorithm does not match run algorithm")
     artifacts = [
         entry for entry in payload["raw_artifacts"] if entry.get("kind") == "episodes_jsonl"
     ]
@@ -574,6 +581,8 @@ def _validated_v2_record_algorithms(
     planner_identities.add(identity)
     algorithm = algorithms[0]
     declared_algorithm = planner.get("algo")
+    if declared_algorithm is not None and declared_algorithm != algorithm:
+        raise ValueError("SNQI-v2 declared planner algorithm does not match episode algorithm")
     bound_algorithm = declared_algorithm if declared_algorithm is not None else algorithm
     return {_planner(record): bound_algorithm for record in records}
 
@@ -614,12 +623,18 @@ def enrich_campaign_v2(
             original_hashes[sidecar] = sha256_file(sidecar)
             staged[path] = _temporary_sibling(path)
             records = _stage_v2_file(path, staged[path], spec, planner)
-            expected_algorithms.update(
-                _validated_v2_record_algorithms(records, planner, planner_identities)
-            )
+            run_algorithms = _validated_v2_record_algorithms(records, planner, planner_identities)
+            expected_algorithms.update(run_algorithms)
             staged[sidecar] = _temporary_sibling(sidecar)
             _stage_v2_provenance(
-                path, staged[path], sidecar, staged[sidecar], spec, records, original_hashes[path]
+                path,
+                staged[path],
+                sidecar,
+                staged[sidecar],
+                spec,
+                records,
+                original_hashes[path],
+                next(iter(run_algorithms.values())),
             )
             all_records.extend(records)
         artifacts = write_v2_reports(

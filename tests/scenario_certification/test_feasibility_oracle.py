@@ -47,6 +47,10 @@ from robot_sf.scenario_certification.feasibility_oracle import (
     run_envelope_sensitivity_sweep,
     run_feasibility_oracle,
 )
+from robot_sf.scenario_certification.input_identity import (
+    scenario_input_identity,
+    scenario_manifest_records_match,
+)
 from robot_sf.scenario_certification.v1 import (
     CERT_SCHEMA_VERSION,
     GEOMETRICALLY_INFEASIBLE,
@@ -54,6 +58,7 @@ from robot_sf.scenario_certification.v1 import (
     RouteCertificate,
     ScenarioCertificate,
 )
+from robot_sf.training.scenario_loader import load_scenarios_for_validation
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCENARIO_PATH = _REPO_ROOT / "configs/scenarios/archetypes/classic_head_on_corridor.yaml"
@@ -170,6 +175,56 @@ def test_make_envelope_scenario_rejects_non_positive_radius() -> None:
     """A non-positive envelope radius is rejected."""
     with pytest.raises(ValueError, match="envelope_radius_m"):
         make_envelope_scenario(_scenario(), envelope_radius_m=0.0)
+
+
+def test_parse_time_row_mutation_blocks_certifier_and_envelope_probe_is_bound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A changed expanded row cannot inherit the source manifest's certification."""
+    report = load_scenarios_for_validation(_SCENARIO_PATH)
+    scenario = report.scenarios[0]
+    scenario_id = str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"))
+    identity = scenario_input_identity(
+        _SCENARIO_PATH,
+        scenario_id=scenario_id,
+        validation_report=report,
+    )
+    assert identity["status"] == "available"
+    assert isinstance(identity.get("scenario_row_sha256"), str)
+    assert scenario_manifest_records_match(identity, scenario)
+
+    scenario["simulation_config"]["max_episode_steps"] += 1
+    assert not scenario_manifest_records_match(identity, scenario)
+    with pytest.raises(ValueError, match="scenario row changed after parse"):
+        make_envelope_scenario(scenario, envelope_radius_m=0.5)
+    certifier_called = False
+
+    def unexpected_certifier(*_args, **_kwargs):
+        nonlocal certifier_called
+        certifier_called = True
+        pytest.fail("certifier must not see a post-parse row mutation")
+
+    monkeypatch.setattr(feasibility_oracle, "_default_certifier", unexpected_certifier)
+    margin = feasibility_oracle._geometric_margin(
+        scenario,
+        scenario_path=_SCENARIO_PATH,
+        envelope_radius_m=1.0,
+        certifier=unexpected_certifier,
+        require_runtime_input_binding=True,
+    )
+    assert margin.classification == "blocked:scenario_manifest_parse_identity_mismatch"
+    assert margin.runtime_input_identity_stable is False
+    assert not certifier_called
+
+    fresh_report = load_scenarios_for_validation(_SCENARIO_PATH)
+    fresh_scenario = fresh_report.scenarios[0]
+    fresh_id = scenario_input_identity(
+        _SCENARIO_PATH,
+        scenario_id=scenario_id,
+        validation_report=fresh_report,
+    )
+    envelope = make_envelope_scenario(fresh_scenario, envelope_radius_m=0.5)
+    assert scenario_manifest_records_match(fresh_id, envelope)
 
 
 # ---------------------------------------------------------------------------

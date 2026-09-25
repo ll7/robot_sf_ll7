@@ -956,7 +956,7 @@ def _verified_bundle_copy_for_reference(
     content_cache: Mapping[str, bytes] | None,
     tracked_paths: set[str] | None,
 ) -> str | None:
-    """Use a bundle copy only when no explicit copy locator was declared."""
+    """Recover a missing bundle output unless ``artifact_path`` pins its identity."""
     if mapping.get("artifact_path"):
         return None
     return _bundle_copy_for_sha256(
@@ -1042,16 +1042,6 @@ def _artifact_hash_finding(  # noqa: PLR0913 - candidate-tree inputs stay explic
         )
     artifact_bytes = _repository_file_bytes(repo_root, resolved[0], content_ref, content_cache)
     if artifact_bytes is None:
-        if _verified_bundle_copy_for_reference(
-            repo_root,
-            display_path,
-            mapping,
-            declared_hash,
-            content_ref=content_ref,
-            content_cache=content_cache,
-            tracked_paths=tracked_paths,
-        ):
-            return None
         return _issue(
             display_path,
             "artifact_unreadable",
@@ -1064,16 +1054,6 @@ def _artifact_hash_finding(  # noqa: PLR0913 - candidate-tree inputs stay explic
         if binding is not None:
             if applied_bindings is not None and binding not in applied_bindings:
                 applied_bindings.append(dict(binding))
-            return None
-        if _verified_bundle_copy_for_reference(
-            repo_root,
-            display_path,
-            mapping,
-            declared_hash,
-            content_ref=content_ref,
-            content_cache=content_cache,
-            tracked_paths=tracked_paths,
-        ):
             return None
         return _issue(
             display_path,

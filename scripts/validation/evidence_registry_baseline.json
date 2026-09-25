@@ -376,27 +376,35 @@
       "uncommitted_artifact_missing_location": 64
     },
     "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_issue_1501_failure_0002/replay_1.provenance.json": {
+      "artifact_hash_mismatch": 1,
       "uncommitted_artifact_missing_location": 1
     },
     "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_issue_1501_failure_0002/replay_2.provenance.json": {
+      "artifact_hash_mismatch": 1,
       "uncommitted_artifact_missing_location": 1
     },
     "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/representative_success/episode_records_original.provenance.json": {
+      "artifact_hash_mismatch": 1,
       "uncommitted_artifact_missing_location": 1
     },
     "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/representative_success/episode_records_replay.provenance.json": {
+      "artifact_hash_mismatch": 1,
       "uncommitted_artifact_missing_location": 1
     },
     "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/smoke/corrected_success_smoke/episode_records.provenance.json": {
+      "artifact_hash_mismatch": 1,
       "uncommitted_artifact_missing_location": 1
+    },
+    "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_revision_mapping.json": {
+      "artifact_hash_mismatch": 1
     }
   },
-  "generated_at": "2026-09-25T12:00:04Z",
+  "generated_at": "2026-09-25T12:41:53Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {
     "by_code": {
-      "artifact_hash_mismatch": 15,
+      "artifact_hash_mismatch": 21,
       "config_missing_at_commit": 7,
       "dangling_commit": 23,
       "duplicate_campaign_id": 7,
@@ -407,7 +415,7 @@
       "missing_config_sha256": 53,
       "uncommitted_artifact_missing_location": 219
     },
-    "files_with_findings": 104,
-    "total_findings": 507
+    "files_with_findings": 105,
+    "total_findings": 513
   }
 }

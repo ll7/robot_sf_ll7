@@ -1413,6 +1413,70 @@ def test_evidence_bundle_binds_exact_copy_by_sha256(tmp_path: Path) -> None:
     assert projected["issues"] == []
 
 
+@pytest.mark.parametrize("projected", [False, True], ids=["ordinary", "projected"])
+def test_evidence_bundle_copy_cannot_hide_tracked_path_hash_mismatch(
+    tmp_path: Path, projected: bool
+) -> None:
+    """A matching copy cannot override bytes at the explicitly declared tracked path."""
+    linter = _load_linter()
+    repo, evidence, base_commit, _config_sha256 = _make_repo(tmp_path / "bundle-mismatch")
+    bundle = evidence / "case-study"
+    payload = bundle / "payload"
+    payload.mkdir(parents=True)
+
+    claimed = payload / "claimed.json"
+    claimed.write_text('{"result":"at declared path"}\n', encoding="utf-8")
+    matching_copy = payload / "correct.json"
+    matching_copy.write_text('{"result":"declared digest"}\n', encoding="utf-8")
+    declared_hash = hashlib.sha256(matching_copy.read_bytes()).hexdigest()
+    reference = payload / "reference.json"
+    reference.write_text(
+        json.dumps(
+            {
+                "artifact": {
+                    "path": claimed.relative_to(repo).as_posix(),
+                    "sha256": declared_hash,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    payload_files = [claimed, matching_copy, reference]
+    file_records = []
+    checksum_lines = []
+    for path in payload_files:
+        relative = path.relative_to(payload).as_posix()
+        actual_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+        file_records.append(
+            {"path": relative, "size_bytes": path.stat().st_size, "sha256": actual_hash}
+        )
+        checksum_lines.append(f"{actual_hash}  payload/{relative}\n")
+    (bundle / "checksums.sha256").write_text("".join(checksum_lines), encoding="utf-8")
+    (bundle / "evidence_bundle_manifest.json").write_text(
+        json.dumps({"schema_version": "evidence_bundle.v1", "files": file_records}),
+        encoding="utf-8",
+    )
+    _git(repo, "add", str(bundle.relative_to(repo)))
+    _git(repo, "commit", "-qm", "add conflicting path and matching bundle copy")
+    candidate = _git(repo, "rev-parse", "HEAD")
+
+    if projected:
+        report = linter.lint_evidence_registry(
+            repo, evidence, candidate_head=candidate, frozen_base=base_commit
+        )
+    else:
+        report = linter.lint_evidence_registry(repo, evidence)
+
+    mismatch_findings = [
+        issue
+        for issue in report["issues"]
+        if issue["path"] == reference.relative_to(repo).as_posix()
+        and issue["code"] == "artifact_hash_mismatch"
+    ]
+    assert len(mismatch_findings) == 1
+
+
 def test_config_hash_mismatch_is_classified(tmp_path: Path) -> None:
     """A declared producing-config hash must match the blob at the declared commit."""
     linter = _load_linter()

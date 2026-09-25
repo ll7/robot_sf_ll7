@@ -163,15 +163,25 @@ decision_summary: >-
   files were recovered byte-for-byte from their recorded source revision. The original renderer
   output was reconstructed byte-for-byte from the preserved comparison JSON and exact producer
   revision; no search or simulation was rerun. The linter moved from 438 findings across 98 files
-  to 507 across 104 files: all 69 increases are `uncommitted_artifact_missing_location` findings
-  in the six paths reviewed below. They refer to 64 per-candidate `episode_records.jsonl` outputs,
-  four historical/representative replay outputs, and one smoke replay output. Those raw episode
-  bytes are absent from the committed packet; similarly named records do not match their declared
-  hashes. The original comparison Markdown is archived at its exact producer-declared digest.
-  Preserve the remaining original references and report this evidence gap instead of synthesizing
-  replay records or relinking to nearby files. The pilot remains diagnostic and NO-GO for the scaled
-  #9648 campaign; this disposition does not treat missing outputs as successful evaluations or
-  promote the findings to benchmark evidence. The packet adds 58 evidence-tree paths.
+  to 513 across 105 files: 69 `uncommitted_artifact_missing_location` findings remain across the
+  six paths reviewed below, and six `artifact_hash_mismatch` findings are recorded across five
+  provenance files plus `source_revision_mapping.json`. The missing-location findings refer to 64
+  per-candidate `episode_records.jsonl` outputs, four historical/representative replay outputs,
+  and one smoke replay output. Those raw episode bytes are absent from the committed packet;
+  similarly named records do not match their declared hashes. Separately, five provenance records
+  declare historical episode-schema bytes at a current tracked path, and the source mapping
+  declares historical sampler bytes at a current tracked path. Each declared hash matches both
+  producer commit `58e516aa4f69ff3098bf518199f483006589758c` and its exact retained
+  `payload/historical_source/` copy, while the current tracked file has changed. Preserve these six
+  mismatches as visible, file-local historical-path findings: do not relink the records to the
+  copies or rewrite the packet. The existing policy still classifies `artifact_hash_mismatch` as
+  `integrity_repair_required`; this baseline disposition does not add a code-level exclusion or
+  waive other paths. The original comparison Markdown is archived at its exact producer-declared
+  digest. Preserve the remaining original references and report the evidence gap instead of
+  synthesizing replay records or relinking to nearby files. The pilot remains diagnostic and NO-GO
+  for the scaled #9648 campaign; this disposition does not treat missing outputs as successful
+  evaluations or promote the findings to benchmark evidence. The packet adds 58 evidence-tree
+  paths.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the
@@ -423,46 +433,96 @@ reviewed_files:
       were found in its payload inventory. Retain the references as incomplete provenance; do not
       reconstruct rows from aggregates or treat candidate summaries as replay evidence. This
       prevents a complete candidate-level replay/accounting claim and is part of the #9645 NO-GO.
+  - path: docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_revision_mapping.json
+    codes: [artifact_hash_mismatch]
+    disposition: baseline
+    reason: >-
+      The verified_source_files entry declares SHA-256
+      e06e27c9cd2811797e6f96dc9c9e9a2273dcc72a2398f22bcb054deda7b0d0cd for
+      scripts/tools/compare_adversarial_samplers.py. That digest matches the file at producer
+      commit 58e516aa4f69ff3098bf518199f483006589758c and the retained exact bytes at
+      docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_source/compare_adversarial_samplers.py;
+      the current tracked path has digest 098514f0917b0af864247be7efade6b2696cce77b2bcbba91c024a9679b85071.
+      Preserve the historical mapping and report this current-path mismatch; do not bind the
+      retained copy as if it were the current source or rewrite the packet. The mapping expressly
+      limits verification to its listed 11 files and makes no full-tree equivalence claim. This
+      exact file-local baseline disposition does not waive artifact_hash_mismatch elsewhere.
   - path: docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_issue_1501_failure_0002/replay_1.provenance.json
-    codes: [uncommitted_artifact_missing_location]
+    codes: [artifact_hash_mismatch, uncommitted_artifact_missing_location]
     disposition: baseline
     reason: >-
       The provenance records historical replay output `output/issue9645-historical-replay/failure_0002/replay.jsonl`
       and its SHA-256, but the exact bytes are absent from the committed packet. The similarly named retained packet JSONL
       does not match the declared digest. Keep the original producer reference; a scenario
-      or summary is insufficient to claim replay verification.
+      or summary is insufficient to claim replay verification. Separately, inputs.schema_path
+      declares SHA-256 3c04b755fbab4764a429c034af3897eaf0db30360b81aebb390f83722105e224 for
+      robot_sf/benchmark/schemas/episode.schema.v1.json. That digest matches producer commit
+      58e516aa4f69ff3098bf518199f483006589758c and retained bytes at
+      docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_source/episode.schema.v1.json;
+      the current tracked schema has digest 858f0a06cb0f2e8b356e47f5d1394fa3f2d304138f537045237897c8b1845848.
+      Preserve this visible current-path mismatch; do not bind the retained copy as the current
+      schema or rewrite the historical record.
   - path: docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_issue_1501_failure_0002/replay_2.provenance.json
-    codes: [uncommitted_artifact_missing_location]
+    codes: [artifact_hash_mismatch, uncommitted_artifact_missing_location]
     disposition: baseline
     reason: >-
       The provenance records historical replay output `output/issue9645-historical-replay/failure_0002/replay_2.jsonl`
       and its SHA-256, but the exact bytes are absent from the committed packet. The similarly named retained packet JSONL
       does not match the declared digest. Keep the original producer reference; a scenario
-      or summary is insufficient to claim replay verification.
+      or summary is insufficient to claim replay verification. Separately, inputs.schema_path
+      declares SHA-256 3c04b755fbab4764a429c034af3897eaf0db30360b81aebb390f83722105e224 for
+      robot_sf/benchmark/schemas/episode.schema.v1.json. That digest matches producer commit
+      58e516aa4f69ff3098bf518199f483006589758c and retained bytes at
+      docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_source/episode.schema.v1.json;
+      the current tracked schema has digest 858f0a06cb0f2e8b356e47f5d1394fa3f2d304138f537045237897c8b1845848.
+      Preserve this visible current-path mismatch; do not bind the retained copy as the current
+      schema or rewrite the historical record.
   - path: docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/representative_success/episode_records_original.provenance.json
-    codes: [uncommitted_artifact_missing_location]
+    codes: [artifact_hash_mismatch, uncommitted_artifact_missing_location]
     disposition: baseline
     reason: >-
       The provenance records the original candidate's `episode_records.jsonl` and digest, but the
       exact episode bytes are absent from the committed packet and the available records do not
       match that digest. Preserve the original source binding; the retained trajectory and summary
-      do not substitute for the missing episode record.
+      do not substitute for the missing episode record. Separately, inputs.schema_path declares
+      SHA-256 3c04b755fbab4764a429c034af3897eaf0db30360b81aebb390f83722105e224 for
+      robot_sf/benchmark/schemas/episode.schema.v1.json. That digest matches producer commit
+      58e516aa4f69ff3098bf518199f483006589758c and retained bytes at
+      docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_source/episode.schema.v1.json;
+      the current tracked schema has digest 858f0a06cb0f2e8b356e47f5d1394fa3f2d304138f537045237897c8b1845848.
+      Preserve this visible current-path mismatch; do not bind the retained copy as the current
+      schema or rewrite the historical record.
   - path: docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/representative_success/episode_records_replay.provenance.json
-    codes: [uncommitted_artifact_missing_location]
+    codes: [artifact_hash_mismatch, uncommitted_artifact_missing_location]
     disposition: baseline
     reason: >-
       The provenance records the representative replay's `episode_records_replay.jsonl` and
       digest, but the exact episode bytes are absent from the committed packet and the available
       records do not match that digest. Preserve the original source binding; the replay summary
-      does not substitute for the missing episode record.
+      does not substitute for the missing episode record. Separately, inputs.schema_path declares
+      SHA-256 3c04b755fbab4764a429c034af3897eaf0db30360b81aebb390f83722105e224 for
+      robot_sf/benchmark/schemas/episode.schema.v1.json. That digest matches producer commit
+      58e516aa4f69ff3098bf518199f483006589758c and retained bytes at
+      docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_source/episode.schema.v1.json;
+      the current tracked schema has digest 858f0a06cb0f2e8b356e47f5d1394fa3f2d304138f537045237897c8b1845848.
+      Preserve this visible current-path mismatch; do not bind the retained copy as the current
+      schema or rewrite the historical record.
   - path: docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/smoke/corrected_success_smoke/episode_records.provenance.json
-    codes: [uncommitted_artifact_missing_location]
+    codes: [artifact_hash_mismatch, uncommitted_artifact_missing_location]
     disposition: baseline
     reason: >-
       The smoke provenance records an `episode_records.jsonl` path and digest, but the exact raw
       episode bytes are absent from the committed packet. Its scenario, trajectory, and failure
       attribution are not substitutes for the missing episode record; preserve the source binding
-      and do not count it as a replay verified from archived raw output.
+      and do not count it as a replay verified from archived raw output. Separately,
+      inputs.schema_path declares SHA-256
+      3c04b755fbab4764a429c034af3897eaf0db30360b81aebb390f83722105e224 for
+      robot_sf/benchmark/schemas/episode.schema.v1.json. That digest matches producer commit
+      58e516aa4f69ff3098bf518199f483006589758c and retained bytes at
+      docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_source/episode.schema.v1.json;
+      the current tracked schema has digest 858f0a06cb0f2e8b356e47f5d1394fa3f2d304138f537045237897c8b1845848.
+      Preserve this visible current-path mismatch; do not bind the retained copy as the current
+      schema or rewrite the historical record.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

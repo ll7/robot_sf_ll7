@@ -275,3 +275,52 @@ def test_malformed_threshold_unknown_probe_and_missing_source_fail_closed() -> N
         "source_sha_invalid",
     }
     json.dumps(report, allow_nan=False)
+
+
+def test_invalid_matrix_and_arm_configuration_cannot_pass() -> None:
+    cases: list[tuple[str, Any, str]] = [
+        ("release_id", "", "release_id_invalid"),
+        ("scenario_ids", [], "scenario_ids_empty"),
+        ("scenario_ids", ["open", "open"], "scenario_ids_duplicate"),
+        ("seeds", [], "seeds_empty"),
+        ("seeds", [111, 111], "seeds_duplicate"),
+        ("probe_scenario_ids", ["probe", "probe"], "probe_scenario_ids_duplicate"),
+        (
+            "stationary_no_pedestrian_scenario_ids",
+            ["outside"],
+            "unknown_stationary_no_pedestrian_scenario",
+        ),
+        ("goal_key", "", "goal_key_invalid"),
+        ("stationary_key", "", "stationary_key_invalid"),
+        ("aware_keys", ["social", "social"], "aware_keys_duplicate"),
+        ("rows_by_arm", {"unexpected": []}, "unconfigured_arm_rows"),
+        ("expected_algorithms_by_arm", None, "expected_algorithms_missing"),
+    ]
+    for field, value, expected_code in cases:
+        inputs = _inputs()
+        inputs[field] = value
+
+        report = evaluate_oracles(**inputs)
+
+        assert report["gate"]["status"] == "fail", field
+        assert expected_code in {item["code"] for item in report["violations"]}, field
+
+
+def test_malformed_and_out_of_matrix_episode_rows_fail_closed() -> None:
+    inputs = _inputs()
+    rows = inputs["rows_by_arm"]["goal"]
+    rows[0] = None
+    rows[1] = {"scenario_id": "open", "seed": 112}
+    rows.append(_row("open", 999))
+
+    report = evaluate_oracles(**inputs)
+
+    assert report["gate"]["status"] == "fail"
+    assert report["coverage"]["goal"]["malformed_rows"]
+    assert report["coverage"]["goal"]["invalid_cells"]
+    assert report["coverage"]["goal"]["unexpected_rows"]
+    assert {item["code"] for item in report["violations"]} >= {
+        "row_invalid",
+        "missing_cell",
+        "unexpected_row",
+    }

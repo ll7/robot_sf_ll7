@@ -10,6 +10,10 @@ maintenance workflow and full discoverability surface.
 The repository-wide explicit issue-relationship contract and bounded migration audit are documented
 in [issue_relationships.md](issue_relationships.md).
 
+Issue #9653's fixture-verified co-evolution coordinator contract is documented in
+[issue_9653_coevolution_contract.md](issue_9653_coevolution_contract.md); its owner adapters and
+empirical loop remain pending exact review of replay, admissibility, and corpus contracts.
+
 ## Per-tool contract notes
 
 Each tool-specific contract lives in its own `docs/context/<tool>.md` note (for example

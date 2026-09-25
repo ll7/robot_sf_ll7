@@ -436,8 +436,20 @@ def _stage_v2_file(
     with temporary.open("w", encoding="utf-8") as output:
         for episode in read_episode_files([path]):
             spec.validate_evaluation_seeds([episode["seed"]])
+            declared_kinematics = planner.get("kinematics")
+            row_kinematics = episode.get("kinematics")
+            if (
+                declared_kinematics is not None
+                and row_kinematics is not None
+                and row_kinematics != declared_kinematics
+            ):
+                raise ValueError("SNQI-v2 planner/episode kinematics identity mismatch")
+            kinematics = declared_kinematics if declared_kinematics is not None else row_kinematics
+            scored_episode = {**episode, "planner_key": planner["key"]}
+            if kinematics is not None:
+                scored_episode["kinematics"] = kinematics
             enriched = score_episode(
-                {**episode, "planner_key": planner["key"], "kinematics": planner.get("kinematics")},
+                scored_episode,
                 spec,
                 expected_algorithm=planner.get("algo"),
             )
@@ -528,9 +540,42 @@ def _validated_run_input(
     ):
         raise ValueError("SNQI-v2 refuses fallback/degraded run summaries")
     planner = entry.get("planner", {})
-    if not planner.get("key"):
-        raise ValueError("SNQI-v2 run requires explicit planner.key")
+    if (
+        not isinstance(planner, Mapping)
+        or not isinstance(planner.get("key"), str)
+        or not planner["key"]
+        or (planner.get("algo") is not None and not isinstance(planner["algo"], str))
+    ):
+        raise ValueError("SNQI-v2 run requires explicit planner.key and a string planner.algo")
     return (repo_root / path_value).resolve(), planner
+
+
+def _validated_v2_record_algorithms(
+    records: Sequence[Mapping[str, Any]],
+    planner: Mapping[str, Any],
+    planner_identities: set[str],
+) -> dict[str, str]:
+    """Validate one staged run's identities and return its algorithm bindings.
+
+    Returns:
+        Mapping from each validated planner/kinematics identity to its algorithm.
+    """
+    identities = {_planner(record) for record in records}
+    algorithms = [record.get("algo") for record in records]
+    if (
+        len(identities) != 1
+        or any(not isinstance(algo, str) or not algo for algo in algorithms)
+        or len(set(algorithms)) != 1
+    ):
+        raise ValueError("SNQI-v2 run must have one planner/kinematics identity and one algorithm")
+    identity = next(iter(identities))
+    if identity in planner_identities:
+        raise ValueError("SNQI-v2 duplicate planner/kinematics identity")
+    planner_identities.add(identity)
+    algorithm = algorithms[0]
+    declared_algorithm = planner.get("algo")
+    bound_algorithm = declared_algorithm if declared_algorithm is not None else algorithm
+    return {_planner(record): bound_algorithm for record in records}
 
 
 def enrich_campaign_v2(
@@ -556,6 +601,7 @@ def enrich_campaign_v2(
     all_records = []
     original_hashes: dict[Path, str] = {}
     expected_algorithms = {}
+    planner_identities: set[str] = set()
     try:
         for entry in run_entries:
             path, planner = _validated_run_input(entry, repo_root)
@@ -568,8 +614,9 @@ def enrich_campaign_v2(
             original_hashes[sidecar] = sha256_file(sidecar)
             staged[path] = _temporary_sibling(path)
             records = _stage_v2_file(path, staged[path], spec, planner)
-            for record in records:
-                expected_algorithms[_planner(record)] = planner.get("algo")
+            expected_algorithms.update(
+                _validated_v2_record_algorithms(records, planner, planner_identities)
+            )
             staged[sidecar] = _temporary_sibling(sidecar)
             _stage_v2_provenance(
                 path, staged[path], sidecar, staged[sidecar], spec, records, original_hashes[path]
@@ -819,11 +866,23 @@ def _validate_respawn_collision(
         raise ValueError("SNQI-v2 inconsistent spawn_validity: unmatched respawn collision")
 
 
-def _validate_spawn_validity(episode: Mapping[str, Any]) -> None:
-    """Refuse invalid or ambiguous spawn admission while preserving legacy absence."""
+_MISSING_SPAWN_VALIDITY = object()
+
+
+def _spawn_validity_block(episode: Mapping[str, Any], *, required: bool) -> Any:
+    """Return producer metadata, preserving the legacy-absence sentinel."""
     if "spawn_validity" not in episode:
+        if required:
+            raise ValueError("SNQI-v2 calibration requires spawn_validity producer metadata")
+        return _MISSING_SPAWN_VALIDITY
+    return episode["spawn_validity"]
+
+
+def _validate_spawn_validity(episode: Mapping[str, Any], *, required: bool = False) -> None:
+    """Refuse invalid or ambiguous spawn admission while preserving legacy absence."""
+    block = _spawn_validity_block(episode, required=required)
+    if block is _MISSING_SPAWN_VALIDITY:
         return
-    block = episode["spawn_validity"]
     if not isinstance(block, Mapping) or not isinstance(block.get("invalid_run"), bool):
         raise ValueError("SNQI-v2 malformed spawn_validity: explicit boolean invalid_run required")
     _validate_spawn_validity_shape(block)
@@ -853,7 +912,10 @@ def _validate_spawn_validity(episode: Mapping[str, Any]) -> None:
 
 
 def validate_episode_execution(
-    episode: Mapping[str, Any], *, expected_algorithm: str | None = None
+    episode: Mapping[str, Any],
+    *,
+    expected_algorithm: str | None = None,
+    require_spawn_validity: bool = False,
 ) -> None:
     """Apply canonical execution classification with independently declared arm identity.
 
@@ -863,7 +925,7 @@ def validate_episode_execution(
     """
     from robot_sf.benchmark.release_acceptance import _status_markers  # noqa: PLC0415
 
-    _validate_spawn_validity(episode)
+    _validate_spawn_validity(episode, required=require_spawn_validity)
     if not isinstance(episode.get("algorithm_metadata", {}), Mapping):
         raise ValueError("SNQI-v2 malformed algorithm metadata")
     # This companion describes optional posthoc metrics, not planner execution.

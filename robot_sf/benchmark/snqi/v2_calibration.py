@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping, Sequence
 from itertools import product
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 from scipy.stats import spearmanr
@@ -37,8 +38,8 @@ from robot_sf.benchmark.snqi.v2_spec import (
 from robot_sf.benchmark.utils import _config_hash
 from robot_sf.common.artifact_paths import get_repository_root
 
-if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+_PP_EQUIV_STATUS = "experimental_counterfactual"
+_PP_EQUIV_VELOCITY_RULE = "backward_difference_first_forward"
 
 
 def derive_calibration_anchors(
@@ -77,7 +78,7 @@ def derive_calibration_anchors(
         _validate_calibration_episode(
             episode, expected_algorithm=(expected_algorithms or {}).get(identity[0])
         )
-        mode = resolve_execution_mode(episode["algorithm_metadata"])
+        mode = _resolve_calibration_execution_mode(episode["algorithm_metadata"])
         counts = command_modes[identity[0]]
         counts[mode] = counts.get(mode, 0) + 1
         metrics = episode["metrics"]
@@ -94,6 +95,7 @@ def derive_calibration_anchors(
         raise ValueError("SNQI-v2 F/N calibration correlation is undefined")
     rho = float(spearmanr(force, exposure).statistic)
     source = PP_EQUIV_FORCE if abs(rho) >= 0.90 else SIMULATED_FORCE
+    selected_source_contract = _selected_force_source_contract(episodes, source)
     anchors = {
         "T": {"lower": 0, "upper": 3, "type": "normative"},
         "N": {"lower": 0, "upper": 0.25, "type": "normative"},
@@ -109,7 +111,7 @@ def derive_calibration_anchors(
     ).hexdigest()
     return {
         "version": "SNQI-v2.0",
-        "status": "frozen",
+        "status": "derived_pending_custody",
         "anchors": anchors,
         "force_decision": {
             "source": source,
@@ -118,6 +120,11 @@ def derive_calibration_anchors(
             "threshold_absolute_rho": 0.90,
             "N": "clip(near_misses/steps/0.25)",
             "selected_source_coverage": len(episodes),
+            **(
+                {"selected_source_contract": selected_source_contract}
+                if selected_source_contract is not None
+                else {}
+            ),
         },
         "calibration": {
             "split_id": f"snqi-v2-dev101-102-{grid_hash[:12]}",
@@ -224,6 +231,7 @@ def freeze_campaign_anchors(
     document["calibration"]["campaign_manifest_sha256"] = hashlib.sha256(
         (campaign_root / "campaign_manifest.json").read_bytes()
     ).hexdigest()
+    document["status"] = "frozen"
     if any(sha256_file(Path(path)) != digest for path, digest in snapshots.items()):
         raise ValueError("SNQI-v2 calibration custody changed during analysis")
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -614,6 +622,8 @@ def _compact_calibration_record(
     metrics = record["metrics"]
     return {
         **{key: record.get(key) for key in ("scenario_id", "seed", "status", "horizon", "steps")},
+        "outcome": record["outcome"],
+        "spawn_validity": record["spawn_validity"],
         "planner_key": arm,
         "scenario_params": {
             key: record["scenario_params"][key]
@@ -626,6 +636,9 @@ def _compact_calibration_record(
             **{
                 key: metrics.get(key)
                 for key in (
+                    "success",
+                    "total_collision_count",
+                    "time_to_goal_ideal_ratio",
                     SIMULATED_FORCE,
                     PP_EQUIV_FORCE,
                     "near_misses",
@@ -634,7 +647,13 @@ def _compact_calibration_record(
                 )
             },
             "robot_force_metadata": {
-                "sample_timing": metrics["robot_force_metadata"]["sample_timing"]
+                key: metrics["robot_force_metadata"][key]
+                for key in (
+                    "sample_timing",
+                    "pp_equiv_status",
+                    "pp_equiv_velocity_rule",
+                )
+                if key in metrics["robot_force_metadata"]
             },
         },
     }
@@ -652,14 +671,46 @@ def _validate_provenance(run_id: str, source_commit: str, episodes_sha256: str) 
         raise ValueError("SNQI-v2 calibration run_id is required")
 
 
+def _selected_force_source_contract(
+    episodes: Sequence[Mapping[str, Any]], source: str
+) -> dict[str, str] | None:
+    """Validate and describe the selected force producer contract.
+
+    Returns:
+        The declared producer contract for the selected counterfactual source,
+        or ``None`` when the simulated source remains selected.
+    """
+    if source != PP_EQUIV_FORCE:
+        return None
+    for episode in episodes:
+        metrics = episode.get("metrics")
+        metadata = metrics.get("robot_force_metadata") if isinstance(metrics, Mapping) else None
+        if (
+            not isinstance(metadata, Mapping)
+            or metadata.get("pp_equiv_status") != _PP_EQUIV_STATUS
+            or metadata.get("pp_equiv_velocity_rule") != _PP_EQUIV_VELOCITY_RULE
+        ):
+            raise ValueError(
+                "SNQI-v2 calibration requires the declared ped-ped-equivalent force "
+                "counterfactual status and velocity rule"
+            )
+        finite_nonnegative(metrics.get(PP_EQUIV_FORCE), PP_EQUIV_FORCE)
+    return {
+        "pp_equiv_status": _PP_EQUIV_STATUS,
+        "pp_equiv_velocity_rule": _PP_EQUIV_VELOCITY_RULE,
+    }
+
+
 def _validate_calibration_episode(
     episode: Mapping[str, Any], *, expected_algorithm: str | None = None
 ) -> None:
     """Require frozen acquisition settings and declared, nonfallback planner execution."""
-    validate_episode_execution(episode, expected_algorithm=expected_algorithm)
+    validate_episode_execution(
+        episode, expected_algorithm=expected_algorithm, require_spawn_validity=True
+    )
     if episode.get("status") not in {"success", "collision", "failure"}:
         raise ValueError("SNQI-v2 calibration rejects invalid episode execution status")
-    mode = resolve_execution_mode(episode.get("algorithm_metadata"))
+    mode = _resolve_calibration_execution_mode(episode.get("algorithm_metadata"))
     if mode not in {"native", "adapter", "mixed"}:
         raise ValueError(
             "SNQI-v2 calibration requires explicit native, adapter or mixed command mode"
@@ -672,6 +723,51 @@ def _validate_calibration_episode(
         or params.get("record_forces") is not True
     ):
         raise ValueError("SNQI-v2 calibration requires H600/dt0.1 with recorded forces")
-    metadata = episode.get("metrics", {}).get("robot_force_metadata", {})
+    _validate_calibration_score_inputs(episode)
+    metrics = episode["metrics"]
+    metadata = metrics.get("robot_force_metadata", {})
+    if not isinstance(metadata, Mapping):
+        raise ValueError("SNQI-v2 calibration requires robot force producer metadata")
     if metadata.get("sample_timing") != "pre_integration":
         raise ValueError("SNQI-v2 calibration requires pre-integration robot force samples")
+
+
+def _validate_calibration_score_inputs(episode: Mapping[str, Any]) -> None:
+    """Reject calibration rows that cannot produce a declared v2 score."""
+    metrics = episode.get("metrics")
+    if not isinstance(metrics, Mapping):
+        raise ValueError("SNQI-v2 calibration requires score metrics")
+    raw_success = metrics.get("success")
+    success = (
+        float(raw_success)
+        if isinstance(raw_success, bool)
+        else finite_nonnegative(raw_success, "success")
+    )
+    if success not in (0.0, 1.0):
+        raise ValueError("SNQI-v2 success must be binary")
+    collisions = finite_nonnegative(metrics.get("total_collision_count"), "total_collision_count")
+    if not collisions.is_integer():
+        raise ValueError("SNQI-v2 total_collision_count must be an integer")
+    if success:
+        finite_nonnegative(metrics.get("time_to_goal_ideal_ratio"), "time_to_goal_ideal_ratio")
+
+
+def _resolve_calibration_execution_mode(metadata: Any) -> str:
+    """Refuse conflicting mode declarations before counting calibration commands.
+
+    Returns:
+        The validated execution mode used for the calibration census.
+    """
+    if not isinstance(metadata, Mapping):
+        return resolve_execution_mode(metadata)
+    declarations = [metadata.get("execution_mode")]
+    for key in ("planner_kinematics", "adapter_impact"):
+        nested = metadata.get(key)
+        if nested is not None and not isinstance(nested, Mapping):
+            raise ValueError(f"SNQI-v2 calibration has malformed {key} execution metadata")
+        if isinstance(nested, Mapping):
+            declarations.append(nested.get("execution_mode"))
+    present = [value for value in declarations if value is not None]
+    if any(not isinstance(value, str) for value in present) or len(set(present)) > 1:
+        raise ValueError("SNQI-v2 calibration has conflicting execution_mode declarations")
+    return present[0] if present else "unknown"

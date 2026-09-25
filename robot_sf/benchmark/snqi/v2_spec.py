@@ -10,6 +10,7 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass
+from itertools import product
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
@@ -282,17 +283,46 @@ def load_snqi_v2_spec(weights_path: Path, anchors_path: Path, family_path: Path)
 def _validate_calibration(anchors_doc: dict[str, Any]) -> None:
     """Require complete nonfallback calibration provenance and declared p95 anchors."""
     calibration = anchors_doc["calibration"]
+    _validate_calibration_grid(calibration)
+    _validate_command_mode_census(calibration)
+    _validate_frozen_custody(calibration)
+    _validate_force_decision_contract(anchors_doc)
+    if any(anchors_doc["anchors"][key].get("type") != "calibration_p95" for key in ("F", "J", "K")):
+        raise ValueError("SNQI-v2 F/J/K must be calibration p95 anchors")
+
+
+def _validate_calibration_grid(calibration: dict[str, Any]) -> None:
+    """Check the declared dev split and its self-consistent grid identity."""
+    arms = calibration.get("arms")
+    scenarios = calibration.get("scenarios")
+    seeds = calibration.get("seeds")
     if (
-        calibration.get("episode_count") != 1344
-        or len(calibration["arms"]) != 14
-        or len(set(calibration["arms"])) != 14
-        or len(calibration["scenarios"]) != 48
-        or len(set(calibration["scenarios"])) != 48
+        not isinstance(arms, list)
+        or len(arms) != 14
+        or any(not isinstance(arm, str) or not arm or Path(arm).name != arm for arm in arms)
+        or len(set(arms)) != 14
+        or not isinstance(scenarios, list)
+        or len(scenarios) != 48
+        or any(not isinstance(scenario, str) or not scenario for scenario in scenarios)
+        or len(set(scenarios)) != 48
+        or seeds != [101, 102]
+        or calibration.get("episode_count") != 1344
         or calibration.get("benchmark_execution") != "nonfallback"
     ):
         raise ValueError("SNQI-v2 calibration requires 14 arms x48 scenarios x2 nonfallback seeds")
+    grid = sorted(product(arms, scenarios, seeds))
+    grid_sha256 = hashlib.sha256(json.dumps(grid, separators=(",", ":")).encode()).hexdigest()
+    if calibration.get("grid_sha256") != grid_sha256:
+        raise ValueError("SNQI-v2 calibration grid_sha256 does not match its declared split")
+    if calibration.get("split_id") != f"snqi-v2-dev101-102-{grid_sha256[:12]}":
+        raise ValueError("SNQI-v2 calibration split_id does not match its declared grid")
+
+
+def _validate_command_mode_census(calibration: dict[str, Any]) -> None:
+    """Require a complete and bounded per-arm command-mode census."""
+    arms = calibration["arms"]
     census = calibration.get("command_mode_counts")
-    if not isinstance(census, dict) or set(census) != set(calibration["arms"]):
+    if not isinstance(census, dict) or set(census) != set(arms):
         raise ValueError("SNQI-v2 calibration requires every arm's command-mode census")
     for counts in census.values():
         if (
@@ -303,14 +333,86 @@ def _validate_calibration(anchors_doc: dict[str, Any]) -> None:
             or sum(counts.values()) != 96
         ):
             raise ValueError("SNQI-v2 calibration command-mode census requires 96 rows per arm")
-    for key, length in (("episodes_sha256", 64), ("source_commit", 40)):
-        value = calibration.get(key, "")
-        if len(value) != length or any(c not in "0123456789abcdef" for c in value):
-            raise ValueError(f"SNQI-v2 invalid calibration {key}")
-    if not calibration.get("run_id"):
-        raise ValueError("SNQI-v2 calibration run_id is required")
-    if any(anchors_doc["anchors"][key].get("type") != "calibration_p95" for key in ("F", "J", "K")):
-        raise ValueError("SNQI-v2 F/J/K must be calibration p95 anchors")
+
+
+def _valid_digest(value: Any, length: int = 64) -> bool:
+    """Return whether a value is a lowercase hexadecimal digest of the required size."""
+    return (
+        isinstance(value, str)
+        and len(value) == length
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _validate_frozen_custody(calibration: dict[str, Any]) -> None:
+    """Require source maps and hashes produced only after the archive freeze checks."""
+    if not calibration.get("run_id") or not _valid_digest(calibration.get("source_commit"), 40):
+        raise ValueError("SNQI-v2 calibration run/source identity is incomplete")
+    episode_files = calibration.get("episode_files_sha256")
+    sidecars = calibration.get("producer_sidecars_sha256")
+    arms = calibration["arms"]
+    expected_episode_paths = {f"runs/{arm}__differential_drive/episodes.jsonl" for arm in arms}
+    expected_sidecar_paths = {
+        f"runs/{arm}__differential_drive/episodes.jsonl.provenance.json" for arm in arms
+    }
+    if (
+        not isinstance(episode_files, dict)
+        or set(episode_files) != expected_episode_paths
+        or any(not _valid_digest(value) for value in episode_files.values())
+        or not isinstance(sidecars, dict)
+        or set(sidecars) != expected_sidecar_paths
+        or any(not _valid_digest(value) for value in sidecars.values())
+    ):
+        raise ValueError(
+            "SNQI-v2 frozen calibration requires every episode and producer-sidecar hash"
+        )
+    expected_episodes_sha256 = hashlib.sha256(
+        json.dumps(episode_files, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    if calibration.get("episodes_sha256") != expected_episodes_sha256:
+        raise ValueError("SNQI-v2 calibration episodes_sha256 does not bind the episode-file map")
+    for key in ("campaign_config_hash", "campaign_manifest_sha256"):
+        if not _valid_digest(calibration.get(key)):
+            raise ValueError(f"SNQI-v2 frozen calibration requires {key}")
+    if calibration.get("episodes_hash_rule") != (
+        "sha256(sorted compact JSON relative-path-to-file-sha256 map)"
+    ):
+        raise ValueError("SNQI-v2 frozen calibration has an unsupported episode hash rule")
+
+
+def _validate_force_decision_contract(anchors_doc: dict[str, Any]) -> None:
+    """Require the pre-registered threshold, complete coverage and source contract."""
+    force_decision = anchors_doc.get("force_decision")
+    if not isinstance(force_decision, dict):
+        raise ValueError("SNQI-v2 calibration force decision is missing")
+    rho = force_decision.get("spearman_rho_F_N")
+    if (
+        isinstance(rho, bool)
+        or not isinstance(rho, (int, float))
+        or not math.isfinite(rho)
+        or abs(rho) > 1
+    ):
+        raise ValueError("SNQI-v2 calibration rho must be finite in [-1,1]")
+    if (
+        force_decision.get("threshold_absolute_rho") != 0.90
+        or force_decision.get("selected_source_coverage") != 1344
+        or force_decision.get("N") != "clip(near_misses/steps/0.25)"
+    ):
+        raise ValueError("SNQI-v2 force decision threshold, N term or source coverage is invalid")
+    source = force_decision.get("source")
+    if source not in {SIMULATED_FORCE, PP_EQUIV_FORCE}:
+        raise ValueError("SNQI-v2 calibration force source is unsupported")
+    expected_source = PP_EQUIV_FORCE if abs(rho) >= 0.90 else SIMULATED_FORCE
+    if source != expected_source:
+        raise ValueError("SNQI-v2 force source violates the preregistered rho threshold")
+    if source == PP_EQUIV_FORCE and force_decision.get("selected_source_contract") != {
+        "pp_equiv_status": "experimental_counterfactual",
+        "pp_equiv_velocity_rule": "backward_difference_first_forward",
+    }:
+        raise ValueError(
+            "SNQI-v2 PP-equivalent force anchor must bind its counterfactual status and "
+            "velocity rule"
+        )
 
 
 def _provenance_path(value: str) -> str:

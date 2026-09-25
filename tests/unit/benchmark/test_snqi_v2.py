@@ -126,7 +126,7 @@ def fixture_spec() -> SnqiV2Spec:
 
 def metrics(**overrides):
     """Return complete synthetic metrics with an independently retained legacy score."""
-    return {
+    document = {
         "success": 1,
         "total_collision_count": 0,
         "time_to_goal_ideal_ratio": 1,
@@ -138,12 +138,41 @@ def metrics(**overrides):
         "snqi": -0.12345678901234567,
         **overrides,
     }
+    return document
+
+
+def _add_synthetic_freeze_custody(document):
+    """Make a loader fixture with an internally consistent fake freeze receipt."""
+    calibration = document["calibration"]
+    arms = calibration["arms"]
+    scenarios = calibration["scenarios"]
+    seeds = calibration["seeds"]
+    episode_files = {f"runs/{arm}__differential_drive/episodes.jsonl": "a" * 64 for arm in arms}
+    sidecars = {
+        f"runs/{arm}__differential_drive/episodes.jsonl.provenance.json": "b" * 64 for arm in arms
+    }
+    grid = sorted((arm, scenario, seed) for arm in arms for scenario in scenarios for seed in seeds)
+    grid_hash = hashlib.sha256(json.dumps(grid, separators=(",", ":")).encode()).hexdigest()
+    calibration.update(
+        grid_sha256=grid_hash,
+        split_id=f"snqi-v2-dev101-102-{grid_hash[:12]}",
+        episode_files_sha256=episode_files,
+        producer_sidecars_sha256=sidecars,
+        episodes_sha256=hashlib.sha256(
+            json.dumps(episode_files, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+        episodes_hash_rule="sha256(sorted compact JSON relative-path-to-file-sha256 map)",
+        campaign_config_hash="c" * 64,
+        campaign_manifest_sha256="d" * 64,
+    )
+    document["status"] = "frozen"
+    return document
 
 
 def anchor_document():
     """Return clearly synthetic, full-schema calibration metadata for loader tests."""
     spec = fixture_spec()
-    return {
+    document = {
         "version": "SNQI-v2.0",
         "status": "frozen",
         "anchors": {
@@ -154,7 +183,14 @@ def anchor_document():
             }
             for key, value in spec.upper_anchors.items()
         },
-        "force_decision": {"source": SIMULATED_FORCE, "spearman_rho_F_N": 0.8},
+        "force_decision": {
+            "source": SIMULATED_FORCE,
+            "spearman_rho_F_N": 0.8,
+            "spearman_rho_F_exposure_fraction": 0.8,
+            "threshold_absolute_rho": 0.90,
+            "N": "clip(near_misses/steps/0.25)",
+            "selected_source_coverage": 1344,
+        },
         "calibration": {
             "episode_count": 1344,
             "arms": [f"synthetic-{i}" for i in range(14)],
@@ -168,6 +204,7 @@ def anchor_document():
             "seeds": [101, 102],
         },
     }
+    return _add_synthetic_freeze_custody(document)
 
 
 @pytest.fixture
@@ -220,6 +257,11 @@ def test_anchor_loader_rejects_boolean_correlation(spec_files, value):
     document["force_decision"].update(
         spearman_rho_F_N=value, source=PP_EQUIV_FORCE if value else SIMULATED_FORCE
     )
+    if value:
+        document["force_decision"]["selected_source_contract"] = {
+            "pp_equiv_status": "experimental_counterfactual",
+            "pp_equiv_velocity_rule": "backward_difference_first_forward",
+        }
     spec_files[1].write_text(json.dumps(document))
     with pytest.raises(ValueError, match="rho"):
         load_snqi_v2_spec(*spec_files)
@@ -309,6 +351,71 @@ def test_anchor_loader_fail_closed(spec_files, mutation):
         doc["anchors"]["F"]["upper"] = 0 if mutation == "zero" else float("nan")
     spec_files[1].write_text(json.dumps(doc))
     with pytest.raises(ValueError):
+        load_snqi_v2_spec(*spec_files)
+
+
+@pytest.mark.parametrize("mutation", ["missing", "status", "velocity"])
+def test_anchor_loader_binds_pp_equivalent_counterfactual_contract(spec_files, mutation):
+    """A frozen PP-equivalent source must retain its experimental producer contract."""
+    from robot_sf.benchmark.snqi.v2_spec import PP_EQUIV_FORCE
+
+    document = anchor_document()
+    decision = document["force_decision"]
+    decision.update(
+        source=PP_EQUIV_FORCE,
+        spearman_rho_F_N=0.9,
+        selected_source_contract={
+            "pp_equiv_status": "experimental_counterfactual",
+            "pp_equiv_velocity_rule": "backward_difference_first_forward",
+        },
+    )
+    if mutation == "missing":
+        decision.pop("selected_source_contract")
+    elif mutation == "status":
+        decision["selected_source_contract"]["pp_equiv_status"] = "measured"
+    else:
+        decision["selected_source_contract"]["pp_equiv_velocity_rule"] = "forward_difference"
+    spec_files[1].write_text(json.dumps(document))
+    with pytest.raises(ValueError, match="counterfactual status and velocity rule"):
+        load_snqi_v2_spec(*spec_files)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "grid",
+        "episodes",
+        "episode_hash",
+        "sidecars",
+        "config",
+        "manifest",
+        "force_coverage",
+        "threshold",
+    ],
+)
+def test_anchor_loader_requires_complete_freeze_custody(spec_files, mutation):
+    """An anchor file must bind the full grid, source files, producer sidecars and config."""
+    document = anchor_document()
+    calibration = document["calibration"]
+    if mutation == "grid":
+        calibration["grid_sha256"] = "0" * 64
+    elif mutation == "episodes":
+        calibration["episode_files_sha256"].pop(next(iter(calibration["episode_files_sha256"])))
+    elif mutation == "episode_hash":
+        path = next(iter(calibration["episode_files_sha256"]))
+        calibration["episode_files_sha256"][path] = "e" * 64
+    elif mutation == "sidecars":
+        calibration["producer_sidecars_sha256"] = {}
+    elif mutation == "config":
+        calibration.pop("campaign_config_hash")
+    elif mutation == "manifest":
+        calibration["campaign_manifest_sha256"] = "bad"
+    elif mutation == "force_coverage":
+        document["force_decision"]["selected_source_coverage"] = 1343
+    else:
+        document["force_decision"]["threshold_absolute_rho"] = 0.95
+    spec_files[1].write_text(json.dumps(document))
+    with pytest.raises(ValueError, match="calibration|force decision"):
         load_snqi_v2_spec(*spec_files)
 
 
@@ -558,9 +665,45 @@ def test_campaign_writes_both_reports_and_fields(tmp_path):
     assert all(Path(path).read_bytes() == content for path, content in before.items())
 
 
+def test_enrichment_rejects_duplicate_planner_kinematics_identity(tmp_path):
+    """Disjoint files cannot be merged into one arm's means or paired bootstrap."""
+    entries = []
+    for name in ("first", "second"):
+        path = tmp_path / f"{name}.jsonl"
+        write_campaign_arm(path, [row for row in records() if row["algo"] == "a"])
+        entries.append({"status": "ok", "planner": {"key": "same-arm"}, "episodes_path": str(path)})
+    with pytest.raises(ValueError, match="duplicate planner/kinematics identity"):
+        enrich_campaign_v2(
+            entries,
+            fixture_spec(),
+            tmp_path / "reports",
+            repo_root=tmp_path,
+            bootstrap_samples=10,
+        )
+
+
+@pytest.mark.parametrize("identity_field", ["algo", "kinematics"])
+def test_enrichment_rejects_conflicting_identity_rows(tmp_path, identity_field):
+    """One campaign arm file cannot combine algorithms or kinematics identities."""
+    rows = [row for row in records() if row["algo"] == "a"]
+    rows[1][identity_field] = "different"
+    path = tmp_path / "mixed.jsonl"
+    write_campaign_arm(path, rows)
+    with pytest.raises(ValueError, match="one planner/kinematics identity and one algorithm"):
+        enrich_campaign_v2(
+            [{"status": "ok", "planner": {"key": "a"}, "episodes_path": str(path)}],
+            fixture_spec(),
+            tmp_path / "reports",
+            repo_root=tmp_path,
+            bootstrap_samples=10,
+        )
+
+
 def calibration_records():
     """Generate a full synthetic development grid with independent F and N."""
     import numpy as np
+
+    from robot_sf.benchmark.spawn_validity import build_spawn_validity
 
     rng = np.random.default_rng(8)
     arms = [f"arm{i}" for i in range(14)]
@@ -572,6 +715,18 @@ def calibration_records():
             "seed": seed,
             "status": "success",
             "outcome": {"route_complete": True, "collision_event": False, "timeout_event": False},
+            "spawn_validity": build_spawn_validity(
+                {
+                    "robot_pedestrian_min_surface_clearance_m": 0.5,
+                    "robot_obstacle_min_surface_clearance_m": 1.0,
+                    "overlapping_pedestrian_rows": [],
+                    "pedestrian_overlap": False,
+                    "obstacle_overlap": False,
+                    "overlap": False,
+                },
+                [],
+                route_complete=True,
+            ),
             "horizon": 600,
             "scenario_params": {"run_horizon": 600, "run_dt": 0.1, "record_forces": True},
             "algorithm_metadata": {"execution_mode": "native"},
@@ -1036,24 +1191,26 @@ def test_spawn_validity_preserves_producer_completed_route_exception(prior_colli
 
 @pytest.mark.parametrize("clearance", [spawn_clearance_fixture(), None])
 def test_spawn_validity_accepts_absent_legacy_and_valid_producer_block(clearance):
-    """Legacy absence and canonical valid blocks retain the same score and anchors."""
+    """Legacy rows remain scoreable while anchor calibration requires producer custody."""
     from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
     from robot_sf.benchmark.spawn_validity import build_spawn_validity
 
     rows, kwargs = calibration_records()
     for row in rows:
         del row["outcome"]
+        del row["spawn_validity"]
     legacy_score = score_episode(rows[0], fixture_spec())
-    legacy_anchors = derive_calibration_anchors(rows, **kwargs)
+    with pytest.raises(ValueError, match="requires spawn_validity"):
+        derive_calibration_anchors(rows, **kwargs)
     for row in rows:
         row["spawn_validity"] = build_spawn_validity(clearance, [])
         row["outcome"] = {"route_complete": True, "collision_event": False, "timeout_event": False}
     scored = score_episode(rows[0], fixture_spec())
     assert scored["metrics"] == legacy_score["metrics"]
-    assert derive_calibration_anchors(rows, **kwargs) == legacy_anchors
+    assert derive_calibration_anchors(rows, **kwargs)["calibration"]["episode_count"] == 1344
 
 
-@pytest.mark.parametrize("block", [{"invalid_run": True}, {"invalid_run": "false"}])
+@pytest.mark.parametrize("block", [{"invalid_run": True}, {"invalid_run": "false"}, None])
 def test_calibration_freeze_rejects_spawn_validity_before_projection(
     tmp_path, calibration_archive, block
 ):
@@ -1069,7 +1226,10 @@ def test_calibration_freeze_rejects_spawn_validity_before_projection(
     sidecar = manifest_path_for_result_jsonl(path)
     payload = json.loads(sidecar.read_text())
     rows = [json.loads(line) for line in path.read_text().splitlines()]
-    rows[0]["spawn_validity"] = block
+    if block is None:
+        rows[0].pop("spawn_validity")
+    else:
+        rows[0]["spawn_validity"] = block
     path.write_text("".join(json.dumps(row) + "\n" for row in rows))
     payload["raw_artifacts"][0]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
     validate_result_provenance_manifest(payload)
@@ -1107,6 +1267,38 @@ def test_calibration_rejects_missing_execution_contract(field):
         derive_calibration_anchors(rows, **kwargs)
 
 
+@pytest.mark.parametrize("field", ["success", "total_collision_count", "time_to_goal_ideal_ratio"])
+def test_calibration_rejects_missing_required_score_inputs(field):
+    """Anchor derivation cannot admit rows that the v2 scorer will reject later."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+
+    rows, kwargs = calibration_records()
+    rows[0]["metrics"].pop(field)
+    with pytest.raises(ValueError, match=field):
+        derive_calibration_anchors(rows, **kwargs)
+
+
+@pytest.mark.parametrize("conflicting_source", ["planner_kinematics", "adapter_impact"])
+def test_calibration_rejects_conflicting_execution_mode_declarations(conflicting_source):
+    """Census admission fails when independent producer mode fields disagree."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+
+    rows, kwargs = calibration_records()
+    rows[0]["algorithm_metadata"][conflicting_source] = {"execution_mode": "adapter"}
+    with pytest.raises(ValueError, match="conflicting execution_mode"):
+        derive_calibration_anchors(rows, **kwargs)
+
+
+def test_calibration_accepts_missing_time_for_failure_rows():
+    """Failure rows retain the score contract that does not use time-to-goal."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+
+    rows, kwargs = calibration_records()
+    rows[0]["metrics"]["success"] = 0
+    rows[0]["metrics"].pop("time_to_goal_ideal_ratio")
+    assert derive_calibration_anchors(rows, **kwargs)["calibration"]["episode_count"] == 1344
+
+
 @pytest.mark.parametrize("value", [False, True])
 @pytest.mark.parametrize(
     "field", ["steps", "near_misses", SIMULATED_FORCE, "jerk_mean", "curvature_mean", "pp_force"]
@@ -1121,6 +1313,10 @@ def test_calibration_rejects_boolean_numbers(field, value):
         for row in rows:
             row["metrics"][SIMULATED_FORCE] = row["metrics"]["near_misses"]
             row["metrics"][PP_EQUIV_FORCE] = 3
+            row["metrics"]["robot_force_metadata"].update(
+                pp_equiv_status="experimental_counterfactual",
+                pp_equiv_velocity_rule="backward_difference_first_forward",
+            )
         field = PP_EQUIV_FORCE
     container = rows[0] if field == "steps" else rows[0]["metrics"]
     container[field] = value
@@ -1136,11 +1332,48 @@ def test_calibration_switch_requires_full_pp_coverage():
     for row in rows:
         row["metrics"][SIMULATED_FORCE] = row["metrics"]["near_misses"]
         row["metrics"][PP_EQUIV_FORCE] = 3
+        row["metrics"]["robot_force_metadata"].update(
+            pp_equiv_status="experimental_counterfactual",
+            pp_equiv_velocity_rule="backward_difference_first_forward",
+        )
     result = derive_calibration_anchors(rows, **kwargs)
     assert result["force_decision"]["source"] == PP_EQUIV_FORCE
+    assert result["force_decision"]["selected_source_contract"] == {
+        "pp_equiv_status": "experimental_counterfactual",
+        "pp_equiv_velocity_rule": "backward_difference_first_forward",
+    }
     assert result["anchors"]["F"]["upper"] == 3
     rows[0]["metrics"][PP_EQUIV_FORCE] = float("nan")
     with pytest.raises(ValueError, match="finite"):
+        derive_calibration_anchors(rows, **kwargs)
+
+
+@pytest.mark.parametrize(
+    "mutation", ["missing_status", "wrong_status", "missing_velocity", "wrong_velocity"]
+)
+def test_calibration_pp_switch_requires_declared_counterfactual_contract(mutation):
+    """PP-equivalent values cannot select F without their producer's declared assumptions."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+    from robot_sf.benchmark.snqi.v2_spec import PP_EQUIV_FORCE
+
+    rows, kwargs = calibration_records()
+    for row in rows:
+        row["metrics"][SIMULATED_FORCE] = row["metrics"]["near_misses"]
+        row["metrics"][PP_EQUIV_FORCE] = 3
+        row["metrics"]["robot_force_metadata"].update(
+            pp_equiv_status="experimental_counterfactual",
+            pp_equiv_velocity_rule="backward_difference_first_forward",
+        )
+    metadata = rows[0]["metrics"]["robot_force_metadata"]
+    if mutation == "missing_status":
+        metadata.pop("pp_equiv_status")
+    elif mutation == "wrong_status":
+        metadata["pp_equiv_status"] = "measured"
+    elif mutation == "missing_velocity":
+        metadata.pop("pp_equiv_velocity_rule")
+    else:
+        metadata["pp_equiv_velocity_rule"] = "forward_difference"
+    with pytest.raises(ValueError, match="counterfactual status and velocity rule"):
         derive_calibration_anchors(rows, **kwargs)
 
 
@@ -1154,6 +1387,7 @@ def test_calibration_records_actual_command_modes_without_relabeling(
     rows, kwargs = calibration_records()
     for row in rows[:adapter_count]:
         row["algorithm_metadata"]["planner_kinematics"] = {"execution_mode": command_mode}
+        row["algorithm_metadata"]["execution_mode"] = command_mode
     anchors = derive_calibration_anchors(rows, **kwargs)
     document = anchors["calibration"]
     assert "execution_mode" not in document
@@ -1162,7 +1396,7 @@ def test_calibration_records_actual_command_modes_without_relabeling(
     assert sum(counts.get(command_mode, 0) for counts in census.values()) == adapter_count
     assert sum(counts.get("native", 0) for counts in census.values()) == 1344 - adapter_count
     assert all(sum(counts.values()) == 96 for counts in census.values())
-    spec_files[1].write_text(json.dumps(anchors))
+    spec_files[1].write_text(json.dumps(_add_synthetic_freeze_custody(anchors)))
     load_snqi_v2_spec(*spec_files)
 
 

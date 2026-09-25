@@ -85,7 +85,16 @@ uv run python scripts/tools/analyze_snqi_contract.py \
 ```
 
 The helper confines source files to the archived `runs/` directory, verifies row
-source commits against the campaign manifest, and records per-file hashes.
+source commits against the campaign manifest, and records per-file hashes. Anchor
+derivation also requires each row's spawn-validity producer block and all active
+SNQI-v2 inputs. Conflicting command-mode declarations fail; a selected PP-equivalent
+force source must retain its `experimental_counterfactual` status and
+`backward_difference_first_forward` velocity rule.
+
+Direct derivation marks results `derived_pending_custody`. Only the archive freeze
+path marks anchors `frozen`, after binding the complete grid, all 14 episode files,
+their producer sidecars, campaign config and campaign manifest. The loader verifies
+the hash maps and force-switch threshold/coverage before accepting frozen anchors.
 
 In particular, undefined pedestrian–pedestrian-equivalent force on one-step
 traces is never replaced with zero. The 384-row four-arm diagnostic is not this

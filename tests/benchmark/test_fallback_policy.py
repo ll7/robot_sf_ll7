@@ -207,6 +207,26 @@ def test_stop_best_effort_decision_label_is_forbidden() -> None:
     ) == ("last_decision.decision_label", "stop_best_effort")
 
 
+def test_availability_rejects_aggregate_stop_best_effort_stats(guarded_metadata) -> None:
+    """Availability must scan preserved aggregate shield counters."""
+    metadata = deepcopy(guarded_metadata)
+    metadata["guard_stats"] = {"stop_best_effort": 1, "fallback_safe": 3}
+    metadata["shield_stats"] = {"decision_counts": {"stop_best_effort": 1, "fallback_safe": 3}}
+    summary = {
+        "status": "ok",
+        "written": 2,
+        "total_jobs": 2,
+        "failed_jobs": 0,
+        "algorithm_readiness": {"name": "guarded_ppo"},
+        "algorithm_metadata_contract": metadata,
+    }
+
+    availability = summarize_benchmark_availability(summary)
+
+    assert availability.benchmark_success is False
+    assert "guard_stats.stop_best_effort" in str(availability.availability_reason)
+
+
 @pytest.mark.parametrize("guarded_runtime", ["fallback_safe"], indirect=True)
 def test_guarded_safe_decision_does_not_hide_checkpoint_fallback(guarded_metadata) -> None:
     """A legitimate shield command cannot excuse a genuine failed checkpoint path."""

@@ -162,10 +162,10 @@ def test_geometrically_infeasible_when_inflated_path_is_blocked() -> None:
     assert _classify(blocked) == GEOMETRICALLY_INFEASIBLE
 
 
-def test_planner_exception_is_unknown_not_geometric_impossibility(
+def test_planner_exception_preserves_legacy_geometric_classification(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A non-no-path exception cannot support a geometric exclusion."""
+    """scenario_cert.v1 preserves its historical exclusion contract for planner errors."""
 
     monkeypatch.setattr(
         scenario_certification_v1.ClassicGlobalPlanner,
@@ -183,11 +183,11 @@ def test_planner_exception_is_unknown_not_geometric_impossibility(
     schema = json.loads(Path("robot_sf/benchmark/schemas/scenario_cert.v1.json").read_text())
     jsonschema.validate(payload, schema)
 
-    assert certificate.classification == "unknown"
-    assert certificate.benchmark_eligibility == "stress_only"
-    assert certificate.route_certificates[0].checks["inflated_collision_free_path"] is None
+    assert certificate.classification == GEOMETRICALLY_INFEASIBLE
+    assert certificate.benchmark_eligibility == "excluded"
+    assert certificate.route_certificates[0].checks["inflated_collision_free_path"] is False
     assert certificate.route_certificates[0].checks["planner"]["path_status"] == "error"
-    assert certificate.reasons == ["inflated_path_planner_error: injected planner failure"]
+    assert certificate.reasons == ["no_inflated_collision_free_path: injected planner failure"]
 
 
 def test_kinodynamically_infeasible_for_tighter_turn_than_bicycle_limit() -> None:

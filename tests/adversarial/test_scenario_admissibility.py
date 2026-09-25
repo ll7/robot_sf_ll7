@@ -34,6 +34,7 @@ from robot_sf.adversarial.feasibility_first import (
 )
 from robot_sf.adversarial.scenario_admissibility import (
     _oracle_excludes,
+    _producer_selected_map_binding,
     _same_selected_map_identity,
 )
 from robot_sf.benchmark.map_runner.map_runner_identity import (
@@ -505,6 +506,74 @@ def _referenced_scenario(tmp_path: Path, *, route_override: bool = True) -> Path
     return scenario_path
 
 
+def test_runtime_input_identity_is_stable_across_checkouts(tmp_path: Path) -> None:
+    """Equivalent content closures bind across roots while retaining diagnostic paths."""
+    from robot_sf.training.scenario_loader import build_robot_config_from_scenario
+
+    checkout_a = tmp_path / "checkout-a"
+    checkout_b = tmp_path / "checkout-b"
+    checkout_a.mkdir()
+    checkout_b.mkdir()
+    scenario_a = _referenced_scenario(checkout_a)
+    for name in ("scenario.yaml", "map.svg", "routes.yaml"):
+        shutil.copyfile(scenario_a.parent / name, checkout_b / name)
+    scenario_b = checkout_b / "scenario.yaml"
+
+    identity_a = scenario_input_identity(scenario_a, scenario_id="case-static")
+    identity_b = scenario_input_identity(scenario_b, scenario_id="case-static")
+    consumed: list[dict[str, str]] = []
+    scenario_row = yaml.safe_load(scenario_b.read_text(encoding="utf-8"))["scenarios"][0]
+    build_robot_config_from_scenario(
+        scenario_row,
+        scenario_path=scenario_b,
+        runtime_input_records=consumed,
+    )
+
+    assert identity_a["effective_input_sha256"] == identity_b["effective_input_sha256"]
+    assert identity_a["path"] != identity_b["path"]
+    assert runtime_input_records_match(identity_a, consumed, scenario_id="case-static") is True
+    assert runtime_input_records_match(identity_b, consumed, scenario_id="case-static") is True
+
+
+def test_selected_map_binding_uses_content_identity_across_checkouts(tmp_path: Path) -> None:
+    """A replay in another checkout binds by stable map identity, not absolute path."""
+    checkout_a = tmp_path / "checkout-a"
+    checkout_b = tmp_path / "checkout-b"
+    checkout_a.mkdir()
+    checkout_b.mkdir()
+    scenario_a = checkout_a / "scenario.yaml"
+    scenario_a.write_text(
+        yaml.safe_dump({"scenarios": [{"name": "case-static"}]}, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    identity = scenario_input_identity(scenario_a, scenario_id="case-static")
+    map_record = next(
+        record
+        for record in identity["files"]
+        if record["role"] == "default_map_pool" and record["map_id"] == "uni_campus_big"
+    )
+    selected_map_path = checkout_b / "uni_campus_big.svg"
+    shutil.copyfile(_REPO_ROOT / "robot_sf/maps/uni_campus_big.svg", selected_map_path)
+    status, binding = _producer_selected_map_binding(
+        {"_candidate_runtime_input_identity": identity},
+        {
+            "scenario_id": "case-static",
+            "selected_map_identity": {
+                "status": "available",
+                "map_id": "uni_campus_big",
+                "path": str(selected_map_path),
+                "sha256": map_record["sha256"],
+                "source_role": "default_map_pool",
+            },
+        },
+    )
+
+    assert status == "valid"
+    assert binding is not None
+    assert binding["path"] == str(selected_map_path)
+
+
 def _bind_certificate_to_scenario(path: Path) -> dict[str, Any]:
     """Attach raw and runtime-input identities to a schema-valid fixture certificate."""
     identity = scenario_input_identity(path, scenario_id="case-static")
@@ -563,19 +632,21 @@ def test_certificate_rejects_only_structural_and_geometric_exclusions() -> None:
 
 
 def test_planner_exception_stays_unknown_and_retained() -> None:
-    """A planner exception must not masquerade as a completed no-path result."""
+    """Legacy v1 planner-error labels do not become proof of geometric impossibility."""
 
-    certificate = _certificate("unknown", eligibility="stress_only")
-    reason = "inflated_path_planner_error: injected planner failure"
-    certificate["reasons"] = [reason]
-    route = certificate["route_certificates"][0]
-    route["reasons"] = [reason]
-    route["checks"].update(inflated_collision_free_path=None, planner={"path_status": "error"})
-
+    reason = "no_inflated_collision_free_path: injected planner failure"
+    certificate = _certificate(
+        "geometrically_infeasible", eligibility="excluded", route_reason=reason
+    )
+    certificate["route_certificates"][0]["checks"].update(
+        inflated_collision_free_path=False,
+        planner={"path_status": "error"},
+    )
     verdict = classify_scenario_admissibility("case-static", scenario_certificate=certificate)
 
     assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert verdict.search_disposition == "retain"
+    assert "scenario_certificate_route_coverage_unresolved" in verdict.reason_codes
 
 
 @pytest.mark.parametrize(

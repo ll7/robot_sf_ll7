@@ -59,7 +59,8 @@ def scenario_input_identity(
             record["role"] or "",
             record["scenario_id"] or "",
             record["sha256"] or "",
-            record["path"] or "",
+            record.get("parser") or "",
+            record.get("map_id") or "",
         ),
     )
     effective_digest, requires_closure = _effective_digest(records, root_digest)
@@ -84,14 +85,11 @@ def runtime_input_records_match(
 
     Returns:
         ``True`` only when every declared runtime input was consumed with the same
-        resolved path, content digest, parser, role, and scenario attribution.
+    content digest, parser, role, map identity, and scenario attribution. Paths
+    remain in the records for diagnostics but are not cross-checkout identity.
     """
     if identity.get("status") != "available":
         return False
-    root_value = identity.get("path")
-    if not isinstance(root_value, str) or not root_value:
-        return False
-    root = Path(root_value).resolve()
     files = identity.get("files")
     if not isinstance(files, list):
         return False
@@ -108,27 +106,27 @@ def runtime_input_records_match(
     if len(expected_records) != len(actual_records):
         return False
 
-    def normalized(record: Mapping[str, Any], *, expected: bool) -> tuple[Any, ...] | None:
+    def normalized(record: Mapping[str, Any]) -> tuple[str, ...] | None:
         path_value = record.get("path")
         if not isinstance(path_value, str) or not path_value:
             return None
-        path = Path(path_value)
-        if expected and not path.is_absolute():
-            path = root.parent / path
         values = (
             record.get("role"),
             record.get("scenario_id"),
-            record.get("sha256"),
-            path.resolve().as_posix(),
+            str(record.get("sha256", "")).lower(),
             record.get("parser"),
         )
         if not all(isinstance(value, str) and value for value in values):
             return None
-        map_id = record.get("map_id") if "map_id" in record else None
+        map_id = record.get("map_id", "")
+        if map_id is None:
+            map_id = ""
+        if not isinstance(map_id, str):
+            return None
         return (*values, map_id)
 
-    expected = [normalized(record, expected=True) for record in expected_records]
-    actual = [normalized(record, expected=False) for record in actual_records]
+    expected = [normalized(record) for record in expected_records]
+    actual = [normalized(record) for record in actual_records]
     if any(record is None for record in [*expected, *actual]):
         return False
     return sorted(expected) == sorted(actual)
@@ -355,7 +353,7 @@ def _effective_digest(records: list[dict[str, str | None]], root_digest: str) ->
             "files": [
                 {
                     key: record[key]
-                    for key in ("role", "scenario_id", "sha256", "path", "map_id", "parser")
+                    for key in ("role", "scenario_id", "sha256", "map_id", "parser")
                     if key in record
                 }
                 for record in records

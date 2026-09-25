@@ -1,0 +1,16 @@
+{
+  "short_collision_max_steps": 20,
+  "same_step_max_steps": 20,
+  "max_contact_speed_m_s": 10.0,
+  "min_orbit_curvature": 1.0,
+  "min_orbit_path_length_m": 5.0,
+  "max_zero_progress_m": 0.5,
+  "max_progress_ratio": 0.1,
+  "min_planners_per_cell": 2,
+  "min_paired_cells": 5,
+  "min_success_rate_gap": 0.2,
+  "baseline_planner": "goal",
+  "pedestrian_free_scenarios": ["classic_bottleneck_low"],
+  "max_unannotated_findings": 0,
+  "require_preflight": true
+}

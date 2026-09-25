@@ -57,6 +57,8 @@ ISSUE_9645_BUNDLE_SCHEMA = "evidence_bundle.v1"
 _ISSUE_9645_PILOT_RUN_ID = "issue_9645_bounded_pilot"
 _ISSUE_9645_PILOT_EVIDENCE_ROOT = "evidence/issue_9645_pilot"
 ISSUE_9656_SUMMARY_SCHEMA = "benchmark-hard-case-slice.v1"
+HISTORICAL_CANDIDATE_SCHEMA_VERSION = "adversarial-historical-candidate.v2"
+LEGACY_HISTORICAL_CANDIDATE_SCHEMA_VERSION = "adversarial-historical-candidate.v1"
 SEARCH_MANIFEST_SCHEMA = "adversarial-search-manifest.v1"
 _ROOT = Path(__file__).resolve().parents[2]
 _CORPUS_SCHEMA_PATH = _ROOT / "robot_sf/benchmark/schemas/adversarial-counterexample-corpus.v1.json"
@@ -621,6 +623,18 @@ def _validate_historical_candidate_registry_row(
     expected_id = hashlib.sha256(_stable_json(identity).encode("utf-8")).hexdigest()
     if candidate["candidate_id"] != expected_id:
         raise CorpusError("historical candidate ID does not bind its source alias and row digest")
+    expected_schema = source_identity_by_import[import_id].get(
+        "candidate_schema_version", LEGACY_HISTORICAL_CANDIDATE_SCHEMA_VERSION
+    )
+    if candidate.get("schema_version") != expected_schema:
+        raise CorpusError("historical candidate schema differs from its import identity")
+    if expected_schema == HISTORICAL_CANDIDATE_SCHEMA_VERSION:
+        if candidate.get("feasibility") != _issue9656_candidate_feasibility_record():
+            raise CorpusError("historical candidate feasibility claim differs from its contract")
+        if candidate.get("planner_status_at_import") != _issue9656_planner_status_at_import(
+            candidate
+        ):
+            raise CorpusError("historical candidate planner status differs from its evidence")
     if candidate.get("candidate_status") == "admitted":
         _validate_promoted_historical_candidate(candidate, known_cases, successful_attempts)
 
@@ -869,6 +883,7 @@ def import_issue9656_candidates(
 
     import_identity = {
         "source_issue": 9656,
+        "candidate_schema_version": HISTORICAL_CANDIDATE_SCHEMA_VERSION,
         "source_row_binding": "verified_episode_file_and_line_sha256",
         "summary_sha256": summary_receipts["summary_sha256"],
         "evidence_bundle_manifest_sha256": summary_receipts["manifest_sha256"],
@@ -1663,7 +1678,7 @@ def _issue9656_candidate_record(
     if source_binding["status"] != "verified":
         candidate_status = "blocked_source_provenance_mismatch"
     return {
-        "schema_version": "adversarial-historical-candidate.v1",
+        "schema_version": HISTORICAL_CANDIDATE_SCHEMA_VERSION,
         "candidate_id": context["candidate_id"],
         "source_issue": 9656,
         "source_case_id": source_case["case_id"],
@@ -1707,6 +1722,20 @@ def _issue9656_candidate_record(
         "candidate_status": candidate_status,
         "source_replay_status": replay_status,
         "source_replay": dict(source_case["replay"]),
+        "feasibility": _issue9656_candidate_feasibility_record(),
+        "planner_status_at_import": {
+            "status": "unknown",
+            "planner_id": source_case["planner_key"],
+            "config_hash": (
+                source_binding["episode_planner_config_hash"]
+                if source_binding["status"] == "verified"
+                else None
+            ),
+            "valid_observation_count": 0,
+            "reason_codes": _issue9656_planner_status_reason_codes(
+                replay_status, source_binding["status"]
+            ),
+        },
         "scenario_id": source_case["scenario_id"],
         "scenario_family": source_case["scenario_family"],
         "scenario_seed": source_case["seed"],
@@ -1737,6 +1766,45 @@ def _issue9656_candidate_record(
             "import_summary": f"historical_candidate_imports/{context['import_id']}/payload/summary.json",
             "import_materialized_manifest": f"historical_candidate_imports/{context['import_id']}/materialized_manifest.json",
         },
+    }
+
+
+def _issue9656_candidate_feasibility_record() -> dict[str, Any]:
+    return {
+        "verdict": "unknown",
+        "reason_codes": ["historical_benchmark_evidence_does_not_establish_dynamic_feasibility"],
+    }
+
+
+def _issue9656_planner_status_reason_codes(
+    source_replay_status: str, source_identity_binding_status: str
+) -> list[str]:
+    status_reasons = {
+        "not_attempted": "source_replay_not_attempted",
+        "unavailable_model_artifact": "source_replay_model_artifact_unavailable",
+        "mismatch_different_revision": "source_replay_revision_mismatch",
+    }
+    reasons = ["no_exact_current_revision_observation"]
+    replay_reason = status_reasons.get(source_replay_status)
+    if replay_reason is not None:
+        reasons.append(replay_reason)
+    if source_identity_binding_status != "verified":
+        reasons.append("source_identity_binding_unverified")
+    return sorted(set(reasons))
+
+
+def _issue9656_planner_status_at_import(candidate: Mapping[str, Any]) -> dict[str, Any]:
+    provenance = candidate.get("source_provenance", {})
+    target_planner = candidate.get("target_planner", {})
+    return {
+        "status": "unknown",
+        "planner_id": target_planner.get("planner_id"),
+        "config_hash": target_planner.get("config_hash"),
+        "valid_observation_count": 0,
+        "reason_codes": _issue9656_planner_status_reason_codes(
+            str(candidate.get("source_replay_status")),
+            str(provenance.get("source_identity_binding_status")),
+        ),
     }
 
 
@@ -1947,6 +2015,12 @@ def _validate_issue9656_summary_manifest_row(
         or replay_row.get("attempted") is not (status == "mismatch_different_revision")
     ):
         raise CorpusError("#9656 replay status or attempt flag is unsupported")
+    if status == "mismatch_different_revision" and (
+        not _is_full_git_revision(replay_row.get("source_revision"))
+        or not _is_full_git_revision(replay_row.get("replay_revision"))
+        or replay_row["source_revision"] == replay_row["replay_revision"]
+    ):
+        raise CorpusError("#9656 revision-mismatch replay lacks distinct full revision bindings")
     criticality = summary_case.get("criticality")
     source_record = summary_case.get("source_record")
     replay_input = summary_case.get("replay_input")
@@ -2279,6 +2353,10 @@ def _issue9656_candidate_import_record(
 ) -> dict[str, Any]:
     replay_counts = Counter(candidate["source_replay_status"] for candidate in candidates)
     candidate_status_counts = Counter(candidate["candidate_status"] for candidate in candidates)
+    feasibility_counts = Counter(candidate["feasibility"]["verdict"] for candidate in candidates)
+    planner_status_counts = Counter(
+        candidate["planner_status_at_import"]["status"] for candidate in candidates
+    )
     return {
         "schema_version": "adversarial-historical-candidate-import.v1",
         "import_id": import_id,
@@ -2314,6 +2392,8 @@ def _issue9656_candidate_import_record(
         "source_rows_verified": len(candidates),
         "candidate_status_counts": dict(sorted(candidate_status_counts.items())),
         "source_replay_status_counts": dict(sorted(replay_counts.items())),
+        "feasibility_status_counts": dict(sorted(feasibility_counts.items())),
+        "planner_status_counts_at_import": dict(sorted(planner_status_counts.items())),
         "criticality_anomaly_counts": dict(
             sorted((summary.get("criticality_anomaly_counts") or {}).items())
         ),

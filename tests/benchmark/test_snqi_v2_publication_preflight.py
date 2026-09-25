@@ -11,6 +11,7 @@ import pytest
 from robot_sf.benchmark.artifact_publication import (
     _check_robot_force_report_consistency,
     _check_snqi_v2_field_consistency,
+    _snqi_v2_expected_arm_algorithms,
 )
 
 if TYPE_CHECKING:
@@ -48,6 +49,11 @@ def _v2_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     _write_json(
         payload / "release" / "release_manifest.resolved.json",
         {
+            "planners": {
+                "keys": ["goal"],
+                "config_identities": [{"key": "goal", "algo": "goal"}],
+            },
+            "kinematics": {"matrix": ["differential_drive"]},
             "metrics": {
                 f"snqi_v2_{role}_{field}": value
                 for role in paths
@@ -55,7 +61,7 @@ def _v2_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                     ("path", paths[role]),
                     ("sha256", spec.hashes[role]),
                 )
-            }
+            },
         },
     )
     provenance = spec.provenance()
@@ -87,7 +93,7 @@ def _v2_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     metrics["snqi_v2"] = compute_snqi_v2(inputs, spec)
     _write_json(
         payload / "runs" / "goal__differential_drive" / "episodes.jsonl",
-        {"steps": 10, "metrics": metrics},
+        {"algo": "goal", "status": "success", "steps": 10, "metrics": metrics},
     )
     return payload
 
@@ -108,6 +114,71 @@ def test_snqi_v2_cold_recomputation_accepts_consistent_row(
     assert result["rows"] == 1
     assert result["mismatch_count"] == 0
     assert result["violations"] == []
+
+
+def test_snqi_v2_arm_mapping_uses_resolved_manifest_identity(tmp_path: Path) -> None:
+    """The arm key and its algorithm may differ, and neither comes from a row."""
+    payload = tmp_path / "payload"
+    _write_json(
+        payload / "release" / "release_manifest.resolved.json",
+        {
+            "planners": {
+                "keys": ["hybrid_candidate"],
+                "config_identities": [
+                    {"key": "hybrid_candidate", "algo": "hybrid_rule_local_planner"}
+                ],
+            },
+            "kinematics": {"matrix": ["differential_drive"]},
+        },
+    )
+    violations: list[str] = []
+    assert _snqi_v2_expected_arm_algorithms(payload, violations) == {
+        "hybrid_candidate__differential_drive": "hybrid_rule_local_planner"
+    }
+    assert violations == []
+
+
+def test_snqi_v2_arm_mapping_rejects_incomplete_manifest(tmp_path: Path) -> None:
+    """A missing planner identity cannot be supplied by an episode's self assertion."""
+    payload = tmp_path / "payload"
+    _write_json(
+        payload / "release" / "release_manifest.resolved.json",
+        {
+            "planners": {"keys": ["goal"], "config_identities": []},
+            "kinematics": {"matrix": ["differential_drive"]},
+        },
+    )
+    violations: list[str] = []
+    assert _snqi_v2_expected_arm_algorithms(payload, violations) == {}
+    assert "do not match" in violations[0]
+
+
+def test_snqi_v2_cold_recomputation_rejects_row_algorithm_spoof(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A stored score does not authorize a different algorithm for the manifest arm."""
+    payload = _v2_payload(tmp_path, monkeypatch)
+    path = payload / "runs" / "goal__differential_drive" / "episodes.jsonl"
+    row = json.loads(path.read_text(encoding="utf-8"))
+    row["algo"] = "guarded_ppo"
+    _write_json(path, row)
+    result = _check_snqi_v2_field_consistency(payload)
+    assert result["mismatch_count"] == 1
+    assert any("algorithm disagrees" in value for value in result["violations"])
+
+
+def test_snqi_v2_cold_recomputation_rejects_undeclared_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run directory outside the manifest roster cannot enter a signed bundle."""
+    payload = _v2_payload(tmp_path, monkeypatch)
+    path = payload / "runs" / "goal__differential_drive" / "episodes.jsonl"
+    rogue = payload / "runs" / "rogue__differential_drive" / "episodes.jsonl"
+    rogue.parent.mkdir(parents=True)
+    path.rename(rogue)
+    result = _check_snqi_v2_field_consistency(payload)
+    assert result["violation_count"] >= 1
+    assert any("no declared release arm" in value for value in result["violations"])
 
 
 @pytest.mark.parametrize("field", ["snqi_v2", "snqi_v2_terms"])

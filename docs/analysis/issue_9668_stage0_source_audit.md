@@ -27,6 +27,32 @@ No pre-existing `robot_sf/benchmark/metrics.py`, simulator force-law, canonical 
 or scenario-matrix file changed in this source range. The final audit must be repeated at the
 exact 0.0.8 source commit after all feature PRs merge.
 
+## Current candidate refresh: named changes that can affect predecessor values
+
+The current audited mainline is `e39ae5a89e8fb2998ca7e1b41bddd9796ceab591`, merged into
+the untagged 0.0.8 preparation branch at `5f85a42eca57cae32c6dbf576c1264e875cebea2`.
+This is **not** the final 0.0.8 source: #9667 and its calibrated anchors have not merged.
+The scoped inventory used `git log --no-merges` and `git diff` from the frozen source through
+this mainline over benchmark, simulator, navigation, planner, sensor, and campaign-config paths.
+
+| Named commit | Execution surface | Can an existing 0.0.7 value move? |
+| --- | --- | --- |
+| `066c0fe3c72fb8697a786d407c69f35725f79026` (#9583) | `metric_layers.py` resolves `failure_to_progress_rate` with strict binary route completion and fuller source attribution. | **Yes on malformed or non-binary inputs:** value availability can move. Valid binary release rows are expected to retain values, but only the paired episode gate can establish that. |
+| `2e1bb6cd04e84661c04603f15f1acca9552f5987` (#9690) | Guarded PPO per-step decision tracing in `map_runner.py`, `map_runner_episode.py`, and episode types. | Intended as diagnostic metadata, but it wraps the guarded policy stats hook and runs in its step path; a control or execution-status drift remains possible until paired execution proves otherwise. |
+| `4f850ff9db4cde8bc3b2dcf8fc4bf49a324b2d77` (#9666) | Adds robot-to-pedestrian force collection in `simulator.py`, `map_runner_episode.py`, `metrics.py`, and `metric_layers.py`. | **Yes, execution-sensitive:** a sampled component enters post-loop metric computation; the intended new reductions must not alter predecessor force totals, trajectories, or metrics. Focused backward-compatibility tests exist, but the full paired gate is still required. |
+| `e39ae5a89e8fb2998ca7e1b41bddd9796ceab591` (#9718) | Binds guarded PPO typed shield diagnostics to the declared planner in fallback and release acceptance. | It can change row **admission**, especially for malformed or spoofed shield metadata. It does not edit the existing scalar metric formula, but changed admission can change the set of release rows. |
+| `1dafad9d16d783e9694e4dc417b3d5b1b4f17a4f` (#9603) | Track identity/reset validation and a sensor side channel. | Tracking is disabled by the frozen config (`include_track_ids: false`), so no intended release value change; confirm the release arm still follows that path. |
+| `bd9d74c8a280997d541cba3ec0c16a7099a9273c` (#9669), `c83a9841a60ea3a0433d000cd84b9ba936ce19df` (#9682), `8f4a7887cb484c80cf6513e3382e0175c75593e8` (#9586) | Adds scenario-belief, force-residual, and maneuver-candidate modules. | No direct reference was found in the frozen campaign template or its 14 selected algorithm configs. An indirect import or changed default is not ruled out by source inspection alone. |
+
+The release branch's own changes to `release_protocol.py`, `artifact_publication.py`, and
+`run_benchmark_release.py` bind v2 assets and delay publication until evidence gates finish;
+they change preflight/custody behavior, not the declared 0.0.7 scientific campaign inputs.
+The predecessor campaign template, 48-scenario matrix, seed-set file, ordered 14-arm roster,
+and applicable algorithm config files retain the archived byte hashes in the source comparison
+recorded below. The complete
+20,160-row 0.0.7-to-0.0.8 gate must still stop the release if *any* predecessor value moves;
+this audit does not waive a mismatch, even if a commit above is a plausible cause.
+
 ## Mainline refresh before the feature merges
 
 The release worktree merged `origin/main@1e9715dc837a811ae2662bccad37920595f897cb`. A broader

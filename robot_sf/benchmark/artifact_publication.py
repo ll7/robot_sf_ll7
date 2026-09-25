@@ -2455,17 +2455,22 @@ def _snqi_v2_report_problem(
     return report, None
 
 
-def _snqi_v2_row_problem(row: Mapping[str, Any], spec: Any) -> str | None:
-    """Return a mismatch reason for one row, using the declared v2 scalarizer."""
-    from robot_sf.benchmark.snqi.compute import (  # noqa: PLC0415
-        compute_snqi_v2,
-        normalize_snqi_v2_terms,
-    )
+def _snqi_v2_row_problem(
+    row: Mapping[str, Any], spec: Any, *, expected_algorithm: str
+) -> str | None:
+    """Recompute a row under its independently declared release arm.
+
+    Returns:
+        A mismatch reason, or ``None`` when the stored fields agree.
+    """
+    from robot_sf.benchmark.snqi.v2_reports import score_episode  # noqa: PLC0415
     from robot_sf.benchmark.snqi.v2_spec import TERMS  # noqa: PLC0415
 
     recorded = row["metrics"]
-    inputs = {**recorded, "executed_steps": row["steps"]}
-    expected_terms = normalize_snqi_v2_terms(inputs, spec)
+    if row.get("algo") != expected_algorithm:
+        return "episode algorithm disagrees with release manifest arm"
+    expected = score_episode(row, spec, expected_algorithm=expected_algorithm)["metrics"]
+    expected_terms = expected["snqi_v2_terms"]
     recorded_terms = recorded["snqi_v2_terms"]
     if not isinstance(recorded_terms, Mapping) or set(recorded_terms) != set(TERMS):
         return "term set is incomplete"
@@ -2483,13 +2488,60 @@ def _snqi_v2_row_problem(row: Mapping[str, Any], spec: Any) -> str | None:
         isinstance(stored_score, bool)
         or not isinstance(stored_score, (int, float))
         or not math.isfinite(stored_score)
-        or abs(stored_score - compute_snqi_v2(inputs, spec)) > 1e-12
+        or abs(stored_score - expected["snqi_v2"]) > 1e-12
     ):
         return "score differs from recomputation"
     return None
 
 
-def _snqi_v2_scan_rows(payload_dir: Path, spec: Any) -> tuple[int, int, list[str]]:
+def _snqi_v2_expected_arm_algorithms(payload_dir: Path, violations: list[str]) -> dict[str, str]:
+    """Bind each run directory to the resolved manifest's planner algorithm.
+
+    Returns:
+        Run-directory names mapped to independently declared algorithms.
+    """
+    try:
+        manifest = _read_json_file(payload_dir / "release" / "release_manifest.resolved.json")
+        planners = manifest["planners"]
+        keys = planners["keys"]
+        identities = planners["config_identities"]
+        kinematics = manifest["kinematics"]["matrix"]
+        if (
+            not isinstance(keys, list)
+            or not keys
+            or not isinstance(identities, list)
+            or not isinstance(kinematics, list)
+            or not kinematics
+            or any(not isinstance(value, str) or not value for value in (*keys, *kinematics))
+            or len(set(keys)) != len(keys)
+            or len(set(kinematics)) != len(kinematics)
+        ):
+            raise ValueError("planner keys or kinematics are malformed")
+        algorithms: dict[str, str] = {}
+        for entry in identities:
+            if not isinstance(entry, Mapping):
+                raise ValueError("planner config identity is malformed")
+            key, algorithm = entry.get("key"), entry.get("algo")
+            if (
+                not isinstance(key, str)
+                or key not in keys
+                or key in algorithms
+                or not isinstance(algorithm, str)
+                or not algorithm
+            ):
+                raise ValueError("planner config identity key or algorithm is invalid")
+            algorithms[key] = algorithm
+        if set(algorithms) != set(keys):
+            raise ValueError("planner config identities do not match the release roster")
+        return {f"{key}__{mode}": algorithms[key] for key in keys for mode in kinematics}
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        violations.append(f"SNQI-v2 release arm declaration is invalid: {exc}")
+        return {}
+
+
+def _snqi_v2_scan_rows(
+    payload_dir: Path, spec: Any, expected_algorithms: Mapping[str, str]
+) -> tuple[int, int, list[str]]:
     """Count every v2 row mismatch and retain a bounded, located sample.
 
     Returns:
@@ -2499,6 +2551,12 @@ def _snqi_v2_scan_rows(payload_dir: Path, spec: Any) -> tuple[int, int, list[str
     mismatches = 0
     violations: list[str] = []
     for episodes_path in sorted(payload_dir.glob("runs/*/episodes.jsonl")):
+        expected_algorithm = expected_algorithms.get(episodes_path.parent.name)
+        if expected_algorithm is None:
+            violations.append(
+                f"SNQI-v2 run has no declared release arm: {episodes_path.parent.name}"
+            )
+            continue
         try:
             stream = episodes_path.open(encoding="utf-8")
         except OSError as exc:
@@ -2510,7 +2568,9 @@ def _snqi_v2_scan_rows(payload_dir: Path, spec: Any) -> tuple[int, int, list[str
                     continue
                 rows += 1
                 try:
-                    problem = _snqi_v2_row_problem(json.loads(line), spec)
+                    problem = _snqi_v2_row_problem(
+                        json.loads(line), spec, expected_algorithm=expected_algorithm
+                    )
                 except (KeyError, TypeError, ValueError, OverflowError) as exc:
                     problem = str(exc)
                 if problem is not None:
@@ -2562,7 +2622,8 @@ def _check_snqi_v2_field_consistency(payload_dir: Path) -> dict[str, Any]:
         elif report is not None:
             reports[name] = report
 
-    rows, mismatch_count, row_problems = _snqi_v2_scan_rows(payload_dir, spec)
+    expected_algorithms = _snqi_v2_expected_arm_algorithms(payload_dir, violations)
+    rows, mismatch_count, row_problems = _snqi_v2_scan_rows(payload_dir, spec, expected_algorithms)
     other_violation_count = len(violations) + len(row_problems) - min(mismatch_count, 20)
     violations.extend(row_problems)
     if not rows:

@@ -1007,6 +1007,84 @@ def test_full_release_rejects_malformed_guarded_fallback_controller_state(tmp_pa
 
 
 @pytest.mark.parametrize(
+    ("marker", "value", "normalized"),
+    [("fallback", True, "true"), ("fallback_count", 2, "2")],
+)
+def test_full_release_rejects_nested_guarded_fallback_controller_state_marker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    marker: str,
+    value: object,
+    normalized: str,
+) -> None:
+    """Nested failures in a valid typed shield state remain release blockers."""
+    campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
+    episode_path = campaign_root / "runs" / "planner_11__differential_drive" / "episodes.jsonl"
+    rows = [json.loads(line) for line in episode_path.read_text(encoding="utf-8").splitlines()]
+    rows[0]["algorithm_metadata"].update(
+        {
+            "guard_stats": {"fallback_safe": 1},
+            "shield_stats": {
+                "last_decision": {
+                    "fallback_controller_state": {
+                        "policy": "RiskDWAPlannerAdapter",
+                        "events": [{marker: value}],
+                    }
+                }
+            },
+        }
+    )
+    episode_path.write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+    sidecar_path = episode_path.with_name(f"{episode_path.name}.provenance.json")
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    sidecar["raw_artifacts"][0]["sha256"] = sha256_file(episode_path)
+    sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+
+    assert result["status"] == "invalid"
+    assert result["forbidden_status_counts"][normalized] == 1
+    assert any("fallback_controller_state.events[0]" in blocker for blocker in result["blockers"])
+
+
+def test_guarded_ppo_safe_shield_state_remains_admitted() -> None:
+    """Declared non-intervening shield state remains admissible through acceptance scanning."""
+    payload = {
+        "status": "ok",
+        "algorithm_metadata": {
+            "algorithm": "ppo",
+            "canonical_algorithm": "guarded_ppo",
+            "planner_contract": {"planner_id": "guarded_ppo"},
+            "guard_stats": {"fallback_safe": 1},
+            "shield_stats": {
+                "last_decision": {
+                    "decision_label": "ppo_clear",
+                    "intervened": False,
+                    "fallback_controller_state": {
+                        "policy": "RiskDWAPlannerAdapter",
+                        "prior_available": False,
+                        "action_adaptation": {
+                            "mode": "direct_policy_command",
+                            "residual_clipped": False,
+                        },
+                    },
+                }
+            },
+        },
+    }
+
+    assert _status_markers(payload, "row", expected_algorithm="guarded_ppo") == []
+
+
+@pytest.mark.parametrize(
     ("metadata_container", "metadata"),
     tuple(
         (container, metadata)

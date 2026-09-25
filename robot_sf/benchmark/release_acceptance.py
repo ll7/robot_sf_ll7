@@ -290,6 +290,11 @@ def _algorithm_metadata_runtime_marker(
                     for key, value in decision_counts.items()
                     if key != "fallback_safe" or not _is_valid_native_counter(value)
                 }
+            last_decision = shield_stats.get("last_decision")
+            if isinstance(last_decision, Mapping):
+                shield_view["last_decision"] = {
+                    str(key): value for key, value in last_decision.items()
+                }
             runtime_view["shield_stats"] = shield_view
     return runtime_fallback_or_degraded_marker(
         runtime_view, expected_algorithm=expected_algorithm, algorithm_metadata=metadata

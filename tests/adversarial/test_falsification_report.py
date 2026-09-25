@@ -11,6 +11,7 @@ import pytest
 
 from robot_sf.adversarial.falsification_report import (
     REPORT_SCHEMA,
+    _runtime_seconds,
     build_convergence_report,
     render_figures,
     render_markdown,
@@ -116,6 +117,17 @@ def test_report_keeps_missing_scoreless_duplicate_and_degraded_attempts_visible(
     assert missing_run["artifact_status"] == "missing"
     assert missing_run["num_missing_evaluations"] == 2
     assert missing_run["best_objective_value"] is None
+
+
+def test_runtime_comes_only_from_search_manifest_evidence() -> None:
+    assert _runtime_seconds({"duration_seconds": 12.5, "runtime_seconds": 8.0}, None) == (
+        None,
+        "not_recorded",
+    )
+    assert _runtime_seconds({}, {"runtime_seconds": 3.25}) == (
+        3.25,
+        "search_manifest.runtime_seconds",
+    )
 
 
 def test_random_tpe_comparison_is_seed_matched_and_descriptive_only() -> None:

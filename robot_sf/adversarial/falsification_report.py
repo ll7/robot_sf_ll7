@@ -473,8 +473,6 @@ def _runtime_seconds(
     row: dict[str, Any], manifest: dict[str, Any] | None
 ) -> tuple[float | None, str]:
     candidates: tuple[tuple[str, Any], ...] = (
-        ("comparison_row.runtime_seconds", row.get("runtime_seconds")),
-        ("comparison_row.duration_seconds", row.get("duration_seconds")),
         (
             "search_manifest.runtime_seconds",
             manifest.get("runtime_seconds") if isinstance(manifest, dict) else None,

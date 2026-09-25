@@ -65,6 +65,57 @@ else:
     assert result.returncode == 0, result.stderr
 
 
+def test_report_writer_can_retry_after_missing_matplotlib(tmp_path: Path) -> None:
+    """A failed renderer leaves no partial bundle and the same path can be retried."""
+    input_path = tmp_path / "round-evidence.json"
+    input_path.write_text(json.dumps(_evidence(tmp_path)), encoding="utf-8")
+    output_dir = tmp_path / "report"
+    script = r"""
+import sys
+from importlib.abc import MetaPathFinder
+from pathlib import Path
+
+class DenyMatplotlib(MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "matplotlib" or fullname.startswith("matplotlib."):
+            raise ModuleNotFoundError("matplotlib deliberately unavailable")
+        return None
+
+blocker = DenyMatplotlib()
+sys.meta_path.insert(0, blocker)
+from robot_sf.adversarial.feasibility_frontier_report import (
+    FrontierReportError,
+    write_frontier_report,
+)
+input_path, output_dir = map(Path, sys.argv[1:3])
+expected = {
+    "frontier_report.json",
+    "frontier_report.md",
+    "frontier.png",
+    "frontier.pdf",
+    "frontier.provenance.json",
+}
+try:
+    write_frontier_report(input_path, output_dir)
+except FrontierReportError as exc:
+    assert "matplotlib is required" in str(exc)
+else:
+    raise AssertionError("missing matplotlib should fail report rendering")
+assert not any((output_dir / name).exists() for name in expected)
+sys.meta_path.remove(blocker)
+write_frontier_report(input_path, output_dir)
+assert all((output_dir / name).is_file() for name in expected)
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(input_path), str(output_dir)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def _artifact(root: Path, name: str, *, role: str) -> dict[str, str]:
     path = root / "evidence" / name
     path.parent.mkdir(parents=True, exist_ok=True)

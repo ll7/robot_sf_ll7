@@ -12,6 +12,7 @@ import json
 import math
 import os
 import re
+import tempfile
 from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -819,7 +820,7 @@ def write_frontier_report(
         "role": "frontier-report-input",
         "schema_version": INPUT_SCHEMA_VERSION,
     }
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = output_dir.resolve()
     expected_outputs = (
         "frontier_report.json",
         "frontier_report.md",
@@ -833,17 +834,41 @@ def write_frontier_report(
             "report output already exists; choose a new output directory: "
             + ", ".join(existing_outputs)
         )
-    (output_dir / "frontier_report.json").write_text(
-        json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8"
-    )
-    relative_evidence_root = os.path.relpath(input_path.parent, output_dir.resolve()).replace(
-        os.sep, "/"
-    )
-    (output_dir / "frontier_report.md").write_text(
-        render_frontier_markdown(report, evidence_root_relative_to_report=relative_evidence_root),
-        encoding="utf-8",
-    )
-    write_frontier_figure(report, output_dir / "frontier")
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    published: list[Path] = []
+    with tempfile.TemporaryDirectory(
+        prefix=f".{output_dir.name}.staging-", dir=output_dir.parent
+    ) as staging_name:
+        staging_dir = Path(staging_name)
+        (staging_dir / "frontier_report.json").write_text(
+            json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n",
+            encoding="utf-8",
+        )
+        relative_evidence_root = os.path.relpath(input_path.parent, output_dir).replace(os.sep, "/")
+        (staging_dir / "frontier_report.md").write_text(
+            render_frontier_markdown(
+                report, evidence_root_relative_to_report=relative_evidence_root
+            ),
+            encoding="utf-8",
+        )
+        write_frontier_figure(report, staging_dir / "frontier")
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        concurrent_outputs = [name for name in expected_outputs if (output_dir / name).exists()]
+        if concurrent_outputs:
+            raise FrontierReportError(
+                "report output already exists; choose a new output directory: "
+                + ", ".join(concurrent_outputs)
+            )
+        try:
+            for name in expected_outputs:
+                destination = output_dir / name
+                os.replace(staging_dir / name, destination)
+                published.append(destination)
+        except OSError:
+            for path in published:
+                path.unlink(missing_ok=True)
+            raise
     return report
 
 

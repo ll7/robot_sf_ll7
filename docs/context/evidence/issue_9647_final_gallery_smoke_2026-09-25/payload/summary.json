@@ -67,7 +67,7 @@
       "map_context": {
         "path": "cases/case_0000_7e144c8113a9/inputs/assets/dec460721d42-classic_crossing.svg",
         "reason": "existing_renderer_cannot_decode_map_overlay",
-        "renderer_error": "UnidentifiedImageError: cannot identify image file '/home/luttkule/git/robot_sf_ll7.worktrees/issue-9647-replay-bundles-refresh-20260924/output/adversarial-replay-gallery/issue9647_final_smoke_b5e8af66/cases/case_0000_7e144c8113a9/inputs/assets/dec460721d42-classic_crossing.svg'",
+        "renderer_error": "UnidentifiedImageError: cannot identify image file 'output/adversarial-replay-gallery/issue9647_final_smoke_b5e8af66/cases/case_0000_7e144c8113a9/inputs/assets/dec460721d42-classic_crossing.svg'",
         "sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
         "status": "unavailable"
       },

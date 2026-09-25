@@ -13,3 +13,5 @@ This smoke ran the documented gallery CLI at the clean code revision recorded be
 - The replay outcome is a historical collision; the runner reports it available/native. This is plumbing and outcome-reproduction evidence only. It is not exact-source verification, search evidence, a feasibility proof, planner-performance evidence, or a real-world safety claim.
 
 The raw source/replay streams and images remain in ignored local output at `output/adversarial-replay-gallery/issue9647_final_smoke_b5e8af66`. The tracked bundle contains only this receipt and its compact machine-readable summary; it does not mirror the output tree. Artifact digests are listed in `summary.json`.
+
+For portability, the tracked summary removes only the machine-local checkout prefix from `rendering.map_context.renderer_error`, leaving its repository-relative `output/...` path, exception/message, map asset SHA-256, and raw gallery-manifest SHA-256 unchanged. This is a presentation normalization; the ignored raw output and replay were not regenerated or modified.

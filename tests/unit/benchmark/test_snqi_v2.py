@@ -1048,6 +1048,49 @@ def test_calibration_freeze_rejects_duplicate_acquisition_yaml(
     assert output.read_bytes() == b"prior anchor\n"
 
 
+@pytest.mark.parametrize("phase", ["before_input_snapshot", "before_publish"])
+def test_calibration_freeze_rejects_acquisition_source_race(
+    tmp_path, calibration_archive, monkeypatch, phase
+):
+    from robot_sf.benchmark.camera_ready._util import _config_hash_payload
+    from robot_sf.benchmark.snqi import v2_calibration
+    from robot_sf.benchmark.utils import _config_hash
+
+    cfg, _, _ = calibration_archive
+    source = tmp_path / "acquisition.yaml"
+    source.write_text("horizon: 600\n")
+    cfg = replace(
+        cfg,
+        source_config_path=source,
+        source_config_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
+    )
+    manifest_path = tmp_path / "campaign_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["config_hash"] = _config_hash(_config_hash_payload(cfg))
+    manifest_path.write_text(json.dumps(manifest))
+    method = (
+        "_snapshot_calibration_files"
+        if phase == "before_input_snapshot"
+        else "derive_calibration_anchors"
+    )
+    original = getattr(v2_calibration, method)
+    changed = []
+
+    def mutate_after_validation(*args, **kwargs):
+        result = original(*args, **kwargs)
+        source.write_text("horizon: 1\n")
+        changed.append(True)
+        return result
+
+    monkeypatch.setattr(v2_calibration, method, mutate_after_validation)
+    output = tmp_path / "anchors.json"
+    output.write_bytes(b"prior anchor\n")
+    with pytest.raises(ValueError, match="config source changed|custody changed"):
+        v2_calibration.freeze_campaign_anchors(tmp_path, output, campaign_config=cfg)
+    assert changed == [True]
+    assert output.read_bytes() == b"prior anchor\n"
+
+
 def test_calibration_acquisition_yaml_is_strict_and_hash_bound(tmp_path):
     from robot_sf.benchmark.snqi.v2_calibration import _validated_calibration_config
 

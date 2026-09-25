@@ -187,3 +187,7 @@ also reject duplicate mapping keys, including nested mappings and merge-expanded
 clean versioned family asset is unchanged. This strict acquisition check is scoped to freeze;
 legacy camera-ready YAML parsing is unchanged. Acquisition bytes must match the loader-captured SHA
 and remain unchanged through the final custody check.
+
+The initial acquisition-file snapshot must equal that captured SHA as well. A change between
+configuration validation and input snapshotting is refused; the final check remains bound to the
+original acquisition bytes rather than accepting a newer snapshot as its own authority.

@@ -159,18 +159,7 @@ def freeze_campaign_anchors(
         parse_v2_json(path.read_text(encoding="utf-8")) for path in metadata_paths
     ]
     planners, canonical_scenarios = _bind_calibration_config(config, manifest, preview)
-    input_paths = {
-        Path(config.scenario_matrix_path),
-        get_repository_root() / "robot_sf/benchmark/schemas/episode.schema.v1.json",
-    }
-    if config.source_config_path is not None:
-        input_paths.add(Path(config.source_config_path))
-    input_paths.update(
-        Path(planner.algo_config_path)
-        for planner in planners.values()
-        if planner.algo_config_path is not None
-    )
-    snapshots.update({str(path): sha256_file(path) for path in input_paths})
+    snapshots.update(_snapshot_calibration_inputs(config, planners))
     arms = list(planners)
     scenarios = list(canonical_scenarios)
     expected_algorithms = {key: planner.algo for key, planner in planners.items()}
@@ -242,6 +231,32 @@ def freeze_campaign_anchors(
     temporary.write_text(json.dumps(document, indent=2, sort_keys=True, allow_nan=False) + "\n")
     temporary.replace(output_path)
     return document
+
+
+def _snapshot_calibration_inputs(config: Any, planners: Mapping[str, Any]) -> dict[str, str]:
+    """Bind input snapshots to the acquisition SHA already validated before parsing.
+
+    Returns:
+        Input hashes retained for the final custody check, including the unchanged acquisition SHA.
+    """
+    input_paths = {
+        Path(config.scenario_matrix_path),
+        get_repository_root() / "robot_sf/benchmark/schemas/episode.schema.v1.json",
+    }
+    if config.source_config_path is not None:
+        input_paths.add(Path(config.source_config_path))
+    input_paths.update(
+        Path(planner.algo_config_path)
+        for planner in planners.values()
+        if planner.algo_config_path is not None
+    )
+    snapshots = {str(path): sha256_file(path) for path in input_paths}
+    if (
+        config.source_config_path is not None
+        and snapshots[str(config.source_config_path)] != config.source_config_sha256
+    ):
+        raise ValueError("SNQI-v2 calibration acquisition config source changed before snapshot")
+    return snapshots
 
 
 def _validated_calibration_config(config: Any | None) -> Any:

@@ -629,6 +629,30 @@ def _write_markdown_report(path: Path, name: str, payload: Mapping[str, Any]) ->
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def _spawn_route_completed(episode: Mapping[str, Any]) -> bool:
+    """Bind the producer exception to explicit outcome, or legacy completion metrics.
+
+    Returns:
+        Whether the row consistently declares a completed route.
+    """
+    if episode.get("status") != "success":
+        return False
+    if "outcome" in episode:
+        outcome = episode["outcome"]
+        return (
+            isinstance(outcome, Mapping)
+            and outcome.get("route_complete") is True
+            and isinstance(outcome.get("collision_event"), bool)
+            and outcome.get("timeout_event") is False
+        )
+    metrics = episode.get("metrics", {})
+    return (
+        isinstance(metrics, Mapping)
+        and metrics.get("success") in (True, 1)
+        and metrics.get("total_collision_count") == 0
+    )
+
+
 def _validate_spawn_validity(episode: Mapping[str, Any]) -> None:
     """Refuse invalid or ambiguous spawn admission while preserving legacy absence."""
     if "spawn_validity" not in episode:
@@ -653,16 +677,9 @@ def _validate_spawn_validity(episode: Mapping[str, Any]) -> None:
     ):
         raise ValueError("SNQI-v2 inconsistent spawn_validity: reset overlap disagrees")
     if reset_overlap or respawn_collisions:
-        metrics = episode.get("metrics", {})
-        completed = (
-            episode.get("status") == "success"
-            and isinstance(metrics, Mapping)
-            and metrics.get("success") in (True, 1)
-            and metrics.get("total_collision_count") == 0
-        )
-        # The producer exempts completed routes; collision/failure rows cannot
-        # override reset or attributed respawn overlap with invalid_run=false.
-        if not completed:
+        # The producer exempts completed routes, including earlier collisions;
+        # a non-success termination cannot claim that exception.
+        if not _spawn_route_completed(episode):
             raise ValueError("SNQI-v2 inconsistent spawn_validity: overlap row marked valid")
 
 

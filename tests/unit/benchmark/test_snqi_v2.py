@@ -673,16 +673,53 @@ def test_spawn_validity_completed_exception_requires_success_status(entrypoint, 
             derive_calibration_anchors(rows, **kwargs)
 
 
-def test_spawn_validity_preserves_producer_completed_route_exception():
+@pytest.mark.parametrize("entrypoint", ["score", "calibration"])
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        {"route_complete": False, "collision_event": False, "timeout_event": False},
+        {"route_complete": True, "collision_event": False, "timeout_event": True},
+        {"route_complete": 1, "collision_event": False, "timeout_event": False},
+        {},
+        None,
+    ],
+)
+def test_spawn_validity_completed_exception_requires_consistent_outcome(entrypoint, outcome):
+    """Explicit producer outcome facts override apparently successful score metrics."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+    from robot_sf.benchmark.spawn_validity import build_spawn_validity
+
+    rows, kwargs = calibration_records()
+    rows[0]["outcome"] = outcome
+    rows[0]["spawn_validity"] = build_spawn_validity({"overlap": True}, [], route_complete=True)
+    with pytest.raises(ValueError, match="spawn_validity"):
+        if entrypoint == "score":
+            score_episode(rows[0], fixture_spec())
+        else:
+            derive_calibration_anchors(rows, **kwargs)
+
+
+@pytest.mark.parametrize("prior_collision", [False, True])
+@pytest.mark.parametrize("with_outcome", [False, True])
+def test_spawn_validity_preserves_producer_completed_route_exception(with_outcome, prior_collision):
     """The producer permits a completed route despite reset-overlap telemetry."""
     from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
     from robot_sf.benchmark.spawn_validity import build_spawn_validity
 
     rows, kwargs = calibration_records()
+    if prior_collision and with_outcome:
+        for row in rows:
+            row["metrics"]["total_collision_count"] = 1
     expected_score = score_episode(rows[0], fixture_spec())
     expected_anchors = derive_calibration_anchors(rows, **kwargs)
     for row in rows:
         row["spawn_validity"] = build_spawn_validity({"overlap": True}, [], route_complete=True)
+        if with_outcome:
+            row["outcome"] = {
+                "route_complete": True,
+                "collision_event": prior_collision,
+                "timeout_event": False,
+            }
     assert score_episode(rows[0], fixture_spec())["metrics"] == expected_score["metrics"]
     assert derive_calibration_anchors(rows, **kwargs) == expected_anchors
 

@@ -7,6 +7,7 @@ Undefined source metrics and incomplete planner/seed coverage fail closed.
 from __future__ import annotations
 
 import json
+import math
 import tempfile
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
@@ -34,7 +35,10 @@ from robot_sf.benchmark.snqi.v2_spec import (
     SnqiV2Spec,
     parse_v2_json,
 )
-from robot_sf.benchmark.spawn_validity import SPAWN_VALIDITY_SCHEMA_VERSION
+from robot_sf.benchmark.spawn_validity import (
+    RESPAWN_COLLISION_WINDOW_S,
+    SPAWN_VALIDITY_SCHEMA_VERSION,
+)
 
 CLAIM_BOUNDARY = (
     "SNQI-v2 is a declared benchmark aggregate over simulator quantities. It is not a validated "
@@ -653,6 +657,53 @@ def _spawn_route_completed(episode: Mapping[str, Any]) -> bool:
     )
 
 
+def _spawn_clearance_negative(value: Any, *, obstacle: bool = False) -> bool:
+    """Validate a producer clearance scalar and return whether it denotes contact.
+
+    Returns:
+        Whether the measured clearance is negative; absent measurements are false.
+    """
+    if value is None:
+        return False
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("SNQI-v2 malformed spawn_validity: invalid clearance scalar")
+    if not math.isfinite(value) and not (obstacle and value == math.inf):
+        raise ValueError("SNQI-v2 malformed spawn_validity: nonfinite clearance")
+    return value < 0.0
+
+
+def _validate_reset_clearance(clearance: Mapping[str, Any]) -> None:
+    """Check the verdict and geometry fields emitted by reset_spawn_clearance."""
+    required = {
+        "robot_pedestrian_min_surface_clearance_m",
+        "robot_obstacle_min_surface_clearance_m",
+        "overlapping_pedestrian_rows",
+        "pedestrian_overlap",
+        "obstacle_overlap",
+        "overlap",
+    }
+    if not required.issubset(clearance):
+        raise ValueError("SNQI-v2 malformed spawn_validity: incomplete reset clearance")
+    rows = clearance["overlapping_pedestrian_rows"]
+    if (
+        not isinstance(rows, list)
+        or any(isinstance(row, bool) or not isinstance(row, int) or row < 0 for row in rows)
+        or rows != sorted(set(rows))
+    ):
+        raise ValueError("SNQI-v2 malformed spawn_validity: invalid overlapping pedestrian rows")
+    pedestrian = _spawn_clearance_negative(clearance["robot_pedestrian_min_surface_clearance_m"])
+    obstacle = _spawn_clearance_negative(
+        clearance["robot_obstacle_min_surface_clearance_m"], obstacle=True
+    )
+    if not (
+        pedestrian == bool(rows)
+        and clearance["pedestrian_overlap"] is pedestrian
+        and clearance["obstacle_overlap"] is obstacle
+        and clearance["overlap"] is (pedestrian or obstacle)
+    ):
+        raise ValueError("SNQI-v2 inconsistent spawn_validity: reset clearance verdict disagrees")
+
+
 def _validate_spawn_validity_shape(block: Mapping[str, Any]) -> None:
     """Require the complete schema emitted by build_spawn_validity for present blocks."""
     required = {
@@ -683,10 +734,63 @@ def _validate_spawn_validity_shape(block: Mapping[str, Any]) -> None:
     )
     if not all(checks):
         raise ValueError("SNQI-v2 malformed spawn_validity: invalid producer field types")
+    if clearance is not None:
+        _validate_reset_clearance(clearance)
     for key in ("respawn_overlap_events", "respawn_overlap_collisions"):
         events = block[key]
         if not isinstance(events, list) or any(not isinstance(event, Mapping) for event in events):
             raise ValueError("SNQI-v2 malformed spawn_validity: invalid respawn telemetry")
+
+
+def _validate_respawn_attribution(episode: Mapping[str, Any], block: Mapping[str, Any]) -> None:
+    """Bind attributed collisions to declared respawn group, pedestrian and timing."""
+    collisions = block["respawn_overlap_collisions"]
+    if not collisions:
+        return
+    params = episode.get("scenario_params", {})
+    dt = params.get("run_dt") if isinstance(params, Mapping) else None
+    if isinstance(dt, bool) or not isinstance(dt, (int, float)) or not math.isfinite(dt) or dt <= 0:
+        raise ValueError("SNQI-v2 malformed spawn_validity: respawn attribution requires run_dt")
+    for collision in collisions:
+        _validate_respawn_collision(collision, block["respawn_overlap_events"], float(dt))
+
+
+def _validate_respawn_collision(
+    collision: Mapping[str, Any], events: list[Mapping[str, Any]], dt: float
+) -> None:
+    """Refuse attribution without matching source event and the producer timing window."""
+    group, row = collision.get("group_id"), collision.get("ped_row")
+    times = [collision.get("respawn_time_s"), collision.get("collision_time_s")]
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in (group, row)
+    ) or any(
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value < 0
+        for value in times
+    ):
+        raise ValueError("SNQI-v2 malformed spawn_validity: invalid attributed collision")
+    respawn_time, collision_time = times
+    matched = any(
+        isinstance(event.get("group_id"), int)
+        and not isinstance(event["group_id"], bool)
+        and event["group_id"] == group
+        and isinstance(event.get("ped_rows"), list)
+        and all(
+            isinstance(value, int) and not isinstance(value, bool) and value >= 0
+            for value in event["ped_rows"]
+        )
+        and row in event["ped_rows"]
+        and isinstance(event.get("step"), int)
+        and not isinstance(event["step"], bool)
+        and event["step"] >= 0
+        and event["step"] * dt == respawn_time
+        for event in events
+    )
+    elapsed = collision_time - respawn_time
+    if not matched or not -dt - 1e-9 <= elapsed <= RESPAWN_COLLISION_WINDOW_S + 1e-9:
+        raise ValueError("SNQI-v2 inconsistent spawn_validity: unmatched respawn collision")
 
 
 def _validate_spawn_validity(episode: Mapping[str, Any]) -> None:
@@ -697,6 +801,7 @@ def _validate_spawn_validity(episode: Mapping[str, Any]) -> None:
     if not isinstance(block, Mapping) or not isinstance(block.get("invalid_run"), bool):
         raise ValueError("SNQI-v2 malformed spawn_validity: explicit boolean invalid_run required")
     _validate_spawn_validity_shape(block)
+    _validate_respawn_attribution(episode, block)
     if block["invalid_run"]:
         raise ValueError("SNQI-v2 refuses spawn_validity.invalid_run episode")
     if block.get("invalid_reason") is not None:

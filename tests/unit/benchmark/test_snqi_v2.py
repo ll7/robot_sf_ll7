@@ -627,6 +627,170 @@ def test_spawn_validity_rejected_before_score_or_calibration(entrypoint, spawn_v
     assert "snqi_v2" not in rows[0]["metrics"]
 
 
+def spawn_clearance_fixture(overlap=False):
+    """Return the full reset clearance schema with consistent pedestrian geometry."""
+    return {
+        "robot_pedestrian_min_surface_clearance_m": -0.1 if overlap else 0.5,
+        "robot_obstacle_min_surface_clearance_m": 1.0,
+        "overlapping_pedestrian_rows": [0] if overlap else [],
+        "pedestrian_overlap": overlap,
+        "obstacle_overlap": False,
+        "overlap": overlap,
+    }
+
+
+@pytest.mark.parametrize("entrypoint", ["score", "calibration"])
+def test_spawn_validity_rejects_contradictory_nested_clearance(entrypoint):
+    """A false aggregate flag cannot hide measured pedestrian overlap."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+    from robot_sf.benchmark.spawn_validity import build_spawn_validity
+
+    rows, kwargs = calibration_records()
+    row = rows[0]
+    row["status"] = "collision"
+    row["metrics"].update(success=0, total_collision_count=1)
+    clearance = spawn_clearance_fixture(overlap=True)
+    clearance["overlap"] = False
+    row["spawn_validity"] = build_spawn_validity(clearance, [])
+    with pytest.raises(ValueError, match="spawn_validity"):
+        if entrypoint == "score":
+            score_episode(row, fixture_spec())
+        else:
+            derive_calibration_anchors(rows, **kwargs)
+
+
+@pytest.mark.parametrize("entrypoint", ["score", "calibration"])
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("pedestrian_overlap", True),
+        ("obstacle_overlap", True),
+        ("overlap", True),
+        ("pedestrian_overlap", 0),
+        ("overlapping_pedestrian_rows", [0]),
+        ("overlapping_pedestrian_rows", [True]),
+        ("overlapping_pedestrian_rows", [-1]),
+        ("overlapping_pedestrian_rows", [0, 0]),
+        ("robot_pedestrian_min_surface_clearance_m", -0.1),
+        ("robot_obstacle_min_surface_clearance_m", -0.1),
+        ("robot_pedestrian_min_surface_clearance_m", True),
+        ("robot_obstacle_min_surface_clearance_m", "0.5"),
+        ("robot_pedestrian_min_surface_clearance_m", float("nan")),
+        ("robot_obstacle_min_surface_clearance_m", float("-inf")),
+        ("missing_nested_field", None),
+    ],
+)
+def test_spawn_validity_rejects_nested_clearance_drift(entrypoint, key, value):
+    """Malformed or contradictory nested geometry cannot assert a clear reset."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+    from robot_sf.benchmark.spawn_validity import build_spawn_validity
+
+    rows, kwargs = calibration_records()
+    clearance = spawn_clearance_fixture()
+    if key == "missing_nested_field":
+        del clearance["pedestrian_overlap"]
+    else:
+        clearance[key] = value
+    rows[0]["spawn_validity"] = build_spawn_validity(clearance, [], route_complete=True)
+    with pytest.raises(ValueError, match="spawn_validity"):
+        if entrypoint == "score":
+            score_episode(rows[0], fixture_spec())
+        else:
+            derive_calibration_anchors(rows, **kwargs)
+
+
+@pytest.mark.parametrize(
+    "ped_x,obstacle_clearance", [(2.0, 1.0), (0.0, 1.0), (2.0, -0.1), (None, float("inf"))]
+)
+def test_spawn_validity_accepts_actual_reset_clearance_producer(
+    monkeypatch, ped_x, obstacle_clearance
+):
+    """Actual reset producer output retains its score/anchors for completed routes."""
+    from types import SimpleNamespace
+
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+    from robot_sf.benchmark.spawn_validity import build_spawn_validity
+    from robot_sf.sim import spawn_validation
+
+    simulator = SimpleNamespace(
+        config=SimpleNamespace(ped_radius=0.3),
+        robots=[SimpleNamespace(pose=((0.0, 0.0), 0.0), config=SimpleNamespace(radius=0.3))],
+        ped_pos=[] if ped_x is None else [(ped_x, 0.0)],
+        map_def=None,
+    )
+    monkeypatch.setattr(spawn_validation, "robot_obstacle_clearance", lambda *_: obstacle_clearance)
+    clearance = spawn_validation.reset_spawn_clearance(simulator)
+    rows, kwargs = calibration_records()
+    expected_score = score_episode(rows[0], fixture_spec())
+    expected_anchors = derive_calibration_anchors(rows, **kwargs)
+    for row in rows:
+        row["spawn_validity"] = build_spawn_validity(clearance, [], route_complete=True)
+    assert score_episode(rows[0], fixture_spec())["metrics"] == expected_score["metrics"]
+    assert derive_calibration_anchors(rows, **kwargs) == expected_anchors
+
+
+@pytest.mark.parametrize("entrypoint", ["score", "calibration"])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "none",
+        "missing_event",
+        "wrong_group",
+        "wrong_ped",
+        "wrong_time",
+        "outside_window",
+        "bad_time",
+        "missing_dt",
+    ],
+)
+def test_spawn_validity_binds_respawn_attribution(entrypoint, mutation):
+    """Attributed collisions retain their source event and producer timing window."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+    from robot_sf.benchmark.spawn_validity import build_spawn_validity
+
+    rows, kwargs = calibration_records()
+    event = {"group_id": 0, "ped_rows": [0], "step": 10, "positions": [[0.0, 0.0]]}
+    block = build_spawn_validity(
+        spawn_clearance_fixture(),
+        [event],
+        route_complete=True,
+        dt_seconds=0.1,
+        collision_events=[
+            {
+                "collision_partner_type": "pedestrian",
+                "collision_partner_id": 0,
+                "collision_time": 1.2,
+            }
+        ],
+    )
+    assert len(block["respawn_overlap_collisions"]) == 1
+    if mutation == "missing_event":
+        block["respawn_overlap_events"] = []
+    elif mutation == "missing_dt":
+        del rows[0]["scenario_params"]["run_dt"]
+    elif mutation != "none":
+        field, value = {
+            "wrong_group": ("group_id", 1),
+            "wrong_ped": ("ped_row", 1),
+            "wrong_time": ("respawn_time_s", 0.9),
+            "outside_window": ("collision_time_s", 2.1),
+            "bad_time": ("collision_time_s", True),
+        }[mutation]
+        block["respawn_overlap_collisions"][0][field] = value
+    rows[0]["spawn_validity"] = block
+    if mutation == "none":
+        if entrypoint == "score":
+            assert "snqi_v2" in score_episode(rows[0], fixture_spec())["metrics"]
+        else:
+            assert derive_calibration_anchors(rows, **kwargs)
+        return
+    with pytest.raises(ValueError, match="spawn_validity"):
+        if entrypoint == "score":
+            score_episode(rows[0], fixture_spec())
+        else:
+            derive_calibration_anchors(rows, **kwargs)
+
+
 @pytest.mark.parametrize("entrypoint", ["score", "calibration"])
 @pytest.mark.parametrize(
     "missing_key",
@@ -653,7 +817,7 @@ def test_spawn_validity_present_block_requires_complete_schema(entrypoint, missi
     row["status"] = "collision"
     row["metrics"].update(success=0, total_collision_count=1)
     row["outcome"] = {"route_complete": False, "collision_event": True, "timeout_event": False}
-    block = build_spawn_validity({"overlap": False}, [])
+    block = build_spawn_validity(spawn_clearance_fixture(), [])
     if missing_key == "all_telemetry":
         block = {"invalid_run": False}
     else:
@@ -687,7 +851,7 @@ def test_spawn_validity_present_block_rejects_malformed_telemetry(entrypoint, ke
     from robot_sf.benchmark.spawn_validity import build_spawn_validity
 
     rows, kwargs = calibration_records()
-    block = build_spawn_validity({"overlap": False}, [])
+    block = build_spawn_validity(spawn_clearance_fixture(), [])
     block[key] = value
     rows[0]["spawn_validity"] = block
     with pytest.raises(ValueError, match="spawn_validity"):
@@ -710,7 +874,7 @@ def test_spawn_validity_rejects_producer_inconsistent_valid_flag(entrypoint, sig
     row = rows[0]
     row["status"] = "collision"
     row["metrics"].update(success=0, total_collision_count=1)
-    block = build_spawn_validity({"overlap": signal == "reset_overlap"}, [])
+    block = build_spawn_validity(spawn_clearance_fixture(overlap=signal == "reset_overlap"), [])
     if signal == "respawn_overlap_collisions":
         block[signal] = [{"ped_row": 0, "respawn_time_s": 0.0, "collision_time_s": 0.1}]
     elif signal == "reset_clearance_mismatch":
@@ -735,7 +899,9 @@ def test_spawn_validity_completed_exception_requires_success_status(entrypoint, 
     row = rows[0]
     row["status"] = status
     row["metrics"].update(success=1, total_collision_count=0)
-    row["spawn_validity"] = build_spawn_validity({"overlap": True}, [], route_complete=True)
+    row["spawn_validity"] = build_spawn_validity(
+        spawn_clearance_fixture(overlap=True), [], route_complete=True
+    )
     with pytest.raises(ValueError, match="spawn_validity"):
         if entrypoint == "score":
             score_episode(row, fixture_spec())
@@ -761,7 +927,9 @@ def test_spawn_validity_completed_exception_requires_consistent_outcome(entrypoi
 
     rows, kwargs = calibration_records()
     rows[0]["outcome"] = outcome
-    rows[0]["spawn_validity"] = build_spawn_validity({"overlap": True}, [], route_complete=True)
+    rows[0]["spawn_validity"] = build_spawn_validity(
+        spawn_clearance_fixture(overlap=True), [], route_complete=True
+    )
     with pytest.raises(ValueError, match="spawn_validity"):
         if entrypoint == "score":
             score_episode(rows[0], fixture_spec())
@@ -783,7 +951,9 @@ def test_spawn_validity_preserves_producer_completed_route_exception(with_outcom
     expected_score = score_episode(rows[0], fixture_spec())
     expected_anchors = derive_calibration_anchors(rows, **kwargs)
     for row in rows:
-        row["spawn_validity"] = build_spawn_validity({"overlap": True}, [], route_complete=True)
+        row["spawn_validity"] = build_spawn_validity(
+            spawn_clearance_fixture(overlap=True), [], route_complete=True
+        )
         if with_outcome:
             row["outcome"] = {
                 "route_complete": True,
@@ -794,7 +964,7 @@ def test_spawn_validity_preserves_producer_completed_route_exception(with_outcom
     assert derive_calibration_anchors(rows, **kwargs) == expected_anchors
 
 
-@pytest.mark.parametrize("clearance", [{"overlap": False}, None])
+@pytest.mark.parametrize("clearance", [spawn_clearance_fixture(), None])
 def test_spawn_validity_accepts_absent_legacy_and_valid_producer_block(clearance):
     """Legacy absence and canonical valid blocks retain the same score and anchors."""
     from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors

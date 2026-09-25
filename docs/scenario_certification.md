@@ -32,9 +32,11 @@ Each certificate includes:
   after classification and verifies the certificate's `source` resolves to the candidate manifest
   bytes. Producer digest fields are checked when a certificate supplies them; their absence does not
   change the v1 output, but adapter-time identity does not attest which map/route bytes a legacy
-  certificate used when it was generated. A certificate can exclude only when its producer-time
-  identity matches the current source digest (root-only inputs) or effective-input digest (external
-  runtime closure); otherwise its classification remains unknown for admissibility. The runtime
+  certificate used when it was generated. A certificate can support an adapter exclusion only
+  when its producer-time identity matches the current source digest (root-only inputs) or
+  effective-input digest (external runtime closure). Route-local geometric and kinodynamic
+  classifications remain unknown even when bound, because v1 does not prove every possible path
+  is blocked. The runtime
   identity covers included manifests and the selected scenario's resolved map and route-override
   files, including the resolved `map_id` path and parser selected by its suffix. If a scenario
   omits both `map_file` and `map_id`, the closure includes every SVG loaded into the default
@@ -82,10 +84,13 @@ Geometry checks:
   grid-inflated A* path can still cut a diagonal corner that the continuous robot disc
   cannot pass, so the certifier measures the full-polyline clearance
   (``LineString(path).distance(obstacles) - robot_radius``) and fails closed as
-  ``geometrically_infeasible`` when the swept envelope clips an obstacle corner
+  ``geometrically_infeasible`` when the selected swept envelope clips an obstacle corner
   (negative clearance), when a planned vertex is clipped, or when the geometry is
-  invalid, empty, or otherwise unverifiable. The occupancy-grid/A* verdict
-  (``inflated_collision_free_path``) and the continuous swept-disc verdict
+  invalid, empty, or otherwise unverifiable. This is evidence about the selected A* route;
+  it does not establish that every continuous route between the spawn and goal is blocked.
+  The adversarial adapter therefore retains these geometry results as
+  ``admissible_feasibility_unknown`` until a path-space proof is available. The
+  occupancy-grid/A* verdict (``inflated_collision_free_path``) and the continuous swept-disc verdict
   (``swept_envelope``), and an executable runtime collision verdict
   (``simulator_obstacle_collision``) are recorded together for the discriminating
   check. The runtime verdict replays conservative path samples through
@@ -100,8 +105,9 @@ Kinodynamic checks:
 
 - differential-drive and holonomic robots are considered command-feasible when their existing
   settings validate, because they can rotate in place,
-- bicycle-drive routes are excluded when the authored route contains a turn tighter than the
-  configured `wheelbase / tan(max_steer)` limit.
+- bicycle-drive authored routes are marked as route-level failures when they contain a turn tighter
+  than the configured `wheelbase / tan(max_steer)` limit. A route-level failure does not show that
+  every alternative path is impossible, so the adversarial adapter retains it as unknown.
 
 Dynamic checks:
 
@@ -176,14 +182,18 @@ separate from planner-evaluation results and does not alter the benchmark denomi
 
 The adapter has five outcomes: `structurally_invalid`,
 `geometric_or_kinodynamic_impossibility`, `admissible_feasibility_unknown`,
-`empirically_feasible`, and `planner_specific_failure`. It rejects only explicit structural or
-geometry/kinodynamic exclusions. Structural exclusions require corroborating producer checks: an
+`empirically_feasible`, and `planner_specific_failure`. It rejects corroborated structural
+invalidity. The current `scenario_cert.v1` geometry and kinodynamic checks are route-local, so even
+matching evidence for every declared spawn/goal pair remains `admissible_feasibility_unknown`:
+the certificate does not enumerate all continuous path alternatives. Its route inventory summary
+states that scope explicitly. Structural exclusions require corroborating producer checks: an
 empty route inventory with the producer's no-route reason, a waypoint count below two with null
 endpoints, or a non-finite endpoint serialized as null/malformed. Reason labels without matching
 checks remain unknown. The current certificate does not include map bounds, obstacle geometry, or
 enough infrastructure policy data to verify outside-map, obstacle, or infrastructure labels, so
-those invalid certificates remain `admissible_feasibility_unknown`. An oracle exclusion is scoped to its recorded robot envelope;
-the envelope and certificate assumptions remain attached to the verdict. A
+those invalid certificates remain `admissible_feasibility_unknown`. An oracle exclusion is scoped
+to its recorded robot envelope; the envelope and certificate assumptions remain attached to the
+verdict. A
 `dynamically_overconstrained` certificate, a blocked or truncated oracle, missing provenance, or
 conflicting evidence remains `admissible_feasibility_unknown`. A positive actor-free oracle result
 requires a `passed` completion with route completion true, no blocker, explicit
@@ -196,17 +206,18 @@ changed source bytes, missing fallback status, contradictory completion status/t
 inconsistent steps remain blocked or unknown. A geometric oracle exclusion
 must carry the producer's no-path completion record; a contradictory positive completion cannot be
 overridden by the geometric label. Since `scenario_cert.v1` reports the
-highest-severity route at the scenario level, geometry or kinematic exclusion requires every
-applicable route certificate to support the same excluded classification; a different or usable
-route keeps the whole case unknown. Each route's reason must also match check data from the
-canonical certifier: a blocked inflated path, a validated swept-envelope clearance failure, a
-validated runtime collision with the same first-collision sample, or a bicycle turning-radius or
-steering-limit failure with matching kinematic values. The scenario-level reason list must match
-the route-level reasons. Labels without those checks, empty reasons, or contradictory values stay
-`admissible_feasibility_unknown`; an unsupported robot model does not establish kinodynamic
-impossibility. For the default oracle certifier, the loader records the exact parser-consumed map
-and route-override snapshots; the report's stable-input status requires those records to match the
-declared closure. Map parsing is cached by content digest, so replacing bytes at the same path
+highest-severity route at the scenario level, its inventory can establish coverage of declared
+spawn/goal pairs, but not coverage of all path alternatives. Each route's reason is checked against
+data from the canonical certifier: a blocked inflated path, a validated swept-envelope clearance
+failure, a validated runtime collision with the same first-collision sample, or a bicycle
+turning-radius or steering-limit failure with matching kinematic values. The scenario-level reason
+list must match the route-level reasons. These checks validate the route-local report only; they do
+not turn it into global geometric or kinodynamic impossibility evidence. Labels without those
+checks, empty reasons, or contradictory values stay `admissible_feasibility_unknown`; an
+unsupported robot model does not establish kinodynamic impossibility. For the default oracle
+certifier, the loader records the exact parser-consumed map and route-override snapshots; the
+report's stable-input status requires those records to match the declared closure. Map parsing is
+cached by content digest, so replacing bytes at the same path
 cannot reuse a stale parsed definition. The default oracle also requires a scenario row whose
 loader-captured manifest closure matches the current root and included-manifest bytes. A stale row
 or a plain hand-built mapping is blocked and remains unknown; `make_envelope_scenario(...)`

@@ -454,11 +454,8 @@ def _certificate(
         )
         return invalidity, True, assumptions
     if classification in {"geometrically_infeasible", "kinodynamically_infeasible"}:
-        if eligibility == "excluded" and _all_routes_confirm_impossibility(cert, classification):
-            reasons.append(f"scenario_certificate_{classification}")
-            return GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY, True, assumptions
         if eligibility == "excluded":
-            reasons.append("scenario_certificate_route_coverage_unresolved")
+            reasons.append(_certificate_route_exclusion_reason(cert, classification))
             return None, True, assumptions
         reasons.append("scenario_certificate_classification_eligibility_conflict")
         return _CERT_CONFLICT, True, assumptions
@@ -565,11 +562,24 @@ def _certificate_exclusion_generation_is_unbound(
         return False
     if classification == "invalid" and _invalid_certificate_category(cert) is None:
         reasons.append("scenario_certificate_invalidity_unresolved")
-    elif classification in {"geometrically_infeasible", "kinodynamically_infeasible"} and not (
-        _all_routes_confirm_impossibility(cert, classification)
-    ):
-        reasons.append("scenario_certificate_route_coverage_unresolved")
+    elif classification in {"geometrically_infeasible", "kinodynamically_infeasible"}:
+        reasons.append(_certificate_route_exclusion_reason(cert, classification))
     return True
+
+
+def _certificate_route_exclusion_reason(cert: Mapping[str, Any], classification: str) -> str:
+    """Explain why route-level exclusion evidence cannot exclude the whole scenario."""
+    routes = cert.get("route_certificates")
+    if (
+        not _route_inventory_complete(cert)
+        or not isinstance(routes, Sequence)
+        or isinstance(routes, (str, bytes))
+        or not _certificate_reasons_match_routes(cert, routes)
+    ):
+        return "scenario_certificate_route_coverage_unresolved"
+    if _all_routes_have_route_exclusion_evidence(cert, classification):
+        return "scenario_certificate_alternative_paths_unresolved"
+    return "scenario_certificate_route_exclusion_evidence_unresolved"
 
 
 def _record_unbound_certificate_generation_identity(
@@ -633,8 +643,8 @@ def _certificate_producer_identity_fields_present(cert: Mapping[str, Any]) -> bo
     )
 
 
-def _all_routes_confirm_impossibility(cert: Mapping[str, Any], classification: str) -> bool:
-    """Require producer-shaped reason and check evidence for every excluded route."""
+def _all_routes_have_route_exclusion_evidence(cert: Mapping[str, Any], classification: str) -> bool:
+    """Match route-local exclusion checks without treating them as global path proof."""
     routes = cert.get("route_certificates")
     if (
         not _route_inventory_complete(cert)
@@ -649,7 +659,7 @@ def _all_routes_confirm_impossibility(cert: Mapping[str, Any], classification: s
         isinstance(route, Mapping)
         and route.get("classification") == classification
         and route.get("benchmark_eligibility") == "excluded"
-        and _route_has_impossibility_evidence(route, classification)
+        and _route_has_exclusion_evidence(route, classification)
         for route in routes
     )
 
@@ -672,8 +682,8 @@ def _certificate_reasons_match_routes(cert: Mapping[str, Any], routes: Sequence[
     return top_reasons == sorted(route_reasons)
 
 
-def _route_has_impossibility_evidence(route: Mapping[str, Any], classification: str) -> bool:
-    """Validate a route exclusion against the checks emitted by scenario_cert.v1."""
+def _route_has_exclusion_evidence(route: Mapping[str, Any], classification: str) -> bool:
+    """Validate a route-local exclusion against checks emitted by scenario_cert.v1."""
     reasons = route.get("reasons")
     checks = route.get("checks")
     if (
@@ -684,14 +694,14 @@ def _route_has_impossibility_evidence(route: Mapping[str, Any], classification: 
     ):
         return False
     if classification == "geometrically_infeasible":
-        return _route_has_geometric_evidence(reasons[0], checks)
+        return _route_has_geometric_exclusion_evidence(reasons[0], checks)
     if classification == "kinodynamically_infeasible":
-        return _route_has_kinodynamic_evidence(reasons[0], checks)
+        return _route_has_kinodynamic_exclusion_evidence(reasons[0], checks)
     return False
 
 
-def _route_has_geometric_evidence(reason: str, checks: Mapping[str, Any]) -> bool:
-    """Match one of the geometric failure records emitted by the canonical producer."""
+def _route_has_geometric_exclusion_evidence(reason: str, checks: Mapping[str, Any]) -> bool:
+    """Match one geometric route failure record emitted by the canonical producer."""
     if checks.get("inflated_collision_free_path") is not False:
         return False
     if reason == "no_inflated_collision_free_path: empty_path":
@@ -748,8 +758,8 @@ def _route_has_geometric_evidence(reason: str, checks: Mapping[str, Any]) -> boo
     return False
 
 
-def _route_has_kinodynamic_evidence(reason: str, checks: Mapping[str, Any]) -> bool:
-    """Match supported bicycle infeasibility reasons to their recorded check values."""
+def _route_has_kinodynamic_exclusion_evidence(reason: str, checks: Mapping[str, Any]) -> bool:
+    """Match one bicycle route failure record to its recorded check values."""
     kinodynamic = checks.get("kinodynamic")
     if not isinstance(kinodynamic, Mapping):
         return False
@@ -844,7 +854,7 @@ def _route_inventory_complete(cert: Mapping[str, Any]) -> bool:
 
 
 def _route_inventory_summary(cert: Mapping[str, Any]) -> dict[str, Any]:
-    """Expose route inventory completeness alongside the source certificate evidence."""
+    """Separate declared spawn/goal route coverage from the unenumerated path space."""
     checks = cert.get("checks")
     routes = cert.get("route_certificates")
     route_count = checks.get("route_count") if isinstance(checks, Mapping) else None
@@ -857,6 +867,8 @@ def _route_inventory_summary(cert: Mapping[str, Any]) -> dict[str, Any]:
         "declared_count": route_count,
         "observed_count": observed_count,
         "complete": _route_inventory_complete(cert),
+        "complete_scope": "declared_spawn_goal_route_pairs",
+        "all_continuous_path_alternatives_covered": False,
     }
 
 
@@ -1058,8 +1070,16 @@ def _oracle(  # noqa: PLR0913 - oracle classification needs its bound source and
 
 
 def _classify_oracle_exclusion(cert: Any, cert_valid: bool, reasons: list[str]) -> str | None:
-    """Only accept a geometric exclusion when complete scenario route coverage agrees."""
-    if not cert_valid or _certificate_route_coverage_unresolved(cert):
+    """Keep route-based oracle exclusions unknown without global path-space evidence."""
+    if not cert_valid or _certificate_global_impossibility_unresolved(cert):
+        if (
+            isinstance(cert, Mapping)
+            and _route_inventory_complete(cert)
+            and cert.get("classification")
+            in {"geometrically_infeasible", "kinodynamically_infeasible"}
+        ):
+            reasons.append("oracle_geometric_exclusion_alternative_paths_unresolved")
+            return None
         reasons.append("oracle_geometric_exclusion_route_coverage_unresolved")
         return None
     if not _certificate_supports_oracle_exclusion(cert):
@@ -1330,14 +1350,14 @@ def _positive_int(value: Any) -> bool:
 
 
 def _certificate_supports_oracle_exclusion(cert: Any) -> bool:
-    """Require a complete matching certificate before using an oracle exclusion globally."""
+    """Require a source certificate that actually proves scenario-wide impossibility."""
     if not isinstance(cert, Mapping) or not _route_inventory_complete(cert):
         return False
     classification = cert.get("classification")
     if classification in {"geometrically_infeasible", "kinodynamically_infeasible"}:
-        return cert.get(
-            "benchmark_eligibility"
-        ) == "excluded" and _all_routes_confirm_impossibility(cert, str(classification))
+        # scenario_cert.v1 records route checks, not every continuous path alternative.
+        # No current field proves that the complete scenario path space was excluded.
+        return False
     if classification == "invalid":
         return (
             cert.get("benchmark_eligibility") == "excluded"
@@ -1346,13 +1366,13 @@ def _certificate_supports_oracle_exclusion(cert: Any) -> bool:
     return False
 
 
-def _certificate_route_coverage_unresolved(cert: Any) -> bool:
-    """Return whether a certificate cannot establish complete route coverage."""
+def _certificate_global_impossibility_unresolved(cert: Any) -> bool:
+    """Return whether the certificate lacks scenario-wide impossibility proof."""
     if not isinstance(cert, Mapping) or not _route_inventory_complete(cert):
         return True
     classification = cert.get("classification")
     if classification in {"geometrically_infeasible", "kinodynamically_infeasible"}:
-        return not _all_routes_confirm_impossibility(cert, str(classification))
+        return True
     if classification == "invalid":
         return _invalid_certificate_category(cert) is None
     return False

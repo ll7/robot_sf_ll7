@@ -15,11 +15,11 @@ from typing import Any
 
 import pytest
 import yaml
+from shapely.geometry import LineString, box
 
 from robot_sf.adversarial import (
     ADMISSIBLE_FEASIBILITY_UNKNOWN,
     EMPIRICALLY_FEASIBLE,
-    GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY,
     PLANNER_SPECIFIC_FAILURE,
     STRUCTURALLY_INVALID,
     partition_candidates_by_admissibility,
@@ -604,7 +604,7 @@ def _bind_oracle_to_scenario(path: Path) -> dict[str, Any]:
     return oracle
 
 
-def test_certificate_rejects_only_structural_and_geometric_exclusions() -> None:
+def test_certificate_rejects_only_structural_exclusions() -> None:
     structural = classify_scenario_admissibility(
         "case-static", scenario_certificate=_certificate("invalid", eligibility="excluded")
     )
@@ -625,9 +625,11 @@ def test_certificate_rejects_only_structural_and_geometric_exclusions() -> None:
 
     assert structural.verdict == STRUCTURALLY_INVALID
     assert structural.search_disposition == "reject"
-    assert impossible.verdict == GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
-    assert impossible.search_disposition == "reject"
-    assert kinematic.verdict == GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
+    assert impossible.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert impossible.search_disposition == "retain"
+    assert "scenario_certificate_alternative_paths_unresolved" in impossible.reason_codes
+    assert kinematic.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert kinematic.search_disposition == "retain"
     assert invalid_geometry.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert "scenario_certificate_invalidity_unresolved" in invalid_geometry.reason_codes
     assert impossible.assumptions["scenario_certificate"]["settings"] == {"robot_radius_m": 0.4}
@@ -648,7 +650,7 @@ def test_planner_exception_stays_unknown_and_retained() -> None:
 
     assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert verdict.search_disposition == "retain"
-    assert "scenario_certificate_route_coverage_unresolved" in verdict.reason_codes
+    assert "scenario_certificate_route_exclusion_evidence_unresolved" in verdict.reason_codes
 
 
 def test_legacy_empty_path_without_producer_status_stays_unknown() -> None:
@@ -667,7 +669,7 @@ def test_legacy_empty_path_without_producer_status_stays_unknown() -> None:
     assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert verdict.search_disposition == "retain"
     assert "scenario_certificate_source_identity_bound_by_adapter" in verdict.reason_codes
-    assert "scenario_certificate_route_coverage_unresolved" in verdict.reason_codes
+    assert "scenario_certificate_route_exclusion_evidence_unresolved" in verdict.reason_codes
 
 
 def test_legacy_certificate_current_identity_does_not_attest_generation() -> None:
@@ -837,7 +839,11 @@ def test_geometric_certificate_label_needs_matching_producer_evidence(mutation: 
     assert verdict.search_disposition == "retain"
 
 
-def test_supported_geometric_collision_check_patterns_can_exclude() -> None:
+def test_route_collision_evidence_stays_unknown_when_alternative_path_exists() -> None:
+    obstacle = box(5.0, 3.0, 9.0, 7.0)
+    alternate_path = LineString([(2.0, 2.0), (3.8, 2.0), (3.8, 8.5), (12.0, 8.5), (12.0, 8.0)])
+    assert alternate_path.distance(obstacle) - 1.0 == pytest.approx(0.2)
+
     swept = _certificate("geometrically_infeasible", eligibility="excluded")
     swept_reason = "planned_path_swept_envelope_clips_obstacle: full_polyline_clearance_m=-0.25"
     swept["reasons"] = [swept_reason]
@@ -879,11 +885,20 @@ def test_supported_geometric_collision_check_patterns_can_exclude() -> None:
 
     assert (
         classify_scenario_admissibility("case-static", scenario_certificate=swept).verdict
-        == GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
+        == ADMISSIBLE_FEASIBILITY_UNKNOWN
     )
     assert (
         classify_scenario_admissibility("case-static", scenario_certificate=simulator).verdict
-        == GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
+        == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    )
+    swept_verdict = classify_scenario_admissibility("case-static", scenario_certificate=swept)
+    assert swept_verdict.search_disposition == "retain"
+    assert "scenario_certificate_alternative_paths_unresolved" in swept_verdict.reason_codes
+    assert (
+        swept_verdict.assumptions["scenario_certificate"]["route_inventory"][
+            "all_continuous_path_alternatives_covered"
+        ]
+        is False
     )
 
     swept["route_certificates"][0]["checks"]["swept_envelope"]["clearance_m"] = -0.5
@@ -920,7 +935,7 @@ def test_kinodynamic_certificate_label_needs_matching_bicycle_check_evidence() -
     assert unresolved.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
 
 
-def test_supported_steering_limit_evidence_excludes_but_unknown_robot_type_does_not() -> None:
+def test_route_steering_limit_evidence_stays_unknown_without_global_proof() -> None:
     steering = _certificate("kinodynamically_infeasible", eligibility="excluded")
     steering_reason = "bicycle_max_steer_non_positive"
     steering["reasons"] = [steering_reason]
@@ -943,8 +958,11 @@ def test_supported_steering_limit_evidence_excludes_but_unknown_robot_type_does_
 
     assert (
         classify_scenario_admissibility("case-static", scenario_certificate=steering).verdict
-        == GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
+        == ADMISSIBLE_FEASIBILITY_UNKNOWN
     )
+    steering_verdict = classify_scenario_admissibility("case-static", scenario_certificate=steering)
+    assert steering_verdict.search_disposition == "retain"
+    assert "scenario_certificate_alternative_paths_unresolved" in steering_verdict.reason_codes
     assert (
         classify_scenario_admissibility("case-static", scenario_certificate=unsupported).verdict
         == ADMISSIBLE_FEASIBILITY_UNKNOWN
@@ -1014,7 +1032,7 @@ def test_top_level_impossibility_does_not_reject_a_case_with_another_usable_rout
 
     assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert verdict.search_disposition == "retain"
-    assert "scenario_certificate_route_coverage_unresolved" in verdict.reason_codes
+    assert "scenario_certificate_route_exclusion_evidence_unresolved" in verdict.reason_codes
 
 
 def test_declared_route_count_must_match_before_certificate_can_reject() -> None:
@@ -1028,6 +1046,8 @@ def test_declared_route_count_must_match_before_certificate_can_reject() -> None
         "declared_count": 2,
         "observed_count": 1,
         "complete": False,
+        "complete_scope": "declared_spawn_goal_route_pairs",
+        "all_continuous_path_alternatives_covered": False,
     }
     assert "scenario_certificate_route_coverage_unresolved" in verdict.reason_codes
 
@@ -1100,7 +1120,7 @@ def test_oracle_exclusion_does_not_override_unresolved_mixed_route_certificate()
 
     assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert verdict.search_disposition == "retain"
-    assert "oracle_geometric_exclusion_route_coverage_unresolved" in verdict.reason_codes
+    assert "oracle_geometric_exclusion_alternative_paths_unresolved" in verdict.reason_codes
 
 
 def test_oracle_exclusion_does_not_override_unresolved_invalid_certificate() -> None:
@@ -1211,15 +1231,16 @@ def test_oracle_geometry_exclusion_without_certificate_remains_unknown() -> None
     assert "oracle_geometric_exclusion_route_coverage_unresolved" in verdict.reason_codes
 
 
-def test_oracle_geometry_exclusion_is_named_with_complete_certificate() -> None:
+def test_oracle_geometry_exclusion_stays_unknown_with_complete_route_inventory() -> None:
     certificate = _certificate("geometrically_infeasible", eligibility="excluded")
     excluded = _oracle(status="infeasible_by_construction", geometric=False, complete=False)
     verdict = classify_scenario_admissibility(
         "case-static", scenario_certificate=certificate, feasibility_evidence=excluded
     )
 
-    assert verdict.verdict == GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY
-    assert verdict.search_disposition == "reject"
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "oracle_geometric_exclusion_alternative_paths_unresolved" in verdict.reason_codes
     assert verdict.assumptions["feasibility_oracle"]["envelope_radius_m"] == 0.4
 
 

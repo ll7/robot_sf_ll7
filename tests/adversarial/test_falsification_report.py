@@ -165,6 +165,18 @@ def test_same_inputs_write_byte_stable_json_markdown_and_figure(tmp_path: Path) 
     assert first_figure.read_bytes() == second_figure.read_bytes()
 
 
+def test_generated_runtime_limitation_matches_manifest_only_source_policy(tmp_path: Path) -> None:
+    outputs = write_convergence_report(_report(), tmp_path)
+    generated = json.loads(Path(outputs["json"]).read_text(encoding="utf-8"))
+    runtime_limitations = [
+        item for item in generated["limitations"] if item.startswith("Search-level runtime")
+    ]
+
+    assert runtime_limitations == [
+        "Search-level runtime is reported only when a finite nonnegative runtime_seconds field is recorded in the search manifest or its summary; comparison-row fields are ignored."
+    ]
+
+
 def test_cli_writes_machine_readable_summary_table_and_figure(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

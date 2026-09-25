@@ -841,12 +841,19 @@ def _validate_issue9656_candidate_source_binding(
         raise CorpusError("#9656 materialized source case alias differs from the pinned summary")
     source_row = materialized_case.get("source_record")
     materialized_source = materialized_case.get("source")
+    materialized_planner = materialized_case.get("planner")
+    materialized_scenario = materialized_case.get("scenario")
     if (
         not isinstance(source_row, Mapping)
         or not isinstance(materialized_source, Mapping)
+        or not isinstance(materialized_planner, Mapping)
+        or not isinstance(materialized_scenario, Mapping)
         or not isinstance(summary_source, Mapping)
     ):
         raise CorpusError("#9656 source row or summary identity is malformed")
+    _validate_issue9656_candidate_metadata_projection(
+        candidate, summary_case, materialized_case, materialized_planner, materialized_scenario
+    )
     source_binding = _issue9656_source_identity_binding(
         summary_case, materialized_case, source_row, summary_source
     )
@@ -907,10 +914,34 @@ def _validate_issue9656_candidate_source_binding(
         else None
     )
     if not isinstance(target_planner, Mapping) or (
-        target_planner.get("canonical_algorithm") != source_binding["canonical_algorithm"]
+        target_planner.get("planner_id") != summary_case.get("planner_key")
+        or target_planner.get("planner_id") != provenance.get("raw_planner_alias")
+        or target_planner.get("canonical_algorithm") != source_binding["canonical_algorithm"]
         or target_planner.get("config_hash") != expected_config_hash
     ):
         raise CorpusError("#9652 candidate planner identity differs from pinned source evidence")
+
+
+def _validate_issue9656_candidate_metadata_projection(
+    candidate: Mapping[str, Any],
+    summary_case: Mapping[str, Any],
+    materialized_case: Mapping[str, Any],
+    materialized_planner: Mapping[str, Any],
+    materialized_scenario: Mapping[str, Any],
+) -> None:
+    if (
+        candidate.get("scenario_id") != summary_case.get("scenario_id")
+        or candidate.get("scenario_family") != summary_case.get("scenario_family")
+        or candidate.get("scenario_seed") != summary_case.get("seed")
+        or candidate.get("criticality") != summary_case.get("criticality")
+        or candidate.get("benchmark_eligible") != summary_case.get("benchmark_eligible")
+        or materialized_case.get("criticality") != summary_case.get("criticality")
+        or materialized_planner.get("key") != summary_case.get("planner_key")
+        or materialized_scenario.get("scenario_id") != summary_case.get("scenario_id")
+        or materialized_scenario.get("scenario_family") != summary_case.get("scenario_family")
+        or materialized_scenario.get("seed") != summary_case.get("seed")
+    ):
+        raise CorpusError("#9652 candidate metadata differs from pinned summary/materialized case")
 
 
 def _validate_issue9656_summary_case(
@@ -1774,10 +1805,19 @@ def _load_pinned_historical_source_row(
     imported_files = import_record.get("source_files", [])
     if not isinstance(imported_files, list):
         raise CorpusError("candidate import receipt has no source file inventory")
-    for receipt in imported_files:
-        if not isinstance(receipt, dict):
-            raise CorpusError("candidate import receipt contains a malformed source file")
-        _verify_corpus_artifact(corpus_root, receipt.get("stored_path"), receipt.get("sha256"))
+    source_identity = import_record.get("source_identity")
+    if (
+        isinstance(source_identity, Mapping)
+        and source_identity.get("candidate_schema_version") == HISTORICAL_CANDIDATE_SCHEMA_VERSION
+    ):
+        _validate_issue9656_retained_import_bundle(
+            import_record, source_identity, corpus_root=corpus_root
+        )
+    else:
+        for receipt in imported_files:
+            if not isinstance(receipt, dict):
+                raise CorpusError("candidate import receipt contains a malformed source file")
+            _verify_corpus_artifact(corpus_root, receipt.get("stored_path"), receipt.get("sha256"))
     summary_receipt = next(
         (
             item
@@ -1810,6 +1850,116 @@ def _load_pinned_historical_source_row(
     if not isinstance(row, dict):
         raise CorpusError("candidate_import_summary_does_not_contain_source_case")
     return row, row.get("source_record")
+
+
+def _validate_issue9656_retained_import_bundle(
+    import_record: Mapping[str, Any],
+    source_identity: Mapping[str, Any],
+    *,
+    corpus_root: Path,
+) -> None:
+    """Require the complete copied bundle inventory and bind it to import identity."""
+    import_id = import_record.get("import_id")
+    if not isinstance(import_id, str) or not import_id:
+        raise CorpusError("#9652 import receipt has no stable import ID")
+    imported_files = import_record.get("source_files")
+    if not isinstance(imported_files, list):
+        raise CorpusError("#9652 import receipt has no retained source file inventory")
+
+    import_root = f"historical_candidate_imports/{import_id}"
+    expected_fixed_receipts = _issue9656_fixed_import_receipts(import_root, source_identity)
+    receipts_by_path = _issue9656_index_source_file_receipts(imported_files)
+    for path, expected_receipt in expected_fixed_receipts.items():
+        if receipts_by_path.get(path) != expected_receipt:
+            raise CorpusError(f"#9652 retained source inventory is missing or misbound {path}")
+
+    manifest_path = _resolve_corpus_artifact(
+        expected_fixed_receipts["evidence_bundle_manifest.json"]["stored_path"], corpus_root
+    )
+    checksums_path = _resolve_corpus_artifact(
+        expected_fixed_receipts["checksums.sha256"]["stored_path"], corpus_root
+    )
+    expected_payload_receipts = _issue9656_expected_payload_receipts(
+        manifest_path, checksums_path, source_identity, import_root
+    )
+    expected_receipts = {**expected_fixed_receipts, **expected_payload_receipts}
+    if receipts_by_path != expected_receipts:
+        raise CorpusError(
+            "#9652 retained source inventory is incomplete or differs from its pinned bundle"
+        )
+    for receipt in expected_receipts.values():
+        _verify_corpus_artifact(corpus_root, receipt["stored_path"], receipt["sha256"])
+
+
+def _issue9656_fixed_import_receipts(
+    import_root: str, source_identity: Mapping[str, Any]
+) -> dict[str, dict[str, str]]:
+    fixed_files = {
+        "evidence_bundle_manifest.json": source_identity.get("evidence_bundle_manifest_sha256"),
+        "checksums.sha256": source_identity.get("evidence_checksums_sha256"),
+        "materialized_manifest.json": source_identity.get("materialized_manifest_sha256"),
+    }
+    expected_fixed_receipts = {}
+    for path, digest in fixed_files.items():
+        if not _is_sha256(digest):
+            raise CorpusError("#9652 source identity has an invalid retained bundle digest")
+        expected_fixed_receipts[path] = {
+            "path": path,
+            "stored_path": f"{import_root}/{path}",
+            "sha256": digest,
+        }
+    return expected_fixed_receipts
+
+
+def _issue9656_index_source_file_receipts(
+    imported_files: list[Any],
+) -> dict[str, Mapping[str, Any]]:
+    receipts_by_path: dict[str, Mapping[str, Any]] = {}
+    for receipt in imported_files:
+        if not isinstance(receipt, Mapping) or not isinstance(receipt.get("path"), str):
+            raise CorpusError("#9652 retained source inventory contains a malformed receipt")
+        path = receipt["path"]
+        if path in receipts_by_path:
+            raise CorpusError("#9652 retained source inventory contains duplicate paths")
+        receipts_by_path[path] = receipt
+    return receipts_by_path
+
+
+def _issue9656_expected_payload_receipts(
+    manifest_path: Path,
+    checksums_path: Path,
+    source_identity: Mapping[str, Any],
+    import_root: str,
+) -> dict[str, dict[str, str]]:
+    bundle_manifest = _read_json_object(manifest_path)
+    if bundle_manifest.get("schema_version") != ISSUE_9645_BUNDLE_SCHEMA:
+        raise CorpusError("#9652 retained evidence bundle manifest schema is invalid")
+    entries = bundle_manifest.get("files")
+    totals = bundle_manifest.get("totals")
+    if not isinstance(entries, list) or not isinstance(totals, Mapping):
+        raise CorpusError("#9652 retained evidence bundle inventory is incomplete")
+    files_by_path = _validated_bundle_file_map(entries)
+    total_bytes = sum(item["size_bytes"] for item in files_by_path.values())
+    if totals.get("file_count") != len(files_by_path) or totals.get("total_bytes") != total_bytes:
+        raise CorpusError("#9652 retained evidence bundle totals disagree with its inventory")
+    if files_by_path.get("summary.json", {}).get("sha256") != source_identity.get("summary_sha256"):
+        raise CorpusError("#9652 retained bundle summary digest differs from source identity")
+
+    checksums = _parse_sha256_receipt(checksums_path, label="#9652 retained bundle checksums")
+    expected_checksums = {
+        f"payload/{relative}": record["sha256"] for relative, record in files_by_path.items()
+    }
+    if checksums != expected_checksums:
+        raise CorpusError("#9652 retained checksum sidecar differs from evidence manifest")
+
+    return {
+        f"payload/{relative}": {
+            "path": f"payload/{relative}",
+            "stored_path": f"{import_root}/payload/{relative}",
+            "sha256": record["sha256"],
+        }
+        for relative, record in files_by_path.items()
+    }
 
 
 def _historical_candidate_metadata_errors(

@@ -1385,6 +1385,114 @@ def test_issue9656_import_receipt_fields_cannot_be_rewritten(
         corpus_path.write_text(json.dumps(corpus, sort_keys=True), encoding="utf-8")
 
 
+@pytest.mark.parametrize(
+    "field",
+    ("criticality", "scenario_id", "scenario_family", "scenario_seed", "planner_id"),
+)
+def test_issue9656_candidate_identity_projection_cannot_be_rewritten(
+    tmp_path: Path, field: str
+) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
+        tmp_path, statuses=("not_attempted",)
+    )
+    corpus_root = tmp_path / "corpus"
+    corpus, _receipt = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=corpus_root,
+    )
+    candidate = copy.deepcopy(corpus["historical_candidates"][0])
+    if field == "criticality":
+        candidate["criticality"]["metrics"]["minimum_clearance_m"] = 999.0
+    elif field == "planner_id":
+        candidate["target_planner"]["planner_id"] = "rewritten-planner-alias"
+        candidate["planner_status_at_import"] = (
+            counterexample_corpus._issue9656_planner_status_at_import(candidate)
+        )
+    elif field == "scenario_seed":
+        candidate["scenario_seed"] = 999
+    else:
+        candidate[field] = f"rewritten-{field}"
+    tampered = copy.deepcopy(corpus)
+    tampered["historical_candidates"][0] = candidate
+
+    with pytest.raises(CorpusError, match="pinned"):
+        validate_corpus(tampered, corpus_root=corpus_root)
+
+
+@pytest.mark.parametrize(
+    "missing_paths",
+    (
+        ("evidence_bundle_manifest.json",),
+        ("checksums.sha256",),
+        ("evidence_bundle_manifest.json", "checksums.sha256"),
+    ),
+)
+def test_issue9656_retained_bundle_receipt_inventory_must_be_complete(
+    tmp_path: Path, missing_paths: tuple[str, ...]
+) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
+        tmp_path, statuses=("not_attempted",)
+    )
+    corpus_root = tmp_path / "corpus"
+    corpus, _receipt = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=corpus_root,
+    )
+    corpus_path = corpus_root / "corpus.json"
+    save_corpus(corpus_path, corpus)
+    tampered = copy.deepcopy(corpus)
+    import_record = tampered["historical_candidate_imports"][0]
+    import_record["source_files"] = [
+        item for item in import_record["source_files"] if item["path"] not in missing_paths
+    ]
+
+    with pytest.raises(CorpusError, match="retained source inventory"):
+        save_corpus(corpus_path, tampered)
+
+    corpus_path.write_text(json.dumps(tampered, sort_keys=True), encoding="utf-8")
+    with pytest.raises(CorpusError, match="retained source inventory"):
+        load_corpus(corpus_path)
+
+
+@pytest.mark.parametrize("receipt_field", ("path", "stored_path", "sha256"))
+def test_issue9656_retained_bundle_receipt_must_match_pinned_identity(
+    tmp_path: Path, receipt_field: str
+) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
+        tmp_path, statuses=("not_attempted",)
+    )
+    corpus_root = tmp_path / "corpus"
+    corpus, _receipt = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=corpus_root,
+    )
+    tampered = copy.deepcopy(corpus)
+    bundle_receipt = next(
+        item
+        for item in tampered["historical_candidate_imports"][0]["source_files"]
+        if item["path"] == "evidence_bundle_manifest.json"
+    )
+    if receipt_field == "sha256":
+        bundle_receipt[receipt_field] = "0" * 64
+    else:
+        bundle_receipt[receipt_field] = f"rewritten/{bundle_receipt[receipt_field]}"
+
+    with pytest.raises(CorpusError, match="retained source inventory"):
+        validate_corpus(tampered, corpus_root=corpus_root)
+
+
 def test_issue9656_revision_mismatch_claim_requires_distinct_full_revisions(
     tmp_path: Path,
 ) -> None:
@@ -1679,6 +1787,13 @@ def test_pending_historical_candidate_rejects_source_metadata_or_input_tampering
     else:
         artifact = corpus_root / candidate["artifact_paths"][tamper]
         artifact.write_bytes(artifact.read_bytes() + b"\n")
+
+    if tamper == "scenario_metadata":
+        with pytest.raises(CorpusError, match="candidate metadata differs from pinned"):
+            promote_historical_candidate(
+                candidate["candidate_id"], {}, corpus, corpus_root=corpus_root
+            )
+        return
 
     corpus, receipt = promote_historical_candidate(
         candidate["candidate_id"], {}, corpus, corpus_root=corpus_root

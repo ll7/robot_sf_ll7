@@ -2841,11 +2841,24 @@ def _step_build_planner_decision_entry(
     if not slc.record_planner_decision_trace or sim.planner_step_decision is None:
         return
     psd = sim.planner_step_decision
+    guard_decision_raw = psd.get("last_decision")
+    if not isinstance(guard_decision_raw, dict):
+        guard_decision_raw = psd
+    guard_decision = (
+        guard_decision_raw
+        if isinstance(guard_decision_raw, dict)
+        and guard_decision_raw.get("schema_version") == "shield-decision.v1"
+        else None
+    )
     selected_terms = psd.get("selected_terms")
     selected_terms = selected_terms if isinstance(selected_terms, dict) else {}
     progress_windows_raw = psd.get("progress_windows")
     progress_windows = progress_windows_raw if isinstance(progress_windows_raw, dict) else {}
-    selected_command = psd.get("selected_command")
+    selected_command = (
+        guard_decision.get("filtered_action")
+        if guard_decision is not None
+        else psd.get("selected_command")
+    )
     selected_command = selected_command if isinstance(selected_command, list) else []
     rejection_counts = _planner_decision_counter_mapping(
         psd.get("rejection_counts"), field="rejection_counts"
@@ -2859,8 +2872,14 @@ def _step_build_planner_decision_entry(
     distance_to_goal = float(np.linalg.norm(sim.robot_pos - state.goal_vec))
     step_decision: dict[str, Any] = {
         "step": int(step_idx),
-        "selected_source": str(psd.get("selected_source", "unknown")),
-        "planner_mode": str(psd.get("planner_mode", "unknown")),
+        "selected_source": str(
+            guard_decision.get("decision_label", psd.get("selected_source", "unknown"))
+            if guard_decision is not None
+            else psd.get("selected_source", "unknown")
+        ),
+        "planner_mode": str(
+            psd.get("planner_mode", "guarded_ppo" if guard_decision is not None else "unknown")
+        ),
         "selected_command": [
             float(value)
             for value in selected_command[:2]
@@ -2892,6 +2911,29 @@ def _step_build_planner_decision_entry(
         "robot_x_m": float(sim.robot_pos[0]),
         "robot_y_m": float(sim.robot_pos[1]),
     }
+    if guard_decision is not None:
+        proposed_action = guard_decision.get("proposed_action")
+        if isinstance(proposed_action, list) and len(proposed_action) >= 2:
+            step_decision["proposed_command"] = [
+                float(value)
+                for value in proposed_action[:2]
+                if isinstance(value, int | float | np.integer | np.floating)
+            ]
+        step_decision["safety_guard"] = dict(guard_decision)
+        current_intervened = bool(guard_decision.get("intervened", False))
+        previous_guard = (
+            state.planner_decision_trace[-1].get("safety_guard")
+            if state.planner_decision_trace
+            else None
+        )
+        previous_intervened = (
+            bool(previous_guard.get("intervened", False))
+            if isinstance(previous_guard, dict)
+            else False
+        )
+        step_decision["guard_intervened"] = current_intervened
+        step_decision["guard_intervention_start"] = current_intervened and not previous_intervened
+        step_decision["guard_intervention_end"] = previous_intervened and not current_intervened
     _step_planner_decision_topology_keys(step_decision, psd)
     _step_planner_decision_dwa_keys(step_decision, psd)
     state.planner_decision_trace.append(cast("PlannerDecisionTraceEntry", step_decision))

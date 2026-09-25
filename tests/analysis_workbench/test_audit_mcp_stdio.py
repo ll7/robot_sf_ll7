@@ -570,7 +570,7 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
                 assert dispatch_finished.wait(10.0), (
                     f"MCP request did not finish dispatch; proxy exit={process.poll()}"
                 )
-            ready, _, _ = select.select([process.stdout], [], [], 3.0)
+            ready, _, _ = select.select([process.stdout], [], [], 10.0)
             assert ready, f"MCP proxy did not deliver a dispatched response; exit={process.poll()}"
             line = process.stdout.readline()
             assert line

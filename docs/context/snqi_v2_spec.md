@@ -166,3 +166,13 @@ matrix before projection. Optional raw arm aliases must agree with the containin
 arm. Archive relocation preserves the exact arm suffix and original row-to-artifact
 associations. Metadata, raw files, sidecars, and independent inputs are hashed again
 before any anchor output is replaced; rejected custody leaves existing output intact.
+
+### Exact calibration producer identity
+
+Anchor freeze reconstructs each row's complete `scenario_params` through the map-runner resume
+identity builder using the independently supplied campaign configuration and planner inputs. This
+binds seed-derived defaults, effective policy configuration, observation contract, force/trace
+options, and wrapper/filter settings. Extra or changed fields are refused even when the raw row,
+config hash, and producer sidecar are coherently rehashed. The deterministic map-runner episode ID
+must also match these parameters and the development seed. IDs must be unique within an arm;
+identical algorithms/configurations in distinct declared arms can legitimately share an ID.

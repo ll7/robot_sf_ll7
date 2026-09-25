@@ -11,6 +11,7 @@ import hashlib
 import json
 from itertools import product
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -205,18 +206,11 @@ def freeze_campaign_anchors(
         sidecar_hashes[str(sidecar.relative_to(campaign_root))] = sidecar_hash
         snapshots[str(path)] = file_hash
         snapshots[str(sidecar)] = sidecar_hash
-        count = 0
-        for index, record in enumerate(read_episode_files([path])):
-            _validate_calibration_row_custody(
-                record, custody, index, planner, canonical_scenarios, manifest["git"]["commit"]
+        records.extend(
+            _read_calibration_arm(
+                path, custody, planner, canonical_scenarios, manifest["git"]["commit"], config
             )
-            records.append(
-                _compact_calibration_record(record, arm, expected_algorithm=planner.algo)
-            )
-            count += 1
-            del record
-        if count != 96:
-            raise ValueError("SNQI-v2 calibration producer arm must contain exactly96 rows")
+        )
     if observed_arms != set(planners):
         raise ValueError("SNQI-v2 calibration run inventory is incomplete")
     digest = hashlib.sha256(
@@ -378,6 +372,100 @@ def _load_calibration_custody(
     return payload
 
 
+def _read_calibration_arm(
+    path: Path,
+    custody: Mapping[str, Any],
+    planner: Any,
+    scenarios: Mapping[str, Any],
+    source: str,
+    config: Any,
+) -> list[dict[str, Any]]:
+    """Validate each raw producer row before retaining a compact calibration projection.
+
+    Returns:
+        The 96 compact rows for one independently declared arm.
+    """
+    context = _calibration_identity_context(config, planner, scenarios)
+    episode_ids: set[str] = set()
+    records = []
+    for index, record in enumerate(read_episode_files([path])):
+        _validate_calibration_row_custody(
+            record, custody, index, planner, scenarios, source, identity_context=context
+        )
+        if record["episode_id"] in episode_ids:
+            raise ValueError("SNQI-v2 calibration duplicate producer episode identity within arm")
+        episode_ids.add(record["episode_id"])
+        records.append(
+            _compact_calibration_record(record, planner.key, expected_algorithm=planner.algo)
+        )
+        del record
+    if len(records) != 96:
+        raise ValueError("SNQI-v2 calibration producer arm must contain exactly96 rows")
+    return records
+
+
+def _calibration_identity_context(config: Any, planner: Any, scenarios: Mapping[str, Any]) -> Any:
+    """Adapt independently bound campaign inputs to the producer's read-only identity builder.
+
+    Only the resume identity and normalization helpers consume this data-only context. No
+    simulator, policy runtime, output writer, or batch preflight is started. Defaults match
+    camera-ready's run_map_batch call, including absent tracking/filter/track overrides.
+
+    Returns:
+        Normalized inputs for the producer resume identity helper.
+    """
+    from robot_sf.benchmark.camera_ready._util import (  # noqa: PLC0415
+        _latency_stress_metadata,
+        _synthetic_actuation_metadata,
+    )
+    from robot_sf.benchmark.camera_ready.campaign import (  # noqa: PLC0415
+        _resolve_arm_safety_wrapper,
+    )
+    from robot_sf.benchmark.map_runner.map_runner import (  # noqa: PLC0415
+        _normalize_batch_specs,
+    )
+    from robot_sf.benchmark.release_acceptance import (  # noqa: PLC0415
+        _full_release_candidate_config,
+    )
+
+    path, policy_config, error = _full_release_candidate_config(
+        planner_spec=planner,
+        source_repository_root=get_repository_root(),
+        allowed_scenario_ids=set(scenarios),
+    )
+    if error:
+        raise ValueError(f"SNQI-v2 calibration canonical policy config is invalid: {error}")
+    observation_mode = planner.observation_mode or config.observation_mode
+    context = SimpleNamespace(
+        algo=planner.algo,
+        algo_config_path=str(path) if path is not None else None,
+        raw_policy_cfg=policy_config,
+        horizon=planner.horizon_override or config.horizon,
+        dt=planner.dt_override or config.dt,
+        record_forces=config.record_forces,
+        batch_observation_mode=str(observation_mode).strip()
+        if observation_mode is not None
+        else None,
+        observation_level=None,
+        benchmark_track=None,
+        track_schema_version=None,
+        observation_noise=config.observation_noise,
+        tracking_precision=None,
+        synthetic_actuation_profile=_synthetic_actuation_metadata(
+            config.synthetic_actuation_profile
+        ),
+        latency_stress_profile=_latency_stress_metadata(
+            config.latency_stress_profile, dt=config.dt
+        ),
+        safety_wrapper=_resolve_arm_safety_wrapper(cfg=config, planner=planner),
+        cbf_safety_filter=None,
+        record_planner_decision_trace=config.record_planner_decision_trace,
+        record_simulation_step_trace=config.record_simulation_step_trace,
+    )
+    _normalize_batch_specs(context)
+    return context
+
+
 def _validate_calibration_row_custody(
     record: Mapping[str, Any],
     custody: Mapping[str, Any],
@@ -385,8 +473,16 @@ def _validate_calibration_row_custody(
     planner: Any,
     scenarios: Mapping[str, Any],
     source: str,
+    *,
+    identity_context: Any,
 ) -> None:
     """Reject a mismatched raw identity before assigning its verified containing arm."""
+    from robot_sf.benchmark.map_runner.map_runner import (  # noqa: PLC0415
+        _compute_resume_identity_payload,
+    )
+    from robot_sf.benchmark.map_runner.map_runner_identity import (  # noqa: PLC0415
+        compute_map_episode_id,
+    )
     from robot_sf.benchmark.release_acceptance import (  # noqa: PLC0415
         _full_release_effective_algorithm,
         _full_release_row_contract_blockers,
@@ -414,15 +510,19 @@ def _validate_calibration_row_custody(
         or ("kinematics" in record and record["kinematics"] != "differential_drive")
     ):
         raise ValueError("SNQI-v2 calibration raw row source/config/arm mismatch")
-    expected_params = {
-        key: value for key, value in scenario.items() if key not in {"seed", "seeds"}
-    }
-    expected_params["robot_config"] = {
-        **scenario.get("robot_config", {}),
-        "type": "differential_drive",
-    }
-    if any(params.get(key) != value for key, value in expected_params.items()):
-        raise ValueError("SNQI-v2 calibration row scenario config differs from canonical matrix")
+    seed = record.get("seed")
+    if type(seed) is not int or seed not in {101, 102}:
+        raise ValueError("SNQI-v2 calibration row seed is outside canonical development split")
+    expected_params = _compute_resume_identity_payload(identity_context, dict(scenario), seed)
+    # Exact JSON identity rejects extra run-shaping keys and bool/numeric substitutions.
+    if json.dumps(params, sort_keys=True) != json.dumps(expected_params, sort_keys=True):
+        raise ValueError(
+            "SNQI-v2 calibration row scenario config differs from canonical producer identity"
+        )
+    if record.get("episode_id") != compute_map_episode_id(expected_params, seed):
+        raise ValueError(
+            "SNQI-v2 calibration row episode identity differs from canonical producer identity"
+        )
     bound = custody["rows"][index]
     provenance = record["result_provenance"]
     artifact = next(item for item in custody["raw_artifacts"] if item["kind"] == "episodes_jsonl")

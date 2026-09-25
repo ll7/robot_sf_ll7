@@ -688,12 +688,17 @@ def test_calibration_rejects_fallback_or_degraded_adapter(marker):
 
 
 @pytest.fixture
-def calibration_archive(tmp_path, guarded_episode):
+def calibration_archive(tmp_path, guarded_episode, request):
     """Build a complete synthetic archive using real producer custody constructors."""
     from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
     from robot_sf.benchmark.camera_ready._preflight import _scenario_matrix_hash
     from robot_sf.benchmark.camera_ready._util import _config_hash_payload
     from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, PlannerSpec, SeedPolicy
+    from robot_sf.benchmark.map_runner.map_runner_identity import (
+        compute_map_episode_id,
+        scenario_identity_payload,
+        scenario_with_episode_seed_defaults,
+    )
     from robot_sf.benchmark.release_acceptance import _result_provenance_scenarios
     from robot_sf.benchmark.result_provenance import (
         build_result_provenance_manifest,
@@ -725,6 +730,7 @@ def calibration_archive(tmp_path, guarded_episode):
         seed_policy=SeedPolicy(mode="fixed-list", seeds=(101, 102)),
         horizon=600,
         dt=0.1,
+        **getattr(request, "param", {}),
     )
     resolved = _load_campaign_scenarios(cfg)
     effective = _result_provenance_scenarios(cfg, resolved, kinematics="differential_drive")
@@ -753,20 +759,28 @@ def calibration_archive(tmp_path, guarded_episode):
         path.parent.mkdir(parents=True)
         arm_rows = [row for row in rows if row["planner_key"] == arm]
         algo = kwargs["expected_algorithms"][arm]
+        mode, level = (
+            ("sensor_fusion_state", "lidar_2d")
+            if algo == "guarded_ppo"
+            else ("goal_state", "oracle_full_state")
+        )
         for row in arm_rows:
             row["algo"] = algo
-            row["episode_id"] = f"{row['scenario_id']}--{row['seed']}--{arm}"
             row["git_hash"] = kwargs["source_commit"]
-            row["scenario_params"] = {
-                **{
-                    k: v
-                    for k, v in by_name[row["scenario_id"]].items()
-                    if k not in {"seed", "seeds"}
-                },
-                "run_horizon": 600,
-                "run_dt": 0.1,
-                "record_forces": True,
-            }
+            row["scenario_params"] = scenario_identity_payload(
+                scenario_with_episode_seed_defaults(by_name[row["scenario_id"]], seed=row["seed"]),
+                algo=algo,
+                algo_config={},
+                horizon=600,
+                dt=0.1,
+                record_forces=True,
+                observation_mode=mode,
+                observation_level=level,
+                safety_wrapper=cfg.safety_wrapper,
+                record_planner_decision_trace=cfg.record_planner_decision_trace,
+                record_simulation_step_trace=cfg.record_simulation_step_trace,
+            )
+            row["episode_id"] = compute_map_episode_id(row["scenario_params"], row["seed"])
             row["config_hash"] = _config_hash(row["scenario_params"])
             row["algorithm_metadata"] = (
                 json.loads(json.dumps(guarded_episode["algorithm_metadata"]))
@@ -788,8 +802,8 @@ def calibration_archive(tmp_path, guarded_episode):
                     horizon=600,
                     dt=0.1,
                     record_forces=True,
-                    active_observation_mode="native",
-                    active_observation_level="full",
+                    active_observation_mode=mode,
+                    active_observation_level=level,
                 ),
             }
         path.write_text("".join(json.dumps(row) + "\n" for row in arm_rows))
@@ -808,8 +822,8 @@ def calibration_archive(tmp_path, guarded_episode):
             horizon=600,
             dt=0.1,
             record_forces=True,
-            active_observation_mode="native",
-            active_observation_level="full",
+            active_observation_mode=mode,
+            active_observation_level=level,
         )
         payload["run"]["repo_commit"] = kwargs["source_commit"]
         write_result_provenance_manifest(manifest_path_for_result_jsonl(path), payload)
@@ -939,6 +953,73 @@ def test_calibration_freeze_rejects_unbound_custody(  # noqa: C901, PLR0915
     assert output.read_bytes() == before
 
 
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "safety_wrapper",
+        "cbf_safety_filter",
+        "observation_mode",
+        "algo_config_hash",
+        "extra",
+        "duplicate_id",
+    ],
+)
+def test_calibration_freeze_rejects_coherent_identity_forgery(
+    tmp_path, calibration_archive, mutation
+):
+    from robot_sf.benchmark.result_provenance import (
+        manifest_path_for_result_jsonl,
+        validate_result_provenance_manifest,
+    )
+    from robot_sf.benchmark.snqi.v2_calibration import freeze_campaign_anchors
+    from robot_sf.benchmark.utils import _config_hash
+
+    cfg, _, kwargs = calibration_archive
+    path = tmp_path / "runs" / f"{kwargs['arms'][0]}__differential_drive" / "episodes.jsonl"
+    sidecar = manifest_path_for_result_jsonl(path)
+    payload = json.loads(sidecar.read_text())
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    row = rows[1]
+    if mutation == "duplicate_id":
+        row["episode_id"] = rows[0]["episode_id"]
+    else:
+        row["scenario_params"][mutation] = {
+            "safety_wrapper": {"enabled": True, "mode": "other-policy"},
+            "cbf_safety_filter": {"enabled": True},
+            "observation_mode": "forged-observation",
+            "algo_config_hash": "forged-policy",
+            "extra": {"behavior": "changed"},
+        }[mutation]
+        digest = _config_hash(row["scenario_params"])
+        row["config_hash"] = digest
+        row["result_provenance"]["config_hash"] = digest
+        payload["rows"][1]["config_hash"] = digest
+        from robot_sf.benchmark.map_runner.map_runner_identity import compute_map_episode_id
+
+        row["episode_id"] = compute_map_episode_id(row["scenario_params"], row["seed"])
+    payload["rows"][1]["episode_id"] = row["episode_id"]
+    path.write_text("".join(json.dumps(item) + "\n" for item in rows))
+    payload["raw_artifacts"][0]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    validate_result_provenance_manifest(payload)
+    sidecar.write_text(json.dumps(payload))
+    output = tmp_path / "anchors.json"
+    output.write_bytes(b"prior anchor\n")
+    with pytest.raises(ValueError, match="canonical|episode identity"):
+        freeze_campaign_anchors(tmp_path, output, campaign_config=cfg)
+    assert output.read_bytes() == b"prior anchor\n"
+
+
+@pytest.mark.parametrize(
+    "calibration_archive",
+    [
+        {},
+        {
+            "safety_wrapper": {"enabled": True, "arm_key": "wrapper_on"},
+            "record_planner_decision_trace": True,
+        },
+    ],
+    indirect=True,
+)
 def test_freeze_calibration_archive_binds_files_and_source(
     tmp_path, monkeypatch, calibration_archive
 ):
@@ -983,6 +1064,7 @@ def test_freeze_calibration_archive_binds_files_and_source(
         scope.setattr(Path, "read_bytes", reject_whole_episode_file_read)
         document = freeze_campaign_anchors(tmp_path, output, campaign_config=cfg)
     expected = original_derive(rows, **kwargs)
+    assert len({row["episode_id"] for row in rows}) < len(rows)
     assert document["anchors"] == expected["anchors"]
     assert document["force_decision"] == expected["force_decision"]
     assert (

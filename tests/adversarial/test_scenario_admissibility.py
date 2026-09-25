@@ -33,6 +33,9 @@ from robot_sf.adversarial.feasibility_first import (
     SCENARIO_FEASIBILITY_PREDICATE_NAMES,
 )
 from robot_sf.adversarial.scenario_admissibility import _oracle_excludes
+from robot_sf.benchmark.map_runner.map_runner_identity import (
+    scenario_with_episode_seed_defaults as _scenario_with_episode_seed_defaults,
+)
 from robot_sf.benchmark.result_provenance import (
     build_result_provenance_manifest,
     manifest_path_for_result_jsonl,
@@ -58,9 +61,13 @@ from robot_sf.scenario_certification.v1 import (
 _SCENARIO_ARTIFACT = Path(__file__).resolve().parent / "fixtures/issue_9651/case_static.yaml"
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCENARIO_ARTIFACT_SHA256 = hashlib.sha256(_SCENARIO_ARTIFACT.read_bytes()).hexdigest()
-_SCENARIO_EFFECTIVE_INPUT_SHA256 = scenario_input_identity(
-    _SCENARIO_ARTIFACT, scenario_id="case-static"
-).get("effective_input_sha256")
+_SCENARIO_RUNTIME_IDENTITY = scenario_input_identity(_SCENARIO_ARTIFACT, scenario_id="case-static")
+_SCENARIO_EFFECTIVE_INPUT_SHA256 = _SCENARIO_RUNTIME_IDENTITY.get("effective_input_sha256")
+_SCENARIO_RUNTIME_INPUT_RECORDS = [
+    dict(record)
+    for record in _SCENARIO_RUNTIME_IDENTITY.get("files", [])
+    if record.get("role") != "scenario_manifest"
+]
 _EXECUTION_FIXTURE_TEMP = tempfile.TemporaryDirectory(prefix="issue-9651-execution-evidence-")
 _EXECUTION_FIXTURE_ROOT = Path(_EXECUTION_FIXTURE_TEMP.name)
 _EXECUTION_FIXTURE_COUNTER = itertools.count()
@@ -245,6 +252,8 @@ def _execution(  # noqa: PLR0913 - fixture fields model canonical episode and pr
     include_context: bool = True,
     include_producer_context: bool = True,
     sim_dt: float = 0.1,
+    producer_goal_x: float | None = None,
+    include_runtime_input_records: bool = True,
 ) -> dict[str, Any]:
     planner_aliases = {
         "reference": "goal",
@@ -262,18 +271,24 @@ def _execution(  # noqa: PLR0913 - fixture fields model canonical episode and pr
     planner_checkpoint_sha256 = (
         "not_applicable" if canonical_planner_id in {"goal", "social_force", "orca"} else "d" * 64
     )
-    scenario_params = {
-        **yaml.safe_load(_SCENARIO_ARTIFACT.read_text(encoding="utf-8")),
-        "algo": canonical_planner_id,
-        "algo_config_hash": _config_hash({"planner": canonical_planner_id}),
-        "record_forces": False,
-        "observation_mode": "socnav_state",
-        "observation_level": "full",
-        "record_planner_decision_trace": False,
-        "record_simulation_step_trace": False,
-        "run_horizon": 100,
-        "run_dt": sim_dt,
-    }
+    scenario_params = _scenario_with_episode_seed_defaults(
+        yaml.safe_load(_SCENARIO_ARTIFACT.read_text(encoding="utf-8")), seed=seed
+    )
+    if producer_goal_x is not None:
+        scenario_params["robot"]["goal"][0] = producer_goal_x
+    scenario_params.update(
+        {
+            "algo": canonical_planner_id,
+            "algo_config_hash": _config_hash({"planner": canonical_planner_id}),
+            "record_forces": False,
+            "observation_mode": "socnav_state",
+            "observation_level": "full",
+            "record_planner_decision_trace": False,
+            "record_simulation_step_trace": False,
+            "run_horizon": 100,
+            "run_dt": sim_dt,
+        }
+    )
     config_hash = _config_hash(scenario_params)
     episode_row = {
         "version": "v1",
@@ -300,6 +315,10 @@ def _execution(  # noqa: PLR0913 - fixture fields model canonical episode and pr
             "execution_mode": "native",
         },
     }
+    if include_runtime_input_records:
+        episode_row["runtime_input_records"] = [
+            dict(record) for record in _SCENARIO_RUNTIME_INPUT_RECORDS
+        ]
     if include_context:
         # This extension is deliberately non-authoritative: producer-owned run metadata below
         # supplies numerical context, while row extensions must not forge it.
@@ -1825,10 +1844,69 @@ def test_reference_success_is_empirical_but_target_failure_alone_is_unknown() ->
     )
 
     assert reference.verdict == EMPIRICALLY_FEASIBLE
-    assert reference.evidence["execution_artifact_bindings"]["reference"]["status"] == "valid"
+    reference_binding = reference.evidence["execution_artifact_bindings"]["reference"]
+    assert reference_binding["status"] == "valid"
+    run_context = reference_binding["run_context_binding"]
+    assert run_context["selected_scenario_row_binding_status"] == "valid"
+    assert run_context["scenario_runtime_input_closure_binding_status"] == "valid"
     assert target_only.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert target_only.target_planner_outcome == "route_incomplete"
     assert "target_failure_alone_does_not_prove_infeasibility" in target_only.reason_codes
+
+
+def test_self_consistent_producer_episode_for_a_different_candidate_is_unknown() -> None:
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        reference_execution=_execution("reference", route_complete=True, producer_goal_x=1.0),
+    )
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert "reference_execution_scenario_case_identity_mismatch" in verdict.reason_codes
+    binding = verdict.evidence["execution_artifact_bindings"]["reference"]
+    producer_binding = binding["producer_provenance_binding"]
+    row_binding = producer_binding["run_context_binding"]
+    assert row_binding["status"] == "mismatch"
+    assert row_binding["selected_scenario_row_binding_status"] == "mismatch"
+    assert (
+        producer_binding["candidate_scenario_case_identity_sha256"]
+        != producer_binding["producer_scenario_case_identity_sha256"]
+    )
+
+
+def test_consistent_wrong_case_reference_target_and_replay_do_not_prove_failure() -> None:
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        reference_execution=_execution("reference", route_complete=True, producer_goal_x=1.0),
+        target_execution=_execution("target", route_complete=False, producer_goal_x=1.0),
+        replay_execution=_execution(
+            "target", route_complete=False, replay=True, producer_goal_x=1.0
+        ),
+    )
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert "reference_execution_scenario_case_identity_mismatch" in verdict.reason_codes
+    assert "target_execution_scenario_case_identity_mismatch" in verdict.reason_codes
+    assert "replay_execution_scenario_case_identity_mismatch" in verdict.reason_codes
+    assert verdict.verdict != PLANNER_SPECIFIC_FAILURE
+
+
+def test_execution_with_unbound_producer_resource_closure_remains_unknown() -> None:
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        reference_execution=_execution(
+            "reference", route_complete=True, include_runtime_input_records=False
+        ),
+    )
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert "reference_execution_scenario_runtime_input_closure_unavailable" in (
+        verdict.reason_codes
+    )
+    binding = verdict.evidence["execution_artifact_bindings"]["reference"]
+    assert (
+        binding["run_context_binding"]["scenario_runtime_input_closure_binding_status"]
+        == "unavailable"
+    )
 
 
 def test_matched_reference_target_failure_needs_reproducing_replay() -> None:

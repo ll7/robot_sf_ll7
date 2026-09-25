@@ -556,6 +556,24 @@ def test_gallery_passes_materialized_map_to_renderer_and_marks_external_map_unbo
     assert map_context["renderer_error"].startswith("UnidentifiedImageError:")
 
 
+def test_renderer_map_context_marks_missing_image_reader_unavailable(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    map_path = tmp_path / "map.png"
+    map_bytes = b"map bytes"
+    map_path.write_bytes(map_bytes)
+    monkeypatch.setattr("robot_sf.common.optional_import.try_import", lambda _name: None)
+
+    result = replay_gallery._renderer_map_context(map_path)
+
+    assert result == {
+        "status": "unavailable",
+        "reason": "existing_renderer_cannot_decode_map_overlay",
+        "renderer_error": "ImportError: matplotlib.image is unavailable",
+        "sha256": hashlib.sha256(map_bytes).hexdigest(),
+    }
+
+
 def test_gallery_materializes_map_id_registry_and_pins_runner_resolution(
     tmp_path: Path, monkeypatch: Any
 ) -> None:

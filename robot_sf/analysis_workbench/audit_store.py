@@ -367,6 +367,7 @@ class AuditStore:
 
         if not self._closed:
             self._connection.close()
+            self._validated_journal = None
             self._closed = True
 
     def _ensure_open(self) -> None:

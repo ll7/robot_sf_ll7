@@ -715,6 +715,7 @@ def test_unchanged_journal_reuses_validated_snapshot_without_mutable_aliases(
         assert second[0]["store_id"] != "caller-mutated"
         assert second[1][0].changes[0].record["observed_behavior"] == ""
         assert parses == 0
+    assert store._validated_journal is None
 
 
 def test_validated_snapshot_rechecks_exact_bytes_and_recovers_tail(tmp_path) -> None:

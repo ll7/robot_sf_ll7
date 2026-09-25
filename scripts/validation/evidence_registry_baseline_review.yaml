@@ -158,16 +158,22 @@ decision_summary: >-
   two SHA-bound `evidence-review-marker.v1` sidecars. The sidecars bind the root README and
   campaign provenance bytes without modifying either artifact.
   Issue #9656 evidence-tree addendum (2026-09-25): the checksum-pinned historical hard-case packet
-  adds five tracked paths under `issue_9656_hard_case_mining_2026-09-24/`: `checksums.sha256`,
-  `evidence_bundle_manifest.json`, and payload `current_head_no_replay_manifest.json`, `report.md`,
-  and `summary.json`. An independent exact-head review recomputed the base and candidate tree
-  manifests (2423 files / `c5d2440137291b0eb83416894ba10dcd32aacc24a23946b7a67ef99b0c961222` to
-  2428 / `4159317c0c3ae61d519788cd1050e8a6f724322c37e8cc2446f4dd8b8809d5b6`), verified the
-  payload digests, and ran the candidate/frozen-base evidence scan. The packet adds no registry
-  findings or per-code increases; totals remain 438 findings across 98 files, and no #9656 path
-  has a finding. Refresh the machine baseline only to bind the five-file path-set change. The
-  diagnostic-only historical claim boundary is preserved; no finding disposition or strict-CI
-  exclusion is added.
+  contributes five diagnostic packet paths under `issue_9656_hard_case_mining_2026-09-24/`:
+  `checksums.sha256`, `evidence_bundle_manifest.json`, and payload
+  `current_head_no_replay_manifest.json`, `report.md`, and `summary.json`. Five adjacent
+  `evidence-review-marker.v1` sidecars bind those exact bytes without modifying the packet. An
+  independent exact-head review at `5ab13d21f56ec6f2c3c3dd9312bc1e2ae5650eb1` verified the packet,
+  sidecar digests, test-fixture writer exemption, and candidate/frozen-base report, and conditionally
+  approved only the tree-manifest refresh after this companion update. Its separate catalog finding
+  was repaired by registering all five sidecars in `docs/context/catalog.yaml` at
+  `97a581a85fefae082922c20290ccdaed473b67c3`. The reviewed candidate adds five paths to the prior
+  baseline tree (2428 files / `4159317c0c3ae61d519788cd1050e8a6f724322c37e8cc2446f4dd8b8809d5b6`
+  to 2433 / `71237cccbc8e6fa3f14a8548a264d0eda3ac30b1b6e368bb72a8bef7d6675022`); from frozen base,
+  the complete packet tree is 2423 files / `c5d2440137291b0eb83416894ba10dcd32aacc24a23946b7a67ef99b0c961222`
+  to 2433. The evidence scan remains at 438 findings across 98 files with no new or increased
+  per-code finding, and no #9656 path has a finding. Refresh the machine baseline only to bind this
+  five-sidecar path-set change. The diagnostic-only historical claim boundary is preserved; no
+  finding disposition or strict-CI exclusion is added.
 #8237 disposition: remediate. The E_release_checklist digest in the
 #4683 assurance-case example was recomputed against the exact final-head
 # docs/RELEASE.md bytes and is already current at this head. No

@@ -1,0 +1,19 @@
+{
+  "schema": "research_terminal_outcome_integration_fixture.v1",
+  "source": {
+    "issue": 9645,
+    "experiment_commit": "58e516aa4f69ff3098bf518199f483006589758c",
+    "artifact_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/evidence_synthesis.json",
+    "artifact_sha256": "eaf44ef19005fe6bf75723234525bf0bd51cdb8921e5c0e69ff0301159252f12",
+    "fixture_copy_path": "tests/dev/fixtures/research_terminal_outcomes/issue_9645_evidence_synthesis.json",
+    "search_or_simulation_rerun": false
+  },
+  "terminal_outcome": {
+    "schema": "research_terminal_outcome.v1",
+    "classification": "no_signal",
+    "summary": "In the finite #9645 Random-vs-TPE pilot's fixed scenario seed and clipped search space, all 64 candidate evaluations completed with best objective 0.0 and no near miss or collision. This is no signal for scaling that unchanged domain; it does not establish that no counterexample exists.",
+    "evidence_artifacts": [
+      "tests/dev/fixtures/research_terminal_outcomes/issue_9645_evidence_synthesis.json"
+    ]
+  }
+}

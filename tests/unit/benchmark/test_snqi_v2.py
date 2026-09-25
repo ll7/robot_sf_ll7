@@ -2165,7 +2165,7 @@ def test_guarded_campaign_entry_binding(tmp_path, guarded_episode, expected):
 
 
 @pytest.mark.parametrize("expected", [None, "goal", "guarded_ppo"])
-def test_guarded_offline_requires_independent_file_map(
+def test_guarded_offline_requires_matching_file_map(
     tmp_path, spec_files, guarded_episode, expected
 ):
     from scripts.tools.analyze_snqi_contract import main
@@ -2188,17 +2188,127 @@ def test_guarded_offline_requires_independent_file_map(
     ]
     if expected is not None:
         declaration = tmp_path / "execution.json"
-        declaration.write_text(
-            json.dumps({path.name: {"key": "independent-arm", "algo": expected}})
-        )
+        declaration.write_text(json.dumps({path.name: {"key": "declared-arm", "algo": expected}}))
         args += ["--execution-map", str(declaration)]
     if expected != "guarded_ppo":
-        with pytest.raises(ValueError, match="fallback/degraded"):
+        with pytest.raises(ValueError, match="fallback/degraded|identity mismatch"):
             main(args)
     else:
         assert main(args) == 0
         family = json.loads((tmp_path / "reports/snqi_v2_family.json").read_text())
-        assert family["declared_ranking"][0]["planner"] == "independent-arm"
+        assert family["declared_ranking"][0]["planner"] == "declared-arm"
+
+
+@pytest.mark.parametrize(
+    ("identity", "declared", "message"),
+    [
+        ("algo", "ppo", "algorithm identity mismatch"),
+        ("planner_key", "ppo-arm", "planner_key identity mismatch"),
+        ("kinematics", "holonomic", "kinematics identity mismatch"),
+    ],
+)
+def test_offline_execution_map_rejects_raw_identity_mismatch(
+    tmp_path, spec_files, identity, declared, message
+):
+    """The map cannot relabel explicit producer identities before compaction."""
+    from scripts.tools.analyze_snqi_contract import main
+
+    path = tmp_path / "episodes.jsonl"
+    rows = [
+        {
+            **row,
+            "algo": "orca",
+            "planner_key": "orca-arm",
+            "kinematics": "differential_drive",
+        }
+        for row in records()
+        if row["algo"] == "a"
+    ]
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    declaration = {"key": "orca-arm", "algo": "orca", "kinematics": "differential_drive"}
+    declaration["key" if identity == "planner_key" else identity] = declared
+    execution_map = tmp_path / "execution.json"
+    execution_map.write_text(json.dumps({path.name: declaration}))
+    with pytest.raises(ValueError, match=message):
+        main(
+            [
+                "--score-version",
+                "SNQI-v2",
+                "--episodes",
+                str(path),
+                "--execution-map",
+                str(execution_map),
+                "--weights",
+                str(spec_files[0]),
+                "--anchors",
+                str(spec_files[1]),
+                "--family",
+                str(spec_files[2]),
+                "--reports-dir",
+                str(tmp_path / "reports"),
+            ]
+        )
+
+
+@pytest.mark.parametrize("execution_mode", ["native", "adapter"])
+def test_offline_execution_map_accepts_matching_native_and_adapter_identities(
+    tmp_path, spec_files, execution_mode
+):
+    """Matching map and producer identities remain valid for native and adapter rows."""
+    from scripts.tools.analyze_snqi_contract import main
+
+    path = tmp_path / "episodes.jsonl"
+    rows = [
+        {
+            **row,
+            "planner_key": f"{execution_mode}-arm",
+            "kinematics": "differential_drive",
+            "algorithm_metadata": {
+                "status": "ok",
+                "execution_mode": execution_mode,
+                "planner_kinematics": {"execution_mode": execution_mode},
+            },
+        }
+        for row in records()
+        if row["algo"] == "a"
+    ]
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    execution_map = tmp_path / "execution.json"
+    execution_map.write_text(
+        json.dumps(
+            {
+                path.name: {
+                    "key": f"{execution_mode}-arm",
+                    "algo": "a",
+                    "kinematics": "differential_drive",
+                }
+            }
+        )
+    )
+    reports_dir = tmp_path / "reports"
+    assert (
+        main(
+            [
+                "--score-version",
+                "SNQI-v2",
+                "--episodes",
+                str(path),
+                "--execution-map",
+                str(execution_map),
+                "--weights",
+                str(spec_files[0]),
+                "--anchors",
+                str(spec_files[1]),
+                "--family",
+                str(spec_files[2]),
+                "--reports-dir",
+                str(reports_dir),
+            ]
+        )
+        == 0
+    )
+    family = json.loads((reports_dir / "snqi_v2_family.json").read_text())
+    assert family["declared_ranking"][0]["planner"] == (f"{execution_mode}-arm::differential_drive")
 
 
 @pytest.mark.parametrize("expected", [None, "goal", "guarded_ppo"])

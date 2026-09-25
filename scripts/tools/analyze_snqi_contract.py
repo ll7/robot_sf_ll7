@@ -260,12 +260,41 @@ def _v2_execution_declarations(args: argparse.Namespace) -> dict[Path, dict[str,
                     not isinstance(planner.get(key), str) or not planner[key].strip()
                     for key in ("key", "algo")
                 )
+                or (
+                    "kinematics" in planner
+                    and planner["kinematics"] is not None
+                    and (
+                        not isinstance(planner["kinematics"], str)
+                        or not planner["kinematics"].strip()
+                    )
+                )
             ):
                 raise ValueError("SNQI-v2 malformed or duplicate execution declaration")
             declarations[path] = planner
         if set(declarations) != {path.resolve() for path in args.episodes}:
             raise ValueError("SNQI-v2 execution map must bind exactly the supplied episode files")
     return declarations
+
+
+def _validate_v2_episode_identity(episode: dict[str, Any], planner: dict[str, Any]) -> None:
+    """Reject a map that conflicts with identities explicitly recorded by the producer."""
+    raw_algorithm = episode.get("algo")
+    if not isinstance(raw_algorithm, str) or not raw_algorithm.strip():
+        raise ValueError("SNQI-v2 execution map algorithm identity mismatch")
+    if raw_algorithm != planner["algo"]:
+        raise ValueError("SNQI-v2 execution map algorithm identity mismatch")
+
+    for field, declared in (
+        ("planner_key", planner["key"]),
+        ("kinematics", planner.get("kinematics")),
+    ):
+        observed = episode.get(field)
+        if observed is not None and (
+            not isinstance(observed, str)
+            or not observed.strip()
+            or (declared is not None and observed != declared)
+        ):
+            raise ValueError(f"SNQI-v2 execution map {field} identity mismatch")
 
 
 def _analyze_v2(args: argparse.Namespace) -> int:
@@ -291,13 +320,21 @@ def _analyze_v2(args: argparse.Namespace) -> int:
         for episode in read_episode_files([path]):
             expected = planner["algo"] if planner else None
             if planner:
+                _validate_v2_episode_identity(episode, planner)
+                declared_kinematics = planner.get("kinematics")
+                effective_kinematics = (
+                    declared_kinematics
+                    if declared_kinematics is not None
+                    else episode.get("kinematics")
+                )
                 episode = {
                     **episode,
                     "planner_key": planner["key"],
-                    "kinematics": planner.get("kinematics"),
                 }
+                if effective_kinematics is not None:
+                    episode["kinematics"] = effective_kinematics
                 group = planner["key"] + (
-                    f"::{planner['kinematics']}" if planner.get("kinematics") else ""
+                    f"::{effective_kinematics}" if effective_kinematics else ""
                 )
                 if group in expected_algorithms and expected_algorithms[group] != expected:
                     raise ValueError("SNQI-v2 conflicting algorithm declarations for report arm")

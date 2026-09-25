@@ -384,6 +384,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Issue #9725 spawn defects (changes seeded spawns).** Robot starts are now sampled
+  only where the robot radius plus a 0.1 m margin clears every wall and map bound
+  (fail loudly otherwise); pedestrians that overlap the robot footprint at reset are
+  moved deterministically to the nearest clear point without drawing random numbers;
+  route-end respawns avoid the current robot footprint. The head-on corridor robot
+  spawn zone moves 0.38 m off the wall and the station-platform route-0 pedestrian
+  spawn zone moves out of the robot spawn zone. Episode records now always carry
+  `spawn_validity` (reset clearance to pedestrians and walls); a reset overlap, or a
+  pedestrian collision after an unavoidable respawn overlap, sets ledger
+  `invalid_run` with reason `spawn_overlap`, and aggregation excludes those rows
+  from rates. `scripts/benchmark/preflight_spawn_clearance.py` checks every release
+  scenario x seed at reset. Over the release matrix x seeds 111-140, 1311 of 1440
+  cells keep identical spawns; the other 129 are the 12 cells that placed a pedestrian
+  on the robot (only those pedestrians move), all 90 cells of the two edited maps, and
+  27 robot starts that sat 0.004-0.053 m from a wall.
+  Release 0.0.7 rows are unchanged; a new benchmark-data release is required.
+
 * **issue #5935 scenario-evidence crosswalk accepts legacy `safety_predicate.late_evasive.v1`.**
   The export lane (`trace_predicate_export.py`) already accepted both `late_evasive.v1` and `.v2`
   to preserve existing campaign provenance, but the crosswalk's schema registry

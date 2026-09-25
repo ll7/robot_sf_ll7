@@ -107,12 +107,13 @@ def test_ped_simulator_reset_uses_npc_velocity_for_ego_heading(monkeypatch) -> N
             self.pose = new_pose
 
     sim = object.__new__(simulator_module.PedSimulator)
-    sim.robots = [SimpleNamespace()]
+    sim.robots = [SimpleNamespace(pose=((20.0, 20.0), 0.0), config=SimpleNamespace(radius=0.5))]
     sim.robot_navs = [SimpleNamespace(reached_waypoint=True, reached_destination=False)]
     sim.spawn_near_robot = False
     sim.map_def = SimpleNamespace(ped_spawn_zones=["zone"])
     sim.pysf_state = SimpleNamespace(
         num_peds=2,
+        ped_positions=np.array([[1.0, 2.0], [5.0, 6.0]], dtype=float),
         pysf_states=lambda: np.array(
             [
                 [1.0, 2.0, 0.0, 2.0, 5.0, 6.0, 0.5],
@@ -121,6 +122,7 @@ def test_ped_simulator_reset_uses_npc_velocity_for_ego_heading(monkeypatch) -> N
             dtype=float,
         ),
     )
+    sim.config = SimpleNamespace(ped_radius=0.5)
     sim.ego_ped = _EgoPedStub()
     sim._sync_ego_ped_social_force_state = lambda: None
 
@@ -129,6 +131,7 @@ def test_ped_simulator_reset_uses_npc_velocity_for_ego_heading(monkeypatch) -> N
 
     simulator_module.PedSimulator.reset_state(sim)
 
+    assert sim.last_spawn_relocation is None
     assert sim.ego_ped.reset_calls[0][0] == (9.0, 9.0)
     assert sim.ego_ped.reset_calls[0][1] == pytest.approx(np.pi / 2)
 
@@ -147,11 +150,15 @@ def test_ped_simulator_reset_requires_spawn_zone_when_spawn_near_robot_disabled(
             raise AssertionError(f"unexpected reset_state call: {new_pose}")
 
     sim = object.__new__(simulator_module.PedSimulator)
-    sim.robots = [SimpleNamespace()]
+    sim.robots = [SimpleNamespace(pose=((20.0, 20.0), 0.0), config=SimpleNamespace(radius=0.5))]
     sim.robot_navs = [SimpleNamespace(reached_waypoint=True, reached_destination=False)]
     sim.spawn_near_robot = False
     sim.map_def = SimpleNamespace(ped_spawn_zones=[])
-    sim.pysf_state = SimpleNamespace(num_peds=0, pysf_states=lambda: np.zeros((0, 7), dtype=float))
+    sim.pysf_state = SimpleNamespace(
+        num_peds=0,
+        ped_positions=np.zeros((0, 2), dtype=float),
+        pysf_states=lambda: np.zeros((0, 7), dtype=float),
+    )
     sim.ego_ped = _EgoPedStub()
     sim._sync_ego_ped_social_force_state = lambda: None
 

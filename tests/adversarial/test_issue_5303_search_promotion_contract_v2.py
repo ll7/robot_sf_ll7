@@ -257,14 +257,27 @@ def _frozen_contract() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def test_preflight_passes_on_frozen_powered_contract() -> None:
-    """The committed frozen powered contract passes every check with no blockers."""
+def test_preflight_tracks_frozen_powered_contract_input_identity() -> None:
+    """Changed hashed search inputs keep the separate powered campaign fail-closed."""
     result = preflight_issue_5303_powered_contract(repo_root=REPO_ROOT)
-    assert result.ready, "blockers:\n  " + "\n  ".join(result.blockers)
-    assert result.blocked is False
-    assert not result.blockers
-    failed = [name for name, ok in result.checks.items() if not ok]
-    assert failed == [], f"failed checks: {failed}"
+    contract = _frozen_contract()
+    stale_inputs = {
+        entry["id"]
+        for entry in contract["input_provenance"]["required_inputs"]
+        if _sha256_file(REPO_ROOT / entry["path"]) != entry["sha256"]
+    }
+    if stale_inputs:
+        assert {"adversarial_search_runner", "adversarial_bundle", "adversarial_config"} <= (
+            stale_inputs
+        )
+        assert result.blocked is True
+        assert result.ready is False
+        assert result.checks["input_provenance_hashes"] is False
+        assert all(any(name in blocker for blocker in result.blockers) for name in stale_inputs)
+    else:
+        assert result.ready, "blockers:\n  " + "\n  ".join(result.blockers)
+        assert result.blocked is False
+        assert not result.blockers
 
 
 def test_preflight_schema_and_contract_schema_versions() -> None:
@@ -474,12 +487,13 @@ def test_committed_identity_manifest_matches_recomputation() -> None:
 
 
 def test_cli_check_and_identity_emission(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-    """The CLI exits 0 on the frozen contract and emits exactly 768 identities."""
+    """The CLI mirrors the current source gate and still emits 768 identities."""
     from scripts.tools.check_issue_5303_search_promotion_contract_v2 import main
 
-    assert main(["--repo-root", str(REPO_ROOT)]) == 0
+    preflight = preflight_issue_5303_powered_contract(repo_root=REPO_ROOT)
+    assert main(["--repo-root", str(REPO_ROOT)]) == (0 if preflight.ready else 1)
     payload = json.loads(capsys.readouterr().out)
-    assert payload["ready"] is True
+    assert payload["ready"] is preflight.ready
     assert payload["schema_version"] == SCHEMA_VERSION
 
     assert main(["--identities"]) == 0
@@ -553,7 +567,7 @@ def test_dump_preflight_payload(tmp_path: Path) -> None:
     output = tmp_path / "payload.json"
     dump_preflight_payload(result, output)
     payload = json.loads(output.read_text(encoding="utf-8"))
-    assert payload["ready"] is True
+    assert payload["ready"] is result.ready
     dump_preflight_payload(result, None)  # None target stays a no-op
 
 

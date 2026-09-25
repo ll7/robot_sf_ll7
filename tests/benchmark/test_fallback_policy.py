@@ -160,6 +160,53 @@ def test_guarded_genuine_fallback_counters_remain_forbidden(guarded_metadata) ->
     assert any(f"guard_stats.{label}" in path and value == "1" for path, value in markers)
 
 
+@pytest.mark.parametrize("guarded_runtime", ["stop_best_effort"], indirect=True)
+@pytest.mark.parametrize("counter_container", ["guard_stats", "shield_stats"])
+def test_stop_best_effort_counter_reaches_metadata_acceptance_scan(
+    guarded_metadata, counter_container: str
+) -> None:
+    """The acceptance adapter rejects producer stop-best-effort counters."""
+    from robot_sf.benchmark.release_acceptance import _algorithm_metadata_runtime_marker
+
+    metadata = deepcopy(guarded_metadata)
+    metadata.pop("planner_runtime")
+    if counter_container == "guard_stats":
+        metadata.pop("shield_stats")
+    else:
+        metadata.pop("guard_stats")
+    assert _algorithm_metadata_runtime_marker(metadata, expected_algorithm="guarded_ppo") == (
+        f"{counter_container}.{'decision_counts.' if counter_container == 'shield_stats' else ''}stop_best_effort",
+        "1",
+    )
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (0, None),
+        (1, ("stop_best_effort", "1")),
+        (-1, ("stop_best_effort", "invalid")),
+        ("1", ("stop_best_effort", "invalid")),
+        (True, ("stop_best_effort", "invalid")),
+        (None, ("stop_best_effort", "invalid")),
+    ],
+)
+def test_stop_best_effort_counter_is_strict(value: object, expected) -> None:
+    """Zero is valid telemetry; positive and malformed stop counters fail closed."""
+    marker = runtime_fallback_or_degraded_marker({"stop_best_effort": value})
+    if expected is None:
+        assert marker is None
+    else:
+        assert marker == expected
+
+
+def test_stop_best_effort_decision_label_is_forbidden() -> None:
+    """A label-only stop-best-effort decision is execution fallback evidence."""
+    assert runtime_fallback_or_degraded_marker(
+        {"last_decision": {"decision_label": "stop_best_effort"}}
+    ) == ("last_decision.decision_label", "stop_best_effort")
+
+
 @pytest.mark.parametrize("guarded_runtime", ["fallback_safe"], indirect=True)
 def test_guarded_safe_decision_does_not_hide_checkpoint_fallback(guarded_metadata) -> None:
     """A legitimate shield command cannot excuse a genuine failed checkpoint path."""

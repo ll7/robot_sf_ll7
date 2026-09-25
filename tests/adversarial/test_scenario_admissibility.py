@@ -1784,11 +1784,14 @@ def test_producer_scenario_matrix_must_match_the_admissibility_artifact() -> Non
 
     verdict = classify_scenario_admissibility("case-static", reference_execution=run)
 
-    assert verdict.verdict == EMPIRICALLY_FEASIBLE
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     binding = verdict.evidence["execution_artifact_bindings"]["reference"]
     assert binding["status"] == "valid"
     assert binding["run_context_binding"]["status"] == "mismatch"
+    assert binding["run_context_binding"]["scenario_matrix_binding_status"] == "mismatch"
+    assert binding["producer_provenance_binding"]["status"] == "mismatch"
     assert "reference_execution_run_context_mismatch" in verdict.reason_codes
+    assert "reference_execution_scenario_case_identity_mismatch" in verdict.reason_codes
 
 
 def test_relative_execution_evidence_ref_uses_explicit_root(tmp_path: Path) -> None:
@@ -2105,6 +2108,22 @@ def test_unbound_run_context_cannot_support_planner_specific_attribution() -> No
     assert "reference_execution_run_context_unavailable" in verdict.reason_codes
     assert "matched_reference_target_failure_run_context_unbound" in verdict.reason_codes
     assert "planner_specific_failure_attribution_unconfirmed" in verdict.reason_codes
+    reference_binding = verdict.evidence["execution_artifact_bindings"]["reference"]
+    assert reference_binding["run_context_binding"]["scenario_matrix_binding_status"] == "valid"
+    assert reference_binding["run_context_binding"]["case_identity_binding_status"] == "valid"
+
+
+def test_missing_producer_manifest_cannot_prove_candidate_case_feasibility() -> None:
+    reference = _execution("reference", route_complete=True)
+    Path(manifest_path_for_result_jsonl(Path(reference["evidence_ref"]))).unlink()
+
+    verdict = classify_scenario_admissibility("case-static", reference_execution=reference)
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert "reference_execution_run_context_unavailable" in verdict.reason_codes
+    assert "reference_execution_scenario_case_identity_unavailable" in verdict.reason_codes
+    binding = verdict.evidence["execution_artifact_bindings"]["reference"]
+    assert binding["producer_provenance_binding"]["status"] == "unavailable"
 
 
 @pytest.mark.parametrize(

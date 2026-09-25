@@ -3,9 +3,9 @@
 [← Back to Documentation Index](./README.md)
 
 `scenario_cert.v1` is the first machine-readable certification surface for generated and curated
-scenario manifests. It is intentionally conservative: malformed scenarios, completed no-path
-results, kinodynamic violations, and clearly blocked dynamic setups are excluded before they can
-support benchmark claims. Planner errors remain unknown.
+scenario manifests. It preserves its established classification when a planner errors. The
+adversarial admissibility adapter treats that planner error as unknown evidence, rather than as a
+proof that the scenario is infeasible.
 
 For authored scenario intent before execution, use
 [`scenario_contract.v1`](./scenario_contracts.md). A scenario contract records ODD assumptions,
@@ -22,7 +22,7 @@ Each certificate includes:
 - `scenario_id` and `source`: the scenario name/id and manifest or programmatic source.
 - `classification`: one of `valid`, `invalid`, `geometrically_infeasible`,
   `kinodynamically_infeasible`, `dynamically_overconstrained`, `knife_edge`, or
-  `hard_but_solvable`, or `unknown` when certification cannot determine a result.
+  `hard_but_solvable`.
 - `benchmark_eligibility`: `eligible`, `stress_only`, or `excluded`.
 - `checks`: deterministic geometry, route, planner, kinodynamic, and dynamic checks.
 - `route_certificates`: per-route evidence for every applicable robot route.

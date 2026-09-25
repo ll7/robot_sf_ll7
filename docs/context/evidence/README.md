@@ -128,11 +128,20 @@ for retention classes, preservation proof, and cleanup-eligibility workflows.
 
 - `issue_9645_bounded_falsification_2026-09-24/`: diagnostic-only bounded falsification
   receipt for the 64-run Random/TPE pilot. All four 16-candidate runs used the native `goal`
-  planner and stayed at objective 0.0, so the packet records **NO-GO for scaling #9648 under
-  the tested fixed-seed search domain**. It also preserves a separately replay-verified
-  historical #1501 collision, the #9646 convergence report, candidate accounting, provenance,
-  selected replay traces, and explicit unknown-feasibility and claim-boundary caveats. This is
-  not a planner ranking, paper-facing benchmark result, or safety result.
+  planner and retained their recorded objective-0.0 output, so the packet records **NO-GO for
+  scaling #9648 under the tested fixed-seed search domain**. A later review found that the
+  historical objective had no severe-intrusion field and therefore did not establish that part
+  of its composite safety tier; see the separate
+  [objective-coverage addendum](issue_9645_objective_coverage_review_2026-09-25/). The packet
+  also preserves a separately replay-verified historical #1501 collision, the #9646 convergence
+  report, candidate accounting, provenance, selected replay traces, and explicit
+  unknown-feasibility and claim-boundary caveats. It is not a planner ranking, paper-facing
+  benchmark result, or safety result.
+
+- `issue_9645_objective_coverage_review_2026-09-25/`: checksummed review addendum for the
+  historical #9645 pilot. It records missing severe-intrusion observations, limits the original
+  objective-0.0 curves to historical output, and documents the explicit fail-closed v2 objective
+  added for future searches. No historical search or simulation was rerun.
 
 - `issue_6151_simulator_dependence_synthesis_2026-09-13/`: bounded negative synthesis for the
   #3207 validity-boundary parent. The only defensible verdict is `invalid_missing_evidence`:

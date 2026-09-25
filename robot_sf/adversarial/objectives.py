@@ -145,11 +145,13 @@ def _safety_evidence(outcome: dict[str, Any], metrics: dict[str, Any]) -> bool |
 
 
 def constraints_first_outcome_projection(record: dict[str, Any]) -> dict[str, Any]:
-    """Project one episode record into the strict constraints-first outcome vector.
+    """Project one episode record using the historical v1 constraints-first semantics.
 
     Missing containers or non-boolean outcome flags are unavailable rather than
     being coerced into a liveness failure.  This keeps the search objective and
-    the diagnostic row writer aligned when an episode record is malformed.
+    the diagnostic row writer aligned when an episode record is malformed. New
+    searches should use the v2 projection, which also requires negative intrusion
+    evidence before it can classify the composite safety event as false.
     """
     if not isinstance(record, dict):
         return _unavailable_constraints_first_outcome()
@@ -196,6 +198,38 @@ def constraints_first_outcome_projection(record: dict[str, Any]) -> dict[str, An
             "path_efficiency": metrics.get("path_efficiency"),
         },
     }
+
+
+def constraints_first_outcome_projection_v2(record: dict[str, Any]) -> dict[str, Any]:
+    """Project constraints-first outcomes only when the safety tier is observable.
+
+    The v1 projection is retained for historical reproducibility and treats any
+    available negative collision/intrusion indicator as a negative composite
+    event. That is insufficient when intrusion evidence is absent. V2 requires
+    explicit intrusion status before it can classify the composite event as
+    false; a positive collision or intrusion remains sufficient evidence of a
+    positive composite event.
+    """
+    projection = constraints_first_outcome_projection(record)
+    if projection["status"] != "observed":
+        return projection
+    if projection["collision_or_severe_intrusion"] is not False:
+        return projection
+
+    outcome = record.get("outcome") if isinstance(record, dict) else None
+    metrics = record.get("metrics") if isinstance(record, dict) else None
+    if not isinstance(outcome, dict) or not isinstance(metrics, dict):
+        return _unavailable_constraints_first_outcome()
+    has_intrusion_evidence = any(
+        isinstance(outcome.get(name), bool)
+        for name in ("severe_intrusion", "severe_intrusion_event")
+    ) or any(
+        isinstance(metrics.get(name), bool)
+        for name in ("severe_intrusion", "severe_intrusion_event")
+    )
+    if not has_intrusion_evidence:
+        return _unavailable_constraints_first_outcome()
+    return projection
 
 
 def _unavailable_constraints_first_outcome() -> dict[str, Any]:
@@ -248,6 +282,10 @@ def constraints_first_lexicographic_score(outcome: dict[str, Any]) -> float | No
 def constraints_first_lexicographic_v1(evaluation: CandidateEvaluation) -> float | None:
     """Score adversarial outcomes with bounded, constraints-first tiers.
 
+    This historical objective is retained so earlier runs remain reproducible.
+    New campaigns should use v2, which fails closed when severe-intrusion status
+    is absent.
+
     The search API accepts a scalar objective, so this encodes the frozen
     lexicographic ordering in disjoint score bands: collision/severe intrusion
     (``[4, 5)``), liveness failure (``[2, 3)``), then bounded
@@ -264,8 +302,25 @@ def constraints_first_lexicographic_v1(evaluation: CandidateEvaluation) -> float
     return constraints_first_lexicographic_score(projection)
 
 
+def constraints_first_lexicographic_v2(evaluation: CandidateEvaluation) -> float | None:
+    """Score the constraints-first vector while failing closed on unknown safety.
+
+    Unlike the historical v1 objective, v2 leaves a candidate unscored when
+    collision evidence is negative but severe-intrusion status is unavailable.
+    """
+    record = read_first_jsonl_record(evaluation.episode_record_path)
+    if record is None:
+        return None
+
+    projection = constraints_first_outcome_projection_v2(record)
+    if projection["status"] != "observed":
+        return None
+    return constraints_first_lexicographic_score(projection)
+
+
 _OBJECTIVES: dict[str, ObjectiveFn] = {
     "constraints_first_lexicographic_v1": constraints_first_lexicographic_v1,
+    "constraints_first_lexicographic_v2": constraints_first_lexicographic_v2,
     "minimize_episode_min_robot_distance": minimize_episode_min_robot_distance,
     "worst_case_snqi": worst_case_snqi,
     "temporal_robustness": temporal_robustness_objective,

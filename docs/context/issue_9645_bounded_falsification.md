@@ -35,11 +35,34 @@ issue #9648; it does not establish that the scenario space has no counterexample
 
 ### Objective coverage
 
-The reported zero scores are specific to `constraints_first_lexicographic_v1`: its upper score
-bands represent collision/severe intrusion and liveness failure; the lower band uses near-miss
-count and SNQI when available. The implementation does not score path efficiency, elapsed time,
-energy, or broader comfort outcomes, despite the scalar helper's general "comfort/efficiency"
-label. The pilot's tied zero scores therefore say nothing about those omitted dimensions.
+The pilot used `constraints_first_lexicographic_v1`. Its saved candidate rows record collision,
+route-completion, timeout, near-miss, and clearance values, but none records
+`severe_intrusion` or `severe_intrusion_event`. The v1 projection combines the available negative
+collision indicators and treats the composite collision-or-intrusion tier as false when intrusion
+status is absent. Its zero scores therefore do **not** establish that the severe-intrusion
+component was absent. For this pilot, severe-intrusion status is unknown; the archived raw episode
+records are also unavailable for independent recomputation.
+
+The observed rows support the narrower statements that no collision, route-completion failure,
+timeout, or near miss was recorded among the 64 pilot candidates. The zero-score curves remain
+historical producer output, but are not safety-tier evidence. The NO-GO for scaling #9648 remains
+limited to this fixed-seed, clipped domain: the available observations provide no demonstrated
+reason to spend the larger budget, and missing intrusion evidence makes that decision more
+conservative.
+
+Current code also registers `constraints_first_lexicographic_v2`, which leaves the composite
+safety tier unknown unless a negative severe-intrusion result is explicitly recorded. It was added
+after this pilot and was not used for or rerun against the 64 historical candidates. Path
+efficiency, elapsed time, energy, and broader comfort outcomes also remain outside the pilot
+objective despite the scalar helper's general "comfort/efficiency" label. See the
+[objective-coverage review addendum](evidence/issue_9645_objective_coverage_review_2026-09-25/).
+
+The post-review audit counted 64 rows in the tracked candidate table: collision, timeout, and
+near-miss counts are zero for every row; route completion is true for every row; and no intrusion
+field appears in the table or any of the four candidate manifests. These observed fields still
+support the narrow fixed-domain NO-GO. They do not upgrade the historical composite safety score,
+and they do not establish absence of severe intrusion or safety. No simulator or search was rerun
+for this interpretation update.
 
 ### Historical #1501 count caveat
 

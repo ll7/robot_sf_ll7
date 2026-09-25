@@ -7,7 +7,11 @@ from pathlib import Path
 
 from robot_sf.adversarial.certification import passed_status
 from robot_sf.adversarial.config import CandidateEvaluation, CandidateSpec, Pose2D
-from robot_sf.adversarial.objectives import constraints_first_lexicographic_v1, get_objective
+from robot_sf.adversarial.objectives import (
+    constraints_first_lexicographic_v1,
+    constraints_first_lexicographic_v2,
+    get_objective,
+)
 
 
 def _evaluation(tmp_path: Path, name: str, record: dict[str, object]) -> CandidateEvaluation:
@@ -226,6 +230,46 @@ def test_constraints_first_objective_combines_distinct_collision_and_intrusion_e
 
     assert score is not None
     assert 4.0 <= score < 5.0
+
+
+def test_constraints_first_v2_keeps_missing_intrusion_status_unknown(tmp_path: Path) -> None:
+    """V2 requires both safety components before it can emit a negative composite event."""
+    missing_intrusion = _evaluation(
+        tmp_path,
+        "missing_intrusion",
+        {
+            "outcome": {"route_complete": True, "collision_event": False},
+            "metrics": {"collisions": 0, "near_misses": 0, "snqi": 1.0},
+        },
+    )
+    observed_clean = _evaluation(
+        tmp_path,
+        "observed_clean",
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion": False,
+            },
+            "metrics": {"collisions": 0, "near_misses": 0, "snqi": 1.0},
+        },
+    )
+    observed_collision = _evaluation(
+        tmp_path,
+        "observed_collision",
+        {
+            "outcome": {"route_complete": False, "collision_event": True},
+            "metrics": {"collisions": 1, "near_misses": 0, "snqi": 1.0},
+        },
+    )
+
+    assert get_objective("constraints_first_lexicographic_v2") is constraints_first_lexicographic_v2
+    assert constraints_first_lexicographic_v1(missing_intrusion) == 0.5
+    assert constraints_first_lexicographic_v2(missing_intrusion) is None
+    clean_score = constraints_first_lexicographic_v2(observed_clean)
+    collision_score = constraints_first_lexicographic_v2(observed_collision)
+    assert clean_score == 0.5
+    assert collision_score is not None and 4.0 <= collision_score < 5.0
 
 
 def test_constraints_first_objective_rejects_out_of_domain_metrics(tmp_path: Path) -> None:

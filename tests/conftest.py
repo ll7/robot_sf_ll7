@@ -881,8 +881,10 @@ _FAST_FILES = {
     # The release-publication contract is deterministic schema/CLI coverage for
     # the changed release_publication_contract.py producer.
     "test_release_publication_contract.py",
-    # Radius rank-stability schema tests exercise the changed benchmark producer;
-    # keep their deterministic contract coverage in pull-request fast shards.
+    # Radius sweep summary and rank-stability schema tests exercise the changed
+    # benchmark producers; keep their deterministic contract coverage in
+    # pull-request fast shards.
+    "test_radius_sweep_summary.py",
     "test_radius_rank_stability.py",
     # The mechanism-boundary atlas tests are deterministic schema/lineage checks;
     # keep coverage for the changed producer in pull-request fast shards.
@@ -938,6 +940,11 @@ _FAST_FILES = {
     # coverage for the changed planner producer; keep them in the exact-head
     # fast lane for changed-coverage admission.
     "test_force_coupled_potential_field.py",
+    # Maneuver-candidate portfolio and adversarial boundary tests are
+    # deterministic planner-contract coverage for the changed producer; keep
+    # both focused files in the exact-head fast lane.
+    "test_maneuver_candidates.py",
+    "test_maneuver_candidates_counterexamples.py",
     # Versioned obstacle-force dispatch tests are deterministic contract
     # coverage for the planner, simulator, and wrapper seams; keep their
     # top-level modules in PR shards so changed coverage cannot exclude them as

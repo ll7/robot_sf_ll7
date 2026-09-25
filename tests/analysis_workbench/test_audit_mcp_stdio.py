@@ -7,6 +7,7 @@ import select
 import shutil
 import socket
 import subprocess
+import threading
 import time
 from io import BytesIO, StringIO
 from pathlib import Path
@@ -529,8 +530,17 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
     tmp_path: Path,
 ) -> None:
     service, session, dispatcher = _setup(tmp_path)
+    dispatch_finished = threading.Event()
+
+    class ObservedDispatcher:
+        def dispatch(self, request):
+            try:
+                return dispatcher.dispatch(request)
+            finally:
+                dispatch_finished.set()
+
     bridge = AuditMCPBridge(
-        dispatcher, session_id=session.session_id, session_token=session.session_token
+        ObservedDispatcher(), session_id=session.session_id, session_token=session.session_token
     )
     process: subprocess.Popen[bytes] | None = None
     try:
@@ -551,11 +561,17 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
         )
         assert process.stdin is not None and process.stdout is not None
 
-        def exchange(message: dict[str, object]) -> dict[str, object]:
+        def exchange(
+            message: dict[str, object], *, wait_for_dispatch: bool = False
+        ) -> dict[str, object]:
             process.stdin.write(json.dumps(message).encode() + b"\n")
             process.stdin.flush()
+            if wait_for_dispatch:
+                assert dispatch_finished.wait(10.0), (
+                    f"MCP request did not finish dispatch; proxy exit={process.poll()}"
+                )
             ready, _, _ = select.select([process.stdout], [], [], 3.0)
-            assert ready, "MCP proxy did not return a bounded response"
+            assert ready, f"MCP proxy did not deliver a dispatched response; exit={process.poll()}"
             line = process.stdout.readline()
             assert line
             return json.loads(line)
@@ -591,7 +607,8 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
                     "name": "read_episode",
                     "arguments": {"episode_id": "fixture-readable"},
                 },
-            }
+            },
+            wait_for_dispatch=True,
         )
         assert called["result"]["structuredContent"]["status"] == "complete"
         assert session.session_token not in json.dumps(

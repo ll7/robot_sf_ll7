@@ -28,6 +28,12 @@ BASELINE_RADIUS: float = 1.0
 ISSUE_6642 = 6642
 PARENT_ISSUE_6600 = 6600
 GATE1_CANARY_ISSUE = 6641
+# Frozen by the tracked Gate 2 manifest and all three arm configs. A campaign
+# declaration cannot substitute a different passing receipt for this admitted artifact.
+EXPECTED_GATE1_RECEIPT_SHA256 = "88ab630a555ce4a0a6e0b273e6808bc56bffbfa16c57ac3b579c97eb179d9922"
+# The accepted #6642 populations were produced at this one immutable source
+# commit. Gate 3 must bind campaign metadata and config blobs to that object.
+EXPECTED_CAMPAIGN_GIT_COMMIT = "aabad2e2a82cd8dcca93cc78a01493ec6ead5212"
 
 # The release roster is frozen to the 0.0.3.post1 baseline; the checker rejects a
 # sweep whose arm config does not reproduce this exact 14-key roster in order.
@@ -53,6 +59,9 @@ RELEASE_PLANNER_KEYS: tuple[str, ...] = (
 # manifest cannot replace a cell with a different scenario while preserving
 # only the count.
 EXPECTED_SCENARIO_MATRIX = "configs/scenarios/classic_interactions_francis2023.yaml"
+# The frozen runner's suite resolver maps this combined matrix to
+# ``classic_interactions`` because the filename contains "classic".
+EXPECTED_SUITE_KEY = "classic_interactions"
 EXPECTED_RELEASE_BASELINE_CONFIG = (
     "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml"
 )
@@ -76,6 +85,14 @@ EXPECTED_ARM_CAMPAIGN_CONFIGS: dict[str, str] = {
     "r0p5": EXPECTED_ARM_CAMPAIGN_CONFIG_0P5M,
     "r0p8": EXPECTED_ARM_CAMPAIGN_CONFIG_0P8M,
     "r1p0": EXPECTED_ARM_CAMPAIGN_CONFIG,
+}
+# SHA-256 of the exact tracked arm config bytes at the immutable #6642 campaign
+# commit (aabad2e2a82cd8dcca93cc78a01493ec6ead5212). These independently anchor
+# each campaign preflight receipt; a self-consistent replacement digest is not evidence.
+EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256: dict[str, str] = {
+    "r0p5": "bbf309868951cff5f4bb299acbcc3b01f2e37bd54ef72fb138e5b7d99073883f",
+    "r0p8": "ac4006522e77a02306cb34064bc11a151e56fcd2f1f9409bcdb50440c436dda3",
+    "r1p0": "b4855e6ec51729a35ee87af487ad8c3154ccb32a0691b0e1f9d92d5186321a5b",
 }
 EXPECTED_ARM_RELEASE_TAGS: dict[str, str] = {
     "r0p5": EXPECTED_ARM_RELEASE_TAG_0P5M,
@@ -143,6 +160,13 @@ EXPECTED_SEEDS: tuple[int, ...] = tuple(range(EXPECTED_SEED_RANGE[0], EXPECTED_S
 EXPECTED_HORIZON = 600
 EXPECTED_DT = 0.1
 EXPECTED_KINEMATICS = "differential_drive"
+EXPECTED_RECORD_FORCES = True
+# Family-feasibility approval remains intentionally unset until an owner-approved
+# rule artifact and an evaluator over the exact admitted episode rows exist.
+FAMILY_FEASIBILITY_SCHEMA = "issue_6642_family_feasibility.v1"
+FAMILY_FEASIBILITY_PROVENANCE_SCHEMA = "issue_6642_family_feasibility_provenance.v1"
+EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID: str | None = None
+EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256: str | None = None
 EXPECTED_ROWS_PER_ARM = len(RELEASE_PLANNER_KEYS) * EXPECTED_SCENARIO_COUNT * len(EXPECTED_SEEDS)
 EXPECTED_TOTAL_ROWS = len(PRODUCTION_RADII) * EXPECTED_ROWS_PER_ARM
 
@@ -545,6 +569,10 @@ def _runtime_binding_violations(metadata: Mapping[str, Any], *, label: str) -> l
     if not isinstance(receipt, str) or _SHA256_PATTERN.fullmatch(receipt) is None:
         violations.append(
             f"{label}.gate1_receipt_sha256 must be a lowercase 64-character SHA-256 digest"
+        )
+    elif receipt != EXPECTED_GATE1_RECEIPT_SHA256:
+        violations.append(
+            f"{label}.gate1_receipt_sha256 must match the frozen Gate 1 receipt digest"
         )
     source_commit = metadata.get("gate1_source_commit")
     if not isinstance(source_commit, str) or _GIT_SHA_PATTERN.fullmatch(source_commit) is None:
@@ -1270,14 +1298,20 @@ __all__ = [
     "EXPECTED_ARM_CAMPAIGN_CONFIGS",
     "EXPECTED_ARM_CAMPAIGN_CONFIG_0P5M",
     "EXPECTED_ARM_CAMPAIGN_CONFIG_0P8M",
+    "EXPECTED_ARM_CAMPAIGN_CONFIG_SHA256",
     "EXPECTED_ARM_RELEASE_TAG",
     "EXPECTED_ARM_RELEASE_TAGS",
     "EXPECTED_ARM_RELEASE_TAG_0P5M",
     "EXPECTED_ARM_RELEASE_TAG_0P8M",
+    "EXPECTED_CAMPAIGN_GIT_COMMIT",
     "EXPECTED_DT",
+    "EXPECTED_FAMILY_FEASIBILITY_AUTHORITY_SHA256",
+    "EXPECTED_FAMILY_FEASIBILITY_DEFINITION_ID",
+    "EXPECTED_GATE1_RECEIPT_SHA256",
     "EXPECTED_HORIZON",
     "EXPECTED_KINEMATICS",
     "EXPECTED_MANIFEST_CONFIG",
+    "EXPECTED_RECORD_FORCES",
     "EXPECTED_RELEASE_BASELINE_CONFIG",
     "EXPECTED_ROWS_PER_ARM",
     "EXPECTED_SCENARIO_COUNT",
@@ -1286,7 +1320,10 @@ __all__ = [
     "EXPECTED_SEEDS",
     "EXPECTED_SEED_RANGE",
     "EXPECTED_SEED_SET",
+    "EXPECTED_SUITE_KEY",
     "EXPECTED_TOTAL_ROWS",
+    "FAMILY_FEASIBILITY_PROVENANCE_SCHEMA",
+    "FAMILY_FEASIBILITY_SCHEMA",
     "GATE1_CANARY_ISSUE",
     "GATE1_STATUSES",
     "GATE1_STATUS_NOT_YET_PASSED",

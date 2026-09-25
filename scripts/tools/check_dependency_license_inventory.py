@@ -4186,11 +4186,9 @@ def build_inventory(  # noqa: C901, PLR0912, PLR0915
     )
     effective_generator_path = generator_path
     if effective_generator_path is None:
-        effective_generator_path = (
-            repo_root / CANONICAL_GENERATOR
-            if candidate_bundle_path is not None
-            else Path(__file__).resolve()
-        )
+        # Always bind the canonical generator revision: manual dispatches and
+        # baseline comparisons must observe generator drift as stale evidence.
+        effective_generator_path = repo_root / CANONICAL_GENERATOR
     inputs, input_issues = _input_paths(
         repo_root,
         manifest,
@@ -4394,6 +4392,1005 @@ def _reported_unresolved_count(report_path: Path) -> int:
     return value if isinstance(value, int) else 0
 
 
+COMPARISON_SCHEMA_VERSION = "dependency_license_comparison.v1"
+_COMPARISON_FINAL_STATUSES = ("blocked", "complete")
+_COMPARISON_REPORT_FIELDS = frozenset(
+    {
+        "candidate_binding",
+        "environment",
+        "failures",
+        "installed_not_locked",
+        "packages",
+        "policy",
+        "profile_manifest",
+        "profiles",
+        "project",
+        "repository_inputs",
+        "schema_version",
+        "structural_issues",
+        "summary",
+        "surface",
+        "target",
+        "unrepresented_lock_package_dispositions",
+        "unrepresented_lock_packages",
+        _REPORT_CONTENT_DIGEST_FIELD,
+    }
+)
+_COMPARISON_SUMMARY_FIELDS = frozenset(
+    {
+        "candidate_bound",
+        "installed_distribution_count",
+        "installed_not_locked_count",
+        "license_status_counts",
+        "locked_package_count",
+        "outside_selected_package_count",
+        "policy_exact_disposition_count",
+        "policy_exact_match_count",
+        "policy_pending_component_count",
+        "policy_pending_package_count",
+        "profile_count",
+        "profile_membership_edge_count",
+        "selected_package_count",
+        "selected_profile_count",
+        "status",
+        "structural_issue_count",
+        "summary_contract_version",
+        "unrepresented_lock_package_count",
+        "unrepresented_reason_counts",
+        "unrepresented_reviewed_exclusion_count",
+        "unrepresented_unresolved_count",
+        "unresolved_count",
+    }
+)
+_COMPARISON_SUMMARY_COUNT_FIELDS = frozenset(
+    {
+        "installed_distribution_count",
+        "installed_not_locked_count",
+        "locked_package_count",
+        "outside_selected_package_count",
+        "policy_exact_disposition_count",
+        "policy_exact_match_count",
+        "policy_pending_component_count",
+        "policy_pending_package_count",
+        "profile_count",
+        "profile_membership_edge_count",
+        "selected_package_count",
+        "selected_profile_count",
+        "structural_issue_count",
+        "unrepresented_lock_package_count",
+        "unrepresented_reviewed_exclusion_count",
+        "unrepresented_unresolved_count",
+        "unresolved_count",
+    }
+)
+_COMPARISON_SUMMARY_MAP_FIELDS = frozenset({"license_status_counts", "unrepresented_reason_counts"})
+_COMPARISON_ENVIRONMENT_FIELDS = frozenset(
+    {"implementation", "machine", "platform", "python", "python_version"}
+)
+_COMPARISON_STRING_LIST_FIELDS = (
+    "installed_not_locked",
+    "structural_issues",
+    "unrepresented_lock_packages",
+)
+_COMPARISON_OBSERVATION_STATUSES = frozenset(
+    {"not_installed", "duplicate_distribution_name", "observed"}
+)
+_COMPARISON_METADATA_BINDINGS = frozenset(
+    {"not_observed", "ambiguous_installed_metadata", "installed_distribution_not_artifact_bound"}
+)
+_COMPARISON_DYNAMIC_PROFILE_FIELDS = frozenset(
+    {
+        "package_ids",
+        "direct_requirements",
+        "missing_dependencies",
+        "conflicting_dependencies",
+        "relationships",
+        "status",
+    }
+)
+
+
+def _comparison_string_set(value: Any) -> set[str]:
+    """Return the string elements of a report list for set comparison."""
+    if not isinstance(value, list):
+        return set()
+    return {item for item in value if isinstance(item, str)}
+
+
+def _comparison_package_names(
+    report: dict[str, Any],
+) -> tuple[dict[str, set[str]], list[str]]:
+    """Map normalized package names to their identity-key sets.
+
+    A version, source, or artifact change yields a new ``package_id``, so a
+    changed package surfaces as a removed identity plus an added identity
+    under one normalized name.
+    """
+    by_name: dict[str, set[str]] = {}
+    issues: list[str] = []
+    packages = report.get("packages")
+    if not isinstance(packages, list):
+        return by_name, ["report has no packages list"]
+    for record in packages:
+        if not isinstance(record, dict):
+            issues.append("report contains a non-object package record")
+            continue
+        package_id = record.get("package_id")
+        name = record.get("normalized_name")
+        if not isinstance(package_id, str) or not isinstance(name, str):
+            issues.append("report contains a package record without identity")
+            continue
+        by_name.setdefault(name, set()).add(package_id)
+    return by_name, issues
+
+
+def _comparison_reviewed_exclusion_ids(report: dict[str, Any]) -> tuple[set[str], list[str]]:
+    """Return reviewed-exclusion disposition identities for comparison."""
+    ids: set[str] = set()
+    issues: list[str] = []
+    rows = report.get("unrepresented_lock_package_dispositions")
+    if not isinstance(rows, list):
+        return ids, ["report has no unrepresented_lock_package_dispositions list"]
+    for row in rows:
+        if not isinstance(row, dict):
+            issues.append("report contains a non-object disposition row")
+            continue
+        if row.get("status") != "reviewed_exclusion":
+            continue
+        package_id = row.get("package_id")
+        if not isinstance(package_id, str):
+            issues.append("report contains a reviewed exclusion without identity")
+            continue
+        ids.add(package_id)
+    return ids, issues
+
+
+def _comparison_input_rows(
+    report: dict[str, Any], *, report_name: str
+) -> tuple[dict[str, str], list[str]]:
+    """Return validated repository input digests for one comparison report."""
+    inputs = report.get("repository_inputs")
+    if not isinstance(inputs, list) or not inputs:
+        return {}, [f"{report_name} has no repository_inputs digest list"]
+    rows: dict[str, str] = {}
+    issues: list[str] = []
+    for item in inputs:
+        if not isinstance(item, dict):
+            issues.append(f"{report_name} contains a non-object repository input row")
+            continue
+        path = item.get("path")
+        digest = item.get("sha256")
+        if not isinstance(path, str) or not path:
+            issues.append(f"{report_name} contains a repository input without a path")
+            continue
+        if not isinstance(digest, str) or not _SHA256_RE.fullmatch(digest):
+            issues.append(f"{report_name} contains an invalid repository input digest: {path}")
+            continue
+        if path in rows:
+            issues.append(f"{report_name} contains duplicate repository input: {path}")
+            continue
+        rows[path] = digest
+    if len(rows) != len(inputs):
+        # Keep the detailed row errors above while making a malformed list
+        # visible even when two invalid rows happen to share no path.
+        issues.append(f"{report_name} repository_inputs list is malformed")
+    return rows, issues
+
+
+def _comparison_package_shape_issues(report: dict[str, Any], *, report_name: str) -> list[str]:
+    """Validate package records before comparison reduces them to identities."""
+    packages = report.get("packages")
+    if not isinstance(packages, list):
+        return [f"{report_name} has no packages list"]
+    issues: list[str] = []
+    identities: set[str] = set()
+    for record in packages:
+        if not isinstance(record, dict):
+            issues.append(f"{report_name} contains a non-object package record")
+            continue
+        package_id = record.get("package_id")
+        normalized_name = record.get("normalized_name")
+        if not isinstance(package_id, str) or not package_id:
+            issues.append(f"{report_name} contains a package record without identity")
+        elif package_id in identities:
+            issues.append(f"{report_name} contains duplicate package identity: {package_id}")
+        else:
+            identities.add(package_id)
+        if not isinstance(normalized_name, str) or not normalized_name:
+            issues.append(f"{report_name} contains a package record without normalized_name")
+        observation_status = record.get("observation_status")
+        if (
+            not isinstance(observation_status, str)
+            or observation_status not in _COMPARISON_OBSERVATION_STATUSES
+        ):
+            issues.append(
+                f"{report_name} contains a package record with invalid or candidate-bound "
+                "observation_status"
+            )
+        metadata_binding = record.get("metadata_binding")
+        if (
+            not isinstance(metadata_binding, str)
+            or metadata_binding not in _COMPARISON_METADATA_BINDINGS
+        ):
+            issues.append(
+                f"{report_name} contains a package record with invalid or candidate-bound "
+                "metadata_binding"
+            )
+    return issues
+
+
+def _comparison_disposition_shape_issues(  # noqa: C901 - fail-closed shape validation branches
+    report: dict[str, Any], *, report_name: str
+) -> list[str]:
+    """Validate both disposition collections used by the comparison."""
+    issues: list[str] = []
+    rows = report.get("unrepresented_lock_package_dispositions")
+    if not isinstance(rows, list):
+        issues.append(f"{report_name} has no unrepresented disposition list")
+    else:
+        identities: set[str] = set()
+        for row in rows:
+            if not isinstance(row, dict):
+                issues.append(f"{report_name} contains a non-object disposition row")
+                continue
+            package_id = row.get("package_id")
+            status = row.get("status")
+            if not isinstance(package_id, str) or not package_id:
+                issues.append(f"{report_name} contains a disposition without package identity")
+            elif package_id in identities:
+                issues.append(f"{report_name} contains duplicate disposition: {package_id}")
+            else:
+                identities.add(package_id)
+            if not isinstance(status, str) or status not in {
+                "reviewed_exclusion",
+                "unresolved",
+            }:
+                issues.append(f"{report_name} contains an invalid disposition status")
+
+    policy = report.get("policy")
+    policy_rows = policy.get("package_dispositions") if isinstance(policy, dict) else None
+    if not isinstance(policy_rows, list):
+        issues.append(f"{report_name} has no policy disposition list")
+    else:
+        for row in policy_rows:
+            if not isinstance(row, dict):
+                issues.append(f"{report_name} contains a non-object policy disposition row")
+                continue
+            if not isinstance(row.get("id"), str) or not row["id"]:
+                issues.append(f"{report_name} contains a policy disposition without id")
+            if not isinstance(row.get("package"), str) or not row["package"]:
+                issues.append(f"{report_name} contains a policy disposition without package")
+    return issues
+
+
+def _comparison_profile_semantics(
+    report: dict[str, Any], *, report_name: str
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    """Return stable profile semantics while excluding lock-derived membership."""
+    profiles = report.get("profiles")
+    if not isinstance(profiles, list):
+        return {}, [f"{report_name} has no profiles list"]
+    by_id: dict[str, dict[str, Any]] = {}
+    issues: list[str] = []
+    for profile in profiles:
+        if not isinstance(profile, dict):
+            issues.append(f"{report_name} contains a non-object profile record")
+            continue
+        profile_id = profile.get("id")
+        if not isinstance(profile_id, str) or not profile_id:
+            issues.append(f"{report_name} contains a profile without id")
+            continue
+        if profile_id in by_id:
+            issues.append(f"{report_name} contains duplicate profile id: {profile_id}")
+            continue
+        by_id[profile_id] = {
+            key: _normalise_json(value)
+            for key, value in profile.items()
+            if key not in _COMPARISON_DYNAMIC_PROFILE_FIELDS
+        }
+    return by_id, issues
+
+
+def _comparison_report_schema_issues(
+    report: Any, *, report_name: str, allow_review_marker: bool = False
+) -> list[str]:
+    """Require the current inventory's exact top-level report schema."""
+    if not isinstance(report, dict):
+        return [f"{report_name} is not a JSON object"]
+    allowed = set(_COMPARISON_REPORT_FIELDS)
+    if allow_review_marker:
+        allowed.add("review_marker")
+    if set(report) != allowed:
+        return [f"{report_name} has missing or unclassified fields"]
+    return []
+
+
+def _comparison_summary_schema_issues(  # noqa: C901 - fail-closed canonical type checks
+    report: Any, *, report_name: str
+) -> list[str]:
+    """Require canonical summary keys and value types for one inventory report."""
+    summary = report.get("summary") if isinstance(report, dict) else None
+    if not isinstance(summary, dict):
+        return [f"{report_name} has no summary object"]
+    issues: list[str] = []
+    if set(summary) != _COMPARISON_SUMMARY_FIELDS:
+        issues.append(f"{report_name} summary has missing or unclassified fields")
+    for field in _COMPARISON_SUMMARY_COUNT_FIELDS:
+        value = summary.get(field)
+        if type(value) is not int or value < 0:
+            issues.append(f"{report_name} summary {field} must be a nonnegative integer")
+    for field in _COMPARISON_SUMMARY_MAP_FIELDS:
+        value = summary.get(field)
+        if not isinstance(value, dict):
+            issues.append(f"{report_name} summary {field} must be a string-to-count map")
+            continue
+        if any(
+            not isinstance(key, str) or type(count) is not int or count < 0
+            for key, count in value.items()
+        ):
+            issues.append(f"{report_name} summary {field} must be a string-to-count map")
+    candidate_bound = summary.get("candidate_bound")
+    if type(candidate_bound) is not bool:
+        issues.append(f"{report_name} summary candidate_bound must be a boolean")
+    summary_contract_version = summary.get("summary_contract_version")
+    if (
+        not isinstance(summary_contract_version, str)
+        or summary_contract_version != SUMMARY_CONTRACT_VERSION
+    ):
+        issues.append(f"{report_name} summary summary_contract_version is invalid")
+    status = summary.get("status")
+    if not isinstance(status, str) or status not in _COMPARISON_FINAL_STATUSES:
+        issues.append(f"{report_name} summary status is invalid")
+    return sorted(set(issues))
+
+
+def _comparison_environment_issues(report: Any, *, report_name: str) -> list[str]:
+    """Require the exact five string fields emitted by build_inventory."""
+    environment = report.get("environment") if isinstance(report, dict) else None
+    if not isinstance(environment, dict):
+        return [f"{report_name} has no environment object"]
+    issues: list[str] = []
+    if set(environment) != _COMPARISON_ENVIRONMENT_FIELDS:
+        issues.append(f"{report_name} environment has missing or unclassified fields")
+    if any(not isinstance(value, str) for value in environment.values()):
+        issues.append(f"{report_name} environment fields must be strings")
+    return sorted(set(issues))
+
+
+def _comparison_string_list_issues(report: Any, *, report_name: str) -> list[str]:
+    """Require the report's string-list containers to retain their schema."""
+    if not isinstance(report, dict):
+        return [f"{report_name} is not a JSON object"]
+    issues: list[str] = []
+    for field in _COMPARISON_STRING_LIST_FIELDS:
+        value = report.get(field)
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            issues.append(f"{report_name} {field} must be a list of strings")
+    return issues
+
+
+def _comparison_summary_integrity_issues(  # noqa: C901, PLR0912, PLR0915
+    report: Any, *, report_name: str
+) -> list[str]:
+    """Reconcile summary values with the report fields that retain their inputs."""
+    if not isinstance(report, dict):
+        return [f"{report_name} is not a JSON object"]
+    summary = report.get("summary")
+    if not isinstance(summary, dict):
+        return [f"{report_name} has no summary object"]
+    issues: list[str] = []
+    expected: dict[str, Any] = {}
+
+    def expect(field: str, value: Any) -> None:
+        if summary.get(field) != value:
+            issues.append(f"{report_name} summary {field} differs from report contents")
+
+    profiles = report.get("profiles")
+    profile_rows = (
+        profiles
+        if isinstance(profiles, list) and all(isinstance(row, dict) for row in profiles)
+        else None
+    )
+    surface = report.get("surface")
+    selected_profile_ids: set[str] | None = None
+    if isinstance(surface, dict):
+        surface_profile_ids = surface.get("profile_ids")
+        if isinstance(surface_profile_ids, list) and all(
+            isinstance(profile_id, str) for profile_id in surface_profile_ids
+        ):
+            selected_profile_ids = set(surface_profile_ids)
+        else:
+            issues.append(f"{report_name} surface profile_ids cannot reconcile summary")
+    else:
+        issues.append(f"{report_name} surface cannot reconcile summary")
+
+    selected_package_ids: set[str] | None = None
+    profile_memberships: dict[str, set[str]] = {}
+    if profile_rows is not None:
+        expected["profile_count"] = len(profile_rows)
+        profile_package_ids: list[list[str]] = []
+        profile_rows_valid = True
+        for row in profile_rows:
+            profile_id = row.get("id")
+            package_ids = row.get("package_ids")
+            if not isinstance(profile_id, str):
+                profile_rows_valid = False
+                issues.append(f"{report_name} profile id cannot reconcile summary")
+            if not isinstance(package_ids, list) or not all(
+                isinstance(package_id, str) for package_id in package_ids
+            ):
+                profile_rows_valid = False
+                issues.append(f"{report_name} profile package_ids cannot reconcile summary")
+            else:
+                profile_package_ids.append(package_ids)
+                if len(package_ids) != len(set(package_ids)):
+                    profile_rows_valid = False
+                    issues.append(f"{report_name} profile package_ids contain duplicates")
+                if isinstance(profile_id, str):
+                    for package_id in package_ids:
+                        profile_memberships.setdefault(package_id, set()).add(profile_id)
+        if (
+            profile_rows_valid
+            and selected_profile_ids is not None
+            and len(profile_package_ids) == len(profile_rows)
+        ):
+            expected["selected_profile_count"] = sum(
+                row.get("id") in selected_profile_ids for row in profile_rows
+            )
+            expected["profile_membership_edge_count"] = sum(
+                len(package_ids) for package_ids in profile_package_ids
+            )
+            selected_package_ids = {
+                package_id
+                for row, package_ids in zip(profile_rows, profile_package_ids, strict=True)
+                if row.get("id") in selected_profile_ids
+                for package_id in package_ids
+            }
+
+    packages = report.get("packages")
+    package_rows = (
+        packages
+        if isinstance(packages, list) and all(isinstance(row, dict) for row in packages)
+        else None
+    )
+    if package_rows is not None:
+        expected["locked_package_count"] = len(package_rows)
+        if selected_package_ids is not None:
+            expected["selected_package_count"] = len(selected_package_ids)
+            expected["outside_selected_package_count"] = len(package_rows) - len(
+                selected_package_ids
+            )
+        package_ids = {
+            row.get("package_id") for row in package_rows if isinstance(row.get("package_id"), str)
+        }
+        unknown_profile_package_ids = set(profile_memberships) - package_ids
+        if unknown_profile_package_ids:
+            issues.append(f"{report_name} profile package_ids reference unknown package rows")
+        package_statuses = [row.get("license_status") for row in package_rows]
+        if all(isinstance(status, str) for status in package_statuses):
+            expected["license_status_counts"] = dict(sorted(Counter(package_statuses).items()))
+        else:
+            issues.append(f"{report_name} package license_status values cannot reconcile summary")
+        selected_profiles_valid = True
+        exact_statuses_valid = True
+        for row in package_rows:
+            package_id = row.get("package_id")
+            expected_profiles = (
+                profile_memberships.get(package_id, set())
+                if isinstance(package_id, str) and profile_rows is not None
+                else None
+            )
+            package_profiles = row.get("profiles")
+            if not isinstance(package_profiles, list) or not all(
+                isinstance(profile_id, str) for profile_id in package_profiles
+            ):
+                selected_profiles_valid = False
+                issues.append(f"{report_name} package profiles cannot reconcile summary")
+            elif len(package_profiles) != len(set(package_profiles)):
+                selected_profiles_valid = False
+                issues.append(f"{report_name} package profiles contain duplicates")
+            elif expected_profiles is not None and set(package_profiles) != expected_profiles:
+                selected_profiles_valid = False
+                issues.append(f"{report_name} package profiles differ from profile rows")
+            selected_profiles = row.get("selected_profiles")
+            if not isinstance(selected_profiles, list) or not all(
+                isinstance(profile_id, str) for profile_id in selected_profiles
+            ):
+                selected_profiles_valid = False
+                issues.append(f"{report_name} package selected_profiles cannot reconcile summary")
+            elif len(selected_profiles) != len(set(selected_profiles)):
+                selected_profiles_valid = False
+                issues.append(f"{report_name} package selected_profiles contain duplicates")
+            elif expected_profiles is not None and selected_profile_ids is not None:
+                expected_selected_profiles = expected_profiles & selected_profile_ids
+                if set(selected_profiles) != expected_selected_profiles:
+                    selected_profiles_valid = False
+                    issues.append(
+                        f"{report_name} package selected_profiles differ from profile rows"
+                    )
+            exact_status = row.get("exact_policy_status")
+            if exact_status is not None and (
+                not isinstance(exact_status, str) or exact_status not in {"accepted", "blocked"}
+            ):
+                exact_statuses_valid = False
+                issues.append(f"{report_name} package exact_policy_status cannot reconcile summary")
+        if selected_profiles_valid:
+            expected["policy_pending_package_count"] = selected_policy_pending_package_count(
+                package_rows
+            )
+            if exact_statuses_valid:
+                expected["policy_exact_match_count"] = sum(
+                    bool(row.get("selected_profiles"))
+                    and row.get("exact_policy_status") == "accepted"
+                    for row in package_rows
+                )
+
+    dispositions = report.get("unrepresented_lock_package_dispositions")
+    disposition_rows = (
+        dispositions
+        if isinstance(dispositions, list) and all(isinstance(row, dict) for row in dispositions)
+        else None
+    )
+    if disposition_rows is not None:
+        expected["unrepresented_lock_package_count"] = len(disposition_rows)
+        expected["unrepresented_reviewed_exclusion_count"] = sum(
+            row.get("status") == "reviewed_exclusion" for row in disposition_rows
+        )
+        expected["unrepresented_unresolved_count"] = sum(
+            row.get("status") == "unresolved" for row in disposition_rows
+        )
+        reason_counts: Counter[str] = Counter()
+        reason_codes_valid = True
+        for row in disposition_rows:
+            reason_codes = row.get("reason_codes")
+            if not isinstance(reason_codes, list) or not all(
+                isinstance(reason_code, str) for reason_code in reason_codes
+            ):
+                reason_codes_valid = False
+                issues.append(f"{report_name} disposition reason_codes cannot reconcile summary")
+            else:
+                reason_counts.update(reason_codes)
+        if reason_codes_valid:
+            expected["unrepresented_reason_counts"] = dict(sorted(reason_counts.items()))
+        unrepresented = report.get("unrepresented_lock_packages")
+        if isinstance(unrepresented, list) and all(
+            isinstance(package_id, str) for package_id in unrepresented
+        ):
+            disposition_ids = [row.get("package_id") for row in disposition_rows]
+            if unrepresented != disposition_ids:
+                issues.append(f"{report_name} unrepresented package containers differ")
+
+    installed_not_locked = report.get("installed_not_locked")
+    if isinstance(installed_not_locked, list) and all(
+        isinstance(item, str) for item in installed_not_locked
+    ):
+        installed_names: set[str] = set()
+        installed_names_valid = True
+        for item in installed_not_locked:
+            name, separator, version = item.partition("==")
+            if not separator or not name or not version:
+                installed_names_valid = False
+                issues.append(f"{report_name} installed_not_locked values cannot reconcile summary")
+            else:
+                installed_names.add(_canonicalize_name(name))
+        if installed_names_valid and package_rows is not None:
+            locked_names = {
+                row.get("normalized_name")
+                for row in package_rows
+                if isinstance(row.get("normalized_name"), str)
+            }
+            expected["installed_not_locked_count"] = len(installed_names - locked_names)
+
+    structural_issues = report.get("structural_issues")
+    if isinstance(structural_issues, list) and all(
+        isinstance(issue, str) for issue in structural_issues
+    ):
+        expected["structural_issue_count"] = len(set(structural_issues))
+
+    failures = report.get("failures")
+    if isinstance(failures, list) and all(isinstance(failure, str) for failure in failures):
+        expected["unresolved_count"] = len(failures)
+        expected["status"] = "blocked" if failures else "complete"
+
+    policy = report.get("policy")
+    if isinstance(policy, dict):
+        policy_dispositions = policy.get("package_dispositions")
+        if isinstance(policy_dispositions, list):
+            expected["policy_exact_disposition_count"] = len(policy_dispositions)
+
+    # installed_distribution_count loses multiplicity when report observations are
+    # serialized, and policy_pending_component_count loses selected profile-component
+    # membership. Both remain type-checked by _comparison_summary_schema_issues.
+    for field, value in expected.items():
+        expect(field, value)
+    return sorted(set(issues))
+
+
+def _comparison_ordinary_surface_issues(report: Any, *, report_name: str) -> list[str]:
+    """Reject candidate provenance when comparing ordinary inventories."""
+    if not isinstance(report, dict):
+        return [f"{report_name} is not a JSON object"]
+    issues: list[str] = []
+    if report.get("candidate_binding") is not None:
+        issues.append(f"{report_name} candidate_binding is not allowed for comparison")
+    summary = report.get("summary")
+    if isinstance(summary, dict) and summary.get("candidate_bound") is True:
+        issues.append(f"{report_name} summary candidate_bound is not allowed for comparison")
+    packages = report.get("packages")
+    if isinstance(packages, list):
+        for record in packages:
+            if not isinstance(record, dict):
+                continue
+            if record.get("observation_status") == "artifact_bound":
+                issues.append(
+                    f"{report_name} package observation_status is candidate-bound artifact evidence"
+                )
+            if record.get("metadata_binding") == "candidate_sbom_component_identity":
+                issues.append(
+                    f"{report_name} package metadata_binding is candidate-bound SBOM evidence"
+                )
+    return issues
+
+
+def _comparison_baseline_shape_issues(  # noqa: C901 - fail-closed baseline shape validation
+    baseline: Any, baseline_path: Path
+) -> list[str]:
+    """Fail closed when the baseline report itself is malformed."""
+    issues: list[str] = []
+    if not isinstance(baseline, dict):
+        return [f"comparison baseline is not a JSON object: {baseline_path}"]
+    issues.extend(
+        _comparison_report_schema_issues(
+            baseline, report_name="comparison baseline", allow_review_marker=True
+        )
+    )
+    issues.extend(_comparison_summary_schema_issues(baseline, report_name="comparison baseline"))
+    issues.extend(_comparison_summary_integrity_issues(baseline, report_name="comparison baseline"))
+    issues.extend(_comparison_environment_issues(baseline, report_name="comparison baseline"))
+    issues.extend(_comparison_string_list_issues(baseline, report_name="comparison baseline"))
+    if baseline.get("schema_version") != SCHEMA_VERSION:
+        issues.append("comparison baseline schema_version is not current")
+    recorded = baseline.get(_REPORT_CONTENT_DIGEST_FIELD)
+    if not isinstance(recorded, str) or not _SHA256_RE.fullmatch(recorded):
+        issues.append("comparison baseline has no valid report_content_sha256")
+    elif recorded != _report_content_digest(baseline):
+        issues.append("comparison baseline content digest differs from recorded report")
+    summary = baseline.get("summary")
+    if not isinstance(summary, dict):
+        return sorted([*issues, "comparison baseline has no summary object"])
+    if summary.get("summary_contract_version") != SUMMARY_CONTRACT_VERSION:
+        issues.append("comparison baseline summary contract is not current")
+    unresolved = summary.get("unresolved_count")
+    if not isinstance(unresolved, int) or isinstance(unresolved, bool):
+        issues.append("comparison baseline has no integer summary unresolved_count")
+    if summary.get("status") not in _COMPARISON_FINAL_STATUSES:
+        issues.append("comparison baseline has no final summary status")
+    failures = baseline.get("failures")
+    if not isinstance(failures, list) or not all(isinstance(failure, str) for failure in failures):
+        issues.append("comparison baseline has no string failures list")
+    elif isinstance(unresolved, int) and not isinstance(unresolved, bool):
+        if unresolved != len(failures):
+            issues.append(
+                "comparison baseline summary unresolved_count differs from failures count"
+            )
+        expected_status = "blocked" if failures else "complete"
+        if summary.get("status") != expected_status:
+            issues.append("comparison baseline summary status differs from failures")
+    _input_rows, input_issues = _comparison_input_rows(baseline, report_name="comparison baseline")
+    issues.extend(input_issues)
+    issues.extend(_comparison_package_shape_issues(baseline, report_name="comparison baseline"))
+    issues.extend(_comparison_disposition_shape_issues(baseline, report_name="comparison baseline"))
+    _profile_semantics, profile_issues = _comparison_profile_semantics(
+        baseline, report_name="comparison baseline"
+    )
+    issues.extend(profile_issues)
+    for field in ("target", "surface", "profile_manifest", "policy"):
+        if not isinstance(baseline.get(field), dict):
+            issues.append(f"comparison baseline has no {field} object")
+    return sorted(set(issues))
+
+
+def _comparison_source_binding_issues(  # noqa: C901 - fail-closed source binding branches
+    baseline: dict[str, Any],
+    current: dict[str, Any],
+    current_generator_sha256: str | None,
+) -> list[str]:
+    """Fail closed when the baseline is not source-bound to the current run."""
+    issues: list[str] = []
+    issues.extend(
+        _comparison_report_schema_issues(current, report_name="comparison current report")
+    )
+    issues.extend(
+        _comparison_summary_schema_issues(current, report_name="comparison current report")
+    )
+    issues.extend(
+        _comparison_summary_integrity_issues(current, report_name="comparison current report")
+    )
+    issues.extend(_comparison_environment_issues(current, report_name="comparison current report"))
+    issues.extend(_comparison_string_list_issues(current, report_name="comparison current report"))
+    issues.extend(
+        _comparison_package_shape_issues(current, report_name="comparison current report")
+    )
+    issues.extend(_comparison_ordinary_surface_issues(baseline, report_name="comparison baseline"))
+    issues.extend(
+        _comparison_ordinary_surface_issues(current, report_name="comparison current report")
+    )
+    baseline_inputs, baseline_input_issues = _comparison_input_rows(
+        baseline, report_name="comparison baseline"
+    )
+    current_inputs, current_input_issues = _comparison_input_rows(
+        current, report_name="comparison current report"
+    )
+    issues.extend(baseline_input_issues)
+    issues.extend(current_input_issues)
+    if set(baseline_inputs) != set(current_inputs):
+        issues.append("comparison baseline repository input paths differ from current report")
+    for canonical in (CANONICAL_PROFILE_MANIFEST, CANONICAL_POLICY):
+        if canonical not in baseline_inputs:
+            issues.append(
+                f"comparison baseline was not generated from the canonical input: {canonical}"
+            )
+        if canonical not in current_inputs:
+            issues.append(f"comparison current report has no canonical input: {canonical}")
+        elif baseline_inputs.get(canonical) != current_inputs.get(canonical):
+            issues.append(f"comparison baseline {canonical} hash differs from current report")
+    generator_sha256 = baseline_inputs.get(CANONICAL_GENERATOR)
+    if generator_sha256 is None:
+        issues.append("comparison baseline records no generator input")
+    elif current_generator_sha256 is None:
+        issues.append("comparison generator identity is unavailable")
+    elif generator_sha256 != current_generator_sha256:
+        issues.append("comparison baseline generator differs from the current generator")
+    if current_inputs.get(CANONICAL_GENERATOR) != current_generator_sha256:
+        issues.append("comparison current report generator differs from the current generator")
+    baseline_environment = baseline.get("environment")
+    current_environment = current.get("environment")
+    if (
+        isinstance(baseline_environment, dict)
+        and isinstance(current_environment, dict)
+        and baseline_environment != current_environment
+    ):
+        issues.append("comparison baseline environment differs from current report")
+    issues.extend(_comparison_policy_surface_issues(baseline, current))
+    return sorted(set(issues))
+
+
+def _comparison_policy_surface_issues(  # noqa: C901 - compare each reported semantic surface
+    baseline: dict[str, Any],
+    current: dict[str, Any],
+) -> list[str]:
+    """Fail closed when baseline policy content or profile surface differs."""
+    issues: list[str] = []
+    for field, label in (
+        ("policy", "policy"),
+        ("profile_manifest", "profile manifest"),
+        ("project", "project"),
+        ("target", "target"),
+        ("surface", "profile surface"),
+    ):
+        baseline_value = baseline.get(field)
+        current_value = current.get(field)
+        if not isinstance(baseline_value, dict) or not isinstance(current_value, dict):
+            issues.append(f"comparison baseline or current report has no {label} object")
+            continue
+        baseline_value = _normalise_json(baseline_value)
+        current_value = _normalise_json(current_value)
+        if baseline_value == current_value:
+            continue
+        baseline_keys = set(baseline_value)
+        current_keys = set(current_value)
+        for key in sorted(baseline_keys | current_keys):
+            if baseline_value.get(key) != current_value.get(key):
+                issues.append(f"comparison baseline {label} {key} differs from current report")
+
+    baseline_profiles, baseline_profile_issues = _comparison_profile_semantics(
+        baseline, report_name="comparison baseline"
+    )
+    current_profiles, current_profile_issues = _comparison_profile_semantics(
+        current, report_name="comparison current report"
+    )
+    issues.extend(baseline_profile_issues)
+    issues.extend(current_profile_issues)
+    for profile_id in sorted(set(baseline_profiles) | set(current_profiles)):
+        if profile_id not in baseline_profiles:
+            issues.append(f"comparison baseline is missing profile: {profile_id}")
+            continue
+        if profile_id not in current_profiles:
+            issues.append(f"comparison current report is missing profile: {profile_id}")
+            continue
+        baseline_profile = baseline_profiles[profile_id]
+        current_profile = current_profiles[profile_id]
+        if baseline_profile == current_profile:
+            continue
+        for key in sorted(set(baseline_profile) | set(current_profile)):
+            if baseline_profile.get(key) != current_profile.get(key):
+                issues.append(
+                    f"comparison baseline profile {profile_id} {key} differs from current report"
+                )
+    return sorted(set(issues))
+
+
+def _comparison_binding_issues(
+    baseline: Any,
+    *,
+    baseline_path: Path,
+    current: dict[str, Any],
+    current_generator_sha256: str | None,
+) -> list[str]:
+    """Fail closed when the baseline cannot source-bind the comparison.
+
+    Only the baseline side is bound: its content digest, summary contract,
+    canonical inputs, generator identity, policy content, and audited profile
+    surface must match the current run. Lockfile content is the measured
+    signal and must never fail binding.
+    """
+    issues = _comparison_baseline_shape_issues(baseline, baseline_path)
+    if issues or not isinstance(baseline, dict):
+        return issues
+    return _comparison_source_binding_issues(baseline, current, current_generator_sha256)
+
+
+def compare_license_inventories(
+    baseline: dict[str, Any],
+    current: dict[str, Any],
+    *,
+    baseline_path: Path,
+) -> dict[str, Any]:
+    """Diff a source-bound baseline report against a current inventory."""
+    baseline_failures = _comparison_string_set(baseline.get("failures"))
+    current_failures = _comparison_string_set(current.get("failures"))
+    baseline_packages, _ = _comparison_package_names(baseline)
+    current_packages, _ = _comparison_package_names(current)
+    baseline_exclusions, _ = _comparison_reviewed_exclusion_ids(baseline)
+    current_exclusions, _ = _comparison_reviewed_exclusion_ids(current)
+    baseline_names = set(baseline_packages)
+    current_names = set(current_packages)
+    changed_names = sorted(
+        name
+        for name in baseline_names & current_names
+        if baseline_packages[name] != current_packages[name]
+    )
+    baseline_summary = baseline.get("summary")
+    current_summary = current.get("summary")
+    return {
+        "schema_version": COMPARISON_SCHEMA_VERSION,
+        "baseline": {
+            "path": str(baseline_path),
+            "report_content_sha256": baseline.get(_REPORT_CONTENT_DIGEST_FIELD),
+            "unresolved_count": (
+                baseline_summary.get("unresolved_count")
+                if isinstance(baseline_summary, dict)
+                else None
+            ),
+            "status": baseline_summary.get("status")
+            if isinstance(baseline_summary, dict)
+            else None,
+        },
+        "current": {
+            "unresolved_count": (
+                current_summary.get("unresolved_count")
+                if isinstance(current_summary, dict)
+                else None
+            ),
+            "status": current_summary.get("status") if isinstance(current_summary, dict) else None,
+        },
+        "failures": {
+            "new": sorted(current_failures - baseline_failures),
+            "removed": sorted(baseline_failures - current_failures),
+            "unchanged": sorted(baseline_failures & current_failures),
+        },
+        "reviewed_exclusions": {
+            "new": sorted(current_exclusions - baseline_exclusions),
+            "removed": sorted(baseline_exclusions - current_exclusions),
+            "unchanged": sorted(baseline_exclusions & current_exclusions),
+        },
+        "packages": {
+            "added": sorted(current_names - baseline_names),
+            "removed": sorted(baseline_names - current_names),
+            "changed": changed_names,
+        },
+        "global_status_preserved": (
+            current_summary.get("status") if isinstance(current_summary, dict) else None
+        ),
+    }
+
+
+def _comparison_paths_alias(first: Path, second: Path) -> bool | None:
+    """Return whether two paths alias, or None when identity is unknowable."""
+    try:
+        first_resolved = first.resolve()
+        second_resolved = second.resolve()
+    except (OSError, RuntimeError):
+        return None
+    if first_resolved == second_resolved:
+        return True
+    try:
+        first_stat = first.stat()
+    except FileNotFoundError:
+        return False
+    except (OSError, RuntimeError):
+        return None
+    try:
+        second_stat = second.stat()
+    except FileNotFoundError:
+        return False
+    except (OSError, RuntimeError):
+        return None
+    return first_stat.st_dev == second_stat.st_dev and first_stat.st_ino == second_stat.st_ino
+
+
+def _validate_compare_args(args: argparse.Namespace, repo_root: Path) -> int:
+    """Fail closed when comparison flags combine with incompatible modes."""
+    if args.compare_baseline and (args.check_receipt or args.check_freshness):
+        print(
+            "FAIL: --compare-baseline applies to generated inventories, not check modes",
+            file=sys.stderr,
+        )
+        return 1
+    if args.compare_baseline and args.candidate_bundle:
+        print(
+            "FAIL: --compare-baseline cannot be combined with --candidate-bundle",
+            file=sys.stderr,
+        )
+        return 1
+    if args.compare_baseline and not args.output:
+        print(
+            "FAIL: --compare-baseline requires --output so the report and "
+            "the comparison stay separate artifacts",
+            file=sys.stderr,
+        )
+        return 1
+    if args.compare_baseline:
+        output_alias = _comparison_paths_alias(
+            _resolve_path(repo_root, args.compare_baseline),
+            args.output,
+        )
+        if output_alias is None:
+            print(
+                "FAIL: could not establish whether --output aliases --compare-baseline",
+                file=sys.stderr,
+            )
+            return 1
+        if output_alias:
+            print(
+                "FAIL: --output must not alias --compare-baseline",
+                file=sys.stderr,
+            )
+            return 1
+    return 0
+
+
+def _prepare_baseline_comparison(
+    repo_root: Path, compare_arg: Path, inventory: dict[str, Any]
+) -> tuple[dict[str, Any] | None, int]:
+    """Build the baseline comparison or fail closed before the report is written."""
+    baseline_path = _resolve_path(repo_root, compare_arg)
+    try:
+        baseline_report = _read_json(baseline_path)
+    except (OSError, ValueError) as exc:
+        print(f"FAIL: comparison baseline could not be read: {exc}", file=sys.stderr)
+        return None, 1
+    generator_path = repo_root / CANONICAL_GENERATOR
+    try:
+        generator_sha256: str | None = (
+            _sha256_file(generator_path) if generator_path.is_file() else None
+        )
+    except OSError as exc:
+        print(f"FAIL: comparison generator identity is unavailable: {exc}", file=sys.stderr)
+        return None, 1
+    binding_issues = _comparison_binding_issues(
+        baseline_report,
+        baseline_path=baseline_path,
+        current=inventory,
+        current_generator_sha256=generator_sha256,
+    )
+    if binding_issues:
+        for issue in binding_issues:
+            print(f"FAIL: {issue}", file=sys.stderr)
+        return None, 1
+    return compare_license_inventories(baseline_report, inventory, baseline_path=baseline_path), 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run inventory generation or freshness validation."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -4450,8 +5447,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Return exit code 2 when metadata, profile, provenance, or policy rows remain unresolved.",
     )
+    parser.add_argument(
+        "--compare-baseline",
+        type=Path,
+        help=(
+            "Compare the generated inventory against a source-bound baseline report and print "
+            "a dependency_license_comparison.v1 summary. Requires --output so the report and "
+            "the comparison stay separate artifacts; the comparison never changes the exit code."
+        ),
+    )
     args = parser.parse_args(argv)
     repo_root = args.repo_root.resolve()
+    compare_error = _validate_compare_args(args, repo_root)
+    if compare_error:
+        return compare_error
     candidate_bundle_path = (
         _resolve_path(repo_root, args.candidate_bundle) if args.candidate_bundle else None
     )
@@ -4521,6 +5530,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     # writer here would fail in that invocation because Python puts only the script
     # directory on ``sys.path``.  Durable checked-in evidence uses the shared writer
     # and review sidecar; this output is a local/CI artifact outside that tree.
+    comparison: dict[str, Any] | None = None
+    if args.compare_baseline:
+        comparison, comparison_exit = _prepare_baseline_comparison(
+            repo_root, args.compare_baseline, inventory
+        )
+        if comparison_exit:
+            return comparison_exit
+    return _emit_inventory_report(args, inventory, comparison)
+
+
+def _emit_inventory_report(
+    args: argparse.Namespace,
+    inventory: dict[str, Any],
+    comparison: dict[str, Any] | None,
+) -> int:
+    """Write the report, print the optional comparison, and set the exit code.
+
+    The comparison never changes the exit code: an unchanged failure is not
+    an admitted release, and a clean comparison never clears a blocked gate.
+    """
     marked_inventory = {"review_marker": _REVIEW_MARKER_JSON, **inventory}
     rendered = json.dumps(marked_inventory, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     if args.output:
@@ -4529,6 +5558,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"wrote {args.output}")
     else:
         print(rendered, end="")
+    if comparison is not None:
+        print(json.dumps(comparison, ensure_ascii=False, indent=2, sort_keys=True))
     if args.fail_on_unresolved and inventory["summary"]["unresolved_count"]:
         print(
             "FAIL: dependency license inventory remains blocked for "

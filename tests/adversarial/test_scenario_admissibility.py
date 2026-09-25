@@ -33,6 +33,12 @@ from robot_sf.adversarial.feasibility_first import (
     SCENARIO_FEASIBILITY_PREDICATE_NAMES,
 )
 from robot_sf.adversarial.scenario_admissibility import _oracle_excludes
+from robot_sf.benchmark.result_provenance import (
+    build_result_provenance_manifest,
+    manifest_path_for_result_jsonl,
+    write_result_provenance_manifest,
+)
+from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback
 from robot_sf.scenario_certification import v1 as scenario_certification_v1
 from robot_sf.scenario_certification.feasibility_oracle import (
     FEASIBILITY_ORACLE_SCHEMA,
@@ -228,7 +234,7 @@ def _oracle_report(oracle: dict[str, Any], *, scenario_id: str = "case-static") 
     }
 
 
-def _execution(
+def _execution(  # noqa: PLR0913 - fixture fields model canonical episode and producer dimensions.
     planner_id: str,
     *,
     route_complete: bool,
@@ -237,29 +243,48 @@ def _execution(
     seed: int = 19,
     replay: bool = False,
     include_context: bool = True,
+    include_producer_context: bool = True,
+    sim_dt: float = 0.1,
 ) -> dict[str, Any]:
+    planner_aliases = {
+        "reference": "goal",
+        "target": "orca",
+        "replay": "orca",
+        "other": "social_force",
+    }
+    canonical_planner_id = planner_aliases.get(planner_id, planner_id)
     episode_id = "episode-target"
     termination_reason = "success" if route_complete else "max_steps"
-    planner_config_sha256 = "d" * 64 if planner_id == "target" else "c" * 64
+    fixture_index = next(_EXECUTION_FIXTURE_COUNTER)
+    planner_config_path = _EXECUTION_FIXTURE_ROOT / f"planner-{fixture_index:04d}.yaml"
+    planner_config_path.write_text(f"planner: {canonical_planner_id}\n", encoding="utf-8")
+    planner_config_sha256 = hashlib.sha256(planner_config_path.read_bytes()).hexdigest()
     planner_checkpoint_sha256 = (
-        "not_applicable" if planner_id in {"goal", "social_force", "orca"} else "d" * 64
+        "not_applicable" if canonical_planner_id in {"goal", "social_force", "orca"} else "d" * 64
     )
-    execution_context = {
-        "horizon_steps": 100,
-        "robot_model_sha256": "b" * 64,
-        "simulator_config_sha256": "c" * 64,
-        "planner_config_sha256": planner_config_sha256,
-        "planner_checkpoint_sha256": planner_checkpoint_sha256,
-        "environment_sha256": "e" * 64,
+    scenario_params = {
+        **yaml.safe_load(_SCENARIO_ARTIFACT.read_text(encoding="utf-8")),
+        "algo": canonical_planner_id,
+        "algo_config_hash": _config_hash({"planner": canonical_planner_id}),
+        "record_forces": False,
+        "observation_mode": "socnav_state",
+        "observation_level": "full",
+        "record_planner_decision_trace": False,
+        "record_simulation_step_trace": False,
+        "run_horizon": 100,
+        "run_dt": sim_dt,
     }
+    config_hash = _config_hash(scenario_params)
     episode_row = {
         "version": "v1",
         "episode_id": episode_id,
         "scenario_id": scenario_id,
+        "scenario_params": scenario_params,
+        "config_hash": config_hash,
         "seed": seed,
         "horizon": 100,
-        "algo": planner_id,
-        "git_hash": "f" * 40,
+        "algo": canonical_planner_id,
+        "git_hash": _git_hash_fallback(),
         "status": "success" if route_complete else "failure",
         "metrics": {"collisions": 0, "success": int(route_complete)},
         "termination_reason": termination_reason,
@@ -271,17 +296,58 @@ def _execution(
         "integrity": {"contradictions": []},
         "algorithm_metadata": {
             "status": "ok",
-            "canonical_algorithm": planner_id,
+            "canonical_algorithm": canonical_planner_id,
             "execution_mode": "native",
         },
     }
     if include_context:
-        episode_row["execution_context"] = execution_context
-    fixture_index = next(_EXECUTION_FIXTURE_COUNTER)
+        # This extension is deliberately non-authoritative: producer-owned run metadata below
+        # supplies numerical context, while row extensions must not forge it.
+        episode_row["execution_context"] = {
+            "horizon_steps": 100,
+            "planner_config_sha256": "0" * 64,
+            "planner_checkpoint_sha256": planner_checkpoint_sha256,
+            "environment_sha256": "1" * 64,
+        }
     episode_store_path = _EXECUTION_FIXTURE_ROOT / f"episodes-{fixture_index:04d}.jsonl"
     episode_store_bytes = (json.dumps(episode_row, sort_keys=True) + "\n").encode("utf-8")
     episode_store_path.write_bytes(episode_store_bytes)
     episode_store_sha256 = hashlib.sha256(episode_store_bytes).hexdigest()
+
+    def write_producer_manifest(path: Path, row: dict[str, Any], *, keep_context: bool) -> Path:
+        manifest = build_result_provenance_manifest(
+            out_path=path,
+            episode_records=[row],
+            schema_path=_REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json",
+            scenario_path=_SCENARIO_ARTIFACT,
+            scenarios=[],
+            algo=canonical_planner_id,
+            algo_config_path=planner_config_path,
+            benchmark_profile="baseline-safe",
+            suite_key="issue-9651-synthetic-fixture",
+            total_jobs=1,
+            written=1,
+            horizon=100,
+            dt=sim_dt,
+            record_forces=False,
+            active_observation_mode="socnav_state",
+            active_observation_level="full",
+        )
+        if not keep_context:
+            manifest["run"].pop("execution_context", None)
+        manifest_path = manifest_path_for_result_jsonl(path)
+        write_result_provenance_manifest(manifest_path, manifest)
+        return manifest_path
+
+    source_manifest_path = write_producer_manifest(
+        episode_store_path, episode_row, keep_context=include_producer_context
+    )
+    source_manifest = json.loads(source_manifest_path.read_text(encoding="utf-8"))
+    execution_context_sha256 = (
+        source_manifest.get("run", {})
+        .get("execution_context", {})
+        .get("execution_context_sha256", "e" * 64)
+    )
     evidence_ref = episode_store_path.as_posix()
     if planner_id == "replay" or replay:
         replay_sidecar_path = _EXECUTION_FIXTURE_ROOT / f"replay-{fixture_index:04d}.json"
@@ -289,7 +355,6 @@ def _execution(
             _EXECUTION_FIXTURE_ROOT / f"target-replay-result-{fixture_index:04d}.json"
         )
         replay_episode_row = dict(episode_row)
-        replay_episode_row["episode_id"] = "episode-target-replay"
         replay_episode_store_path = (
             _EXECUTION_FIXTURE_ROOT / f"replay-episodes-{fixture_index:04d}.jsonl"
         )
@@ -297,24 +362,31 @@ def _execution(
             "utf-8"
         )
         replay_episode_store_path.write_bytes(replay_episode_store_bytes)
+        replay_manifest_path = write_producer_manifest(
+            replay_episode_store_path,
+            replay_episode_row,
+            keep_context=include_producer_context,
+        )
+        replay_manifest_sha256 = hashlib.sha256(replay_manifest_path.read_bytes()).hexdigest()
         replay_result = {
             "schema_version": "target_planner_replay_result.v1",
             "replay_kind": "target_planner",
             "episode_id": episode_id,
             "scenario_id": scenario_id,
             "seed": seed,
-            "planner_id": planner_id,
-            "source_commit": "f" * 40,
+            "planner_id": canonical_planner_id,
+            "source_commit": episode_row["git_hash"],
             "source_episodes_jsonl_sha256": episode_store_sha256,
             "replay_episode_id": replay_episode_row["episode_id"],
             "replay_episodes_jsonl_path": replay_episode_store_path.as_posix(),
             "replay_episodes_jsonl_sha256": hashlib.sha256(replay_episode_store_bytes).hexdigest(),
+            "replay_provenance_manifest_path": replay_manifest_path.as_posix(),
+            "replay_provenance_manifest_sha256": replay_manifest_sha256,
             "run_status": "ok",
             "fallback_or_degraded": False,
             "route_complete": route_complete,
             "termination_reason": termination_reason,
             "replay_command": "robot-sf-target-planner-replay --fixture",
-            "execution_context": execution_context,
         }
         replay_result_bytes = (json.dumps(replay_result, sort_keys=True) + "\n").encode()
         replay_result_path.write_bytes(replay_result_bytes)
@@ -324,8 +396,8 @@ def _execution(
                     "episode_id": episode_id,
                     "scenario_id": scenario_id,
                     "seed": seed,
-                    "planner_key": planner_id,
-                    "repo_commit": "f" * 40,
+                    "planner_key": canonical_planner_id,
+                    "repo_commit": episode_row["git_hash"],
                     "replay_command": "fixture replay producer",
                     "determinism_check_status": "pass",
                     "source_episodes_jsonl_path": episode_store_path.as_posix(),
@@ -345,7 +417,7 @@ def _execution(
         "case_id": case_id,
         "scenario_id": scenario_id,
         "scenario_variant": "original",
-        "planner_id": planner_id,
+        "planner_id": canonical_planner_id,
         "episode_id": episode_id,
         "run_status": "ok",
         "fallback_or_degraded": False,
@@ -361,9 +433,12 @@ def _execution(
         "source_episodes_jsonl_sha256": episode_store_sha256,
         "effective_input_sha256": _SCENARIO_EFFECTIVE_INPUT_SHA256,
         "effective_input_identity_stable": True,
-        "source_commit": "f" * 40,
+        "source_commit": episode_row["git_hash"],
         "evidence_ref": evidence_ref,
     }
+    record["environment_sha256"] = execution_context_sha256
+    if not include_producer_context:
+        record["environment_sha256"] = "e" * 64
     if planner_id == "replay" or replay:
         record.update(determinism_check_status="pass", resimulated=True)
     return record
@@ -1699,6 +1774,23 @@ def test_named_execution_normalized_outcome_must_match_episode_row() -> None:
     assert "reference_execution_episode_outcome_mismatch" in verdict.reason_codes
 
 
+def test_producer_scenario_matrix_must_match_the_admissibility_artifact() -> None:
+    run = _execution("reference", route_complete=True)
+    episode_store = Path(run["evidence_ref"])
+    manifest_path = manifest_path_for_result_jsonl(episode_store)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["inputs"]["scenario_matrix"]["sha256"] = "0" * 64
+    write_result_provenance_manifest(manifest_path, manifest)
+
+    verdict = classify_scenario_admissibility("case-static", reference_execution=run)
+
+    assert verdict.verdict == EMPIRICALLY_FEASIBLE
+    binding = verdict.evidence["execution_artifact_bindings"]["reference"]
+    assert binding["status"] == "valid"
+    assert binding["run_context_binding"]["status"] == "mismatch"
+    assert "reference_execution_run_context_mismatch" in verdict.reason_codes
+
+
 def test_relative_execution_evidence_ref_uses_explicit_root(tmp_path: Path) -> None:
     run = _execution("reference", route_complete=True)
     source_path = Path(run["evidence_ref"])
@@ -1769,6 +1861,25 @@ def test_matched_reference_target_failure_needs_reproducing_replay() -> None:
     assert verdict.search_disposition == "retain"
     assert verdict.evidence["execution_artifact_bindings"]["target"]["status"] == "valid"
     assert verdict.evidence["execution_artifact_bindings"]["replay"]["status"] == "valid"
+    target_producer_binding = verdict.evidence["execution_artifact_bindings"]["target"][
+        "producer_provenance_binding"
+    ]
+    reference_producer_binding = verdict.evidence["execution_artifact_bindings"]["reference"][
+        "producer_provenance_binding"
+    ]
+    assert (
+        target_producer_binding["row_config_hash"] != reference_producer_binding["row_config_hash"]
+    )
+    assert (
+        target_producer_binding["case_identity_sha256"]
+        == reference_producer_binding["case_identity_sha256"]
+    )
+    assert (
+        verdict.evidence["execution_artifact_bindings"]["target"]["producer_provenance_binding"][
+            "run_context_binding"
+        ]["status"]
+        == "valid"
+    )
     assert "matched_reference_target_failure_reproduced_by_replay" in verdict.reason_codes
     assert absent_replay.verdict == EMPIRICALLY_FEASIBLE
     assert absent_replay.target_planner_outcome == "route_incomplete"
@@ -1869,6 +1980,44 @@ def test_replay_result_cannot_relabel_the_source_episode_as_replay_output() -> N
     assert "planner_specific_failure_attribution_unconfirmed" in verdict.reason_codes
 
 
+def test_replay_result_cannot_reuse_the_target_producer_run_id() -> None:
+    target = _execution("target", route_complete=False)
+    replay = _execution("target", route_complete=False, replay=True)
+    sidecar_path = Path(replay["evidence_ref"])
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    result_path = Path(sidecar["target_planner_replay_result_path"])
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    output_manifest_path = Path(result["replay_provenance_manifest_path"])
+    source_manifest_path = manifest_path_for_result_jsonl(Path(target["evidence_ref"]))
+    source_manifest = json.loads(source_manifest_path.read_text(encoding="utf-8"))
+    output_store_path = Path(result["replay_episodes_jsonl_path"])
+    for artifact in source_manifest["raw_artifacts"]:
+        if artifact["kind"] == "episodes_jsonl":
+            artifact["path"] = output_store_path.as_posix()
+            artifact["sha256"] = hashlib.sha256(output_store_path.read_bytes()).hexdigest()
+    for row in source_manifest["rows"]:
+        row["raw_artifact"] = output_store_path.as_posix()
+    write_result_provenance_manifest(output_manifest_path, source_manifest)
+    result["replay_provenance_manifest_sha256"] = hashlib.sha256(
+        output_manifest_path.read_bytes()
+    ).hexdigest()
+    result_bytes = (json.dumps(result, sort_keys=True) + "\n").encode()
+    result_path.write_bytes(result_bytes)
+    sidecar["target_planner_replay_result_sha256"] = hashlib.sha256(result_bytes).hexdigest()
+    sidecar_path.write_text(json.dumps(sidecar, sort_keys=True), encoding="utf-8")
+
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        reference_execution=_execution("reference", route_complete=True),
+        target_execution=target,
+        replay_execution=replay,
+    )
+
+    assert verdict.verdict == EMPIRICALLY_FEASIBLE
+    assert "planner_specific_failure_replay_reused_target_producer_run" in verdict.reason_codes
+    assert "planner_specific_failure_attribution_unconfirmed" in verdict.reason_codes
+
+
 def test_replay_output_episode_store_digest_must_match_its_bytes() -> None:
     reference = _execution("reference", route_complete=True)
     target = _execution("target", route_complete=False)
@@ -1945,7 +2094,9 @@ def test_replay_runtime_error_cannot_establish_planner_specific_failure() -> Non
 def test_unbound_run_context_cannot_support_planner_specific_attribution() -> None:
     verdict = classify_scenario_admissibility(
         "case-static",
-        reference_execution=_execution("reference", route_complete=True, include_context=False),
+        reference_execution=_execution(
+            "reference", route_complete=True, include_producer_context=False
+        ),
         target_execution=_execution("target", route_complete=False),
         replay_execution=_execution("target", route_complete=False, replay=True),
     )
@@ -1969,17 +2120,17 @@ def test_unbound_run_context_cannot_support_planner_specific_attribution() -> No
         (
             "robot_model_sha256",
             "f" * 64,
-            "replay_execution_target_planner_result_replay_episode_run_context_mismatch",
+            "planner_specific_failure_replay_case_mismatch",
         ),
         (
             "simulator_config_sha256",
             "f" * 64,
-            "replay_execution_target_planner_result_replay_episode_run_context_mismatch",
+            "planner_specific_failure_replay_case_mismatch",
         ),
         (
             "environment_sha256",
             "f" * 64,
-            "replay_execution_target_planner_result_replay_episode_run_context_mismatch",
+            "planner_specific_failure_replay_case_mismatch",
         ),
         ("source_commit", "e" * 40, "replay_execution_episode_identity_mismatch"),
         ("seed", 20, "replay_execution_episode_identity_mismatch"),
@@ -1991,12 +2142,12 @@ def test_unbound_run_context_cannot_support_planner_specific_attribution() -> No
         (
             "planner_config_sha256",
             "f" * 64,
-            "replay_execution_target_planner_result_replay_episode_run_context_mismatch",
+            "replay_execution_run_context_mismatch",
         ),
         (
             "planner_checkpoint_sha256",
             "f" * 64,
-            "replay_execution_target_planner_result_replay_episode_run_context_mismatch",
+            "replay_execution_run_context_unavailable",
         ),
         (
             "episode_id",
@@ -2022,10 +2173,14 @@ def test_replay_must_match_target_case_and_execution_bindings(
         replay_execution=replay,
     )
 
-    assert verdict.verdict == EMPIRICALLY_FEASIBLE
     assert verdict.target_planner_outcome == "route_incomplete"
-    assert reason in verdict.reason_codes
-    assert "planner_specific_failure_attribution_unconfirmed" in verdict.reason_codes
+    if reason is None:
+        assert verdict.verdict == PLANNER_SPECIFIC_FAILURE
+        assert "matched_reference_target_failure_reproduced_by_replay" in verdict.reason_codes
+    else:
+        assert verdict.verdict == EMPIRICALLY_FEASIBLE
+        assert reason in verdict.reason_codes
+        assert "planner_specific_failure_attribution_unconfirmed" in verdict.reason_codes
 
 
 @pytest.mark.parametrize("checked_count", [True, 1.0], ids=["boolean", "float"])

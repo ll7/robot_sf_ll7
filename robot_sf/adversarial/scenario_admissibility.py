@@ -14,6 +14,7 @@ from typing import Any, Literal
 
 from jsonschema import Draft202012Validator
 
+from robot_sf._execution_context import execution_context_digest
 from robot_sf.adversarial.feasibility_first import ScenarioFeasibilityContract
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
@@ -47,6 +48,8 @@ _EXCLUSIONS = {STRUCTURALLY_INVALID, GEOMETRIC_OR_KINODYNAMIC_IMPOSSIBILITY}
 _CERT_PLAUSIBLE = "certificate_plausible"
 _CERT_CONFLICT = "certificate_conflict"
 _SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
+_MAP_RUNNER_CONFIG_HASH = re.compile(r"^[0-9a-fA-F]{16}$")
+_PRODUCER_RUN_ID = re.compile(r"^[0-9a-fA-F]{32}$")
 _GIT_COMMIT = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 _CHECKPOINT_FREE_CLASSICAL_PLANNERS = frozenset({"goal", "social_force", "orca"})
 _SCHEMA_PATH = (
@@ -58,14 +61,9 @@ _EPISODE_SCHEMA_PATH = (
 _TARGET_PLANNER_REPLAY_SCHEMA_PATH = (
     Path(__file__).resolve().parents[1] / "benchmark/schemas/target_planner_replay_result.v1.json"
 )
-_RUN_CONTEXT_FIELDS = (
-    "horizon_steps",
-    "robot_model_sha256",
-    "simulator_config_sha256",
-    "planner_config_sha256",
-    "planner_checkpoint_sha256",
-    "environment_sha256",
-)
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+_RESULT_PROVENANCE_SCHEMA = "benchmark_result_provenance.v1"
+_RESULT_PROVENANCE_INPUT_SCHEMA = "benchmark_result_provenance.input_binding.v2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,8 +138,9 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
     source episode-store path and digest are read and checked. In every case, the selected v1
     episode row must match the normalized row's episode, planner, scenario, seed, revision, and
     route outcome before it can establish an individual execution outcome. Cross-planner
-    attribution additionally requires the episode's recorded ``execution_context`` to bind the
-    normalized horizon and runtime/configuration hashes.
+    attribution additionally requires the adjacent benchmark producer manifest to bind the
+    selected row, planner-config bytes, numerical context, simulator settings, and run identity.
+    Caller-supplied row/result context extensions do not establish that binding.
 
     Certificate and oracle source paths must hash to those exact bytes, and named execution
     ``scenario_sha256`` values must match that digest. Named execution mappings carry
@@ -150,9 +149,10 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
     scenario, robot model, simulator config, and environment. Every execution also carries
     ``episode_id`` and ``source_episodes_jsonl_sha256``. Planner-specific failure additionally
     requires a separate ``target_planner_replay_result.v1`` artifact, referenced and hashed by the
-    replay sidecar. The result must bind the target planner/configuration, runtime context, source
-    episode store, and terminal route outcome. A position-only visualization determinism check is
-    diagnostic evidence and cannot establish a repeated target-planner failure.
+    replay sidecar. The result must bind the target planner/configuration, output producer manifest,
+    source episode store, and terminal route outcome; its producer run ID must differ from the
+    target run ID. A position-only visualization determinism check is diagnostic evidence and
+    cannot establish a repeated target-planner failure.
     """
     if not isinstance(case_id, str) or not case_id.strip():
         raise ValueError("case_id must be non-empty")
@@ -1222,6 +1222,16 @@ def _execution(  # noqa: PLR0913 - explicit execution evidence bindings are pass
         reasons.append(f"{role}_execution_run_context_{context_status or 'unavailable'}")
     bound_source = dict(source)
     bound_source["_execution_context_binding_status"] = context_status
+    producer_binding = binding.get("producer_provenance_binding")
+    if not isinstance(producer_binding, Mapping):
+        result_binding = binding.get("target_planner_replay_result_binding")
+        producer_binding = (
+            result_binding.get("producer_provenance_binding")
+            if isinstance(result_binding, Mapping)
+            else None
+        )
+    if isinstance(producer_binding, Mapping):
+        bound_source["_producer_provenance_binding"] = dict(producer_binding)
     return bound_source
 
 
@@ -1393,8 +1403,18 @@ def _episode_store_binding(
             binding["status"] = "mismatch"
             return f"replay_execution_{auxiliary_reason}", binding
     else:
-        context_binding = _episode_run_context_binding(episode, source)
-        binding["run_context_binding"] = context_binding
+        provenance_problem, producer_binding = _producer_provenance_binding(
+            store_path=store_path,
+            store_bytes=store_bytes,
+            episode=episode,
+            source=source,
+            manifest_path=_episode_provenance_manifest_path(store_path),
+        )
+        binding["producer_provenance_binding"] = producer_binding
+        binding["run_context_binding"] = producer_binding.get("run_context_binding", {})
+        if provenance_problem is not None:
+            binding["status"] = "mismatch"
+            return f"{role}_execution_{provenance_problem}", binding
     binding["status"] = "valid"
     binding["row_identity"] = {
         "scenario_id": episode["scenario_id"],
@@ -1405,6 +1425,407 @@ def _episode_store_binding(
         "termination_reason": episode["termination_reason"],
     }
     return None, binding
+
+
+def _episode_provenance_manifest_path(store_path: Path) -> Path:
+    """Return the canonical map-runner provenance sidecar path for an episode JSONL."""
+    return store_path.with_name(store_path.name + ".provenance.json")
+
+
+def _producer_provenance_binding(
+    *,
+    store_path: Path,
+    store_bytes: bytes,
+    episode: Mapping[str, Any],
+    source: Mapping[str, Any],
+    manifest_path: Path,
+    expected_manifest_sha256: str | None = None,
+    required: bool = False,
+) -> tuple[str | None, dict[str, Any]]:
+    """Bind one episode row to the canonical benchmark producer manifest.
+
+    This checks artifact and record consistency. The JSON manifest is not a signed execution
+    attestation, so these checks cannot prove which external process wrote it.
+    """
+    expected_path = _episode_provenance_manifest_path(store_path).resolve()
+    try:
+        resolved_path = manifest_path.resolve(strict=True)
+    except (OSError, RuntimeError, ValueError):
+        status = "unavailable"
+        binding = {
+            "status": status,
+            "manifest_path": manifest_path.as_posix(),
+            "run_context_binding": {"status": status},
+        }
+        return ("producer_provenance_unavailable" if required else None), binding
+    if resolved_path != expected_path:
+        return _producer_provenance_failure(
+            "producer_provenance_path_not_adjacent",
+            {
+                "manifest_path": resolved_path.as_posix(),
+                "expected_manifest_path": expected_path.as_posix(),
+            },
+        )
+    read_problem, manifest, binding = _read_producer_manifest(
+        resolved_path,
+        store_bytes=store_bytes,
+        expected_sha256=expected_manifest_sha256,
+    )
+    if read_problem is not None:
+        return read_problem, binding
+    if not isinstance(manifest, Mapping) or not _producer_manifest_identity_valid(
+        manifest, episode
+    ):
+        return _producer_provenance_failure(
+            "producer_provenance_identity_or_completeness_invalid", binding
+        )
+    row_problem, producer_row, row_index = _producer_episode_row(
+        manifest, store_path=store_path, store_bytes=store_bytes, episode=episode
+    )
+    if row_problem is not None or producer_row is None:
+        return _producer_provenance_failure(
+            row_problem or "producer_provenance_episode_row_invalid", binding
+        )
+    settings_problem, settings_digest = _simulator_settings_digest(
+        producer_row.get("simulator_settings")
+    )
+    if settings_problem is not None or settings_digest is None:
+        return _producer_provenance_failure(
+            settings_problem or "producer_provenance_simulator_settings_invalid", binding
+        )
+    binding.update(
+        {
+            "run_id": manifest["run"]["run_id"],
+            "row_index": row_index,
+            "row_config_hash": producer_row["config_hash"],
+            "simulator_settings_sha256": settings_digest,
+        }
+    )
+    context_binding = _producer_run_context_binding(manifest, source, episode=episode)
+    binding.update(context_binding)
+    binding["status"] = "valid"
+    return None, binding
+
+
+def _producer_provenance_failure(
+    reason: str, binding: dict[str, Any]
+) -> tuple[str, dict[str, Any]]:
+    binding["status"] = "mismatch"
+    binding["run_context_binding"] = {"status": "mismatch"}
+    return reason, binding
+
+
+def _read_producer_manifest(
+    path: Path,
+    *,
+    store_bytes: bytes,
+    expected_sha256: str | None,
+) -> tuple[str | None, Any, dict[str, Any]]:
+    try:
+        manifest_bytes = path.read_bytes()
+        manifest = json.loads(manifest_bytes)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return (
+            "producer_provenance_malformed",
+            None,
+            {
+                "status": "mismatch",
+                "manifest_path": path.as_posix(),
+                "run_context_binding": {"status": "mismatch"},
+            },
+        )
+    digest = hashlib.sha256(manifest_bytes).hexdigest()
+    binding: dict[str, Any] = {
+        "status": "checked",
+        "manifest_path": path.as_posix(),
+        "manifest_sha256": digest,
+        "episode_store_sha256": hashlib.sha256(store_bytes).hexdigest(),
+    }
+    if expected_sha256 is not None and (
+        _SHA256.fullmatch(expected_sha256) is None or expected_sha256.lower() != digest
+    ):
+        return "producer_provenance_manifest_digest_mismatch", None, binding
+    if (
+        not isinstance(manifest, Mapping)
+        or manifest.get("schema_version") != _RESULT_PROVENANCE_SCHEMA
+        or manifest.get("input_binding_schema_version") != _RESULT_PROVENANCE_INPUT_SCHEMA
+    ):
+        return "producer_provenance_schema_invalid", None, binding
+    return None, manifest, binding
+
+
+def _producer_manifest_identity_valid(
+    manifest: Mapping[str, Any], episode: Mapping[str, Any]
+) -> bool:
+    run = manifest.get("run")
+    campaign = manifest.get("campaign_identity")
+    completeness = manifest.get("completeness")
+    return (
+        isinstance(run, Mapping)
+        and isinstance(manifest.get("inputs"), Mapping)
+        and isinstance(campaign, Mapping)
+        and isinstance(completeness, Mapping)
+        and isinstance(manifest.get("raw_artifacts"), list)
+        and isinstance(manifest.get("rows"), list)
+        and completeness.get("status") == "complete"
+        and isinstance(run.get("run_id"), str)
+        and bool(_PRODUCER_RUN_ID.fullmatch(run.get("run_id", "")))
+        and isinstance(run.get("repo_commit"), str)
+        and bool(_GIT_COMMIT.fullmatch(run.get("repo_commit", "")))
+        and run.get("runner") == "map_runner.run_map_batch"
+        and campaign.get("algorithm") == episode.get("algo")
+        and run.get("repo_commit", "").lower() == str(episode.get("git_hash", "")).lower()
+    )
+
+
+def _producer_episode_row(
+    manifest: Mapping[str, Any],
+    *,
+    store_path: Path,
+    store_bytes: bytes,
+    episode: Mapping[str, Any],
+) -> tuple[str | None, Mapping[str, Any] | None, int | None]:
+    artifacts = manifest.get("raw_artifacts")
+    if not isinstance(artifacts, list):
+        return "producer_provenance_episode_artifact_ambiguous", None, None
+    matching_artifacts = [
+        item
+        for item in artifacts
+        if isinstance(item, Mapping) and item.get("kind") == "episodes_jsonl"
+    ]
+    if len(matching_artifacts) != 1:
+        return "producer_provenance_episode_artifact_ambiguous", None, None
+    artifact = matching_artifacts[0]
+    artifact_path = _resolve_evidence_path(artifact.get("path"), evidence_root=_REPOSITORY_ROOT)
+    if (
+        artifact.get("artifact_status") != "available"
+        or artifact_path is None
+        or artifact_path.resolve() != store_path.resolve()
+        or artifact.get("sha256") != hashlib.sha256(store_bytes).hexdigest()
+    ):
+        return "producer_provenance_episode_artifact_mismatch", None, None
+    rows = manifest.get("rows")
+    if not isinstance(rows, list):
+        return "producer_provenance_episode_row_ambiguous", None, None
+    matching_rows = [
+        row
+        for row in rows
+        if isinstance(row, Mapping) and row.get("episode_id") == episode.get("episode_id")
+    ]
+    if len(matching_rows) != 1:
+        return "producer_provenance_episode_row_ambiguous", None, None
+    row = matching_rows[0]
+    row_index = row.get("jsonl_line")
+    try:
+        lines = store_bytes.decode("utf-8").splitlines()
+        line_episode = (
+            json.loads(lines[row_index])
+            if isinstance(row_index, int)
+            and not isinstance(row_index, bool)
+            and 0 <= row_index < len(lines)
+            else None
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        line_episode = None
+    if not _producer_episode_row_matches(
+        row, artifact=artifact, episode=episode, line_episode=line_episode
+    ):
+        return "producer_provenance_episode_row_mismatch", None, None
+    return None, row, row_index
+
+
+def _producer_episode_row_matches(
+    row: Mapping[str, Any],
+    *,
+    artifact: Mapping[str, Any],
+    episode: Mapping[str, Any],
+    line_episode: Any,
+) -> bool:
+    settings = row.get("simulator_settings")
+    config_hash = row.get("config_hash")
+    return (
+        line_episode == dict(episode)
+        and row.get("scenario_id") == episode.get("scenario_id")
+        and row.get("seed") == episode.get("seed")
+        and config_hash == episode.get("config_hash")
+        and isinstance(config_hash, str)
+        and bool(_MAP_RUNNER_CONFIG_HASH.fullmatch(config_hash))
+        and row.get("repo_commit") == episode.get("git_hash")
+        and row.get("raw_artifact") == artifact.get("path")
+        and isinstance(settings, Mapping)
+        and settings.get("horizon") == episode.get("horizon")
+    )
+
+
+def _simulator_settings_digest(settings: Any) -> tuple[str | None, str | None]:
+    if not isinstance(settings, Mapping):
+        return "producer_provenance_simulator_settings_invalid", None
+    try:
+        encoded = json.dumps(dict(settings), sort_keys=True, separators=(",", ":"), allow_nan=False)
+    except (TypeError, ValueError):
+        return "producer_provenance_simulator_settings_invalid", None
+    return None, hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _producer_run_context_binding(
+    manifest: Mapping[str, Any],
+    source: Mapping[str, Any],
+    *,
+    episode: Mapping[str, Any],
+) -> dict[str, Any]:
+    run = manifest.get("run")
+    inputs = manifest.get("inputs")
+    context_status, context_digest, context_missing = _producer_execution_context(
+        run.get("execution_context") if isinstance(run, Mapping) else None
+    )
+    scenario_status, scenario_digest, scenario_missing = _producer_scenario_input(
+        inputs.get("scenario_matrix") if isinstance(inputs, Mapping) else None,
+        source=source,
+    )
+    config_status, config_digest, config_missing = _producer_planner_config(
+        inputs.get("algo_config") if isinstance(inputs, Mapping) else None,
+        source=source,
+    )
+    case_identity_digest = _planner_independent_case_identity_digest(episode)
+    case_identity_status = "valid" if case_identity_digest is not None else "unavailable"
+    status = _combine_binding_status(
+        _combine_binding_status(context_status, scenario_status),
+        _combine_binding_status(config_status, case_identity_status),
+    )
+    checkpoint_status = _producer_checkpoint_status(source)
+    if checkpoint_status == "unavailable":
+        status = _combine_binding_status(status, "unavailable")
+    missing_fields = sorted(set(context_missing + scenario_missing + config_missing))
+    if case_identity_digest is None:
+        missing_fields.append("episode.scenario_params")
+    if checkpoint_status == "unavailable":
+        missing_fields.append("planner_checkpoint_sha256")
+    return {
+        "execution_context_sha256": context_digest,
+        "scenario_matrix_sha256": scenario_digest,
+        "planner_config_sha256": config_digest,
+        "case_identity_sha256": case_identity_digest,
+        "planner_checkpoint_status": checkpoint_status,
+        "run_context_binding": {
+            "status": status,
+            "missing_fields": sorted(set(missing_fields)),
+            "fields": [
+                "run_id",
+                "execution_context_sha256",
+                "scenario_matrix_sha256",
+                "planner_config_sha256",
+                "case_identity_sha256",
+                "simulator_settings_sha256",
+                "horizon",
+            ],
+        },
+    }
+
+
+def _producer_scenario_input(
+    scenario_input: Any, *, source: Mapping[str, Any]
+) -> tuple[str, str | None, list[str]]:
+    if (
+        not isinstance(scenario_input, Mapping)
+        or scenario_input.get("artifact_status") != "available"
+    ):
+        return "unavailable", None, ["inputs.scenario_matrix"]
+    digest = scenario_input.get("sha256")
+    path = _resolve_evidence_path(scenario_input.get("path"), evidence_root=_REPOSITORY_ROOT)
+    if not isinstance(digest, str) or _SHA256.fullmatch(digest) is None:
+        return "mismatch", None, []
+    if path is None:
+        return "unavailable", None, ["inputs.scenario_matrix.bytes"]
+    try:
+        actual_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return "unavailable", None, ["inputs.scenario_matrix.bytes"]
+    if (
+        actual_digest != digest.lower()
+        or source.get("scenario_sha256", "").lower() != digest.lower()
+    ):
+        return "mismatch", actual_digest, []
+    return "valid", actual_digest, []
+
+
+def _planner_independent_case_identity_digest(episode: Mapping[str, Any]) -> str | None:
+    """Hash map-runner scenario settings while excluding planner identity/configuration."""
+    scenario_params = episode.get("scenario_params")
+    if not isinstance(scenario_params, Mapping) or scenario_params.get("algo") != episode.get(
+        "algo"
+    ):
+        return None
+    params = dict(scenario_params)
+    try:
+        encoded = json.dumps(params, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        expected_config_hash = hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+        if expected_config_hash != episode.get("config_hash"):
+            return None
+        params.pop("algo", None)
+        params.pop("algo_config_hash", None)
+        case_encoded = json.dumps(params, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    except (TypeError, ValueError):
+        return None
+    return hashlib.sha256(case_encoded.encode("utf-8")).hexdigest()
+
+
+def _producer_execution_context(context: Any) -> tuple[str, str | None, list[str]]:
+    if not isinstance(context, Mapping):
+        return "unavailable", None, ["run.execution_context"]
+    digest = context.get("execution_context_sha256")
+    payload = {
+        key: value
+        for key, value in context.items()
+        if key not in {"hostname", "execution_context_sha256"}
+    }
+    try:
+        computed_digest = execution_context_digest(payload)
+    except (TypeError, ValueError):
+        computed_digest = None
+    valid_digest = isinstance(digest, str) and bool(_SHA256.fullmatch(digest))
+    if not valid_digest or computed_digest != digest.lower():
+        return "mismatch", digest if isinstance(digest, str) else None, []
+    return "valid", digest, []
+
+
+def _producer_planner_config(
+    config: Any, *, source: Mapping[str, Any]
+) -> tuple[str, str | None, list[str]]:
+    if not isinstance(config, Mapping) or config.get("artifact_status") != "available":
+        return "unavailable", None, ["inputs.algo_config"]
+    digest = config.get("sha256")
+    path = _resolve_evidence_path(config.get("path"), evidence_root=_REPOSITORY_ROOT)
+    if not isinstance(digest, str) or not _SHA256.fullmatch(digest):
+        return "mismatch", None, []
+    if path is None:
+        return "unavailable", None, ["inputs.algo_config.bytes"]
+    try:
+        actual_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return "unavailable", None, ["inputs.algo_config.bytes"]
+    if (
+        actual_digest != digest.lower()
+        or source.get("planner_config_sha256", "").lower() != digest.lower()
+    ):
+        return "mismatch", actual_digest, []
+    return "valid", actual_digest, []
+
+
+def _producer_checkpoint_status(source: Mapping[str, Any]) -> str:
+    checkpoint = source.get("planner_checkpoint_sha256")
+    if checkpoint == "not_applicable" and _checkpoint_digest_is_valid(
+        source.get("planner_id", ""), checkpoint
+    ):
+        return "not_applicable"
+    return "unavailable"
+
+
+def _combine_binding_status(left: str, right: str) -> str:
+    if "mismatch" in {left, right}:
+        return "mismatch"
+    if "unavailable" in {left, right}:
+        return "unavailable"
+    return "valid"
 
 
 def _replay_auxiliary_binding(
@@ -1433,6 +1854,7 @@ def _replay_auxiliary_binding(
         "target_planner_replay_result_sha256": result_artifact.sha256,
         "target_planner_replay_result_binding": result_binding,
         "run_context_binding": result_binding.get("run_context_binding", {}),
+        "producer_provenance_binding": result_binding.get("producer_provenance_binding", {}),
     }
 
 
@@ -1642,6 +2064,7 @@ def _target_planner_replay_result_binding(
     )
     binding["replay_episode_binding"] = replay_binding
     binding["run_context_binding"] = replay_binding.get("run_context_binding", {})
+    binding["producer_provenance_binding"] = replay_binding.get("producer_provenance_binding", {})
     if replay_reason is not None:
         binding["status"] = "replay_episode_invalid"
         return replay_reason, binding
@@ -1701,59 +2124,32 @@ def _target_replay_episode_binding(
         "route_complete"
     ) or replay_episode.get("termination_reason") != result.get("termination_reason"):
         return "target_planner_result_replay_episode_outcome_mismatch", binding
-    context_reason, context_binding = _target_replay_episode_context_binding(
-        result, replay_episode, source
+    provenance_path = _resolve_evidence_path(
+        result.get("replay_provenance_manifest_path"),
+        evidence_root=None,
+        relative_to=result_path.parent,
     )
-    binding.update(context_binding)
-    if context_reason is not None:
-        return context_reason, binding
+    if provenance_path is None:
+        return "target_planner_result_producer_provenance_unavailable", {
+            **binding,
+            "producer_provenance_binding": {"status": "unavailable"},
+            "run_context_binding": {"status": "unavailable"},
+        }
+    provenance_problem, producer_binding = _producer_provenance_binding(
+        store_path=replay_store_path,
+        store_bytes=replay_store_bytes,
+        episode=replay_episode,
+        source=source,
+        manifest_path=provenance_path,
+        expected_manifest_sha256=result.get("replay_provenance_manifest_sha256"),
+        required=True,
+    )
+    binding["producer_provenance_binding"] = producer_binding
+    binding["run_context_binding"] = producer_binding.get("run_context_binding", {})
+    if provenance_problem is not None:
+        return "target_planner_result_" + provenance_problem, binding
     binding["status"] = "valid"
     return None, binding
-
-
-def _target_replay_episode_context_binding(
-    result: Mapping[str, Any],
-    replay_episode: Mapping[str, Any],
-    source: Mapping[str, Any],
-) -> tuple[str | None, dict[str, Any]]:
-    """Bind result and replay-row contexts to one normalized execution context."""
-    binding: dict[str, Any] = {}
-    replay_context = _context_mapping_binding(replay_episode.get("execution_context"), source)
-    binding["replay_episode_context_binding"] = replay_context
-    if replay_context["status"] != "valid":
-        return (
-            "target_planner_result_replay_episode_run_context_" + replay_context["status"],
-            binding,
-        )
-    context = _context_mapping_binding(result.get("execution_context"), source)
-    binding["run_context_binding"] = context
-    if context["status"] != "valid":
-        return "target_planner_result_run_context_" + context["status"], binding
-    if any(
-        result["execution_context"].get(key) != replay_episode["execution_context"].get(key)
-        for key in _RUN_CONTEXT_FIELDS
-    ):
-        return "target_planner_result_replay_episode_run_context_mismatch", binding
-    return None, binding
-
-
-def _episode_run_context_binding(
-    episode: Mapping[str, Any], source: Mapping[str, Any]
-) -> dict[str, Any]:
-    """Compare persisted episode context with normalized hashes used for case matching."""
-    return _context_mapping_binding(episode.get("execution_context"), source)
-
-
-def _context_mapping_binding(context: Any, source: Mapping[str, Any]) -> dict[str, Any]:
-    if not isinstance(context, Mapping):
-        return {"status": "unavailable", "missing_fields": list(_RUN_CONTEXT_FIELDS)}
-    missing = [key for key in _RUN_CONTEXT_FIELDS if key not in context]
-    if missing:
-        return {"status": "unavailable", "missing_fields": missing}
-    mismatched = [key for key in _RUN_CONTEXT_FIELDS if context.get(key) != source.get(key)]
-    if mismatched:
-        return {"status": "mismatch", "mismatched_fields": mismatched}
-    return {"status": "valid", "fields": list(_RUN_CONTEXT_FIELDS)}
 
 
 def _execution_problem(
@@ -1998,9 +2394,15 @@ def _resolve(
 
 
 def _same_case(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
+    left_binding = left.get("_producer_provenance_binding")
+    right_binding = right.get("_producer_provenance_binding")
+    if not isinstance(left_binding, Mapping) or not isinstance(right_binding, Mapping):
+        return False
     if (
-        left.get("_execution_context_binding_status") != "valid"
-        or right.get("_execution_context_binding_status") != "valid"
+        left_binding.get("status") != "valid"
+        or right_binding.get("status") != "valid"
+        or left_binding.get("run_context_binding", {}).get("status") != "valid"
+        or right_binding.get("run_context_binding", {}).get("status") != "valid"
     ):
         return False
     keys = (
@@ -2015,14 +2417,30 @@ def _same_case(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
         "seed",
         "horizon_steps",
     )
-    return all(left.get(key) == right.get(key) for key in keys)
+    return (
+        all(left.get(key) == right.get(key) for key in keys)
+        and left_binding.get("execution_context_sha256")
+        == right_binding.get("execution_context_sha256")
+        and left_binding.get("case_identity_sha256") is not None
+        and left_binding.get("case_identity_sha256") == right_binding.get("case_identity_sha256")
+        and left_binding.get("simulator_settings_sha256")
+        == right_binding.get("simulator_settings_sha256")
+    )
 
 
 def _same_planner_configuration(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
     """Bind a target failure replay to the target planner config and checkpoint."""
-    return all(
-        left.get(key) == right.get(key)
-        for key in ("planner_config_sha256", "planner_checkpoint_sha256")
+    left_binding = left.get("_producer_provenance_binding")
+    right_binding = right.get("_producer_provenance_binding")
+    if not isinstance(left_binding, Mapping) or not isinstance(right_binding, Mapping):
+        return False
+    return (
+        left_binding.get("planner_config_sha256") is not None
+        and left_binding.get("planner_config_sha256") == right_binding.get("planner_config_sha256")
+        and left_binding.get("row_config_hash") == right_binding.get("row_config_hash")
+        and left_binding.get("planner_checkpoint_status")
+        == right_binding.get("planner_checkpoint_status")
+        == "not_applicable"
     )
 
 
@@ -2052,6 +2470,17 @@ def _replay_binding_mismatch(replay: Mapping[str, Any], target: Mapping[str, Any
         return "planner_specific_failure_replay_configuration_mismatch"
     if not _same_replay_source_episode(replay, target):
         return "planner_specific_failure_replay_source_episode_mismatch"
+    replay_binding = replay.get("_producer_provenance_binding")
+    target_binding = target.get("_producer_provenance_binding")
+    if (
+        not isinstance(replay_binding, Mapping)
+        or not isinstance(target_binding, Mapping)
+        or not isinstance(replay_binding.get("run_id"), str)
+        or not isinstance(target_binding.get("run_id"), str)
+    ):
+        return "planner_specific_failure_replay_producer_run_id_unavailable"
+    if replay_binding["run_id"] == target_binding["run_id"]:
+        return "planner_specific_failure_replay_reused_target_producer_run"
     return None
 
 

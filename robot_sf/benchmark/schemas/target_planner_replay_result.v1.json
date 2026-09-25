@@ -21,7 +21,8 @@
     "route_complete",
     "termination_reason",
     "replay_command",
-    "execution_context"
+    "replay_provenance_manifest_path",
+    "replay_provenance_manifest_sha256"
   ],
   "properties": {
     "schema_version": {"const": "target_planner_replay_result.v1"},
@@ -43,31 +44,10 @@
       "enum": ["success", "collision", "terminated", "truncated", "max_steps"]
     },
     "replay_command": {"type": "string", "minLength": 1},
-    "execution_context": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "horizon_steps",
-        "robot_model_sha256",
-        "simulator_config_sha256",
-        "planner_config_sha256",
-        "planner_checkpoint_sha256",
-        "environment_sha256"
-      ],
-      "properties": {
-        "horizon_steps": {"type": "integer", "minimum": 1},
-        "robot_model_sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
-        "simulator_config_sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
-        "planner_config_sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
-        "planner_checkpoint_sha256": {
-          "type": "string",
-          "oneOf": [
-            {"pattern": "^[0-9a-fA-F]{64}$"},
-            {"const": "not_applicable"}
-          ]
-        },
-        "environment_sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"}
-      }
+    "replay_provenance_manifest_path": {"type": "string", "minLength": 1},
+    "replay_provenance_manifest_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$"
     }
   },
   "allOf": [

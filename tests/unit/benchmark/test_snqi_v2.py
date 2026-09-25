@@ -543,6 +543,17 @@ def test_calibration_switch_requires_full_pp_coverage():
         derive_calibration_anchors(rows, **kwargs)
 
 
+@pytest.mark.parametrize("adapter_count", [1, 1344])
+def test_calibration_never_labels_adapter_rows_as_native(adapter_count):
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+
+    rows, kwargs = calibration_records()
+    for row in rows[:adapter_count]:
+        row["algorithm_metadata"]["execution_mode"] = "adapter"
+    with pytest.raises(ValueError, match="requires explicit native planner mode"):
+        derive_calibration_anchors(rows, **kwargs)
+
+
 def test_freeze_calibration_archive_binds_files_and_source(tmp_path):
     import hashlib
 

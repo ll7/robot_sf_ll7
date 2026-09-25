@@ -191,13 +191,13 @@ def _validate_provenance(run_id: str, source_commit: str, episodes_sha256: str) 
 
 
 def _validate_calibration_episode(episode: Mapping[str, Any]) -> None:
-    """Require the frozen horizon, timestep, recording phase and known planner mode."""
+    """Require the frozen horizon, timestep, recording phase and native planner mode."""
     validate_episode_execution(episode)
     if episode.get("status") not in {"success", "collision", "failure"}:
         raise ValueError("SNQI-v2 calibration rejects invalid episode execution status")
     mode = resolve_execution_mode(episode.get("algorithm_metadata"))
-    if mode not in {"native", "adapter"}:
-        raise ValueError("SNQI-v2 calibration requires explicit native or adapter planner mode")
+    if mode != "native":
+        raise ValueError("SNQI-v2 calibration requires explicit native planner mode")
     params = episode.get("scenario_params", {})
     if (
         episode.get("horizon") != 600

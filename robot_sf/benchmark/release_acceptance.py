@@ -40,7 +40,10 @@ from robot_sf.benchmark.effective_algorithm_branches import (
     check_witness_coverage,
     enumerate_effective_branches,
 )
-from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
+from robot_sf.benchmark.fallback_policy import (
+    is_verified_guarded_ppo,
+    runtime_fallback_or_degraded_marker,
+)
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.map_runner.map_runner_trace import _scenario_id as _producer_scenario_id
 from robot_sf.benchmark.map_runner_identity import suite_key as _producer_suite_key
@@ -260,18 +263,7 @@ def _algorithm_metadata_runtime_marker(
         for key, value in metadata.items()
         if str(key) not in _DECLARATIVE_ALGORITHM_METADATA_CONTAINERS
     }
-    planner_contract = metadata.get("planner_contract")
-    planner_id = (
-        str(planner_contract.get("planner_id", "")).strip().lower()
-        if isinstance(planner_contract, Mapping)
-        else ""
-    )
-    guarded_ppo_identity = (
-        str(expected_algorithm or "").strip().lower() == "guarded_ppo"
-        and str(metadata.get("canonical_algorithm", "")).strip().lower() == "guarded_ppo"
-        and str(metadata.get("algorithm", "")).strip().lower() == "ppo"
-        and planner_id == "guarded_ppo"
-    )
+    guarded_ppo_identity = is_verified_guarded_ppo(metadata, expected_algorithm=expected_algorithm)
     if guarded_ppo_identity:
         guard_stats = metadata.get("guard_stats")
         if isinstance(guard_stats, Mapping):
@@ -298,15 +290,10 @@ def _algorithm_metadata_runtime_marker(
                     for key, value in decision_counts.items()
                     if key != "fallback_safe" or not _is_valid_native_counter(value)
                 }
-            last_decision = shield_stats.get("last_decision")
-            if isinstance(last_decision, Mapping):
-                shield_view["last_decision"] = {
-                    str(key): value
-                    for key, value in last_decision.items()
-                    if key != "fallback_controller_state" or not isinstance(value, Mapping)
-                }
             runtime_view["shield_stats"] = shield_view
-    return runtime_fallback_or_degraded_marker(runtime_view)
+    return runtime_fallback_or_degraded_marker(
+        runtime_view, expected_algorithm=expected_algorithm, algorithm_metadata=metadata
+    )
 
 
 def _status_markers(  # noqa: C901, PLR0912, PLR0915
@@ -359,7 +346,14 @@ def _status_markers(  # noqa: C901, PLR0912, PLR0915
         markers.append((f"{prefix}.{marker_path}", marker_value))
     planner_runtime = payload.get("planner_runtime")
     if isinstance(planner_runtime, Mapping):
-        runtime_marker = runtime_fallback_or_degraded_marker(planner_runtime)
+        metadata_context = payload.get("algorithm_metadata")
+        if metadata_context is None:
+            metadata_context = payload.get("algorithm_metadata_contract")
+        runtime_marker = runtime_fallback_or_degraded_marker(
+            planner_runtime,
+            expected_algorithm=expected_algorithm,
+            algorithm_metadata=metadata_context,
+        )
         if runtime_marker is not None:
             marker_path, marker_value = runtime_marker
             markers.append((f"{prefix}.planner_runtime.{marker_path}", marker_value))
@@ -397,7 +391,11 @@ def _status_markers(  # noqa: C901, PLR0912, PLR0915
         adapter_impact = metadata.get("adapter_impact")
         if isinstance(adapter_impact, Mapping):
             _add(f"{field}.adapter_impact.execution_mode", adapter_impact.get("execution_mode"))
-        runtime_marker = runtime_fallback_or_degraded_marker(metadata.get("planner_runtime"))
+        runtime_marker = runtime_fallback_or_degraded_marker(
+            metadata.get("planner_runtime"),
+            expected_algorithm=expected_algorithm,
+            algorithm_metadata=metadata,
+        )
         if runtime_marker is not None:
             marker_path, marker_value = runtime_marker
             markers.append((f"{prefix}.{field}.planner_runtime.{marker_path}", marker_value))

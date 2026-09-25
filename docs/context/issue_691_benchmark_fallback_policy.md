@@ -32,8 +32,13 @@ This note defines the canonical benchmark-facing fallback policy for Robot SF.
 
 Runtime marker parsing follows declared field types. The shield's
 `fallback_controller_state` is a diagnostic dictionary, not a fallback counter;
-its presence alone does not establish fallback execution. The parser still scans
-its nested dictionaries and lists for forbidden statuses, true fallback/degraded
+its presence alone does not establish fallback execution. It is admitted only
+when the independently declared algorithm and all metadata identity fields agree
+on guarded PPO. Direct parser calls without that binding reject the dictionary.
+Availability uses the producer/config-bound `algorithm_readiness.name`; release
+acceptance uses the manifest's expected arm. Missing or malformed identity cannot
+grant the exception. Ordinary legacy summaries without shield state are unchanged.
+The parser still scans its nested dictionaries and lists for forbidden statuses, true fallback/degraded
 flags, and positive or malformed fallback counters. A non-dictionary value for
 this field is invalid. Other fallback-named counter fields retain strict numeric
 validation. Declared `mixed` command mode remains separate from fallback status.
@@ -42,7 +47,6 @@ planner. Release acceptance permits its exact `fallback_safe` counters only for
 verified guarded identity; best-effort and uncertainty fallback counters remain
 forbidden. The typed-dictionary correction does not add label-only classification
 or redefine shield interventions as degraded execution.
-
 
 - `robot_sf_bench run` must return non-zero for:
   - `fallback`

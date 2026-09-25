@@ -61,22 +61,27 @@ def guarded_runtime(request) -> dict[str, object]:
     return policy._planner_stats()
 
 
-def test_shield_dictionary_does_not_report_policy_fallback(guarded_runtime) -> None:
+def test_shield_dictionary_does_not_report_policy_fallback(
+    guarded_runtime, guarded_metadata
+) -> None:
     """Typed diagnostic state must survive the real runner-to-availability path."""
     decision = guarded_runtime["last_decision"]
     assert decision["intervened"] is False
     assert decision["override_applied"] is False
-    assert runtime_fallback_or_degraded_marker(guarded_runtime) is None
+    assert (
+        runtime_fallback_or_degraded_marker(
+            guarded_runtime, expected_algorithm="guarded_ppo", algorithm_metadata=guarded_metadata
+        )
+        is None
+    )
     summary = {
         "status": "ok",
         "written": 1,
         "total_jobs": 1,
         "failed_jobs": 0,
         "preflight": {"status": "ok"},
-        "algorithm_metadata_contract": {
-            "planner_kinematics": {"execution_mode": "mixed"},
-            "planner_runtime": guarded_runtime,
-        },
+        "algorithm_readiness": {"name": "guarded_ppo"},
+        "algorithm_metadata_contract": guarded_metadata,
     }
     availability = summarize_benchmark_availability(summary)
     assert availability.execution_mode == "mixed"
@@ -115,13 +120,19 @@ def test_declared_guarded_safe_command_remains_available(guarded_metadata) -> No
     decision = runtime["last_decision"]
     assert decision["intervened"] is True
     assert decision["fallback_controller_state"]["policy"] == "RiskDWAPlannerAdapter"
-    assert runtime_fallback_or_degraded_marker(runtime) is None
+    assert (
+        runtime_fallback_or_degraded_marker(
+            runtime, expected_algorithm="guarded_ppo", algorithm_metadata=guarded_metadata
+        )
+        is None
+    )
     summary = {
         "status": "ok",
         "written": 1,
         "total_jobs": 1,
         "failed_jobs": 0,
         "preflight": {"status": "ok"},
+        "algorithm_readiness": {"name": "guarded_ppo"},
         "algorithm_metadata_contract": guarded_metadata,
     }
     availability = summarize_benchmark_availability(summary)
@@ -162,6 +173,7 @@ def test_guarded_safe_decision_does_not_hide_checkpoint_fallback(guarded_metadat
         "total_jobs": 1,
         "failed_jobs": 0,
         "preflight": {"status": "ok"},
+        "algorithm_readiness": {"name": "guarded_ppo"},
         "algorithm_metadata_contract": guarded_metadata,
     }
     assert runtime_fallback_or_degraded_marker(runtime) == (
@@ -174,10 +186,70 @@ def test_guarded_safe_decision_does_not_hide_checkpoint_fallback(guarded_metadat
     assert _status_markers(payload, "row", expected_algorithm="guarded_ppo")
 
 
+@pytest.mark.parametrize("expected_algorithm", [None, "goal", "guarded_ppo"])
+def test_shield_dictionary_requires_complete_identity(guarded_runtime, expected_algorithm) -> None:
+    """A caller name alone cannot grant the structured-state exception."""
+    assert runtime_fallback_or_degraded_marker(
+        guarded_runtime, expected_algorithm=expected_algorithm
+    ) == ("last_decision.fallback_controller_state", "invalid")
+
+
+@pytest.mark.parametrize(
+    "readiness", [None, [], "guarded_ppo", {}, {"name": "goal"}, {"name": False}]
+)
+def test_shield_availability_requires_declared_readiness(guarded_metadata, readiness) -> None:
+    """Self-reported runtime identity cannot replace the producer's requested algorithm."""
+    summary = {
+        "status": "ok",
+        "written": 1,
+        "total_jobs": 1,
+        "failed_jobs": 0,
+        "preflight": {"status": "ok"},
+        "algorithm_readiness": readiness,
+        "algorithm_metadata_contract": guarded_metadata,
+    }
+    availability = summarize_benchmark_availability(summary)
+    assert availability.benchmark_success is False
+    assert "fallback_controller_state=invalid" in availability.availability_reason
+    assert benchmark_run_exit_code(summary) == 2
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("canonical_algorithm", "goal"),
+        ("canonical_algorithm", None),
+        ("algorithm", "guarded_ppo"),
+        ("algorithm", None),
+        ("planner_contract", {}),
+        ("planner_contract", None),
+        ("planner_contract", {"planner_id": "goal"}),
+    ],
+)
+def test_shield_availability_cross_checks_contract_identity(guarded_metadata, field, value) -> None:
+    """Every identity carrier must agree; the readiness name alone is insufficient."""
+    guarded_metadata[field] = value
+    summary = {
+        "status": "ok",
+        "written": 1,
+        "total_jobs": 1,
+        "failed_jobs": 0,
+        "preflight": {"status": "ok"},
+        "algorithm_readiness": {"name": "guarded_ppo"},
+        "algorithm_metadata_contract": guarded_metadata,
+    }
+    assert summarize_benchmark_availability(summary).benchmark_success is False
+    assert benchmark_run_exit_code(summary) == 2
+
+
 @pytest.mark.parametrize("value", [None, [], "unused", 0, False, 1])
-def test_shield_dictionary_rejects_wrong_type(value) -> None:
+def test_shield_dictionary_rejects_wrong_type(value, guarded_metadata) -> None:
     """The declared dictionary cannot be substituted with a scalar or sequence."""
-    assert runtime_fallback_or_degraded_marker({"fallback_controller_state": value}) == (
+    assert runtime_fallback_or_degraded_marker(
+        {"fallback_controller_state": value},
+        expected_algorithm="guarded_ppo",
+        algorithm_metadata=guarded_metadata,
+    ) == (
         "fallback_controller_state",
         "invalid",
     )
@@ -197,12 +269,14 @@ def test_shield_dictionary_rejects_wrong_type(value) -> None:
     ],
 )
 def test_shield_dictionary_still_exposes_nested_failures(
-    guarded_runtime, marker, value, expected
+    guarded_runtime, guarded_metadata, marker, value, expected
 ) -> None:
     """Recognizing the container must never skip genuine or malformed failure evidence."""
     payload = deepcopy(guarded_runtime)
     payload["last_decision"]["fallback_controller_state"]["events"] = [{marker: value}]
-    assert runtime_fallback_or_degraded_marker(payload) == (
+    assert runtime_fallback_or_degraded_marker(
+        payload, expected_algorithm="guarded_ppo", algorithm_metadata=guarded_metadata
+    ) == (
         f"last_decision.fallback_controller_state.events[0].{marker}",
         expected,
     )

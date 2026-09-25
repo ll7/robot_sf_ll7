@@ -40,9 +40,8 @@ ROOT = Path(__file__).resolve().parents[3]
 ASSETS = ROOT / "configs/benchmarks/snqi_v2"
 # From the 0.0.7 publication bundle's resolved manifest (source 07f7e8d43084).
 # Keep these pins independent of the current checkout so calibration fails on input drift.
-FROZEN_007_CAMPAIGN = (
-    ROOT / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
-)
+# Exact historical template bytes; the live release template can select newer planners.
+FROZEN_007_CAMPAIGN = ROOT / "tests/fixtures/snqi_v2/frozen_007_campaign.yaml"
 FROZEN_007_CAMPAIGN_SHA256 = "095331329b06673dc165109c8523579549f769c98542b207a712f6e2bf9ed6ad"
 FROZEN_007_SCENARIO_SHA256 = "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c"
 FROZEN_007_SEED_SETS_SHA256 = "3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6"

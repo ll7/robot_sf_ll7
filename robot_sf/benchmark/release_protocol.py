@@ -3314,12 +3314,26 @@ def _candidate_frozen_checkpoint_arms(  # noqa: C901, PLR0912, PLR0915
             if not isinstance(item, Mapping):
                 raise ValueError(f"frozen 0.0.7 {key} runtime checkpoint is malformed")
             digest = item.get("checkpoint_sha256")
+            hash_source = item.get("hash_source")
             if digest is not None and (
                 not isinstance(digest, str) or _SHA256_RE.fullmatch(digest.lower()) is None
             ):
                 raise ValueError(f"frozen 0.0.7 {key} runtime checkpoint digest is invalid")
+            if hash_source is not None and (
+                not isinstance(hash_source, str) or not hash_source.strip()
+            ):
+                raise ValueError(f"frozen 0.0.7 {key} runtime hash source is invalid")
+            if digest is not None and hash_source is None:
+                raise ValueError(f"frozen 0.0.7 {key} runtime digest has no hash source")
+            if key == "sacadrl" and hash_source != "computed_tensorflow_checkpoint_bundle":
+                raise ValueError("frozen 0.0.7 SACADRL runtime must use the computed bundle")
             runtime_digests.append(
-                (item.get("model_id"), item.get("kinematics"), digest.lower() if digest else None)
+                (
+                    item.get("model_id"),
+                    item.get("kinematics"),
+                    digest.lower() if digest else None,
+                    hash_source,
+                )
             )
         projection.append(
             {
@@ -3363,6 +3377,8 @@ def _candidate_frozen_checkpoint_arms(  # noqa: C901, PLR0912, PLR0915
             ):
                 raise ValueError(f"candidate {key} runtime checkpoint identity differs")
             current_digest = current.get("checkpoint_sha256")
+            if frozen[3] is not None and current.get("hash_source") != frozen[3]:
+                raise ValueError(f"candidate {key} runtime checkpoint hash source differs")
             if frozen[2] is not None and current_digest != frozen[2]:
                 raise ValueError(f"candidate {key} runtime checkpoint digest differs")
             if frozen[2] is None and current_digest is not None and current_digest != top_digest:

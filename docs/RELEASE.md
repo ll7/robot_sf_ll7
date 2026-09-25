@@ -131,9 +131,10 @@ sidecars. `release/scientific_candidate_result.json` records the three
 passing gates. Missing, changed, or degraded rows leave the candidate
 unaccepted. The candidate also compares every checkpoint-bearing arm to the
 frozen 0.0.7 campaign manifest before execution and checks observed runtime
-bundle digests afterward. Do not launch until the #9667 SNQI-v2 parser and
-assets have landed and the exact-source launch admissions pass. The default runner and
-existing DOI-bound release semantics are unchanged.
+bundle digests and their hash sources afterward. Do not launch until the
+#9667 SNQI-v2 parser and assets have landed and the exact-source launch
+admissions pass. The default runner and existing DOI-bound release semantics
+are unchanged.
 
 After the author approves the publication steps and real concept/version DOI
 coordinates are bound in a clean-source resolved identity, create a derivative

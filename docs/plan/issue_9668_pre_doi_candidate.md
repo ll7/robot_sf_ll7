@@ -39,8 +39,8 @@ identity is bound later.
    Before execution, all 14 arms and five staged checkpoint references must
    match the SHA-pinned 0.0.7 archive's campaign manifest, including registry
    digests. After execution, the arm-level checkpoint and runtime bundle
-   digests are compared again; a staging/smoke pair that agrees only with
-   itself is insufficient.
+   digests and their hash sources are compared again; a staging/smoke pair
+   that agrees only with itself is insufficient.
 3. Acceptance uses the strict full-matrix and fallback/degraded exclusions,
    then the 0.0.7 predecessor comparator at absolute tolerance `1e-12` and
    robot-force validation. A mismatch or missing custody stops the candidate.

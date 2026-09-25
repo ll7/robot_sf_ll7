@@ -1,4 +1,4 @@
-"""Pedestrian-removal monotonicity for the real SocialForcePlanner baseline."""
+"""Pedestrian-removal monotonicity for release arms and the SocialForcePlanner baseline."""
 
 from __future__ import annotations
 
@@ -10,13 +10,15 @@ import pytest
 from robot_sf.api import _benchmark_observation_from_env, _planner_action_to_env_action
 from robot_sf.baselines.interface import Observation
 from robot_sf.baselines.social_force import SFPlannerConfig, SocialForcePlanner
-from robot_sf.gym_env.env_config import EnvSettings
-from robot_sf.gym_env.robot_env import RobotEnv
+from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool, SinglePedestrianDefinition
 from robot_sf.nav.obstacle import Obstacle
+from robot_sf.planner import socnav
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.sim.sim_config import SimulationSettings
+from tests.metamorphic.planner_arms import RELEASE_ARMS, crossing_scene, run_arm_episode
 
 _SEED = 8244
 _DT = 0.1
@@ -30,13 +32,22 @@ class _PlannerEpisode:
     positions: tuple[tuple[float, float, float], ...]
     commands: tuple[tuple[float, float], ...]
     actions: tuple[tuple[float, float], ...]
+    pedestrian_positions: tuple[tuple[tuple[float, float], ...], ...]
     success: bool
     collision: bool
-    truncated: bool
+    # The loop used ``max_steps`` without the environment terminating. This is not
+    # the environment's time-limit ``truncated`` flag.
+    step_limit_reached: bool
     pedestrian_count: int
     fallback: bool
     fallback_count: int
     fallback_reason: str | None
+
+
+def _pedestrian_snapshot(env: object) -> tuple[tuple[float, float], ...]:
+    """Copy current simulator pedestrian positions."""
+    positions = np.asarray(env.simulator.ped_pos, dtype=float).reshape(-1, 2)  # type: ignore[attr-defined]
+    return tuple((float(x), float(y)) for x, y in positions)
 
 
 def _run_social_force_episode(
@@ -44,6 +55,11 @@ def _run_social_force_episode(
     *,
     seed: int = _SEED,
     max_steps: int = 180,
+    planner_seed: int | None = None,
+    ped_density: float = 0.0,
+    noise_std: float = 0.0,
+    pedestrians_yield_to_robot: bool = True,
+    interaction_weight: float = 0.05,
 ) -> _PlannerEpisode:
     """Run a real ``RobotEnv`` episode with ``SocialForcePlanner`` and retain its trace.
 
@@ -54,16 +70,19 @@ def _run_social_force_episode(
     if max_steps <= 0:
         raise ValueError("max_steps must be positive")
 
-    pedestrian_count = len(map_def.single_pedestrians)
+    planner_seed = seed if planner_seed is None else planner_seed
+    explicit_count = len(map_def.single_pedestrians)
     sim_config = SimulationSettings(
         sim_time_in_secs=max_steps * _DT,
         time_per_step_in_secs=_DT,
         goal_radius=0.2,
-        ped_density_by_difficulty=[0.0, 0.0, 0.0, 0.0],
-        population_size=pedestrian_count,
-        max_total_pedestrians=max(1, pedestrian_count),
+        ped_density_by_difficulty=[ped_density],
+        difficulty=0,
+        max_total_pedestrians=max(12, explicit_count),
     )
-    env_config = EnvSettings(
+    if ped_density == 0.0:
+        sim_config.population_size = explicit_count
+    env_config = RobotSimulationConfig(
         sim_config=sim_config,
         map_pool=MapDefinitionPool(map_defs={"metamorphic": map_def}),
         map_id="metamorphic",
@@ -75,19 +94,23 @@ def _run_social_force_episode(
             max_angular_accel=5.0,
             max_linear_decel=5.0,
         ),
+        peds_have_robot_repulsion=pedestrians_yield_to_robot,
     )
-    env = RobotEnv(env_config=env_config)
+    # The factory seeds construction-time crowd sampling, as benchmark runs do.
+    env = make_robot_env(config=env_config, seed=seed)
     planner = SocialForcePlanner(
         SFPlannerConfig(
             dt=_DT,
             action_space="velocity",
             desired_speed=0.8,
             v_max=1.0,
-            interaction_weight=0.05,
+            interaction_weight=interaction_weight,
+            noise_std=noise_std,
         ),
-        seed=seed,
+        seed=planner_seed,
     )
     positions: list[tuple[float, float, float]] = []
+    pedestrian_positions: list[tuple[tuple[float, float], ...]] = []
     commands: list[tuple[float, float]] = []
     actions: list[tuple[float, float]] = []
     last_info: dict[str, object] = {}
@@ -96,7 +119,9 @@ def _run_social_force_episode(
 
     try:
         _observation, last_info = env.reset(seed=seed)
-        planner.reset(seed=seed)
+        planner.reset(seed=planner_seed)
+        pedestrian_count = len(env.simulator.ped_pos)
+        pedestrian_positions.append(_pedestrian_snapshot(env))
         initial_position = np.asarray(env.simulator.robot_poses[0][0], dtype=float)
         initial_heading = float(env.simulator.robot_poses[0][1])
         positions.append((float(initial_position[0]), float(initial_position[1]), initial_heading))
@@ -117,6 +142,7 @@ def _run_social_force_episode(
             pose = env.simulator.robot_poses[0]
             position = np.asarray(pose[0], dtype=float)
             positions.append((float(position[0]), float(position[1]), float(pose[1])))
+            pedestrian_positions.append(_pedestrian_snapshot(env))
             commands.append(command)
             actions.append((float(action_values[0]), float(action_values[1])))
             previous_position = np.asarray(planner_observation.robot["position"], dtype=float)
@@ -131,9 +157,10 @@ def _run_social_force_episode(
             positions=tuple(positions),
             commands=tuple(commands),
             actions=tuple(actions),
+            pedestrian_positions=tuple(pedestrian_positions),
             success=bool(last_info.get("success", False)),
             collision=bool(last_info.get("collision", False)),
-            truncated=bool(not terminated and not env_truncated),
+            step_limit_reached=bool(not terminated and not env_truncated),
             pedestrian_count=pedestrian_count,
             fallback=bool(diagnostics.get("fallback", False)),
             fallback_count=int(diagnostics.get("fallback_count", 0)),
@@ -146,50 +173,6 @@ def _run_social_force_episode(
     finally:
         planner.close()
         env.close()
-
-
-def _crossing_scene(*, pedestrian_present: bool) -> MapDefinition:
-    """Build the same fixed, straight route with or without one crossing pedestrian."""
-    spawn = ((3.0, 10.0), (3.0, 10.0), (3.0, 10.0))
-    goal = ((17.0, 10.0), (17.0, 10.0), (17.0, 10.0))
-    pedestrians = (
-        [
-            SinglePedestrianDefinition(
-                id="crossing",
-                start=(10.0, 5.0),
-                goal=(10.0, 15.0),
-                speed_m_s=1.0,
-            )
-        ]
-        if pedestrian_present
-        else []
-    )
-    route = GlobalRoute(
-        spawn_id=0,
-        goal_id=0,
-        waypoints=[(3.0, 10.0), (17.0, 10.0)],
-        spawn_zone=spawn,
-        goal_zone=goal,
-    )
-    return MapDefinition(
-        width=20.0,
-        height=20.0,
-        obstacles=[],
-        robot_spawn_zones=[spawn],
-        ped_spawn_zones=[],
-        robot_goal_zones=[goal],
-        bounds=[
-            ((0.0, 0.0), (20.0, 0.0)),
-            ((20.0, 0.0), (20.0, 20.0)),
-            ((20.0, 20.0), (0.0, 20.0)),
-            ((0.0, 20.0), (0.0, 0.0)),
-        ],
-        robot_routes=[route],
-        ped_goal_zones=[],
-        ped_crowded_zones=[],
-        ped_routes=[],
-        single_pedestrians=pedestrians,
-    )
 
 
 def _short_navigation_scene(
@@ -294,7 +277,7 @@ def test_social_force_success_is_preserved_when_nearby_pedestrian_is_removed() -
     for episode in (with_pedestrian, without_pedestrian):
         assert episode.success
         assert not episode.collision
-        assert not episode.truncated
+        assert not episode.step_limit_reached
         assert episode.fallback is False, episode.fallback_reason
         assert episode.fallback_count == 0
     assert not with_pedestrian.success or without_pedestrian.success
@@ -307,20 +290,35 @@ def test_social_force_success_is_preserved_when_nearby_pedestrian_is_removed() -
     assert np.max(command_differences) > 1e-6
 
 
-@pytest.mark.slow
-def test_removing_crossing_pedestrian_does_not_reduce_social_force_success() -> None:
-    """A successful pedestrian-present episode must remain successful after removal."""
-    with_pedestrian = _run_social_force_episode(_crossing_scene(pedestrian_present=True))
-    without_pedestrian = _run_social_force_episode(_crossing_scene(pedestrian_present=False))
+@pytest.mark.parametrize("arm", RELEASE_ARMS)
+def test_removing_crossing_pedestrian_does_not_reduce_release_arm_success(arm: str) -> None:
+    """A successful crossing episode stays successful, and no slower, once the pedestrian goes.
 
-    assert with_pedestrian.pedestrian_count == 1
-    assert without_pedestrian.pedestrian_count == 0
-    for episode in (with_pedestrian, without_pedestrian):
-        assert episode.commands
-        assert episode.fallback is False, episode.fallback_reason
-        assert episode.fallback_count == 0
+    The pedestrian crosses the route when the robot arrives, so the planner must
+    react (its commands differ). The premise ``with_pedestrian.success`` is asserted
+    first, so the implication is exercised rather than satisfied vacuously.
+    """
+    if arm == "orca" and socnav.rvo2 is None:
+        pytest.skip("rvo2 is required for the native ORCA release arm")
+    with_pedestrian = run_arm_episode(
+        arm, crossing_scene(pedestrian=True), seed=_SEED, max_steps=150
+    )
+    without_pedestrian = run_arm_episode(
+        arm, crossing_scene(pedestrian=False), seed=_SEED, max_steps=150
+    )
 
-    # This fixed crossing scene is expected to be solvable once the pedestrian is removed.
-    assert without_pedestrian.success
-    # State the metamorphic relation directly; no planner-family exception is declared here.
-    assert not with_pedestrian.success or without_pedestrian.success
+    assert len(with_pedestrian.pedestrian_positions[0]) == 1
+    assert len(without_pedestrian.pedestrian_positions[0]) == 0
+    shared = min(len(with_pedestrian.commands), len(without_pedestrian.commands))
+    assert (
+        np.max(
+            np.abs(
+                np.subtract(with_pedestrian.commands[:shared], without_pedestrian.commands[:shared])
+            )
+        )
+        > 1e-3
+    ), "the crossing pedestrian must change the planner's commands"
+
+    assert with_pedestrian.success and not with_pedestrian.collision  # premise
+    assert without_pedestrian.success and not without_pedestrian.collision
+    assert len(without_pedestrian.commands) <= len(with_pedestrian.commands)

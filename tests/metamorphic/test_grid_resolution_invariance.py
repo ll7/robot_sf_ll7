@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import fields
+
 import numpy as np
 import pytest
 
@@ -14,6 +16,8 @@ GRID_RESOLUTIONS = (BASE_RESOLUTION, BASE_RESOLUTION / 2.0, BASE_RESOLUTION * 2.
 COMMAND_ATOL = 0.05
 FORCE_RTOL = 0.05
 FORCE_ATOL = 0.05
+SOCIAL_FORCE_V2_FIELD = "social_force_planner_version"
+SOCIAL_FORCE_V2_VERSION = "resolution_independent_v2"
 
 
 def _observation_with_wall(
@@ -93,9 +97,11 @@ class _ForceRecordingSocialForcePlanner(socnav.SocialForcePlannerAdapter):
         return force
 
 
-def _measure_social_force(resolution: float) -> tuple[np.ndarray, np.ndarray]:
+def _measure_social_force(
+    resolution: float, config: socnav.SocNavPlannerConfig
+) -> tuple[np.ndarray, np.ndarray]:
     """Run one normal planner call and return its command and obstacle force."""
-    planner = _ForceRecordingSocialForcePlanner(socnav.SocNavPlannerConfig())
+    planner = _ForceRecordingSocialForcePlanner(config)
     command = np.asarray(planner.plan(_observation_with_wall(resolution)), dtype=float)
     return command, planner.obstacle_force
 
@@ -125,15 +131,27 @@ def _occupied_wall_bounds(observation: dict) -> tuple[float, float, float, float
     )
 
 
+# The ORCA wall sits 2.0-3.2 m ahead and slightly left, so its command is neither
+# speed- nor turn-rate-saturated: an obstacle-geometry error that scales with the
+# cell size (a margin counted in cells, a radius off by one cell) moves the
+# command by more than the tolerance instead of being hidden by a clip.
+ORCA_WALL_BOUNDS = ((2.0, 3.2), (-0.8, 0.4))
+SATURATION_MARGIN = 0.05
+
+
 @pytest.mark.skipif(socnav.rvo2 is None, reason="rvo2 is required for native ORCA execution")
 def test_orca_command_is_invariant_to_grid_resolution_with_wall_influence() -> None:
-    """Native ORCA keeps its wall response across resolutions and uses the wall."""
+    """Native ORCA keeps an unsaturated wall response across resolutions."""
     config = SocNavPlannerConfig()
 
     def command(resolution: float, *, wall_present: bool) -> np.ndarray:
         planner = ORCAPlannerAdapter(config, allow_fallback=False)
         return np.asarray(
-            planner.plan(_observation_with_wall(resolution, wall_present=wall_present)),
+            planner.plan(
+                _observation_with_wall(
+                    resolution, wall_present=wall_present, wall_bounds=ORCA_WALL_BOUNDS
+                )
+            ),
             dtype=float,
         )
 
@@ -147,17 +165,24 @@ def test_orca_command_is_invariant_to_grid_resolution_with_wall_influence() -> N
     assert np.all(np.linalg.norm(wall_commands - free_commands, axis=1) > COMMAND_ATOL), (
         "the static wall must change each resolution's ORCA command"
     )
+    assert np.all(wall_commands[:, 0] < config.max_linear_speed - SATURATION_MARGIN), (
+        f"wall response saturates the linear speed cap: {wall_commands[:, 0]}"
+    )
+    assert np.all(np.abs(wall_commands[:, 1]) < config.max_angular_speed - SATURATION_MARGIN), (
+        f"wall response saturates the turn-rate cap: {wall_commands[:, 1]}"
+    )
     np.testing.assert_allclose(
         wall_commands[1:],
         np.broadcast_to(wall_commands[0], wall_commands[1:].shape),
         rtol=0.0,
-        atol=0.05,
+        atol=COMMAND_ATOL,
         err_msg="ORCA command changed after halving or doubling occupancy resolution",
     )
 
 
 @pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason="Known DWA grid-resolution dependence tracked by #9740; remove after that fix merges.",
 )
 def test_dwa_command_is_invariant_to_grid_resolution_with_wall_influence() -> None:
@@ -205,32 +230,68 @@ def test_dwa_command_is_invariant_to_grid_resolution_with_wall_influence() -> No
     )
 
 
+def _social_force_v2_available() -> bool:
+    """Return whether the #9738 resolution-independent planner option exists."""
+    names = {field.name for field in fields(socnav.SocNavPlannerConfig)}
+    return SOCIAL_FORCE_V2_FIELD in names and hasattr(
+        socnav, "SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2"
+    )
+
+
+def _assert_social_force_resolution_invariant(
+    config: socnav.SocNavPlannerConfig,
+) -> None:
+    """Compare commands and obstacle forces at half, base and double resolution."""
+    measurements = [_measure_social_force(resolution, config) for resolution in GRID_RESOLUTIONS]
+    commands = np.asarray([command for command, _force in measurements])
+    forces = np.asarray([force for _command, force in measurements])
+
+    assert commands.shape == forces.shape == (len(GRID_RESOLUTIONS), 2)
+    assert np.all(np.linalg.norm(forces, axis=1) > 0.0), "wall force must be exercised"
+    np.testing.assert_allclose(
+        forces[1:],
+        np.broadcast_to(forces[0], forces[1:].shape),
+        rtol=FORCE_RTOL,
+        atol=FORCE_ATOL,
+        err_msg="obstacle forces changed after halving or doubling occupancy resolution",
+    )
+    np.testing.assert_allclose(
+        commands[1:],
+        np.broadcast_to(commands[0], commands[1:].shape),
+        rtol=0.0,
+        atol=COMMAND_ATOL,
+        err_msg="planner commands changed after halving or doubling occupancy resolution",
+    )
+
+
 @pytest.mark.skipif(
     socnav.sf_forces is None,
     reason="pysocialforce (fast-pysf) is required for the SocialForcePlannerAdapter path",
 )
 @pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason="Known per-cell wall-force scaling tracked by #9724; remove after that fix merges.",
 )
 def test_social_force_command_and_force_are_invariant_to_grid_resolution() -> None:
-    """Halving or doubling grid resolution preserves physical planner outputs."""
-    measurements = [_measure_social_force(resolution) for resolution in GRID_RESOLUTIONS]
-    commands = np.asarray([command for command, _force in measurements])
-    forces = np.asarray([force for _command, force in measurements])
+    """The default (release) social-force obstacle term sums one force per cell."""
+    _assert_social_force_resolution_invariant(socnav.SocNavPlannerConfig())
 
-    assert np.all(np.linalg.norm(forces, axis=1) > 0.0), "wall force must be exercised"
-    np.testing.assert_allclose(
-        commands[1:],
-        commands[0],
-        rtol=0.0,
-        atol=COMMAND_ATOL,
-        err_msg="planner commands changed after halving or doubling occupancy resolution",
+
+@pytest.mark.skipif(
+    socnav.sf_forces is None,
+    reason="pysocialforce (fast-pysf) is required for the SocialForcePlannerAdapter path",
+)
+@pytest.mark.skipif(
+    not _social_force_v2_available(),
+    reason=(
+        "social_force_planner_version: resolution_independent_v2 is not available "
+        "before PR #9738 (issue #9724) merges"
+    ),
+)
+def test_social_force_v2_command_and_force_are_invariant_to_grid_resolution() -> None:
+    """The #9738 opt-in v2 obstacle term is the passing twin of the #9724 xfail."""
+    config = socnav.SocNavPlannerConfig(
+        **{SOCIAL_FORCE_V2_FIELD: SOCIAL_FORCE_V2_VERSION},
     )
-    np.testing.assert_allclose(
-        forces[1:],
-        forces[0],
-        rtol=FORCE_RTOL,
-        atol=FORCE_ATOL,
-        err_msg="obstacle forces changed after halving or doubling occupancy resolution",
-    )
+    _assert_social_force_resolution_invariant(config)

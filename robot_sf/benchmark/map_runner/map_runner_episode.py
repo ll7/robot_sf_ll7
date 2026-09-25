@@ -30,6 +30,7 @@ from robot_sf.benchmark.constants import NEAR_MISS_DIST
 from robot_sf.benchmark.episode_input_identity import (
     capture_episode_input_identity,
     reconcile_consumed_map_identity,
+    reconcile_consumed_route_identity,
 )
 from robot_sf.benchmark.event_ledger import build_event_ledger
 from robot_sf.benchmark.failure_mechanism_taxonomy import unknown_failure_mechanism_record
@@ -212,6 +213,7 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: TC001
 from robot_sf.planner.safety_shield import shield_metrics_from_stats
 from robot_sf.robot.safety_wrapper import DeadlockRecoveryMonitor  # noqa: TC001
 from robot_sf.sim.spawn_validation import reset_spawn_clearance
+from robot_sf.training.scenario_loader import capture_route_override_snapshot
 
 # Policy builders are migrated incrementally; the episode boundary narrows the
 # legacy plain-dict metadata to ``AlgoMeta`` after enrichment.
@@ -1382,18 +1384,25 @@ def _resolve_episode_run_context(  # noqa: PLR0913
         )
     safety_wrapper_deadlock_monitor = make_deadlock_recovery_monitor(safety_wrapper_runtime)
     case_input_run_id = uuid.uuid4().hex
+    route_override_snapshot = capture_route_override_snapshot(scenario, scenario_path=scenario_path)
     input_identity_before_config = capture_episode_input_identity(
         scenario,
         scenario_path=scenario_path,
         seed=int(seed),
         run_id=case_input_run_id,
+        route_override_snapshot=route_override_snapshot,
     )
-    config = _build_env_config(scenario, scenario_path=scenario_path)
+    config = _build_env_config(
+        scenario,
+        scenario_path=scenario_path,
+        route_override_snapshot=route_override_snapshot,
+    )
     case_input_identity = capture_episode_input_identity(
         scenario,
         scenario_path=scenario_path,
         seed=int(seed),
         run_id=case_input_run_id,
+        route_override_snapshot=route_override_snapshot,
     )
     identity_fields = (
         "scenario_semantic_sha256",
@@ -1414,6 +1423,10 @@ def _resolve_episode_run_context(  # noqa: PLR0913
     consumed_map_sha256 = getattr(map_definition, "_consumed_map_sha256", None)
     case_input_identity = reconcile_consumed_map_identity(
         case_input_identity, consumed_map_sha256=consumed_map_sha256
+    )
+    case_input_identity = reconcile_consumed_route_identity(
+        case_input_identity,
+        consumed_route_overrides_sha256=getattr(config, "_consumed_route_overrides_sha256", None),
     )
     max_steps = int(scenario.get("simulation_config", {}).get("max_episode_steps", 0) or 0)
     horizon_val = int(horizon) if horizon and horizon > 0 else max_steps

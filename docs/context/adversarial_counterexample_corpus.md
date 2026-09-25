@@ -196,8 +196,11 @@ it checks the case and seed, planner/config identity, source revision, outcomes,
 selected metrics, exact event identities, raw episode status, and the event
 ledger's `invalid_run` flag. V2 receipts also bind a unique run ID, the behavior-affecting scenario
 identity, exact route override bytes, and map plus registry bytes captured around environment
-configuration. The corpus separately retains the scenario file digest. If behavior-affecting
-inputs change during configuration, the row is marked unavailable for exact case binding. A
+configuration. Route overrides are parsed from the same immutable byte snapshot whose digest is
+recorded; the episode identity is reconciled against the digest attached to the applied config.
+Map parsing follows the same snapshot-and-reconcile rule. The corpus separately retains the
+scenario file digest. If behavior-affecting inputs cannot be bound to the bytes consumed during
+configuration, the row is marked unavailable for exact case binding. A
 complete evaluation requires the same full Git
 commit identifier in the evaluation, episode, event ledger, and receipt; a
 placeholder such as `unknown` is insufficient. Both append and status

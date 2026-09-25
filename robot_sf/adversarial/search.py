@@ -351,7 +351,7 @@ def run_adversarial_search(
             candidate=candidate,
             scenario_yaml_path=scenario_yaml_path,
         )
-        if _scenario_admissibility_rejects(
+        if config.apply_admissibility_filter and _scenario_admissibility_rejects(
             certification_status,
             expected_case_id=admissibility_case_id,
         ):

@@ -17,8 +17,15 @@ files are absent, pass its `payload/` directory to the same command. Directory m
 source search manifests against `candidate_evaluations.csv`, `row_status.json`, `summary.json`, and
 `convergence_report.json`. The payload must sit beside `evidence_bundle_manifest.json` and
 `checksums.sha256`; the command validates their file lists, sizes, and digests before reconciling
-rows. It binds planned budgets to per-run manifests, summaries, and convergence counts, including
-failed, invalid, missing, and duplicate evaluations. It reports a zero-critical result only when the
+rows. It requires `run_metadata.manifest_files` and each summary run's path and digest to name
+exactly the loaded source-manifest set. When a manifest inventory includes `artifact_path`, that
+locator must resolve inside the packet to the corresponding source-manifest bytes. Candidate-level
+errors must agree with the source manifest;
+failed or unresolved evaluations stay visible and cannot establish successful execution or a
+zero-critical result. Certification counts require a passed certificate with an admissible
+classification, and collision counts must agree with the collision-event flag. It binds planned
+budgets to per-run manifests, summaries, and convergence counts, including failed, invalid, missing,
+and duplicate evaluations. It reports a zero-critical result only when the
 declared budget is complete, no candidate is scoreless, every candidate has known noncritical
 criticality, and sampler aggregates agree. Unknown criticality, scoreless candidates, and missing
 budget slots stay visible and are not counted as zero. A packet containing a critical candidate

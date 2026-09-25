@@ -33,6 +33,7 @@ def _write_packet(root: Path, *, critical: bool = False, unknown: bool = False) 
     episode_status = "collision" if critical else "success"
     row_status_label = "unexpected_failure" if unknown else "successful_evidence"
     execution_evidence = not unknown
+    evaluation_error = "planner evaluation failed before outcome was recorded" if unknown else None
     effective_hash = "b" * 64
     manifest_candidate = {
         "candidate": candidate,
@@ -41,7 +42,7 @@ def _write_packet(root: Path, *, critical: bool = False, unknown: bool = False) 
         "episode_record_path": "output/raw/candidate_0000/episode_records.jsonl",
         "effective_scenario_hash": effective_hash,
         "objective_value": 0.0,
-        "error": None,
+        "error": evaluation_error,
         "analysis_eligibility": {
             "schema_version": "search_analysis_eligibility.v1",
             "eligible": True,
@@ -135,7 +136,7 @@ def _write_packet(root: Path, *, critical: bool = False, unknown: bool = False) 
         "source_manifest_sha256": manifest_sha,
         "scenario_yaml_sha256": "c" * 64,
         "episode_records_sha256": "d" * 64,
-        "error": "",
+        "error": evaluation_error or "",
     }
     with (packet / "candidate_evaluations.csv").open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(csv_row))
@@ -152,7 +153,7 @@ def _write_packet(root: Path, *, critical: bool = False, unknown: bool = False) 
         "readiness_status": "native",
         "availability_status": "available",
         "fallback_or_degraded": False,
-        "error": None,
+        "error": evaluation_error,
     }
     _write_json(
         packet / "row_status.json",
@@ -171,8 +172,8 @@ def _write_packet(root: Path, *, critical: bool = False, unknown: bool = False) 
             "source_revision": "a" * 40,
             "pilot_budget": {
                 "attempted": 1,
-                "completed": 1,
-                "failed": 0,
+                "completed": int(not unknown),
+                "failed": int(unknown),
                 "invalid": 0,
                 "planned": 1,
                 "unknown_or_scoreless": int(unknown),
@@ -203,10 +204,12 @@ def _write_packet(root: Path, *, critical: bool = False, unknown: bool = False) 
                     "run_id": "random_17",
                     "sampler": "random",
                     "sampler_seed": 17,
+                    "manifest_path": "output/raw/random/manifest.json",
+                    "manifest_sha256": manifest_sha,
                     "candidate_rows": 1,
                     "attempted_evaluations": 1,
                     "planned_evaluations": 1,
-                    "failed_evaluations": 0,
+                    "failed_evaluations": int(unknown),
                     "invalid_candidates": 0,
                     "best_objective": 0.0,
                 }
@@ -218,6 +221,13 @@ def _write_packet(root: Path, *, critical: bool = False, unknown: bool = False) 
         {
             "schema_version": "issue_9645_execution_provenance.v1",
             "experiment_source_commit": "a" * 40,
+            "manifest_files": [
+                {
+                    "path": "output/raw/random/manifest.json",
+                    "run_id": "random_17",
+                    "sha256": manifest_sha,
+                }
+            ],
         },
     )
     _write_json(
@@ -231,11 +241,11 @@ def _write_packet(root: Path, *, critical: bool = False, unknown: bool = False) 
                     "candidate_accounting": {
                         "attempted": 1,
                         "critical": int(critical),
-                        "failed": 0,
+                        "failed": int(unknown),
                         "invalid": 0,
                         "missing": 0,
                         "duplicate": 0,
-                        "valid_total_minus_invalid_minus_failed": 1,
+                        "valid_total_minus_invalid_minus_failed": int(not unknown),
                         "duplicate_rate_observed": 0.0,
                         "invalid_rate_observed": 0.0,
                     },
@@ -249,6 +259,112 @@ def _write_packet(root: Path, *, critical: bool = False, unknown: bool = False) 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _refresh_manifest_identity_references(packet: Path) -> None:
+    """Bind CSV, summary, and run-metadata identities to the current source manifests."""
+    manifest_entries: list[dict[str, str]] = []
+    digest_by_run_id: dict[str, str] = {}
+    for path in sorted((packet / "source_manifests").glob("*.json")):
+        manifest_bytes = path.read_bytes()
+        manifest = json.loads(manifest_bytes)
+        config = manifest["config"]
+        run_id = f"{Path(config['output_dir']).name}_{config['seed']}"
+        manifest_path = f"{config['output_dir'].rstrip('/')}/manifest.json"
+        digest = hashlib.sha256(manifest_bytes).hexdigest()
+        manifest_entries.append({"path": manifest_path, "run_id": run_id, "sha256": digest})
+        digest_by_run_id[run_id] = digest
+
+    csv_path = packet / "candidate_evaluations.csv"
+    with csv_path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = reader.fieldnames
+        rows = list(reader)
+    for row in rows:
+        row["source_manifest_sha256"] = digest_by_run_id[row["run_id"]]
+    with csv_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    summary_path = packet / "summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    for run in summary["runs"]:
+        identity = next(item for item in manifest_entries if item["run_id"] == run["run_id"])
+        run["manifest_path"] = identity["path"]
+        run["manifest_sha256"] = identity["sha256"]
+    _write_json(summary_path, summary)
+
+    metadata_path = packet / "run_metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["manifest_files"] = manifest_entries
+    _write_json(metadata_path, metadata)
+
+
+def _append_second_run(packet: Path) -> None:
+    """Expand the fixture into a consistent two-run packet with a duplicate candidate."""
+    source_manifest_path = packet / "source_manifests" / "random_seed_17.json"
+    second_manifest = json.loads(source_manifest_path.read_text(encoding="utf-8"))
+    second_manifest["config"]["seed"] = 18
+    second_manifest["config"]["output_dir"] = "output/raw/seed_18/random"
+    _write_json(packet / "source_manifests" / "random_seed_18.json", second_manifest)
+
+    csv_path = packet / "candidate_evaluations.csv"
+    with csv_path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = reader.fieldnames
+        rows = list(reader)
+    second_row = dict(rows[0])
+    second_row["run_id"] = "random_18"
+    second_row["sampler_seed"] = "18"
+    rows.append(second_row)
+    with csv_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    status_path = packet / "row_status.json"
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    second_status = dict(status["rows"][0])
+    second_status["row_id"] = "random_18:01"
+    status["rows"].append(second_status)
+    status["counts"] = {"successful_evidence": 2}
+    _write_json(status_path, status)
+
+    summary_path = packet / "summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["pilot_budget"].update(attempted=2, completed=2, planned=2)
+    summary["pilot_metrics"]["route_completions"] = 2
+    summary["candidate_outcomes"].update(
+        distinct_effective_scenarios=1,
+        distinct_candidate_specs=1,
+        duplicate_candidate_specs=1,
+    )
+    summary["evaluation_budget_consumed"]["pilot_search_candidates"] = 2
+    summary["feasibility"]["pilot_empirical_goal_successes"] = 2
+    summary["feasibility"]["pilot_scenario_certification"] = {"passed:valid": 2}
+    second_run = dict(summary["runs"][0])
+    second_run.update(
+        run_id="random_18",
+        sampler_seed=18,
+        candidate_rows=1,
+        attempted_evaluations=1,
+        planned_evaluations=1,
+    )
+    summary["runs"].append(second_run)
+    _write_json(summary_path, summary)
+
+    convergence_path = packet / "convergence_report.json"
+    convergence = json.loads(convergence_path.read_text(encoding="utf-8"))
+    accounting = convergence["aggregates"][0]["candidate_accounting"]
+    accounting.update(
+        attempted=2,
+        valid_total_minus_invalid_minus_failed=2,
+        duplicate=1,
+        duplicate_rate_observed=0.5,
+    )
+    _write_json(convergence_path, convergence)
+    _refresh_manifest_identity_references(packet)
 
 
 def _refresh_bundle_receipts(packet: Path) -> None:
@@ -354,7 +470,265 @@ def test_compact_packet_keeps_unknown_criticality_out_of_zero_case_claim(
     assert result["summary"]["criticality_unknown_count"] == 1
     assert result["selection"]["status"] == "criticality_unknown_no_candidate_selected"
     assert result["candidates"][0]["case_criticality"] == "unknown"
+    assert result["candidates"][0]["execution_outcome"] == "evaluation_failed"
+    assert result["candidates"][0]["evaluation_error"] == (
+        "planner evaluation failed before outcome was recorded"
+    )
     assert result["candidates"][0]["selection_status"] == "no_case_selected"
+
+
+def test_compact_packet_binds_candidate_error_and_rejects_error_as_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    packet = _write_packet(tmp_path)
+    monkeypatch.setattr(replay_gallery, "_repository_root", lambda: tmp_path)
+    manifest_path = packet / "source_manifests" / "random_seed_17.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["candidates"][0]["error"] = "planner evaluation failed"
+    _write_json(manifest_path, manifest)
+    _refresh_manifest_identity_references(packet)
+    _refresh_bundle_receipts(packet)
+
+    with pytest.raises(ValueError, match="candidate error conflicts with source manifest"):
+        replay_gallery.build_replay_gallery(
+            packet, tmp_path / "output" / "error-mismatch", render=False, video=False
+        )
+
+    csv_path = packet / "candidate_evaluations.csv"
+    with csv_path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = reader.fieldnames
+        rows = list(reader)
+    rows[0]["error"] = "planner evaluation failed"
+    with csv_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    status_path = packet / "row_status.json"
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    status["rows"][0]["error"] = "planner evaluation failed"
+    _write_json(status_path, status)
+    _refresh_bundle_receipts(packet)
+
+    with pytest.raises(ValueError, match="failed candidate cannot count as successful evidence"):
+        replay_gallery.build_replay_gallery(
+            packet, tmp_path / "output" / "error-as-success", render=False, video=False
+        )
+
+
+def test_compact_packet_does_not_count_failed_certificate_as_eligible_coverage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    packet = _write_packet(tmp_path)
+    monkeypatch.setattr(replay_gallery, "_repository_root", lambda: tmp_path)
+    manifest_path = packet / "source_manifests" / "random_seed_17.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["candidates"][0]["certification_status"]["status"] = "failed"
+    _write_json(manifest_path, manifest)
+    _refresh_manifest_identity_references(packet)
+    csv_path = packet / "candidate_evaluations.csv"
+    with csv_path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = reader.fieldnames
+        rows = list(reader)
+    rows[0]["certification_status"] = "failed"
+    with csv_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    status_path = packet / "row_status.json"
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    status["rows"][0]["candidate_certification_status"] = "failed"
+    _write_json(status_path, status)
+    summary_path = packet / "summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["pilot_budget"]["invalid"] = 1
+    summary["pilot_budget"]["unknown_or_scoreless"] = 1
+    summary["runs"][0]["invalid_candidates"] = 1
+    summary["feasibility"]["pilot_empirical_goal_successes"] = 0
+    summary["feasibility"]["pilot_scenario_certification"] = {"failed:valid": 1}
+    _write_json(summary_path, summary)
+    convergence_path = packet / "convergence_report.json"
+    convergence = json.loads(convergence_path.read_text(encoding="utf-8"))
+    accounting = convergence["aggregates"][0]["candidate_accounting"]
+    accounting["invalid"] = 1
+    accounting["valid_total_minus_invalid_minus_failed"] = 0
+    accounting["invalid_rate_observed"] = 1.0
+    _write_json(convergence_path, convergence)
+    _refresh_bundle_receipts(packet)
+
+    result = replay_gallery.build_replay_gallery(
+        packet, tmp_path / "output" / "failed-certificate", render=False, video=False
+    )
+
+    assert result["summary"]["zero_critical_result_verified"] is False
+    assert result["summary"]["scenario_eligibility_counts"] == {"ineligible_or_unknown": 1}
+    assert result["summary"]["criticality_unknown_count"] == 1
+    assert result["candidates"][0]["certification_status"] == "failed"
+    assert result["candidates"][0]["case_criticality"] == "unknown"
+
+
+def test_compact_packet_reconciles_collision_counts_with_event_and_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    packet = _write_packet(tmp_path)
+    monkeypatch.setattr(replay_gallery, "_repository_root", lambda: tmp_path)
+    csv_path = packet / "candidate_evaluations.csv"
+    with csv_path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = reader.fieldnames
+        rows = list(reader)
+    rows[0]["total_collision_count"] = "1"
+    rows[0]["ped_collision_count"] = "1"
+    with csv_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    _refresh_bundle_receipts(packet)
+
+    with pytest.raises(ValueError, match="collision counts conflict with collision event"):
+        replay_gallery.build_replay_gallery(
+            packet, tmp_path / "output" / "collision-count-conflict", render=False, video=False
+        )
+
+
+@pytest.mark.parametrize(
+    ("identity_file", "mutate", "message"),
+    [
+        (
+            "run_metadata.json",
+            lambda payload: payload["manifest_files"][0].update(
+                path="output/substituted/manifest.json"
+            ),
+            "manifest inventory conflicts with loaded source manifests",
+        ),
+        (
+            "summary.json",
+            lambda payload: payload["runs"][0].update(manifest_sha256="f" * 64),
+            "summary manifest path or digest conflicts",
+        ),
+        (
+            "summary.json",
+            lambda payload: payload["runs"][0].update(
+                manifest_path="output/substituted/manifest.json"
+            ),
+            "summary manifest path or digest conflicts",
+        ),
+    ],
+)
+def test_compact_packet_binds_run_manifest_inventory_and_summary_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    identity_file: str,
+    mutate: Any,
+    message: str,
+) -> None:
+    packet = _write_packet(tmp_path)
+    monkeypatch.setattr(replay_gallery, "_repository_root", lambda: tmp_path)
+    path = packet / identity_file
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    mutate(payload)
+    _write_json(path, payload)
+    _refresh_bundle_receipts(packet)
+
+    with pytest.raises(ValueError, match=message):
+        replay_gallery.build_replay_gallery(
+            packet,
+            tmp_path / "output" / "bad-manifest-identity",
+            render=False,
+            video=False,
+        )
+
+
+def test_compact_packet_validates_optional_manifest_artifact_locator(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    packet = _write_packet(tmp_path)
+    monkeypatch.setattr(replay_gallery, "_repository_root", lambda: tmp_path)
+    metadata_path = packet / "run_metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["manifest_files"][0]["artifact_path"] = "source_manifests/random_seed_17.json"
+    _write_json(metadata_path, metadata)
+    _refresh_bundle_receipts(packet)
+
+    valid = replay_gallery.build_replay_gallery(
+        packet, tmp_path / "output" / "valid-manifest-artifact", render=False, video=False
+    )
+    assert valid["summary"]["zero_critical_result_verified"] is True
+
+    metadata["manifest_files"][0]["artifact_path"] = "../source_manifests/random_seed_17.json"
+    _write_json(metadata_path, metadata)
+    _refresh_bundle_receipts(packet)
+
+    with pytest.raises(ValueError, match="source manifest artifact path conflicts"):
+        replay_gallery.build_replay_gallery(
+            packet,
+            tmp_path / "output" / "traversing-manifest-artifact",
+            render=False,
+            video=False,
+        )
+
+
+def test_compact_packet_rejects_coordinated_run_omission_against_manifest_inventory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    packet = _write_packet(tmp_path)
+    _append_second_run(packet)
+    monkeypatch.setattr(replay_gallery, "_repository_root", lambda: tmp_path)
+
+    (packet / "source_manifests" / "random_seed_18.json").unlink()
+    csv_path = packet / "candidate_evaluations.csv"
+    with csv_path.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = reader.fieldnames
+        rows = [row for row in reader if row["run_id"] == "random_17"]
+    with csv_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    status_path = packet / "row_status.json"
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    status["rows"] = [row for row in status["rows"] if row["row_id"] == "random_17:01"]
+    status["counts"] = {"successful_evidence": 1}
+    _write_json(status_path, status)
+
+    summary_path = packet / "summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["pilot_budget"].update(attempted=1, completed=1, planned=1)
+    summary["pilot_metrics"]["route_completions"] = 1
+    summary["candidate_outcomes"].update(
+        distinct_effective_scenarios=1,
+        distinct_candidate_specs=1,
+        duplicate_candidate_specs=0,
+    )
+    summary["evaluation_budget_consumed"]["pilot_search_candidates"] = 1
+    summary["feasibility"]["pilot_empirical_goal_successes"] = 1
+    summary["feasibility"]["pilot_scenario_certification"] = {"passed:valid": 1}
+    summary["runs"] = [summary["runs"][0]]
+    _write_json(summary_path, summary)
+
+    convergence_path = packet / "convergence_report.json"
+    convergence = json.loads(convergence_path.read_text(encoding="utf-8"))
+    accounting = convergence["aggregates"][0]["candidate_accounting"]
+    accounting.update(
+        attempted=1,
+        valid_total_minus_invalid_minus_failed=1,
+        duplicate=0,
+        duplicate_rate_observed=0.0,
+    )
+    _write_json(convergence_path, convergence)
+    _refresh_bundle_receipts(packet)
+
+    with pytest.raises(
+        ValueError, match="manifest inventory conflicts with loaded source manifests"
+    ):
+        replay_gallery.build_replay_gallery(
+            packet,
+            tmp_path / "output" / "coordinated-manifest-omission",
+            render=False,
+            video=False,
+        )
 
 
 def test_compact_packet_does_not_verify_zero_critical_for_incomplete_budget(
@@ -366,22 +740,12 @@ def test_compact_packet_does_not_verify_zero_critical_for_incomplete_budget(
     source_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     source_manifest["config"]["budget"] = 2
     _write_json(manifest_path, source_manifest)
-    manifest_digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
-    csv_path = packet / "candidate_evaluations.csv"
-    with csv_path.open(encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
-        fieldnames = reader.fieldnames
-        rows = list(reader)
-    rows[0]["source_manifest_sha256"] = manifest_digest
-    with csv_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
     summary_path = packet / "summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     summary["pilot_budget"]["planned"] = 2
     summary["runs"][0]["planned_evaluations"] = 2
     _write_json(summary_path, summary)
+    _refresh_manifest_identity_references(packet)
     convergence_path = packet / "convergence_report.json"
     convergence = json.loads(convergence_path.read_text(encoding="utf-8"))
     convergence["aggregates"][0]["candidate_accounting"]["missing"] = 1
@@ -408,13 +772,11 @@ def test_compact_packet_preserves_scoreless_candidate_without_zero_claim(
     source_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     source_manifest["candidates"][0]["objective_value"] = None
     _write_json(manifest_path, source_manifest)
-    manifest_digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     csv_path = packet / "candidate_evaluations.csv"
     with csv_path.open(encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         fieldnames = reader.fieldnames
         rows = list(reader)
-    rows[0]["source_manifest_sha256"] = manifest_digest
     rows[0]["objective_value"] = ""
     with csv_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
@@ -426,6 +788,7 @@ def test_compact_packet_preserves_scoreless_candidate_without_zero_claim(
     summary["pilot_metrics"]["score_set"] = []
     summary["runs"][0]["best_objective"] = None
     _write_json(summary_path, summary)
+    _refresh_manifest_identity_references(packet)
     _refresh_bundle_receipts(packet)
 
     result = replay_gallery.build_replay_gallery(
@@ -447,13 +810,11 @@ def test_compact_packet_rejects_candidate_rows_omitted_from_source_manifest(
     manifest["config"]["budget"] = 2
     manifest["candidates"].append(dict(manifest["candidates"][0]))
     manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
-    manifest_digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     csv_path = packet / "candidate_evaluations.csv"
     with csv_path.open(encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         fieldnames = reader.fieldnames
         rows = list(reader)
-    rows[0]["source_manifest_sha256"] = manifest_digest
     with csv_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
@@ -463,6 +824,7 @@ def test_compact_packet_rejects_candidate_rows_omitted_from_source_manifest(
     summary["pilot_budget"]["planned"] = 2
     summary["runs"][0]["planned_evaluations"] = 2
     _write_json(summary_path, summary)
+    _refresh_manifest_identity_references(packet)
     convergence_path = packet / "convergence_report.json"
     convergence = json.loads(convergence_path.read_text(encoding="utf-8"))
     convergence["aggregates"][0]["candidate_accounting"]["missing"] = 1
@@ -585,17 +947,7 @@ def test_compact_packet_binds_summary_budget_to_source_manifest_budget(
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["config"]["budget"] = 999
     _write_json(manifest_path, manifest)
-    manifest_digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
-    csv_path = packet / "candidate_evaluations.csv"
-    with csv_path.open(encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
-        fieldnames = reader.fieldnames
-        rows = list(reader)
-    rows[0]["source_manifest_sha256"] = manifest_digest
-    with csv_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
+    _refresh_manifest_identity_references(packet)
     _refresh_bundle_receipts(packet)
 
     with pytest.raises(ValueError, match="summary pilot budget does not match candidate ledger"):

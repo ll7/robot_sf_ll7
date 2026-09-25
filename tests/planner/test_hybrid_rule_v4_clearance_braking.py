@@ -396,6 +396,7 @@ def test_v4_configs_resolve_to_the_v4_variant(v4_name: str) -> None:
         assert cfg.planner_variant == HYBRID_RULE_V4_CLEARANCE_BRAKING_VARIANT
         assert cfg.max_linear_speed == pytest.approx(2.0)
         assert cfg.v4_braking_check_enabled is True
+        assert cfg.continuous_static_clearance_enabled is True
         HybridRuleLocalPlannerAdapter(cfg)
 
 

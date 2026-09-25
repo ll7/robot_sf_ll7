@@ -10,6 +10,7 @@
 # 3. a candidate is rejected when, after one control step, the robot could not
 #    brake to a stop before a constant-velocity pedestrian prediction reaches
 #    contact while the robot is still moving.
+# 4. rollout poses are also checked against exact obstacle geometry.
 # v3 configs are unaffected: every v4 branch is gated on planner_variant.
 allow_testing_algorithms: true
 planner_variant: hybrid_rule_v4_clearance_braking
@@ -37,6 +38,13 @@ lookahead_distances: [0.5, 1.0, 1.5, 2.0]
 robot_radius_default: 0.3
 pedestrian_radius_default: 0.3
 hard_safety_margin: 0.05
+# v4 checks rollout poses against the exact obstacle segments of the bound map
+# (the v3 "continuous" static check) in every scenario. Braking-consistent
+# speeds make v4 cross doorways slowly and close to the walls, where the 0.2 m
+# occupancy-grid clearance error exceeds the 0.05 m hard margin: without this,
+# the fast-progress v4 twin crept into doorway walls at 0.1-0.4 m/s in 16 of 90
+# diagnostic doorway episodes (issue #9726 PR diagnostic).
+continuous_static_clearance_enabled: true
 desired_static_clearance: 0.7
 desired_dynamic_clearance: 0.9
 obstacle_threshold: 0.5

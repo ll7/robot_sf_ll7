@@ -12,19 +12,27 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
+import yaml
 from jsonschema import Draft202012Validator
 
 from robot_sf._execution_context import execution_context_digest
 from robot_sf.adversarial.feasibility_first import ScenarioFeasibilityContract
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
+from robot_sf.benchmark.map_runner.map_runner_identity import (
+    planner_independent_scenario_case_payload,
+)
 from robot_sf.benchmark.termination_reason import (
     TERMINATION_REASONS,
     outcome_contradictions,
     status_from_termination_reason,
 )
 from robot_sf.scenario_certification.feasibility_diagnostics import DIAGNOSTIC_CLAIM_BOUNDARY
-from robot_sf.scenario_certification.input_identity import scenario_input_identity
+from robot_sf.scenario_certification.input_identity import (
+    runtime_input_records_match,
+    scenario_input_identity,
+)
+from robot_sf.training.scenario_loader import load_scenarios_for_validation
 
 SCENARIO_ADMISSIBILITY_SCHEMA = "scenario_admissibility.v1"
 FEASIBILITY_ORACLE_SCHEMA = "scenario_feasibility_oracle.v1"
@@ -187,6 +195,16 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
     requires_effective_input_binding = artifact_identity.get(
         "requires_effective_input_binding", True
     )
+    selected_scenario_row, selected_scenario_row_status = _selected_candidate_scenario_row(
+        scenario_artifact_path,
+        scenario_id=scenario_id,
+        expected_sha256=artifact_sha256,
+    )
+    evidence["selected_scenario_row_binding"] = {
+        "status": selected_scenario_row_status,
+        "scenario_id": scenario_id,
+        "source_artifact_sha256": artifact_sha256,
+    }
     if artifact_sha256 is None:
         reasons.append("scenario_artifact_identity_missing_or_unavailable")
     inputs = {
@@ -200,6 +218,15 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
             ("replay_execution", replay_execution),
         )
     }
+    for role in ("reference", "target", "replay"):
+        source = inputs[f"{role}_execution"]
+        if isinstance(source, Mapping):
+            inputs[f"{role}_execution"] = {
+                **dict(source),
+                "_selected_scenario_row": selected_scenario_row,
+                "_selected_scenario_row_status": selected_scenario_row_status,
+                "_candidate_runtime_input_identity": runtime_identity,
+            }
 
     cert = inputs["scenario_certificate"]
     cert_state, cert_valid, cert_assumptions = _certificate(
@@ -1229,6 +1256,12 @@ def _execution(  # noqa: PLR0913 - explicit execution evidence bindings are pass
         )
         reasons.append(f"{role}_execution_scenario_case_identity_{identity_status}")
         return None
+    resource_closure_status = run_context_binding.get(
+        "scenario_runtime_input_closure_binding_status"
+    )
+    if resource_closure_status not in {"valid", "not_required"}:
+        reasons.append(f"{role}_execution_scenario_runtime_input_closure_{resource_closure_status}")
+        return None
     if context_status == "mismatch":
         return None
     bound_source = dict(source)
@@ -1698,10 +1731,18 @@ def _producer_run_context_binding(
         source=source,
     )
     case_identity_digest = _planner_independent_case_identity_digest(episode)
-    case_identity_status = "valid" if case_identity_digest is not None else "unavailable"
+    self_identity_status = "valid" if case_identity_digest is not None else "unavailable"
+    selected_case_status, candidate_case_digest, producer_case_digest = (
+        _selected_scenario_case_binding(source, episode)
+    )
+    resource_closure_status = _producer_scenario_resource_closure_binding(source, episode)
+    case_identity_status = _combine_binding_status(self_identity_status, selected_case_status)
     status = _combine_binding_status(
         _combine_binding_status(context_status, scenario_status),
-        _combine_binding_status(config_status, case_identity_status),
+        _combine_binding_status(
+            config_status,
+            _combine_binding_status(case_identity_status, resource_closure_status),
+        ),
     )
     checkpoint_status = _producer_checkpoint_status(source)
     if checkpoint_status == "unavailable":
@@ -1709,6 +1750,10 @@ def _producer_run_context_binding(
     missing_fields = sorted(set(context_missing + scenario_missing + config_missing))
     if case_identity_digest is None:
         missing_fields.append("episode.scenario_params")
+    if selected_case_status == "unavailable":
+        missing_fields.append("candidate.selected_scenario_row")
+    if resource_closure_status == "unavailable":
+        missing_fields.append("producer.scenario_runtime_input_closure")
     if checkpoint_status == "unavailable":
         missing_fields.append("planner_checkpoint_sha256")
     return {
@@ -1716,6 +1761,8 @@ def _producer_run_context_binding(
         "scenario_matrix_sha256": scenario_digest,
         "planner_config_sha256": config_digest,
         "case_identity_sha256": case_identity_digest,
+        "candidate_scenario_case_identity_sha256": candidate_case_digest,
+        "producer_scenario_case_identity_sha256": producer_case_digest,
         "planner_checkpoint_status": checkpoint_status,
         "run_context_binding": {
             "status": status,
@@ -1723,18 +1770,157 @@ def _producer_run_context_binding(
             "scenario_matrix_binding_status": scenario_status,
             "planner_config_binding_status": config_status,
             "case_identity_binding_status": case_identity_status,
+            "selected_scenario_row_binding_status": selected_case_status,
+            "scenario_runtime_input_closure_binding_status": resource_closure_status,
             "missing_fields": sorted(set(missing_fields)),
             "fields": [
                 "run_id",
                 "execution_context_sha256",
                 "scenario_matrix_sha256",
                 "planner_config_sha256",
+                "candidate_scenario_case_identity_sha256",
                 "case_identity_sha256",
                 "simulator_settings_sha256",
                 "horizon",
             ],
         },
     }
+
+
+def _selected_scenario_case_binding(
+    source: Mapping[str, Any], episode: Mapping[str, Any]
+) -> tuple[str, str | None, str | None]:
+    """Compare the selected artifact row with the producer episode's scenario settings."""
+    selected = source.get("_selected_scenario_row")
+    if source.get("_selected_scenario_row_status") != "valid" or not isinstance(selected, Mapping):
+        return "unavailable", None, None
+    seed = episode.get("seed")
+    params = episode.get("scenario_params")
+    if not isinstance(seed, int) or isinstance(seed, bool) or not isinstance(params, Mapping):
+        return "unavailable", None, None
+    candidate_projection = planner_independent_scenario_case_payload(selected, seed=seed)
+    producer_projection = planner_independent_scenario_case_payload(params, seed=seed)
+    candidate_digest = _canonical_mapping_digest(candidate_projection)
+    producer_digest = _canonical_mapping_digest(producer_projection)
+    if candidate_digest is None or producer_digest is None:
+        return "unavailable", candidate_digest, producer_digest
+    return (
+        "valid" if candidate_digest == producer_digest else "mismatch",
+        candidate_digest,
+        producer_digest,
+    )
+
+
+def _producer_scenario_resource_closure_binding(
+    source: Mapping[str, Any], episode: Mapping[str, Any]
+) -> str:
+    """Require producer-row parser snapshots whenever the candidate has external inputs."""
+    identity = source.get("_candidate_runtime_input_identity")
+    if not isinstance(identity, Mapping):
+        return "unavailable"
+    if identity.get("requires_effective_input_binding") is not True:
+        return "not_required"
+    records = episode.get("runtime_input_records")
+    scenario_id = episode.get("scenario_id")
+    if not isinstance(records, list) or not isinstance(scenario_id, str) or not scenario_id.strip():
+        return "unavailable"
+    if not all(isinstance(record, Mapping) for record in records):
+        return "mismatch"
+    return (
+        "valid"
+        if runtime_input_records_match(
+            identity,
+            [dict(record) for record in records],
+            scenario_id=scenario_id,
+        )
+        else "mismatch"
+    )
+
+
+def _canonical_mapping_digest(value: Mapping[str, Any]) -> str | None:
+    """Hash JSON-compatible scenario projections with deterministic encoding."""
+    try:
+        encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    except (TypeError, ValueError):
+        return None
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _selected_candidate_scenario_row(
+    scenario_artifact_path: str | Path | None,
+    *,
+    scenario_id: str | None,
+    expected_sha256: Any,
+) -> tuple[dict[str, Any] | None, str]:
+    """Load exactly one selected canonical row, with the bounded legacy single-row form."""
+    if not isinstance(scenario_artifact_path, (str, Path)):
+        return None, "unavailable"
+    try:
+        root = Path(scenario_artifact_path).expanduser().resolve(strict=True)
+        raw_bytes = root.read_bytes()
+    except (OSError, RuntimeError, ValueError):
+        return None, "unavailable"
+    if (
+        not isinstance(expected_sha256, str)
+        or _SHA256.fullmatch(expected_sha256) is None
+        or hashlib.sha256(raw_bytes).hexdigest() != expected_sha256.lower()
+    ):
+        return None, "unavailable"
+
+    report = load_scenarios_for_validation(root)
+    if report.load_error is None and not report.entry_issues and not report.load_issues:
+        rows = [
+            row
+            for row in report.scenarios
+            if _scenario_row_identifier(row) is not None
+            and (scenario_id is None or _scenario_row_identifier(row) == scenario_id)
+        ]
+        if len(rows) == 1:
+            return dict(rows[0]), "valid"
+        return None, "unavailable"
+
+    # A narrow legacy form is retained for the existing one-row identity contract. It cannot
+    # contain includes or resource references because those require loader provenance.
+    try:
+        legacy_row = yaml.safe_load(raw_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, yaml.YAMLError):
+        return None, "unavailable"
+    if not isinstance(legacy_row, Mapping) or "scenarios" in legacy_row:
+        return None, "unavailable"
+    external_reference_keys = {
+        "includes",
+        "include",
+        "scenario_files",
+        "map_id",
+        "map_file",
+        "map_search_paths",
+        "route_overrides_file",
+    }
+    if any(
+        _has_declared_external_reference(legacy_row.get(key)) for key in external_reference_keys
+    ):
+        return None, "unavailable"
+    row_id = _scenario_row_identifier(legacy_row)
+    if row_id is None or (scenario_id is not None and row_id != scenario_id):
+        return None, "unavailable"
+    return dict(legacy_row), "valid"
+
+
+def _scenario_row_identifier(row: Mapping[str, Any]) -> str | None:
+    """Use map-runner scenario ID precedence for one parsed row."""
+    value = row.get("name") or row.get("scenario_id") or row.get("id")
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _has_declared_external_reference(value: Any) -> bool:
+    """Return whether a legacy row declares a non-empty external-resource reference."""
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, tuple, Mapping)):
+        return bool(value)
+    return True
 
 
 def _producer_scenario_input(

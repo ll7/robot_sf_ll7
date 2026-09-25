@@ -7,6 +7,7 @@ from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from pathlib import Path
 
 import yaml
@@ -24,6 +25,30 @@ from robot_sf.benchmark.tracking_precision_contract import (
     tracking_precision_hash,
 )
 from robot_sf.benchmark.utils import _config_hash
+
+_MAP_RUNNER_SCENARIO_IDENTITY_FIELDS = frozenset(
+    {
+        "algo",
+        "algo_config_hash",
+        "record_forces",
+        "observation_mode",
+        "observation_level",
+        "benchmark_track",
+        "track_schema_version",
+        "observation_noise_profile",
+        "observation_noise_hash",
+        "tracking_precision",
+        "tracking_precision_hash",
+        "synthetic_actuation_profile",
+        "latency_stress_profile",
+        "safety_wrapper",
+        "cbf_safety_filter",
+        "record_planner_decision_trace",
+        "record_simulation_step_trace",
+        "run_horizon",
+        "run_dt",
+    }
+)
 
 
 def _resolve_seed_list(path: Path) -> dict[str, list[int]]:
@@ -181,6 +206,34 @@ def _scenario_with_episode_seed_defaults(
     if isinstance(sim_config, dict) and sim_config.get("route_spawn_seed") is None:
         sim_config["route_spawn_seed"] = int(seed)
     return updated
+
+
+def planner_independent_scenario_case_payload(
+    scenario: Mapping[str, Any], *, seed: int
+) -> dict[str, Any]:
+    """Return the candidate-row identity that remains after map-run identity fields.
+
+    The map runner expands the selected scenario, adds an ID default and seed-derived
+    route defaults, then overlays run-level identity fields in
+    :func:`_scenario_identity_payload`. This projection applies the same row and seed
+    rules while dropping only that documented run-level envelope. It lets consumers
+    bind an episode row to the selected candidate instead of trusting the episode's
+    self-consistent config hash alone.
+    """
+    identity_scenario = _scenario_with_episode_seed_defaults(dict(scenario), seed=seed)
+    payload = {
+        key: value for key, value in identity_scenario.items() if key not in {"seed", "seeds"}
+    }
+    scenario_id = (
+        identity_scenario.get("name")
+        or identity_scenario.get("scenario_id")
+        or identity_scenario.get("id")
+        or "unknown"
+    )
+    payload.setdefault("id", scenario_id)
+    for field in _MAP_RUNNER_SCENARIO_IDENTITY_FIELDS:
+        payload.pop(field, None)
+    return payload
 
 
 resolve_seed_list = _resolve_seed_list

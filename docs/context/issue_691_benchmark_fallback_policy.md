@@ -44,9 +44,12 @@ this field is invalid. Other fallback-named counter fields retain strict numeric
 validation. Declared `mixed` command mode remains separate from fallback status.
 Guarded PPO's safe Risk-DWA command is a declared component of that composite
 planner. Release acceptance permits its exact `fallback_safe` counters only for
-verified guarded identity; best-effort and uncertainty fallback counters remain
-forbidden. The typed-dictionary correction does not add label-only classification
-or redefine shield interventions as degraded execution.
+verified guarded identity; its exact `fallback_safe` decision label remains
+admitted under that same identity-bound exception. The exact `stop_best_effort`
+decision label is forbidden, and its counters admit only zero; positive or
+malformed values fail closed. Other best-effort and uncertainty fallback
+counters remain forbidden. This narrow label rule does not redefine safe shield
+interventions as degraded execution.
 
 - `robot_sf_bench run` must return non-zero for:
   - `fallback`

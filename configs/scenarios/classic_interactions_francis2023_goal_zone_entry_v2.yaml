@@ -1,0 +1,13 @@
+# Successor release scenario matrix for issue #9725.
+# Identical to classic_interactions_francis2023_goal_zone_entry_v1.yaml except that
+# classic_station_platform_medium uses the successor map, whose pedestrian route 0 spawns
+# in a pocket north of the robot start instead of inside the robot spawn zone. The v1
+# matrix, the archetype YAML, and maps/svg_maps/classic_station_platform.svg stay
+# byte-identical so frozen study pins keep resolving to the old geometry.
+includes:
+  - classic_interactions_francis2023_goal_zone_entry_v1.yaml
+map_search_paths:
+  - ../../maps/svg_maps
+scenario_overrides_by_name:
+  classic_station_platform_medium:
+    map_file: ../../maps/successor_svg_maps/classic_station_platform_v2.svg

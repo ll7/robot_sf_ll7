@@ -205,6 +205,20 @@ rows:
       - maps/registry.yaml
       - LICENSE
 
+  - id: successor-svg-maps
+    scope: maps
+    globs: ["maps/successor_svg_maps/*.svg"]
+    status: project-authored
+    source: "Robot SF project-authored successor revisions of maps/svg_maps geometry (issue #9725)."
+    source_revision_or_access_date: "Repository-authored; validated at the commit running this checker."
+    license_or_rights: "Repository-owned project content under the repository license; no external-source clearance is implied."
+    attribution: "Robot SF project authors."
+    checksum_policy: "Release artifacts are hashed by the distribution/evidence pipeline; no external raw source is asserted."
+    modification_status: "Project-authored successor geometry; the original maps/svg_maps file stays unchanged for frozen pins."
+    evidence:
+      - configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v2.yaml
+      - LICENSE
+
   - id: map3-osm-export
     scope: maps
     globs: ["maps/svg_maps/map3_1350_buildings_inkscape.svg"]

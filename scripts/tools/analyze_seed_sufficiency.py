@@ -15,6 +15,7 @@ from typing import Any
 import matplotlib
 
 from robot_sf.benchmark.rank_metrics import kendall_tau, rank_order
+from robot_sf.benchmark.seed_variance import seed_episode_row_is_valid
 
 matplotlib.use("Agg")
 from matplotlib import pyplot as plt
@@ -205,7 +206,12 @@ def _load_campaign(root: Path, *, metrics: tuple[str, ...]) -> dict[str, Any]:
     reports = root / "reports"
     seed_payload = _read_json(reports / "seed_variability_by_scenario.json")
     seed_rows = [row for row in seed_payload.get("rows", []) if isinstance(row, dict)]
-    episode_rows = _read_csv(reports / "seed_episode_rows.csv")
+    # Issue #9725: spawn-overlap rows are listed in the CSV but excluded from rates.
+    episode_rows = [
+        row
+        for row in _read_csv(reports / "seed_episode_rows.csv")
+        if seed_episode_row_is_valid(row)
+    ]
     sufficiency_path = reports / "statistical_sufficiency.json"
     sufficiency = _read_json(sufficiency_path) if sufficiency_path.exists() else {}
     seed_count = _campaign_seed_count(seed_rows, episode_rows)

@@ -73,6 +73,10 @@ from robot_sf.nav.navigation import (
     sample_route,
 )
 from robot_sf.nav.occupancy import circle_collides_any_lines
+from robot_sf.nav.spawn_clearance import (
+    SPAWN_CLEARANCE_MARGIN_M,
+    relocate_overlapping_pedestrians,
+)
 from robot_sf.ped_npc.adversial_ped_force import (
     AdversarialPedForce,
     AdversarialPedForceConfig,
@@ -83,7 +87,11 @@ from robot_sf.ped_npc.ped_behavior import (
     PedestrianBehavior,
     SinglePedestrianBehavior,
 )
-from robot_sf.ped_npc.ped_population import PedSpawnConfig, populate_simulation
+from robot_sf.ped_npc.ped_population import (
+    PedSpawnConfig,
+    populate_simulation,
+    validate_spawn_footprints,
+)
 from robot_sf.ped_npc.ped_robot_force import PedRobotForce, PedRobotForceConfig
 from robot_sf.ped_npc.ped_zone import sample_zone
 from robot_sf.ped_npc.residual_adversary import (
@@ -470,9 +478,16 @@ def _build_pysf_simulation(  # noqa: PLR0913
         ),
         sampler_capture=sampler_capture,
     )
+    max_robot_radius = max((float(robot.config.radius) for robot in robots), default=0.0)
     for behavior in peds_behaviors:
         if isinstance(behavior, SinglePedestrianBehavior):
             behavior.set_robot_pose_provider(robot_pose_provider)
+        elif isinstance(behavior, FollowRouteBehavior) and robots:
+            # Route-end respawns must not teleport a group onto the robot (issue #9725).
+            behavior.set_robot_exclusion(
+                robot_pose_provider,
+                max_robot_radius + float(config.ped_radius) + SPAWN_CLEARANCE_MARGIN_M,
+            )
 
     if include_response_law_multipliers:
         num_peds = pysf_state.pysf_states().shape[0]
@@ -564,6 +579,7 @@ class Simulator:
         init=False, repr=False, default=None
     )
     sampler_capture: SpawnSamplerCapture | None = field(init=False, repr=False, default=None)
+    last_spawn_relocation: Any = field(init=False, repr=False, default=None)
     last_oracle_transition_traces: tuple[OracleTransitionTraceV1, ...] | None = field(
         init=False, repr=False, default=None
     )
@@ -1656,6 +1672,7 @@ class Simulator:
                     self.map_def,
                     None if self.random_start_pos else i,
                     completion_policy=self.goal_completion_policy,
+                    robot_radius=float(robot.config.radius),
                 )
                 nav.new_route(
                     waypoints[1:],
@@ -1665,6 +1682,64 @@ class Simulator:
                     goal_id=getattr(waypoints, "goal_id", None),
                 )
                 robot.reset_state((waypoints[0], nav.initial_orientation))
+        self._enforce_reset_spawn_clearance()
+
+    def _enforce_reset_spawn_clearance(self) -> None:
+        """Move pedestrians that overlap a robot footprint after the robot start is known.
+
+        Pedestrians are placed at construction, before any robot start is sampled, so a
+        route or crowd pedestrian can start inside the robot footprint (issue #9725).
+        Overlapping rows are moved deterministically to the nearest clear point on the
+        exclusion circle (robot radius + pedestrian radius + margin); no random numbers
+        are drawn, so every other spawn of the seed stays unchanged. The next reset
+        restores the construction-time layout and checks it again.
+        """
+        ped_positions = np.asarray(self.ped_pos, dtype=float).reshape(-1, 2)
+        if ped_positions.shape[0] == 0 or not self.robots:
+            self.last_spawn_relocation = None
+            return
+        ped_radius = float(self.config.ped_radius)
+        ped_xy = [(float(x), float(y)) for x, y in ped_positions]
+        robots = [
+            ((float(r.pose[0][0]), float(r.pose[0][1])), float(r.config.radius))
+            for r in self.robots
+        ]
+        # The footprint validator (issue #9403) names the rows inside robot radius plus
+        # margin; only those rows are candidates for relocation.
+        overlapping_rows: set[int] = set()
+        for robot_xy, robot_radius in robots:
+            footprint = validate_spawn_footprints(
+                robot_xy, robot_radius + SPAWN_CLEARANCE_MARGIN_M, ped_xy, ped_radius
+            )
+            overlapping_rows.update(footprint.overlapping_rows)
+        if not overlapping_rows:
+            self.last_spawn_relocation = None
+            return
+        report = relocate_overlapping_pedestrians(
+            ped_xy,
+            ped_radius,
+            robots,
+            self.map_def,
+            rows=sorted(overlapping_rows),
+        )
+        self.last_spawn_relocation = report
+        if not report.relocated and not report.unresolved:
+            return
+        states = self.pysf_state.pysf_states()
+        for row, (_old, new_xy) in report.relocated.items():
+            states[row, PYSF_POSITION_SLICE] = new_xy
+        if report.relocated:
+            logger.debug(
+                "Moved {count} pedestrian(s) off the robot start footprint at reset: {rows}",
+                count=len(report.relocated),
+                rows=sorted(report.relocated),
+            )
+        if report.unresolved:
+            logger.warning(
+                "Pedestrian row(s) {rows} still overlap the robot start after reset; no clear "
+                "point was found (issue #9725).",
+                rows=report.unresolved,
+            )
 
     def _capture_robot_ped_forces(self) -> None:
         """Copy already evaluated robot components and their pre-integration inputs."""
@@ -2076,6 +2151,7 @@ class PedSimulator(Simulator):
                     self.map_def,
                     None if self.random_start_pos else i,
                     completion_policy=self.goal_completion_policy,
+                    robot_radius=float(robot.config.radius),
                 )
                 nav.new_route(
                     waypoints[1:],
@@ -2085,6 +2161,7 @@ class PedSimulator(Simulator):
                     goal_id=getattr(waypoints, "goal_id", None),
                 )
                 robot.reset_state((waypoints[0], nav.initial_orientation))
+        self._enforce_reset_spawn_clearance()
         # Ego_pedestrian reset
         if self.spawn_near_robot:
             robot_spawn = self.robot_pos[0]

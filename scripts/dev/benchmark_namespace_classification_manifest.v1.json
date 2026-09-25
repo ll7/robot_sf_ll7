@@ -292,6 +292,8 @@
     "social_preference_labels.py",
     "socnavbench_canary.py",
     "source_bound_component_contrasts.py",
+    "spawn_preflight.py",
+    "spawn_validity.py",
     "step_trace_comparator.py",
     "stress_uncertainty_coverage.py",
     "typed_snapshot.py",

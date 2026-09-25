@@ -36,7 +36,6 @@ _FORESIGHT_CONSTANT_VELOCITY_MODE = "constant_velocity"
 
 _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "goal": "classical",
-    "stand_still": "classical",
     "social_force": "classical",
     "orca": CONTRACT_RECORDS_BY_NAME["orca"].baseline_category,
     "brne": "diagnostic",
@@ -121,7 +120,6 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
 
 _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "goal": "deterministic_goal_seeking",
-    "stand_still": "constant_zero_velocity_reference",
     "social_force": "social_force_adapter",
     "orca": CONTRACT_RECORDS_BY_NAME["orca"].policy_semantics,
     "brne": "bounded_bayesian_recursive_nash_equilibrium_diagnostic",
@@ -224,22 +222,6 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "notes": (
             "Goal baseline consumes robot and goal state only; it can run under socnav_state "
             "as a parity control because extra pedestrian channels are ignored."
-        ),
-    },
-    "stand_still": {
-        "default_mode": "socnav_state",
-        "supported_modes": (
-            "goal_state",
-            "socnav_state",
-            "headed_socnav_state",
-            "gst_human_state",
-            "sensor_fusion_state",
-            "lidar_human_state",
-        ),
-        "inputs": (),
-        "notes": (
-            "Stationary reference ignores all observation content; the active observation mode "
-            "is recorded only for run comparability."
         ),
     },
     "social_force": _DEFAULT_OBSERVATION_SPEC,
@@ -565,13 +547,6 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "supports_native_commands": True,
         "supports_adapter_commands": False,
         "default_execution_mode": "native",
-    },
-    "stand_still": {
-        "planner_command_space": "unicycle_vw",
-        "supports_native_commands": True,
-        "supports_adapter_commands": False,
-        "default_execution_mode": "native",
-        "execution_detail": "Emits an exact zero linear and angular command on every step.",
     },
     "social_force": {
         "planner_command_space": "unicycle_vw",

@@ -3011,12 +3011,14 @@ def _resolve_algorithm_contract(ctx: _BatchContext) -> None:
         resolved_observation_level = learned_observation_contract.get("observation_level_key")
     ctx.algo_contract = enrich_algorithm_metadata(
         algo=ctx.algo,
-        metadata={},
+        metadata=_stand_still_builder.metadata_seed() if ctx.algo == "stand_still" else {},
         robot_kinematics=ctx.kinematics_tag,
         adapter_impact_requested=ctx.adapter_impact_eval,
         observation_mode=ctx.active_observation_mode,
         observation_level=resolved_observation_level,
     )
+    if ctx.algo == "stand_still":
+        _stand_still_builder.apply_observation_contract(ctx.algo_contract)
     ctx.algo_contract["learned_checkpoint_observation_contract"] = learned_observation_contract
     ctx.active_observation_level = str(ctx.algo_contract["observation_level"]["key"])
     attach_track_metadata(
@@ -3279,10 +3281,12 @@ def _compute_resume_identity_payload(
         identity_observation_level = identity_observation_contract.get("observation_level_key")
     identity_contract = enrich_algorithm_metadata(
         algo=identity_algo,
-        metadata={},
+        metadata=_stand_still_builder.metadata_seed() if identity_algo == "stand_still" else {},
         observation_mode=identity_observation_mode,
         observation_level=identity_observation_level,
     )
+    if identity_algo == "stand_still":
+        _stand_still_builder.apply_observation_contract(identity_contract)
     identity_observation_level = str(identity_contract["observation_level"]["key"])
     return _scenario_identity_payload(
         identity_scenario,

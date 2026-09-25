@@ -11,6 +11,8 @@ overlay. The overlay sets an exact population of zero and removes fixed SVG
 pedestrians from a copied map definition. The map runner checks the actual
 instantiated count against zero before recording an episode. The **stand-still**
 arm uses the original pedestrian population and always commands `(0, 0)`.
+Its command and observation metadata lives beside the policy because a frozen
+adversarial campaign pins the shared `algorithm_metadata.py` bytes.
 The source release matrix deliberately has no pedestrians in
 `classic_bottleneck_low`; its 30 rows remain required for coverage but are
 listed separately and excluded from the contact-rate denominator. The config

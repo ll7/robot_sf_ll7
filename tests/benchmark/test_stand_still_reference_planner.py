@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from robot_sf.benchmark.algorithm_metadata import (
     canonical_algorithm_name,
-    enrich_algorithm_metadata,
-    observation_spec_for_algorithm,
-    resolve_observation_mode,
 )
 from robot_sf.benchmark.algorithm_readiness import (
     get_algorithm_readiness,
@@ -14,6 +11,7 @@ from robot_sf.benchmark.algorithm_readiness import (
     require_algorithm_allowed,
 )
 from robot_sf.benchmark.map_runner.map_runner import _build_policy, _preflight_policy
+from robot_sf.benchmark.planner_command_contract import validate_planner_contract
 
 
 def test_stand_still_emits_zero_without_reading_observation() -> None:
@@ -35,6 +33,8 @@ def test_stand_still_emits_zero_without_reading_observation() -> None:
     assert metadata["planner_kinematics"]["supports_native_commands"] is True
     assert metadata["planner_kinematics"]["supports_adapter_commands"] is False
     assert metadata["planner_contract"]["planner_id"] == "stand_still"
+    assert metadata["observation_spec"]["inputs"] == []
+    assert metadata["planner_contract"]["observation_contract"]["required_inputs"] == []
 
 
 def test_stand_still_readiness_and_observation_contract() -> None:
@@ -60,11 +60,13 @@ def test_stand_still_readiness_and_observation_contract() -> None:
     )
     assert effective_config == {}
     assert preflight["status"] == "ok"
+    contract = validate_planner_contract(
+        algo="stand_still",
+        robot_kinematics="differential_drive",
+        algo_config={},
+        observation_mode="socnav_state",
+    )
+    assert contract["action_contract"]["command_space"] == "unicycle_vw"
+    assert contract["observation_contract"]["required_inputs"] == []
 
-    observation_spec = observation_spec_for_algorithm("stand_still")
-    assert observation_spec["inputs"] == []
-    assert observation_spec["default_mode"] == "socnav_state"
-    assert resolve_observation_mode("stand_still", "sensor_fusion_state") == "sensor_fusion_state"
-    metadata = enrich_algorithm_metadata(algo="stand_still")
-    assert metadata["planner_contract"]["observation_contract"]["required_inputs"] == []
     assert "stand_still" not in paper_baseline_algorithms()

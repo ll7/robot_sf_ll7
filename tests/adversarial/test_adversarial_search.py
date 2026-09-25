@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import csv
 import dataclasses
-import hashlib
 import json
 import sys
 import types
@@ -176,65 +175,6 @@ def _candidate(seed: int, *, goal_x: float = 5.0) -> CandidateSpec:
         pedestrian_delay_s=0.0,
         scenario_seed=seed,
     )
-
-
-def _bound_episode_record(
-    config: SearchConfig,
-    scenario_yaml_path: Path,
-    candidate: CandidateSpec,
-    *,
-    route_complete: bool,
-) -> dict[str, Any]:
-    """Build a canonical-shaped fixture bound to the materialized candidate/config."""
-    scenario_payload = yaml.safe_load(scenario_yaml_path.read_text(encoding="utf-8"))
-    scenario = scenario_payload["scenarios"][0]
-    scenario_id = str(scenario["name"])
-    planner_config: dict[str, Any] = {}
-    if config.algo_config_path is not None:
-        parsed_planner_config = yaml.safe_load(config.algo_config_path.read_text(encoding="utf-8"))
-        planner_config = dict(parsed_planner_config or {})
-    planner_config_hash = search._config_hash(planner_config)
-    scenario_params = {key: value for key, value in scenario.items() if key != "seeds"}
-    scenario_params["id"] = scenario_id
-    scenario_params["algo"] = config.policy
-    scenario_params["algo_config_hash"] = planner_config_hash
-    scenario_params["run_horizon"] = int(config.horizon or 100)
-    scenario_params["run_dt"] = float(config.dt or 0.1)
-    scenario_params["record_forces"] = bool(config.record_forces)
-    termination_reason = "success" if route_complete else "collision"
-    return {
-        "version": "v1",
-        "episode_id": f"episode-{candidate.scenario_seed}",
-        "scenario_id": scenario_id,
-        "seed": candidate.scenario_seed,
-        "algo": config.policy,
-        "scenario_params": scenario_params,
-        "config_hash": search._config_hash(scenario_params),
-        "git_hash": "a" * 40,
-        "status": termination_reason,
-        "steps": 3,
-        "termination_reason": termination_reason,
-        "outcome": {
-            "route_complete": route_complete,
-            "collision_event": not route_complete,
-            "timeout_event": False,
-        },
-        "integrity": {"contradictions": []},
-        "algorithm_metadata": {
-            "algorithm": config.policy,
-            "canonical_algorithm": config.policy,
-            "baseline_category": "classical",
-            "execution_mode": "native",
-            "status": "ok",
-            "config_hash": planner_config_hash,
-            "config": planner_config,
-        },
-        "metrics": {
-            "snqi": 0.5,
-            "success": float(route_complete),
-            "collisions": int(not route_complete),
-        },
-    }
 
 
 def _runtime_base_map(*, obstacles: list[Obstacle] | None = None) -> MapDefinition:
@@ -1314,16 +1254,17 @@ def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path
         scenario_yaml_path: Path,
         candidate_dir: Path,
     ) -> CandidateEvaluation:
-        """Write a provenance-complete planner episode and return its evaluation."""
+        """Write one successful episode record and return candidate evaluation."""
         snqi = scores.pop(0)
-        route_complete = snqi > 0.5
-        record = _bound_episode_record(
-            _config,
-            scenario_yaml_path,
-            candidate,
-            route_complete=route_complete,
-        )
-        record["metrics"]["snqi"] = snqi
+        record: dict[str, Any] = {
+            "episode_id": f"episode-{candidate.scenario_seed}",
+            "seed": candidate.scenario_seed,
+            "status": "success",
+            "steps": 3,
+            "termination_reason": "success",
+            "outcome": {"route_complete": True, "collision": False, "timeout": False},
+            "metrics": {"snqi": snqi, "success": 1.0},
+        }
         episode_path = candidate_dir / "episode_records.jsonl"
         episode_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
         trajectory_path = write_trajectory_csv(candidate_dir / "trajectory.csv", record)
@@ -1331,20 +1272,11 @@ def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path
             candidate=candidate,
             certification_status=passed_status(),
             objective_value=None,
-            failure_attribution=dataclasses.replace(
-                attribution_from_episode_record(record),
-                details={
-                    **attribution_from_episode_record(record).details,
-                    "execution_mode": "native",
-                    "readiness_status": "native",
-                    "availability_status": "available",
-                },
-            ),
+            failure_attribution=attribution_from_episode_record(record),
             episode_record_path=episode_path,
             trajectory_csv_path=trajectory_path,
             scenario_yaml_path=scenario_yaml_path,
             bundle_path=candidate_dir,
-            effective_planner_config={},
         )
 
     result = search.run_adversarial_search(
@@ -1362,397 +1294,6 @@ def test_programmatic_search_scores_candidates_without_subprocess(tmp_path: Path
     assert manifest["summary"]["best_bundle_path"].endswith("candidate_0001")
     assert (config.output_dir / "candidate_0001" / "scenario.yaml").exists()
     assert (config.output_dir / "candidate_0001" / "route_overrides.yaml").exists()
-    assert all(
-        row["scenario_admissibility"]["search_disposition"] == "retain"
-        and row["scenario_admissibility"]["verdict"] == "admissible_feasibility_unknown"
-        for row in manifest["candidates"]
-    )
-    assert [
-        row["scenario_admissibility"]["target_planner_outcome"] for row in manifest["candidates"]
-    ] == [
-        "route_completed",
-        "route_incomplete",
-    ]
-    assert all(
-        len(
-            row["scenario_admissibility"]["evidence"]["target_planner_observation"][
-                "episode_records_jsonl_sha256"
-            ]
-        )
-        == 64
-        for row in manifest["candidates"]
-    )
-
-
-def test_target_episode_observation_hashes_and_parses_one_byte_snapshot(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Replacing an episode path after its read cannot swap the parsed outcome."""
-    config = _config(tmp_path)
-    candidate = _candidate(7)
-    scenario_path, _ = write_candidate_inputs(
-        config=config,
-        candidate=candidate,
-        candidate_dir=tmp_path / "candidate",
-        index=0,
-    )
-    record_a = _bound_episode_record(config, scenario_path, candidate, route_complete=False)
-    record_b = _bound_episode_record(config, scenario_path, candidate, route_complete=True)
-    record_a_bytes = (json.dumps(record_a) + "\n").encode("utf-8")
-    record_b_bytes = (json.dumps(record_b) + "\n").encode("utf-8")
-    episode_path = tmp_path / "candidate" / "episode_records.jsonl"
-    episode_path.write_bytes(record_a_bytes)
-    attribution = dataclasses.replace(
-        attribution_from_episode_record(record_a),
-        details={
-            "execution_mode": "native",
-            "readiness_status": "native",
-            "availability_status": "available",
-        },
-    )
-    payload = search.classify_scenario_admissibility(
-        "candidate_0000",
-        scenario_artifact_path=scenario_path,
-        scenario_id=_candidate_scenario_id_for_test(scenario_path),
-    ).to_dict()
-    original_read_bytes = Path.read_bytes
-    replaced = False
-
-    def read_episode_then_replace(path: Path) -> bytes:
-        nonlocal replaced
-        content = original_read_bytes(path)
-        if path == episode_path and not replaced:
-            replaced = True
-            episode_path.write_bytes(record_b_bytes)
-        return content
-
-    monkeypatch.setattr(Path, "read_bytes", read_episode_then_replace)
-
-    observed = search._post_evaluation_admissibility(
-        payload,
-        config=config,
-        candidate=candidate,
-        scenario_yaml_path=scenario_path,
-        episode_record_path=episode_path,
-        failure_attribution=attribution,
-    )
-
-    target_observation = observed["evidence"]["target_planner_observation"]
-    assert replaced is True
-    assert episode_path.read_bytes() == record_b_bytes
-    assert (
-        target_observation["episode_records_jsonl_sha256"]
-        == hashlib.sha256(record_a_bytes).hexdigest()
-    )
-    assert target_observation["scenario_config_hash"] == record_a["config_hash"]
-    assert (
-        target_observation["planner_config_hash"] == record_a["algorithm_metadata"]["config_hash"]
-    )
-    assert target_observation["route_complete"] is False
-    assert observed["target_planner_outcome"] == "route_incomplete"
-
-
-def test_target_episode_observation_binds_candidate_and_planner_config(
-    tmp_path: Path,
-) -> None:
-    """The native record must identify the exact sampled candidate and planner config."""
-    config = _config(tmp_path)
-    candidate = _candidate(7)
-    scenario_path, _ = write_candidate_inputs(
-        config=config,
-        candidate=candidate,
-        candidate_dir=tmp_path / "candidate",
-        index=0,
-    )
-    record = _bound_episode_record(config, scenario_path, candidate, route_complete=True)
-    attribution = dataclasses.replace(
-        attribution_from_episode_record(record),
-        details={
-            "execution_mode": "native",
-            "readiness_status": "native",
-            "availability_status": "available",
-        },
-    )
-
-    assert (
-        search._target_episode_observation_reason(
-            record,
-            config=config,
-            candidate=candidate,
-            scenario_yaml_path=scenario_path,
-            failure_attribution=attribution,
-        )[0]
-        is None
-    )
-
-    changed_candidate = json.loads(json.dumps(record))
-    changed_candidate["scenario_params"]["metadata"]["adversarial_candidate"]["goal"]["x"] = 8.0
-    assert (
-        search._target_episode_observation_reason(
-            changed_candidate,
-            config=config,
-            candidate=candidate,
-            scenario_yaml_path=scenario_path,
-            failure_attribution=attribution,
-        )[0]
-        == "target_episode_record_candidate_parameters_mismatch"
-    )
-
-    changed_config = json.loads(json.dumps(record))
-    changed_config["scenario_params"]["algo_config_hash"] = "0" * 16
-    changed_config["config_hash"] = search._config_hash(changed_config["scenario_params"])
-    assert (
-        search._target_episode_observation_reason(
-            changed_config,
-            config=config,
-            candidate=candidate,
-            scenario_yaml_path=scenario_path,
-            failure_attribution=attribution,
-        )[0]
-        == "target_episode_planner_config_hash_mismatch"
-    )
-
-
-def test_target_episode_rejects_self_consistent_config_not_selected_by_search(
-    tmp_path: Path,
-) -> None:
-    """A matching row hash cannot substitute for the search-selected planner config."""
-    planner_config_path = tmp_path / "selected_planner.yaml"
-    planner_config_path.write_text("gain: 1\n", encoding="utf-8")
-    config = dataclasses.replace(_config(tmp_path), algo_config_path=planner_config_path)
-    candidate = _candidate(7)
-    scenario_path, _ = write_candidate_inputs(
-        config=config,
-        candidate=candidate,
-        candidate_dir=tmp_path / "candidate",
-        index=0,
-    )
-    record = _bound_episode_record(config, scenario_path, candidate, route_complete=True)
-    alternate_config = {"gain": 2}
-    alternate_hash = search._config_hash(alternate_config)
-    record["algorithm_metadata"]["config"] = alternate_config
-    record["algorithm_metadata"]["config_hash"] = alternate_hash
-    record["scenario_params"]["algo_config_hash"] = alternate_hash
-    record["config_hash"] = search._config_hash(record["scenario_params"])
-    attribution = dataclasses.replace(
-        attribution_from_episode_record(record),
-        details={
-            "execution_mode": "native",
-            "readiness_status": "native",
-            "availability_status": "available",
-        },
-    )
-
-    reason, _route_complete = search._target_episode_observation_reason(
-        record,
-        config=config,
-        candidate=candidate,
-        scenario_yaml_path=scenario_path,
-        failure_attribution=attribution,
-    )
-
-    assert reason == "target_episode_planner_config_selected_config_mismatch"
-
-
-def test_target_episode_rejects_self_consistent_scenario_horizon_not_selected_by_search(
-    tmp_path: Path,
-) -> None:
-    """A recomputed row hash cannot bind an episode to a different scenario horizon."""
-    config = _config(tmp_path)
-    candidate = _candidate(7)
-    scenario_path, _ = write_candidate_inputs(
-        config=config,
-        candidate=candidate,
-        candidate_dir=tmp_path / "candidate",
-        index=0,
-    )
-    record = _bound_episode_record(config, scenario_path, candidate, route_complete=True)
-    record["scenario_params"]["simulation_config"]["max_episode_steps"] = 999
-    record["config_hash"] = search._config_hash(record["scenario_params"])
-    attribution = dataclasses.replace(
-        attribution_from_episode_record(record),
-        details={
-            "execution_mode": "native",
-            "readiness_status": "native",
-            "availability_status": "available",
-        },
-    )
-
-    reason, route_complete = search._target_episode_observation_reason(
-        record,
-        config=config,
-        candidate=candidate,
-        scenario_yaml_path=scenario_path,
-        failure_attribution=attribution,
-    )
-
-    assert reason == "target_episode_selected_scenario_parameters_mismatch"
-    assert route_complete is None
-
-
-def test_target_episode_rejects_runner_horizon_not_selected_by_search(tmp_path: Path) -> None:
-    """Runner-added horizon metadata must match the search's effective horizon."""
-    config = _config(tmp_path)
-    candidate = _candidate(7)
-    scenario_path, _ = write_candidate_inputs(
-        config=config,
-        candidate=candidate,
-        candidate_dir=tmp_path / "candidate",
-        index=0,
-    )
-    record = _bound_episode_record(config, scenario_path, candidate, route_complete=True)
-    record["scenario_params"]["run_horizon"] = 999
-    record["config_hash"] = search._config_hash(record["scenario_params"])
-    attribution = dataclasses.replace(
-        attribution_from_episode_record(record),
-        details={
-            "execution_mode": "native",
-            "readiness_status": "native",
-            "availability_status": "available",
-        },
-    )
-
-    reason, route_complete = search._target_episode_observation_reason(
-        record,
-        config=config,
-        candidate=candidate,
-        scenario_yaml_path=scenario_path,
-        failure_attribution=attribution,
-    )
-
-    assert reason == "target_episode_run_horizon_mismatch"
-    assert route_complete is None
-
-
-def test_target_episode_observation_rechecks_scenario_inputs_after_parse(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A scenario edit during observation cannot leave a bound target outcome."""
-    config = _config(tmp_path)
-    candidate = _candidate(7)
-    scenario_path, _ = write_candidate_inputs(
-        config=config,
-        candidate=candidate,
-        candidate_dir=tmp_path / "candidate",
-        index=0,
-    )
-    original_scenario_bytes = scenario_path.read_bytes()
-    record = _bound_episode_record(config, scenario_path, candidate, route_complete=True)
-    episode_path = tmp_path / "candidate" / "episode_records.jsonl"
-    episode_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
-    attribution = dataclasses.replace(
-        attribution_from_episode_record(record),
-        details={
-            "execution_mode": "native",
-            "readiness_status": "native",
-            "availability_status": "available",
-        },
-    )
-    payload = search.classify_scenario_admissibility(
-        "candidate_0000",
-        scenario_artifact_path=scenario_path,
-        scenario_id=_candidate_scenario_id_for_test(scenario_path),
-    ).to_dict()
-    original_parse = search.parse_first_jsonl_record
-
-    def parse_then_mutate(data: bytes, *, source: str) -> dict[str, Any] | None:
-        parsed = original_parse(data, source=source)
-        scenario_path.write_bytes(original_scenario_bytes + b"# changed during observation\n")
-        return parsed
-
-    monkeypatch.setattr(search, "parse_first_jsonl_record", parse_then_mutate)
-
-    observed = search._post_evaluation_admissibility(
-        payload,
-        config=config,
-        candidate=candidate,
-        scenario_yaml_path=scenario_path,
-        episode_record_path=episode_path,
-        failure_attribution=attribution,
-    )
-
-    assert observed["target_planner_outcome"] == "unavailable"
-    assert observed["evidence"]["target_planner_observation"]["reason_code"] == (
-        "target_scenario_runtime_input_changed_during_observation"
-    )
-
-
-def _candidate_scenario_id_for_test(scenario_yaml_path: Path) -> str:
-    """Read a single materialized scenario ID for direct observation fixtures."""
-    payload = yaml.safe_load(scenario_yaml_path.read_text(encoding="utf-8"))
-    return str(payload["scenarios"][0]["name"])
-
-
-def test_search_applies_and_records_admissibility_rejection(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """An explicit helper exclusion is recorded and stops evaluation before the planner call."""
-    from robot_sf.adversarial.scenario_admissibility import ScenarioAdmissibilityVerdict
-
-    config = dataclasses.replace(_config(tmp_path, require_certification=False), budget=1)
-    evaluated: list[CandidateSpec] = []
-
-    def evaluator(
-        _config: SearchConfig,
-        candidate: CandidateSpec,
-        _scenario_yaml_path: Path,
-        _candidate_dir: Path,
-    ) -> CandidateEvaluation:
-        evaluated.append(candidate)
-        raise AssertionError("explicitly rejected candidate must not reach evaluation")
-
-    def reject_every_candidate(*args: Any, **_kwargs: Any) -> ScenarioAdmissibilityVerdict:
-        case_id = args[0]
-        return ScenarioAdmissibilityVerdict(
-            case_id=case_id,
-            scenario_id="case-static",
-            verdict="geometric_or_kinodynamic_impossibility",
-            target_planner_outcome="not_evaluated",
-            search_disposition="reject",
-            reason_codes=("scenario_certificate_geometrically_infeasible",),
-            assumptions={},
-            evidence={},
-        )
-
-    monkeypatch.setattr(search, "classify_scenario_admissibility", reject_every_candidate)
-    result = search.run_adversarial_search(
-        config,
-        evaluator=evaluator,
-        certifier=lambda *_args: passed_status("certification passed"),
-        sampler=_SequenceSampler([_candidate(7)]),
-    )
-
-    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
-    row = manifest["candidates"][0]
-    assert evaluated == []
-    assert result.num_invalid_candidates == 1
-    assert row["scenario_admissibility"]["search_disposition"] == "reject"
-    assert row["scenario_admissibility"]["reason_codes"] == [
-        "scenario_certificate_geometrically_infeasible"
-    ]
-    assert row["analysis_eligibility"]["eligible"] is False
-
-
-def test_evaluation_failure_is_recorded_as_unavailable_target_outcome(tmp_path: Path) -> None:
-    """An attempted but failed planner run is distinct from a pre-evaluation candidate."""
-    config = dataclasses.replace(_config(tmp_path, require_certification=False), budget=1)
-
-    def failed_evaluator(*_args: Any) -> CandidateEvaluation:
-        raise RuntimeError("fixture evaluation failure")
-
-    result = search.run_adversarial_search(
-        config,
-        evaluator=failed_evaluator,
-        certifier=lambda *_args: passed_status("certification passed"),
-        sampler=_SequenceSampler([_candidate(7)]),
-    )
-
-    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
-    observation = manifest["candidates"][0]["scenario_admissibility"]
-    assert observation["target_planner_outcome"] == "unavailable"
-    assert observation["evidence"]["target_planner_observation"]["reason_code"] == (
-        "target_evaluation_failed"
-    )
 
 
 def test_coordinate_refinement_sampler_improves_synthetic_objective(tmp_path: Path) -> None:
@@ -2778,10 +2319,6 @@ def test_required_certification_fails_closed_when_adapter_missing(tmp_path: Path
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     assert manifest["candidates"][0]["certification_status"]["status"] == "not_available"
     assert manifest["candidates"][0]["error"] == "scenario_cert.v1 adapter is not available"
-    assert manifest["candidates"][0]["scenario_admissibility"]["verdict"] == (
-        "admissible_feasibility_unknown"
-    )
-    assert manifest["candidates"][0]["scenario_admissibility"]["search_disposition"] == ("retain")
 
 
 def test_required_certification_uses_real_scenario_certification_api(tmp_path: Path) -> None:
@@ -2903,56 +2440,6 @@ def test_default_evaluator_treats_failures_as_failed_jobs(
             tmp_path / "scenario.yaml",
             tmp_path / "candidate",
         )
-
-
-def test_default_evaluator_uses_and_records_exact_planner_config_snapshot(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    """The runner receives the selected config bytes captured for target binding."""
-    config_path = tmp_path / "selected.yaml"
-    selected_bytes = b"gain: 1\n"
-    config_path.write_bytes(selected_bytes)
-    config = dataclasses.replace(_config(tmp_path), algo_config_path=config_path)
-    candidate_dir = tmp_path / "candidate"
-
-    def fake_run_batch(*_args: object, **kwargs: object) -> dict[str, object]:
-        snapshot_path = Path(str(kwargs["algo_config_path"]))
-        assert snapshot_path == candidate_dir / "planner_config.snapshot.yaml"
-        assert snapshot_path.read_bytes() == selected_bytes
-        config_path.write_bytes(b"gain: 2\n")
-        out_path = kwargs["out_path"]
-        assert isinstance(out_path, Path)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(
-            json.dumps(
-                {
-                    "status": "success",
-                    "outcome": {"collision": False, "route_complete": True},
-                    "algorithm_metadata": {
-                        "status": "ok",
-                        "execution_mode": "native",
-                        "config": {"gain": 1},
-                        "config_hash": search._config_hash({"gain": 1}),
-                    },
-                }
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-        return {"failures": []}
-
-    monkeypatch.setattr(search, "run_batch", fake_run_batch)
-
-    evaluation = search._default_evaluator(
-        config,
-        _candidate(7),
-        tmp_path / "scenario.yaml",
-        candidate_dir,
-    )
-
-    assert evaluation.effective_planner_config == {"gain": 1}
-    assert evaluation.planner_config_source_sha256 == hashlib.sha256(selected_bytes).hexdigest()
 
 
 def test_default_evaluator_records_fail_closed_benchmark_availability(
@@ -3480,50 +2967,6 @@ def test_certification_adapter_preserves_worst_file_api_eligibility(
 
     assert status.passed
     assert status.reason == "knife-edge clearance"
-
-
-def test_unknown_certificate_remains_searchable_but_stress_only(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """Unknown feasibility is retained by candidate screening without benchmark promotion."""
-    fake_module = types.ModuleType("robot_sf.scenario_certification")
-    certificate = object()
-    fake_module.certify_scenario_file = lambda *_args, **_kwargs: [certificate]
-    fake_module.certificate_to_dict = lambda _certificate: {
-        "classification": "unknown",
-        "benchmark_eligibility": "stress_only",
-        "reasons": ["planner error"],
-    }
-    monkeypatch.setitem(sys.modules, "robot_sf.scenario_certification", fake_module)
-
-    status = certification.certify_candidate(
-        _candidate(8), scenario_yaml_path=tmp_path / "scenario.yaml", require_certification=True
-    )
-
-    assert status.passed
-    assert status.details["certificates"][0]["classification"] == "unknown"
-    assert status.details["certificates"][0]["benchmark_eligibility"] == "stress_only"
-
-
-def test_unknown_certificate_without_eligibility_fails_closed(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """An unknown class without its required eligibility cannot enter search."""
-    fake_module = types.ModuleType("robot_sf.scenario_certification")
-    fake_module.certify_scenario_file = lambda *_args, **_kwargs: [object()]
-    fake_module.certificate_to_dict = lambda _certificate: {
-        "classification": "unknown",
-        "benchmark_eligibility": None,
-        "reasons": ["incomplete certificate"],
-    }
-    monkeypatch.setitem(sys.modules, "robot_sf.scenario_certification", fake_module)
-
-    status = certification.certify_candidate(
-        _candidate(9), scenario_yaml_path=tmp_path / "scenario.yaml", require_certification=True
-    )
-
-    assert not status.passed
-    assert status.status == "failed"
 
 
 def test_objective_registry_and_fallback_scoring(

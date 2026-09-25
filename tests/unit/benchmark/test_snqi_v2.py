@@ -627,6 +627,47 @@ def test_spawn_validity_rejected_before_score_or_calibration(entrypoint, spawn_v
     assert "snqi_v2" not in rows[0]["metrics"]
 
 
+@pytest.mark.parametrize("entrypoint", ["score", "calibration"])
+@pytest.mark.parametrize(
+    "signal", ["reset_overlap", "respawn_overlap_collisions", "reset_clearance_mismatch"]
+)
+def test_spawn_validity_rejects_producer_inconsistent_valid_flag(entrypoint, signal):
+    """An invalid reset/respawn cannot be relabelled valid after a collision."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+    from robot_sf.benchmark.spawn_validity import build_spawn_validity
+
+    rows, kwargs = calibration_records()
+    row = rows[0]
+    row["status"] = "collision"
+    row["metrics"].update(success=0, total_collision_count=1)
+    block = build_spawn_validity({"overlap": signal == "reset_overlap"}, [])
+    if signal == "respawn_overlap_collisions":
+        block[signal] = [{"ped_row": 0, "respawn_time_s": 0.0, "collision_time_s": 0.1}]
+    elif signal == "reset_clearance_mismatch":
+        block["reset_clearance"]["overlap"] = True
+    block.update(invalid_run=False, invalid_reason=None)
+    row["spawn_validity"] = block
+    with pytest.raises(ValueError, match="spawn_validity"):
+        if entrypoint == "score":
+            score_episode(row, fixture_spec())
+        else:
+            derive_calibration_anchors(rows, **kwargs)
+
+
+def test_spawn_validity_preserves_producer_completed_route_exception():
+    """The producer permits a completed route despite reset-overlap telemetry."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+    from robot_sf.benchmark.spawn_validity import build_spawn_validity
+
+    rows, kwargs = calibration_records()
+    expected_score = score_episode(rows[0], fixture_spec())
+    expected_anchors = derive_calibration_anchors(rows, **kwargs)
+    for row in rows:
+        row["spawn_validity"] = build_spawn_validity({"overlap": True}, [], route_complete=True)
+    assert score_episode(rows[0], fixture_spec())["metrics"] == expected_score["metrics"]
+    assert derive_calibration_anchors(rows, **kwargs) == expected_anchors
+
+
 def test_spawn_validity_accepts_absent_legacy_and_valid_producer_block():
     """Legacy absence and canonical valid blocks retain the same score and anchors."""
     from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors

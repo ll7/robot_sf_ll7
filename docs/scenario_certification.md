@@ -177,10 +177,15 @@ oracle, predicate contract, and named execution/replay records through
 `scenario_artifact_path` with the evidence. The output contract is
 [`scenario_admissibility.v1`](../robot_sf/benchmark/schemas/scenario_admissibility.v1.json),
 and `partition_candidates_by_admissibility(...)` retains cases by verdict for search
-stratification. `run_map_elites` accepts an `admissibility_precheck`; it records each verdict next to
-the proposed candidate, skips only explicit exclusions before evaluation, and continues unknown,
-missing, malformed, or unavailable verdicts to the evaluator. This keeps feasibility records
-separate from planner-evaluation results and does not alter the benchmark denominator.
+stratification. The `run_adversarial_search` path stores one verdict in each candidate's
+`certification_status.details.scenario_admissibility` field in its search manifest. It reuses the
+certificate already produced for that candidate and lets the adapter bind it to the selected
+scenario bytes and runtime-referenced map/route inputs. Missing, mismatched, or unreadable evidence
+remains an unknown retained row. `run_map_elites` accepts an `admissibility_precheck`; it records
+each verdict next to the proposed candidate, skips only explicit exclusions before evaluation, and
+continues unknown, missing, malformed, unavailable, or raised-precheck outcomes to the evaluator.
+This keeps feasibility records separate from planner-evaluation results and does not alter the
+benchmark denominator.
 New QD comparison artifacts use `adversarial_qd_comparison.v1`: equal proposal slots are reported
 separately from each method's actual evaluator-call count. Historical `adversarial_qd_archive.v1`
 comparison fixtures remain unchanged.

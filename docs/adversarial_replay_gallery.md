@@ -88,10 +88,11 @@ ignored `output/`; retain only a compact checksummed receipt when a durable hand
 The selector requires an analysis-eligible row and a passed `scenario_cert.v1` receipt containing
 exactly one certificate that validates against the canonical schema, matches the candidate
 scenario's name/id, and has complete route accounting (`checks.route_count` equals the non-empty
-`route_certificates` list). A `valid` or `hard_but_solvable` classification is admissible only when
-the certificate also marks every route benchmark-eligible. Missing, failed, malformed, incomplete,
-ambiguous, or scenario-mismatched certificates remain in candidate accounting and do not establish
-admissibility. The selector also requires a finite objective, one unambiguous source episode, a
+`route_certificates` list). Top-level eligibility, route eligibility, and the all-routes check must
+agree with their classifications; a `valid` or `hard_but_solvable` classification is admissible
+only when every route is benchmark-eligible. Missing, failed, malformed, incomplete, ambiguous, or
+scenario-mismatched certificates remain in candidate accounting and do not establish admissibility.
+The selector also requires a finite objective, one unambiguous source episode, a
 one-scenario YAML input, matching scenario and seed identity, candidate parameters matching the
 generated scenario metadata, and a recomputed effective-scenario hash matching the search manifest.
 The source failure attribution must agree

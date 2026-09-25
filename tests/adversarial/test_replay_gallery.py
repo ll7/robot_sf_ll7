@@ -1878,6 +1878,12 @@ def test_gallery_accounts_invalid_and_failed_candidates_without_selecting_them(
             "certificate_incomplete",
         ),
         (
+            lambda receipt: receipt["details"]["certificates"][0].update(
+                benchmark_eligibility="excluded"
+            ),
+            "certificate_eligibility_inconsistent",
+        ),
+        (
             lambda receipt: receipt["details"]["certificates"][0].pop("evidence"),
             "certificate_structurally_invalid",
         ),
@@ -1892,6 +1898,7 @@ def test_gallery_accounts_invalid_and_failed_candidates_without_selecting_them(
         "invalid-status-schema",
         "wrong-id",
         "incomplete",
+        "top-level-eligibility-mismatch",
         "invalid-certificate-schema",
         "missing-certificate",
     ),

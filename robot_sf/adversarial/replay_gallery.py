@@ -45,7 +45,21 @@ GALLERY_SCHEMA_VERSION = "adversarial-replay-gallery.v1"
 SEARCH_MANIFEST_SCHEMA_VERSION = "adversarial-search-manifest.v1"
 _REVISION_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 _MAX_PED_TRACK_SPEED_MPS = 12.0
-_ADMISSIBLE_CLASSIFICATIONS = frozenset({"valid", "hard_but_solvable"})
+_CERTIFICATE_ELIGIBILITY_BY_CLASSIFICATION = {
+    "valid": "eligible",
+    "hard_but_solvable": "eligible",
+    "knife_edge": "stress_only",
+    "invalid": "excluded",
+    "geometrically_infeasible": "excluded",
+    "kinodynamically_infeasible": "excluded",
+    "dynamically_overconstrained": "excluded",
+}
+_ELIGIBILITY_SEVERITY = {"eligible": 0, "stress_only": 1, "excluded": 2}
+_ADMISSIBLE_CLASSIFICATIONS = frozenset(
+    classification
+    for classification, eligibility in _CERTIFICATE_ELIGIBILITY_BY_CLASSIFICATION.items()
+    if eligibility == "eligible"
+)
 _CANONICAL_OUTCOME_FIELDS = (
     "route_complete",
     "collision",
@@ -2851,6 +2865,8 @@ def _validated_scenario_certificate(
         return None, "certificate_scenario_id_mismatch"
     if not _scenario_certificate_is_complete(certificate):
         return None, "certificate_incomplete"
+    if not _scenario_certificate_eligibility_is_consistent(certificate):
+        return None, "certificate_eligibility_inconsistent"
     return certificate, None
 
 
@@ -2878,7 +2894,7 @@ def _canonical_scenario_certificate(payload: Any) -> tuple[dict[str, Any] | None
 
 
 def _scenario_certificate_is_complete(certificate: dict[str, Any]) -> bool:
-    """Check canonical route accounting and eligibility fields omitted from the JSON Schema."""
+    """Check canonical route accounting fields omitted from the JSON Schema."""
     checks = certificate.get("checks")
     routes = certificate.get("route_certificates")
     route_count = checks.get("route_count") if isinstance(checks, dict) else None
@@ -2891,13 +2907,37 @@ def _scenario_certificate_is_complete(certificate: dict[str, Any]) -> bool:
         or not isinstance(checks.get("all_routes_benchmark_eligible"), bool)
     ):
         return False
-    classification = str(certificate.get("classification", "")).strip().lower()
-    if classification in _ADMISSIBLE_CLASSIFICATIONS and (
-        checks.get("all_routes_benchmark_eligible") is not True
-        or any(route.get("benchmark_eligibility") != "eligible" for route in routes)
+    return True
+
+
+def _scenario_certificate_eligibility_is_consistent(certificate: dict[str, Any]) -> bool:
+    """Require class and route eligibility to agree with the canonical certificate contract."""
+    classification = certificate.get("classification")
+    certificate_eligibility = _CERTIFICATE_ELIGIBILITY_BY_CLASSIFICATION.get(classification)
+    routes = certificate.get("route_certificates")
+    checks = certificate.get("checks")
+    if (
+        certificate_eligibility is None
+        or certificate.get("benchmark_eligibility") != certificate_eligibility
+        or not isinstance(routes, list)
+        or not isinstance(checks, dict)
     ):
         return False
-    return True
+    route_eligibilities = []
+    for route in routes:
+        route_classification = route.get("classification")
+        route_eligibility = _CERTIFICATE_ELIGIBILITY_BY_CLASSIFICATION.get(route_classification)
+        if route_eligibility is None or route.get("benchmark_eligibility") != route_eligibility:
+            return False
+        route_eligibilities.append(route_eligibility)
+    if not route_eligibilities:
+        return False
+    worst_route_eligibility = max(route_eligibilities, key=_ELIGIBILITY_SEVERITY.__getitem__)
+    all_routes_eligible = all(eligibility == "eligible" for eligibility in route_eligibilities)
+    return (
+        certificate_eligibility == worst_route_eligibility
+        and checks.get("all_routes_benchmark_eligible") is all_routes_eligible
+    )
 
 
 def _certification_classification(payload: Any) -> str | None:

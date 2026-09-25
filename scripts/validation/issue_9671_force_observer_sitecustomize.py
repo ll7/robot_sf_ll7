@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
+from types import CodeType, ModuleType
 from typing import Any
 
 import numpy as np
@@ -27,11 +28,37 @@ SOURCE_MODULES = {
     SIM_FILE: "robot_sf.sim.simulator",
     RUNNER_FILE: "robot_sf.benchmark.map_runner.map_runner_episode",
 }
+TARGET_QUALNAMES = {
+    FORCE_FILE: ("PedRobotForce.__call__",),
+    SIM_FILE: ("Simulator.step_once", "PedSimulator.step_once"),
+    RUNNER_FILE: ("run_map_episode",),
+}
 FORCE_LINES = {"Simulator": 1699, "PedSimulator": 2087}
 
 
 class ObserverIdentityError(RuntimeError):
     """A force slot cannot be bound to a stable trace actor."""
+
+
+def _compiled_target_codes(source_root: Path, relative_path: str) -> dict[str, CodeType]:
+    """Retain target code objects compiled from verified on-disk source bytes."""
+    path = (source_root / relative_path).resolve(strict=True)
+    pending = [
+        compile(
+            path.read_bytes(), str(path), "exec", dont_inherit=True, optimize=sys.flags.optimize
+        )
+    ]
+    found: dict[str, CodeType] = {}
+    while pending:
+        code = pending.pop()
+        if code.co_qualname in TARGET_QUALNAMES[relative_path]:
+            if code.co_qualname in found:
+                raise ObserverIdentityError(f"duplicate frozen code object: {code.co_qualname}")
+            found[code.co_qualname] = code
+        pending.extend(value for value in code.co_consts if isinstance(value, CodeType))
+    if set(found) != set(TARGET_QUALNAMES[relative_path]):
+        raise ObserverIdentityError(f"missing frozen code object: {relative_path}")
+    return {f"{relative_path}:{name}": code for name, code in found.items()}
 
 
 def _vectors(value: Any, count: int | None = None) -> list[list[float]]:
@@ -120,11 +147,18 @@ def bind_episode(capture: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]
 class ForceObserver:
     """Trace frozen call/return events without calling the force component again."""
 
-    def __init__(self, output: Path, provenance: dict[str, Any], source_root: Path) -> None:
+    def __init__(
+        self,
+        output: Path,
+        provenance: dict[str, Any],
+        source_root: Path,
+        expected_codes: dict[str, CodeType],
+    ) -> None:
         """Keep one process/thread and one episode active at a time."""
         self.output = output
         self.provenance = provenance
         self.source_root = source_root.resolve(strict=True)
+        self.expected_codes = expected_codes
         self.verified_frames: set[Any] = set()
         self.pid = os.getpid()
         self.thread = threading.get_ident()
@@ -171,6 +205,22 @@ class ForceObserver:
             or frame.f_globals.get("__name__") != SOURCE_MODULES[relative_path]
         ):
             raise ObserverIdentityError("traced frame is outside pinned frozen source/module")
+        module = sys.modules.get(SOURCE_MODULES[relative_path])
+        if not isinstance(module, ModuleType) or frame.f_globals is not vars(module):
+            raise ObserverIdentityError("traced frame globals differ from loaded frozen module")
+        qualified = frame.f_code.co_qualname
+        if qualified not in TARGET_QUALNAMES[relative_path]:
+            raise ObserverIdentityError("unexpected function in frozen module")
+        owner: Any = module
+        for name in qualified.split("."):
+            owner = getattr(owner, name, None)
+            if owner is None:
+                raise ObserverIdentityError("frozen target function missing from module")
+        if frame.f_code is not getattr(owner, "__code__", None):
+            raise ObserverIdentityError("traced code object differs from frozen module function")
+        key = f"{relative_path}:{qualified}"
+        if frame.f_code != self.expected_codes.get(key):
+            raise ObserverIdentityError("traced code object differs from pinned source bytes")
         self.verified_frames.add(frame)
 
     def _episode_event(self, frame: Any, event: str, arg: Any) -> None:
@@ -328,6 +378,7 @@ def install_from_environment() -> ForceObserver | None:
     ).strip():
         raise ObserverIdentityError("frozen source tracked files are dirty")
     source_hashes = {}
+    expected_codes = {}
     for relative_path in SOURCE_MODULES:
         committed = subprocess.check_output(
             ["git", "-C", str(source), "show", f"{FROZEN_SOURCE}:{relative_path}"]
@@ -336,6 +387,7 @@ def install_from_environment() -> ForceObserver | None:
         if local != committed:
             raise ObserverIdentityError(f"frozen source bytes differ: {relative_path}")
         source_hashes[relative_path] = hashlib.sha256(local).hexdigest()
+        expected_codes.update(_compiled_target_codes(source, relative_path))
     config = Path(os.environ["ISSUE9671_DIAGNOSTIC_CONFIG_PATH"])
     config_sha = hashlib.sha256(config.read_bytes()).hexdigest()
     if config_sha != os.environ["ISSUE9671_DIAGNOSTIC_CONFIG_SHA256"]:
@@ -348,7 +400,7 @@ def install_from_environment() -> ForceObserver | None:
         "campaign_id": os.environ["ISSUE9671_CAMPAIGN_ID"],
         "pid": str(os.getpid()),
     }
-    observer = ForceObserver(Path(output), provenance, source)
+    observer = ForceObserver(Path(output), provenance, source, expected_codes)
     sys.settrace(observer)
     threading.settrace(observer)
     return observer

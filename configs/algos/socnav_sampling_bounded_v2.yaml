@@ -1,0 +1,17 @@
+# Opt-in bounded sampling heuristic for algo=socnav_sampling (issues #9727, #9746).
+#
+# The historical heuristic (legacy_v1) stays the default when this selector is
+# absent, so earlier campaigns replay bit-identically.
+#
+# bounded_v2 corrects three deviations from the reference sampling method
+# (SocNavBench SamplingPlanner): far-field-only repulsion cap, a robot-footprint
+# sweep along the driven arc instead of a centre line, and a speed cap at the
+# bound drive's maximum with occupancy scaling that a far goal can no longer
+# swamp. See robot_sf/planner/socnav_sampling_v2.py.
+#
+# The braking envelope is an enhancement the reference method does not have, and
+# pedestrian velocity prediction in the sweep is a heuristic beyond it, so both
+# stay off here; set either to true to opt in.
+socnav_sampling_version: bounded_v2
+sampling_braking_envelope: false
+sampling_pedestrian_prediction: false

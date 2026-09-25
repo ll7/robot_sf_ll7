@@ -423,6 +423,9 @@ _FAST_FILES = {
     "test_pedestrian_removal.py",
     "test_planner_unit_consistency.py",
     "test_replay_determinism.py",
+    # socnav_sampling bounded_v2 contracts (issues #9727, #9746) are deterministic
+    # planner checks on synthetic grids; the two episode replays stay marked slow.
+    "test_issue_9727_socnav_sampling.py",
     # Bounded robot-force contracts cover capture, post-hoc reconstruction, and
     # legacy compatibility; include them in PR changed-line coverage shards.
     "test_robot_attributable_force.py",

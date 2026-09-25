@@ -222,7 +222,8 @@ diagnostic artifact, not an original 0.0.7 release field.
    manifest must bind these row digests to the raw JSONL SHA and include checksums for every
    sidecar and the staged observer input. `check_issue_9671_force_bundle.py` implements a
    deterministic manifest writer and cold validator, requiring the independently pinned
-   manifest SHA-256. It binds the startup receipt, campaign manifest, producer JSONL/manifest,
+   manifest SHA-256. It binds the startup receipt, separately SHA-pinned reviewed private
+   launch-packet YAML, immutable submission-intent receipt, campaign manifest, producer JSONL/manifest,
    observer bytes, every sidecar byte stream and the 20 exact episode IDs. It checks complete
    step/actor/force series and the component sum, then compares every new outcome and recorded
    robot/pedestrian state/total-force vector against the SHA-pinned job 15758/15760 baseline.
@@ -242,8 +243,15 @@ diagnostic artifact, not an original 0.0.7 release field.
 For the later reviewed launch, the bundle gate takes a JSON `--spec` with `archive`,
 `baseline_report`, all four `baseline_traces`, `observer_path`, `observer_sha256`, and
 `campaigns.headon_group`/`campaigns.doorway`. Each campaign entry supplies its unchanged
-`config`, producer `campaign_manifest`, canonical `startup_receipt`, new `campaign_id` and
-`job_id`, raw `traces`, and `sidecar_dir`. The baseline report defaults to pinned SHA-256
+`config`, producer `campaign_manifest`, canonical `startup_receipt`, reviewed `launch_packet`
+and `launch_packet_sha256`, runtime `packet_sha256`, `submission_intent_receipt` and its
+`submission_intent_sha256`, reviewed `queue_id` and `submission_id`, new `campaign_id` and
+`job_id`, raw `traces`, and `sidecar_dir`. The intent receipt must derive its submission ID
+from queue ID, runtime packet digest, attempt, and nonce exactly as canonical private ops does;
+all three identities must match the producer startup receipt. The runtime packet digest is
+computed from script/config/route/submit arguments; it is **not** the YAML file SHA or proof
+that `startup.packet` names the YAML. Missing packet identity fails closed before candidate
+admission. The baseline report defaults to pinned SHA-256
 `e1637fa907d87f8a5456ee0f3367524e8e335b480c1d2bd5162215f08a3f7ffd`.
 Manifest artifact keys are campaign-relative, so a complete cold-retrieved tree can move to a
 new host path without changing its manifest bytes; files outside the campaign tree fail closed.

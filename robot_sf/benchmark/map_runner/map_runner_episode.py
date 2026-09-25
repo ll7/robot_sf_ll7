@@ -163,6 +163,7 @@ from robot_sf.benchmark.safety.safety_wrapper_runtime import (
     runtime_config_from_mapping,
     summarize_safety_wrapper_trace,
 )
+from robot_sf.benchmark.spawn_validity import build_spawn_validity
 from robot_sf.benchmark.synthetic_actuation import (
     SyntheticActuationController,
     SyntheticActuationProfile,
@@ -205,6 +206,7 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: TC001
 from robot_sf.planner.safety_shield import shield_metrics_from_stats
 from robot_sf.robot.safety_wrapper import DeadlockRecoveryMonitor  # noqa: TC001
+from robot_sf.sim.spawn_validation import reset_spawn_clearance
 
 # Policy builders are migrated incrementally; the episode boundary narrows the
 # legacy plain-dict metadata to ``AlgoMeta`` after enrichment.
@@ -1838,6 +1840,8 @@ class _EpisodeStepLoopResult:
     obstacle_force_law_metadata: dict[str, Any] | None
     sampler_capture: dict[str, Any] | None = None
     robot_force_samples: list[dict[str, Any]] = field(default_factory=list)
+    reset_spawn_clearance: dict[str, Any] | None = None
+    respawn_overlap_events: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -1895,6 +1899,34 @@ class _StepLoopState:
     simulator_obstacle_force_law_metadata: dict[str, Any] | None = None
     planner_obstacle_force_law_metadata: dict[str, Any] | None = None
     sampler_capture: dict[str, Any] | None = None
+    reset_spawn_clearance: dict[str, Any] | None = None
+    respawn_overlap_events: list[dict[str, Any]] = field(default_factory=list)
+
+
+def _read_reset_spawn_clearance(simulator: Any) -> dict[str, Any] | None:
+    """Measure reset clearance for the episode record (issue #9725).
+
+    Returns:
+        The clearance block, or ``None`` when the simulator does not expose the
+        robot, pedestrian, and map state it needs.
+    """
+    try:
+        return reset_spawn_clearance(simulator)
+    except (AttributeError, TypeError, ValueError, IndexError) as exc:
+        logger.warning("Reset spawn clearance unavailable: {err}", err=exc)
+        return None
+
+
+def _read_respawn_overlap_events(simulator: Any) -> list[dict[str, Any]]:
+    """Collect route-end respawns that could not avoid a robot footprint.
+
+    Returns:
+        Respawn-overlap events from every route behavior of the simulator.
+    """
+    events: list[dict[str, Any]] = []
+    for behavior in getattr(simulator, "peds_behaviors", None) or []:
+        events.extend(dict(event) for event in getattr(behavior, "respawn_overlap_events", []))
+    return events
 
 
 def _read_obstacle_force_law_metadata(env: Any) -> dict[str, Any] | None:
@@ -2169,6 +2201,7 @@ def _init_step_loop_state(
     state.trace_actor_ids = trace_actor_ids
     state.initial_goal_distance = initial_goal_distance
     state.sampler_capture = _read_sampler_capture(env)
+    state.reset_spawn_clearance = _read_reset_spawn_clearance(env.simulator)
     return state
 
 
@@ -3281,6 +3314,8 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
             planner_runtime_snapshot=state.planner_runtime_snapshot,
         ),
         sampler_capture=state.sampler_capture,
+        reset_spawn_clearance=state.reset_spawn_clearance,
+        respawn_overlap_events=list(state.respawn_overlap_events),
     )
 
 
@@ -3478,6 +3513,7 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
             args.planner_runtime.policy_fn
         )
         if getattr(env, "simulator", None) is not None:
+            state.respawn_overlap_events = _read_respawn_overlap_events(env.simulator)
             state.simulator_obstacle_force_law_metadata = _read_obstacle_force_law_metadata(env)
             state.map_def = env.simulator.map_def
             state.goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
@@ -4785,6 +4821,13 @@ def _finalize_assembled_record_provenance(  # noqa: PLR0913
     active_observation_level: str,
 ) -> None:
     """Attach provenance and episode-evidence metadata to an assembled record."""
+    # Spawn validity must be on the record before the event ledger is built, so a
+    # reset or respawn overlap marks the ledger ``invalid_run`` (issue #9725).
+    record["spawn_validity"] = build_spawn_validity(
+        loop_result.reset_spawn_clearance,
+        loop_result.respawn_overlap_events,
+        ped_collision_seen=loop_result.ped_collision_seen,
+    )
     _finalize_record_provenance(
         record,
         algo_meta=algo_meta,

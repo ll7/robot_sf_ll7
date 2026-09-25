@@ -988,7 +988,7 @@ maps:
     rule_ids: []
 - map_id: classic_head_on_corridor
   path: svg_maps/classic_head_on_corridor.svg
-  source_sha256: 89f439ac1f04561e0cd550c16be01a9674dc6fe80ba196f0dcc8f8f3c641f11b
+  source_sha256: d0dafb311e21e52035d837e463d157d63137d658f34d9364aeb4ef733665b109
   role: robot_runtime
   capabilities:
     robot_runtime: true
@@ -1168,7 +1168,7 @@ maps:
     rule_ids: []
 - map_id: classic_station_platform
   path: svg_maps/classic_station_platform.svg
-  source_sha256: 5f03421ac3d16d6008e92e00634fa9f3d0c896304ffd204691d79a3a115be156
+  source_sha256: 6a106e4e1a44ea927ffe1fa0089d865991d97c9ae85fe4a1608d5c8fd78f136c
   role: robot_runtime
   capabilities:
     robot_runtime: true

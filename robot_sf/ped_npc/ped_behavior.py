@@ -2,10 +2,12 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from math import cos, dist, sin
+from math import cos, dist, pi, sin
 from typing import TYPE_CHECKING, Protocol
 
 from loguru import logger
+from shapely.geometry import Point as ShapelyPoint
+from shapely.prepared import prep
 
 from robot_sf.common.types import RobotPose, Vec2D, Zone
 from robot_sf.nav.map_config import GlobalRoute, SinglePedestrianDefinition
@@ -159,6 +161,12 @@ class FollowRouteBehavior:
     reset_at_start: bool = False
     global_ped_offset: int = 0
     """Offset from this route-only state view to the simulator pedestrian rows."""
+    robot_pose_provider: Callable[[], list[RobotPose]] | None = None
+    """Current robot poses; respawns keep clear of these footprints (issue #9725)."""
+    robot_exclusion_radius: float = 0.0
+    """Centre distance (robot radius + ped radius + margin) respawns keep from each robot."""
+    respawn_overlap_events: list[dict] = field(default_factory=list)
+    """Respawns that could not avoid a robot footprint during the current episode."""
 
     def __post_init__(self):
         """
@@ -180,6 +188,30 @@ class FollowRouteBehavior:
                 self.goal_proximity_threshold,
                 group_pos,
             )
+
+    def set_robot_exclusion(
+        self,
+        provider: Callable[[], list[RobotPose]] | None,
+        exclusion_radius: float,
+    ) -> None:
+        """Bind the robot pose provider and footprint radius used to guard respawns."""
+        self.robot_pose_provider = provider
+        self.robot_exclusion_radius = float(exclusion_radius)
+
+    def _robot_exclusions(self) -> list["PreparedGeometry"]:
+        """Return prepared disks around the current robot centres (empty when unbound).
+
+        Returns:
+            One prepared disk of radius ``robot_exclusion_radius`` per robot.
+        """
+        if self.robot_pose_provider is None or self.robot_exclusion_radius <= 0.0:
+            return []
+        # Circumscribe the circle so the polygonal buffer never undercuts the radius.
+        radius = self.robot_exclusion_radius / cos(pi / 64.0)
+        exclusions = []
+        for (x, y), _theta in self.robot_pose_provider():
+            exclusions.append(prep(ShapelyPoint(float(x), float(y)).buffer(radius, quad_segs=16)))
+        return exclusions
 
     def step(self) -> None:
         """
@@ -213,6 +245,7 @@ class FollowRouteBehavior:
         However, if reset_at_start is True, all groups will be immediately respawned at
         the start.
         """
+        self.respawn_overlap_events = []
         if self.reset_at_start:
             for gid in self.navigators.keys():
                 self.respawn_group_at_start(gid)
@@ -222,8 +255,13 @@ class FollowRouteBehavior:
         Respawn a group at the start of its route.
 
         The group is repositioned to the spawn zone of its route (avoiding obstacles
-        when provided), and it is redirected to the first waypoint of its route.
+        when provided, and the current robot footprints when a robot pose provider is
+        bound), and it is redirected to the first waypoint of its route.
         The waypoint ID of its navigator is reset to 0.
+
+        The draws match the unguarded call, so a respawn that already cleared the robot
+        is unchanged. If the robot covers the whole spawn zone, the legacy sample is
+        used and the event is recorded in ``respawn_overlap_events`` (issue #9725).
 
         Parameters
         ----------
@@ -233,11 +271,39 @@ class FollowRouteBehavior:
         nav = self.navigators[gid]
         num_peds = self.groups.group_size(gid)
         spawn_zone = self.route_assignments[gid].spawn_zone
-        spawn_positions = sample_zone(
-            spawn_zone,
-            num_peds,
-            obstacle_polygons=self.obstacle_polygons,
-        )
+        robot_exclusions = self._robot_exclusions()
+        spawn_positions = None
+        if robot_exclusions:
+            try:
+                spawn_positions = sample_zone(
+                    spawn_zone,
+                    num_peds,
+                    obstacle_polygons=self.obstacle_polygons,
+                    exclusions=robot_exclusions,
+                )
+            except RuntimeError:
+                logger.warning(
+                    "Route group {gid} respawn could not avoid the robot footprint; "
+                    "using the unguarded spawn sample (issue #9725).",
+                    gid=gid,
+                )
+        if spawn_positions is None:
+            spawn_positions = sample_zone(
+                spawn_zone,
+                num_peds,
+                obstacle_polygons=self.obstacle_polygons,
+            )
+            if robot_exclusions and any(
+                zone.intersects(ShapelyPoint(pt))
+                for pt in spawn_positions
+                for zone in robot_exclusions
+            ):
+                self.respawn_overlap_events.append(
+                    {
+                        "group_id": int(gid),
+                        "positions": [list(map(float, p)) for p in spawn_positions],
+                    }
+                )
         self.groups.reposition_group(gid, spawn_positions)
         self.groups.redirect_group(gid, nav.waypoints[0])
         nav.waypoint_id = 0

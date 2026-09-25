@@ -657,7 +657,10 @@ def _derive_evaluations(
         "num_over_budget_critical_candidates": sum(
             item["observed_critical"] for item in over_budget
         ),
-        "num_missing_evaluations": max(0, expected_slots - actual_count),
+        "num_missing_evaluations": sum(item["status"] == "missing" for item in evaluations),
+        "num_missing_budgeted_evaluations": sum(
+            item["status"] == "missing" and item["within_budget"] for item in evaluations
+        ),
         "num_valid_candidates": len(budgeted) - budgeted_invalid - budgeted_failed,
         "num_invalid_candidates": budgeted_invalid,
         "num_failed_evaluations": budgeted_failed,
@@ -1095,7 +1098,10 @@ def _aggregate_group(
             "critical": critical,
             "observed_critical": observed_critical,
             "duplicate": duplicate,
-            "missing": sum(run["num_missing_evaluations"] for run in group_runs),
+            "missing_within_budget": sum(
+                run["num_missing_budgeted_evaluations"] for run in group_runs
+            ),
+            "missing_all_expected_slots": sum(run["num_missing_evaluations"] for run in group_runs),
             "duplicate_rate_observed": duplicate / attempted if attempted else None,
             "invalid_rate_observed": invalid / attempted if attempted else None,
         },
@@ -1374,14 +1380,14 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "## Per-run accounting",
         "",
-        "| Objective | Method | Seed | Budget | Best observed ≤B | Best eligible ≤B | Observed critical (all rows) | Eligible critical ≤B | First eligible critical eval | Over-budget rows | Valid / invalid / failed / scoreless / missing (≤B) | Duplicates ≤B | Execution modes | Availability | Pair status | Artifact |",
+        "| Objective | Method | Seed | Budget | Best observed ≤B | Best eligible ≤B | Observed critical (all rows) | Eligible critical ≤B | First eligible critical eval | Over-budget rows | Valid / invalid / failed / scoreless / missing ≤B / all expected | Duplicates ≤B | Execution modes | Availability | Pair status | Artifact |",
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|",
     ]
     for run in report["runs"]:
         accounting = (
             f"{run['num_valid_candidates']} / {run['num_invalid_candidates']} / "
             f"{run['num_failed_evaluations']} / {run['num_scoreless_valid_candidates']} / "
-            f"{run['num_missing_evaluations']}"
+            f"{run['num_missing_budgeted_evaluations']} / {run['num_missing_evaluations']}"
         )
         duplicate = (
             f"{run['num_duplicate_candidates']}/{run['num_budgeted_candidates']}"

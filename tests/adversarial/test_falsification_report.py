@@ -12,6 +12,7 @@ import pytest
 from robot_sf.adversarial.falsification_report import (
     REPORT_SCHEMA,
     build_convergence_report,
+    render_markdown,
     write_convergence_report,
 )
 from scripts.tools.report_falsification_search import main
@@ -296,6 +297,36 @@ def test_pairs_fail_closed_when_index_and_manifest_identity_disagree(
     assert reason in changed_run["index_identity_reason_codes"]
     assert comparison["matched_seed_count"] == 1
     assert reason in excluded["tpe_reason_codes"]
+
+
+def test_missing_rows_beyond_indexed_budget_are_not_counted_as_budgeted_missing(
+    tmp_path: Path,
+) -> None:
+    def increase_manifest_budget(manifest: dict[str, Any]) -> None:
+        manifest["config"]["budget"] = 5
+
+    report = _report_with_manifest(tmp_path, row_index=0, mutate=increase_manifest_budget)
+    random_1101 = next(
+        run for run in report["runs"] if run["sampler"] == "random" and run["seed"] == 1101
+    )
+    assert random_1101["expected_evaluations"] == 5
+    assert random_1101["num_missing_evaluations"] == 1
+    assert random_1101["num_missing_budgeted_evaluations"] == 0
+    assert random_1101["evaluations"][4]["status"] == "missing"
+    assert random_1101["evaluations"][4]["within_budget"] is False
+    assert "manifest_budget_mismatch" in random_1101["comparison_ineligibility_reason_codes"]
+
+    random_aggregate = next(
+        aggregate
+        for aggregate in report["aggregates"]
+        if aggregate["sampler"] == "random" and aggregate["budget"] == 4
+    )
+    assert random_aggregate["candidate_accounting"]["missing_within_budget"] == 0
+    assert random_aggregate["candidate_accounting"]["missing_all_expected_slots"] == 1
+    accounting_row = next(
+        line for line in render_markdown(report).splitlines() if "| Random | 1101 |" in line
+    )
+    assert "| 2 / 1 / 1 / 0 / 0 / 1 |" in accounting_row
 
 
 @pytest.mark.parametrize("eligibility_reason", ["ineligible", "degraded"])

@@ -30,7 +30,10 @@ critical counts, aggregates, or Random/TPE deltas. The current search runner's l
 that legacy value and emits a warning when it differs from row-derived full-manifest accounting.
 Invalid, failed, scoreless, duplicate, missing, fallback, degraded, analysis-ineligible, and
 over-budget attempts remain represented in the machine-readable output. Missing manifest rows are
-shown as unavailable runs with their expected budget rather than silently removed.
+shown as unavailable runs with their expected budget rather than silently removed. Per-run and
+aggregate accounting distinguish missing evaluations inside the comparison-indexed budget from all
+missing slots across the larger of the comparison and manifest budgets; an index/manifest budget
+mismatch therefore cannot inflate the within-budget missing count.
 
 Search curves maximize the objective recorded by the runner and carry the prior best score across
 invalid, failed, or scoreless attempts. Solid curves summarize only candidates with explicit

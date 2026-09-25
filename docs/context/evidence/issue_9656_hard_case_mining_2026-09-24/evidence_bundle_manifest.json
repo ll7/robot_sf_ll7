@@ -1,10 +1,10 @@
 {
   "schema_version": "evidence_bundle.v1",
-  "created_at_utc": "2026-09-25T04:37:52Z",
+  "created_at_utc": "2026-09-25T04:55:42Z",
   "bundle_name": "issue_9656_hard_case_mining_2026-09-24",
   "source_root": "issue-9656-evidence-stage",
-  "command": "uv run python scripts/tools/materialize_benchmark_hard_cases.py --summary \"${ISSUE9656_LOCAL_ROOT}/showcase_topk15_latest9662/showcase_summary.json\" --campaign-root \"${ISSUE9656_LOCAL_ROOT}/showcase_topk15_latest9662/input/extracted-64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle/payload\" --bundle \"${ISSUE9656_LOCAL_ROOT}/showcase_topk15_latest9662/input/cache/bundle-64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90.tar.gz\" --matrix configs/scenarios/classic_interactions_francis2023.yaml --out-dir \"${ISSUE9656_LOCAL_ROOT}/materialized_head_634c2f7_no_replay_v3\" --resume-from \"${ISSUE9656_LOCAL_ROOT}/materialized_final_provenance_fix/manifest.json\" --replay-limit 0",
-  "commit": "634c2f7a453fbf377a59fa7c4b9391391a0a0773",
+  "command": "uv run python scripts/tools/materialize_benchmark_hard_cases.py --summary \"${ISSUE9656_LOCAL_ROOT}/showcase_topk15_latest9662/showcase_summary.json\" --campaign-root \"${ISSUE9656_LOCAL_ROOT}/showcase_topk15_latest9662/input/extracted-64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle/payload\" --bundle \"${ISSUE9656_LOCAL_ROOT}/showcase_topk15_latest9662/input/cache/bundle-64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90.tar.gz\" --matrix configs/scenarios/classic_interactions_francis2023.yaml --out-dir \"${ISSUE9656_LOCAL_ROOT}/materialized_head_e58be7b_no_replay\" --resume-from \"${ISSUE9656_LOCAL_ROOT}/materialized_final_provenance_fix/manifest.json\" --replay-limit 0",
+  "commit": "e58be7bd141be58ac3bbd99658fc1665b8bcc717",
   "claim_boundary": "diagnostic_only: historical simulator records and four finite replays; no planner safety, benchmark generalization, or real-world safety claim",
   "policy": {
     "large_raw_artifacts": "excluded",
@@ -13,27 +13,27 @@
   },
   "totals": {
     "file_count": 3,
-    "total_bytes": 249622
+    "total_bytes": 250304
   },
   "files": [
     {
       "path": "report.md",
-      "size_bytes": 8815,
-      "sha256": "8440885fabd0114da0c5d2114a085921d969cabcca9c093fc0a2f38e6f6709df",
+      "size_bytes": 9220,
+      "sha256": "1222d974618cc5f1463a488bfcaea2e59bece91cd932b567e7c9226fe8c6fabd",
       "kind": "reports",
       "location": "docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/payload/report.md"
     },
     {
       "path": "summary.json",
-      "size_bytes": 123032,
-      "sha256": "45f00bf6fe63e273b17873a5290a08e4b0f5922c2ff847ee454d9f5d88f7db89",
+      "size_bytes": 123309,
+      "sha256": "4625232b8880751e3b867440ab648ea61c89df7e1729499d18571483e46156ea",
       "kind": "aggregates",
       "location": "docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/payload/summary.json"
     },
     {
       "path": "current_head_no_replay_manifest.json",
       "size_bytes": 117775,
-      "sha256": "9faad12ef2647e7674b40bc70d7b693c06c73be02eeaf62880fdce3113b726ee",
+      "sha256": "b3e13b38e208500b976cc0452fdd7cebf011cd986f669e761c1366902205496e",
       "kind": "manifests",
       "location": "docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/payload/current_head_no_replay_manifest.json"
     }

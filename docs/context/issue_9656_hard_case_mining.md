@@ -38,8 +38,11 @@ second campaign. It preserves the selector's original execution revision
 `477f14c1b4b052ad407a34a71caace6618a75eeb`
 and summary SHA-256 `c2f0b4c0b85303e3547e4ce13f5676b45c886b6b9593a78a7a4d6016fdb39c1f`. The three
 selector source-file SHA-256 values are retained in the evidence summary and match the reachable
-snapshot at `0a5f73283b98279900797b75d20adf6d4676086b`; this verifies matching source files without
-rewriting the historical execution revision. Repeated selection at the same output path produced
+merged snapshot at `120c870d80daba4a06389f9df3c469a2f467da94`; this verifies matching source files
+without rewriting the historical execution revision. An earlier packet named local commit
+`0a5f73283b98279900797b75d20adf6d4676086b`, later found to exist only in a local backup ref; the
+current-head manifest supersedes that unavailable snapshot assertion and records the reachable
+equivalent. Repeated selection at the same output path produced
 the same summary hash and the same case IDs at another output path. The full analyzer subreport
 records absolute output paths, so running in a different directory changes that subreport's hashes.
 The materializer consumes the versioned JSON contract without copying or reranking the selector.
@@ -50,7 +53,10 @@ Reproduction commands and the machine-readable 36-case inventory are in the trac
 [bundle manifest](evidence/issue_9656_hard_case_mining_2026-09-24/evidence_bundle_manifest.json),
 and [checksums](evidence/issue_9656_hard_case_mining_2026-09-24/checksums.sha256). The original
 release and all source episode rows remain the durable raw evidence; extracted payloads, case
-JSON files, replay matrices/configs, and replay episode rows stay in ignored `output/` caches.
+JSON files, replay matrices/configs, and replay episode rows stay in ignored `output/` caches. The
+[current-head no-replay manifest](evidence/issue_9656_hard_case_mining_2026-09-24/payload/current_head_no_replay_manifest.json)
+records the reachable source snapshot, reuses four historical receipts with zero new attempts, and
+keeps their missing replay-environment identities classified as unavailable.
 Source cases can be rematerialized from the release. The summary retains hashes and metrics for the
 four replay rows, but not their raw bytes; verify those exact receipts only while the local cache is
 preserved. A later replay is a new evaluation, not a reconstruction of those bytes. On

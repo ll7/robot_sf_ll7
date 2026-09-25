@@ -3,7 +3,7 @@
 Current contract: [issue #9652](https://github.com/ll7/robot_sf_ll7/issues/9652). The
 versioned corpus API and CLI are the implementation surface for the planned #9653 loop; the
 initial fixture is the persisted [#9645 bounded pilot](https://github.com/ll7/robot_sf_ll7/issues/9645)
-and its separately replay-verified #1501 case.
+and its historical #1501 case, whose replay projections match but direct input binding is unknown.
 
 The versioned corpus in `robot_sf.adversarial.counterexample_corpus` stores
 admitted challenge cases, search-run provenance, admission attempts, and planner
@@ -16,7 +16,8 @@ and configuration; no stored discovery or failure record is rewritten.
 The following command uses the small checked-in #9645 test/evidence fixture. It
 exercises the import path; it is not the durable output of the bounded pilot.
 The fixture contains a zero-discovery search result and a separate
-historical #1501 collision that was replayed twice under one current revision.
+historical #1501 collision with two matching replay projections under one
+current revision.
 The importer records the pilot's 64 completed candidates and explicit zero
 discoveries, then applies the admission checks to the independently replayed
 historical case. It does not treat the pilot's successful candidates as newly
@@ -42,15 +43,16 @@ source-hash receipt with run metadata, and verifies each consumed payload file
 before admission. The corpus retains the outer manifest and checksum sidecar
 digests alongside the copied accounting evidence.
 
-The #1501 raw historical episode and original search manifest were not
-archived. The case therefore records the historical source revision as lineage,
-the manifest as unavailable, and the historical raw replay match as
-unverifiable. Its regenerated target and replay revisions match exactly; the
-selected event and metric projections agree across both runs and with the
-durable receipt. The persisted #9645 packet rewrites local paths in its bundled
-replay artifacts, so each replay receipt keeps the source digest before path
-normalization separate from the normalized bundle digest. The normalization
-receipt pins the allowed local-path rewrites.
+The #1501 original episode and search manifest were not archived. Its two
+regenerated rows and source sidecars have distinct run IDs, matching event and
+metric projections, and matching target/replay revisions. However, those rows
+predate direct runtime binding to the materialized scenario, route, and map
+bytes. The corpus labels their input binding `unknown_historical`; their planner
+status therefore remains `unknown`, even though the retained projections and
+sidecar custody verify. The persisted #9645 packet rewrites local paths in its
+bundled replay artifacts, so each replay receipt keeps the source digest before
+path normalization separate from the normalized bundle digest. The
+normalization receipt pins the allowed local-path rewrites.
 
 Dynamic feasibility for this case remains `admissible_feasibility_unknown`.
 The current `scenario_cert.v1` result is a static route certificate, not proof
@@ -138,6 +140,11 @@ to the case inputs and selected event/metric projection. Its `artifact_path` is 
 corpus root. The replay revision must exactly equal the target revision; the helper does not run a
 simulator.
 
+Admission receipts use v2 and bind their replay inventory one-to-one to the stored artifact
+receipts by path, digest, run ID, and selected event identity. Repeated artifacts require distinct
+run IDs and paths. Historical v1 admission receipts remain readable with their original claim
+boundary; they are not silently upgraded to direct input-bound evidence.
+
 ```python
 from robot_sf.adversarial.counterexample_corpus import (
     create_case_admission_replay_receipt,
@@ -182,14 +189,20 @@ artifact stored under the directory containing `corpus.json`. The public
 `create_planner_replay_receipt` helper builds the receipt from that stored file;
 it checks the case and seed, planner/config identity, source revision, outcomes,
 selected metrics, exact event identities, raw episode status, and the event
-ledger's `invalid_run` flag. A complete evaluation requires the same full Git
+ledger's `invalid_run` flag. V2 receipts also bind a unique run ID, the behavior-affecting scenario
+identity, exact route override bytes, and map plus registry bytes captured around environment
+configuration. The corpus separately retains the scenario file digest. If behavior-affecting
+inputs change during configuration, the row is marked unavailable for exact case binding. A
+complete evaluation requires the same full Git
 commit identifier in the evaluation, episode, event ledger, and receipt; a
 placeholder such as `unknown` is insufficient. Both append and status
 recomputation recheck the artifact checksum and projection. A changed or missing
 artifact makes the observation `unknown`; a digest alone is not accepted as
 episode evidence. The receipt also pins the case's materialized scenario and
-route input digests. The raw episode status must match the canonical
-`status_from_termination_reason` result for a supported termination reason;
+route input digests and compares the episode's captured identity against the case's scenario
+semantics and exact route, map, and registry bytes. Rehashing changed scenario semantics or
+route/map bytes does not make a stale episode row match. The raw episode status must match the
+canonical `status_from_termination_reason` result for a supported termination reason;
 unsupported or contradictory status/reason pairs remain `unknown`.
 
 Build the receipt after placing the one-row JSONL artifact below the corpus root:
@@ -226,7 +239,10 @@ being dropped or counted as a solve. Episodes with invalid/error status,
 `termination_reason=error`, or `invalid_run=true`, and receipts that do not bind
 raw status plus `invalid_run`, remain `unknown` rather than being counted as
 planner-specific failures. Older receipts missing those bindings remain
-loadable but recompute as `unknown`.
+loadable but recompute as `unknown`; historical rows with explicit
+`unknown_historical` input binding are visible but never count as solved or unsolved planner
+evidence. Dynamic feasibility remains a separate case-level verdict and is not inferred from
+planner status.
 Legacy complete evaluation rows without a replay receipt remain loadable and
 visible, but recomputation reports them as `unknown`. New complete rows cannot
 be appended without a receipt.
@@ -257,8 +273,9 @@ The slice contains a canonical scenario matrix, copied route overrides and map b
 a map registry when the scenario uses `map_id`, a planner configuration snapshot per case,
 a checksum manifest, and a replay command for each case. Export refuses to overwrite an existing
 directory and checks the stored scenario/route/map bytes against their recorded digests and
-map-aware effective scenario identity. Each case manifest preserves its source case ID
-and records an explicit identity mapping from the source effective-scenario
+map-aware effective scenario identity. Each case manifest preserves its source case ID, records
+`replay_input_binding_status` (including `unknown_historical` where runtime input hashes were not
+captured), and includes an explicit identity mapping from the source effective-scenario
 hash to the exported hash after `route_overrides_file` is normalized to the
 slice's `routes/` path. The exporter recomputes both identities and verifies the
 exported matrix against the mapping.

@@ -119,6 +119,38 @@ def parse_v2_json(raw: str | bytes) -> Any:
     return json.loads(raw, object_pairs_hook=_unique_object)
 
 
+class _UniqueYamlLoader(yaml.SafeLoader):
+    """Keep SafeLoader constructors while refusing ambiguous mapping keys."""
+
+    def construct_mapping(self, node: yaml.nodes.MappingNode, deep: bool = False) -> dict:
+        """Validate keys, including merge-expanded keys, before constructing a mapping.
+
+        Returns:
+            The unambiguous safe YAML mapping.
+        """
+        self.flatten_mapping(node)
+        keys = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in keys:
+                raise ValueError(f"duplicate YAML key: {key}")
+            keys.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
+def parse_v2_yaml(raw: str | bytes) -> Any:
+    """Load V2 family/acquisition YAML without last-wins mapping replacement.
+
+    Returns:
+        The decoded safe YAML value with unique keys at every nesting depth.
+    """
+    loader = _UniqueYamlLoader(raw)
+    try:
+        return loader.get_single_data()
+    finally:
+        loader.dispose()
+
+
 @dataclass(frozen=True)
 class SnqiV2Spec:
     """A validated score specification; nested mappings are immutable snapshots."""
@@ -207,7 +239,7 @@ def load_snqi_v2_spec(weights_path: Path, anchors_path: Path, family_path: Path)
     raw = {key: path.read_bytes() for key, path in paths.items()}
     weights_doc = parse_v2_json(raw["weights"])
     anchors_doc = parse_v2_json(raw["anchors"])
-    family_doc = yaml.safe_load(raw["family"])
+    family_doc = parse_v2_yaml(raw["family"])
     if weights_doc.get("version") != "SNQI-v2.0" or family_doc != FAMILY:
         raise ValueError("SNQI-v2 unrecognized weights/family version or family contract")
     entries = weights_doc["weights"]

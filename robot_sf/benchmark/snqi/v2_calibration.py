@@ -32,6 +32,7 @@ from robot_sf.benchmark.snqi.v2_spec import (
     SIMULATED_FORCE,
     finite_nonnegative,
     parse_v2_json,
+    parse_v2_yaml,
 )
 from robot_sf.benchmark.utils import _config_hash
 from robot_sf.common.artifact_paths import get_repository_root
@@ -143,12 +144,8 @@ def freeze_campaign_anchors(
     Returns:
         Frozen anchor document, including hashes of every source episode file.
     """
-    from robot_sf.benchmark.camera_ready_campaign import load_campaign_config  # noqa: PLC0415
-
     campaign_root = campaign_root.resolve()
-    config = campaign_config or load_campaign_config(
-        get_repository_root() / "configs/benchmarks/snqi_v2/calibration.dev101_102.yaml"
-    )
+    config = _validated_calibration_config(campaign_config)
     metadata_paths = [
         campaign_root / name
         for name in (
@@ -166,6 +163,8 @@ def freeze_campaign_anchors(
         Path(config.scenario_matrix_path),
         get_repository_root() / "robot_sf/benchmark/schemas/episode.schema.v1.json",
     }
+    if config.source_config_path is not None:
+        input_paths.add(Path(config.source_config_path))
     input_paths.update(
         Path(planner.algo_config_path)
         for planner in planners.values()
@@ -243,6 +242,33 @@ def freeze_campaign_anchors(
     temporary.write_text(json.dumps(document, indent=2, sort_keys=True, allow_nan=False) + "\n")
     temporary.replace(output_path)
     return document
+
+
+def _validated_calibration_config(config: Any | None) -> Any:
+    """Validate acquisition YAML before using its independently supplied configuration.
+
+    Returns:
+        The provided configuration or the canonically loaded development configuration.
+    """
+    from robot_sf.benchmark.camera_ready_campaign import load_campaign_config  # noqa: PLC0415
+
+    path = (
+        get_repository_root() / "configs/benchmarks/snqi_v2/calibration.dev101_102.yaml"
+        if config is None
+        else config.source_config_path
+    )
+    # A caller-created in-memory configuration has no serialized YAML to disambiguate.
+    if path is None:
+        return config
+    path = Path(path)
+    raw = path.read_bytes()
+    if not isinstance(parse_v2_yaml(raw), dict):
+        raise ValueError("SNQI-v2 calibration acquisition YAML must be a mapping")
+    digest = hashlib.sha256(raw).hexdigest()
+    resolved = load_campaign_config(path) if config is None else config
+    if resolved.source_config_sha256 != digest:
+        raise ValueError("SNQI-v2 calibration acquisition config source changed")
+    return resolved
 
 
 def _snapshot_calibration_files(paths: Sequence[Path], root: Path) -> dict[str, str]:

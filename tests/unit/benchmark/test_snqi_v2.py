@@ -181,6 +181,14 @@ def spec_files(tmp_path):
     return paths
 
 
+@pytest.mark.parametrize("prefix", ["version: forged\n", "seed: 0\n", "<<: {version: forged}\n"])
+def test_family_loader_rejects_duplicate_yaml_keys(spec_files, prefix):
+    family = spec_files[2]
+    family.write_text(prefix + family.read_text())
+    with pytest.raises(ValueError, match="duplicate YAML key"):
+        load_snqi_v2_spec(*spec_files)
+
+
 @pytest.mark.parametrize("value", [False, True])
 @pytest.mark.parametrize("term", TERMS)
 def test_weight_loader_rejects_boolean_numbers(spec_files, term, value):
@@ -1007,6 +1015,52 @@ def test_calibration_freeze_rejects_coherent_identity_forgery(
     with pytest.raises(ValueError, match="canonical|episode identity"):
         freeze_campaign_anchors(tmp_path, output, campaign_config=cfg)
     assert output.read_bytes() == b"prior anchor\n"
+
+
+@pytest.mark.parametrize("prefix", ["horizon: 1\n", "seed_policy: {mode: forged}\n", None])
+def test_calibration_freeze_rejects_duplicate_acquisition_yaml(
+    tmp_path, calibration_archive, prefix
+):
+    from robot_sf.benchmark.camera_ready._util import _config_hash_payload
+    from robot_sf.benchmark.snqi.v2_calibration import freeze_campaign_anchors
+    from robot_sf.benchmark.utils import _config_hash
+
+    cfg, _, _ = calibration_archive
+    path = tmp_path / "acquisition.yaml"
+    path.write_text(
+        prefix + "horizon: 600\nseed_policy: {mode: fixed-list, seeds: [101, 102]}\n"
+        if prefix is not None
+        else "horizon: 600\nseed_policy: {mode: forged, mode: fixed-list, seeds: [101, 102]}\n"
+    )
+    cfg = replace(
+        cfg,
+        source_config_path=path,
+        source_config_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+    )
+    manifest_path = tmp_path / "campaign_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["config_hash"] = _config_hash(_config_hash_payload(cfg))
+    manifest_path.write_text(json.dumps(manifest))
+    output = tmp_path / "anchors.json"
+    output.write_bytes(b"prior anchor\n")
+    with pytest.raises(ValueError, match="duplicate YAML key"):
+        freeze_campaign_anchors(tmp_path, output, campaign_config=cfg)
+    assert output.read_bytes() == b"prior anchor\n"
+
+
+def test_calibration_acquisition_yaml_is_strict_and_hash_bound(tmp_path):
+    from robot_sf.benchmark.snqi.v2_calibration import _validated_calibration_config
+
+    config = _validated_calibration_config(None)
+    source = ASSETS / "calibration.dev101_102.yaml"
+    assert config.source_config_path == source
+    assert config.source_config_sha256 == hashlib.sha256(source.read_bytes()).hexdigest()
+    assert config.horizon == 600
+    assert config.seed_policy.seeds == (101, 102)
+    path = tmp_path / "changed.yaml"
+    path.write_bytes(source.read_bytes() + b"\n# bytes changed after canonical load\n")
+    with pytest.raises(ValueError, match="config source changed"):
+        _validated_calibration_config(replace(config, source_config_path=path))
 
 
 @pytest.mark.parametrize("location", ["metadata", "nested_metadata", "seed", "manifest", "sidecar"])

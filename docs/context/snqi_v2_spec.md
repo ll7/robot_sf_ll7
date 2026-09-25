@@ -181,3 +181,9 @@ V2 JSON inputs reject duplicate object keys at every nesting depth before row cl
 scoring. This applies to raw episode streams, calibration metadata, producer sidecars, frozen JSON
 assets, and offline execution maps; an earlier fallback marker or seed cannot be overwritten by a
 later duplicate key. Rejection preserves existing anchors and staged campaign inputs.
+
+The mandatory V2-F YAML and any serialized acquisition configuration supplied to calibration freeze
+also reject duplicate mapping keys, including nested mappings and merge-expanded collisions. The
+clean versioned family asset is unchanged. This strict acquisition check is scoped to freeze;
+legacy camera-ready YAML parsing is unchanged. Acquisition bytes must match the loader-captured SHA
+and remain unchanged through the final custody check.

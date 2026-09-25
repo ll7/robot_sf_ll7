@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from robot_sf.benchmark.fallback_policy import summarize_benchmark_availability
 from robot_sf.benchmark.map_runner.map_runner_batch_runner import _initial_feasibility_totals
 from robot_sf.benchmark.map_runner.map_runner_batch_summary import (
     WorkerMetadataBridgeUpdate,
@@ -11,6 +12,138 @@ from robot_sf.benchmark.map_runner.map_runner_batch_summary import (
     build_ammv_feasibility_summary,
     merge_runtime_algorithm_contract,
 )
+
+
+def _guarded_episode_metadata(
+    *, decision_label: str, stop_count: object, safe_count: object
+) -> dict[str, object]:
+    """Build one guarded producer metadata payload with shield telemetry."""
+    return {
+        "algorithm": "ppo",
+        "canonical_algorithm": "guarded_ppo",
+        "planner_contract": {"planner_id": "guarded_ppo"},
+        "planner_kinematics": {"execution_mode": "mixed"},
+        "planner_runtime": {"last_decision": {"decision_label": decision_label}},
+        "guard_stats": {"stop_best_effort": stop_count, "fallback_safe": safe_count},
+        "shield_stats": {
+            "decision_counts": {
+                "stop_best_effort": stop_count,
+                "fallback_safe": safe_count,
+            },
+            "last_decision": {"decision_label": decision_label},
+        },
+    }
+
+
+def _guarded_contract_base() -> dict[str, object]:
+    """Return the static identity that the real batch contract supplies."""
+    return {
+        "algorithm": "ppo",
+        "canonical_algorithm": "guarded_ppo",
+        "planner_contract": {"planner_id": "guarded_ppo"},
+        "planner_kinematics": {"execution_mode": "mixed"},
+    }
+
+
+def test_stop_best_effort_from_earlier_episode_blocks_later_safe_summary() -> None:
+    """Aggregate availability must retain an earlier stop decision."""
+    earlier_stop = _guarded_episode_metadata(
+        decision_label="stop_best_effort", stop_count=1, safe_count=0
+    )
+    later_safe = _guarded_episode_metadata(
+        decision_label="fallback_safe", stop_count=0, safe_count=1
+    )
+    contract = merge_runtime_algorithm_contract(_guarded_contract_base(), earlier_stop)
+    merge_runtime_algorithm_contract(contract, later_safe)
+    summary = {
+        "status": "ok",
+        "total_jobs": 2,
+        "written": 2,
+        "failed_jobs": 0,
+        "algorithm_readiness": {"name": "guarded_ppo"},
+        "algorithm_metadata_contract": contract,
+    }
+
+    availability = summarize_benchmark_availability(summary)
+
+    assert availability.benchmark_success is False
+    assert contract["guard_stats"] == {"stop_best_effort": 1, "fallback_safe": 1}
+    assert contract["shield_stats"]["decision_counts"] == {
+        "stop_best_effort": 1,
+        "fallback_safe": 1,
+    }
+    assert contract["shield_stats"]["last_decision"] == {"decision_label": "stop_best_effort"}
+
+
+def test_safe_guard_telemetry_aggregates_numeric_and_remains_available() -> None:
+    """Multiple identity-bound safe episodes retain numeric counters and availability."""
+    first = _guarded_episode_metadata(decision_label="fallback_safe", stop_count=0, safe_count=1)
+    second = _guarded_episode_metadata(decision_label="fallback_safe", stop_count=0, safe_count=2)
+    contract = merge_runtime_algorithm_contract(_guarded_contract_base(), first)
+    merge_runtime_algorithm_contract(contract, second)
+    summary = {
+        "status": "ok",
+        "total_jobs": 2,
+        "written": 2,
+        "failed_jobs": 0,
+        "algorithm_readiness": {"name": "guarded_ppo"},
+        "algorithm_metadata_contract": contract,
+    }
+
+    availability = summarize_benchmark_availability(summary)
+
+    assert contract["guard_stats"]["fallback_safe"] == 3
+    assert contract["shield_stats"]["decision_counts"]["fallback_safe"] == 3
+    assert "last_decision" not in contract["shield_stats"]
+    assert availability.benchmark_success is True
+
+
+def test_malformed_stop_counter_in_aggregate_fails_closed() -> None:
+    """Malformed producer counters must survive aggregation as rejection evidence."""
+    malformed = _guarded_episode_metadata(
+        decision_label="fallback_safe", stop_count="1", safe_count=1
+    )
+    contract = merge_runtime_algorithm_contract(_guarded_contract_base(), malformed)
+    summary = {
+        "status": "ok",
+        "total_jobs": 1,
+        "written": 1,
+        "failed_jobs": 0,
+        "algorithm_readiness": {"name": "guarded_ppo"},
+        "algorithm_metadata_contract": contract,
+    }
+
+    availability = summarize_benchmark_availability(summary)
+
+    assert availability.benchmark_success is False
+
+
+def test_malformed_telemetry_container_survives_later_safe_episode() -> None:
+    """A later valid episode cannot erase malformed aggregate telemetry."""
+    malformed = {
+        **_guarded_contract_base(),
+        "guard_stats": None,
+        "shield_stats": {"decision_counts": None},
+    }
+    later_safe = _guarded_episode_metadata(
+        decision_label="fallback_safe", stop_count=0, safe_count=1
+    )
+    contract = merge_runtime_algorithm_contract(_guarded_contract_base(), malformed)
+    merge_runtime_algorithm_contract(contract, later_safe)
+    summary = {
+        "status": "ok",
+        "total_jobs": 2,
+        "written": 2,
+        "failed_jobs": 0,
+        "algorithm_readiness": {"name": "guarded_ppo"},
+        "algorithm_metadata_contract": contract,
+    }
+
+    availability = summarize_benchmark_availability(summary)
+
+    assert contract["guard_stats"] is None
+    assert contract["shield_stats"]["decision_counts"] is None
+    assert availability.benchmark_success is False
 
 
 class TestFloatMetadataValue:

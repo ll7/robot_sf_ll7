@@ -717,6 +717,17 @@ def _geometric_margin(
         Geometric margin with corridor-vs-envelope reporting.
     """
     envelope_diameter_m = 2.0 * float(envelope_radius_m)
+    identity_before: Mapping[str, Any] | None = None
+    if require_runtime_input_binding:
+        identity_before = scenario_input_identity(
+            scenario_path,
+            scenario_id=_scenario_id(scenario),
+        )
+        if identity_before.get("status") != "available":
+            return _blocked_geometric_margin(
+                envelope_radius_m,
+                "runtime_input_identity_unavailable",
+            )
     try:
         certificate = certifier(scenario, scenario_path)
     except Exception as exc:  # noqa: BLE001 - oracle must fail closed on certifier errors.
@@ -724,9 +735,23 @@ def _geometric_margin(
 
     classification = str(certificate.classification)
     eligibility = str(certificate.benchmark_eligibility)
-    runtime_input_identity_stable = certificate.evidence.get("runtime_input_identity_stable")
-    if require_runtime_input_binding and runtime_input_identity_stable is not True:
-        return _blocked_geometric_margin(envelope_radius_m, "runtime_input_identity_unavailable")
+    if require_runtime_input_binding:
+        identity_after = scenario_input_identity(
+            scenario_path,
+            scenario_id=_scenario_id(scenario),
+        )
+        runtime_input_identity_stable = (
+            identity_before is not None
+            and _scenario_input_identity_matches(identity_before, identity_after)
+            and _certificate_matches_scenario_input_identity(certificate, identity_before)
+        )
+        if not runtime_input_identity_stable:
+            return _blocked_geometric_margin(
+                envelope_radius_m,
+                "runtime_input_identity_changed_or_unavailable",
+            )
+    else:
+        runtime_input_identity_stable = certificate.evidence.get("runtime_input_identity_stable")
     route_checks = _aggregate_route_checks(certificate)
     min_clearance = _optional_float(route_checks.get("minimum_static_clearance_m"))
     shortest_path = _optional_float(route_checks.get("shortest_path_length_m"))
@@ -766,6 +791,63 @@ def _geometric_margin(
             else None
         ),
     )
+
+
+def _scenario_input_identity_matches(before: Mapping[str, Any], after: Mapping[str, Any]) -> bool:
+    """Bind legacy v1 certificate evidence to a stable adapter-owned input closure.
+
+    Returns:
+        ``True`` when both snapshots identify the same complete source/input closure.
+    """
+    if before.get("status") != "available" or after.get("status") != "available":
+        return False
+    if before.get("source_artifact_sha256") != after.get("source_artifact_sha256"):
+        return False
+    requires_closure = before.get("requires_effective_input_binding") is True
+    if after.get("requires_effective_input_binding") is not requires_closure:
+        return False
+    if not requires_closure:
+        return True
+    effective_before = before.get("effective_input_sha256")
+    return (
+        isinstance(effective_before, str)
+        and bool(effective_before)
+        and effective_before == after.get("effective_input_sha256")
+    )
+
+
+def _certificate_matches_scenario_input_identity(
+    certificate: ScenarioCertificate,
+    identity: Mapping[str, Any],
+) -> bool:
+    """Check producer-owned identity fields when present; legacy v1 leaves them absent.
+
+    Returns:
+        ``True`` when present producer fields agree with the adapter-owned identity.
+    """
+    evidence = certificate.evidence
+    if not isinstance(evidence, Mapping):
+        return False
+    if evidence.get("runtime_input_identity_stable") is False:
+        return False
+    source_digest = evidence.get("source_artifact_sha256")
+    if "source_artifact_sha256" in evidence and source_digest != identity.get(
+        "source_artifact_sha256"
+    ):
+        return False
+    effective_digest = evidence.get("effective_input_sha256")
+    producer_effective_fields = any(
+        field in evidence for field in ("effective_input_sha256", "effective_input_identity_stable")
+    )
+    if producer_effective_fields:
+        if effective_digest != identity.get("effective_input_sha256"):
+            return False
+        if (
+            identity.get("requires_effective_input_binding") is True
+            and evidence.get("effective_input_identity_stable") is not True
+        ):
+            return False
+    return True
 
 
 def _blocked_geometric_margin(envelope_radius_m: float, blocker: str) -> GeometricMargin:

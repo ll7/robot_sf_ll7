@@ -195,6 +195,20 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
     requires_effective_input_binding = artifact_identity.get(
         "requires_effective_input_binding", True
     )
+    runtime_source_digest = runtime_identity.get("source_artifact_sha256")
+    adapter_identity_available = (
+        runtime_identity.get("status") == "available"
+        and isinstance(artifact_sha256, str)
+        and runtime_source_digest == artifact_sha256
+        and (
+            not requires_effective_input_binding
+            or (
+                isinstance(effective_input_sha256, str)
+                and _SHA256.fullmatch(effective_input_sha256) is not None
+            )
+        )
+    )
+    artifact_identity["adapter_identity_available"] = adapter_identity_available
     selected_scenario_row, selected_scenario_row_status = _selected_candidate_scenario_row(
         scenario_artifact_path,
         scenario_id=scenario_id,
@@ -235,6 +249,7 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
         artifact_sha256,
         effective_input_sha256,
         requires_effective_input_binding,
+        adapter_identity_available,
         reasons,
     )
     predicate_state = _predicates(inputs["predicate_contract"], case_id, reasons)
@@ -266,7 +281,22 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
         for role in ("reference", "target", "replay")
     }
     evidence["execution_artifact_bindings"] = execution_artifact_bindings
+    runtime_identity_after = (
+        scenario_input_identity(scenario_artifact_path, scenario_id=scenario_id)
+        if isinstance(scenario_artifact_path, (str, Path))
+        else {}
+    )
+    adapter_identity_stable = adapter_identity_available and _scenario_input_identity_matches(
+        runtime_identity, runtime_identity_after
+    )
+    artifact_identity["adapter_identity_stable"] = adapter_identity_stable
+    if isinstance(cert_assumptions.get("identity_binding"), dict):
+        cert_assumptions["identity_binding"]["stable"] = adapter_identity_stable
+    if scenario_certificate is not None and not adapter_identity_stable:
+        reasons.append("scenario_certificate_adapter_identity_changed_or_unavailable")
     verdict = _resolve(cert_state, oracle_state, predicate_state, runs, reasons)
+    if not adapter_identity_stable:
+        verdict = ADMISSIBLE_FEASIBILITY_UNKNOWN
     target = runs["target"]
     target_outcome = (
         "not_evaluated"
@@ -340,12 +370,32 @@ def _artifact_reference_matches(
     return True
 
 
+def _scenario_input_identity_matches(before: Mapping[str, Any], after: Mapping[str, Any]) -> bool:
+    """Check that adapter-owned source and effective-input digests stayed stable."""
+    if before.get("status") != "available" or after.get("status") != "available":
+        return False
+    if before.get("source_artifact_sha256") != after.get("source_artifact_sha256"):
+        return False
+    requires_closure = before.get("requires_effective_input_binding") is True
+    if after.get("requires_effective_input_binding") is not requires_closure:
+        return False
+    if not requires_closure:
+        return True
+    effective_digest = before.get("effective_input_sha256")
+    return (
+        isinstance(effective_digest, str)
+        and bool(effective_digest)
+        and (effective_digest == after.get("effective_input_sha256"))
+    )
+
+
 def _certificate(
     cert: Any,
     scenario_id: str | None,
     artifact_sha256: str | None,
     effective_input_sha256: str | None,
     requires_effective_input_binding: bool,
+    adapter_identity_available: bool,
     reasons: list[str],
 ) -> tuple[str | None, bool, dict[str, Any]]:
     if not _certificate_inputs_bound(
@@ -354,6 +404,7 @@ def _certificate(
         artifact_sha256,
         effective_input_sha256,
         requires_effective_input_binding,
+        adapter_identity_available,
         reasons,
     ):
         return None, False, {}
@@ -365,6 +416,15 @@ def _certificate(
         "settings": cert.get("checks", {}).get("settings", {}),
         "route_certificates": cert.get("route_certificates", []),
         "route_inventory": _route_inventory_summary(cert),
+        "identity_binding": {
+            "source": "admissibility_adapter_current_input_identity",
+            "source_artifact_sha256": artifact_sha256,
+            "effective_input_sha256": (
+                effective_input_sha256 if requires_effective_input_binding else None
+            ),
+            "requires_effective_input_binding": requires_effective_input_binding,
+            "producer_fields_present": _certificate_producer_identity_fields_present(cert),
+        },
     }
     if classification == "invalid" and eligibility == "excluded":
         invalidity = _invalid_certificate_category(cert)
@@ -402,6 +462,7 @@ def _certificate_inputs_bound(
     artifact_sha256: str | None,
     effective_input_sha256: str | None,
     requires_effective_input_binding: bool,
+    adapter_identity_available: bool,
     reasons: list[str],
 ) -> bool:
     """Validate certificate shape, named scenario, and selected candidate bytes."""
@@ -421,35 +482,71 @@ def _certificate_inputs_bound(
     ):
         return False
     cert_evidence = cert.get("evidence")
-    producer_digest = (
-        cert_evidence.get("source_artifact_sha256") if isinstance(cert_evidence, Mapping) else None
-    )
-    if (
-        artifact_sha256 is None
-        or not isinstance(producer_digest, str)
-        or _SHA256.fullmatch(producer_digest) is None
-        or producer_digest.lower() != artifact_sha256.lower()
-    ):
-        reasons.append("scenario_certificate_producer_source_digest_missing_or_mismatch")
+    if not adapter_identity_available:
+        reasons.append("scenario_certificate_adapter_identity_unavailable")
         return False
-    if requires_effective_input_binding:
-        effective_digest = (
-            cert_evidence.get("effective_input_sha256")
-            if isinstance(cert_evidence, Mapping)
-            else None
-        )
+    return _certificate_producer_identity_bound(
+        cert_evidence,
+        artifact_sha256,
+        effective_input_sha256,
+        requires_effective_input_binding,
+        reasons,
+    )
+
+
+def _certificate_producer_identity_bound(
+    cert_evidence: Any,
+    artifact_sha256: str | None,
+    effective_input_sha256: str | None,
+    requires_effective_input_binding: bool,
+    reasons: list[str],
+) -> bool:
+    """Check any producer-owned identity while allowing adapter-bound legacy v1 data."""
+    if isinstance(cert_evidence, Mapping) and "source_artifact_sha256" in cert_evidence:
+        producer_digest = cert_evidence.get("source_artifact_sha256")
         if (
-            effective_input_sha256 is None
-            or not isinstance(effective_digest, str)
-            or _SHA256.fullmatch(effective_digest) is None
-            or effective_digest.lower() != effective_input_sha256.lower()
-            or cert_evidence.get("effective_input_identity_stable") is not True
+            artifact_sha256 is None
+            or not isinstance(producer_digest, str)
+            or _SHA256.fullmatch(producer_digest) is None
+            or producer_digest.lower() != artifact_sha256.lower()
         ):
-            reasons.append(
-                "scenario_certificate_effective_input_identity_missing_mismatch_or_unstable"
-            )
+            reasons.append("scenario_certificate_producer_source_digest_missing_or_mismatch")
             return False
+    else:
+        reasons.append("scenario_certificate_source_identity_bound_by_adapter")
+    if requires_effective_input_binding:
+        if isinstance(cert_evidence, Mapping) and any(
+            key in cert_evidence
+            for key in ("effective_input_sha256", "effective_input_identity_stable")
+        ):
+            effective_digest = cert_evidence.get("effective_input_sha256")
+            if (
+                effective_input_sha256 is None
+                or not isinstance(effective_digest, str)
+                or _SHA256.fullmatch(effective_digest) is None
+                or effective_digest.lower() != effective_input_sha256.lower()
+                or cert_evidence.get("effective_input_identity_stable") is not True
+            ):
+                reasons.append(
+                    "scenario_certificate_effective_input_identity_missing_mismatch_or_unstable"
+                )
+                return False
+        else:
+            reasons.append("scenario_certificate_effective_input_identity_bound_by_adapter")
     return True
+
+
+def _certificate_producer_identity_fields_present(cert: Mapping[str, Any]) -> bool:
+    """Report whether a producer certificate carries adapter-independent identity fields."""
+    evidence = cert.get("evidence")
+    return isinstance(evidence, Mapping) and any(
+        key in evidence
+        for key in (
+            "source_artifact_sha256",
+            "effective_input_sha256",
+            "effective_input_identity_stable",
+        )
+    )
 
 
 def _all_routes_confirm_impossibility(cert: Mapping[str, Any], classification: str) -> bool:

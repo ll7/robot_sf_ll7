@@ -649,10 +649,6 @@ class PlanningError(RobotSfError):
     pass
 
 
-class NoPathFoundError(PlanningError):
-    """Raised when all completed planner attempts find no route."""
-
-
 class _PathCandidate(NamedTuple):
     """Candidate path tracked during random-path optimization."""
 
@@ -966,7 +962,6 @@ class ClassicGlobalPlanner:
 
         Raises:
             PlanningError: If planning fails or coordinates are out of bounds.
-            NoPathFoundError: If every planner attempt completed without a route.
         """
         start_grid = self._world_to_grid(*start)
         goal_grid = self._world_to_grid(*goal)
@@ -1056,12 +1051,7 @@ class ClassicGlobalPlanner:
         goal_fmt = f"({goal[0]:.2f}, {goal[1]:.2f})"
         logger.error(f"Planning from {start_fmt} to {goal_fmt} failed.")
         logger.error("Consider increasing the cells per meter value.")
-        error_type = (
-            NoPathFoundError
-            if not abort_due_to_invalid_cell and last_error is None
-            else PlanningError
-        )
-        raise error_type(error_msg)
+        raise PlanningError(error_msg)
 
     def plan_random_path(
         self,

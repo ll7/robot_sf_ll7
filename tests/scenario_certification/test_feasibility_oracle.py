@@ -949,6 +949,8 @@ def test_oracle_end_to_end_on_committed_head_on_corridor_scenario() -> None:
     # The corridor width must exceed the envelope diameter when the route is feasible,
     # and the corridor-envelope margin must equal corridor_width - diameter.
     geom = verdict.geometric
+    assert geom.runtime_input_identity_stable is True
+    assert geom.route_geometrically_feasible is not None
     if geom.route_geometrically_feasible and geom.min_corridor_width_m is not None:
         assert geom.min_corridor_width_m > geom.envelope_diameter_m
         assert geom.corridor_envelope_margin_m == pytest.approx(

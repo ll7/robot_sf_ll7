@@ -186,7 +186,14 @@ def test_planner_exception_preserves_legacy_geometric_classification(
     assert certificate.classification == GEOMETRICALLY_INFEASIBLE
     assert certificate.benchmark_eligibility == "excluded"
     assert certificate.route_certificates[0].checks["inflated_collision_free_path"] is False
-    assert certificate.route_certificates[0].checks["planner"]["path_status"] == "error"
+    assert "planner" not in certificate.route_certificates[0].checks
+    assert set(payload["evidence"]) == {"scenario_fingerprint", "difficulty_analysis"}
+    assert not {
+        "source_artifact_sha256",
+        "effective_input_sha256",
+        "effective_input_identity_stable",
+        "runtime_input_identity_stable",
+    }.intersection(payload["evidence"])
     assert certificate.reasons == ["no_inflated_collision_free_path: injected planner failure"]
 
 

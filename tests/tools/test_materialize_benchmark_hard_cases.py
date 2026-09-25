@@ -521,6 +521,38 @@ def test_showcase_execution_revision_is_preserved_when_snapshot_does_not_match()
     assert record["showcase_tool_source_snapshot_status"] == "source_files_not_matched"
 
 
+def test_showcase_snapshot_revalidates_prior_verified_revision() -> None:
+    """A resume may retain an earlier reachable source snapshot after a new replay revision."""
+    revision = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout.strip()
+    relative_path = "scripts/replay_episode_figure.py"
+    source_file = subprocess.run(
+        ["git", "show", f"{revision}:{relative_path}"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=True,
+    ).stdout
+    record = _showcase_tool_snapshot(
+        {
+            "tool_provenance": {
+                "git_revision": "1" * 40,
+                "files": {relative_path: hashlib.sha256(source_file).hexdigest()},
+            }
+        },
+        "0" * 40,
+        fallback_snapshot_revision=revision,
+    )
+
+    assert record["showcase_tool_revision"] == "1" * 40
+    assert record["showcase_tool_source_snapshot_revision"] == revision
+    assert record["showcase_tool_source_snapshot_status"] == "verified_file_hash_match"
+
+
 def test_showcase_snapshot_requires_a_file_hash_inventory() -> None:
     """A historical revision without file hashes stays explicitly unverified."""
     record = _showcase_tool_snapshot(

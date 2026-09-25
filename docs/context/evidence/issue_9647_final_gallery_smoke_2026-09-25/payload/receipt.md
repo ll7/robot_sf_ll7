@@ -1,3 +1,4 @@
+<!-- AI-GENERATED (robot_sf#9647, 2026-09-25) - NEEDS-REVIEW -->
 # #9647 final-head replay gallery smoke
 
 This smoke ran the documented gallery CLI at the clean code revision recorded below. It used one tracked historical #1501 `failure_0002` compatibility fixture, not a new search result or discovery.

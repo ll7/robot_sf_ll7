@@ -1,3 +1,4 @@
+<!-- AI-GENERATED (robot_sf#9647, 2026-09-25) - NEEDS-REVIEW -->
 # Issue #9647 historical gallery smoke receipt
 
 The exact-head command exercised the gallery selector, canonical replay runner, outcome comparator, and existing renderer using the tracked #1501 `failure_0002` compatibility fixture. It selected and replayed one case with a matching outcome projection. This is a historical collision replay, not a new discovery or a falsification search.

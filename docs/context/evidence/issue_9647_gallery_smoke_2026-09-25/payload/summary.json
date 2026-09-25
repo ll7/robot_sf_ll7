@@ -328,5 +328,6 @@
     "source_manifest_sha256": "289bb94735ec7a1e325690e00069d761765b9f7ce0b7c06a1e6459a2e26966f9",
     "source_search_manifest_sha256": "289bb94735ec7a1e325690e00069d761765b9f7ce0b7c06a1e6459a2e26966f9"
   },
-  "schema_version": "issue_9647_gallery_smoke_receipt.v1"
+  "schema_version": "issue_9647_gallery_smoke_receipt.v1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW"
 }

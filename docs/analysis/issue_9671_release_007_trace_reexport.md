@@ -251,14 +251,20 @@ from queue ID, runtime packet digest, attempt, and nonce exactly as canonical pr
 all three identities must match the producer startup receipt. The runtime packet digest is
 computed from script/config/route/submit arguments; it is **not** the YAML file SHA or proof
 that `startup.packet` names the YAML. Missing packet identity fails closed before candidate
-admission. The baseline report defaults to pinned SHA-256
+admission. The launch YAML must declare `identity.observer_sha256` and match the staged observer.
+The YAML's reviewed SHA must be supplied **outside the bundle spec** with
+`--approved-headon-launch-packet-sha256` and `--approved-doorway-launch-packet-sha256`
+for both writing and cold validation. Obtain those pins from the independent packet review;
+recomputing them from the spec or a modified local YAML defeats the approval boundary.
+The baseline report defaults to pinned SHA-256
 `e1637fa907d87f8a5456ee0f3367524e8e335b480c1d2bd5162215f08a3f7ffd`.
 Manifest artifact keys are campaign-relative, so a complete cold-retrieved tree can move to a
 new host path without changing its manifest bytes; files outside the campaign tree fail closed.
 After producer checksum and cold-retrieval checks, run
-`uv run python scripts/validation/check_issue_9671_force_bundle.py write --spec <spec.json> --manifest <new-manifest.json>`;
+`uv run python scripts/validation/check_issue_9671_force_bundle.py write --spec <spec.json> --manifest <new-manifest.json> --approved-headon-launch-packet-sha256 <reviewed-sha> --approved-doorway-launch-packet-sha256 <reviewed-sha>`;
 record the printed manifest SHA separately, then use `validate --spec ... --manifest ...
---manifest-sha256 <recorded-sha>` on cold artifacts. Exit 2 means a recorded outcome/state
+--manifest-sha256 <recorded-sha>` with both reviewed packet SHA arguments on cold artifacts.
+Exit 2 means a recorded outcome/state
 finding and is not candidate evidence. The writer refuses to overwrite an existing manifest.
 
 This plan needs review and #9667 to merge before a new packet or Slurm submission. The observer

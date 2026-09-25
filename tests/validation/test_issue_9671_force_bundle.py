@@ -129,6 +129,7 @@ def _fixture(
             f"queue_id: {queue_id}\n"
             f"campaign_id: test-{name}\n"
             f"identity:\n  source_sha: {bundle.trace_checker.SOURCE_SHA}\n"
+            f"  observer_sha256: {_sha(observer_path)}\n"
             f"  canonical_config_path: {bundle.trace_checker.DIAGNOSTIC_CONFIG[name]}\n"
             f"  canonical_config_sha256: {_sha(config)}\n"
             "  private_ops_runtime_commit: test-private-runtime\n"
@@ -245,9 +246,14 @@ def _fixture(
     return spec, row, sidecar_path
 
 
-def _build(spec: dict[str, Any]) -> dict[str, Any]:
+def _approved_pins(spec: dict[str, Any]) -> dict[str, str]:
+    return {name: item["launch_packet_sha256"] for name, item in spec["campaigns"].items()}
+
+
+def _build(spec: dict[str, Any], approved_pins: dict[str, str] | None = None) -> dict[str, Any]:
     return bundle.build_manifest(
         spec,
+        approved_launch_packet_sha256=approved_pins or _approved_pins(spec),
         expected={("ppo", "classic_doorway_medium", 113)},
         expected_baseline_report_sha256=None,
         expected_baseline_counts={"match": 1, "mismatch": 0, "no_release_row": 0},
@@ -270,6 +276,7 @@ def test_manifest_binds_exact_sidecar_bytes_and_outcome(
             spec,
             manifest,
             _sha(manifest),
+            approved_launch_packet_sha256=_approved_pins(spec),
             expected={("ppo", "classic_doorway_medium", 113)},
             expected_baseline_report_sha256=None,
             expected_baseline_counts={"match": 1, "mismatch": 0, "no_release_row": 0},
@@ -283,6 +290,7 @@ def test_manifest_binds_exact_sidecar_bytes_and_outcome(
             spec,
             manifest,
             _sha(manifest),
+            approved_launch_packet_sha256=_approved_pins(spec),
             expected={("ppo", "classic_doorway_medium", 113)},
             expected_baseline_report_sha256=None,
             expected_baseline_counts={"match": 1, "mismatch": 0, "no_release_row": 0},
@@ -304,6 +312,7 @@ def test_manifest_survives_cold_tree_relocation(
             moved_spec,
             relocated / "bundle.json",
             _sha(manifest),
+            approved_launch_packet_sha256=_approved_pins(moved_spec),
             expected={("ppo", "classic_doorway_medium", 113)},
             expected_baseline_report_sha256=None,
             expected_baseline_counts={"match": 1, "mismatch": 0, "no_release_row": 0},
@@ -399,6 +408,42 @@ def test_rejects_unbound_submission_identity(
         campaign["submission_intent_sha256"] = _sha(intent_path)
     startup_path.write_text(json.dumps(startup))
     with pytest.raises(ValueError, match="submission intent identity|submission intent SHA-256"):
+        _build(spec)
+
+
+def test_coherent_observer_spec_sidecar_and_packet_swap_rejects_review_pin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec, _, sidecar_path = _fixture(tmp_path, monkeypatch)
+    approved_pins = _approved_pins(spec)
+    observer_path = Path(spec["observer_path"])
+    old_observer_sha = spec["observer_sha256"]
+    observer_path.write_bytes(b"coherently-forged-observer")
+    spec["observer_sha256"] = _sha(observer_path)
+    sidecar = json.loads(sidecar_path.read_text())
+    sidecar["observer_provenance"]["observer_sha256"] = spec["observer_sha256"]
+    sidecar_path.write_text(json.dumps(sidecar))
+    for item in spec["campaigns"].values():
+        launch_path = Path(item["launch_packet"])
+        launch_path.write_text(
+            launch_path.read_text().replace(old_observer_sha, spec["observer_sha256"])
+        )
+        item["launch_packet_sha256"] = _sha(launch_path)
+    with pytest.raises(ValueError, match="independently approved review pin"):
+        _build(spec, approved_pins)
+
+
+def test_observer_swap_rejects_unchanged_reviewed_packet(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec, _, sidecar_path = _fixture(tmp_path, monkeypatch)
+    observer_path = Path(spec["observer_path"])
+    observer_path.write_bytes(b"forged-observer")
+    spec["observer_sha256"] = _sha(observer_path)
+    sidecar = json.loads(sidecar_path.read_text())
+    sidecar["observer_provenance"]["observer_sha256"] = spec["observer_sha256"]
+    sidecar_path.write_text(json.dumps(sidecar))
+    with pytest.raises(ValueError, match="submission intent identity"):
         _build(spec)
 
 

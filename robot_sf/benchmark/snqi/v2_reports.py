@@ -653,6 +653,42 @@ def _spawn_route_completed(episode: Mapping[str, Any]) -> bool:
     )
 
 
+def _validate_spawn_validity_shape(block: Mapping[str, Any]) -> None:
+    """Require the complete schema emitted by build_spawn_validity for present blocks."""
+    required = {
+        "schema_version",
+        "reset_clearance",
+        "reset_clearance_status",
+        "reset_clearance_error",
+        "reset_overlap",
+        "respawn_overlap_events",
+        "respawn_overlap_collisions",
+        "invalid_run",
+        "invalid_reason",
+    }
+    if not required.issubset(block):
+        raise ValueError("SNQI-v2 malformed spawn_validity: missing producer fields")
+    clearance = block["reset_clearance"]
+    available = isinstance(clearance, Mapping) and bool(clearance)
+    checks = (
+        block["schema_version"] == SPAWN_VALIDITY_SCHEMA_VERSION,
+        isinstance(block["invalid_run"], bool),
+        block["invalid_reason"] is None or isinstance(block["invalid_reason"], str),
+        isinstance(block["reset_overlap"], bool),
+        clearance is None or (available and isinstance(clearance.get("overlap"), bool)),
+        clearance is not None or block["reset_overlap"] is False,
+        block["reset_clearance_status"] == ("available" if available else "unavailable"),
+        block["reset_clearance_error"] is None
+        or (not available and isinstance(block["reset_clearance_error"], str)),
+    )
+    if not all(checks):
+        raise ValueError("SNQI-v2 malformed spawn_validity: invalid producer field types")
+    for key in ("respawn_overlap_events", "respawn_overlap_collisions"):
+        events = block[key]
+        if not isinstance(events, list) or any(not isinstance(event, Mapping) for event in events):
+            raise ValueError("SNQI-v2 malformed spawn_validity: invalid respawn telemetry")
+
+
 def _validate_spawn_validity(episode: Mapping[str, Any]) -> None:
     """Refuse invalid or ambiguous spawn admission while preserving legacy absence."""
     if "spawn_validity" not in episode:
@@ -660,6 +696,7 @@ def _validate_spawn_validity(episode: Mapping[str, Any]) -> None:
     block = episode["spawn_validity"]
     if not isinstance(block, Mapping) or not isinstance(block.get("invalid_run"), bool):
         raise ValueError("SNQI-v2 malformed spawn_validity: explicit boolean invalid_run required")
+    _validate_spawn_validity_shape(block)
     if block["invalid_run"]:
         raise ValueError("SNQI-v2 refuses spawn_validity.invalid_run episode")
     if block.get("invalid_reason") is not None:

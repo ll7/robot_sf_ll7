@@ -1330,6 +1330,7 @@ def _resolve_episode_run_context(  # noqa: PLR0913
     latency_stress_profile: dict[str, Any] | None,
     safety_wrapper: dict[str, Any] | None,
     cbf_safety_filter: dict[str, Any] | None,
+    runtime_input_records: list[dict[str, str]] | None = None,
 ) -> _EpisodeRunContext:
     """Normalize episode inputs, build the env config, and resolve the policy cfg.
 
@@ -1375,7 +1376,14 @@ def _resolve_episode_run_context(  # noqa: PLR0913
             "safety_wrapper and cbf_safety_filter cannot both be enabled in #3948 first slice"
         )
     safety_wrapper_deadlock_monitor = make_deadlock_recovery_monitor(safety_wrapper_runtime)
-    config = _build_env_config(scenario, scenario_path=scenario_path)
+    if runtime_input_records is None:
+        config = _build_env_config(scenario, scenario_path=scenario_path)
+    else:
+        config = _build_env_config(
+            scenario,
+            scenario_path=scenario_path,
+            runtime_input_records=runtime_input_records,
+        )
     max_steps = int(scenario.get("simulation_config", {}).get("max_episode_steps", 0) or 0)
     horizon_val = int(horizon) if horizon and horizon > 0 else max_steps
     if horizon_val <= 0:
@@ -5249,6 +5257,7 @@ def run_map_episode(  # noqa: PLR0913
     pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None = None,
     close_policy: bool = True,
     policy_builder: PolicyBuilder,
+    runtime_input_records: list[dict[str, str]] | None = None,
 ) -> EpisodeRecordDict:
     """Run one scenario/seed episode and return a benchmark JSONL record.
 
@@ -5277,6 +5286,7 @@ def run_map_episode(  # noqa: PLR0913
         latency_stress_profile=latency_stress_profile,
         safety_wrapper=safety_wrapper,
         cbf_safety_filter=cbf_safety_filter,
+        runtime_input_records=runtime_input_records,
     )
     scenario = ctx.scenario
     telemetry_profile = telemetry_from_scenario(scenario)

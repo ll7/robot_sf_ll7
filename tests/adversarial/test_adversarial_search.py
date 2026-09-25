@@ -198,6 +198,9 @@ def _bound_episode_record(
     scenario_params["id"] = scenario_id
     scenario_params["algo"] = config.policy
     scenario_params["algo_config_hash"] = planner_config_hash
+    scenario_params["run_horizon"] = int(config.horizon or 100)
+    scenario_params["run_dt"] = float(config.dt or 0.1)
+    scenario_params["record_forces"] = bool(config.record_forces)
     termination_reason = "success" if route_complete else "collision"
     return {
         "version": "v1",
@@ -1549,6 +1552,76 @@ def test_target_episode_rejects_self_consistent_config_not_selected_by_search(
     )
 
     assert reason == "target_episode_planner_config_selected_config_mismatch"
+
+
+def test_target_episode_rejects_self_consistent_scenario_horizon_not_selected_by_search(
+    tmp_path: Path,
+) -> None:
+    """A recomputed row hash cannot bind an episode to a different scenario horizon."""
+    config = _config(tmp_path)
+    candidate = _candidate(7)
+    scenario_path, _ = write_candidate_inputs(
+        config=config,
+        candidate=candidate,
+        candidate_dir=tmp_path / "candidate",
+        index=0,
+    )
+    record = _bound_episode_record(config, scenario_path, candidate, route_complete=True)
+    record["scenario_params"]["simulation_config"]["max_episode_steps"] = 999
+    record["config_hash"] = search._config_hash(record["scenario_params"])
+    attribution = dataclasses.replace(
+        attribution_from_episode_record(record),
+        details={
+            "execution_mode": "native",
+            "readiness_status": "native",
+            "availability_status": "available",
+        },
+    )
+
+    reason, route_complete = search._target_episode_observation_reason(
+        record,
+        config=config,
+        candidate=candidate,
+        scenario_yaml_path=scenario_path,
+        failure_attribution=attribution,
+    )
+
+    assert reason == "target_episode_selected_scenario_parameters_mismatch"
+    assert route_complete is None
+
+
+def test_target_episode_rejects_runner_horizon_not_selected_by_search(tmp_path: Path) -> None:
+    """Runner-added horizon metadata must match the search's effective horizon."""
+    config = _config(tmp_path)
+    candidate = _candidate(7)
+    scenario_path, _ = write_candidate_inputs(
+        config=config,
+        candidate=candidate,
+        candidate_dir=tmp_path / "candidate",
+        index=0,
+    )
+    record = _bound_episode_record(config, scenario_path, candidate, route_complete=True)
+    record["scenario_params"]["run_horizon"] = 999
+    record["config_hash"] = search._config_hash(record["scenario_params"])
+    attribution = dataclasses.replace(
+        attribution_from_episode_record(record),
+        details={
+            "execution_mode": "native",
+            "readiness_status": "native",
+            "availability_status": "available",
+        },
+    )
+
+    reason, route_complete = search._target_episode_observation_reason(
+        record,
+        config=config,
+        candidate=candidate,
+        scenario_yaml_path=scenario_path,
+        failure_attribution=attribution,
+    )
+
+    assert reason == "target_episode_run_horizon_mismatch"
+    assert route_complete is None
 
 
 def test_target_episode_observation_rechecks_scenario_inputs_after_parse(

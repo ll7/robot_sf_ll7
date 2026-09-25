@@ -23,6 +23,11 @@ The default candidate set is `francis2023_narrow_doorway` and `francis2023_blind
 - Run mode: local central processing unit (CPU) diagnostic; no learned planner or benchmark campaign.
 - Claim boundary: `diagnostic_only_not_benchmark_evidence`.
 
+This is a historical packet produced before the oracle propagated exact map and route parser
+snapshots into its provenance. It does not bind the implicit default map pool or the bytes
+consumed by the actor-free runner, so the current admissibility adapter retains these cells as
+unknown instead of accepting the recorded exclusion as current bound evidence.
+
 ## Observed verdicts
 
 | Cell | Nominal 1.0 m | Reduced 0.5 m | Interpretation |

@@ -355,7 +355,7 @@ def render_frontier_markdown(
     """Render the compact report text from the machine-readable summary."""
     headline = {
         "synthetic_fixture": "Synthetic fixture (implementation-only) feasibility-frontier report",
-        "simulator_run": "Empirical feasibility frontier",
+        "simulator_run": "Declared simulator-run evidence (unverified) feasibility-frontier report",
         "historical_artifact": "Historical-artifact feasibility-frontier report",
     }[report["evidence_kind"]]
     lines = [

@@ -1670,20 +1670,38 @@ def test_frontier_report_writer_emits_deterministic_json_markdown_and_figure(
             "synthetic_fixture",
             "Synthetic fixture (implementation-only) feasibility-frontier report",
         ),
-        ("simulator_run", "Empirical feasibility frontier"),
+        (
+            "simulator_run",
+            "Declared simulator-run evidence (unverified) feasibility-frontier report",
+        ),
         ("historical_artifact", "Historical-artifact feasibility-frontier report"),
     ],
 )
 def test_frontier_markdown_headline_matches_evidence_kind(
     tmp_path: Path, evidence_kind: str, headline: str
 ) -> None:
-    """Synthetic output is visibly non-empirical; only simulator runs get that headline."""
+    """Headlines preserve the declared kind without implying verified provenance."""
     evidence = _evidence(tmp_path)
     evidence["evidence_kind"] = evidence_kind
 
     report = build_frontier_report(evidence, evidence_root=tmp_path)
 
     assert render_frontier_markdown(report).splitlines()[0] == (f"# {headline}: {_EXPERIMENT_ID}")
+
+
+def test_relabeling_synthetic_fixture_as_simulator_run_does_not_claim_empirical_evidence(
+    tmp_path: Path,
+) -> None:
+    """A caller-edited evidence kind cannot turn fixture data into empirical evidence."""
+    evidence = _evidence(tmp_path)
+    assert evidence["evidence_kind"] == "synthetic_fixture"
+
+    evidence["evidence_kind"] = "simulator_run"
+    report = build_frontier_report(evidence, evidence_root=tmp_path)
+    headline = render_frontier_markdown(report).splitlines()[0]
+
+    assert "Declared simulator-run evidence (unverified)" in headline
+    assert "Empirical feasibility frontier" not in headline
 
 
 def test_frontier_report_rejects_path_escape_and_noncanonical_admissibility(tmp_path: Path) -> None:

@@ -156,11 +156,14 @@ summary fields independently.
 
 ## Evidence limits and integration
 
-Fixture output is implementation evidence only. The input's `evidence_kind` is descriptive metadata;
-it is not an independent authorization for benchmark or publication claims. A generated report does
-not establish search-space coverage, global optimality, mathematical feasibility, or real-world
-safety. A round with zero replay-verified counterexamples states its exact candidate and simulator
-budgets and explicitly says that no counterexample found does not mean none exists.
+Fixture output is implementation evidence only. The input's `evidence_kind` is caller-declared,
+descriptive metadata; it is not an independent authorization for benchmark or publication claims.
+In particular, a bundle marked `simulator_run` receives a declared/unverified report headline until
+an independently verified producer binding exists. Relabeling fixture rows cannot establish that a
+simulator produced them. A generated report does not establish search-space coverage, global
+optimality, mathematical feasibility, or real-world safety. A round with zero replay-verified
+counterexamples states its exact candidate and simulator budgets and explicitly says that no
+counterexample found does not mean none exists.
 
 This adapter is fixture-first because #9653 has not yet landed a durable round-artifact schema. The
 implementation for Issue #9653 must either emit this v1 bundle or add an explicit, tested adapter

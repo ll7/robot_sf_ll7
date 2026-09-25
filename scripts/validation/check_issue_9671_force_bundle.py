@@ -34,16 +34,24 @@ def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _validate_submission_identity(item: dict[str, Any], startup_ids: dict[str, Any]) -> None:
+def _validate_submission_identity(
+    item: dict[str, Any],
+    startup_ids: dict[str, Any],
+    *,
+    approved_launch_sha256: str,
+    observer_sha256: str,
+) -> None:
     """Bind producer startup to a reviewed launch packet and immutable submit intent."""
     packet_sha = item.get("packet_sha256")
     launch_sha = item.get("launch_packet_sha256")
     intent_sha = item.get("submission_intent_sha256")
     if any(
         not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)
-        for digest in (packet_sha, launch_sha, intent_sha)
+        for digest in (packet_sha, launch_sha, intent_sha, approved_launch_sha256)
     ):
         raise ValueError("reviewed launch packet or submission intent SHA-256 missing")
+    if launch_sha != approved_launch_sha256:
+        raise ValueError("launch packet SHA-256 differs from independently approved review pin")
     if not isinstance(item.get("queue_id"), str) or not item["queue_id"]:
         raise ValueError("reviewed queue ID missing")
     if not isinstance(item.get("submission_id"), str) or not re.fullmatch(
@@ -68,6 +76,7 @@ def _validate_submission_identity(item: dict[str, Any], startup_ids: dict[str, A
         or launch.get("queue_id") != item["queue_id"]
         or launch.get("campaign_id") != item["campaign_id"]
         or (launch.get("identity") or {}).get("source_sha") != trace_checker.SOURCE_SHA
+        or (launch.get("identity") or {}).get("observer_sha256") != observer_sha256
         or (launch.get("identity") or {}).get("canonical_config_path") != startup_ids.get("config")
         or (launch.get("identity") or {}).get("canonical_config_sha256")
         != _sha(Path(item["config"]))
@@ -279,6 +288,7 @@ def _trace_state(row: dict[str, Any]) -> dict[str, Any]:
 def build_manifest(  # noqa: C901, PLR0912, PLR0915 - custody gate checks disjoint artifacts
     spec: dict[str, Any],
     *,
+    approved_launch_packet_sha256: dict[str, str],
     expected: set[tuple[str, str, int]] = trace_checker.EXPECTED_TUPLES,
     expected_baseline_report_sha256: str | None = BASELINE_REPORT_SHA256,
     expected_baseline_counts: dict[str, int] | None = BASELINE_COUNTS,
@@ -289,6 +299,8 @@ def build_manifest(  # noqa: C901, PLR0912, PLR0915 - custody gate checks disjoi
     """Validate all inputs and construct a deterministic diagnostic manifest."""
     if set(spec.get("campaigns") or {}) != {"headon_group", "doorway"}:
         raise ValueError("exactly the two diagnostic campaigns are required")
+    if set(approved_launch_packet_sha256) != {"headon_group", "doorway"}:
+        raise ValueError("both independently approved launch packet SHAs are required")
     archive = Path(spec["archive"])
     baseline_path = Path(spec["baseline_report"])
     baseline_sha = _sha(baseline_path)
@@ -384,7 +396,12 @@ def build_manifest(  # noqa: C901, PLR0912, PLR0915 - custody gate checks disjoi
             or startup_ids.get("public_commit") != trace_checker.SOURCE_SHA
         ):
             raise ValueError(f"Slurm startup identity mismatch: {name}")
-        _validate_submission_identity(item, startup_ids)
+        _validate_submission_identity(
+            item,
+            startup_ids,
+            approved_launch_sha256=approved_launch_packet_sha256[name],
+            observer_sha256=observer_sha,
+        )
         selected = set(release_report["diagnostic_inputs"][name]["tuples"])
         sidecar_dir = Path(item["sidecar_dir"])
         paths = sorted(sidecar_dir.rglob("*.robot-force.json"))
@@ -515,17 +532,28 @@ def main() -> int:
     parser.add_argument("--spec", required=True, type=Path)
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--manifest-sha256")
+    parser.add_argument("--approved-headon-launch-packet-sha256", required=True)
+    parser.add_argument("--approved-doorway-launch-packet-sha256", required=True)
     args = parser.parse_args()
     spec = json.loads(args.spec.read_text())
+    approved_pins = {
+        "headon_group": args.approved_headon_launch_packet_sha256,
+        "doorway": args.approved_doorway_launch_packet_sha256,
+    }
     if args.mode == "write":
-        result = build_manifest(spec)
+        result = build_manifest(spec, approved_launch_packet_sha256=approved_pins)
         if args.manifest.exists():
             raise ValueError("refusing to overwrite an existing observer manifest")
         args.manifest.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     else:
         if not args.manifest_sha256:
             raise ValueError("validate requires separately pinned --manifest-sha256")
-        result = validate_manifest(spec, args.manifest, args.manifest_sha256)
+        result = validate_manifest(
+            spec,
+            args.manifest,
+            args.manifest_sha256,
+            approved_launch_packet_sha256=approved_pins,
+        )
     print(
         json.dumps(
             {

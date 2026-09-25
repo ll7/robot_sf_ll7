@@ -139,3 +139,12 @@ def test_unknown_attribute_raises_attribute_error() -> None:
 
     with pytest.raises(AttributeError, match="definitely_missing"):
         _ = sc.definitely_missing  # type: ignore[attr-defined]
+
+
+def test_scenario_cert_v1_does_not_export_unknown_classification() -> None:
+    """Unknown admissibility evidence must not extend the frozen v1 API."""
+    import robot_sf.scenario_certification as sc
+
+    assert "UNKNOWN" not in sc.__all__
+    with pytest.raises(AttributeError, match="UNKNOWN"):
+        _ = sc.UNKNOWN  # type: ignore[attr-defined]

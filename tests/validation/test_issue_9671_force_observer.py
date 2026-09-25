@@ -4,7 +4,7 @@ import importlib.util
 import sys
 import threading
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest
@@ -139,26 +139,33 @@ def test_rejects_changed_component_roster_on_second_step() -> None:
         observer.bind_episode(capture, row)
 
 
-def test_live_dispatch_rejects_episode_on_second_thread(tmp_path: Path) -> None:
+def test_live_dispatch_rejects_episode_on_second_thread(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     source_root = tmp_path / "frozen"
     runner = source_root / observer.RUNNER_FILE
     runner.parent.mkdir(parents=True)
     code = "def run_map_episode(scenario, seed, algo):\n    return None\n"
     runner.write_text(code)
-    namespace: dict = {
-        "__name__": observer.SOURCE_MODULES[observer.RUNNER_FILE],
-        "__file__": str(runner),
-    }
+    module_name = observer.SOURCE_MODULES[observer.RUNNER_FILE]
+    module = ModuleType(module_name)
+    module.__file__ = str(runner)
+    monkeypatch.setitem(sys.modules, module_name, module)
     exec(  # noqa: S102 - compile a synthetic frozen filename to exercise live trace dispatch
         compile(code, str(runner), "exec"),
-        namespace,
+        vars(module),
     )
-    watched = observer.ForceObserver(tmp_path, {}, source_root)
+    watched = observer.ForceObserver(
+        tmp_path,
+        {},
+        source_root,
+        observer._compiled_target_codes(source_root, observer.RUNNER_FILE),
+    )
     failures: list[Exception] = []
 
     def invoke() -> None:
         try:
-            namespace["run_map_episode"]({"name": "doorway"}, 113, "ppo")
+            module.run_map_episode({"name": "doorway"}, 113, "ppo")
         except Exception as exc:
             failures.append(exc)
 
@@ -179,29 +186,113 @@ def test_live_dispatch_rejects_episode_on_second_thread(tmp_path: Path) -> None:
     assert "process or thread" in str(failures[0])
 
 
-def test_live_dispatch_rejects_shadowed_import_root(tmp_path: Path) -> None:
+def test_live_dispatch_rejects_shadowed_import_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     verified_root = tmp_path / "frozen"
     verified = verified_root / observer.RUNNER_FILE
     shadowed = tmp_path / "shadow" / observer.RUNNER_FILE
     for path in (verified, shadowed):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("def run_map_episode(scenario, seed, algo):\n    return None\n")
-    namespace: dict = {
-        "__name__": observer.SOURCE_MODULES[observer.RUNNER_FILE],
-        "__file__": str(shadowed),
-    }
+    module_name = observer.SOURCE_MODULES[observer.RUNNER_FILE]
+    module = ModuleType(module_name)
+    module.__file__ = str(shadowed)
+    monkeypatch.setitem(sys.modules, module_name, module)
     exec(  # noqa: S102 - live dispatch must see a real shadow-root filename
-        compile(shadowed.read_text(), str(shadowed), "exec"), namespace
+        compile(shadowed.read_text(), str(shadowed), "exec"), vars(module)
     )
-    watched = observer.ForceObserver(tmp_path, {}, verified_root)
+    watched = observer.ForceObserver(
+        tmp_path,
+        {},
+        verified_root,
+        observer._compiled_target_codes(verified_root, observer.RUNNER_FILE),
+    )
     previous = sys.gettrace()
     try:
         sys.settrace(watched)
         with pytest.raises(observer.ObserverIdentityError, match="outside pinned frozen source"):
-            namespace["run_map_episode"]({"name": "doorway"}, 113, "ppo")
+            module.run_map_episode({"name": "doorway"}, 113, "ppo")
     finally:
         sys.settrace(previous)
     assert list(tmp_path.glob("*.robot-force.json")) == []
+
+
+def test_live_dispatch_rejects_code_swap_with_spoofed_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_root = tmp_path / "frozen"
+    runner = source_root / observer.RUNNER_FILE
+    runner.parent.mkdir(parents=True)
+    runner.write_text("def run_map_episode(scenario, seed, algo):\n    return None\n")
+    module_name = observer.SOURCE_MODULES[observer.RUNNER_FILE]
+    module = ModuleType(module_name)
+    module.__file__ = str(runner)
+    monkeypatch.setitem(sys.modules, module_name, module)
+    exec(  # noqa: S102 - genuine function from test's pinned source bytes
+        compile(runner.read_text(), str(runner), "exec"), vars(module)
+    )
+    original = module.run_map_episode
+    replacement_code = compile(
+        "def run_map_episode(scenario, seed, algo):\n    return {'forged': True}\n",
+        str(runner),
+        "exec",
+    )
+    exec(replacement_code, vars(module))  # noqa: S102 - deliberate code swap probe
+    replacement = module.run_map_episode
+    module.run_map_episode = original
+    watched = observer.ForceObserver(
+        tmp_path,
+        {},
+        source_root,
+        observer._compiled_target_codes(source_root, observer.RUNNER_FILE),
+    )
+    previous = sys.gettrace()
+    try:
+        sys.settrace(watched)
+        with pytest.raises(observer.ObserverIdentityError, match="code object differs"):
+            replacement({"name": "doorway"}, 113, "ppo")
+    finally:
+        sys.settrace(previous)
+    module.run_map_episode = replacement
+    try:
+        sys.settrace(watched)
+        with pytest.raises(observer.ObserverIdentityError, match="pinned source bytes"):
+            module.run_map_episode({"name": "doorway"}, 113, "ppo")
+    finally:
+        sys.settrace(previous)
+
+
+def test_live_dispatch_rejects_module_swap_with_spoofed_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_root = tmp_path / "frozen"
+    runner = source_root / observer.RUNNER_FILE
+    runner.parent.mkdir(parents=True)
+    runner.write_text("def run_map_episode(scenario, seed, algo):\n    return None\n")
+    module_name = observer.SOURCE_MODULES[observer.RUNNER_FILE]
+    original = ModuleType(module_name)
+    original.__file__ = str(runner)
+    exec(  # noqa: S102 - generate a genuine function in the original module
+        compile(runner.read_text(), str(runner), "exec"), vars(original)
+    )
+    shadow = ModuleType(module_name)
+    shadow.__file__ = str(runner)
+    shadow.run_map_episode = original.run_map_episode
+    monkeypatch.setitem(sys.modules, module_name, shadow)
+    watched = observer.ForceObserver(
+        tmp_path,
+        {},
+        source_root,
+        observer._compiled_target_codes(source_root, observer.RUNNER_FILE),
+    )
+    previous = sys.gettrace()
+    try:
+        sys.settrace(watched)
+        with pytest.raises(observer.ObserverIdentityError, match="globals differ"):
+            original.run_map_episode({"name": "doorway"}, 113, "ppo")
+    finally:
+        sys.settrace(previous)
 
 
 def test_copies_actual_last_forces_without_reinvoking_provider(tmp_path: Path) -> None:
@@ -210,7 +301,7 @@ def test_copies_actual_last_forces_without_reinvoking_provider(tmp_path: Path) -
     component.last_forces = np.asarray([[0.2, 0.0], [0.3, 0.0]])
     component.config = SimpleNamespace(force_multiplier=10.0)
     component.get_robot_pos = lambda: pytest.fail("observer re-invoked provider")
-    watched = observer.ForceObserver(tmp_path, {}, tmp_path)
+    watched = observer.ForceObserver(tmp_path, {}, tmp_path, {})
     watched.episode = {"steps": []}
     watched.step = {"step_entry_positions": [[0.0, 0.0], [1.0, 0.0]]}
     frame = SimpleNamespace(

@@ -186,6 +186,9 @@ diagnostic artifact, not an original 0.0.7 release field.
    observer is also rejected by PID. At installation, verify the three traced source files
    byte-for-byte against pinned commit `07f7e8d`; on each traced call, require the code filename,
    module `__file__` and module name to resolve to those files under that verified checkout.
+   Require frame globals to be the live `sys.modules` dictionary, frame code identity to the
+   module's actual function/method, and code-object equality to a fresh compile of the pinned
+   bytes. A direct import probe in the frozen checkout matched all four target code objects.
    A shadowed import root fails before a sidecar can be written. No sidecar is admitted for
    unobserved or failed episodes.
 2. An opt-in `sys.settrace` observer copies the frozen `PedRobotForce.__call__` return value

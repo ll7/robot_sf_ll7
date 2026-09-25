@@ -379,6 +379,43 @@ def test_qd_without_verdict_records_unknown_and_still_evaluates(tmp_path: Path) 
     assert result.admissibility_records[0]["reason_code"] == "admissibility_precheck_not_configured"
 
 
+def test_qd_precheck_exception_is_unavailable_and_budget_continues(tmp_path: Path) -> None:
+    """A broken optional precheck remains visible without dropping the evaluation."""
+    config = QDSearchConfig(
+        search_space=_space(), objective="worst_case_snqi", grid=GridSpec(0, 2.5, 0, 3, 4), budget=2
+    )
+    evaluations = [
+        _make_evaluation(
+            candidate=candidate,
+            min_distance=1.0,
+            critical_time=1.0,
+            objective=1.0,
+            bundle_index=index,
+            temp_root=tmp_path,
+        )
+        for index, candidate in enumerate(_candidates(2))
+    ]
+
+    def broken_precheck(_config: QDSearchConfig, _candidate: CandidateSpec) -> None:
+        raise RuntimeError("private details are not persisted")
+
+    result = run_map_elites(
+        config,
+        evaluator=_FakeEvaluator(evaluations),
+        admissibility_precheck=broken_precheck,
+    )
+
+    assert result.num_proposed == 2
+    assert result.num_evaluated == 2
+    assert result.num_admissibility_rejected == 0
+    assert len(result.admissibility_records) == 2
+    for record in result.admissibility_records:
+        assert record["status"] == "unavailable"
+        assert record["reason_code"] == "admissibility_precheck_raised"
+        assert record["error_type"] == "RuntimeError"
+        assert "private details" not in str(record)
+
+
 def test_qd_invalid_verdict_is_preserved_and_does_not_reject(tmp_path: Path) -> None:
     config = QDSearchConfig(
         search_space=_space(), objective="worst_case_snqi", grid=GridSpec(0, 2.5, 0, 3, 4), budget=1

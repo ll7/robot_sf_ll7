@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -36,6 +38,10 @@ from robot_sf.adversarial.config import (
 from robot_sf.adversarial.io import read_first_jsonl_record
 from robot_sf.adversarial.objectives import get_objective
 from robot_sf.adversarial.samplers import CandidateSampler, build_sampler
+from robot_sf.adversarial.scenario_admissibility import (
+    classify_scenario_admissibility,
+    validate_scenario_admissibility,
+)
 from robot_sf.benchmark.fallback_policy import (
     resolve_execution_mode,
     summarize_benchmark_availability,
@@ -307,13 +313,17 @@ def run_adversarial_search(
         candidate_dir = config.output_dir / f"candidate_{index:04d}"
         validation_errors = config.search_space.validate_candidate(candidate)
         if validation_errors:
+            certification_status = _attach_scenario_admissibility(
+                failed_status(
+                    "search-space validation failed", details={"errors": validation_errors}
+                ),
+                candidate=candidate,
+                scenario_yaml_path=None,
+            )
             num_invalid += 1
             evaluation = _invalid_evaluation(
                 candidate=candidate,
-                certification_status=failed_status(
-                    "search-space validation failed",
-                    details={"errors": validation_errors},
-                ),
+                certification_status=certification_status,
                 scenario_yaml_path=None,
                 bundle_path=None,
                 reason="; ".join(validation_errors),
@@ -332,6 +342,11 @@ def run_adversarial_search(
             candidate,
             scenario_yaml_path,
             config.require_certification,
+        )
+        certification_status = _attach_scenario_admissibility(
+            certification_status,
+            candidate=candidate,
+            scenario_yaml_path=scenario_yaml_path,
         )
         if not candidate_allowed(
             certification_status,
@@ -412,6 +427,94 @@ def _observe_candidate(sampler: CandidateSampler, evaluation: CandidateEvaluatio
     observe = getattr(sampler, "observe", None)
     if callable(observe):
         observe(evaluation)
+
+
+def _attach_scenario_admissibility(
+    certification_status: CertificationStatus,
+    *,
+    candidate: CandidateSpec,
+    scenario_yaml_path: Path | None,
+) -> CertificationStatus:
+    """Bind one conservative admissibility verdict to a materialized search candidate.
+
+    The existing certifier result is reused; this helper never reruns the producer. The
+    admissibility adapter independently binds the certificate to the selected scenario bytes
+    and runtime-referenced map/route closure. Any absent, mismatched, or unreadable evidence
+    remains a retained unknown row in the normal search manifest.
+    """
+    raw_scenario: bytes | None = None
+    scenario_id: str | None = None
+    certificate: dict[str, Any] | None = None
+    classification_error_type: str | None = None
+    try:
+        if scenario_yaml_path is not None:
+            raw_scenario = scenario_yaml_path.read_bytes()
+            scenario_document = yaml.safe_load(raw_scenario.decode("utf-8"))
+            scenarios = (
+                scenario_document.get("scenarios") if isinstance(scenario_document, dict) else None
+            )
+            if (
+                isinstance(scenarios, list)
+                and len(scenarios) == 1
+                and isinstance(scenarios[0], dict)
+            ):
+                row = scenarios[0]
+                value = row.get("name") or row.get("scenario_id") or row.get("id")
+                if isinstance(value, str) and value.strip():
+                    scenario_id = value.strip()
+        certificates = certification_status.details.get("certificates")
+        if isinstance(certificates, list) and scenario_id is not None:
+            matching = [
+                item
+                for item in certificates
+                if isinstance(item, dict) and item.get("scenario_id") == scenario_id
+            ]
+            if len(matching) == 1:
+                certificate = matching[0]
+
+        case_bytes = raw_scenario or json.dumps(
+            candidate.to_json(), sort_keys=True, separators=(",", ":"), allow_nan=True
+        ).encode("utf-8")
+        case_id = f"adversarial-search-{hashlib.sha256(case_bytes).hexdigest()}"
+        verdict = classify_scenario_admissibility(
+            case_id,
+            scenario_artifact_path=scenario_yaml_path,
+            scenario_id=scenario_id,
+            scenario_certificate=certificate,
+        ).to_dict()
+    except Exception as exc:  # noqa: BLE001 - retain unknown evidence instead of dropping a row
+        classification_error_type = type(exc).__name__
+        fallback_bytes = json.dumps(
+            candidate.to_json(), sort_keys=True, separators=(",", ":"), allow_nan=True
+        ).encode("utf-8")
+        case_id = f"adversarial-search-{hashlib.sha256(fallback_bytes).hexdigest()}"
+        verdict = {
+            "schema_version": "scenario_admissibility.v1",
+            "case_id": case_id,
+            "scenario_id": scenario_id,
+            "verdict": "admissible_feasibility_unknown",
+            "target_planner_outcome": "not_evaluated",
+            "search_disposition": "retain",
+            "reason_codes": ["admissibility_classification_unavailable"],
+            "assumptions": {},
+            "evidence": {
+                "classification_adapter": {
+                    "status": "unavailable",
+                    "error_type": classification_error_type,
+                    "scenario_artifact_sha256": (
+                        hashlib.sha256(raw_scenario).hexdigest()
+                        if raw_scenario is not None
+                        else None
+                    ),
+                }
+            },
+        }
+    validate_scenario_admissibility(verdict)
+    details = dict(certification_status.details)
+    details["scenario_admissibility"] = verdict
+    if classification_error_type is not None:
+        details["scenario_admissibility_status"] = "unavailable"
+    return replace(certification_status, details=details)
 
 
 def production_candidate_evaluator(

@@ -2412,10 +2412,17 @@ def test_required_certification_uses_real_scenario_certification_api(tmp_path: P
     invalid_status = manifest["candidates"][0]["certification_status"]
     valid_status = manifest["candidates"][1]["certification_status"]
     assert invalid_status["status"] == "failed"
+    assert invalid_status["details"]["scenario_admissibility"]["search_disposition"] == "retain"
     assert "start_inside_static_obstacle" in invalid_status["reason"]
     assert manifest["candidates"][0]["error"] == "start_inside_static_obstacle"
     assert valid_status["status"] == "passed"
     assert valid_status["details"]["certificates"][0]["benchmark_eligibility"] != "excluded"
+    admissibility = valid_status["details"]["scenario_admissibility"]
+    assert admissibility["schema_version"] == "scenario_admissibility.v1"
+    assert admissibility["scenario_id"] == "template_adversarial_0001"
+    assert admissibility["search_disposition"] == "retain"
+    assert admissibility["verdict"] == "admissible_feasibility_unknown"
+    assert admissibility["evidence"]["selected_scenario_row_binding"]["status"] == "valid"
     assert manifest["candidates"][1]["trajectory_csv_path"].endswith(
         "candidate_0001/trajectory.csv"
     )

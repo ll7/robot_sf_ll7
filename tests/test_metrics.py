@@ -56,6 +56,153 @@ def _make_episode(T: int, K: int) -> EpisodeData:
     )
 
 
+def _robot_force_config(*, active: bool = True) -> dict[str, object]:
+    """Return a compact robot-force configuration for pure metric tests."""
+    return {
+        "prf_active": active,
+        "prf_multiplier": 4.0,
+        "prf_activation_m": 1.0,
+        "prf_robot_radius_m": 0.5,
+        "prf_ped_radius_m": 0.2,
+    }
+
+
+def _social_force_config() -> dict[str, float]:
+    """Return the minimum SocialForce mapping consumed by the pair kernel."""
+    return {
+        "lambda_importance": 1.0,
+        "gamma": 1.0,
+        "n_prime": 1.0,
+        "n": 1.0,
+        "factor": 1.0,
+        "activation_threshold": 10.0,
+    }
+
+
+def test_robot_force_recompute_covers_inactive_nan_and_response_multiplier_paths() -> None:
+    """Robot-force recomputation preserves invalid rows and applies response weights."""
+    episode = _make_episode(T=2, K=2)
+    episode.peds_pos[:] = np.array(
+        [
+            [[1.0, 0.0], [np.nan, np.nan]],
+            [[3.0, 0.0], [2.0, 0.0]],
+        ]
+    )
+    config = {
+        **_robot_force_config(),
+        "response_multipliers": np.array([[2.0, 3.0], [4.0, 5.0]]),
+    }
+
+    force = metrics_mod.recompute_robot_ped_forces(episode, config)
+
+    # The first pedestrian is within the 1.7 m cutoff and receives the explicit
+    # response multiplier; the NaN row remains invalid and out-of-cutoff rows
+    # contribute no force.
+    assert force[0, 0, 0] == pytest.approx(8.0)
+    assert np.isnan(force[0, 1]).all()
+    assert np.array_equal(force[1], np.zeros((2, 2)))
+
+    inactive = metrics_mod.recompute_robot_ped_forces(
+        episode,
+        {
+            **_robot_force_config(active=False),
+            "response_multipliers": config["response_multipliers"],
+        },
+    )
+    assert inactive[0, 0].tolist() == [0.0, 0.0]
+    assert np.isnan(inactive[0, 1]).all()
+
+
+def test_robot_force_recompute_rejects_coincident_centers() -> None:
+    """Coincident robot and pedestrian centers remain a singular model input."""
+    episode = _make_episode(T=1, K=1)
+    with pytest.raises(ValueError, match="undefined at coincident centers"):
+        metrics_mod.recompute_robot_ped_forces(episode, _robot_force_config())
+
+
+@pytest.mark.parametrize(
+    ("forces", "dt", "reference", "message"),
+    [
+        (np.zeros((2, 2)), 0.1, 1.0, "shape"),
+        (np.zeros((1, 1, 2)), 0.0, 1.0, "dt and force reference"),
+        (np.array([[[np.inf, 0.0]]]), 0.1, 1.0, "infinite robot force"),
+    ],
+)
+def test_robot_force_reductions_reject_invalid_inputs(
+    forces: np.ndarray, dt: float, reference: float, message: str
+) -> None:
+    """Reduction validation fails closed for malformed, invalid, or infinite input."""
+    with pytest.raises(ValueError, match=message):
+        metrics_mod.robot_force_reductions(forces, dt=dt, reference=reference)
+
+
+@pytest.mark.parametrize(
+    "samples,social_config",
+    [
+        (None, None),
+        ([{}], {}),
+        ([{}, {}], None),
+    ],
+)
+def test_robot_force_pp_equivalent_rejects_incomplete_alignment_guards(
+    samples: list[dict[str, object]] | None, social_config: dict[str, float] | None
+) -> None:
+    """The counterfactual requires two samples and an explicit social-force config."""
+    episode = _make_episode(T=2, K=1)
+    episode.robot_force_samples = samples
+    episode.social_force_config = social_config
+    with pytest.raises(ValueError, match="at least two aligned force-input samples"):
+        metrics_mod.robot_force_pp_equivalent(episode)
+
+
+def test_robot_force_pp_equivalent_rejects_component_roster_drift() -> None:
+    """Counterfactual replay rejects a changing component roster."""
+    episode = _make_episode(T=2, K=1)
+    episode.social_force_config = _social_force_config()
+    episode.robot_force_samples = [
+        {
+            "peds_pos": [[1.0, 0.0]],
+            "components": [{**_robot_force_config(), "robot_pos": [0.0, 0.0]}],
+        },
+        {"peds_pos": [[1.0, 0.0]], "components": []},
+    ]
+    with pytest.raises(ValueError, match="component roster changed"):
+        metrics_mod.robot_force_pp_equivalent(episode)
+
+
+@pytest.mark.parametrize(
+    "robot_config,social_config",
+    [
+        (None, _social_force_config()),
+        (_robot_force_config(), None),
+    ],
+)
+def test_robot_force_metrics_requires_both_configurations(
+    robot_config: dict[str, object] | None, social_config: dict[str, float] | None
+) -> None:
+    """Partial opt-in configuration is rejected instead of silently changing mode."""
+    episode = _make_episode(T=1, K=1)
+    episode.robot_force_config = robot_config
+    episode.social_force_config = social_config
+    with pytest.raises(ValueError, match="require robot and social force configuration"):
+        metrics_mod.robot_force_metrics(episode)
+
+
+def test_robot_force_metrics_records_posthoc_provenance() -> None:
+    """Post-hoc estimates carry explicit provenance in the metric metadata."""
+    episode = _make_episode(T=1, K=1)
+    episode.peds_pos[:] = [[[1.0, 0.0]]]
+    episode.robot_force_config = _robot_force_config(active=False)
+    episode.social_force_config = _social_force_config()
+
+    result = metrics_mod.robot_force_metrics(episode)
+
+    assert result["robot_force_metadata"]["source"] == "posthoc_recomputed"
+    assert result["robot_force_metadata"]["sample_timing"] == (
+        "caller_supplied_positions_may_be_post_integration"
+    )
+
+
 def test_metrics_docstring_marks_implemented_and_not_stubbed():
     """Verify metrics module docstring documents implemented metrics without stub markings."""
     doc = (metrics_mod.__doc__ or "").lower()

@@ -23,6 +23,7 @@ from robot_sf.adversarial import (
     PLANNER_SPECIFIC_FAILURE,
     STRUCTURALLY_INVALID,
     partition_candidates_by_admissibility,
+    scenario_admissibility,
     validate_scenario_admissibility,
 )
 from robot_sf.adversarial import (
@@ -46,7 +47,6 @@ from robot_sf.benchmark.result_provenance import (
     write_result_provenance_manifest,
 )
 from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback
-from robot_sf.scenario_certification import v1 as scenario_certification_v1
 from robot_sf.scenario_certification.feasibility_oracle import (
     FEASIBILITY_ORACLE_SCHEMA,
     ISSUE_5574_REPORT_SCHEMA,
@@ -57,7 +57,6 @@ from robot_sf.scenario_certification.input_identity import (
 )
 from robot_sf.scenario_certification.v1 import (
     CERT_SCHEMA_VERSION,
-    ScenarioCertificate,
     certificate_to_dict,
     certify_scenario_file,
 )
@@ -91,6 +90,7 @@ def _certificate(
     scenario_id: str = "case-static",
     pedestrian_count: int = 0,
     route_reason: str | None = None,
+    include_producer_identity: bool = True,
 ) -> dict[str, Any]:
     if route_reason is not None:
         reasons = [route_reason]
@@ -140,7 +140,9 @@ def _certificate(
             "effective_input_sha256": _SCENARIO_EFFECTIVE_INPUT_SHA256,
             "effective_input_identity_stable": True,
             "runtime_input_identity_stable": True,
-        },
+        }
+        if include_producer_identity
+        else {},
     }
 
 
@@ -647,6 +649,98 @@ def test_planner_exception_stays_unknown_and_retained() -> None:
     assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert verdict.search_disposition == "retain"
     assert "scenario_certificate_route_coverage_unresolved" in verdict.reason_codes
+
+
+def test_legacy_empty_path_without_producer_status_stays_unknown() -> None:
+    """Legacy v1 empty-path records do not prove that the planner completed a no-path search."""
+
+    certificate = _certificate(
+        "geometrically_infeasible",
+        eligibility="excluded",
+        include_producer_identity=False,
+    )
+    route_checks = certificate["route_certificates"][0]["checks"]
+    route_checks["planner"] = {"algorithm": "a_star"}
+
+    verdict = classify_scenario_admissibility("case-static", scenario_certificate=certificate)
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "scenario_certificate_source_identity_bound_by_adapter" in verdict.reason_codes
+    assert "scenario_certificate_route_coverage_unresolved" in verdict.reason_codes
+
+
+def test_legacy_certificate_identity_is_bound_by_adapter_inputs() -> None:
+    """The adapter validates v1 certificates that lack producer-only digest fields."""
+
+    certificate = _certificate(include_producer_identity=False)
+    verdict = classify_scenario_admissibility("case-static", scenario_certificate=certificate)
+
+    binding = verdict.assumptions["scenario_certificate"]["identity_binding"]
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert binding["source"] == "admissibility_adapter_current_input_identity"
+    assert binding["source_artifact_sha256"] == _SCENARIO_ARTIFACT_SHA256
+    assert binding["effective_input_sha256"] == _SCENARIO_EFFECTIVE_INPUT_SHA256
+    assert binding["producer_fields_present"] is False
+    assert "scenario_certificate_effective_input_identity_bound_by_adapter" in (
+        verdict.reason_codes
+    )
+
+
+def test_legacy_certificate_identity_unavailable_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing adapter-owned input identity cannot validate an exclusion certificate."""
+
+    monkeypatch.setattr(
+        scenario_admissibility,
+        "scenario_input_identity",
+        lambda *_args, **_kwargs: {
+            "status": "unavailable",
+            "source_artifact_sha256": None,
+            "effective_input_sha256": None,
+            "requires_effective_input_binding": True,
+            "files": [],
+            "reason_code": "fixture_identity_unavailable",
+        },
+    )
+    certificate = _certificate(
+        "geometrically_infeasible",
+        eligibility="excluded",
+        include_producer_identity=False,
+    )
+
+    verdict = classify_scenario_admissibility("case-static", scenario_certificate=certificate)
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert "scenario_certificate_adapter_identity_unavailable" in verdict.reason_codes
+
+
+def test_certificate_exclusion_fails_closed_when_adapter_identity_changes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A source/input change during classification downgrades an exclusion to unknown."""
+    identity_before = dict(_SCENARIO_RUNTIME_IDENTITY)
+    identity_after = {
+        **identity_before,
+        "effective_input_sha256": "a" * 64,
+    }
+    identities = iter((identity_before, identity_after))
+    monkeypatch.setattr(
+        scenario_admissibility,
+        "scenario_input_identity",
+        lambda *_args, **_kwargs: next(identities),
+    )
+    certificate = _certificate("geometrically_infeasible", eligibility="excluded")
+
+    verdict = classify_scenario_admissibility("case-static", scenario_certificate=certificate)
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert verdict.search_disposition == "retain"
+    assert verdict.evidence["scenario_artifact_identity"]["adapter_identity_stable"] is False
+    assert verdict.assumptions["scenario_certificate"]["identity_binding"]["stable"] is False
+    assert "scenario_certificate_adapter_identity_changed_or_unavailable" in (verdict.reason_codes)
 
 
 @pytest.mark.parametrize(
@@ -1294,10 +1388,8 @@ def test_oracle_report_producer_digest_rejects_stale_same_path_report(tmp_path: 
     )
 
 
-def test_producer_certificate_digest_is_bound_through_admissibility_adapter(
-    tmp_path: Path,
-) -> None:
-    """A source-file edit after certification invalidates the producer's captured digest."""
+def test_legacy_certificate_output_is_bound_by_adapter_identity(tmp_path: Path) -> None:
+    """Legacy v1 output stays unchanged while #9651 binds it to current candidate inputs."""
     scenario_path = tmp_path / "case_static.yaml"
     map_path = _REPO_ROOT / "maps/svg_maps/classic_head_on_corridor.svg"
     original_bytes = f"""scenarios:
@@ -1315,10 +1407,9 @@ def test_producer_certificate_digest_is_bound_through_admissibility_adapter(
     certificate = certificate_to_dict(
         certify_scenario_file(scenario_path, scenario_id="case-static")[0]
     )
-    original_digest = hashlib.sha256(original_bytes).hexdigest()
-    assert certificate["evidence"]["source_artifact_sha256"] == original_digest
-
-    scenario_path.write_bytes(original_bytes + b"# revised after certification\n")
+    identity = scenario_input_identity(scenario_path, scenario_id="case-static")
+    assert "source_artifact_sha256" not in certificate["evidence"]
+    assert "effective_input_sha256" not in certificate["evidence"]
     verdict = _classify_scenario_admissibility(
         "case-static",
         scenario_artifact_path=scenario_path,
@@ -1328,6 +1419,22 @@ def test_producer_certificate_digest_is_bound_through_admissibility_adapter(
 
     assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert verdict.search_disposition == "retain"
+    binding = verdict.assumptions["scenario_certificate"]["identity_binding"]
+    assert binding["source"] == "admissibility_adapter_current_input_identity"
+    assert binding["source_artifact_sha256"] == hashlib.sha256(original_bytes).hexdigest()
+    assert binding["effective_input_sha256"] == identity["effective_input_sha256"]
+    assert binding["producer_fields_present"] is False
+
+
+def test_present_certificate_producer_digest_must_match_adapter_identity() -> None:
+    """Optional future producer digests remain checked when a certificate supplies them."""
+
+    certificate = _certificate()
+    certificate["evidence"]["source_artifact_sha256"] = "0" * 64
+
+    verdict = classify_scenario_admissibility("case-static", scenario_certificate=certificate)
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
     assert "scenario_certificate_producer_source_digest_missing_or_mismatch" in (
         verdict.reason_codes
     )
@@ -1375,95 +1482,6 @@ def test_certificate_and_oracle_reject_stale_runtime_input_bytes(
     )
 
 
-def test_certificate_producer_marks_referenced_input_change_unstable(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A map edit during certification clears the producer's effective-input binding."""
-    scenario_path = _referenced_scenario(tmp_path)
-    map_path = tmp_path / "map.svg"
-
-    def certify_then_mutate(
-        scenario: dict[str, Any], *, scenario_path: Path, **_kwargs: Any
-    ) -> ScenarioCertificate:
-        map_path.write_bytes(map_path.read_bytes() + b"\n<!-- concurrent edit -->\n")
-        return ScenarioCertificate(
-            schema_version=CERT_SCHEMA_VERSION,
-            scenario_id="case-static",
-            source=scenario_path.as_posix(),
-            classification="valid",
-            benchmark_eligibility="eligible",
-            reasons=[],
-            checks={"route_count": 1},
-            route_certificates=[],
-        )
-
-    monkeypatch.setattr(scenario_certification_v1, "certify_scenario", certify_then_mutate)
-
-    certificate = certificate_to_dict(
-        certify_scenario_file(scenario_path, scenario_id="case-static")[0]
-    )
-
-    assert certificate["evidence"]["effective_input_sha256"] is None
-    assert certificate["evidence"]["effective_input_identity_stable"] is False
-
-
-def test_certificate_producer_rejects_aba_include_replacement(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """An ABA include replacement cannot bind identity to bytes it did not parse."""
-    scenario_path = tmp_path / "root.yaml"
-    included_path = tmp_path / "included.yaml"
-    scenario_path.write_text("includes: [included.yaml]\n", encoding="utf-8")
-    original_bytes = b"scenarios:\n  - name: case-static\n    marker: restored-A\n    seeds: [19]\n"
-    consumed_bytes = b"scenarios:\n  - name: case-static\n    marker: consumed-B\n    seeds: [19]\n"
-    included_path.write_bytes(original_bytes)
-    original_read_bytes = Path.read_bytes
-    loaded_markers: list[str] = []
-    swapped = False
-
-    def read_with_aba(path: Path) -> bytes:
-        nonlocal swapped
-        if path == included_path and not swapped:
-            swapped = True
-            included_path.write_bytes(consumed_bytes)
-            consumed = original_read_bytes(path)
-            included_path.write_bytes(original_bytes)
-            return consumed
-        return original_read_bytes(path)
-
-    def certify_fixture(scenario: dict[str, Any], *, scenario_path: Path, **_kwargs: Any):
-        return ScenarioCertificate(
-            schema_version=CERT_SCHEMA_VERSION,
-            scenario_id="case-static",
-            source=scenario_path.as_posix(),
-            classification="valid",
-            benchmark_eligibility="eligible",
-            reasons=[],
-            checks={"loaded_marker": scenario.get("marker")},
-            route_certificates=[],
-        )
-
-    monkeypatch.setattr(Path, "read_bytes", read_with_aba)
-
-    def inspect_loaded_scenario(
-        scenario: dict[str, Any], *, scenario_path: Path, **kwargs: Any
-    ) -> ScenarioCertificate:
-        loaded_markers.append(str(scenario.get("marker")))
-        return certify_fixture(scenario, scenario_path=scenario_path, **kwargs)
-
-    monkeypatch.setattr(scenario_certification_v1, "certify_scenario", inspect_loaded_scenario)
-
-    certificate = certificate_to_dict(
-        certify_scenario_file(scenario_path, scenario_id="case-static")[0]
-    )
-
-    assert loaded_markers == ["consumed-B"]
-    assert certificate["checks"]["loaded_marker"] == "consumed-B"
-    assert included_path.read_bytes() == original_bytes
-    assert certificate["evidence"]["effective_input_sha256"] is None
-    assert certificate["evidence"]["effective_input_identity_stable"] is False
-
-
 @pytest.mark.parametrize(
     "external_reference",
     (
@@ -1489,7 +1507,41 @@ def test_legacy_single_row_identity_rejects_external_references(
     assert identity["effective_input_sha256"] is None
 
 
-def test_map_parser_cache_key_tracks_exact_source_bytes(
+def test_adapter_identity_rejects_aba_include_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The adapter-owned manifest identity fails closed when an include changes during parse."""
+    scenario_path = tmp_path / "root.yaml"
+    included_path = tmp_path / "included.yaml"
+    scenario_path.write_text("includes: [included.yaml]\n", encoding="utf-8")
+    original_bytes = b"scenarios:\n  - name: case-static\n    marker: restored-A\n    seeds: [19]\n"
+    consumed_bytes = b"scenarios:\n  - name: case-static\n    marker: consumed-B\n    seeds: [19]\n"
+    included_path.write_bytes(original_bytes)
+    original_read_bytes = Path.read_bytes
+    swapped = False
+
+    def read_with_aba(path: Path) -> bytes:
+        nonlocal swapped
+        if path.resolve() == included_path.resolve() and not swapped:
+            swapped = True
+            included_path.write_bytes(consumed_bytes)
+            try:
+                return original_read_bytes(path)
+            finally:
+                included_path.write_bytes(original_bytes)
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", read_with_aba)
+
+    identity = scenario_input_identity(scenario_path, scenario_id="case-static")
+
+    assert included_path.read_bytes() == original_bytes
+    assert identity["status"] == "unavailable"
+    assert identity["effective_input_sha256"] is None
+    assert identity["reason_code"] == "included_scenario_manifest_changed_during_load"
+
+
+def test_opt_in_map_parser_cache_tracks_exact_source_bytes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Changing map bytes at one path parses the new immutable source snapshot."""
@@ -1512,18 +1564,47 @@ def test_map_parser_cache_key_tracks_exact_source_bytes(
             path, geometry_contract=geometry_contract, source_bytes=source_bytes
         )
 
-    scenario_loader._load_map_definition.cache_clear()
+    scenario_loader._load_map_definition_cached.cache_clear()
     monkeypatch.setattr(svg_map_parser, "convert_map", capture_source)
     try:
-        first = scenario_loader._load_map_definition(str(source_path))
+        first, _ = scenario_loader._load_map_definition_with_digest(str(source_path))
         source_path.write_bytes(updated_bytes)
-        second = scenario_loader._load_map_definition(str(source_path))
+        second, _ = scenario_loader._load_map_definition_with_digest(str(source_path))
     finally:
-        scenario_loader._load_map_definition.cache_clear()
+        scenario_loader._load_map_definition_cached.cache_clear()
 
     assert first is not None and second is not None
     assert parsed_sources == [initial_bytes, updated_bytes]
     assert first is not second
+
+
+def test_legacy_map_loader_keeps_path_parser_without_input_capture(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The legacy scenario loader does not opt into the new parser snapshot path."""
+    from robot_sf.nav import svg_map_parser
+    from robot_sf.training import scenario_loader
+
+    source_path = _REPO_ROOT / "maps/svg_maps/classic_head_on_corridor.svg"
+    parsed_sources: list[bytes | None] = []
+    original_convert = svg_map_parser.convert_map
+
+    def capture_source(
+        path: str, *, geometry_contract: str = "legacy", source_bytes: bytes | None = None
+    ) -> Any:
+        parsed_sources.append(source_bytes)
+        return original_convert(
+            path, geometry_contract=geometry_contract, source_bytes=source_bytes
+        )
+
+    scenario_loader._load_map_definition.cache_clear()
+    monkeypatch.setattr(svg_map_parser, "convert_map", capture_source)
+    try:
+        assert scenario_loader._load_map_definition(str(source_path)) is not None
+    finally:
+        scenario_loader._load_map_definition.cache_clear()
+
+    assert parsed_sources == [None]
 
 
 def test_default_map_pool_is_part_of_runtime_input_identity(tmp_path: Path) -> None:
@@ -1618,42 +1699,6 @@ def test_runtime_identity_rejects_route_bytes_parsed_during_aba_replacement(
         for item in consumed
     )
     assert runtime_input_records_match(identity, consumed, scenario_id="case-static") is False
-
-
-def test_certificate_runtime_identity_follows_exact_map_parser_snapshot(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Certificate binding rejects map bytes consumed during an ABA replacement."""
-    from robot_sf.training import scenario_loader
-
-    scenario_path = _referenced_scenario(tmp_path, route_override=False)
-    map_path = tmp_path / "map.svg"
-    original_map_bytes = map_path.read_bytes()
-    consumed_variant = original_map_bytes + b"\n<!-- consumed-during-cert-ABA -->\n"
-    original_load = scenario_loader._load_map_definition_with_digest
-
-    def load_variant_then_restore(
-        path: str, *, geometry_contract: str = "legacy"
-    ) -> tuple[Any, str | None]:
-        if Path(path).resolve() == map_path.resolve():
-            map_path.write_bytes(consumed_variant)
-            try:
-                return original_load(path, geometry_contract=geometry_contract)
-            finally:
-                map_path.write_bytes(original_map_bytes)
-        return original_load(path, geometry_contract=geometry_contract)
-
-    monkeypatch.setattr(
-        scenario_loader, "_load_map_definition_with_digest", load_variant_then_restore
-    )
-
-    certificate = certificate_to_dict(
-        certify_scenario_file(scenario_path, scenario_id="case-static")[0]
-    )
-
-    assert map_path.read_bytes() == original_map_bytes
-    assert certificate["evidence"]["runtime_input_identity_stable"] is False
-    assert certificate["evidence"]["effective_input_identity_stable"] is False
 
 
 def test_map_registry_remap_changes_effective_identity(

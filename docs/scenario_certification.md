@@ -26,22 +26,25 @@ Each certificate includes:
 - `benchmark_eligibility`: `eligible`, `stress_only`, or `excluded`.
 - `checks`: deterministic geometry, route, planner, kinodynamic, and dynamic checks.
 - `route_certificates`: per-route evidence for every applicable robot route.
-- `evidence`: optional scenario metadata and scenario-difficulty provenance. File-based
-  certificates also record `source_artifact_sha256`, captured when the certifier reads the
-  manifest, and `effective_input_sha256` plus `effective_input_identity_stable`. The effective
-  identity covers included manifests and the selected scenario's resolved map and route-override
+- `evidence`: optional scenario metadata and scenario-difficulty provenance. The frozen
+  `scenario_cert.v1` producer does not add source or effective-input digest fields. The
+  `scenario_admissibility.v1` adapter computes source and runtime-input identity before and after
+  classification, verifies the certificate's `source` resolves to those candidate bytes, and
+  records that stable adapter-time binding in its assumptions. Producer digest fields are checked
+  when a certificate supplies them; their absence does not change the v1 certificate output. The
+  runtime identity covers included manifests and the selected scenario's resolved map and route-override
   files, including the resolved `map_id` path and parser selected by its suffix. If a scenario
   omits both `map_file` and `map_id`, the closure includes every SVG loaded into the default
-  `MapDefinitionPool`. Certification and actor-free oracle execution compare the source hashes
-  returned by the actual map and route parsers with this declared closure; a missing or different
-  consumed input leaves runtime identity unavailable. Validation loading records each manifest
-  digest from the same byte buffer it parsed. File-based certification and feasibility reports
-  reuse that parsed validation report when computing input identity, so an include that changes
-  and is restored during loading cannot be paired with a digest from a later parse. Explicit map
-  definitions are cached by source-content digest and geometry contract, and SVG/serialized-map
-  parsers consume the same immutable bytes used for that digest. A legacy single-row identity is
-  available only when the full runtime input closure, including the default map pool when used, can
-  be resolved and matched to the consumer snapshots.
+  `MapDefinitionPool`. The feasibility oracle brackets the frozen certificate call with its own
+  source/input identity; a changed identity or a mismatching producer field leaves geometry
+  unknown. The benchmark episode producer can additionally compare parser-consumed resource
+  records with this declared closure; unavailable or different inputs remain unbound. Validation
+  loading records manifest digests from the byte buffer it
+  parsed, so an include changed during that load cannot be paired with a digest from a later parse.
+  Explicit map definitions used by input-capturing callers are cached by source-content digest and
+  geometry contract, and those callers parse the immutable bytes used for the digest. A legacy
+  single-row identity is available only when the full runtime input closure, including the default
+  map pool when used, can be resolved.
 
 Benchmark inclusion policy:
 
@@ -66,8 +69,10 @@ Geometry checks:
 - finite start and goal coordinates within map bounds,
 - start/goal not inside static obstacles,
 - inflated global path existence using the classic A* planner with no inflation fallback,
-- a planner exception retains the historical v1 classification label, while the adversarial
-  admissibility layer recognizes `path_status=error` as unresolved and does not reject the case,
+- a planner exception retains the historical v1 classification label, but the certificate does
+  not distinguish a completed no-path search from an error. The adversarial admissibility layer
+  therefore keeps an empty-path exclusion unknown unless independent route evidence establishes
+  impossibility,
 - **continuous swept-envelope validation of the planned A* path** (issue #6139): after A*
   returns a collision-free grid path, the certifier re-validates the planned polyline
   against the same parsed obstacle geometry and robot envelope the simulator uses. A
@@ -277,16 +282,16 @@ configuration match. Incomplete records stay visible in `evidence` and do not es
 Artifact provenance is bound across evidence sources: the certificate `source` and oracle
 `scenario_manifest` references must resolve to bytes with the same SHA-256 as
 `scenario_artifact_path`, and each execution's `scenario_sha256` must equal that digest. When a
-scenario uses included manifests, a map file, or route overrides, certificates, oracle cells, and
-normalized execution records must also carry the matching `effective_input_sha256`; producers must
-record that the referenced bytes stayed stable while evidence was generated. The adapter checks each
-named execution's parser-consumed input closure against the candidate's captured resources. A
-certificate's captured `evidence.source_artifact_sha256` must also equal the manifest digest, so
-reusing a certificate after editing the source file at the same path leaves it unbound. A
-missing or unavailable canonical artifact, an unresolvable source reference, or any mismatch
-leaves that evidence unusable for rejection or feasibility classification while preserving the
-captured input and reason code. For multi-scenario manifests, callers should pass the exact
-scenario artifact used for the named case and adapt evidence hashes to those same bytes; a shared
+scenario uses included manifests, a map file, or route overrides, oracle cells and normalized
+execution records must carry the matching `effective_input_sha256`; their producers record whether
+the referenced bytes stayed stable while evidence was generated. The adapter checks each named
+execution's parser-consumed input closure against the candidate's captured resources. Legacy
+`scenario_cert.v1` certificates have no producer-owned digest fields: the adapter binds their
+`source` to the current candidate source and input identity, and records that binding source in its
+assumptions. A missing or unavailable candidate identity, an unresolvable certificate source
+reference, or any supplied digest mismatch leaves the certificate unusable for rejection. This
+adapter-time binding does not attest when a legacy certificate was generated. For multi-scenario
+manifests, callers should pass the exact scenario artifact used for the named case; a shared
 scenario ID alone does not establish artifact identity.
 
 An observed reference or replay completion is empirical evidence for that named case and run, not

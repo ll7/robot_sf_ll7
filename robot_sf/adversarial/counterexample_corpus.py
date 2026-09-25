@@ -726,6 +726,7 @@ def admit_case_record(
     try:
         artifact_root_path = _resolve_corpus_directory(artifact_root, root)
         errors = _validate_case_record(incoming, corpus_root=root)
+        errors.extend(_validate_case_current_target_revision(incoming))
         if errors:
             raise CorpusError("case record rejected: " + "; ".join(errors))
         _case_artifacts_within_root(incoming, root, artifact_root_path)
@@ -2212,8 +2213,23 @@ def create_case_admission_replay_receipt(
     """Create one exact-revision admission receipt from a stored replay artifact.
 
     The artifact must already be a one-row episode JSONL under ``corpus_root``. This
-    validates and records existing evidence; it does not execute a simulator.
+    validates and records existing evidence; it does not execute a simulator. The
+    target is resolved independently from this module's checkout HEAD. An optional
+    ``target_revision`` is only an expected-value check and cannot override that HEAD.
     """
+    revision = _current_target_revision()
+    if revision is None:
+        raise CorpusError(
+            "admission replay rejected: independent current target revision is unavailable"
+        )
+    if target_revision is not None and target_revision != revision:
+        raise CorpusError(
+            "admission replay target revision differs from the independently resolved current target"
+        )
+    if observation.get("source_revision") != revision:
+        raise CorpusError(
+            "admission replay revision must match the independently resolved current target"
+        )
     evaluation_receipt = create_planner_replay_receipt(
         observation,
         case,
@@ -2222,9 +2238,6 @@ def create_case_admission_replay_receipt(
     )
     if evaluation_receipt.get("input_binding", {}).get("status") != "bound":
         raise CorpusError("admission replay rejected: direct case input binding is unavailable")
-    revision = target_revision or str(observation.get("source_revision") or "")
-    if not _is_full_git_revision(revision) or revision != observation.get("source_revision"):
-        raise CorpusError("admission replay target revision must exactly match the replay revision")
     projection = {
         "scenario_id": case.get("scenario_id"),
         "seed": case.get("scenario_seed"),
@@ -3868,6 +3881,27 @@ def _validate_case_record(case: Mapping[str, Any], *, corpus_root: Path | None =
         errors.extend(_validate_case_corpus_evidence(case, corpus_root))
         errors.extend(_validate_case_admission_replay(case, corpus_root))
     return errors
+
+
+def _validate_case_current_target_revision(case: Mapping[str, Any]) -> list[str]:
+    """Require an independently resolved checkout HEAD before admission as current."""
+    receipt = case.get("replay_receipt")
+    if not isinstance(receipt, Mapping) or receipt.get("verification_status") not in {
+        "exact_current_revision_match",
+        "repeated_current_revision_match",
+    }:
+        return []
+    current_revision = _current_target_revision()
+    if current_revision is None:
+        return ["independent current target revision is unavailable"]
+    if (
+        receipt.get("target_revision") != current_revision
+        or receipt.get("replay_revision") != current_revision
+    ):
+        return [
+            "admission replay does not match the independently resolved current target revision"
+        ]
+    return []
 
 
 def _validate_case_execution_contract(case: Mapping[str, Any]) -> list[str]:
@@ -5786,3 +5820,21 @@ def _is_full_git_revision(value: Any) -> bool:
         and len(value) == 40
         and all(character in "0123456789abcdef" for character in value)
     )
+
+
+def _current_target_revision() -> str | None:
+    """Resolve the exact HEAD of the checkout that provides this corpus module."""
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(_ROOT), "rev-parse", "--verify", "HEAD^{commit}"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    revision = completed.stdout.strip()
+    if completed.returncode != 0 or not _is_full_git_revision(revision):
+        return None
+    return revision

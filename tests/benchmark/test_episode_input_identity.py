@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import hashlib
-from typing import TYPE_CHECKING
+from pathlib import Path
 
-from robot_sf.benchmark.episode_input_identity import capture_episode_input_identity
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from robot_sf.benchmark.episode_input_identity import (
+    capture_episode_input_identity,
+    reconcile_consumed_map_identity,
+)
+from robot_sf.training import scenario_loader
+from robot_sf.training.scenario_loader import build_robot_config_from_scenario
 
 
 def test_episode_input_identity_binds_scenario_route_and_map_bytes(tmp_path: Path) -> None:
@@ -60,3 +62,68 @@ def test_episode_input_identity_binds_scenario_route_and_map_bytes(tmp_path: Pat
         scenario, scenario_path=scenario_path, seed=17, run_id="run-d"
     )
     assert changed_map["map_assets"] != identity["map_assets"]
+
+
+def test_replaced_map_bytes_cannot_reuse_path_cached_geometry(tmp_path: Path) -> None:
+    """The parsed map digest follows the exact bytes consumed across replacements."""
+    repository_root = Path(__file__).resolve().parents[2]
+    classic_map = repository_root / "maps/svg_maps/classic_crossing.svg"
+    narrow_map = repository_root / "maps/svg_maps/narrow_corridor.svg"
+    scenario_path = tmp_path / "scenario.yaml"
+    scenario_path.write_text("scenario fixture\n", encoding="utf-8")
+    route_path = tmp_path / "route.yaml"
+    route_path.write_text("route_payload: {}\n", encoding="utf-8")
+    map_path = tmp_path / "map.svg"
+    classic_bytes = classic_map.read_bytes()
+    narrow_bytes = narrow_map.read_bytes()
+    map_path.write_bytes(classic_bytes)
+    scenario = {
+        "name": "replace-map",
+        "map_file": "map.svg",
+        "route_overrides_file": "route.yaml",
+    }
+
+    scenario_loader._load_map_definition.cache_clear()
+    try:
+        initial_identity = capture_episode_input_identity(
+            scenario, scenario_path=scenario_path, seed=17, run_id="run-before"
+        )
+        first_config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+        (first_map,) = first_config.map_pool.map_defs.values()
+        assert initial_identity["status"] == "bound"
+        assert first_map._consumed_map_sha256 == hashlib.sha256(classic_bytes).hexdigest()
+
+        map_path.write_bytes(narrow_bytes)
+        replacement_identity = capture_episode_input_identity(
+            scenario, scenario_path=scenario_path, seed=17, run_id="run-after"
+        )
+        second_config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+        (second_map,) = second_config.map_pool.map_defs.values()
+
+        assert replacement_identity["status"] == "bound"
+        assert second_map is not first_map
+        assert second_map.width != first_map.width
+        assert second_map.obstacles != first_map.obstacles
+        assert second_map._consumed_map_sha256 == hashlib.sha256(narrow_bytes).hexdigest()
+        assert (
+            reconcile_consumed_map_identity(
+                replacement_identity,
+                consumed_map_sha256=second_map._consumed_map_sha256,
+            )["status"]
+            == "bound"
+        )
+
+        # A replacement after parsing can restore the captured path bytes (an ABA
+        # race); the identity must still become unavailable because the consumed
+        # snapshot differs from the bytes present at the capture boundary.
+        map_path.write_bytes(classic_bytes)
+        restored_identity = capture_episode_input_identity(
+            scenario, scenario_path=scenario_path, seed=17, run_id="run-restored"
+        )
+        raced_identity = reconcile_consumed_map_identity(
+            restored_identity, consumed_map_sha256=second_map._consumed_map_sha256
+        )
+        assert raced_identity["status"] == "unavailable"
+        assert "parsed_map_bytes_differ_from_captured_map_asset" in raced_identity["reason_codes"]
+    finally:
+        scenario_loader._load_map_definition.cache_clear()

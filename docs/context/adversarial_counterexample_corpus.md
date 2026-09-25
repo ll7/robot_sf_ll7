@@ -137,8 +137,13 @@ independently authenticate a replay.
 
 The public `create_case_admission_replay_receipt` helper binds an existing one-row episode JSONL
 to the case inputs and selected event/metric projection. Its `artifact_path` is relative to the
-corpus root. The replay revision must exactly equal the target revision; the helper does not run a
-simulator.
+corpus root. The helper independently resolves the exact `HEAD` of the checkout that provides the
+corpus module and requires the replay's source revision to match it. An optional
+`target_revision` argument is only an expected-value check; it cannot set or override the target.
+If checkout `HEAD` is unavailable, or if the replay was produced by another revision, receipt
+creation and case admission reject the evidence. The helper does not run a simulator. Corpus
+validation later preserves the recorded admission-time claim and does not compare it with a newer
+checkout `HEAD`.
 
 Admission receipts use v2 and bind their replay inventory one-to-one to the stored artifact
 receipts by path, digest, run ID, and selected event identity. Repeated artifacts require distinct
@@ -159,7 +164,6 @@ case["replay_receipt"] = create_case_admission_replay_receipt(
     case,
     artifact_path="historical_candidates/<candidate-id>/replay_output/current.jsonl",
     corpus_root=corpus_root,
-    target_revision=replay_observation["source_revision"],
 )
 ```
 

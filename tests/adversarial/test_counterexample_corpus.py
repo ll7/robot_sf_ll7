@@ -414,7 +414,7 @@ def _stage_case_under_candidate(case: dict[str, object], corpus_root: Path, cand
 
 
 def _single_replay_admission_receipt(
-    case: dict[str, object], corpus_root: Path
+    case: dict[str, object], corpus_root: Path, *, target_revision: str | None = None
 ) -> dict[str, object]:
     """Create an exact-revision receipt from a stored episode fixture without running it."""
     old_receipt = case["replay_receipt"]
@@ -455,13 +455,21 @@ def _single_replay_admission_receipt(
         "evidence_status": "complete",
         "run_id": run_id,
     }
-    return create_case_admission_replay_receipt(
-        observation,
-        case,
-        artifact_path=artifact_path,
-        corpus_root=corpus_root,
-        target_revision=projection["source_revision"],
-    )
+    # This fixture reuses historical bytes, so bind its synthetic target to the
+    # fixture's recorded source revision only within the helper's test scope.
+    with pytest.MonkeyPatch.context() as target_patch:
+        target_patch.setattr(
+            counterexample_corpus,
+            "_current_target_revision",
+            lambda: projection["source_revision"],
+        )
+        return create_case_admission_replay_receipt(
+            observation,
+            case,
+            artifact_path=artifact_path,
+            corpus_root=corpus_root,
+            target_revision=target_revision,
+        )
 
 
 def _append_episode_evaluation(
@@ -942,7 +950,7 @@ def test_issue9656_import_keeps_unverified_rows_in_separate_candidate_registry(
 
 
 def test_pending_historical_candidate_promotes_after_exact_replay_and_input_binding(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
         tmp_path, statuses=("not_attempted",), promotion_case=True
@@ -971,6 +979,12 @@ def test_pending_historical_candidate_promotes_after_exact_replay_and_input_bind
     }
     case = copy.deepcopy(corpus["cases"][0])
     case["replay_receipt"] = _single_replay_admission_receipt(case, corpus_root)
+    fixture_target_revision = case["replay_receipt"]["target_revision"]
+    monkeypatch.setattr(
+        counterexample_corpus,
+        "_current_target_revision",
+        lambda: fixture_target_revision,
+    )
     validate_corpus({**corpus, "cases": [case]}, corpus_root=corpus_root)
     case_record = _stage_case_under_candidate(case, corpus_root, candidate["candidate_id"])
     case_record["discovery"]["historical_candidate_binding"] = {
@@ -1025,6 +1039,59 @@ def test_pending_historical_candidate_promotes_after_exact_replay_and_input_bind
     assert historical_replay["local_ignored_output_used_as_admission_evidence"] is False
     assert historical_replay["admission_replay_matches_target_revision"] is True
     validate_corpus(corpus, corpus_root=corpus_root)
+
+
+def test_admission_receipt_rejects_replay_revision_as_untrusted_target(
+    tmp_path: Path,
+) -> None:
+    """A caller cannot label a stale replay revision as the current target."""
+    corpus_root = tmp_path / "corpus"
+    corpus, _pilot = import_issue9645_packet(_SOURCE_PACKET, new_corpus(), corpus_root=corpus_root)
+    case = copy.deepcopy(corpus["cases"][0])
+    case["replay_receipt"] = _single_replay_admission_receipt(case, corpus_root)
+    assert counterexample_corpus._validate_case_current_target_revision(case) == [
+        "admission replay does not match the independently resolved current target revision"
+    ]
+    corpus, admission = counterexample_corpus.admit_case_record(
+        case,
+        corpus,
+        corpus_root=corpus_root,
+        artifact_root=f"cases/{case['case_id']}",
+        source_kind="test_exact_current_revision",
+        source_id="stale-replay-source-revision",
+    )
+    assert admission["decision"] == "rejected"
+    assert any(
+        "independently resolved current target revision" in blocker
+        for blocker in admission["blockers"]
+    )
+
+    with pytest.raises(CorpusError, match="independently resolved current target"):
+        _single_replay_admission_receipt(case, corpus_root, target_revision="0" * 40)
+
+
+def test_case_admission_rejects_missing_or_mismatched_current_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Admission stays unknown when checkout HEAD cannot be independently resolved."""
+    corpus_root = tmp_path / "corpus"
+    corpus, _pilot = import_issue9645_packet(_SOURCE_PACKET, new_corpus(), corpus_root=corpus_root)
+    case = copy.deepcopy(corpus["cases"][0])
+    case["replay_receipt"] = _single_replay_admission_receipt(case, corpus_root)
+    monkeypatch.setattr(counterexample_corpus, "_current_target_revision", lambda: None)
+    corpus, admission = counterexample_corpus.admit_case_record(
+        case,
+        corpus,
+        corpus_root=corpus_root,
+        artifact_root=f"cases/{case['case_id']}",
+        source_kind="test_exact_current_revision",
+        source_id="missing-trusted-target-revision",
+    )
+    assert admission["decision"] == "rejected"
+    assert any(
+        "independent current target revision is unavailable" in blocker
+        for blocker in admission["blockers"]
+    )
 
 
 @pytest.mark.parametrize(

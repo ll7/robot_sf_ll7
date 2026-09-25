@@ -27,7 +27,10 @@ from robot_sf.benchmark.analysis_trace import (
     telemetry_from_scenario,
 )
 from robot_sf.benchmark.constants import NEAR_MISS_DIST
-from robot_sf.benchmark.episode_input_identity import capture_episode_input_identity
+from robot_sf.benchmark.episode_input_identity import (
+    capture_episode_input_identity,
+    reconcile_consumed_map_identity,
+)
 from robot_sf.benchmark.event_ledger import build_event_ledger
 from robot_sf.benchmark.failure_mechanism_taxonomy import unknown_failure_mechanism_record
 from robot_sf.benchmark.group_space_metrics import group_specs_from_map
@@ -1406,6 +1409,12 @@ def _resolve_episode_run_context(  # noqa: PLR0913
             set(case_input_identity.get("reason_codes", []))
             | {"inputs_changed_during_environment_resolution"}
         )
+    map_definitions = getattr(getattr(config, "map_pool", None), "map_defs", {})
+    map_definition = next(iter(map_definitions.values()), None) if map_definitions else None
+    consumed_map_sha256 = getattr(map_definition, "_consumed_map_sha256", None)
+    case_input_identity = reconcile_consumed_map_identity(
+        case_input_identity, consumed_map_sha256=consumed_map_sha256
+    )
     max_steps = int(scenario.get("simulation_config", {}).get("max_episode_steps", 0) or 0)
     horizon_val = int(horizon) if horizon and horizon > 0 else max_steps
     if horizon_val <= 0:

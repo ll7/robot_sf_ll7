@@ -8,14 +8,15 @@ pipeline and runs a bounded (<=4h CPU) MAP-Elites search over the
 ``(distance_to_human_min, time_to_collision_min)`` behavior grid for the doorway
 family.
 
-Emits two archive artifacts under ``--output-dir``:
+Emits an archive and a comparison artifact under ``--output-dir``:
 
 * ``archive.json`` (``adversarial_qd_archive.v1``) - the populated MAP-Elites grid
   with coverage, QD score, and distinct certified failure mechanisms;
-* ``comparison.json`` - the equal-budget MAP-Elites vs single-objective diversity
-  comparison (filled cells, coverage, distinct failure modes).
+* ``comparison.json`` (``adversarial_qd_comparison.v1``) - an equal-proposal-budget
+  MAP-Elites vs single-objective diversity comparison. Rows report actual evaluator calls,
+  which may differ when an admissibility precheck skips a QD proposal.
 
-Capability-not-evidence boundary: these are archive artifact paths, not
+Capability-not-evidence boundary: these are artifact paths, not
 camera-ready benchmark findings. See the issue #5308 contract.
 
 Usage::
@@ -292,7 +293,7 @@ def _run_single_objective_baseline(
     budget: int,
     seed: int,
 ) -> list[CandidateEvaluation]:
-    """Run an equal-budget single-objective search for the comparison row.
+    """Run a proposal-budget single-objective search for the comparison row.
 
     Uses a RandomCandidateSampler (warm-started) that converges on the best objective,
     mirroring the single-objective baseline of ``compare_qd_vs_single_objective``.
@@ -459,7 +460,7 @@ def _finalize_summary(result: QDSearchResult, *, elapsed: float, smoke: bool) ->
 
 @dataclass(frozen=True)
 class _ComparisonContext:
-    """Bundle of inputs for the equal-budget comparison artifact (issue #5308)."""
+    """Bundle of inputs for the equal-proposal-budget comparison artifact (issue #5308)."""
 
     qd_config: QDSearchConfig
     search_config: Any
@@ -476,7 +477,7 @@ def _write_summary_and_comparison(
     summary: dict[str, Any],
     output_dir: Path,
 ) -> dict[str, Any]:
-    """Write the campaign summary and the equal-budget comparison artifact."""
+    """Write the campaign summary and the equal-proposal-budget comparison artifact."""
     summary_path = output_dir / "campaign_summary.json"
     summary_payload = {
         "schema_version": QD_ARCHIVE_SCHEMA_VERSION,

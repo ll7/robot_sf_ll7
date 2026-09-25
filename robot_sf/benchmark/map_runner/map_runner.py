@@ -144,6 +144,7 @@ from robot_sf.benchmark.map_runner_policies import registry as _policy_builder_r
 from robot_sf.benchmark.map_runner_policies import rule_and_grid as _rule_and_grid_builder
 from robot_sf.benchmark.map_runner_policies import safety_barrier as _safety_barrier_builder
 from robot_sf.benchmark.map_runner_policies import socnav_family as _socnav_family_builder
+from robot_sf.benchmark.map_runner_policies import stand_still as _stand_still_builder
 from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
     DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS,
 )
@@ -1073,6 +1074,7 @@ def _ppo_action_to_unicycle(
 # existing if/elif chain.
 _POLICY_BUILDERS: dict[str, _policy_builder_registry.PolicyBuilder] = {
     **dict.fromkeys(_goal_policy_builder.GOAL_ALGO_KEYS, _goal_policy_builder.build),
+    **dict.fromkeys(_stand_still_builder.STAND_STILL_ALGO_KEYS, _stand_still_builder.build),
     **dict.fromkeys(_brne_builder.BRNE_KEYS, _brne_builder.build),
     **dict.fromkeys(
         _adapter_policy_builders.RISK_SURFACE_DWA_KEYS,
@@ -3021,12 +3023,14 @@ def _resolve_algorithm_contract(ctx: _BatchContext) -> None:
         resolved_observation_level = learned_observation_contract.get("observation_level_key")
     ctx.algo_contract = enrich_algorithm_metadata(
         algo=ctx.algo,
-        metadata={},
+        metadata=_stand_still_builder.metadata_seed() if ctx.algo == "stand_still" else {},
         robot_kinematics=ctx.kinematics_tag,
         adapter_impact_requested=ctx.adapter_impact_eval,
         observation_mode=ctx.active_observation_mode,
         observation_level=resolved_observation_level,
     )
+    if ctx.algo == "stand_still":
+        _stand_still_builder.apply_observation_contract(ctx.algo_contract)
     ctx.algo_contract["learned_checkpoint_observation_contract"] = learned_observation_contract
     ctx.active_observation_level = str(ctx.algo_contract["observation_level"]["key"])
     attach_track_metadata(
@@ -3289,10 +3293,12 @@ def _compute_resume_identity_payload(
         identity_observation_level = identity_observation_contract.get("observation_level_key")
     identity_contract = enrich_algorithm_metadata(
         algo=identity_algo,
-        metadata={},
+        metadata=_stand_still_builder.metadata_seed() if identity_algo == "stand_still" else {},
         observation_mode=identity_observation_mode,
         observation_level=identity_observation_level,
     )
+    if identity_algo == "stand_still":
+        _stand_still_builder.apply_observation_contract(identity_contract)
     identity_observation_level = str(identity_contract["observation_level"]["key"])
     return _scenario_identity_payload(
         identity_scenario,

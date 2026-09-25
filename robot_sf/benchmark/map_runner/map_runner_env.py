@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
@@ -29,6 +30,23 @@ def build_env_config(
         RobotSimulationConfig: Config with SocNav structured observations and grid enabled.
     """
     config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+    population_mode = scenario.get("reference_population_mode")
+    if population_mode is not None:
+        if population_mode != "pedestrian_free_v1":
+            raise ValueError(f"Unsupported reference_population_mode: {population_mode!r}")
+        if config.sim_config.population_size != 0:
+            raise ValueError("pedestrian_free_v1 requires simulation_config.population_size: 0")
+        if config.map_pool is None or not config.map_pool.map_defs:
+            raise ValueError("pedestrian_free_v1 requires a loaded map")
+        # The exact zero-population override suppresses route/density spawning. SVG
+        # single-ped markers are separate fixed actors, so remove them from this
+        # episode's copied map definitions before simulator construction. The source
+        # map and other scenario arms remain untouched.
+        for map_name, source_map in config.map_pool.map_defs.items():
+            map_def = deepcopy(source_map)
+            map_def.single_pedestrians = []
+            map_def.social_groups = []
+            config.map_pool.map_defs[map_name] = map_def
     config.observation_mode = ObservationMode.SOCNAV_STRUCT
     config.use_occupancy_grid = True
     config.include_grid_in_observation = True

@@ -84,6 +84,7 @@ from robot_sf.benchmark.map_runner.map_runner_view_integrity import (
     DegeneratePlannerViewError,
     evaluate_effective_view_integrity,
 )
+from robot_sf.benchmark.map_runner_policies import stand_still as _stand_still_builder
 from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
     DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS,
 )
@@ -1744,6 +1745,8 @@ def _prepare_policy_and_observation_contract(  # noqa: PLR0913
             observation_level=resolved_observation_level,
         ),
     )
+    if algo == "stand_still":
+        _stand_still_builder.apply_observation_contract(algo_meta)
     # Latency instrumentation resolves the planner configuration hash from the callable so
     # cached policies remain provenance-bound when a new harness is activated per episode.
     policy_fn._meta = algo_meta

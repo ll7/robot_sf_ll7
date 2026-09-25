@@ -228,6 +228,7 @@
     "reactivity_ablation.py",
     "reactivity_replay_preflight.py",
     "realism_validation_contract.py",
+    "reference_oracle_report.py",
     "relevance_windows.py",
     "release_acceptance.py",
     "release_assurance_case.py",

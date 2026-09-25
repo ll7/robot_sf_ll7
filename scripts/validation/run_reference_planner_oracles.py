@@ -382,7 +382,14 @@ def main(argv: list[str] | None = None) -> int:
         try:
             _verify_population_overlays(config, scenarios)
             _run(config, scenarios, args.output_root.resolve(), config_path)
-        except Exception as exc:  # noqa: BLE001 - preserve a failed-run report and exit nonzero.
+        except (
+            OSError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+            KeyError,
+            subprocess.SubprocessError,
+        ) as exc:
             run_error = f"Run aborted: {type(exc).__name__}: {exc}"
     report = _gate(config, args.output_root.resolve(), config_path, run_error=run_error)
     print(

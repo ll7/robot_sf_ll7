@@ -580,7 +580,10 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
                     f"MCP request did not finish dispatch; {proxy_status()}"
                 )
             ready, _, _ = select.select([process.stdout], [], [], response_timeout)
-            assert ready, f"MCP proxy did not deliver a dispatched response; {proxy_status()}"
+            assert ready, (
+                f"MCP proxy timed out after {response_timeout:g}s waiting for a dispatched "
+                f"response; {proxy_status()}"
+            )
             line = process.stdout.readline()
             assert line, f"MCP proxy closed stdout before replying; {proxy_status()}"
             return json.loads(line)

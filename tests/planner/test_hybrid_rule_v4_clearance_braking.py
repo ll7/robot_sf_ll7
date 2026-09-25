@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -210,7 +211,7 @@ def test_v4_reads_drive_limits_from_bound_environment() -> None:
     _bind(planner, BicycleDriveSettings(max_accel=0.7, max_decel=0.4, max_velocity=2.5))
     limits = planner._v4_drive_limits()
     assert (limits["max_linear_accel"], limits["max_linear_decel"]) == pytest.approx((0.7, 0.4))
-    assert limits["source"] == "env_robot_config:BicycleDriveSettings"
+    assert limits["source"] == "env_robot_config:BicycleDriveSettings+default_angular_limits"
 
 
 def test_v4_rollout_follows_drive_braking_limit() -> None:
@@ -301,6 +302,151 @@ def test_v4_decision_and_episode_metadata_record_speed_safety() -> None:
         )
     )
     assert "speed_safety" not in v3.diagnostics()
+
+
+# ---------------------------------------------------------------------------
+# Flat map-runner observations (review of PR #9747)
+# ---------------------------------------------------------------------------
+
+
+def _flat_obs(
+    *,
+    heading: float,
+    speed: float,
+    ped_world_velocity: tuple[float, float],
+    include_timestep: bool = True,
+) -> dict:
+    """Flat map-runner observation: robot at the origin, one pedestrian ahead.
+
+    Pedestrian velocities are robot-ego-frame, as the SocNav sensor emits them.
+    """
+    ahead = np.array([np.cos(heading), np.sin(heading)])
+    ped = ahead * (2.0 + ROBOT_RADIUS + PED_RADIUS)
+    vx, vy = ped_world_velocity
+    ego = (
+        np.cos(heading) * vx + np.sin(heading) * vy,
+        -np.sin(heading) * vx + np.cos(heading) * vy,
+    )
+    obs = {
+        "robot_position": np.array([0.0, 0.0], dtype=np.float32),
+        "robot_heading": np.array([heading], dtype=np.float32),
+        "robot_speed": np.array([speed], dtype=np.float32),
+        "robot_radius": np.array([ROBOT_RADIUS], dtype=np.float32),
+        "goal_current": (ahead * 20.0).astype(np.float32),
+        "goal_next": (ahead * 20.0).astype(np.float32),
+        "pedestrians_positions": np.array([ped], dtype=np.float32),
+        "pedestrians_velocities": np.array([ego], dtype=np.float32),
+        "pedestrians_count": np.array([1.0], dtype=np.float32),
+        "pedestrians_radius": np.array([PED_RADIUS], dtype=np.float32),
+    }
+    if include_timestep:
+        obs["sim_timestep"] = np.array([BENCHMARK_DT], dtype=np.float32)
+    return obs
+
+
+def test_v4_rotates_flat_observation_velocities_to_world_frame() -> None:
+    """At heading pi an approaching pedestrian must not look like it walks away."""
+    planner = _v4_planner()
+    _bind(planner, DifferentialDriveSettings())
+    obs = _flat_obs(heading=np.pi, speed=1.5, ped_world_velocity=(1.0, 0.0))
+    state = planner._extract_state(obs)
+    np.testing.assert_allclose(state["ped_vel"], [[1.0, 0.0]], atol=1e-5)
+    planner.plan(obs)
+    rejections = planner.last_decision()["rejection_counts"]
+    assert rejections.get("braking_infeasible", 0) > 0, rejections
+
+
+def test_v3_flat_observation_frame_is_unchanged() -> None:
+    """v3 keeps its historical flat-observation behaviour (tracked in #9752)."""
+    v3 = HybridRuleLocalPlannerAdapter(
+        build_hybrid_rule_local_planner_config(
+            load_planner_config("configs/algos/hybrid_rule_v3_teb_like_rollout.yaml", "x")
+        )
+    )
+    obs = _flat_obs(heading=np.pi, speed=1.5, ped_world_velocity=(1.0, 0.0))
+    np.testing.assert_allclose(v3._extract_state(obs)["ped_vel"], [[-1.0, 0.0]], atol=1e-5)
+
+
+def test_v4_reads_flat_timestep_and_records_sources() -> None:
+    """v4 uses sim_timestep from flat observations, else the bound simulator config."""
+    planner = _v4_planner()
+    env = SimpleNamespace(
+        simulator=SimpleNamespace(
+            robots=[SimpleNamespace(config=DifferentialDriveSettings())],
+            config=SimpleNamespace(time_per_step_in_secs=0.05),
+        )
+    )
+    planner.bind_env(env)
+    state = planner._extract_state(_flat_obs(heading=0.0, speed=0.0, ped_world_velocity=(0, 0)))
+    assert state["dt"] == pytest.approx(BENCHMARK_DT)
+    assert planner._v4_state_sources == {
+        "dt": "observation.sim_timestep",
+        "robot_radius": "observation.robot_radius",
+        "ped_radius": "observation.pedestrians_radius",
+    }
+    state = planner._extract_state(
+        _flat_obs(heading=0.0, speed=0.0, ped_world_velocity=(0, 0), include_timestep=False)
+    )
+    assert state["dt"] == pytest.approx(0.05)
+    assert planner._v4_state_sources["dt"] == "env.sim_config"
+    planner.plan(_flat_obs(heading=0.0, speed=0.0, ped_world_velocity=(0, 0)))
+    assert planner.last_decision()["state_sources"]["dt"] == "observation.sim_timestep"
+    assert planner.last_decision()["speed_safety"]["reaction_time"] == pytest.approx(BENCHMARK_DT)
+
+
+def test_v4_binds_angular_limits_to_the_drive() -> None:
+    """Turn rate and angular acceleration come from DifferentialDriveSettings."""
+    planner = _v4_planner()
+    _bind(planner, DifferentialDriveSettings())
+    assert planner._max_angular_speed() == pytest.approx(1.0)
+    assert planner._max_angular_accel() == pytest.approx(1.0)
+    _v_min, _v_max, w_min, w_max = planner._dynamic_window(0.0, 1.0)
+    period = planner.config.control_period
+    assert (w_min, w_max) == pytest.approx((-1.0 * period, 1.0 * period))
+    realized = planner._v4_realized_rollout_commands([(0.0, 1.2)] * 8, current_speed=0.0, dt=0.2)
+    assert [round(w, 6) for _v, w in realized] == [0.2, 0.4, 0.6, 0.8, 1.0, 1.0, 1.0, 1.0]
+    v3 = HybridRuleLocalPlannerAdapter(
+        build_hybrid_rule_local_planner_config(
+            load_planner_config("configs/algos/hybrid_rule_v3_teb_like_rollout.yaml", "x")
+        )
+    )
+    assert v3._max_angular_speed() == pytest.approx(1.2)
+    assert v3._max_angular_accel() == pytest.approx(4.0)
+
+
+def test_v4_braking_check_turns_at_the_drive_angular_limit() -> None:
+    """A hard swerve cannot escape a head-on pedestrian within one step at 1 rad/s^2."""
+    planner = _v4_planner()
+    _bind(planner, DifferentialDriveSettings())
+    state = _state(clearance=1.6, speed=1.5, ped_velocity=(-0.8, 0.0))
+    radius = ROBOT_RADIUS + PED_RADIUS + planner.config.hard_safety_margin
+    swerve = planner._v4_braking_rejection(
+        candidate=HybridRuleCandidate(1.5, 1.0, "dynamic_window"),
+        state=state,
+        collision_radius=radius,
+    )
+    assert swerve is not None and swerve["reason"] == "braking_infeasible"
+
+
+def test_v4_pedestrian_gates_use_surface_clearance() -> None:
+    """Corridor-subgoal and static-recovery gates compare surface clearance in v4."""
+    planner = _v4_planner(recovery_enabled=True)
+    _bind(planner, DifferentialDriveSettings())
+    counts = Counter({"static_clearance": 3})
+    # 1.5 m surface clearance is beyond the 1.0 m gate; 0.5 m is inside it.
+    assert planner._static_recovery_allowed(counts, 1.5) is True
+    assert planner._static_recovery_allowed(counts, 0.5) is False
+    obs = _flat_obs(heading=0.0, speed=0.0, ped_world_velocity=(0, 0))
+    captured = {}
+    original = planner._corridor_subgoal_activation
+
+    def _spy(**kwargs):
+        captured["nearest_ped"] = kwargs["nearest_ped"]
+        return original(**kwargs)
+
+    planner._corridor_subgoal_activation = _spy
+    planner.plan(obs)
+    assert captured["nearest_ped"] == pytest.approx(2.0, abs=1e-5)
 
 
 # ---------------------------------------------------------------------------

@@ -15,13 +15,15 @@
 allow_testing_algorithms: true
 planner_variant: hybrid_rule_v4_clearance_braking
 
-# v4 ignores max_linear_accel/max_linear_decel: rollouts, the dynamic window and
-# the braking check read the drive's limits from the bound environment
-# (DifferentialDriveSettings: 1.0 m/s^2 both ways in the benchmark). The speed
-# ceiling is min(max_linear_speed, drive max_linear_speed).
+# v4 ignores max_linear_accel/max_linear_decel and max_angular_accel: rollouts,
+# the dynamic window and the braking check read the drive's limits from the
+# bound environment (benchmark DifferentialDriveSettings: 1.0 m/s^2 linear both
+# ways, 1.0 rad/s^2 angular, 2.0 m/s, 1.0 rad/s). The speed and turn-rate
+# ceilings are min(config value, drive limit), so 1.2 rad/s resolves to 1.0.
+# The step time comes from the observation (nested sim.timestep or flat
+# sim_timestep), else the bound simulator config; its source is recorded.
 max_linear_speed: 2.0
 max_angular_speed: 1.2
-max_angular_accel: 4.0
 control_period: 0.6
 
 rollout_dt: 0.2
@@ -35,8 +37,11 @@ linear_samples: 7
 angular_samples: 9
 lookahead_distances: [0.5, 1.0, 1.5, 2.0]
 
-robot_radius_default: 0.3
-pedestrian_radius_default: 0.3
+# Radii come from the observation (benchmark: robot 1.0 m, pedestrian 0.4 m);
+# these defaults apply only when the observation lacks them, and each decision
+# records which source was used (state_sources).
+robot_radius_default: 1.0
+pedestrian_radius_default: 0.4
 hard_safety_margin: 0.05
 # v4 checks rollout poses against the exact obstacle segments of the bound map
 # (the v3 "continuous" static check) in every scenario. Braking-consistent
@@ -61,7 +66,13 @@ obstacle_search_cells: 12
 # On every level the cap is also min'ed with v_brake(clearance - margin), the
 # largest speed that can still be braked to zero, so e.g. 1.25 m/s at 1.0 m and
 # the 2.0 m/s drive maximum only from 2.3 m surface clearance.
-# The v3 centre-distance fields (stop/slow/moderate_distance_human) are unused.
+# The v3 centre-distance fields (stop/slow/moderate_distance_human) are unused
+# for speed limits. In v4, corridor_subgoal_min_nearest_ped_distance,
+# route_trace_recovery_min_nearest_ped_distance and the static-recovery gate
+# (slow_distance_human) are compared with surface clearance too. The near-human
+# turn limit (near_human_angular_limit_distance, centre distance) is kept on
+# purpose: turning a round robot does not move its footprint, and the swept
+# path of turning while moving is covered by the braking check.
 v4_stop_clearance_human: 0.15
 v4_slow_clearance_human: 0.35
 v4_moderate_clearance_human: 0.6

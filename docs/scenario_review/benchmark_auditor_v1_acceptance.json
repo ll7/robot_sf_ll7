@@ -6,6 +6,27 @@
   "status": "ba05_bounded_acceptance_complete_ba06_slice_merged_epic_open",
   "acceptance_base_origin_main": "346673a80e04888746e0b78abcccecffe623de47",
   "boundary_policy": "acceptance_base_is_stable_and_not_a_self-referential_current-main_claim",
+  "current_author_direction": {
+    "as_of": "2026-09-25",
+    "source_comment_url": "https://github.com/ll7/robot_sf_ll7/issues/9483#issuecomment-5832436448",
+    "decision": "explicit_decline_until_dissertation_0.0.8_work_is_done_not_open_deferral",
+    "declined_scope": {
+      "ba05_external_acceptance_gates": [
+        "provider-enforced physical cost cap",
+        "GitHub remote-publication guarantees",
+        "retained failure/control bundle with media and PTS/provenance receipts"
+      ],
+      "ba06_workbench_integration": {
+        "decision": "explicitly_declined_until_dissertation_0.0.8_work_is_done",
+        "workstream_status": "closed_behind_ba05",
+        "issue_9489_status": "open"
+      }
+    },
+    "permitted_now": {
+      "supervised_audit_sessions": "interactive, with a person or coordinating agent reviewing findings",
+      "preferred_data": "corrected dissertation 0.0.8 data"
+    }
+  },
   "previous_documentation_receipt": {"pr": 9573, "exact_head": "6b3bc0632027094de5d4728a5f3ac9d13ec8582a", "merge": "346673a80e04888746e0b78abcccecffe623de47", "metadata_digest": "62b90e7254f6de33ca96f0d5362c5d1416788f6742932b79657f6a65c113935e", "hosted": "all required checks passed", "merge_queue_gate": "35692560493", "status": "docs_only_receipt"},
   "slices": {
     "ba05_d1": {"pr": 9559, "exact_head": "ec8061c4517fb3926fefd1b1a2cb6cb3cdcf0088", "merge": "6787f5b93a1023dd243f66d81b1e6a13fe6871a3", "focused": "102 passed", "hosted_run": "35655668527", "status": "accepted_bounded"},
@@ -17,6 +38,6 @@
     "provider_cap": {"status": "blocked_external", "offline": "provider-free read-only", "local_accounting": "local ledger only; no physical enforcement", "strict_provider_ceiling": "refuses without verified finite provider cap"},
     "real_data_browser_codex_recovery": {"status": "diagnostic_only", "unproven": ["real-data browser", "retained media/native source", "live Codex", "cancellation/reconnect", "campaign completion"]}
   },
-  "open_work": {"issues": [9488, 9489], "epic": 9483, "complete": false, "next_action": "continue BA-06 only against explicit CAS, provider-cap, source-admission, real-data, and recovery gates"},
+  "open_work": {"issues": [9488, 9489], "epic": 9483, "complete": false, "next_action": "supervised_audit_sessions_are_permitted"},
   "full_matrix_report": "benchmark_auditor_v1_acceptance_2026-09-22.md"
 }

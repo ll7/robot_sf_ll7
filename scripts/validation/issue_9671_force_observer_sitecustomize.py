@@ -22,6 +22,11 @@ FROZEN_SOURCE = "07f7e8d43084de748915e1b1eb8b2a1603357c6e"
 FORCE_FILE = "robot_sf/ped_npc/ped_robot_force.py"
 SIM_FILE = "robot_sf/sim/simulator.py"
 RUNNER_FILE = "robot_sf/benchmark/map_runner/map_runner_episode.py"
+SOURCE_MODULES = {
+    FORCE_FILE: "robot_sf.ped_npc.ped_robot_force",
+    SIM_FILE: "robot_sf.sim.simulator",
+    RUNNER_FILE: "robot_sf.benchmark.map_runner.map_runner_episode",
+}
 FORCE_LINES = {"Simulator": 1699, "PedSimulator": 2087}
 
 
@@ -115,10 +120,12 @@ def bind_episode(capture: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]
 class ForceObserver:
     """Trace frozen call/return events without calling the force component again."""
 
-    def __init__(self, output: Path, provenance: dict[str, str]) -> None:
+    def __init__(self, output: Path, provenance: dict[str, Any], source_root: Path) -> None:
         """Keep one process/thread and one episode active at a time."""
         self.output = output
         self.provenance = provenance
+        self.source_root = source_root.resolve(strict=True)
+        self.verified_frames: set[Any] = set()
         self.pid = os.getpid()
         self.thread = threading.get_ident()
         self.episode: dict[str, Any] | None = None
@@ -135,15 +142,36 @@ class ForceObserver:
         filename = frame.f_code.co_filename
         name = frame.f_code.co_name
         if filename.endswith(RUNNER_FILE) and name == "run_map_episode":
+            self._verify_source_frame(frame, event, RUNNER_FILE)
             self._episode_event(frame, event, arg)
         elif filename.endswith(SIM_FILE) and name == "step_once":
+            self._verify_source_frame(frame, event, SIM_FILE)
             self._step_event(frame, event)
         elif filename.endswith(FORCE_FILE) and name == "__call__":
+            self._verify_source_frame(frame, event, FORCE_FILE)
             if event == "return":
                 self._force_event(frame, arg)
         else:
             return None
+        if event == "return":
+            self.verified_frames.remove(frame)
         return self
+
+    def _verify_source_frame(self, frame: Any, event: str, relative_path: str) -> None:
+        if event != "call":
+            if frame not in self.verified_frames:
+                raise ObserverIdentityError("traced frame has no verified frozen-source call")
+            return
+        expected_path = (self.source_root / relative_path).resolve(strict=True)
+        declared_file = frame.f_globals.get("__file__")
+        if (
+            Path(frame.f_code.co_filename).resolve(strict=True) != expected_path
+            or not isinstance(declared_file, str)
+            or Path(declared_file).resolve(strict=True) != expected_path
+            or frame.f_globals.get("__name__") != SOURCE_MODULES[relative_path]
+        ):
+            raise ObserverIdentityError("traced frame is outside pinned frozen source/module")
+        self.verified_frames.add(frame)
 
     def _episode_event(self, frame: Any, event: str, arg: Any) -> None:
         self._check_process()
@@ -288,7 +316,7 @@ def install_from_environment() -> ForceObserver | None:
     actual = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     if actual != expected:
         raise ObserverIdentityError("observer byte hash mismatch")
-    source = Path(os.environ["ISSUE9671_FROZEN_SOURCE_ROOT"])
+    source = Path(os.environ["ISSUE9671_FROZEN_SOURCE_ROOT"]).resolve(strict=True)
     head = subprocess.check_output(
         ["git", "-C", str(source), "rev-parse", "HEAD"], text=True
     ).strip()
@@ -299,6 +327,15 @@ def install_from_environment() -> ForceObserver | None:
         text=True,
     ).strip():
         raise ObserverIdentityError("frozen source tracked files are dirty")
+    source_hashes = {}
+    for relative_path in SOURCE_MODULES:
+        committed = subprocess.check_output(
+            ["git", "-C", str(source), "show", f"{FROZEN_SOURCE}:{relative_path}"]
+        )
+        local = (source / relative_path).read_bytes()
+        if local != committed:
+            raise ObserverIdentityError(f"frozen source bytes differ: {relative_path}")
+        source_hashes[relative_path] = hashlib.sha256(local).hexdigest()
     config = Path(os.environ["ISSUE9671_DIAGNOSTIC_CONFIG_PATH"])
     config_sha = hashlib.sha256(config.read_bytes()).hexdigest()
     if config_sha != os.environ["ISSUE9671_DIAGNOSTIC_CONFIG_SHA256"]:
@@ -306,11 +343,12 @@ def install_from_environment() -> ForceObserver | None:
     provenance = {
         "observer_sha256": actual,
         "frozen_source_commit": head,
+        "frozen_source_file_sha256": source_hashes,
         "diagnostic_config_sha256": config_sha,
         "campaign_id": os.environ["ISSUE9671_CAMPAIGN_ID"],
         "pid": str(os.getpid()),
     }
-    observer = ForceObserver(Path(output), provenance)
+    observer = ForceObserver(Path(output), provenance, source)
     sys.settrace(observer)
     threading.settrace(observer)
     return observer

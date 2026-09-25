@@ -183,7 +183,11 @@ diagnostic artifact, not an original 0.0.7 release field.
    one in-process worker, matching these configs; write one PID-scoped capture stream. Register
    both `sys.settrace` and `threading.settrace` at startup. A later thread that enters
    `run_map_episode` is observed and rejected before its body executes; a fork with the inherited
-   observer is also rejected by PID. No sidecar is admitted for unobserved or failed episodes.
+   observer is also rejected by PID. At installation, verify the three traced source files
+   byte-for-byte against pinned commit `07f7e8d`; on each traced call, require the code filename,
+   module `__file__` and module name to resolve to those files under that verified checkout.
+   A shadowed import root fails before a sidecar can be written. No sidecar is admitted for
+   unobserved or failed episodes.
 2. An opt-in `sys.settrace` observer copies the frozen `PedRobotForce.__call__` return value
    and its already evaluated frame locals (`ped_positions`, `robot_pos`, and `multipliers` if
    present). It must never call a force kernel, position provider or multiplier callback again.

@@ -371,9 +371,21 @@
     },
     "docs/context/evidence/issue_9431_trace_worked_examples_2026-09/campaign_provenance.json": {
       "dangling_commit": 2
+    },
+    "docs/context/evidence/issue_9647_final_gallery_smoke_2026-09-25/evidence_bundle_manifest.json": {
+      "uncommitted_artifact_missing_location": 2
+    },
+    "docs/context/evidence/issue_9647_final_gallery_smoke_2026-09-25/payload/summary.json": {
+      "uncommitted_artifact_missing_location": 4
+    },
+    "docs/context/evidence/issue_9647_gallery_smoke_2026-09-25/evidence_bundle_manifest.json": {
+      "uncommitted_artifact_missing_location": 2
+    },
+    "docs/context/evidence/issue_9647_gallery_smoke_2026-09-25/payload/summary.json": {
+      "uncommitted_artifact_missing_location": 15
     }
   },
-  "generated_at": "2026-09-24T13:03:36Z",
+  "generated_at": "2026-09-25T03:59:12Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {
@@ -387,9 +399,9 @@
       "missing_commit": 27,
       "missing_config_path": 49,
       "missing_config_sha256": 53,
-      "uncommitted_artifact_missing_location": 150
+      "uncommitted_artifact_missing_location": 173
     },
-    "files_with_findings": 98,
-    "total_findings": 438
+    "files_with_findings": 102,
+    "total_findings": 461
   }
 }

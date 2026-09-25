@@ -14,13 +14,14 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 9431
-latest_reviewed_date: 2026-09-23
+latest_reconciliation_issue: 9647
+latest_reviewed_date: 2026-09-25
+latest_reviewed_by: Codex autonomous lead agent, with an independent provenance review under the user's programme authorization; no additional human sign-off is claimed.
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 438
-refreshed_baseline_files_with_findings: 98
+refreshed_baseline_total_findings: 461
+refreshed_baseline_files_with_findings: 102
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -157,6 +158,20 @@ decision_summary: >-
   across 98 files, and records the 40-file evidence-tree addition: 38 diagnostic trace files plus
   two SHA-bound `evidence-review-marker.v1` sidecars. The sidecars bind the root README and
   campaign provenance bytes without modifying either artifact.
+  Replay-gallery smoke addendum (issue #9647; 2026-09-25): two compact diagnostic receipts record
+  references and SHA-256 digests for ignored local replay streams, generated inputs, and figures.
+  Those raw/rendered outputs are intentionally not mirrored into this evidence bundle, and no
+  downstream workflow depends on the worktree-local files. The final one-case smoke can be rerun
+  from the tracked #1501 compatibility fixture and its recorded command at commit
+  `b5e8af66c4b5b59df2ad60f8a2ae515c587bc14f`. The earlier bundle's declared code commit
+  `1357ebd4084a5da077e10e5ab9ed74e5a4d9a9e4` is absent from this repository's object database, so
+  its earlier-attempt raw outputs remain historical local-only references and are not claimed
+  retrievable or reproducible from that exact revision. Preserve the local-only disposition and
+  disclose the registry's `uncommitted_artifact_missing_location` findings rather than presenting
+  these paths as durable artifacts. The four affected compact files add 23 findings (2 + 4 + 2 +
+  15); the evidence tree adds eight tracked files. This refresh moves the machine baseline from 438
+  findings across 98 files to 461 across 102 files and does not promote the smoke beyond
+  diagnostic-only evidence.
 #8237 disposition: remediate. The E_release_checklist digest in the
 #4683 assurance-case example was recomputed against the exact final-head
 # docs/RELEASE.md bytes and is already current at this head. No
@@ -403,6 +418,45 @@ reviewed_files:
       the trace bundle disclaims aggregate/statistical/causal evidence and documents its startup /
       admission receipt exception. The #9431 full-campaign goal-adjacent timeout criterion remains
       unavailable, no waiver is claimed, and the issue stays open.
+  - path: docs/context/evidence/issue_9647_final_gallery_smoke_2026-09-25/evidence_bundle_manifest.json
+    codes: [uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      The diagnostic-only #9647 manifest points to ignored local `output/` products that are
+      intentionally excluded from the compact tracked bundle. The tracked #1501 compatibility
+      fixture and recorded command are the reproducible source; no downstream workflow depends on
+      the local replay streams or figures. Their local paths and digests remain explicit in the
+      receipt, but they are not presented as durable artifacts. Keep this registry finding visible
+      as reviewed local-output provenance bookkeeping; promote an artifact before any later
+      workflow depends on it.
+  - path: docs/context/evidence/issue_9647_final_gallery_smoke_2026-09-25/payload/summary.json
+    codes: [uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      The diagnostic-only #9647 summary records ignored local replay/source streams and rendered
+      figures with their worktree paths and digests. They are intentionally not copied into git or
+      claimed durable; the tracked #1501 compatibility fixture and command permit regeneration, and
+      no downstream workflow depends on the local files. Preserve the report's explicit
+      local-output disposition and keep the registry finding visible rather than inventing a remote
+      artifact location.
+  - path: docs/context/evidence/issue_9647_gallery_smoke_2026-09-25/evidence_bundle_manifest.json
+    codes: [uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      The historical #9647 diagnostic manifest records earlier ignored local output directories
+      from superseded smoke attempts. Those files are not inputs to the current workflow or durable
+      evidence; the current tracked receipt explicitly labels them as local-only and retains their
+      disposition for audit. Keep the registry finding visible; do not create a durable-location
+      claim for discarded or unretained outputs.
+  - path: docs/context/evidence/issue_9647_gallery_smoke_2026-09-25/payload/summary.json
+    codes: [uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      The historical #9647 diagnostic summary preserves attempt-ledger references to ignored local
+      output from prior runs, including invalid and unavailable attempts. These worktree outputs are
+      not durable dependencies; the tracked receipt preserves the attempts and their local-only
+      status without presenting raw streams or figures as retrievable. Retain the registry finding
+      as explicit provenance debt, and require promotion before downstream use.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

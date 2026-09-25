@@ -943,6 +943,62 @@ def test_legacy_v1_no_row_admission_rejects_unselected_contradictory_metrics(
         validate_corpus({**corpus, "cases": [case]}, corpus_root=corpus_root)
 
 
+@pytest.mark.parametrize(
+    ("mutation", "expected_error"),
+    [
+        ("status_mismatch", "replay_artifact_status_termination_mismatch"),
+        ("degraded_execution", "replay_artifact_fallback_status_mismatch"),
+    ],
+)
+def test_legacy_v1_no_row_admission_rejects_invalid_status_or_execution(
+    tmp_path: Path,
+    mutation: str,
+    expected_error: str,
+) -> None:
+    """Legacy receipts must validate raw status and execution evidence after rehashing."""
+    corpus_root = tmp_path / "corpus"
+    corpus, _pilot = import_issue9645_packet(_SOURCE_PACKET, new_corpus(), corpus_root=corpus_root)
+    case = copy.deepcopy(corpus["cases"][0])
+    receipt = case["replay_receipt"]
+
+    for replay in receipt["replay_artifacts"]:
+        artifact_path = replay["path"]
+        artifact = corpus_root / artifact_path
+        episode = json.loads(artifact.read_text(encoding="utf-8"))
+        if mutation == "status_mismatch":
+            episode["status"] = "success"
+        else:
+            episode["integrity"]["effective_view"]["degraded"] = True
+            episode["algorithm_metadata"]["status"] = "degraded"
+            episode["readiness_status"] = "fallback"
+            episode["availability_status"] = "not_available"
+        artifact.write_text(json.dumps(episode, sort_keys=True) + "\n", encoding="utf-8")
+        artifact_sha256 = hashlib.sha256(artifact.read_bytes()).hexdigest()
+        replay["sha256"] = artifact_sha256
+        replay["normalized_bundle_sha256"] = artifact_sha256
+        replay["selected_event_identity"] = counterexample_corpus._selected_event_identity(episode)
+        for source_file in case["source_evidence"]["corpus_files"]:
+            if source_file["path"] == artifact_path:
+                source_file["sha256"] = artifact_sha256
+                break
+        else:
+            raise AssertionError("admission replay artifact is absent from source evidence custody")
+
+    receipt["selected_projection"]["selected_event_identity"] = receipt["replay_artifacts"][0][
+        "selected_event_identity"
+    ]
+    receipt["selected_projection_sha256"] = hashlib.sha256(
+        counterexample_corpus._stable_json(receipt["selected_projection"]).encode("utf-8")
+    ).hexdigest()
+    receipt["schema_version"] = "adversarial-case-admission-replay.v1"
+    receipt.pop("artifact_receipts")
+
+    errors = counterexample_corpus._validate_case_admission_replay(case, corpus_root)
+    assert expected_error in errors
+    with pytest.raises(CorpusError, match=expected_error):
+        validate_corpus({**corpus, "cases": [case]}, corpus_root=corpus_root)
+
+
 def test_target_planner_configuration_snapshot_must_match_replay_metadata(
     tmp_path: Path,
 ) -> None:

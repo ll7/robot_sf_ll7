@@ -4615,10 +4615,35 @@ def _validate_legacy_artifact_projection(
         artifact_projection = _admission_projection_from_episode(episode, selected_projection)
     except CorpusError as exc:
         return [f"legacy admission replay artifact is invalid: {exc}"]
-    consistency_errors = _replay_outcome_metric_consistency_errors(episode)
+    consistency_errors = _replay_episode_status_projection_errors(episode)
+    consistency_errors.extend(_replay_outcome_metric_consistency_errors(episode))
+    consistency_errors.extend(_validate_legacy_replay_execution_evidence(episode))
     if artifact_projection != selected_projection:
         consistency_errors.append("selected projection differs from a verified replay artifact")
     return consistency_errors
+
+
+def _validate_legacy_replay_execution_evidence(record: Mapping[str, Any]) -> list[str]:
+    """Apply current execution eligibility checks when a v1 receipt lacks row metadata."""
+    metadata = record.get("algorithm_metadata")
+    metadata = metadata if isinstance(metadata, Mapping) else {}
+    kinematics = metadata.get("planner_kinematics")
+    kinematics = kinematics if isinstance(kinematics, Mapping) else {}
+    execution_mode = kinematics.get("execution_mode")
+    readiness_status = {
+        "native": "native",
+        "adapter": "adapter",
+        "mixed": "adapter",
+    }.get(execution_mode)
+    return _validate_replay_execution_evidence(
+        {
+            "execution_mode": execution_mode,
+            "readiness_status": readiness_status,
+            "availability_status": "available",
+            "fallback_or_degraded": False,
+        },
+        record,
+    )
 
 
 def _admission_projection_from_episode(

@@ -1134,6 +1134,87 @@ def test_selection_binding_rejects_alternate_runner_map_registry_path(tmp_path: 
     replay_gallery.scenario_loader._load_map_registry.cache_clear()
 
 
+def test_selection_binding_rejects_route_asset_digest_change_with_same_semantics(
+    tmp_path: Path,
+) -> None:
+    selected_route_bytes = b"routes:\n  - {route_id: north, points: [[0, 0], [1, 1]]}\n"
+    materialized_route_bytes = b"routes: [{route_id: north, points: [[0, 0], [1, 1]]}]\n"
+    assert yaml.safe_load(selected_route_bytes) == yaml.safe_load(materialized_route_bytes)
+    selected_route_sha256 = hashlib.sha256(selected_route_bytes).hexdigest()
+    materialized_route_sha256 = hashlib.sha256(materialized_route_bytes).hexdigest()
+    assert selected_route_sha256 != materialized_route_sha256
+
+    selected = {
+        "scenario_sha256": "scenario-digest",
+        "effective_scenario_hash": "effective-digest",
+        "map_file_declared": False,
+        "route_overrides_sha256": selected_route_sha256,
+    }
+    materialization = {
+        "source_scenario_sha256": "scenario-digest",
+        "effective_scenario_hash": "effective-digest",
+        "assets": [
+            {
+                "field": "route_overrides_file",
+                "source_sha256": materialized_route_sha256,
+                "bundle_path": "inputs/assets/routes.yaml",
+            }
+        ],
+    }
+    case_dir = tmp_path / "case"
+    assets_dir = case_dir / "inputs" / "assets"
+    assets_dir.mkdir(parents=True)
+    (assets_dir / "routes.yaml").write_bytes(materialized_route_bytes)
+
+    error, binding = replay_gallery._materialized_selection_binding(
+        selected, materialization, case_dir=case_dir
+    )
+
+    assert error == "not_replayed_route_overrides_changed_after_selection"
+    assert binding == {
+        "status": "mismatch",
+        "selected_source_sha256": selected_route_sha256,
+        "materialized_source_sha256": materialized_route_sha256,
+    }
+
+
+def test_selection_binding_rejects_changed_bundled_route_override_bytes(
+    tmp_path: Path,
+) -> None:
+    selected_route_bytes = b"routes: [{route_id: north, points: [[0, 0], [1, 1]]}]\n"
+    bundled_route_bytes = b"routes: [{route_id: south, points: [[0, 0], [1, 1]]}]\n"
+    selected_route_sha256 = hashlib.sha256(selected_route_bytes).hexdigest()
+    selected = {
+        "scenario_sha256": "scenario-digest",
+        "effective_scenario_hash": "effective-digest",
+        "map_file_declared": False,
+        "route_overrides_sha256": selected_route_sha256,
+    }
+    materialization = {
+        "source_scenario_sha256": "scenario-digest",
+        "effective_scenario_hash": "effective-digest",
+        "assets": [
+            {
+                "field": "route_overrides_file",
+                "source_sha256": selected_route_sha256,
+                "bundle_path": "inputs/assets/routes.yaml",
+            }
+        ],
+    }
+    case_dir = tmp_path / "case"
+    assets_dir = case_dir / "inputs" / "assets"
+    assets_dir.mkdir(parents=True)
+    (assets_dir / "routes.yaml").write_bytes(bundled_route_bytes)
+
+    error, binding = replay_gallery._materialized_selection_binding(
+        selected, materialization, case_dir=case_dir
+    )
+
+    assert error == "not_replayed_route_overrides_changed_after_selection"
+    assert binding["status"] == "mismatch"
+    assert binding["input"] == "route_overrides_file"
+
+
 def test_gallery_output_must_resolve_inside_ignored_output_tree(
     tmp_path: Path, monkeypatch: Any
 ) -> None:

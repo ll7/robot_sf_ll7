@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -23,6 +25,31 @@ def _report() -> dict[str, object]:
         FIXTURE_ROOT / "comparison.json",
         repo_root=REPO_ROOT,
     )
+
+
+def _report_with_manifest(
+    tmp_path: Path,
+    *,
+    row_index: int,
+    mutate: Any,
+    execution_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    comparison = json.loads((FIXTURE_ROOT / "comparison.json").read_text(encoding="utf-8"))
+    row = comparison["rows"][row_index]
+    manifest_path = REPO_ROOT / row["manifest_path"]
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    mutate(manifest)
+    temporary_manifest = tmp_path / f"manifest-{row_index}.json"
+    temporary_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+    if execution_context is not None:
+        (tmp_path / "execution_context.txt").write_text(
+            json.dumps(execution_context), encoding="utf-8"
+        )
+    row["manifest_path"] = str(temporary_manifest)
+    comparison_path = tmp_path / "comparison.json"
+    comparison_path.write_text(json.dumps(comparison), encoding="utf-8")
+    return build_convergence_report(comparison_path, repo_root=REPO_ROOT)
 
 
 def test_report_derives_candidate_accounting_and_preserves_legacy_summary() -> None:
@@ -103,8 +130,9 @@ def test_random_tpe_comparison_is_seed_matched_and_descriptive_only() -> None:
     assert comparison["tpe_minus_random_median"] == pytest.approx(0.25)
     assert comparison["tpe_minus_random_min"] == pytest.approx(0.1)
     assert comparison["tpe_minus_random_max"] == pytest.approx(0.4)
-    assert report["provenance"]["source_revision"]["status"] == "partial"
+    assert report["provenance"]["source_revision"]["status"] == "unknown"
     assert report["provenance"]["source_revision"]["exact_source_revision"] is None
+    assert report["provenance"]["source_revision"]["unverified_commit_identifiers"] == ["abc123"]
 
 
 def test_same_inputs_write_byte_stable_json_markdown_and_figure(tmp_path: Path) -> None:
@@ -143,7 +171,8 @@ def test_cli_writes_machine_readable_summary_table_and_figure(
     assert console["run_count"] == 5
     assert (output / "falsification_report.json").is_file()
     markdown = (output / "falsification_report.md").read_text(encoding="utf-8")
-    assert "Invalid, failed, scoreless and missing" in markdown
+    assert "Observed best and critical counts retain raw candidate evidence" in markdown
+    assert "analysis_eligibility.eligible=true" in markdown
     assert "native: 1, unknown: 3" in markdown
     assert "available: 1, unknown: 3" in markdown
     assert "Not performed; descriptive only" in markdown
@@ -168,3 +197,174 @@ def test_fixture_files_are_checked_in_and_paths_resolve_from_repo_root() -> None
         for run in report["runs"]
         if run["manifest_path"].endswith("/manifest.json")
     )
+
+
+def test_over_budget_attempt_is_auditable_but_cannot_change_budgeted_best_or_pair(
+    tmp_path: Path,
+) -> None:
+    def append_over_budget_candidate(manifest: dict[str, Any]) -> None:
+        candidate = copy.deepcopy(manifest["candidates"][0])
+        candidate["candidate"]["start"]["x"] = 9.0
+        candidate["effective_scenario_hash"] = "over-budget-critical"
+        candidate["objective_value"] = 99.0
+        candidate["failure_attribution"]["primary_failure"] = "collision"
+        manifest["candidates"].append(candidate)
+
+    report = _report_with_manifest(tmp_path, row_index=0, mutate=append_over_budget_candidate)
+    random_1101 = next(
+        run for run in report["runs"] if run["sampler"] == "random" and run["seed"] == 1101
+    )
+    comparison = next(item for item in report["random_vs_tpe"] if item["budget"] == 4)
+
+    assert random_1101["num_candidates"] == 5
+    assert random_1101["num_budgeted_candidates"] == 4
+    assert random_1101["num_over_budget_candidates"] == 1
+    assert random_1101["num_over_budget_critical_candidates"] == 1
+    assert random_1101["best_objective_value"] == pytest.approx(4.3)
+    assert random_1101["best_observed_objective_value"] == pytest.approx(99.0)
+    assert random_1101["evaluations"][4]["within_budget"] is False
+    assert random_1101["evaluations"][4]["best_so_far_objective"] == pytest.approx(4.3)
+    assert random_1101["evaluations"][4]["best_so_far_observed_objective"] == pytest.approx(99.0)
+    assert comparison["matched_seed_count"] == 1
+    assert comparison["ineligible_matched_seeds"][0]["seed"] == 1101
+    assert (
+        "over_budget_candidates_present"
+        in comparison["ineligible_matched_seeds"][0]["random_reason_codes"]
+    )
+
+
+def test_pairs_fail_closed_when_shared_search_configuration_differs(tmp_path: Path) -> None:
+    def change_search_space(manifest: dict[str, Any]) -> None:
+        manifest["config"]["search_space"]["variables"]["start_x"]["max"] = 2.0
+
+    report = _report_with_manifest(tmp_path, row_index=1, mutate=change_search_space)
+    comparison = next(item for item in report["random_vs_tpe"] if item["budget"] == 4)
+
+    assert comparison["matched_seed_count"] == 1
+    excluded = next(item for item in comparison["ineligible_matched_seeds"] if item["seed"] == 1101)
+    assert excluded["reason_codes"] == ["shared_configuration_mismatch"]
+
+
+def test_pairs_fail_closed_when_planner_policy_differs(tmp_path: Path) -> None:
+    def change_planner_policy(manifest: dict[str, Any]) -> None:
+        manifest["config"]["policy"] = "different_planner"
+
+    report = _report_with_manifest(tmp_path, row_index=1, mutate=change_planner_policy)
+    comparison = next(item for item in report["random_vs_tpe"] if item["budget"] == 4)
+    excluded = next(item for item in comparison["ineligible_matched_seeds"] if item["seed"] == 1101)
+
+    assert comparison["matched_seed_count"] == 1
+    assert excluded["reason_codes"] == ["shared_configuration_mismatch"]
+
+
+def test_pairs_fail_closed_when_scenario_template_content_differs(tmp_path: Path) -> None:
+    def change_scenario_template(manifest: dict[str, Any]) -> None:
+        template = tmp_path / "different-scenario.yaml"
+        template.write_text("scenarios: []\n", encoding="utf-8")
+        manifest["config"]["scenario_template"] = str(template)
+
+    report = _report_with_manifest(tmp_path, row_index=1, mutate=change_scenario_template)
+    comparison = next(item for item in report["random_vs_tpe"] if item["budget"] == 4)
+    excluded = next(item for item in comparison["ineligible_matched_seeds"] if item["seed"] == 1101)
+
+    assert comparison["matched_seed_count"] == 1
+    assert excluded["reason_codes"] == ["shared_configuration_mismatch"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "reason"),
+    [
+        ("budget", 5, "manifest_budget_mismatch"),
+        ("seed", 9999, "manifest_seed_mismatch"),
+        ("objective", "different_objective", "manifest_objective_mismatch"),
+    ],
+)
+def test_pairs_fail_closed_when_index_and_manifest_identity_disagree(
+    tmp_path: Path, field: str, value: Any, reason: str
+) -> None:
+    def change_manifest_identity(manifest: dict[str, Any]) -> None:
+        manifest["config"][field] = value
+
+    report = _report_with_manifest(tmp_path, row_index=1, mutate=change_manifest_identity)
+    comparison = next(item for item in report["random_vs_tpe"] if item["budget"] == 4)
+    changed_run = next(
+        run for run in report["runs"] if run["sampler"] == "optuna" and run["seed"] == 1101
+    )
+    excluded = next(item for item in comparison["ineligible_matched_seeds"] if item["seed"] == 1101)
+
+    assert changed_run["index_identity_valid"] is False
+    assert reason in changed_run["index_identity_reason_codes"]
+    assert comparison["matched_seed_count"] == 1
+    assert reason in excluded["tpe_reason_codes"]
+
+
+@pytest.mark.parametrize("eligibility_reason", ["ineligible", "degraded"])
+def test_ineligible_degraded_score_and_criticality_remain_observed_but_not_eligible(
+    tmp_path: Path, eligibility_reason: str
+) -> None:
+    def raise_noneligible_score(manifest: dict[str, Any]) -> None:
+        candidate = manifest["candidates"][3]
+        candidate["objective_value"] = 99.0
+        candidate["failure_attribution"]["primary_failure"] = "incomplete"
+        if eligibility_reason == "ineligible":
+            candidate["analysis_eligibility"]["eligible"] = False
+            candidate["failure_attribution"]["details"]["execution_mode"] = "native"
+        else:
+            candidate["analysis_eligibility"]["eligible"] = True
+
+    report = _report_with_manifest(tmp_path, row_index=2, mutate=raise_noneligible_score)
+    random_2202 = next(
+        run for run in report["runs"] if run["sampler"] == "random" and run["seed"] == 2202
+    )
+    comparison = next(item for item in report["random_vs_tpe"] if item["budget"] == 4)
+    pair_2202 = next(pair for pair in comparison["pairs"] if pair["seed"] == 2202)
+    degraded = random_2202["evaluations"][3]
+
+    assert random_2202["best_observed_objective_value"] == pytest.approx(99.0)
+    assert random_2202["best_analysis_eligible_objective_value"] == pytest.approx(4.1)
+    assert random_2202["num_observed_critical_candidates"] == 2
+    assert random_2202["num_critical_candidates"] == 1
+    assert degraded["observed_critical"] is True
+    assert degraded["critical"] is False
+    assert degraded["analysis_evidence_eligible"] is False
+    assert degraded["analysis_eligible"] is (eligibility_reason == "degraded")
+    assert degraded["execution_mode"] == (
+        "degraded" if eligibility_reason == "degraded" else "native"
+    )
+    assert pair_2202["random_final_best"] == pytest.approx(4.1)
+    assert pair_2202["tpe_minus_random"] == pytest.approx(0.4)
+
+
+def test_exact_source_revision_requires_full_sha_and_supported_context_schema(
+    tmp_path: Path,
+) -> None:
+    full_sha = "a" * 40
+    context = {
+        "schema_version": "adversarial_execution_context.v1",
+        "commit_sha": full_sha,
+    }
+    report = _report_with_manifest(
+        tmp_path,
+        row_index=0,
+        mutate=lambda _manifest: None,
+        execution_context=context,
+    )
+    random_1101 = next(
+        run for run in report["runs"] if run["sampler"] == "random" and run["seed"] == 1101
+    )
+    assert random_1101["source_revision"]["exact_source_revision"] == full_sha
+    assert "abc123" in random_1101["source_revision"]["unverified_commit_identifiers"]
+
+    bad_schema_context = {"schema_version": "unexpected.v9", "commit_sha": full_sha}
+    report = _report_with_manifest(
+        tmp_path / "bad-schema",
+        row_index=0,
+        mutate=lambda _manifest: None,
+        execution_context=bad_schema_context,
+    )
+    random_1101 = next(
+        run for run in report["runs"] if run["sampler"] == "random" and run["seed"] == 1101
+    )
+    assert random_1101["source_revision"]["exact_source_revision"] is None
+    assert random_1101["source_revision"]["status"] == "unknown"
+    assert full_sha in random_1101["source_revision"]["unverified_commit_identifiers"]

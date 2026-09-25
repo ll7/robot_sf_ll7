@@ -1220,6 +1220,19 @@ def _execution(  # noqa: PLR0913 - explicit execution evidence bindings are pass
     context_status = binding.get("run_context_binding", {}).get("status")
     if context_status != "valid":
         reasons.append(f"{role}_execution_run_context_{context_status or 'unavailable'}")
+    run_context_binding = binding.get("run_context_binding", {})
+    scenario_status = run_context_binding.get("scenario_matrix_binding_status")
+    case_identity_status = run_context_binding.get("case_identity_binding_status")
+    if scenario_status != "valid" or case_identity_status != "valid":
+        identity_status = (
+            "mismatch"
+            if "mismatch" in {scenario_status, case_identity_status}
+            else "unavailable"
+        )
+        reasons.append(f"{role}_execution_scenario_case_identity_{identity_status}")
+        return None
+    if context_status == "mismatch":
+        return None
     bound_source = dict(source)
     bound_source["_execution_context_binding_status"] = context_status
     producer_binding = binding.get("producer_provenance_binding")
@@ -1503,7 +1516,7 @@ def _producer_provenance_binding(
     )
     context_binding = _producer_run_context_binding(manifest, source, episode=episode)
     binding.update(context_binding)
-    binding["status"] = "valid"
+    binding["status"] = context_binding["run_context_binding"]["status"]
     return None, binding
 
 
@@ -1708,6 +1721,10 @@ def _producer_run_context_binding(
         "planner_checkpoint_status": checkpoint_status,
         "run_context_binding": {
             "status": status,
+            "execution_context_binding_status": context_status,
+            "scenario_matrix_binding_status": scenario_status,
+            "planner_config_binding_status": config_status,
+            "case_identity_binding_status": case_identity_status,
             "missing_fields": sorted(set(missing_fields)),
             "fields": [
                 "run_id",

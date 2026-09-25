@@ -1211,7 +1211,7 @@ def _certificate_supports_actor_free_rollout(cert: Any) -> bool:
     return _route_inventory_complete(cert) and _static_certificate(cert)
 
 
-def _execution(  # noqa: PLR0913 - explicit execution evidence bindings are passed through.
+def _execution(  # noqa: C901,PLR0913 - explicit producer bindings fail closed in sequence.
     source: Any,
     role: str,
     case_id: str,
@@ -1261,6 +1261,12 @@ def _execution(  # noqa: PLR0913 - explicit execution evidence bindings are pass
     )
     if resource_closure_status not in {"valid", "not_required"}:
         reasons.append(f"{role}_execution_scenario_runtime_input_closure_{resource_closure_status}")
+        return None
+    selected_map_status = run_context_binding.get("selected_map_binding_status")
+    if selected_map_status not in {"valid", "not_required"}:
+        reasons.append(
+            f"{role}_execution_selected_map_identity_{selected_map_status or 'unavailable'}"
+        )
         return None
     if context_status == "mismatch":
         return None
@@ -1736,12 +1742,16 @@ def _producer_run_context_binding(
         _selected_scenario_case_binding(source, episode)
     )
     resource_closure_status = _producer_scenario_resource_closure_binding(source, episode)
+    selected_map_status, selected_map_identity = _producer_selected_map_binding(source, episode)
     case_identity_status = _combine_binding_status(self_identity_status, selected_case_status)
     status = _combine_binding_status(
         _combine_binding_status(context_status, scenario_status),
         _combine_binding_status(
             config_status,
-            _combine_binding_status(case_identity_status, resource_closure_status),
+            _combine_binding_status(
+                case_identity_status,
+                _combine_binding_status(resource_closure_status, selected_map_status),
+            ),
         ),
     )
     checkpoint_status = _producer_checkpoint_status(source)
@@ -1754,6 +1764,8 @@ def _producer_run_context_binding(
         missing_fields.append("candidate.selected_scenario_row")
     if resource_closure_status == "unavailable":
         missing_fields.append("producer.scenario_runtime_input_closure")
+    if selected_map_status == "unavailable":
+        missing_fields.append("producer.selected_map_identity")
     if checkpoint_status == "unavailable":
         missing_fields.append("planner_checkpoint_sha256")
     return {
@@ -1764,6 +1776,7 @@ def _producer_run_context_binding(
         "candidate_scenario_case_identity_sha256": candidate_case_digest,
         "producer_scenario_case_identity_sha256": producer_case_digest,
         "planner_checkpoint_status": checkpoint_status,
+        "selected_map_identity": selected_map_identity,
         "run_context_binding": {
             "status": status,
             "execution_context_binding_status": context_status,
@@ -1772,6 +1785,7 @@ def _producer_run_context_binding(
             "case_identity_binding_status": case_identity_status,
             "selected_scenario_row_binding_status": selected_case_status,
             "scenario_runtime_input_closure_binding_status": resource_closure_status,
+            "selected_map_binding_status": selected_map_status,
             "missing_fields": sorted(set(missing_fields)),
             "fields": [
                 "run_id",
@@ -1834,6 +1848,90 @@ def _producer_scenario_resource_closure_binding(
             scenario_id=scenario_id,
         )
         else "mismatch"
+    )
+
+
+def _producer_selected_map_binding(  # noqa: C901 - each provenance guard is explicit.
+    source: Mapping[str, Any], episode: Mapping[str, Any]
+) -> tuple[str, dict[str, Any] | None]:
+    """Bind the realized map id and bytes to one resource in the candidate closure."""
+    identity = source.get("_candidate_runtime_input_identity")
+    if not isinstance(identity, Mapping):
+        return "unavailable", None
+    if identity.get("requires_effective_input_binding") is not True:
+        return "not_required", None
+    selected = episode.get("selected_map_identity")
+    if not isinstance(selected, Mapping) or selected.get("status") != "available":
+        return "unavailable", None
+    map_id = selected.get("map_id")
+    selected_path = selected.get("path")
+    selected_sha256 = selected.get("sha256")
+    selected_role = selected.get("source_role")
+    if (
+        not isinstance(map_id, str)
+        or not map_id.strip()
+        or not isinstance(selected_path, str)
+        or not selected_path.strip()
+        or not isinstance(selected_sha256, str)
+        or _SHA256.fullmatch(selected_sha256) is None
+        or selected_role not in {"map_file", "default_map_pool"}
+    ):
+        return "unavailable", None
+    identity_path = identity.get("path")
+    files = identity.get("files")
+    scenario_id = episode.get("scenario_id")
+    if not isinstance(identity_path, str) or not isinstance(files, list):
+        return "unavailable", None
+    if not isinstance(scenario_id, str) or not scenario_id.strip():
+        return "unavailable", None
+    candidate_records = [
+        record
+        for record in files
+        if isinstance(record, Mapping)
+        and record.get("role") in {"map_file", "default_map_pool"}
+        and record.get("scenario_id") == scenario_id
+    ]
+    if not candidate_records:
+        return "unavailable", None
+    try:
+        candidate_root = Path(identity_path).expanduser().resolve().parent
+        selected_resolved_path = Path(selected_path).expanduser().resolve()
+    except (OSError, RuntimeError, ValueError):
+        return "unavailable", None
+    matching_records: list[Mapping[str, Any]] = []
+    for record in candidate_records:
+        expected_sha256 = record.get("sha256")
+        expected_role = record.get("role")
+        expected_map_id = record.get("map_id")
+        expected_path = record.get("path")
+        if (
+            not isinstance(expected_sha256, str)
+            or expected_sha256.lower() != selected_sha256.lower()
+            or expected_role != selected_role
+            or (isinstance(expected_map_id, str) and expected_map_id != map_id)
+            or not isinstance(expected_path, str)
+            or not expected_path.strip()
+        ):
+            continue
+        try:
+            path = Path(expected_path)
+            expected_resolved_path = (
+                path.resolve() if path.is_absolute() else (candidate_root / path).resolve()
+            )
+        except (OSError, RuntimeError, ValueError):
+            continue
+        if expected_resolved_path == selected_resolved_path:
+            matching_records.append(record)
+    if len(matching_records) != 1:
+        return "mismatch", None
+    return (
+        "valid",
+        {
+            "map_id": map_id,
+            "path": selected_resolved_path.as_posix(),
+            "sha256": selected_sha256.lower(),
+            "source_role": selected_role,
+        },
     )
 
 
@@ -2624,8 +2722,23 @@ def _same_case(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
         == right_binding.get("execution_context_sha256")
         and left_binding.get("case_identity_sha256") is not None
         and left_binding.get("case_identity_sha256") == right_binding.get("case_identity_sha256")
+        and _same_selected_map_identity(
+            left_binding.get("selected_map_identity"),
+            right_binding.get("selected_map_identity"),
+        )
         and left_binding.get("simulator_settings_sha256")
         == right_binding.get("simulator_settings_sha256")
+    )
+
+
+def _same_selected_map_identity(left: Any, right: Any) -> bool:
+    """Compare realized map identity without requiring equal checkout-local paths."""
+    if not isinstance(left, Mapping) or not isinstance(right, Mapping):
+        return False
+    keys = ("map_id", "sha256", "source_role")
+    return all(
+        isinstance(left.get(key), str) and bool(left.get(key)) and left.get(key) == right.get(key)
+        for key in keys
     )
 
 

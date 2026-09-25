@@ -161,7 +161,6 @@ class QDArchiveCell:
     certification_status: str
     scenario_yaml_path: str | None = None
     bundle_path: str | None = None
-    scenario_admissibility: dict[str, Any] | None = None
 
     def to_json(self) -> dict[str, Any]:
         """Return a JSON-serializable cell payload."""
@@ -174,7 +173,6 @@ class QDArchiveCell:
             "certification_status": self.certification_status,
             "scenario_yaml_path": self.scenario_yaml_path,
             "bundle_path": self.bundle_path,
-            "scenario_admissibility": self.scenario_admissibility,
         }
 
 
@@ -205,8 +203,6 @@ class QDArchive:
         if evaluation.objective_value is None or not math.isfinite(
             float(evaluation.objective_value)
         ):
-            return False
-        if _scenario_admissibility_rejects(evaluation):
             return False
         cell = self.grid.cell_index(descriptor)
         if cell is None:
@@ -242,7 +238,6 @@ class QDArchive:
             bundle_path=(
                 evaluation.bundle_path.as_posix() if evaluation.bundle_path is not None else None
             ),
-            scenario_admissibility=evaluation.scenario_admissibility,
         )
         return True
 
@@ -368,6 +363,7 @@ class QDSearchResult:
     num_proposed: int = 0
     num_admissibility_rejected: int = 0
     pre_evaluation_rejections: tuple[Mapping[str, Any], ...] = ()
+    admissibility_records: tuple[Mapping[str, Any], ...] = ()
 
     def to_json(self) -> dict[str, Any]:
         """Return a JSON-serializable result payload."""
@@ -379,6 +375,7 @@ class QDSearchResult:
             "num_proposed": self.num_proposed,
         }
         payload["pre_evaluation_rejections"] = [dict(row) for row in self.pre_evaluation_rejections]
+        payload["admissibility_records"] = [dict(row) for row in self.admissibility_records]
         return payload
 
 
@@ -425,11 +422,19 @@ def run_map_elites(
     num_admitted = 0
     num_admissibility_rejected = 0
     pre_evaluation_rejections: list[Mapping[str, Any]] = []
+    admissibility_records: list[Mapping[str, Any]] = []
 
     for index in range(config.budget):
         emitter = active_emitters[index % len(active_emitters)]
         candidate = emitter.sample()
         verdict = admissibility_precheck(config, candidate) if admissibility_precheck else None
+        admissibility_records.append(
+            _admissibility_record(
+                candidate,
+                verdict,
+                precheck_configured=admissibility_precheck is not None,
+            )
+        )
         if _scenario_admissibility_payload_rejects(verdict):
             num_admissibility_rejected += 1
             pre_evaluation_rejections.append(
@@ -441,17 +446,9 @@ def run_map_elites(
             )
             continue
         num_evaluated += 1
-        evaluation, admissibility_rejected = _evaluate_qd_candidate(
-            config=config,
-            candidate=candidate,
-            evaluator=evaluator,
-            objective_fn=objective_fn,
-        )
-        if admissibility_rejected:
-            num_admissibility_rejected += 1
-            for active_emitter in active_emitters:
-                _observe(active_emitter, evaluation)
-            continue
+        evaluation = evaluator(config, candidate)
+        if evaluation.objective_value is None:
+            evaluation = evaluation.with_objective(objective_fn(evaluation))
 
         cert_status = (
             certifier(candidate) if certifier is not None else evaluation.certification_status
@@ -479,6 +476,7 @@ def run_map_elites(
         num_admitted=num_admitted,
         num_admissibility_rejected=num_admissibility_rejected,
         pre_evaluation_rejections=tuple(pre_evaluation_rejections),
+        admissibility_records=tuple(admissibility_records),
     )
 
 
@@ -491,25 +489,48 @@ def _resolve_archive(config: QDSearchConfig, archive: QDArchive | None) -> QDArc
     return archive
 
 
-def _evaluate_qd_candidate(
-    *,
-    config: QDSearchConfig,
+def _admissibility_record(
     candidate: CandidateSpec,
-    evaluator: QDEvaluator,
-    objective_fn: Any,
-) -> tuple[CandidateEvaluation, bool]:
-    """Evaluate one QD candidate without scoring an explicit admissibility exclusion."""
-    evaluation = evaluator(config, candidate)
-    if _scenario_admissibility_rejects(evaluation):
-        return evaluation, True
-    if evaluation.objective_value is None:
-        evaluation = evaluation.with_objective(objective_fn(evaluation))
-    return evaluation, False
-
-
-def _scenario_admissibility_rejects(evaluation: CandidateEvaluation) -> bool:
-    """Recognize only the helper's explicit pre-evaluation exclusion disposition."""
-    return _scenario_admissibility_payload_rejects(evaluation.scenario_admissibility)
+    verdict: Any,
+    *,
+    precheck_configured: bool,
+) -> Mapping[str, Any]:
+    """Preserve each verdict or its explicit unavailable/invalid state beside the candidate."""
+    record: dict[str, Any] = {"candidate": candidate.to_json()}
+    if verdict is None:
+        record.update(
+            {
+                "status": "unavailable",
+                "reason_code": (
+                    "admissibility_verdict_unavailable"
+                    if precheck_configured
+                    else "admissibility_precheck_not_configured"
+                ),
+            }
+        )
+        return record
+    if not isinstance(verdict, Mapping):
+        record.update(
+            {
+                "status": "invalid",
+                "reason_code": "admissibility_verdict_not_mapping",
+                "value_type": type(verdict).__name__,
+            }
+        )
+        return record
+    try:
+        validate_scenario_admissibility(verdict)
+    except ValueError as exc:
+        record.update(
+            {
+                "status": "invalid",
+                "reason_code": "admissibility_verdict_schema_invalid",
+                "validation_error": str(exc),
+            }
+        )
+        return record
+    record.update({"status": "available", "scenario_admissibility": dict(verdict)})
+    return record
 
 
 def _scenario_admissibility_payload_rejects(payload: Any) -> bool:

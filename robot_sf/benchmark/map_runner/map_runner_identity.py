@@ -236,6 +236,70 @@ def planner_independent_scenario_case_payload(
     return payload
 
 
+def selected_map_identity_from_runtime_inputs(
+    map_id: Any,
+    runtime_input_records: list[dict[str, str]],
+    *,
+    scenario_id: str,
+) -> dict[str, Any]:
+    """Bind the realized map to one parser-captured source resource.
+
+    An implicit map pool can contain multiple maps, so its complete resource closure does
+    not identify which map the environment actually selected. This record ties the
+    environment's realized map id to the exact parser-consumed source path and digest.
+
+    Returns:
+        A schema-shaped available identity when exactly one source matches, otherwise an
+        unavailable identity with a reason.
+    """
+    unavailable = {
+        "schema_version": "selected_map_identity.v1",
+        "status": "unavailable",
+        "map_id": map_id if isinstance(map_id, str) and map_id.strip() else None,
+        "path": None,
+        "sha256": None,
+        "source_role": None,
+        "reason": None,
+    }
+    if not isinstance(map_id, str) or not map_id.strip():
+        unavailable["reason"] = "realized_map_id_unavailable"
+        return unavailable
+    map_records = [
+        record
+        for record in runtime_input_records
+        if isinstance(record, dict)
+        and record.get("scenario_id") == scenario_id
+        and record.get("role") in {"map_file", "default_map_pool"}
+    ]
+    matches = [record for record in map_records if record.get("map_id") == map_id]
+    if not matches and len(map_records) == 1 and "map_id" not in map_records[0]:
+        # Explicit map_file rows historically omit a map_id when the scenario does not
+        # declare one; a single parser-consumed map resource still binds unambiguously.
+        matches = map_records
+    if len(matches) != 1:
+        unavailable["reason"] = "realized_map_source_not_unique"
+        return unavailable
+    record = matches[0]
+    path = record.get("path")
+    sha256 = record.get("sha256")
+    source_role = record.get("role")
+    if not all(isinstance(value, str) and value.strip() for value in (path, sha256, source_role)):
+        unavailable["reason"] = "realized_map_source_identity_incomplete"
+        return unavailable
+    if len(sha256) != 64 or any(character not in "0123456789abcdefABCDEF" for character in sha256):
+        unavailable["reason"] = "realized_map_source_digest_invalid"
+        return unavailable
+    return {
+        "schema_version": "selected_map_identity.v1",
+        "status": "available",
+        "map_id": map_id,
+        "path": path,
+        "sha256": sha256.lower(),
+        "source_role": source_role,
+        "reason": None,
+    }
+
+
 resolve_seed_list = _resolve_seed_list
 suite_key = _suite_key
 select_seeds = _select_seeds

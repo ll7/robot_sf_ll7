@@ -221,7 +221,10 @@ def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.Monkey
     dummy_config = type(
         "Cfg",
         (),
-        {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()},
+        {
+            "sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})(),
+            "map_id": "episode-schema-smoke",
+        },
     )()
 
     def build_env_config(_scenario, scenario_path, *, runtime_input_records=None):
@@ -229,8 +232,9 @@ def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.Monkey
         if runtime_input_records is not None:
             runtime_input_records.append(
                 {
-                    "role": "fixture_map",
+                    "role": "map_file",
                     "scenario_id": "episode-schema-smoke",
+                    "map_id": "episode-schema-smoke",
                     "sha256": "a" * 64,
                     "path": "/fixture/map.svg",
                     "parser": "svg",
@@ -306,13 +310,23 @@ def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.Monkey
     assert record["failure_mechanism"]["mechanism_label"] == "unknown"
     assert record["runtime_input_records"] == [
         {
-            "role": "fixture_map",
+            "role": "map_file",
             "scenario_id": "episode-schema-smoke",
+            "map_id": "episode-schema-smoke",
             "sha256": "a" * 64,
             "path": "/fixture/map.svg",
             "parser": "svg",
         }
     ]
+    assert record["selected_map_identity"] == {
+        "schema_version": "selected_map_identity.v1",
+        "status": "available",
+        "map_id": "episode-schema-smoke",
+        "path": "/fixture/map.svg",
+        "sha256": "a" * 64,
+        "source_role": "map_file",
+        "reason": None,
+    }
     exposure = record["interaction_exposure"]
     assert exposure["interaction_exposure_schema_version"] == INTERACTION_EXPOSURE_SCHEMA_VERSION
     # Two pedestrians are present, so exposure is derivable (computed), not blank.

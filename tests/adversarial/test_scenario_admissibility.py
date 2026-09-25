@@ -32,7 +32,10 @@ from robot_sf.adversarial.feasibility_first import (
     SCENARIO_FEASIBILITY_CONTRACT_VERSION,
     SCENARIO_FEASIBILITY_PREDICATE_NAMES,
 )
-from robot_sf.adversarial.scenario_admissibility import _oracle_excludes
+from robot_sf.adversarial.scenario_admissibility import (
+    _oracle_excludes,
+    _same_selected_map_identity,
+)
 from robot_sf.benchmark.map_runner.map_runner_identity import (
     scenario_with_episode_seed_defaults as _scenario_with_episode_seed_defaults,
 )
@@ -254,6 +257,8 @@ def _execution(  # noqa: PLR0913 - fixture fields model canonical episode and pr
     sim_dt: float = 0.1,
     producer_goal_x: float | None = None,
     include_runtime_input_records: bool = True,
+    include_selected_map_identity: bool = True,
+    selected_map_id: str = "uni_campus_big",
 ) -> dict[str, Any]:
     planner_aliases = {
         "reference": "goal",
@@ -319,6 +324,21 @@ def _execution(  # noqa: PLR0913 - fixture fields model canonical episode and pr
         episode_row["runtime_input_records"] = [
             dict(record) for record in _SCENARIO_RUNTIME_INPUT_RECORDS
         ]
+    if include_selected_map_identity:
+        map_record = next(
+            record
+            for record in _SCENARIO_RUNTIME_INPUT_RECORDS
+            if record.get("role") in {"map_file", "default_map_pool"}
+        )
+        episode_row["selected_map_identity"] = {
+            "schema_version": "selected_map_identity.v1",
+            "status": "available",
+            "map_id": selected_map_id,
+            "path": map_record["path"],
+            "sha256": map_record["sha256"],
+            "source_role": map_record["role"],
+            "reason": None,
+        }
     if include_context:
         # This extension is deliberately non-authoritative: producer-owned run metadata below
         # supplies numerical context, while row extensions must not forge it.
@@ -1907,6 +1927,54 @@ def test_execution_with_unbound_producer_resource_closure_remains_unknown() -> N
         binding["run_context_binding"]["scenario_runtime_input_closure_binding_status"]
         == "unavailable"
     )
+
+
+def test_execution_with_unbound_selected_map_remains_unknown() -> None:
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        reference_execution=_execution(
+            "reference", route_complete=True, include_selected_map_identity=False
+        ),
+    )
+
+    assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    assert "reference_execution_selected_map_identity_unavailable" in verdict.reason_codes
+
+
+def test_selected_map_mismatch_cannot_support_planner_specific_failure() -> None:
+    verdict = classify_scenario_admissibility(
+        "case-static",
+        reference_execution=_execution("reference", route_complete=True),
+        target_execution=_execution(
+            "target", route_complete=False, selected_map_id="different-map"
+        ),
+        replay_execution=_execution(
+            "target", route_complete=False, replay=True, selected_map_id="different-map"
+        ),
+    )
+
+    assert verdict.verdict == EMPIRICALLY_FEASIBLE
+    assert verdict.verdict != PLANNER_SPECIFIC_FAILURE
+    assert "target_execution_selected_map_identity_mismatch" in verdict.reason_codes
+    assert "replay_execution_selected_map_identity_mismatch" in verdict.reason_codes
+
+
+def test_same_realized_map_identity_ignores_worktree_local_path() -> None:
+    left = {
+        "map_id": "map-a",
+        "path": "/worktrees/one/maps/map-a.svg",
+        "sha256": "a" * 64,
+        "source_role": "default_map_pool",
+    }
+    right = {
+        "map_id": "map-a",
+        "path": "/worktrees/two/maps/map-a.svg",
+        "sha256": "a" * 64,
+        "source_role": "default_map_pool",
+    }
+
+    assert _same_selected_map_identity(left, right)
+    assert not _same_selected_map_identity(left, {**right, "sha256": "b" * 64})
 
 
 def test_matched_reference_target_failure_needs_reproducing_replay() -> None:

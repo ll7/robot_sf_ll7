@@ -263,60 +263,6 @@ def test_archive_admits_only_certified_finite(tmp_path: Path) -> None:
     assert archive.filled_cell_count() == 1
 
 
-def test_archive_rejects_explicit_admissibility_exclusion_with_passed_certificate(
-    tmp_path: Path,
-) -> None:
-    """A helper exclusion cannot enter the QD archive after later objective scoring."""
-    grid = GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4)
-    archive = QDArchive(grid=grid)
-    rejected = replace(
-        _make_evaluation(
-            candidate=_candidates(1)[0],
-            min_distance=1.0,
-            critical_time=1.0,
-            objective=99.0,
-            cert_status=passed_status("custom certifier says passed"),
-            temp_root=tmp_path,
-        ),
-        scenario_admissibility=_admissibility_payload("structurally_invalid", "reject"),
-    )
-
-    assert not archive.try_insert(
-        descriptor=(1.0, 1.0), evaluation=rejected, certification_status=passed_status("passed")
-    )
-    assert archive.filled_cell_count() == 0
-
-
-def test_qd_search_counts_explicit_admissibility_exclusions(tmp_path: Path) -> None:
-    """A rejected candidate is counted, observed, and never rescored into the archive."""
-    grid = GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4)
-    config = QDSearchConfig(
-        search_space=_space(),
-        objective="worst_case_snqi",
-        grid=grid,
-        budget=1,
-        require_certification=False,
-    )
-    rejected = replace(
-        _make_evaluation(
-            candidate=_candidates(1)[0],
-            min_distance=1.0,
-            critical_time=1.0,
-            objective=99.0,
-            cert_status=passed_status("custom certifier says passed"),
-            temp_root=tmp_path,
-        ),
-        scenario_admissibility=_admissibility_payload("structurally_invalid", "reject"),
-    )
-    result = run_map_elites(config, evaluator=_FakeEvaluator([rejected]))
-
-    assert result.num_evaluated == 1
-    assert result.num_admissibility_rejected == 1
-    assert result.num_admitted == 0
-    assert result.archive.filled_cell_count() == 0
-    assert result.to_json()["search_summary"]["num_admissibility_rejected"] == 1
-
-
 def test_qd_precheck_rejects_before_calling_evaluator(tmp_path: Path) -> None:
     config = QDSearchConfig(
         search_space=_space(), objective="worst_case_snqi", grid=GridSpec(0, 2.5, 0, 3, 4), budget=1
@@ -339,9 +285,13 @@ def test_qd_precheck_rejects_before_calling_evaluator(tmp_path: Path) -> None:
     assert result.num_evaluated == 0
     assert result.num_admissibility_rejected == 1
     assert result.pre_evaluation_rejections[0]["stage"] == "pre_evaluation"
+    assert result.admissibility_records[0]["scenario_admissibility"]["verdict"] == (
+        "geometric_or_kinodynamic_impossibility"
+    )
     assert result.to_json()["pre_evaluation_rejections"] == [
         dict(result.pre_evaluation_rejections[0])
     ]
+    assert result.to_json()["admissibility_records"] == [dict(result.admissibility_records[0])]
 
 
 def test_qd_unknown_precheck_continues_to_evaluator(tmp_path: Path) -> None:
@@ -366,6 +316,53 @@ def test_qd_unknown_precheck_continues_to_evaluator(tmp_path: Path) -> None:
     assert result.num_proposed == 1
     assert result.num_evaluated == 1
     assert result.num_admissibility_rejected == 0
+    assert result.admissibility_records[0]["status"] == "available"
+    assert result.admissibility_records[0]["scenario_admissibility"]["verdict"] == (
+        "admissible_feasibility_unknown"
+    )
+
+
+def test_qd_without_verdict_records_unknown_and_still_evaluates(tmp_path: Path) -> None:
+    config = QDSearchConfig(
+        search_space=_space(), objective="worst_case_snqi", grid=GridSpec(0, 2.5, 0, 3, 4), budget=1
+    )
+    evaluation = _make_evaluation(
+        candidate=_candidates(1)[0],
+        min_distance=1.0,
+        critical_time=1.0,
+        objective=1.0,
+        temp_root=tmp_path,
+    )
+    result = run_map_elites(config, evaluator=_FakeEvaluator([evaluation]))
+
+    assert result.num_evaluated == 1
+    assert result.admissibility_records[0]["status"] == "unavailable"
+    assert result.admissibility_records[0]["reason_code"] == "admissibility_precheck_not_configured"
+
+
+def test_qd_invalid_verdict_is_preserved_and_does_not_reject(tmp_path: Path) -> None:
+    config = QDSearchConfig(
+        search_space=_space(), objective="worst_case_snqi", grid=GridSpec(0, 2.5, 0, 3, 4), budget=1
+    )
+    evaluation = _make_evaluation(
+        candidate=_candidates(1)[0],
+        min_distance=1.0,
+        critical_time=1.0,
+        objective=1.0,
+        temp_root=tmp_path,
+    )
+    result = run_map_elites(
+        config,
+        evaluator=_FakeEvaluator([evaluation]),
+        admissibility_precheck=lambda _config, _candidate: {"schema_version": "invalid"},
+    )
+
+    assert result.num_evaluated == 1
+    assert result.num_admissibility_rejected == 0
+    assert result.admissibility_records[0]["status"] == "invalid"
+    assert result.admissibility_records[0]["reason_code"] == (
+        "admissibility_verdict_schema_invalid"
+    )
 
 
 def test_archive_keeps_higher_quality_incumbent(tmp_path: Path) -> None:

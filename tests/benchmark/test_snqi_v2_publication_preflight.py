@@ -167,6 +167,45 @@ def test_snqi_v2_cold_recomputation_rejects_row_algorithm_spoof(
     assert any("algorithm disagrees" in value for value in result["violations"])
 
 
+def test_snqi_v2_cold_recomputation_binds_guarded_safe_to_manifest_arm(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Declared guarded PPO may use its safe shield; a row cannot grant that exception."""
+    payload = _v2_payload(tmp_path, monkeypatch)
+    manifest_path = payload / "release" / "release_manifest.resolved.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    run_path = payload / "runs" / "goal__differential_drive" / "episodes.jsonl"
+    guarded_path = payload / "runs" / "guarded_ppo__differential_drive" / "episodes.jsonl"
+    row = json.loads(run_path.read_text(encoding="utf-8"))
+    row["algo"] = "guarded_ppo"
+    row["algorithm_metadata"] = {
+        "algorithm": "ppo",
+        "canonical_algorithm": "guarded_ppo",
+        "planner_contract": {"planner_id": "guarded_ppo"},
+        "guard_stats": {"fallback_safe": 1},
+    }
+    guarded_path.parent.mkdir(parents=True)
+    _write_json(guarded_path, row)
+    run_path.unlink()
+    manifest["planners"] = {
+        "keys": ["guarded_ppo"],
+        "config_identities": [{"key": "guarded_ppo", "algo": "guarded_ppo"}],
+    }
+    _write_json(manifest_path, manifest)
+    assert _check_snqi_v2_field_consistency(payload)["violations"] == []
+
+    _write_json(run_path, {**row, "algo": "goal"})
+    guarded_path.unlink()
+    manifest["planners"] = {
+        "keys": ["goal"],
+        "config_identities": [{"key": "goal", "algo": "goal"}],
+    }
+    _write_json(manifest_path, manifest)
+    result = _check_snqi_v2_field_consistency(payload)
+    assert result["mismatch_count"] == 1
+    assert any("refuses fallback/degraded" in value for value in result["violations"])
+
+
 def test_snqi_v2_cold_recomputation_rejects_undeclared_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

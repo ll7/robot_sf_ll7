@@ -1,5 +1,6 @@
 """Publication-free hashes must leave every existing campaign hash unchanged."""
 
+import copy
 import hashlib
 import subprocess
 from dataclasses import asdict, replace
@@ -38,6 +39,115 @@ def test_pre_doi_scientific_projection_removes_only_publication_coordinates() ->
     assert "publication_identity_mode" not in scientific
 
 
+def test_frozen_checkpoint_admission_rejects_coherent_new_model_and_runtime_bundle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A staging and smoke pair can agree with each other yet differ from frozen 0.0.7."""
+    planners = [
+        SimpleNamespace(key=f"arm{index:02}", algo=f"algo{index:02}") for index in range(14)
+    ]
+    references = [
+        SimpleNamespace(
+            planner_key=planner.key,
+            algo=planner.algo,
+            kind="model_id",
+            value=f"model{index:02}",
+            implicit=False,
+        )
+        for index, planner in enumerate(planners[:5])
+    ]
+    monkeypatch.setattr(
+        release_protocol,
+        "iter_campaign_arm_checkpoint_references",
+        lambda _: references,
+    )
+    frozen = {"planners": []}
+    staged = {"arms": []}
+    for index, planner in enumerate(planners):
+        record = None
+        if index < 5:
+            record = {
+                "planner_key": planner.key,
+                "algo": planner.algo,
+                "kind": "model_id",
+                "value": f"model{index:02}",
+                "implicit": False,
+                "checkpoint_sha256": "a" * 64,
+                "resolved_path": "fixture.pt",
+            }
+            staged["arms"].append(dict(record))
+        bundle_digest = "c" * 64 if index == 2 else "a" * 64 if record else None
+        frozen["planners"].append(
+            {
+                "key": planner.key,
+                "algo": planner.algo,
+                "checkpoint_provenance": {
+                    "model_id": record["value"] if record else None,
+                    "checkpoint_sha256": bundle_digest,
+                    "references": [record] if record else [],
+                    "runtime": [
+                        {
+                            "model_id": record["value"],
+                            "kinematics": "differential_drive",
+                            "checkpoint_sha256": bundle_digest,
+                        }
+                    ]
+                    if record
+                    else [],
+                },
+            }
+        )
+    monkeypatch.setattr(
+        release_protocol,
+        "get_registry_entry",
+        lambda model_id, *, path: {"local_path": "fixture.pt", "sha256": "a" * 64},
+    )
+    cfg = SimpleNamespace(planners=planners)
+    kwargs = {
+        "registry_path": tmp_path / "registry.yaml",
+    }
+    projection = release_protocol._candidate_frozen_checkpoint_arms(cfg, frozen, staged, **kwargs)
+    assert len(projection) == 14 and projection[2]["checkpoint_sha256"] == "c" * 64
+    incomplete = copy.deepcopy(frozen)
+    incomplete["planners"].pop()
+    with pytest.raises(ValueError, match="checkpoint roster is incomplete"):
+        release_protocol._candidate_frozen_checkpoint_arms(cfg, incomplete, staged, **kwargs)
+    missing_staged = {"arms": staged["arms"][:-1]}
+    with pytest.raises(ValueError, match="staged checkpoints differ from frozen"):
+        release_protocol._candidate_frozen_checkpoint_arms(cfg, frozen, missing_staged, **kwargs)
+
+    monkeypatch.setattr(
+        release_protocol,
+        "get_registry_entry",
+        lambda model_id, *, path: {"local_path": "fixture.pt", "sha256": "b" * 64},
+    )
+    staged["arms"][0]["checkpoint_sha256"] = "b" * 64
+    with pytest.raises(ValueError, match="registry checkpoint differs from frozen"):
+        release_protocol._candidate_frozen_checkpoint_arms(cfg, frozen, staged, **kwargs)
+
+    monkeypatch.setattr(
+        release_protocol,
+        "get_registry_entry",
+        lambda model_id, *, path: {"local_path": "fixture.pt", "sha256": "a" * 64},
+    )
+    with pytest.raises(ValueError, match="staged checkpoints differ from frozen"):
+        release_protocol._candidate_frozen_checkpoint_arms(cfg, frozen, staged, **kwargs)
+    staged["arms"][0]["checkpoint_sha256"] = "a" * 64
+
+    observed = copy.deepcopy(frozen)
+    observed["planners"][2]["checkpoint_provenance"]["checkpoint_sha256"] = "b" * 64
+    with pytest.raises(ValueError, match="runtime bundle differs from frozen"):
+        release_protocol._candidate_frozen_checkpoint_arms(
+            cfg, frozen, staged, observed_campaign=observed, **kwargs
+        )
+    observed = copy.deepcopy(frozen)
+    observed["planners"][2]["checkpoint_provenance"]["runtime"][0]["checkpoint_sha256"] = "b" * 64
+    with pytest.raises(ValueError, match="runtime checkpoint digest differs"):
+        release_protocol._candidate_frozen_checkpoint_arms(
+            cfg, frozen, staged, observed_campaign=observed, **kwargs
+        )
+
+
 def test_candidate_admission_rejects_wrong_template_source_and_checkpoint(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -59,7 +169,9 @@ def test_candidate_admission_rejects_wrong_template_source_and_checkpoint(
     )
     kwargs = {
         "cfg": cfg,
-        "baseline_manifest": {},
+        "baseline_manifest": {"source_sha": "0" * 40},
+        "baseline_campaign_manifest": {"git": {"commit": "0" * 40}},
+        "baseline_archive_sha256": release_protocol.SCIENTIFIC_CANDIDATE_FROZEN_ARCHIVE_SHA256,
         "source_sha": "a" * 40,
         "checkpoint_receipt": {"submit_safe": False},
         "checkpoint_receipt_sha256": "b" * 64,

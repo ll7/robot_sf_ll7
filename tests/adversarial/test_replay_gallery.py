@@ -1884,6 +1884,12 @@ def test_gallery_accounts_invalid_and_failed_candidates_without_selecting_them(
             "certificate_eligibility_inconsistent",
         ),
         (
+            lambda receipt: receipt["details"]["certificates"][0]["route_certificates"][0].update(
+                classification="hard_but_solvable"
+            ),
+            "certificate_eligibility_inconsistent",
+        ),
+        (
             lambda receipt: receipt["details"]["certificates"][0].pop("evidence"),
             "certificate_structurally_invalid",
         ),
@@ -1899,6 +1905,7 @@ def test_gallery_accounts_invalid_and_failed_candidates_without_selecting_them(
         "wrong-id",
         "incomplete",
         "top-level-eligibility-mismatch",
+        "top-level-classification-not-worst-route",
         "invalid-certificate-schema",
         "missing-certificate",
     ),

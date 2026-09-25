@@ -12,8 +12,8 @@
     "paper_or_benchmark_claim": "not_established_by_bundle_alone"
   },
   "totals": {
-    "file_count": 56,
-    "total_bytes": 1247677
+    "file_count": 57,
+    "total_bytes": 1249474
   },
   "files": [
     {
@@ -146,6 +146,12 @@
       "path": "pilot_comparison_render_provenance.json",
       "size_bytes": 1331,
       "sha256": "452d68bd187cbb854cc9db4e48c674e2025b380f3161ca123829a7abfd98bd10",
+      "kind": "misc"
+    },
+    {
+      "path": "pilot_report_manifest_path_map.v1.json",
+      "size_bytes": 1797,
+      "sha256": "da5a8f176aa8ae34f1e5d435a2bc34200f203b0e1fdf2ec7c4157c69fcc774cf",
       "kind": "misc"
     },
     {

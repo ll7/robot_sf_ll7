@@ -192,6 +192,15 @@ decision_summary: >-
   sampler-source mismatch; preserve both producer pins and the mapping bytes. The objective
   addendum adds three evidence-tree paths, and the reviewed machine baseline grows from 513 to
   514 findings across 105 files while remaining diagnostic-only.
+  Archived-manifest path-map addendum (issue #9645; 2026-09-25): the packet adds one tracked
+  `falsification_manifest_path_map.v1` payload that binds the four original output-manifest paths
+  to archived copies by the exact comparison-index digest and each manifest's SHA-256. This
+  restores deterministic manifest resolution for the #9646 report without restoring raw episode
+  records or changing any search outcome. Review confirmed all four source manifests' row identity
+  and declared output-directory parent against the preserved comparison index. The path-map adds
+  one evidence-tree path (2488 to 2489); it introduces no registry findings, and the 514-finding,
+  105-file baseline remains unchanged. The packet remains diagnostic-only and the bounded NO-GO
+  remains limited to its fixed seeds and clipped search domain.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the

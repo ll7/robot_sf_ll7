@@ -18,6 +18,24 @@ preserves its recorded candidate outcomes, and writes the output and renderer pr
 not infer empirical execution from the input or repeat search and simulation. The provenance records
 the source and rendered report digests, renderer revision, and `search_or_simulation_rerun: false`.
 
+### Archived search-manifest paths
+
+The comparison index keeps each manifest's original `output/` path. The raw output tree is not
+preserved, but the four exact search manifests are archived under `payload/source_manifests/`.
+[`pilot_report_manifest_path_map.v1.json`](evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_report_manifest_path_map.v1.json)
+binds each original path to its archived copy by SHA-256 and is itself bound to the comparison
+index digest. The #9646 report can consume the tracked manifests directly with that map; this path
+binding does not recover the absent per-candidate episode records, so source-trace verification
+remains unknown.
+
+```bash
+uv run python scripts/tools/report_falsification_search.py \
+  --comparison docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_comparison.json \
+  --manifest-path-map docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_report_manifest_path_map.v1.json \
+  --output-dir output/issue9646-pilot-report \
+  --repo-root .
+```
+
 The experiment's recorded source commit, `58e516aa4f69ff3098bf518199f483006589758c`, is local-only
 and cannot currently be fetched from the remote. Its exact experiment-time revision can be
 reconstructed from base `5cccee50be333adceee4c978b54bf63d32454cc9` and the tracked

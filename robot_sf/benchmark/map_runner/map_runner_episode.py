@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import math
 import time
 from collections import Counter
@@ -1309,6 +1310,26 @@ class _EpisodeRunContext:
     policy_cfg: dict[str, Any]
 
 
+def _accepts_runtime_input_records(builder: Callable[..., Any]) -> bool:
+    """Return whether an environment builder supports runtime-input capture.
+
+    Returns:
+        ``True`` for the canonical builder contract or a compatible wrapper.
+    """
+    try:
+        parameters = inspect.signature(builder).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(
+        (
+            parameter.name == "runtime_input_records"
+            and parameter.kind is not inspect.Parameter.POSITIONAL_ONLY
+        )
+        or parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters
+    )
+
+
 def _resolve_episode_run_context(  # noqa: PLR0913
     *,
     scenario: dict[str, Any],
@@ -1378,14 +1399,17 @@ def _resolve_episode_run_context(  # noqa: PLR0913
             "safety_wrapper and cbf_safety_filter cannot both be enabled in #3948 first slice"
         )
     safety_wrapper_deadlock_monitor = make_deadlock_recovery_monitor(safety_wrapper_runtime)
-    if runtime_input_records is None:
-        config = _build_env_config(scenario, scenario_path=scenario_path)
-    else:
+    if runtime_input_records is not None and _accepts_runtime_input_records(_build_env_config):
         config = _build_env_config(
             scenario,
             scenario_path=scenario_path,
             runtime_input_records=runtime_input_records,
         )
+    else:
+        # Keep legacy monkeypatched builders usable. Their missing capture support
+        # leaves the row's input identity unavailable, which downstream evidence
+        # consumers already treat as unknown.
+        config = _build_env_config(scenario, scenario_path=scenario_path)
     max_steps = int(scenario.get("simulation_config", {}).get("max_episode_steps", 0) or 0)
     horizon_val = int(horizon) if horizon and horizon > 0 else max_steps
     if horizon_val <= 0:

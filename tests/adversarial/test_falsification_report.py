@@ -203,6 +203,140 @@ def test_analysis_eligibility_receipt_cannot_override_canonical_evidence(
     assert evaluation["analysis_evidence_eligible"] is False
 
 
+@pytest.mark.parametrize(
+    ("inconsistency", "expected_reason", "expected_episode_status"),
+    [
+        ("missing_path", "episode_record_missing_path", "missing_path"),
+        ("missing_file", "episode_record_missing", "missing"),
+        ("malformed_file", "episode_record_malformed", "malformed"),
+        ("availability_unknown", "availability_status_unknown", "available"),
+        ("availability_failed", "availability_status_failed", "available"),
+        ("availability_missing", "availability_status_missing", "available"),
+        ("readiness_unknown", "readiness_status_unknown", "available"),
+        ("readiness_missing", "readiness_status_missing", "available"),
+        ("execution_mode_adapter", "execution_mode_adapter", "available"),
+        ("execution_mode_missing", "execution_mode_missing", "available"),
+    ],
+)
+def test_artifact_verified_eligibility_requires_available_trace_and_native_execution(
+    tmp_path: Path,
+    inconsistency: str,
+    expected_reason: str,
+    expected_episode_status: str,
+) -> None:
+    malformed_path = tmp_path / "malformed.jsonl"
+    malformed_path.write_text("not a JSON episode record\n", encoding="utf-8")
+    default_episode_path = "tests/fixtures/adversarial/search_report/records/episode.jsonl"
+    episode_paths = {
+        "missing_path": None,
+        "missing_file": str(tmp_path / "missing.jsonl"),
+        "malformed_file": str(malformed_path),
+    }
+    detail_overrides = {
+        "availability_unknown": {"availability_status": "unknown"},
+        "availability_failed": {"availability_status": "failed"},
+        "readiness_unknown": {"readiness_status": "unknown"},
+        "execution_mode_adapter": {"execution_mode": "adapter"},
+    }
+    missing_details = {
+        "availability_missing": "availability_status",
+        "readiness_missing": "readiness_status",
+        "execution_mode_missing": "execution_mode",
+    }
+
+    def break_artifact_eligibility(manifest: dict[str, Any]) -> None:
+        for index in (0, 2):
+            candidate = manifest["candidates"][index]
+            details = candidate["failure_attribution"].setdefault("details", {})
+            candidate["analysis_eligibility"]["eligible"] = True
+            candidate["effective_scenario_hash"] = f"scenario-{index}"
+            details["execution_mode"] = "native"
+            details["readiness_status"] = "native"
+            details["availability_status"] = "available"
+            candidate["episode_record_path"] = episode_paths.get(
+                inconsistency, default_episode_path
+            )
+            details.update(detail_overrides.get(inconsistency, {}))
+            missing_detail = missing_details.get(inconsistency)
+            if missing_detail:
+                details.pop(missing_detail)
+
+    report = _report_with_manifest(tmp_path, row_index=2, mutate=break_artifact_eligibility)
+    random_2202 = next(
+        run for run in report["runs"] if run["sampler"] == "random" and run["seed"] == 2202
+    )
+    candidate_evaluations = [random_2202["evaluations"][index] for index in (0, 2)]
+    expected_availability = {
+        "availability_unknown": "unknown",
+        "availability_failed": "failed",
+        "availability_missing": None,
+    }.get(inconsistency, "available")
+
+    for evaluation in candidate_evaluations:
+        assert evaluation["status"] == "scored"
+        assert evaluation["objective_value"] is not None
+        assert evaluation["analysis_eligible"] is True
+        assert evaluation["availability_status"] == expected_availability
+        assert evaluation["analysis_evidence_eligible"] is False
+        assert evaluation["episode_record_status"] == expected_episode_status
+        assert expected_reason in evaluation["analysis_evidence_ineligibility_reason_codes"]
+    assert random_2202["best_objective_value"] is not None
+    assert random_2202["best_analysis_eligible_objective_value"] is None
+
+    comparison = next(item for item in report["random_vs_tpe"] if item["budget"] == 4)
+    assert comparison["matched_seed_count"] == 0
+    excluded = next(item for item in comparison["ineligible_matched_seeds"] if item["seed"] == 2202)
+    assert excluded["reason_codes"] == ["analysis_eligible_score_unavailable"]
+
+
+def test_episode_digest_and_eligibility_use_the_same_trace_snapshot() -> None:
+    report = _report()
+    run = next(run for run in report["runs"] if run["sampler"] == "random" and run["seed"] == 2202)
+    evaluation = run["evaluations"][0]
+    provenance = next(
+        record
+        for record in run["source_revision"]["episode_records"]
+        if record["evaluation_index"] == evaluation["evaluation_index"]
+    )
+
+    assert evaluation["episode_record_status"] == provenance["artifact_status"] == "available"
+    assert provenance["status"] == "commit_unverified"
+    assert evaluation["episode_record_sha256"] == provenance["sha256"]
+    assert evaluation["analysis_evidence_eligible"] is True
+
+
+def test_markdown_distinguishes_run_checks_from_pairs_and_shows_runtime() -> None:
+    report = _report()
+    markdown = render_markdown(report)
+    per_run_rows = [
+        line.split("|")[1:-1]
+        for line in markdown.splitlines()
+        if line.startswith("| `") and " | " in line
+    ]
+    random_1101 = next(
+        [cell.strip() for cell in row]
+        for row in per_run_rows
+        if row[1].strip() == "Random" and row[2].strip() == "1101"
+    )
+    tpe_1101 = next(
+        [cell.strip() for cell in row]
+        for row in per_run_rows
+        if row[1].strip() == "TPE" and row[2].strip() == "1101"
+    )
+    comparison = next(item for item in report["random_vs_tpe"] if item["budget"] == 4)
+    incomplete = next(
+        item for item in comparison["ineligible_matched_seeds"] if item["seed"] == 1101
+    )
+
+    assert "Pair status" not in markdown
+    assert "| Search runtime (s) |" in markdown
+    assert "| Run input status |" in markdown
+    assert random_1101[4] == "Not recorded"
+    assert random_1101[15] == "input checks passed"
+    assert tpe_1101[4] == "4.25"
+    assert incomplete["reason_codes"] == ["incomplete_budgeted_evaluations"]
+
+
 def test_random_tpe_comparison_is_seed_matched_and_descriptive_only() -> None:
     report = _report()
     comparison = next(

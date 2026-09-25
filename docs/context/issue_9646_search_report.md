@@ -66,28 +66,39 @@ critical counts, aggregates, or Random/TPE deltas. The current search runner's l
 `summary.num_valid_candidates` subtracts invalid rows but not evaluator failures. The report preserves
 that legacy value and emits a warning when it differs from row-derived full-manifest accounting.
 Invalid, failed, scoreless, duplicate, missing, fallback, degraded, analysis-ineligible, and
-over-budget attempts remain represented in the machine-readable output. Missing manifest rows are
-shown as unavailable runs with their expected budget rather than silently removed. Per-run and
-aggregate accounting distinguish missing evaluations inside the comparison-indexed budget from all
-missing slots across the larger of the comparison and manifest budgets; an index/manifest budget
-mismatch therefore cannot inflate the within-budget missing count.
+over-budget attempts remain represented in the machine-readable output. Analysis-eligible evidence
+requires a parseable episode-record file whose bytes were read and hashed, `execution_mode=native`,
+`readiness_status=native`, `availability_status=available`, a scored objective, and the other
+canonical eligibility fields. Missing paths, missing files, malformed records, unknown or
+failed availability, and missing execution statuses remain visible with per-evaluation reason
+codes; observed scores and reported eligibility receipts are preserved separately. Missing
+manifest rows are shown as unavailable runs with their expected budget rather than silently
+removed. Per-run and aggregate accounting distinguish missing evaluations inside the
+comparison-indexed budget from all missing slots across the larger of the comparison and manifest
+budgets; an index/manifest budget mismatch therefore cannot inflate the within-budget missing
+count.
 
 Search curves maximize the objective recorded by the runner and carry the prior best score across
-invalid, failed, or scoreless attempts. Solid curves summarize only candidates with explicit
-`analysis_eligibility.eligible=true` that agrees with the canonical scored, native-execution,
-trace-path, and effective-scenario-hash requirements, with no fallback/degraded execution; dashed
-curves show all observed scored outcomes. Both curves stop at the comparison-indexed budget, and missing budget
-slots remain explicit rather than being drawn as completed evaluations. A budget panel without
-scored observations is labeled, so an empty curve is not mistaken for a zero-valued result. Runs
-whose comparison row disagrees with manifest objective, seed, or budget are retained but excluded from aggregates. A
-Random/TPE seed pair additionally requires the same normalized scenario/search/planner configuration
-fingerprint, eligible scores from both runs, and no missing within-budget evaluations; exclusions
-retain per-method reason codes and missing-slot counts in JSON. Invalid and failed attempts remain
-accounted as attempted slots, while unrecorded within-budget slots cannot contribute to a matched
-best-of-budget delta. Runtime is
-read only from an explicit runtime field; it remains `null` / “Not recorded” when the source
-artifacts do not contain search-level duration. Planner-step runtime and file timestamps are not
-substitutes for search runtime.
+invalid, failed, or scoreless attempts. Solid curves summarize only candidates whose explicit
+`analysis_eligibility.eligible=true` receipt agrees with the canonical requirements: a scored
+objective, `execution_mode=native`, `readiness_status=native`, `availability_status=available`, a
+parseable episode artifact, and an effective-scenario hash. Dashed curves show all observed scored
+outcomes. Both curves stop at the comparison-indexed budget, and missing budget slots remain
+explicit rather than being drawn as completed evaluations. A budget panel without scored
+observations is labeled, so an empty curve is not mistaken for a zero-valued result. Runs whose
+comparison row disagrees with manifest objective, seed, or budget are retained but excluded from
+aggregates. A Random/TPE seed pair additionally
+requires the same normalized scenario/search/planner configuration fingerprint, eligible scores
+from both runs, and no missing within-budget evaluations; exclusions retain per-method reason codes
+and missing-slot counts in JSON. The per-run Markdown `Run input status` reports only that run's
+manifest/index/config checks; it does not claim a seed pair exists or is eligible. Unmatched and
+ambiguous seeds and incomplete or counterpart-ineligible pairs remain separate in the JSON. Invalid
+and failed attempts remain accounted as attempted slots, while unrecorded within-budget slots
+cannot contribute to a matched best-of-budget delta. The per-run table includes search-level runtime
+in seconds, rendered as `Not recorded` when unavailable. Runtime is read only from an explicit
+runtime field; it remains `null` / “Not recorded” when the source artifacts do not contain
+search-level duration. Planner-step runtime and file timestamps are not substitutes for search
+runtime.
 
 Source revision is taken from an `adversarial_execution_context.v1` sidecar when present, otherwise
 from candidate episode provenance. An identifier is exact only when it is a full 40-character

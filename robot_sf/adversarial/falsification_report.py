@@ -306,18 +306,50 @@ def _analysis_eligibility(item: dict[str, Any]) -> bool | None:
     return None
 
 
-def _analysis_evidence_eligible(item: dict[str, Any], *, status: str) -> bool:
-    """Require the canonical native, scored, trace-bound eligibility evidence."""
-    return (
-        status == "scored"
-        and _analysis_eligibility(item) is True
-        and _execution_mode(item) == "native"
-        and _execution_risk_mode(item) is None
-        and isinstance(item.get("episode_record_path"), str)
-        and bool(item["episode_record_path"].strip())
-        and isinstance(item.get("effective_scenario_hash"), str)
-        and bool(item["effective_scenario_hash"].strip())
+def _status_reason_token(value: str) -> str:
+    token = re.sub(r"[^a-z0-9]+", "_", value.strip().lower()).strip("_")
+    return token or "unknown"
+
+
+def _analysis_evidence_ineligibility_reasons(
+    item: dict[str, Any], *, status: str, episode_evidence: dict[str, Any] | None
+) -> list[str]:
+    """Explain why an observed row does not meet artifact-verified eligibility."""
+    reasons: list[str] = []
+    if status != "scored":
+        reasons.append(f"candidate_status_{_status_reason_token(status)}")
+    eligibility = _analysis_eligibility(item)
+    if eligibility is not True:
+        reasons.append(
+            "analysis_eligibility_unknown" if eligibility is None else "analysis_eligibility_false"
+        )
+
+    execution_requirements = (
+        ("execution_mode", _execution_mode(item), "native"),
+        ("readiness_status", _execution_status(item, "readiness_status"), "native"),
+        ("availability_status", _execution_status(item, "availability_status"), "available"),
     )
+    for field, observed, required in execution_requirements:
+        if observed == required:
+            continue
+        if observed is None:
+            reasons.append(f"{field}_missing")
+        else:
+            reasons.append(f"{field}_{_status_reason_token(observed)}")
+
+    effective_hash = item.get("effective_scenario_hash")
+    if not isinstance(effective_hash, str) or not effective_hash.strip():
+        reasons.append("effective_scenario_hash_missing")
+
+    episode_status = (
+        episode_evidence.get("artifact_status") if isinstance(episode_evidence, dict) else None
+    )
+    if episode_status != "available":
+        token = (
+            _status_reason_token(episode_status) if isinstance(episode_status, str) else "unknown"
+        )
+        reasons.append(f"episode_record_{token}")
+    return sorted(set(reasons))
 
 
 def _execution_mode(item: dict[str, Any]) -> str | None:
@@ -373,7 +405,10 @@ def _missing_evaluation(index: int, *, within_budget: bool) -> dict[str, Any]:
         "execution_mode": None,
         "readiness_status": None,
         "availability_status": None,
+        "episode_record_status": "not_evaluated",
+        "episode_record_sha256": None,
         "analysis_evidence_eligible": False,
+        "analysis_evidence_ineligibility_reason_codes": ["candidate_evaluation_missing"],
         "within_budget": within_budget,
         "error": "candidate evaluation was expected by the recorded budget but is absent",
         "best_so_far_objective": None,
@@ -414,46 +449,83 @@ def _commit_value(record: dict[str, Any]) -> str | None:
 
 
 def _episode_record_evidence(
-    row: dict[str, Any],
+    item: Any,
+    evaluation_index: int,
     *,
     manifest_path: Path,
     repo_root: Path,
-) -> tuple[dict[str, Any] | None, str | None, bool]:
-    raw_item = row.get("_raw")
-    raw_path = raw_item.get("episode_record_path") if isinstance(raw_item, dict) else None
+) -> dict[str, Any]:
+    raw_path = item.get("episode_record_path") if isinstance(item, dict) else None
     if not isinstance(raw_path, str) or not raw_path.strip():
-        return None, None, False
+        return {
+            "evaluation_index": evaluation_index,
+            "path": None,
+            "sha256": None,
+            "commit_sha": None,
+            "commit_identifier": None,
+            "status": "missing_path",
+            "artifact_status": "missing_path",
+        }
     resolved = _resolve_path(raw_path, anchors=(repo_root, manifest_path.parent, Path.cwd()))
     if resolved is None or not resolved.is_file():
-        return (
-            {"evaluation_index": row["evaluation_index"], "path": raw_path, "status": "missing"},
-            None,
-            True,
-        )
-    commit = None
-    parsed = None
+        return {
+            "evaluation_index": evaluation_index,
+            "path": raw_path,
+            "sha256": None,
+            "commit_sha": None,
+            "commit_identifier": None,
+            "status": "missing",
+            "artifact_status": "missing",
+        }
+    digest = hashlib.sha256()
     try:
-        with resolved.open(encoding="utf-8") as handle:
-            first_line = handle.readline()
-        parsed = json.loads(first_line) if first_line else None
-        if isinstance(parsed, dict):
-            identifier = _commit_value(parsed)
-            commit = identifier.lower() if _is_full_commit_sha(identifier) else None
-    except (OSError, UnicodeError, json.JSONDecodeError):
-        commit = None
-    evidence = {
-        "evaluation_index": row["evaluation_index"],
+        with resolved.open("rb") as handle:
+            first_record_line = b""
+            for line in handle:
+                digest.update(line)
+                if line.strip():
+                    first_record_line = line
+                    break
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError:
+        return {
+            "evaluation_index": evaluation_index,
+            "path": _portable_path(resolved, repo_root=repo_root),
+            "sha256": None,
+            "commit_sha": None,
+            "commit_identifier": None,
+            "status": "commit_unknown",
+            "artifact_status": "unreadable",
+        }
+    try:
+        parsed = json.loads(first_record_line.decode("utf-8")) if first_record_line else None
+    except (UnicodeError, json.JSONDecodeError):
+        parsed = None
+    if not isinstance(parsed, dict):
+        return {
+            "evaluation_index": evaluation_index,
+            "path": _portable_path(resolved, repo_root=repo_root),
+            "sha256": digest.hexdigest(),
+            "commit_sha": None,
+            "commit_identifier": None,
+            "status": "commit_unknown",
+            "artifact_status": "malformed",
+        }
+    identifier = _commit_value(parsed)
+    commit = identifier.lower() if _is_full_commit_sha(identifier) else None
+    provenance_status = (
+        "available" if commit else "commit_unverified" if identifier else "commit_unknown"
+    )
+    return {
+        "evaluation_index": evaluation_index,
         "path": _portable_path(resolved, repo_root=repo_root),
-        "sha256": _file_sha256(resolved),
+        "sha256": digest.hexdigest(),
         "commit_sha": commit,
-        "commit_identifier": _commit_value(parsed) if isinstance(parsed, dict) else None,
-        "status": "available"
-        if commit
-        else "commit_unverified"
-        if isinstance(parsed, dict) and _commit_value(parsed)
-        else "commit_unknown",
+        "commit_identifier": identifier,
+        "status": provenance_status,
+        "artifact_status": "available",
     }
-    return evidence, commit, commit is None
 
 
 def _execution_context_revision(
@@ -474,31 +546,40 @@ def _execution_context_revision(
 
 
 def _episode_provenance(
-    candidate_rows: list[dict[str, Any]], *, manifest_path: Path, repo_root: Path
-) -> tuple[list[dict[str, Any]], set[str], int, set[str]]:
+    candidate_items: list[Any], *, manifest_path: Path, repo_root: Path
+) -> dict[str, Any]:
+    evidence_by_evaluation: dict[int, dict[str, Any]] = {}
     evidence_rows: list[dict[str, Any]] = []
     commits: set[str] = set()
     unverified: set[str] = set()
     unresolved = 0
-    for row in candidate_rows:
-        evidence, commit, has_unresolved = _episode_record_evidence(
-            row, manifest_path=manifest_path, repo_root=repo_root
+    for index, item in enumerate(candidate_items, start=1):
+        evidence = _episode_record_evidence(
+            item, index, manifest_path=manifest_path, repo_root=repo_root
         )
-        if evidence is None:
+        evidence_by_evaluation[index] = evidence
+        if evidence.get("path") is None:
             continue
         evidence_rows.append(evidence)
+        commit = evidence.get("commit_sha")
         if commit:
             commits.add(commit)
         identifier = evidence.get("commit_identifier")
         if identifier and not _is_full_commit_sha(identifier):
             unverified.add(identifier)
-        unresolved += int(has_unresolved)
-    return evidence_rows, commits, unresolved, unverified
+        unresolved += int(commit is None)
+    return {
+        "by_evaluation": evidence_by_evaluation,
+        "records": evidence_rows,
+        "commit_shas": commits,
+        "unresolved_count": unresolved,
+        "unverified_commit_identifiers": unverified,
+    }
 
 
 def _source_evidence(
     manifest_path: Path,
-    candidate_rows: list[dict[str, Any]],
+    episode_provenance: dict[str, Any],
     *,
     repo_root: Path,
 ) -> dict[str, Any]:
@@ -522,9 +603,10 @@ def _source_evidence(
             else "unknown",
         }
 
-    episode_evidence, commits, unresolved_refs, unverified_commit_identifiers = _episode_provenance(
-        candidate_rows, manifest_path=manifest_path, repo_root=repo_root
-    )
+    episode_evidence = episode_provenance["records"]
+    commits = episode_provenance["commit_shas"]
+    unresolved_refs = episode_provenance["unresolved_count"]
+    unverified_commit_identifiers = set(episode_provenance["unverified_commit_identifiers"])
     if unverified_context_identifier:
         unverified_commit_identifiers.add(unverified_context_identifier)
 
@@ -753,6 +835,7 @@ def _derive_evaluations(
     *,
     expected_slots: int,
     summary_budget: int,
+    episode_evidence_by_index: dict[int, dict[str, Any]],
 ) -> dict[str, Any]:
     evaluations: list[dict[str, Any]] = []
     best_budgeted_observed: float | None = None
@@ -780,9 +863,15 @@ def _derive_evaluations(
             seen_effective.setdefault(effective_hash, index)
 
         eligible = _analysis_eligibility(item) if is_mapping else None
-        analysis_evidence_eligible = (
-            _analysis_evidence_eligible(item, status=status) if is_mapping else False
+        episode_evidence = episode_evidence_by_index.get(index)
+        eligibility_reasons = (
+            _analysis_evidence_ineligibility_reasons(
+                item, status=status, episode_evidence=episode_evidence
+            )
+            if is_mapping
+            else ["candidate_record_malformed"]
         )
+        analysis_evidence_eligible = not eligibility_reasons
         within_budget = index <= summary_budget
         if status == "scored" and score is not None:
             best_all_observed = (
@@ -821,7 +910,16 @@ def _derive_evaluations(
             "availability_status": _execution_status(item, "availability_status")
             if is_mapping
             else None,
+            "episode_record_status": (
+                episode_evidence.get("artifact_status", "unknown")
+                if isinstance(episode_evidence, dict)
+                else "unknown"
+            ),
+            "episode_record_sha256": (
+                episode_evidence.get("sha256") if isinstance(episode_evidence, dict) else None
+            ),
             "analysis_evidence_eligible": analysis_evidence_eligible,
+            "analysis_evidence_ineligibility_reason_codes": eligibility_reasons,
             "within_budget": within_budget,
             "error": error if isinstance(error, str) else str(error) if error is not None else None,
             "best_so_far_objective": best_budgeted_observed,
@@ -1136,17 +1234,27 @@ def _build_run(
         manifest_budget=manifest_budget,
         warnings=warnings,
     )
+    episode_provenance = (
+        _episode_provenance(raw_candidates, manifest_path=manifest_path, repo_root=repo_root)
+        if manifest_path is not None and artifact["status"] == "available"
+        else {
+            "by_evaluation": {},
+            "records": [],
+            "commit_shas": set(),
+            "unresolved_count": 0,
+            "unverified_commit_identifiers": set(),
+        }
+    )
     derived = _derive_evaluations(
         raw_candidates,
         expected_slots=expected_slots,
         summary_budget=indexed_budget,
+        episode_evidence_by_index=episode_provenance["by_evaluation"],
     )
     legacy_summary = _legacy_summary(manifest, derived, warnings)
     runtime_seconds, runtime_source = _runtime_seconds(row, manifest)
     source = (
-        _source_evidence(
-            manifest_path, derived["evaluations"][: derived["num_candidates"]], repo_root=repo_root
-        )
+        _source_evidence(manifest_path, episode_provenance, repo_root=repo_root)
         if manifest_path is not None and artifact["status"] == "available"
         else {
             "status": "unknown",
@@ -1696,8 +1804,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "## Per-run accounting",
         "",
-        "| Objective | Method | Seed | Budget | Best observed ≤B | Best eligible ≤B | Observed critical (all rows) | Eligible critical ≤B | First eligible critical eval | Over-budget rows | Valid / invalid / failed / scoreless / missing ≤B / all expected | Duplicates ≤B | Execution modes | Availability | Pair status | Artifact |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|",
+        "| Objective | Method | Seed | Budget | Search runtime (s) | Best observed ≤B | Best eligible ≤B | Observed critical (all rows) | Eligible critical ≤B | First eligible critical eval | Over-budget rows | Valid / invalid / failed / scoreless / missing ≤B / all expected | Duplicates ≤B | Execution modes | Availability | Run input status | Artifact |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|",
     ]
     for run in report["runs"]:
         accounting = (
@@ -1710,8 +1818,8 @@ def render_markdown(report: dict[str, Any]) -> str:
             if run["num_budgeted_candidates"]
             else "Not recorded"
         )
-        pair_status = (
-            "eligible"
+        run_input_status = (
+            "input checks passed"
             if run["comparison_eligible"]
             else "; ".join(run["comparison_ineligibility_reason_codes"])
         )
@@ -1719,23 +1827,24 @@ def render_markdown(report: dict[str, Any]) -> str:
         availability = _render_status_counts(run["availability_status_counts"])
         lines.append(
             f"| `{run['objective']}` | {run['method']} | {run['seed']} | {run['budget']} | "
+            f"{_display_number(run['runtime_seconds'])} | "
             f"{_display_number(run['best_objective_value'])} | "
             f"{_display_number(run['best_analysis_eligible_objective_value'])} | "
             f"{run['num_observed_critical_candidates']} | {run['num_critical_candidates']} | "
             f"{run['first_critical_evaluation'] if run['first_critical_evaluation'] is not None else 'None recorded'} | "
             f"{run['num_over_budget_candidates']} | {accounting} | {duplicate} | "
-            f"{execution_modes} | {availability} | {pair_status} | {run['artifact_status']} |"
+            f"{execution_modes} | {availability} | {run_input_status} | {run['artifact_status']} |"
         )
     if not report["runs"]:
         lines.append(
-            "| — | — | — | — | Not recorded | Not recorded | — | — | — | — | — | — | — | — | — | no runs |"
+            "| — | — | — | — | Not recorded | Not recorded | Not recorded | — | — | — | — | — | — | — | — | — | no runs |"
         )
     lines.extend(
         [
             "",
             "Budget-limited summaries use only the first B comparison-indexed candidate rows. Extra rows remain in JSON audit history and cannot alter best-so-far values or paired deltas.",
             "",
-            "Observed best and critical counts retain raw candidate evidence. Eligible best/critical summaries require a scored objective, native execution, a recorded trace path and effective-scenario hash, an explicit `analysis_eligibility.eligible=true` receipt, and no fallback/degraded execution; contradictory or incomplete evidence stays ineligible.",
+            "Observed best and critical counts retain raw candidate evidence. Eligible best/critical summaries require a scored objective, `execution_mode=native`, `readiness_status=native`, `availability_status=available`, a parseable episode-record artifact, an effective-scenario hash, and an explicit `analysis_eligibility.eligible=true` receipt; contradictory or incomplete evidence stays ineligible. Per-evaluation reason codes identify failed checks.",
             "",
             "Valid candidates within B are derived as `candidate rows within B - invalid - failed`; scoreless valid evaluations remain in that count. Missing and over-budget attempts remain explicit.",
             "",
@@ -1765,7 +1874,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "Pairs require index/manifest agreement, matching normalized scenario/search/planner configuration, no over-budget rows, and an analysis-eligible score from both methods. Exclusion reason codes are retained in JSON.",
+            "Run input status reports per-run index/manifest/config checks only; it does not assert that a Random/TPE pair exists or qualifies. Pairs are decided separately and require index/manifest agreement, matching normalized scenario/search/planner configuration, no over-budget rows, complete budgeted evaluations, and an analysis-eligible score from both methods. Missing, unmatched, ambiguous, and counterpart-ineligible cases remain in the JSON with reason codes.",
         ]
     )
     lines.extend(["", "## Figures", ""])

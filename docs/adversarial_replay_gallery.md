@@ -73,19 +73,28 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run python \
   --out output/adversarial-replay-gallery/<smoke-name> --top-k 1
 ```
 
-The smoke should select and replay one candidate. Compare the recorded outcome and objective, then
-inspect `gallery_manifest.json`, the case manifest, and `figures/`. The fixture's dynamic task
-feasibility is unknown. A current-code replay at a different source revision is an outcome
-reproduction only; video may be recorded as unavailable when the canonical runner emits no video.
-The output stays in ignored `output/`; retain only a compact checksummed receipt when a durable
-handoff is needed.
+The tracked fixture currently carries only a compact historical classification annotation, not a
+complete canonical `scenario_cert.v1` certificate. Under the fail-closed selector it remains in
+candidate accounting and is not replayed or rendered until a source-backed full certificate is
+available. Do not use this legacy fixture to claim a replay/renderer smoke in that state. Once a
+complete certificate is supplied, compare the recorded outcome and objective, then inspect
+`gallery_manifest.json`, the case manifest, and `figures/`. The fixture's dynamic task feasibility
+is unknown. A current-code replay at a different source revision is an outcome reproduction only;
+video may be recorded as unavailable when the canonical runner emits no video. The output stays in
+ignored `output/`; retain only a compact checksummed receipt when a durable handoff is needed.
 
 ## Selection and replay checks
 
-The selector requires an analysis-eligible row, a `valid` or `hard_but_solvable` certificate, a
-finite objective, one unambiguous source episode, a one-scenario YAML input, matching scenario and
-seed identity, candidate parameters matching the generated scenario metadata, and a recomputed
-effective-scenario hash matching the search manifest. The source failure attribution must agree
+The selector requires an analysis-eligible row and a passed `scenario_cert.v1` receipt containing
+exactly one certificate that validates against the canonical schema, matches the candidate
+scenario's name/id, and has complete route accounting (`checks.route_count` equals the non-empty
+`route_certificates` list). A `valid` or `hard_but_solvable` classification is admissible only when
+the certificate also marks every route benchmark-eligible. Missing, failed, malformed, incomplete,
+ambiguous, or scenario-mismatched certificates remain in candidate accounting and do not establish
+admissibility. The selector also requires a finite objective, one unambiguous source episode, a
+one-scenario YAML input, matching scenario and seed identity, candidate parameters matching the
+generated scenario metadata, and a recomputed effective-scenario hash matching the search manifest.
+The source failure attribution must agree
 with the canonical episode. Source availability must explicitly report `available`, native
 readiness, and native execution mode in both the attribution and eligibility receipts; the source
 episode must also report successful algorithm metadata with no fallback/degraded runtime marker.

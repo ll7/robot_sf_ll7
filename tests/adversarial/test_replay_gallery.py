@@ -32,6 +32,57 @@ def _candidate() -> dict[str, Any]:
     }
 
 
+def _scenario_certificate(
+    *, classification: str = "valid", scenario_id: str = "test_scenario"
+) -> dict[str, Any]:
+    """Build a complete canonical certificate fixture for one candidate scenario."""
+    eligibility = {
+        "valid": "eligible",
+        "hard_but_solvable": "eligible",
+        "knife_edge": "stress_only",
+        "invalid": "excluded",
+        "geometrically_infeasible": "excluded",
+        "kinodynamically_infeasible": "excluded",
+        "dynamically_overconstrained": "excluded",
+    }[classification]
+    route = {
+        "route_id": "test-route",
+        "spawn_id": 0,
+        "goal_id": 0,
+        "classification": classification,
+        "benchmark_eligibility": eligibility,
+        "reasons": [],
+        "checks": {},
+        "evidence": {},
+    }
+    return {
+        "schema_version": "scenario_cert.v1",
+        "scenario_id": scenario_id,
+        "source": "unit-test fixture",
+        "classification": classification,
+        "benchmark_eligibility": eligibility,
+        "reasons": [],
+        "checks": {
+            "route_count": 1,
+            "all_routes_benchmark_eligible": eligibility == "eligible",
+        },
+        "route_certificates": [route],
+        "evidence": {},
+    }
+
+
+def _certification_status(
+    certificate: dict[str, Any], *, status: str = "passed", schema_version: str = "scenario_cert.v1"
+) -> dict[str, Any]:
+    """Wrap one scenario certificate in the adversarial certification receipt."""
+    return {
+        "schema_version": schema_version,
+        "status": status,
+        "reason": "unit-test fixture",
+        "details": {"certificates": [certificate]},
+    }
+
+
 @pytest.fixture(autouse=True)
 def _temporary_checkout_root(tmp_path: Path, monkeypatch: Any) -> None:
     """Keep output-boundary tests and all generated bundles inside pytest's temp tree."""
@@ -116,12 +167,7 @@ def _source_manifest(
                     "certificate_ok": True,
                     "execution_mode": "native",
                 },
-                "certification_status": {
-                    "schema_version": "scenario_cert.v1",
-                    "status": "passed",
-                    "reason": "valid route certificate",
-                    "details": {"certificates": [{"classification": "valid"}]},
-                },
+                "certification_status": _certification_status(_scenario_certificate()),
                 "failure_attribution": {
                     "status": "attributed",
                     "primary_failure": "collision",
@@ -1792,7 +1838,9 @@ def test_gallery_accounts_invalid_and_failed_candidates_without_selecting_them(
     manifest = _source_manifest(tmp_path)
     payload = json.loads(manifest.read_text(encoding="utf-8"))
     invalid = dict(payload["candidates"][0])
-    invalid["certification_status"] = {"details": {"certificates": [{"classification": "invalid"}]}}
+    invalid["certification_status"] = _certification_status(
+        _scenario_certificate(classification="invalid"), status="failed"
+    )
     failed = dict(payload["candidates"][0])
     failed["error"] = "simulator initialization failed"
     payload["candidates"] = [invalid, failed]
@@ -1806,28 +1854,81 @@ def test_gallery_accounts_invalid_and_failed_candidates_without_selecting_them(
 
     assert result["summary"]["selected_case_count"] == 0
     assert result["summary"]["dispositions"] == {
-        "certificate_invalid": 1,
+        "certificate_status_not_passed": 1,
         "evaluation_failed": 1,
     }
     assert result["cases"] == []
 
 
 @pytest.mark.parametrize(
+    ("receipt_mutation", "expected_disposition"),
+    [
+        (lambda receipt: receipt.update(status="failed"), "certificate_status_not_passed"),
+        (lambda receipt: receipt.pop("schema_version"), "certificate_status_schema_invalid"),
+        (
+            lambda receipt: receipt.update(schema_version="scenario_cert.v0"),
+            "certificate_status_schema_invalid",
+        ),
+        (
+            lambda receipt: receipt["details"]["certificates"][0].update(scenario_id="other"),
+            "certificate_scenario_id_mismatch",
+        ),
+        (
+            lambda receipt: receipt["details"]["certificates"][0]["checks"].update(route_count=2),
+            "certificate_incomplete",
+        ),
+        (
+            lambda receipt: receipt["details"]["certificates"][0].pop("evidence"),
+            "certificate_structurally_invalid",
+        ),
+        (
+            lambda receipt: receipt["details"]["certificates"].clear(),
+            "certificate_list_incomplete_or_ambiguous",
+        ),
+    ],
+    ids=(
+        "failed-status",
+        "missing-status-schema",
+        "invalid-status-schema",
+        "wrong-id",
+        "incomplete",
+        "invalid-certificate-schema",
+        "missing-certificate",
+    ),
+)
+def test_gallery_keeps_unbound_or_incomplete_certificates_out_of_selection(
+    tmp_path: Path,
+    receipt_mutation: Any,
+    expected_disposition: str,
+) -> None:
+    manifest = _source_manifest(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    receipt = payload["candidates"][0]["certification_status"]
+    receipt_mutation(receipt)
+    manifest.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "output" / "gallery", render=False, video=False
+    )
+
+    assert result["summary"]["selected_case_count"] == 0
+    assert result["summary"]["dispositions"] == {expected_disposition: 1}
+    assert result["cases"] == []
+
+
+@pytest.mark.parametrize(
     ("certificate", "expected"),
     [
-        ({"classification": "VALID"}, "admissible_by_source_certificate"),
-        ({"classification": "geometrically_infeasible"}, "invalid_or_infeasible"),
-        ({"classification": "knife_edge"}, "stress_only"),
+        (_certification_status(_scenario_certificate()), "admissible_by_source_certificate"),
+        (
+            _certification_status(_scenario_certificate(classification="knife_edge")),
+            "stress_only",
+        ),
+        (_certification_status(_scenario_certificate(), status="failed"), "unknown"),
         ({}, "unknown"),
         (
-            {
-                "details": {
-                    "certificates": [
-                        {"classification": "valid"},
-                        {"classification": "invalid"},
-                    ]
-                }
-            },
+            _certification_status(_scenario_certificate())
+            | {"details": {"certificates": [_scenario_certificate(), _scenario_certificate()]}},
             "unknown",
         ),
     ],
@@ -1835,26 +1936,28 @@ def test_gallery_accounts_invalid_and_failed_candidates_without_selecting_them(
 def test_feasibility_verdict_preserves_certificate_strength(
     certificate: dict[str, Any], expected: str
 ) -> None:
-    verdict = replay_gallery._feasibility_verdict(certificate)
+    verdict = replay_gallery._feasibility_verdict(certificate, scenario_id="test_scenario")
 
     assert verdict["status"] == expected
     assert verdict["source_certificate"] == certificate
     if expected == "unknown":
-        assert verdict["reason"] == "certificate classification does not establish feasibility"
+        assert verdict["reason"] in {
+            "certificate_status_not_passed",
+            "certificate_status_schema_invalid",
+            "certificate_list_incomplete_or_ambiguous",
+            "certificate_status_missing_or_malformed",
+        }
 
 
-def test_certificate_classification_ignores_malformed_entries_without_inventing_a_verdict() -> None:
+def test_certificate_classification_rejects_malformed_entries_without_inventing_a_verdict() -> None:
     assert replay_gallery._certification_classification(None) is None
     assert (
-        replay_gallery._certification_classification(
-            {"details": {"certificates": [{"classification": "valid"}, None]}}
-        )
+        replay_gallery._certification_classification(_certification_status(_scenario_certificate()))
         == "valid"
     )
-    assert (
-        replay_gallery._certification_classification({"details": {"certificates": "malformed"}})
-        is None
-    )
+    malformed_entries = _certification_status(_scenario_certificate())
+    malformed_entries["details"]["certificates"].append(None)
+    assert replay_gallery._certification_classification(malformed_entries) is None
 
 
 def test_gallery_artifact_resolution_uses_source_bundle_before_checkout(

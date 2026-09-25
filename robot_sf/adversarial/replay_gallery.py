@@ -12,9 +12,11 @@ import subprocess
 import tempfile
 from collections import Counter
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+import jsonschema
 import yaml
 
 from robot_sf.adversarial.archive import curate_failure_archive
@@ -408,14 +410,6 @@ def _prepare_candidate(  # noqa: C901, PLR0912, PLR0915 - keep ordered validatio
     eligibility = candidate_payload.get("analysis_eligibility")
     if not isinstance(eligibility, dict) or eligibility.get("eligible") is not True:
         return None, _accounting_row(index, candidate_payload, "analysis_ineligible")
-    classification = _certification_classification(candidate_payload.get("certification_status"))
-    if classification not in _ADMISSIBLE_CLASSIFICATIONS:
-        disposition = (
-            f"certificate_{classification}"
-            if classification is not None
-            else "certificate_classification_unknown"
-        )
-        return None, _accounting_row(index, candidate_payload, disposition)
     objective_value = _finite_number(candidate_payload.get("objective_value"))
     if objective_value is None:
         return None, _accounting_row(index, candidate_payload, "objective_unavailable")
@@ -456,6 +450,19 @@ def _prepare_candidate(  # noqa: C901, PLR0912, PLR0915 - keep ordered validatio
         return None, _accounting_row(
             index, candidate_payload, scenario_error or "scenario_identity_unavailable"
         )
+    scenario_id = _scenario_certificate_id(scenario_identity)
+    certificate, certificate_error = _validated_scenario_certificate(
+        candidate_payload.get("certification_status"), expected_scenario_id=scenario_id
+    )
+    if certificate_error is not None or certificate is None:
+        return None, _accounting_row(
+            index,
+            candidate_payload,
+            certificate_error or "certificate_unknown",
+        )
+    classification = str(certificate.get("classification", "")).strip().lower()
+    if classification not in _ADMISSIBLE_CLASSIFICATIONS:
+        return None, _accounting_row(index, candidate_payload, f"certificate_{classification}")
     map_id_snapshot, map_id_error = _snapshot_map_id_input(
         scenario_identity,
         scenario_path=scenario_path,
@@ -536,6 +543,7 @@ def _prepare_candidate(  # noqa: C901, PLR0912, PLR0915 - keep ordered validatio
         "index": index,
         "case_id": case_id,
         "candidate": candidate,
+        "scenario_id": scenario_id,
         "candidate_payload": candidate_payload,
         "objective_value": objective_value,
         "failure_attribution": candidate_payload.get("failure_attribution"),
@@ -844,7 +852,8 @@ def _initial_case_result(
         },
         "failure_attribution": selected["failure_attribution"],
         "feasibility_verdict": _feasibility_verdict(
-            selected["candidate_payload"].get("certification_status")
+            selected["candidate_payload"].get("certification_status"),
+            scenario_id=selected["scenario_id"],
         ),
         "source": {
             "revision": selected["source_revision"] or context.source_revision,
@@ -2778,31 +2787,16 @@ def _failure_cluster_by_candidate(
     }
 
 
-def _certification_classification(payload: Any) -> str | None:
-    """Extract the most specific route certificate classification."""
-    if not isinstance(payload, dict):
-        return None
-    direct = payload.get("classification")
-    if isinstance(direct, str) and direct:
-        return direct.lower()
-    details = payload.get("details")
-    certificates = details.get("certificates") if isinstance(details, dict) else None
-    if isinstance(certificates, list) and certificates:
-        values = [
-            str(item.get("classification")).lower()
-            for item in certificates
-            if isinstance(item, dict) and item.get("classification")
-        ]
-        if values and all(value == values[0] for value in values):
-            return values[0]
-        if values:
-            return "mixed"
-    return None
-
-
-def _feasibility_verdict(payload: Any) -> dict[str, Any]:
-    """Preserve the repository's certificate result without promoting it to a proof oracle."""
-    classification = _certification_classification(payload)
+def _feasibility_verdict(payload: Any, *, scenario_id: str | None = None) -> dict[str, Any]:
+    """Preserve only a complete, scenario-bound certificate without claiming a proof oracle."""
+    certificate, error = _validated_scenario_certificate(payload, expected_scenario_id=scenario_id)
+    if certificate is None:
+        return {
+            "status": "unknown",
+            "reason": error or "certificate_scenario_identity_unavailable",
+            "source_certificate": payload,
+        }
+    classification = str(certificate.get("classification", "")).strip().lower()
     if classification in _ADMISSIBLE_CLASSIFICATIONS:
         return {"status": "admissible_by_source_certificate", "source_certificate": payload}
     if classification in {
@@ -2821,6 +2815,108 @@ def _feasibility_verdict(payload: Any) -> dict[str, Any]:
         "reason": "certificate classification does not establish feasibility",
         "source_certificate": payload,
     }
+
+
+@lru_cache(maxsize=1)
+def _scenario_certificate_validator() -> jsonschema.Draft202012Validator:
+    """Load the canonical ``scenario_cert.v1`` JSON Schema validator once."""
+    schema_path = (
+        Path(__file__).resolve().parents[1] / "benchmark" / "schemas" / "scenario_cert.v1.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    return jsonschema.Draft202012Validator(schema)
+
+
+def _scenario_certificate_id(scenario: dict[str, Any]) -> str | None:
+    """Resolve the candidate id with the same field precedence as scenario certification."""
+    raw = scenario.get("name") or scenario.get("scenario_id") or scenario.get("id")
+    if raw is None:
+        return None
+    scenario_id = str(raw).strip()
+    return scenario_id or None
+
+
+def _validated_scenario_certificate(
+    payload: Any,
+    *,
+    expected_scenario_id: str | None,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Return one complete canonical certificate only when its receipt is passed and bound."""
+    certificate, error = _canonical_scenario_certificate(payload)
+    if certificate is None:
+        return None, error
+    if not isinstance(expected_scenario_id, str) or not expected_scenario_id.strip():
+        return None, "certificate_scenario_identity_unavailable"
+    if certificate.get("scenario_id") != expected_scenario_id:
+        return None, "certificate_scenario_id_mismatch"
+    if not _scenario_certificate_is_complete(certificate):
+        return None, "certificate_incomplete"
+    return certificate, None
+
+
+def _canonical_scenario_certificate(payload: Any) -> tuple[dict[str, Any] | None, str | None]:
+    """Validate the passed receipt and its sole certificate against the canonical JSON Schema."""
+    if not isinstance(payload, dict):
+        return None, "certificate_status_missing_or_malformed"
+    if payload.get("schema_version") != "scenario_cert.v1":
+        return None, "certificate_status_schema_invalid"
+    if payload.get("status") != "passed":
+        return None, "certificate_status_not_passed"
+    details = payload.get("details")
+    raw_certificates = details.get("certificates") if isinstance(details, dict) else None
+    if not isinstance(raw_certificates, list) or len(raw_certificates) != 1:
+        return None, "certificate_list_incomplete_or_ambiguous"
+    certificate = raw_certificates[0]
+    if not isinstance(certificate, dict):
+        return None, "certificate_structurally_invalid"
+    try:
+        _scenario_certificate_validator().validate(certificate)
+    except (jsonschema.ValidationError, jsonschema.SchemaError, OSError, ValueError, TypeError):
+        return None, "certificate_structurally_invalid"
+
+    return certificate, None
+
+
+def _scenario_certificate_is_complete(certificate: dict[str, Any]) -> bool:
+    """Check canonical route accounting and eligibility fields omitted from the JSON Schema."""
+    checks = certificate.get("checks")
+    routes = certificate.get("route_certificates")
+    route_count = checks.get("route_count") if isinstance(checks, dict) else None
+    if (
+        isinstance(route_count, bool)
+        or not isinstance(route_count, int)
+        or route_count < 1
+        or not isinstance(routes, list)
+        or route_count != len(routes)
+        or not isinstance(checks.get("all_routes_benchmark_eligible"), bool)
+    ):
+        return False
+    classification = str(certificate.get("classification", "")).strip().lower()
+    if classification in _ADMISSIBLE_CLASSIFICATIONS and (
+        checks.get("all_routes_benchmark_eligible") is not True
+        or any(route.get("benchmark_eligibility") != "eligible" for route in routes)
+    ):
+        return False
+    return True
+
+
+def _certification_classification(payload: Any) -> str | None:
+    """Extract a class only from one structurally valid canonical certificate."""
+    details = payload.get("details") if isinstance(payload, dict) else None
+    certificates = details.get("certificates") if isinstance(details, dict) else None
+    if not isinstance(certificates, list) or len(certificates) != 1:
+        return None
+    certificate = certificates[0]
+    expected_scenario_id = certificate.get("scenario_id") if isinstance(certificate, dict) else None
+    validated, _ = _validated_scenario_certificate(
+        payload,
+        expected_scenario_id=expected_scenario_id
+        if isinstance(expected_scenario_id, str)
+        else None,
+    )
+    if validated is None:
+        return None
+    return str(validated.get("classification", "")).strip().lower() or None
 
 
 def _certification_object(payload: Any) -> Any:

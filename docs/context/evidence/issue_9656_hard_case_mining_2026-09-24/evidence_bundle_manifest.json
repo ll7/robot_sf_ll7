@@ -13,20 +13,20 @@
   },
   "totals": {
     "file_count": 3,
-    "total_bytes": 250304
+    "total_bytes": 251310
   },
   "files": [
     {
       "path": "report.md",
-      "size_bytes": 9220,
-      "sha256": "1222d974618cc5f1463a488bfcaea2e59bece91cd932b567e7c9226fe8c6fabd",
+      "size_bytes": 9664,
+      "sha256": "5e651940ad5e81634544e45e521c3cd5f247a0aa88dac6d2f541324f76689e55",
       "kind": "reports",
       "location": "docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/payload/report.md"
     },
     {
       "path": "summary.json",
-      "size_bytes": 123309,
-      "sha256": "4625232b8880751e3b867440ab648ea61c89df7e1729499d18571483e46156ea",
+      "size_bytes": 123871,
+      "sha256": "5b055840bfa08354641d3a7200c97ce5067cbf233d1d954f466f8c3fc78d6e90",
       "kind": "aggregates",
       "location": "docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/payload/summary.json"
     },
@@ -37,5 +37,6 @@
       "kind": "manifests",
       "location": "docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/payload/current_head_no_replay_manifest.json"
     }
-  ]
+  ],
+  "metadata_updated_at_utc": "2026-09-25T05:12:15Z"
 }

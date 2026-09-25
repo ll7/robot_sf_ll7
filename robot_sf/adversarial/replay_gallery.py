@@ -39,6 +39,7 @@ from robot_sf.benchmark.fallback_policy import (
     runtime_fallback_or_degraded_marker,
 )
 from robot_sf.benchmark.runner import run_batch
+from robot_sf.scenario_certification.v1 import _STATUS_SEVERITY
 from robot_sf.training import scenario_loader
 
 GALLERY_SCHEMA_VERSION = "adversarial-replay-gallery.v1"
@@ -2911,7 +2912,7 @@ def _scenario_certificate_is_complete(certificate: dict[str, Any]) -> bool:
 
 
 def _scenario_certificate_eligibility_is_consistent(certificate: dict[str, Any]) -> bool:
-    """Require class and route eligibility to agree with the canonical certificate contract."""
+    """Require top-level classification and eligibility to match route aggregation."""
     classification = certificate.get("classification")
     certificate_eligibility = _CERTIFICATE_ELIGIBILITY_BY_CLASSIFICATION.get(classification)
     routes = certificate.get("route_certificates")
@@ -2923,19 +2924,27 @@ def _scenario_certificate_eligibility_is_consistent(certificate: dict[str, Any])
         or not isinstance(checks, dict)
     ):
         return False
+    route_classifications = []
     route_eligibilities = []
     for route in routes:
         route_classification = route.get("classification")
         route_eligibility = _CERTIFICATE_ELIGIBILITY_BY_CLASSIFICATION.get(route_classification)
-        if route_eligibility is None or route.get("benchmark_eligibility") != route_eligibility:
+        if (
+            route_classification not in _STATUS_SEVERITY
+            or route_eligibility is None
+            or route.get("benchmark_eligibility") != route_eligibility
+        ):
             return False
+        route_classifications.append(route_classification)
         route_eligibilities.append(route_eligibility)
     if not route_eligibilities:
         return False
+    worst_route_classification = max(route_classifications, key=_STATUS_SEVERITY.__getitem__)
     worst_route_eligibility = max(route_eligibilities, key=_ELIGIBILITY_SEVERITY.__getitem__)
     all_routes_eligible = all(eligibility == "eligible" for eligibility in route_eligibilities)
     return (
-        certificate_eligibility == worst_route_eligibility
+        classification == worst_route_classification
+        and certificate_eligibility == worst_route_eligibility
         and checks.get("all_routes_benchmark_eligible") is all_routes_eligible
     )
 

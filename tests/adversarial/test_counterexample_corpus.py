@@ -831,6 +831,70 @@ def test_selected_projection_must_match_every_verified_replay_artifact(tmp_path:
         validate_corpus(corpus, corpus_root=corpus_root)
 
 
+def test_case_admission_rejects_unselected_contradictory_canonical_metrics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Raw replay contradictions remain visible when a projection omits that metric."""
+    corpus_root = tmp_path / "corpus"
+    corpus, _pilot = import_issue9645_packet(_SOURCE_PACKET, new_corpus(), corpus_root=corpus_root)
+    case = copy.deepcopy(corpus["cases"][0])
+    receipt = _single_replay_admission_receipt(case, corpus_root)
+    artifact_receipt = receipt["artifact_receipts"][0]
+    artifact_path = corpus_root / artifact_receipt["artifact_path"]
+    episode = json.loads(artifact_path.read_text(encoding="utf-8"))
+
+    # Preserve the replay's collision projection while corrupting an unselected
+    # canonical success metric. Update every byte receipt so only semantic
+    # consistency, not a stale digest, can reject the case.
+    episode["metrics"]["success"] = 1
+    episode["metrics"]["success_rate"] = 1
+    artifact_path.write_text(json.dumps(episode, sort_keys=True) + "\n", encoding="utf-8")
+    artifact_sha256 = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+    selected_metrics = {
+        key: value
+        for key, value in artifact_receipt["metrics"].items()
+        if key in {"collisions", "total_collision_count"}
+    }
+    artifact_receipt["metrics"] = selected_metrics
+    artifact_receipt["artifact_sha256"] = artifact_sha256
+    artifact_receipt["episode_sha256"] = artifact_sha256
+    receipt["replay_artifacts"][0]["sha256"] = artifact_sha256
+    receipt["selected_projection"]["metrics"] = selected_metrics
+    receipt["selected_projection_sha256"] = hashlib.sha256(
+        counterexample_corpus._stable_json(receipt["selected_projection"]).encode("utf-8")
+    ).hexdigest()
+    for source_file in case["source_evidence"]["corpus_files"]:
+        if source_file["path"] == artifact_receipt["artifact_path"]:
+            source_file["sha256"] = artifact_sha256
+            break
+    else:
+        raise AssertionError("admission replay artifact is absent from source evidence custody")
+    case["replay_receipt"] = receipt
+    monkeypatch.setattr(
+        counterexample_corpus,
+        "_current_target_revision",
+        lambda: receipt["target_revision"],
+    )
+
+    corpus, admission = counterexample_corpus.admit_case_record(
+        case,
+        corpus,
+        corpus_root=corpus_root,
+        artifact_root=f"cases/{case['case_id']}",
+        source_kind="test_unselected_metric_contradiction",
+        source_id="contradictory-success-metric",
+    )
+
+    assert admission["decision"] == "rejected"
+    assert any(
+        "replay_artifact_outcome_metric_contradiction" in blocker
+        and "success metrics > 0" in blocker
+        for blocker in admission["blockers"]
+    )
+    assert len(corpus["cases"]) == 1
+    validate_corpus(corpus, corpus_root=corpus_root)
+
+
 def test_target_planner_configuration_snapshot_must_match_replay_metadata(
     tmp_path: Path,
 ) -> None:

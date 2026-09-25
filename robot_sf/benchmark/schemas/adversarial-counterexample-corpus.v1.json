@@ -337,7 +337,12 @@
           "artifact_paths"
         ],
         "properties": {
-          "schema_version": {"const": "adversarial-historical-candidate.v1"},
+          "schema_version": {
+            "enum": [
+              "adversarial-historical-candidate.v1",
+              "adversarial-historical-candidate.v2"
+            ]
+          },
           "candidate_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "source_issue": {"const": 9656},
           "source_case_id": {"type": "string", "pattern": "^case-[0-9a-f]{16}$"},
@@ -363,6 +368,35 @@
             ]
           },
           "source_replay": {"type": "object"},
+          "feasibility": {
+            "type": "object",
+            "required": ["verdict", "reason_codes"],
+            "properties": {
+              "verdict": {"const": "unknown"},
+              "reason_codes": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string", "minLength": 1}
+              }
+            },
+            "additionalProperties": false
+          },
+          "planner_status_at_import": {
+            "type": "object",
+            "required": ["status", "planner_id", "config_hash", "valid_observation_count", "reason_codes"],
+            "properties": {
+              "status": {"const": "unknown"},
+              "planner_id": {"type": "string", "minLength": 1},
+              "config_hash": {"type": ["string", "null"]},
+              "valid_observation_count": {"const": 0},
+              "reason_codes": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string", "minLength": 1}
+              }
+            },
+            "additionalProperties": false
+          },
           "scenario_id": {"type": "string", "minLength": 1},
           "scenario_family": {"type": "string", "minLength": 1},
           "scenario_seed": {"type": "integer"},
@@ -372,6 +406,15 @@
           "replay_inputs": {"type": "object"},
           "artifact_paths": {"type": "object"}
         },
+        "allOf": [
+          {
+            "if": {
+              "properties": {"schema_version": {"const": "adversarial-historical-candidate.v2"}},
+              "required": ["schema_version"]
+            },
+            "then": {"required": ["feasibility", "planner_status_at_import"]}
+          }
+        ],
         "additionalProperties": true
       }
     },

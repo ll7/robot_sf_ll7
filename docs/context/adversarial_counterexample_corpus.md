@@ -117,6 +117,15 @@ admission attempts, or exported regression slices. They become admitted cases
 only after the existing exact-replay, input-binding, admissibility, and duplicate
 checks pass.
 
+Each imported candidate explicitly records `feasibility.verdict: unknown`; the
+historical benchmark evidence does not establish dynamic task feasibility. Its
+`planner_status_at_import` is also `unknown` with zero valid current-revision
+observations and a reason tied to the replay or source-provenance state. In
+particular, a different-revision replay is neither a current solved result nor a
+current unsolved result. These candidate-level fields preserve the evidence
+state without adding unadmitted candidates to the corpus's recomputed planner
+status.
+
 The imported #9656 source episode JSONL is retained as a path and digest reference; its raw bytes
 are not copied from campaign output into the corpus. A file that remains only in ignored local
 output is not admission evidence. Each candidate records this custody boundary explicitly and

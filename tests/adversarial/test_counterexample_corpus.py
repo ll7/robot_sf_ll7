@@ -39,6 +39,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SOURCE_PACKET = _REPO_ROOT / "tests/fixtures/adversarial_counterexample_corpus/issue_9645/payload"
 _SOURCE_BUNDLE = _SOURCE_PACKET.parent
 _ISSUE9656_SOURCE_REVISION = "f7ebdcae2375d085e925213197a75a386e26a79c"
+_ISSUE9656_REPLAY_REVISION = "5cccee50be333adceee4c978b54bf63d32454cc9"
 _ISSUE9656_SOURCE_MATRIX = "configs/scenarios/classic_interactions_francis2023.yaml"
 _ISSUE9656_SOURCE_MATRIX_SHA256 = "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5"
 
@@ -167,7 +168,16 @@ def _build_issue9656_fixture_candidate(
         "metrics": {"collisions_metric": 0.0, "minimum_clearance_m": 0.5 + index},
         "outcome": {"collision_event": False, "route_complete": False, "timeout_event": True},
     }
-    replay = {"attempted": status == "mismatch_different_revision", "status": status}
+    replay = {
+        "attempted": status == "mismatch_different_revision",
+        "status": status,
+        "source_revision": (
+            _ISSUE9656_SOURCE_REVISION if status == "mismatch_different_revision" else None
+        ),
+        "replay_revision": (
+            _ISSUE9656_REPLAY_REVISION if status == "mismatch_different_revision" else None
+        ),
+    }
     summary_case = {
         "benchmark_eligible": True,
         "case_id": case_id,
@@ -1052,6 +1062,20 @@ def test_target_planner_configuration_snapshot_must_match_replay_metadata(
         )
 
 
+def _assert_unknown_issue9656_candidate_status(candidate: dict[str, object]) -> None:
+    assert candidate["schema_version"] == "adversarial-historical-candidate.v2"
+    assert candidate["feasibility"] == {
+        "verdict": "unknown",
+        "reason_codes": ["historical_benchmark_evidence_does_not_establish_dynamic_feasibility"],
+    }
+    status = candidate["planner_status_at_import"]
+    assert status["status"] == "unknown"
+    assert status["valid_observation_count"] == 0
+    assert status["planner_id"] == candidate["target_planner"]["planner_id"]
+    assert status["config_hash"] == candidate["target_planner"]["config_hash"]
+    assert "no_exact_current_revision_observation" in status["reason_codes"]
+
+
 def test_issue9656_import_keeps_unverified_rows_in_separate_candidate_registry(
     tmp_path: Path,
 ) -> None:
@@ -1152,6 +1176,88 @@ def test_issue9656_import_keeps_unverified_rows_in_separate_candidate_registry(
             summary_path, materialized, bundle_root, campaign_root, corpus, corpus_root=corpus_root
         )
     assert len(corpus["historical_candidates"]) == 3
+
+
+def test_issue9656_candidate_claims_unknown_and_rejects_tampering(tmp_path: Path) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(tmp_path)
+    corpus_root = tmp_path / "corpus"
+    corpus, receipt = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=corpus_root,
+    )
+    assert receipt["feasibility_status_counts"] == {"unknown": 3}
+    assert receipt["planner_status_counts_at_import"] == {"unknown": 3}
+    for candidate in corpus["historical_candidates"]:
+        _assert_unknown_issue9656_candidate_status(candidate)
+
+    mismatch = next(
+        row
+        for row in corpus["historical_candidates"]
+        if row["source_replay_status"] == "mismatch_different_revision"
+    )
+    assert mismatch["candidate_status"] == "blocked_replay_revision_mismatch"
+    assert mismatch["source_provenance"]["source_row_binding"] == (
+        "verified_episode_file_and_line_sha256"
+    )
+    assert mismatch["source_provenance"]["episode_file_sha256"]
+    assert mismatch["source_provenance"]["line_number"] > 0
+    assert (
+        mismatch["source_replay"]["source_revision"] != mismatch["source_replay"]["replay_revision"]
+    )
+    assert mismatch["planner_status_at_import"]["reason_codes"] == [
+        "no_exact_current_revision_observation",
+        "source_replay_revision_mismatch",
+    ]
+
+    tampered_status = copy.deepcopy(corpus)
+    tampered_candidate = next(
+        row
+        for row in tampered_status["historical_candidates"]
+        if row["source_replay_status"] == "mismatch_different_revision"
+    )
+    tampered_candidate["planner_status_at_import"]["reason_codes"].remove(
+        "source_replay_revision_mismatch"
+    )
+    with pytest.raises(CorpusError, match="historical candidate planner status differs"):
+        validate_corpus(tampered_status, corpus_root=corpus_root)
+
+    tampered_schema = copy.deepcopy(corpus)
+    tampered_schema["historical_candidates"][0]["schema_version"] = (
+        "adversarial-historical-candidate.v1"
+    )
+    with pytest.raises(CorpusError, match="historical candidate schema differs"):
+        validate_corpus(tampered_schema, corpus_root=corpus_root)
+
+    tampered_feasibility = copy.deepcopy(corpus)
+    tampered_feasibility["historical_candidates"][0]["feasibility"]["verdict"] = "feasible"
+    with pytest.raises(CorpusError, match="invalid corpus at historical_candidates"):
+        validate_corpus(tampered_feasibility, corpus_root=corpus_root)
+
+
+def test_issue9656_revision_mismatch_claim_requires_distinct_full_revisions(
+    tmp_path: Path,
+) -> None:
+    summary_path, materialized, _campaign_root, _bundle_root = _issue9656_candidate_fixture(
+        tmp_path
+    )
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    manifest = json.loads((materialized / "manifest.json").read_text(encoding="utf-8"))
+    summary_case = next(
+        row for row in summary["cases"] if row["replay"]["status"] == "mismatch_different_revision"
+    )
+    manifest_case = next(
+        row for row in manifest["cases"] if row["case_id"] == summary_case["case_id"]
+    )
+    source_revision = summary_case["replay"]["source_revision"]
+    summary_case["replay"]["replay_revision"] = source_revision
+    manifest_case["replay"]["replay_revision"] = source_revision
+
+    with pytest.raises(CorpusError, match="distinct full revision bindings"):
+        counterexample_corpus._validate_issue9656_summary_manifest_row(summary_case, manifest_case)
 
 
 def test_pending_historical_candidate_promotes_after_exact_replay_and_input_binding(

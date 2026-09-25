@@ -59,6 +59,11 @@ release roster, all 48 scenarios, development seeds 101/102, horizon 600 and dt 
 The config preserves planner/checkpoint references, requires force recording,
 and disallows prerequisite fallback. V2 scoring is disabled for acquisition.
 The canonical preflight and checkpoint staging gates must pass before submission.
+Declared kinematic command adapters are legitimate members of the frozen roster
+(for example, Social Force projects velocity vectors into unicycle commands).
+They are distinct from fallback or degraded policy execution, which is rejected.
+Calibration records `benchmark_execution: nonfallback` and each arm's actual
+`command_mode_counts` over its 96 episodes; it never relabels adapter commands as native.
 
 `v2_calibration.derive_calibration_anchors` requires every one of the 1,344 unique
 arm/scenario/seed combinations. It computes episode-level Spearman correlation

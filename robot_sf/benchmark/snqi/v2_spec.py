@@ -227,7 +227,7 @@ def load_snqi_v2_spec(weights_path: Path, anchors_path: Path, family_path: Path)
 
 
 def _validate_calibration(anchors_doc: dict[str, Any]) -> None:
-    """Require complete native calibration provenance and declared p95 anchors."""
+    """Require complete nonfallback calibration provenance and declared p95 anchors."""
     calibration = anchors_doc["calibration"]
     if (
         calibration.get("episode_count") != 1344
@@ -235,9 +235,21 @@ def _validate_calibration(anchors_doc: dict[str, Any]) -> None:
         or len(set(calibration["arms"])) != 14
         or len(calibration["scenarios"]) != 48
         or len(set(calibration["scenarios"])) != 48
-        or calibration.get("execution_mode") != "native"
+        or calibration.get("benchmark_execution") != "nonfallback"
     ):
-        raise ValueError("SNQI-v2 calibration must cover 14 arms x48 scenarios x2 seeds natively")
+        raise ValueError("SNQI-v2 calibration requires 14 arms x48 scenarios x2 nonfallback seeds")
+    census = calibration.get("command_mode_counts")
+    if not isinstance(census, dict) or set(census) != set(calibration["arms"]):
+        raise ValueError("SNQI-v2 calibration requires every arm's command-mode census")
+    for counts in census.values():
+        if (
+            not isinstance(counts, dict)
+            or not counts
+            or not set(counts) <= {"native", "adapter"}
+            or any(type(count) is not int or count <= 0 for count in counts.values())
+            or sum(counts.values()) != 96
+        ):
+            raise ValueError("SNQI-v2 calibration command-mode census requires 96 rows per arm")
     for key, length in (("episodes_sha256", 64), ("source_commit", 40)):
         value = calibration.get(key, "")
         if len(value) != length or any(c not in "0123456789abcdef" for c in value):

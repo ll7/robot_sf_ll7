@@ -13,5 +13,5 @@
       "type": "normative"
     }
   },
-  "required_calibration": "14 frozen release arms x48 scenarios x dev seeds101/102 =1344 native episodes; F/J/K p95 and F decision not yet measured."
+  "required_calibration": "14 frozen release arms x48 scenarios x dev seeds101/102 =1344 nonfallback episodes with actual command-mode census; F/J/K p95 and F decision not yet measured."
 }

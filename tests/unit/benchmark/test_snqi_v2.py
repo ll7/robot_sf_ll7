@@ -160,7 +160,8 @@ def anchor_document():
             "episode_count": 1344,
             "arms": [f"synthetic-{i}" for i in range(14)],
             "scenarios": [f"synthetic-{i}" for i in range(48)],
-            "execution_mode": "native",
+            "benchmark_execution": "nonfallback",
+            "command_mode_counts": {f"synthetic-{i}": {"native": 96} for i in range(14)},
             "source_commit": "a" * 40,
             "episodes_sha256": "b" * 64,
             "run_id": "synthetic-test-only",
@@ -235,6 +236,27 @@ def test_anchor_loader_fail_closed(spec_files, mutation):
         doc["anchors"]["F"]["upper"] = 0 if mutation == "zero" else float("nan")
     spec_files[1].write_text(json.dumps(doc))
     with pytest.raises(ValueError):
+        load_snqi_v2_spec(*spec_files)
+
+
+@pytest.mark.parametrize("mutation", ["missing", "arm", "fallback", "short", "bool", "claim"])
+def test_anchor_loader_rejects_unproven_command_mode_census(spec_files, mutation):
+    doc = anchor_document()
+    calibration = doc["calibration"]
+    if mutation == "missing":
+        del calibration["command_mode_counts"]
+    elif mutation == "arm":
+        del calibration["command_mode_counts"]["synthetic-0"]
+    elif mutation == "claim":
+        calibration["benchmark_execution"] = "native"
+    else:
+        calibration["command_mode_counts"]["synthetic-0"] = {
+            "fallback": {"fallback": 96},
+            "short": {"native": 95},
+            "bool": {"native": True, "adapter": 95},
+        }[mutation]
+    spec_files[1].write_text(json.dumps(doc))
+    with pytest.raises(ValueError, match="calibration"):
         load_snqi_v2_spec(*spec_files)
 
 
@@ -544,13 +566,34 @@ def test_calibration_switch_requires_full_pp_coverage():
 
 
 @pytest.mark.parametrize("adapter_count", [1, 1344])
-def test_calibration_never_labels_adapter_rows_as_native(adapter_count):
+def test_calibration_records_actual_command_modes_without_relabeling(adapter_count, spec_files):
     from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
 
     rows, kwargs = calibration_records()
     for row in rows[:adapter_count]:
-        row["algorithm_metadata"]["execution_mode"] = "adapter"
-    with pytest.raises(ValueError, match="requires explicit native planner mode"):
+        row["algorithm_metadata"]["planner_kinematics"] = {"execution_mode": "adapter"}
+    anchors = derive_calibration_anchors(rows, **kwargs)
+    document = anchors["calibration"]
+    assert "execution_mode" not in document
+    assert document["benchmark_execution"] == "nonfallback"
+    census = document["command_mode_counts"]
+    assert sum(counts.get("adapter", 0) for counts in census.values()) == adapter_count
+    assert sum(counts.get("native", 0) for counts in census.values()) == 1344 - adapter_count
+    assert all(sum(counts.values()) == 96 for counts in census.values())
+    spec_files[1].write_text(json.dumps(anchors))
+    load_snqi_v2_spec(*spec_files)
+
+
+@pytest.mark.parametrize("marker", ["fallback_used", "fallback_triggered", "degraded"])
+def test_calibration_rejects_fallback_or_degraded_adapter(marker):
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+
+    rows, kwargs = calibration_records()
+    rows[0]["algorithm_metadata"] = {
+        "planner_kinematics": {"execution_mode": "adapter"},
+        "planner_runtime": {marker: True},
+    }
+    with pytest.raises(ValueError, match="fallback/degraded"):
         derive_calibration_anchors(rows, **kwargs)
 
 

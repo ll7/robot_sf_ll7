@@ -56,6 +56,7 @@ def derive_calibration_anchors(
     ):
         raise ValueError("SNQI-v2 calibration requires 14 arms x48 scenarios x2 seeds =1344")
     observed = set()
+    command_modes: dict[str, dict[str, int]] = {arm: {} for arm in arms}
     force, exposure, fractions = [], [], []
     for episode in episodes:
         identity = (episode.get("planner_key"), episode.get("scenario_id"), episode.get("seed"))
@@ -63,6 +64,9 @@ def derive_calibration_anchors(
             raise ValueError(f"SNQI-v2 calibration duplicate or out-of-split identity: {identity}")
         observed.add(identity)
         _validate_calibration_episode(episode)
+        mode = resolve_execution_mode(episode["algorithm_metadata"])
+        counts = command_modes[identity[0]]
+        counts[mode] = counts.get(mode, 0) + 1
         metrics = episode["metrics"]
         steps = finite_nonnegative(episode.get("steps"), "executed steps")
         near = finite_nonnegative(metrics.get("near_misses"), "near_misses")
@@ -112,7 +116,8 @@ def derive_calibration_anchors(
             "episode_count": 1344,
             "arms": sorted(arms),
             "scenarios": sorted(scenarios),
-            "execution_mode": "native",
+            "benchmark_execution": "nonfallback",
+            "command_mode_counts": command_modes,
             "quantile_method": "linear",
         },
     }
@@ -191,13 +196,13 @@ def _validate_provenance(run_id: str, source_commit: str, episodes_sha256: str) 
 
 
 def _validate_calibration_episode(episode: Mapping[str, Any]) -> None:
-    """Require the frozen horizon, timestep, recording phase and native planner mode."""
+    """Require frozen acquisition settings and declared, nonfallback planner execution."""
     validate_episode_execution(episode)
     if episode.get("status") not in {"success", "collision", "failure"}:
         raise ValueError("SNQI-v2 calibration rejects invalid episode execution status")
     mode = resolve_execution_mode(episode.get("algorithm_metadata"))
-    if mode != "native":
-        raise ValueError("SNQI-v2 calibration requires explicit native planner mode")
+    if mode not in {"native", "adapter"}:
+        raise ValueError("SNQI-v2 calibration requires explicit native or adapter command mode")
     params = episode.get("scenario_params", {})
     if (
         episode.get("horizon") != 600

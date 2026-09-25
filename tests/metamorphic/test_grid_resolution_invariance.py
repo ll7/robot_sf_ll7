@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import fields
-
 import numpy as np
 import pytest
 
@@ -230,14 +228,6 @@ def test_dwa_command_is_invariant_to_grid_resolution_with_wall_influence() -> No
     )
 
 
-def _social_force_v2_available() -> bool:
-    """Return whether the #9738 resolution-independent planner option exists."""
-    names = {field.name for field in fields(socnav.SocNavPlannerConfig)}
-    return SOCIAL_FORCE_V2_FIELD in names and hasattr(
-        socnav, "SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2"
-    )
-
-
 def _assert_social_force_resolution_invariant(
     config: socnav.SocNavPlannerConfig,
 ) -> None:
@@ -272,12 +262,13 @@ def _assert_social_force_resolution_invariant(
     strict=True,
     raises=AssertionError,
     reason=(
-        "#9724: the default (release) grid_cell_sum_v1 obstacle term sums one force per "
-        "occupied cell; remove when the release arm stops using it."
+        "#9724: the legacy grid_cell_sum_v1 obstacle term (still the SocNavPlannerConfig "
+        "default) sums one force per occupied cell; the release arm now uses v2, whose "
+        "twin below passes"
     ),
 )
 def test_social_force_command_and_force_are_invariant_to_grid_resolution() -> None:
-    """The default (release) social-force obstacle term sums one force per cell."""
+    """The legacy (code-default) social-force obstacle term sums one force per cell."""
     _assert_social_force_resolution_invariant(socnav.SocNavPlannerConfig())
 
 
@@ -285,15 +276,8 @@ def test_social_force_command_and_force_are_invariant_to_grid_resolution() -> No
     socnav.sf_forces is None,
     reason="pysocialforce (fast-pysf) is required for the SocialForcePlannerAdapter path",
 )
-@pytest.mark.skipif(
-    not _social_force_v2_available(),
-    reason=(
-        "social_force_planner_version: resolution_independent_v2 is not available "
-        "before PR #9738 (issue #9724) merges"
-    ),
-)
 def test_social_force_v2_command_and_force_are_invariant_to_grid_resolution() -> None:
-    """The #9738 opt-in v2 obstacle term is the passing twin of the #9724 xfail."""
+    """The v2 obstacle term used by the release social_force arm is resolution invariant."""
     config = socnav.SocNavPlannerConfig(
         **{SOCIAL_FORCE_V2_FIELD: SOCIAL_FORCE_V2_VERSION},
     )

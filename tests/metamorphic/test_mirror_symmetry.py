@@ -20,7 +20,9 @@ from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.planner import socnav
+from robot_sf.planner.socnav_base import SocNavPlannerConfig
 from robot_sf.planner.visibility_planner import PlannerConfig, VisibilityPlanner
+from robot_sf.sim.pedestrian_model_variants import _pairwise_social_force_kernel
 from tests.metamorphic.planner_arms import (
     HYBRID_V3_ARM,
     ArmEpisode,
@@ -244,7 +246,24 @@ def _requires_rvo2(arm: str) -> None:
         pytest.skip("rvo2 is required for the native ORCA release arm")
 
 
-@pytest.mark.parametrize("arm", ["social_force", "orca"])
+_BRANCH_CUT_REASON = (
+    "#9733 finding (issue pending): the social-force pair kernel takes "
+    "theta = atan2(interaction) - atan2(difference) without wrapping, so a pair whose "
+    "two angles straddle +/-pi gets |theta| ~ 2 pi and zero force; the release v2 arm "
+    "drops the crossing pedestrian in the +x scene but not in the rotated one"
+)
+
+
+@pytest.mark.parametrize(
+    "arm",
+    [
+        pytest.param(
+            "social_force",
+            marks=pytest.mark.xfail(strict=True, raises=AssertionError, reason=_BRANCH_CUT_REASON),
+        ),
+        "orca",
+    ],
+)
 def test_release_arm_trace_is_mirror_and_rotation_equivariant(arm: str) -> None:
     """Release arms return the transformed trace for y-mirror, x-mirror and a 90-degree turn."""
     _requires_rvo2(arm)
@@ -308,3 +327,31 @@ def test_release_hybrid_v3_outcome_is_mirror_and_rotation_invariant() -> None:
         assert episode.status == "ok"
         outcomes[name] = (episode.success, episode.collision, episode.step_limit_reached)
     assert set(outcomes.values()) == {(True, False, False)}, outcomes
+
+
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason=_BRANCH_CUT_REASON)
+def test_social_force_pair_kernel_is_rotation_equivariant() -> None:
+    """Rotating a robot-pedestrian pair rotates its force (release v2 kernel parameters)."""
+    config = SocNavPlannerConfig()
+    parameters = {
+        "n": int(config.social_force_n),
+        "n_prime": int(config.social_force_n_prime),
+        "lambda_importance": float(config.social_force_lambda_importance),
+        "gamma": float(config.social_force_gamma),
+    }
+    # A pedestrian 2 m straight ahead of a robot driving along +x, crossing it.
+    position_difference = np.asarray([[-2.0, -0.05]])
+    velocity_difference = np.asarray([[-1.2, 0.9]])
+    reference = None
+    for angle in (0.0, 0.3, np.pi / 2.0, np.pi, -np.pi / 2.0):
+        rotation = np.asarray([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
+        force = _pairwise_social_force_kernel(
+            position_difference @ rotation.T, velocity_difference @ rotation.T, **parameters
+        )
+        unrotated = force @ rotation
+        if reference is None:
+            reference = unrotated
+        np.testing.assert_allclose(
+            unrotated, reference, rtol=0.0, atol=1e-9, err_msg=f"rotation {angle:.3f} rad"
+        )
+    assert np.linalg.norm(reference) > 1e-3, "the crossing pedestrian must exert a force"

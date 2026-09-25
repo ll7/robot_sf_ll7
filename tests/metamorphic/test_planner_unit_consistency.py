@@ -95,6 +95,9 @@ AUDITED_UNIT_FIELDS = frozenset(
     predictive_safe_distance predictive_ttc_distance predictive_uncertainty_base_std
     predictive_uncertainty_growth_per_step progress_escape_distance
     progress_escape_speed proxemic_costmap_personal_radius proxemic_costmap_social_radius
+    social_force_obstacle_v2_length
+    v4_braking_margin v4_moderate_clearance_human v4_reaction_time
+    v4_slow_clearance_human v4_stop_clearance_human
     recovery_reorient_angular_speed resolution robot_radius robot_radius_default
     rollout_dt rollout_horizon route_guide_commitment_progress_threshold
     route_rescue_progress_threshold route_trace_recovery_goal_stall_progress_3s
@@ -205,14 +208,27 @@ DRIVE_ANGULAR_ACCEL_FIELDS = frozenset(
     ("actuation_max_angular_accel", "max_angular_accel", "max_angular_acceleration")
 )
 ROBOT_RADIUS_FIELDS = frozenset(("predictive_robot_radius", "robot_radius", "robot_radius_default"))
-# Pedestrian and proxemic radii describe other agents or social zones; they are
-# bounded for sign and magnitude only. The robot-body radius is compared to the drive.
+PEDESTRIAN_RADIUS_FIELDS = frozenset(
+    ("pedestrian_radius", "pedestrian_radius_default", "predictive_pedestrian_radius")
+)
+# Body radii must lie in [physical radius, 1.5 x physical radius]: smaller plans
+# through contact; a diameter (2 x) or larger is a unit error. Proxemic zones and
+# the goal-approach radius are not bodies; they are bounded for sign and magnitude.
+RADIUS_UNIT_FACTOR = 1.5
 OTHER_RADIUS_FIELDS = frozenset(
     """
-    pedestrian_radius pedestrian_radius_default predictive_pedestrian_radius
     proxemic_costmap_personal_radius proxemic_costmap_social_radius
     social_force_goal_approach_radius
     """.split()
+)
+# Hybrid v4 speed levels are pedestrian SURFACE clearances (centre distance minus
+# both radii); the v3 centre-distance gates are unused by v4.
+V4_CLEARANCE_LEVELS = (
+    ("v4_stop_clearance_human", "very_slow_speed"),
+    ("v4_slow_clearance_human", "moderate_speed"),
+)
+V4_CLEARANCE_FIELDS = frozenset(
+    ("v4_stop_clearance_human", "v4_slow_clearance_human", "v4_moderate_clearance_human")
 )
 CENTRE_DISTANCE_GATE_FIELDS = frozenset(
     ("moderate_distance_human", "slow_distance_human", "stop_distance_human")
@@ -235,7 +251,7 @@ ZERO_OR_NEGATIVE_ALLOWED = frozenset(
     corridor_subgoal_goal_stall_progress_3s
     static_corridor_transit_min_progress_3s
     predictive_candidate_heading_deltas predictive_near_field_heading_deltas
-    angular_candidates
+    angular_candidates v4_reaction_time
     """.split()
 )
 # SocNav's unbound default is a preferred speed, not the drive's effective maximum;
@@ -254,6 +270,18 @@ HYBRID_RELEASE_CONFIGS = tuple(
 _HYBRID_DEFAULTS = "HybridRuleLocalPlannerConfig defaults"
 _HYBRID_V3_REPRESENTATIVE = "configs/algos/hybrid_rule_v3_static_margin0_waypoint2.yaml"
 _HYBRID_PORTFOLIO = "configs/algos/hybrid_portfolio_camera_ready.yaml"
+HYBRID_V4_BASE = "configs/algos/hybrid_rule_v4_clearance_braking.yaml"
+# The #9747 v4 twins of the four release hybrid arms; they must fit the drive.
+HYBRID_V4_RELEASE_TWINS = tuple(
+    f"configs/policy_search/candidates/{name}_s30_h600_release.yaml"
+    for name in (
+        "hybrid_rule_v4_fast_progress_static_escape",
+        "hybrid_rule_v4_fast_progress_static_escape_continuous",
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    )
+)
+HYBRID_V4_SOURCES = frozenset((HYBRID_V4_BASE, *HYBRID_V4_RELEASE_TWINS))
 _PREDICTION_PLANNER = "configs/algos/prediction_planner_camera_ready.yaml"
 
 # (rule, source, key) -> offending value. Values are pinned exactly: a fix
@@ -306,6 +334,25 @@ KNOWN_VIOLATIONS: dict[str, dict[tuple[str, str, str], Any]] = {
             0.3
         ),
         ("robot_radius_below_drive", _PREDICTION_PLANNER, "predictive_robot_radius"): 0.25,
+        # Planner pedestrian bodies smaller than the simulator's 0.4 m pedestrian.
+        **{
+            ("pedestrian_radius_below_simulator", source, "pedestrian_radius_default"): 0.3
+            for source in (*HYBRID_RELEASE_CONFIGS, _HYBRID_DEFAULTS, _HYBRID_V3_REPRESENTATIVE)
+        },
+        **{
+            ("pedestrian_radius_below_simulator", source, "pedestrian_radius"): 0.3
+            for source in ("DWAPlannerConfig defaults", "configs/algos/dwa_classic.yaml")
+        },
+        (
+            "pedestrian_radius_below_simulator",
+            "SocNavPlannerConfig defaults",
+            "predictive_pedestrian_radius",
+        ): 0.3,
+        (
+            "pedestrian_radius_below_simulator",
+            _PREDICTION_PLANNER,
+            "predictive_pedestrian_radius",
+        ): (0.25),
     },
 }
 
@@ -347,6 +394,7 @@ def _unit_bearing(name: str) -> bool:
             "predictive_near_field_speed_samples",
             "hrvo_neighbor_dist",
             "orca_neighbor_dist",
+            "v4_reaction_time",
         }
         or any(token in name for token in UNIT_TOKENS)
     )
@@ -354,8 +402,9 @@ def _unit_bearing(name: str) -> bool:
 
 def _release_values():
     """Yield each release algo_config resolved for the default and every override scenario."""
-    for entry in release_campaign_planners():
-        path = entry.get("algo_config")
+    entries = [(entry["algo"], entry.get("algo_config")) for entry in release_campaign_planners()]
+    entries += [("hybrid_rule_local_planner", path) for path in HYBRID_V4_RELEASE_TWINS]
+    for algo, path in entries:
         if not path:
             continue
         manifest = _load_yaml(path)
@@ -364,7 +413,9 @@ def _release_values():
             if isinstance(manifest.get(block), dict):
                 scenarios.update(manifest[block])
         for scenario in sorted(scenarios):
-            _algo, config = resolve_release_algo_config(entry["algo"], path, scenario)
+            resolved_algo, config = resolve_release_algo_config(algo, path, scenario)
+            if path in HYBRID_V4_SOURCES and resolved_algo == "hybrid_rule_local_planner":
+                assert config.get("planner_variant") == "hybrid_rule_v4_clearance_braking", path
             yield path, dict(_number_leaves(config))
 
 
@@ -388,6 +439,7 @@ def _all_values() -> tuple[tuple[str, dict[str, Any]], ...]:
             continue
         result.append((entrypoint, dict(_number_leaves(_load_yaml(entrypoint)))))
     result.extend(_release_values())
+    result.append((HYBRID_V4_BASE, dict(_number_leaves(_load_yaml(HYBRID_V4_BASE)))))
     for cls in (
         HybridRuleLocalPlannerConfig,
         SocNavPlannerConfig,
@@ -431,8 +483,16 @@ def _field_violations(source: str, name: str, numbers: tuple[float, ...]):  # no
         yield "angular_accel_unit_bound", largest
     if name in ROBOT_RADIUS_FIELDS and min(numbers) < DRIVE.radius:
         yield "robot_radius_below_drive", min(numbers)
+    if name in ROBOT_RADIUS_FIELDS and largest > RADIUS_UNIT_FACTOR * DRIVE.radius:
+        yield "robot_radius_unit_error", largest
+    if name in PEDESTRIAN_RADIUS_FIELDS and min(numbers) < SIM.ped_radius:
+        yield "pedestrian_radius_below_simulator", min(numbers)
+    if name in PEDESTRIAN_RADIUS_FIELDS and largest > RADIUS_UNIT_FACTOR * SIM.ped_radius:
+        yield "pedestrian_radius_unit_error", largest
     if name in OTHER_RADIUS_FIELDS and not all(0.0 < n <= 10.0 * DRIVE.radius for n in numbers):
         yield "radius_unit_bound", largest
+    if source in HYBRID_V4_SOURCES:
+        return  # v4 speed levels are surface clearances; see _v4_level_violations.
     if name == "stop_distance_human" and min(numbers) < CONTACT_DISTANCE:
         yield "stop_gate_inside_contact", min(numbers)
     if name == "slow_distance_human" and min(numbers) < (
@@ -534,6 +594,7 @@ def test_drive_related_fields_have_a_rule_or_a_stated_reason() -> None:
         | DRIVE_LINEAR_DECEL_FIELDS
         | DRIVE_ANGULAR_ACCEL_FIELDS
         | ROBOT_RADIUS_FIELDS
+        | PEDESTRIAN_RADIUS_FIELDS
         | OTHER_RADIUS_FIELDS
         | CENTRE_DISTANCE_GATE_FIELDS
     )
@@ -611,10 +672,13 @@ def test_hybrid_code_default_stop_and_slow_distance_clear_contact() -> None:
 @pytest.mark.xfail(
     strict=True,
     raises=AssertionError,
-    reason="issue #9750: planner robot-body radii are smaller than the 1.0 m drive body",
+    reason=(
+        "issue #9750: planner robot and pedestrian body radii are smaller than the "
+        "1.0 m drive body and the 0.4 m simulator pedestrian"
+    ),
 )
 def test_planner_robot_radius_matches_drive_body() -> None:
-    """A planner that models a smaller body than the drive plans through contact."""
+    """A planner that models smaller bodies than the simulator plans through contact."""
     violations = _violations_for("#9750")
     assert not violations, violations
 
@@ -646,3 +710,54 @@ def test_selected_hybrid_v3_stop_and_braking_match_drive() -> None:
     if float(config["max_linear_decel"]) > DRIVE.max_linear_decel:
         violations.append("rollout braking exceeds drive")
     assert not violations, "; ".join(violations)
+
+
+def test_hybrid_v4_release_twins_fit_the_drive_rules() -> None:
+    """The #9747 v4 twins are audited and break no drive-limit or radius rule."""
+    audited = {source for source, _values in _all_values()}
+    assert HYBRID_V4_SOURCES <= audited
+    violations = sorted(
+        f"{rule}: {source}.{key}={value}"
+        for (rule, source, key), value in computed_violations()
+        if source in HYBRID_V4_SOURCES
+    )
+    assert not violations, violations
+
+
+def test_observed_and_planner_read_radii_match_drive_and_simulator() -> None:
+    """The observation and the planners read body radii, not diameters or halves.
+
+    The structured observation must carry the drive's robot radius and the
+    simulator's pedestrian radius, and the ORCA and hybrid v4 adapters must read
+    those exact values from it.
+    """
+    from robot_sf.gym_env.environment_factory import make_robot_env
+    from robot_sf.planner.hybrid_rule_local_planner import (
+        HybridRuleLocalPlannerAdapter,
+        build_hybrid_rule_local_planner_config,
+    )
+    from robot_sf.planner.socnav_orca import ORCAPlannerAdapter
+    from tests.metamorphic.planner_arms import interaction_scene, robot_env_config
+
+    config = robot_env_config(interaction_scene(), max_steps=3)
+    env = make_robot_env(config=config, seed=8244)
+    try:
+        observation, _info = env.reset(seed=8244)
+    finally:
+        env.close()
+    robot_radius = float(observation["robot_radius"][0])
+    pedestrian_radius = float(observation["pedestrians_radius"][0])
+    assert robot_radius == pytest.approx(DRIVE.radius)
+    assert pedestrian_radius == pytest.approx(SIM.ped_radius)
+
+    orca = ORCAPlannerAdapter(SocNavPlannerConfig())
+    robot_state, _goal_state, ped_state = orca._socnav_fields(observation)
+    assert float(robot_state["radius"][0]) == pytest.approx(DRIVE.radius)
+    assert orca._extract_pedestrians(ped_state)[3] == pytest.approx(SIM.ped_radius)
+
+    v4 = HybridRuleLocalPlannerAdapter(
+        build_hybrid_rule_local_planner_config(_load_yaml(HYBRID_V4_BASE))
+    )
+    state = v4._extract_state(observation)
+    assert state["robot_radius"] == pytest.approx(DRIVE.radius)
+    assert state["ped_radius"] == pytest.approx(SIM.ped_radius)

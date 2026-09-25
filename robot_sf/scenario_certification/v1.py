@@ -27,7 +27,10 @@ from robot_sf.planner.classic_global_planner import (
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
-from robot_sf.scenario_certification.input_identity import scenario_input_identity
+from robot_sf.scenario_certification.input_identity import (
+    runtime_input_records_match,
+    scenario_input_identity,
+)
 from robot_sf.training.scenario_loader import (
     ScenarioValidationReport,
     build_robot_config_from_scenario,
@@ -155,6 +158,7 @@ def certify_scenario_file(
             source_artifact_sha256=source_digest,
             effective_input_sha256=input_before.get("effective_input_sha256"),
             effective_input_identity_stable=False,
+            runtime_input_identity=input_before,
         )
         input_after = scenario_input_identity(
             scenario_path,
@@ -167,6 +171,7 @@ def certify_scenario_file(
             and input_before.get("effective_input_sha256") is not None
             and input_before.get("effective_input_sha256")
             == input_after.get("effective_input_sha256")
+            and certificate.evidence.get("runtime_input_identity_stable") is True
         )
         certificates.append(
             _bind_source_digest(
@@ -176,6 +181,9 @@ def certify_scenario_file(
                     input_before.get("effective_input_sha256") if input_stable else None
                 ),
                 effective_input_identity_stable=input_stable,
+                runtime_input_identity_stable=(
+                    certificate.evidence.get("runtime_input_identity_stable") is True
+                ),
             )
         )
     input_identity_after_certification = scenario_input_identity(
@@ -195,6 +203,9 @@ def certify_scenario_file(
                 source_digest,
                 effective_input_sha256=None,
                 effective_input_identity_stable=False,
+                runtime_input_identity_stable=(
+                    certificate.evidence.get("runtime_input_identity_stable") is True
+                ),
             )
             for certificate in certificates
         ]
@@ -222,6 +233,7 @@ def certify_scenario(
     source_artifact_sha256: str | object | None = _SOURCE_DIGEST_UNSET,
     effective_input_sha256: str | object | None = _SOURCE_DIGEST_UNSET,
     effective_input_identity_stable: bool = False,
+    runtime_input_identity: Mapping[str, Any] | None = None,
 ) -> ScenarioCertificate:
     """Build a ``scenario_cert.v1`` certificate from a scenario-loader entry.
 
@@ -241,14 +253,14 @@ def certify_scenario(
     else:
         source_digest = None
     sid = _scenario_id(scenario)
+    selected_input_identity = (
+        runtime_input_identity
+        if runtime_input_identity is not None
+        else scenario_input_identity(scenario_path, scenario_id=sid)
+    )
     if effective_input_sha256 is _SOURCE_DIGEST_UNSET:
-        input_identity = scenario_input_identity(scenario_path, scenario_id=sid)
-        effective_digest = input_identity.get("effective_input_sha256")
-        stable_input = (
-            not input_identity.get("requires_effective_input_binding", True)
-            and effective_digest is not None
-            and effective_digest == source_digest
-        )
+        effective_digest = selected_input_identity.get("effective_input_sha256")
+        stable_input = selected_input_identity.get("status") == "available"
     elif isinstance(effective_input_sha256, str) and len(effective_input_sha256) == 64:
         effective_digest = effective_input_sha256
         stable_input = effective_input_identity_stable is True
@@ -256,7 +268,12 @@ def certify_scenario(
         effective_digest = None
         stable_input = False
     try:
-        config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+        consumed_runtime_inputs: list[dict[str, str]] = []
+        config = build_robot_config_from_scenario(
+            scenario,
+            scenario_path=scenario_path,
+            runtime_input_records=consumed_runtime_inputs,
+        )
     except Exception as exc:  # noqa: BLE001 - certificate must fail closed on loader errors.
         return _bind_source_digest(
             _invalid_scenario_certificate(
@@ -268,7 +285,15 @@ def certify_scenario(
             source_digest,
             effective_input_sha256=effective_digest,
             effective_input_identity_stable=stable_input,
+            runtime_input_identity_stable=False,
         )
+
+    runtime_input_stable = runtime_input_records_match(
+        selected_input_identity,
+        consumed_runtime_inputs,
+        scenario_id=sid,
+    )
+    stable_input = stable_input and runtime_input_stable
 
     map_defs = list(config.map_pool.map_defs.items())
     if not map_defs:
@@ -282,6 +307,7 @@ def certify_scenario(
             source_digest,
             effective_input_sha256=effective_digest,
             effective_input_identity_stable=stable_input,
+            runtime_input_identity_stable=runtime_input_stable,
         )
 
     route_certs: list[RouteCertificate] = []
@@ -307,6 +333,7 @@ def certify_scenario(
             source_digest,
             effective_input_sha256=effective_digest,
             effective_input_identity_stable=stable_input,
+            runtime_input_identity_stable=runtime_input_stable,
         )
     return _bind_source_digest(
         _aggregate_scenario_certificate(
@@ -319,6 +346,7 @@ def certify_scenario(
         source_digest,
         effective_input_sha256=effective_digest,
         effective_input_identity_stable=stable_input,
+        runtime_input_identity_stable=runtime_input_stable,
     )
 
 
@@ -341,6 +369,7 @@ def _bind_source_digest(
     *,
     effective_input_sha256: str | None = None,
     effective_input_identity_stable: bool = False,
+    runtime_input_identity_stable: bool = False,
 ) -> ScenarioCertificate:
     """Bind a certificate to the source artifact digest observed by its producer.
 
@@ -352,6 +381,7 @@ def _bind_source_digest(
         evidence["source_artifact_sha256"] = source_digest
     evidence["effective_input_sha256"] = effective_input_sha256
     evidence["effective_input_identity_stable"] = effective_input_identity_stable
+    evidence["runtime_input_identity_stable"] = runtime_input_identity_stable
     return replace(certificate, evidence=evidence)
 
 

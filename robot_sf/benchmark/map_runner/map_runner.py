@@ -143,6 +143,7 @@ from robot_sf.benchmark.map_runner_policies import registry as _policy_builder_r
 from robot_sf.benchmark.map_runner_policies import rule_and_grid as _rule_and_grid_builder
 from robot_sf.benchmark.map_runner_policies import safety_barrier as _safety_barrier_builder
 from robot_sf.benchmark.map_runner_policies import socnav_family as _socnav_family_builder
+from robot_sf.benchmark.map_runner_policies import stand_still as _stand_still_builder
 from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
     DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS,
 )
@@ -1072,6 +1073,7 @@ def _ppo_action_to_unicycle(
 # existing if/elif chain.
 _POLICY_BUILDERS: dict[str, _policy_builder_registry.PolicyBuilder] = {
     **dict.fromkeys(_goal_policy_builder.GOAL_ALGO_KEYS, _goal_policy_builder.build),
+    **dict.fromkeys(_stand_still_builder.STAND_STILL_ALGO_KEYS, _stand_still_builder.build),
     **dict.fromkeys(_brne_builder.BRNE_KEYS, _brne_builder.build),
     **dict.fromkeys(
         _adapter_policy_builders.RISK_SURFACE_DWA_KEYS,

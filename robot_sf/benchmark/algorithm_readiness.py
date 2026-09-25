@@ -53,6 +53,15 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         note="Goal-following heuristic baseline.",
     ),
     AlgorithmReadiness(
+        canonical_name="stand_still",
+        tier="baseline-ready",
+        aliases=("stand_still",),
+        note=(
+            "Deterministic zero-velocity reference baseline; ignores observations and is not in "
+            "the paper-baseline roster."
+        ),
+    ),
+    AlgorithmReadiness(
         canonical_name="social_force",
         tier="baseline-ready",
         aliases=("social_force", "sf"),

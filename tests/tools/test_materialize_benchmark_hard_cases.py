@@ -1910,6 +1910,162 @@ def test_resume_does_not_reuse_attempt_for_currently_ineligible_row(
     assert preserved_prior == prior_replay
 
 
+@pytest.mark.parametrize("currently_eligible", [True, False])
+def test_resume_preserves_manifest_attempt_when_case_file_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, currently_eligible: bool
+) -> None:
+    summary_path, campaign_root, matrix = _build_inputs(tmp_path, include_unavailable=False)
+    previous_dir = tmp_path / "previous"
+    previous = materialize(_args(summary_path, campaign_root, matrix, previous_dir))
+    missing_case_file = previous_dir / previous["cases"][0]["case_file"]
+    prior_replay = {
+        "attempted": True,
+        "status": "runner_failed" if currently_eligible else "exact_match",
+        "returncode": 1 if currently_eligible else 0,
+        "command": ["uv", "run", "robot_sf_bench", "run", "--dt", "0.1"],
+        "replay_revision": "prior-replay-revision",
+        "episode_output": "replay/episodes.jsonl",
+    }
+    manifest_path = previous_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["cases"][0]["replay"] = prior_replay
+    manifest["replay"]["attempted"] = 1
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    prior_replay_dir = missing_case_file.parent / "replay"
+    prior_replay_dir.mkdir()
+    (prior_replay_dir / "episodes.jsonl").write_text("historical replay bytes\n", encoding="utf-8")
+    missing_case_file.unlink()
+
+    if not currently_eligible:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        summary["cases"][0]["benchmark_eligible"] = False
+        summary_path.write_text(json.dumps(summary, sort_keys=True), encoding="utf-8")
+
+    def fail_if_replayed(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        pytest.fail("a missing historical replay artifact must not be rerun")
+
+    monkeypatch.setattr(materializer, "_run_replay", fail_if_replayed)
+    args = _args(summary_path, campaign_root, matrix, tmp_path / "resumed")
+    args.replay_limit = 1
+    args.resume_from = previous_dir
+    resumed = materialize(args)
+    case_file = tmp_path / "resumed" / resumed["cases"][0]["case_file"]
+    case_record = json.loads(case_file.read_text(encoding="utf-8"))
+
+    if currently_eligible:
+        replay = case_record["replay"]
+        assert replay["attempted"] is True
+        assert replay["status"] == "replay_artifact_missing_on_resume"
+        assert replay["resume_prior_status"] == "runner_failed"
+        assert replay["replay_revision"] == "prior-replay-revision"
+        assert resumed["replay"]["attempted"] == 1
+        assert resumed["replay"]["new_attempted"] == 0
+        assert resumed["replay"]["reused_attempts"] == 0
+        assert resumed["replay"]["preserved_attempts_missing_artifacts"] == 1
+        assert resumed["replay"]["prior_attempts_not_promoted"] == 0
+    else:
+        replay = case_record["replay"]
+        assert replay == {
+            "status": "unavailable_source_row_not_benchmark_eligible",
+            "attempted": False,
+        }
+        prior = case_record["resume_prior_attempt"]
+        assert prior["status"] == "not_promoted_current_source_ineligible"
+        assert (
+            prior["source_record_sha256"] == manifest["cases"][0]["source_record"]["record_sha256"]
+        )
+        assert prior["source_manifest_sha256"] == _sha256(manifest_path)
+        assert prior["case_record_status"] == "missing"
+        assert prior["prior_replay"] == prior_replay
+        assert resumed["replay"]["attempted"] == 0
+        assert resumed["replay"]["new_attempted"] == 0
+        assert resumed["replay"]["reused_attempts"] == 0
+        assert resumed["replay"]["preserved_attempts_missing_artifacts"] == 0
+        assert resumed["replay"]["prior_attempts_not_promoted"] == 1
+        assert resumed["cases"][0]["resume_prior_attempt"] == prior
+
+    assert not (case_file.parent / "replay").exists()
+
+
+def test_repeated_resume_preserves_original_missing_artifact_prior_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    summary, campaign_root, matrix = _build_inputs(tmp_path, include_unavailable=False)
+    previous_dir = tmp_path / "previous"
+    previous = materialize(_args(summary, campaign_root, matrix, previous_dir))
+    missing_case_file = previous_dir / previous["cases"][0]["case_file"]
+    prior_replay = {
+        "attempted": True,
+        "status": "runner_failed",
+        "returncode": 1,
+        "replay_revision": "original-replay-revision",
+        "episode_output": "replay/episodes.jsonl",
+    }
+    manifest_path = previous_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["cases"][0]["replay"] = prior_replay
+    manifest["replay"]["attempted"] = 1
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    missing_case_file.unlink()
+
+    def fail_if_replayed(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        pytest.fail("a prior replay attempt must not be rerun on repeated resume")
+
+    monkeypatch.setattr(materializer, "_run_replay", fail_if_replayed)
+    first_args = _args(summary, campaign_root, matrix, tmp_path / "resumed-once")
+    first_args.replay_limit = 1
+    first_args.resume_from = previous_dir
+    first_resume = materialize(first_args)
+
+    second_args = _args(summary, campaign_root, matrix, tmp_path / "resumed-twice")
+    second_args.replay_limit = 1
+    second_args.resume_from = tmp_path / "resumed-once"
+    second_resume = materialize(second_args)
+
+    for resumed, output_dir in (
+        (first_resume, tmp_path / "resumed-once"),
+        (second_resume, tmp_path / "resumed-twice"),
+    ):
+        case_file = output_dir / resumed["cases"][0]["case_file"]
+        case_record = json.loads(case_file.read_text(encoding="utf-8"))
+        replay = case_record["replay"]
+        assert replay["attempted"] is True
+        assert replay["status"] == "replay_artifact_missing_on_resume"
+        assert replay["resume_prior_status"] == "runner_failed"
+        assert replay["replay_revision"] == "original-replay-revision"
+        assert replay["reused"] is False
+        assert resumed["replay"]["attempted"] == 1
+        assert resumed["replay"]["new_attempted"] == 0
+        assert resumed["replay"]["preserved_attempts_missing_artifacts"] == 1
+        assert resumed["replay"]["replay_revisions"] == ["original-replay-revision"]
+        assert not (case_file.parent / replay["episode_output"]).exists()
+
+
+def test_resume_missing_case_attempt_requires_matching_manifest_source_identity(
+    tmp_path: Path,
+) -> None:
+    summary_path, campaign_root, matrix = _build_inputs(tmp_path, include_unavailable=False)
+    previous_dir = tmp_path / "previous"
+    previous = materialize(_args(summary_path, campaign_root, matrix, previous_dir))
+    missing_case_file = previous_dir / previous["cases"][0]["case_file"]
+    manifest_path = previous_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["cases"][0]["source_record"]["record_sha256"] = "0" * 64
+    manifest["cases"][0]["replay"] = {
+        "attempted": True,
+        "status": "runner_failed",
+        "replay_revision": "prior-replay-revision",
+    }
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    missing_case_file.unlink()
+
+    args = _args(summary_path, campaign_root, matrix, tmp_path / "resumed")
+    args.replay_limit = 1
+    args.resume_from = previous_dir
+    with pytest.raises(MaterializationError, match="cannot be bound to the current source row"):
+        materialize(args)
+
+
 @pytest.mark.parametrize(
     ("mutation", "expected_status"),
     [

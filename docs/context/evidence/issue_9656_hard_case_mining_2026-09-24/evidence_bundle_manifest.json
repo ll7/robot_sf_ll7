@@ -13,20 +13,20 @@
   },
   "totals": {
     "file_count": 3,
-    "total_bytes": 258338
+    "total_bytes": 258369
   },
   "files": [
     {
       "path": "current_head_no_replay_manifest.json",
-      "size_bytes": 124513,
-      "sha256": "d6d5cf60afb71a462ce6a33ee695ee107a82d8cdb2c287dc728983497ee103ff",
+      "size_bytes": 124353,
+      "sha256": "5e8f9f803f6dea43e9b00d38ea72a2b7e18aa9b0da7cf21b8a18a528c5c384be",
       "kind": "misc",
       "location": "payload/current_head_no_replay_manifest.json"
     },
     {
       "path": "report.md",
-      "size_bytes": 9954,
-      "sha256": "586fbc5e9e36e3b5df794839e94c096e784cd128b76f306220c884f1a53ceaca",
+      "size_bytes": 10145,
+      "sha256": "72b1173ce1fe553d3283df6daa427d688b9bde1212bf2b46d23b5ce2bc4ad05b",
       "kind": "reports",
       "location": "payload/report.md"
     },
@@ -37,5 +37,15 @@
       "kind": "aggregates",
       "location": "payload/summary.json"
     }
-  ]
+  ],
+  "packaging_normalization": {
+    "recorded_at_utc": "2026-09-26T20:07:07Z",
+    "reason": "Replace ignored local output-root literals in the tracked compact manifest with its documented relocatable root placeholder.",
+    "replacement_prefix": "${ISSUE9656_LOCAL_ROOT}/",
+    "replacement_count": 16,
+    "before_sha256": "d6d5cf60afb71a462ce6a33ee695ee107a82d8cdb2c287dc728983497ee103ff",
+    "after_sha256": "5e8f9f803f6dea43e9b00d38ea72a2b7e18aa9b0da7cf21b8a18a528c5c384be",
+    "data_effect": "Path strings only; no case identity, source row, replay result, metric, or checksum value was changed.",
+    "source_prefix_description": "repository ignored-cache root for issue 9656"
+  }
 }

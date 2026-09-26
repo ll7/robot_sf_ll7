@@ -413,10 +413,16 @@ def _normalize_no_fallback_diagnostics(value: Any) -> Any:
     if isinstance(value, dict):
         normalized = {key: _normalize_no_fallback_diagnostics(item) for key, item in value.items()}
         if normalized.get("fallback") is False:
+            if (
+                type(normalized.get("fallback_count")) is not int
+                or normalized["fallback_count"] != 0
+                or normalized.get("fallback_reason", object()) is not None
+                or normalized.get("fallback_reasons") != {}
+            ):
+                raise ValueError("malformed Social Force no-fallback diagnostics")
             if "fallback_used" not in normalized and "fallback_triggered" not in normalized:
                 normalized["fallback_used"] = False
-            if normalized.get("fallback_reasons") == {}:
-                normalized.pop("fallback_reasons")
+            normalized.pop("fallback_reasons")
         return normalized
     if isinstance(value, list):
         return [_normalize_no_fallback_diagnostics(item) for item in value]

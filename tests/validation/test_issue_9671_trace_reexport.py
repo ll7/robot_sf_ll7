@@ -306,6 +306,52 @@ def test_accepts_native_no_fallback_planner_diagnostics(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
+    "field",
+    ["fallback_count", "fallback_reason", "fallback_reasons"],
+)
+def test_rejects_incomplete_native_no_fallback_diagnostics(tmp_path: Path, field: str) -> None:
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [_row(113, "collision", trace=False)])
+    trace = _row(113, "collision", trace=True)
+    trace["algorithm_metadata"]["planner_diagnostics"] = {"fallback": False}
+    trace["algorithm_metadata"]["planner_diagnostics"].pop(field, None)
+    traces = tmp_path / "episodes.jsonl"
+    traces.write_text(json.dumps(trace) + "\n")
+
+    with pytest.raises(ValueError, match="malformed Social Force no-fallback diagnostics"):
+        _check(archive, traces, tmp_path, [113])
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("fallback_count", False),
+        ("fallback_count", 1),
+        ("fallback_reason", "unexpected"),
+        ("fallback_reasons", {"kernel": 0}),
+    ],
+)
+def test_rejects_malformed_native_no_fallback_diagnostics(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [_row(113, "collision", trace=False)])
+    trace = _row(113, "collision", trace=True)
+    trace["algorithm_metadata"]["planner_diagnostics"] = {
+        "fallback": False,
+        "fallback_count": 0,
+        "fallback_reason": None,
+        "fallback_reasons": {},
+    }
+    trace["algorithm_metadata"]["planner_diagnostics"][field] = value
+    traces = tmp_path / "episodes.jsonl"
+    traces.write_text(json.dumps(trace) + "\n")
+
+    with pytest.raises(ValueError, match="malformed Social Force no-fallback diagnostics"):
+        _check(archive, traces, tmp_path, [113])
+
+
+@pytest.mark.parametrize(
     ("field", "value"),
     [
         ("fallback", True),
@@ -329,7 +375,10 @@ def test_rejects_positive_social_force_fallback_diagnostics(
     traces = tmp_path / "episodes.jsonl"
     traces.write_text(json.dumps(trace) + "\n")
 
-    with pytest.raises(ValueError, match="inadmissible runtime mode"):
+    with pytest.raises(
+        ValueError,
+        match="inadmissible runtime mode|malformed Social Force no-fallback diagnostics",
+    ):
         _check(archive, traces, tmp_path, [113])
 
 

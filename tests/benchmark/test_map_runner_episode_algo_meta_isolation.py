@@ -76,7 +76,7 @@ def _patch_episode_runtime(monkeypatch) -> None:
     monkeypatch.setattr(
         map_runner_episode,
         "_build_env_config",
-        lambda _scenario, scenario_path: _config(),
+        lambda _scenario, scenario_path, **_kwargs: _config(),
     )
     monkeypatch.setattr(
         map_runner_episode,

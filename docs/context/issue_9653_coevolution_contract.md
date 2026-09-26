@@ -49,10 +49,22 @@ the planner is not carried into a later round.
 
 A discovered case reaches the next round only when the search row is an
 evaluated target-planner failure with normal execution, replay matches exactly,
-feasibility is empirically demonstrated, and the admissibility adapter says
-admissible. Invalid, fallback, degraded, replay-mismatched, infeasible, and
-unknown rows remain separately recorded and are not admitted. The corpus
-adapter must preserve the coordinator's stable case ID.
+and the admissibility adapter says admissible. Feasibility may be empirically
+demonstrated or remain `unknown`; the coordinator preserves the corpus verdict
+and never upgrades unknown to feasible. Invalid, fallback, degraded,
+replay-mismatched, infeasible, and inadmissible rows remain separately recorded
+and are not admitted.
+
+The coordinator's `discovery_id` is a per-run ledger identity, not the corpus
+identity. The corpus adapter returns its canonical `case_id` and a normalized
+`corpus_case` projection containing the case's original `origin_round`,
+`candidate_id`, scenario, and source evidence. Newly admitted cases and exact
+corpus duplicates both enter later regression evaluation by canonical ID;
+duplicates retain their original provenance and do not count as new admissions
+for stop criteria. If a configured initial regression ID is later rediscovered,
+the canonical corpus projection fills missing metadata and conflicting identity
+metadata stops the round diagnostically. Rejected cases do not enter the
+regression slice.
 
 No-new-case stopping waits until the configured minimum round count and means
 only that no new admissible counterexample was found under the recorded finite

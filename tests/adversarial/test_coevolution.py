@@ -106,6 +106,7 @@ class FixtureAdapters:
         scores_by_round: dict[int, list[float | None]] | None = None,
         fail_phase: str | None = None,
         admit: bool = True,
+        admission_status: str | None = None,
     ) -> None:
         """Configure scripted phase results and collect which adapters ran."""
         self.candidates_by_round = candidates_by_round or {}
@@ -113,10 +114,14 @@ class FixtureAdapters:
         self.scores_by_round = scores_by_round or {}
         self.fail_phase = fail_phase
         self.admit = admit
+        self.admission_status = admission_status
         self.calls: Counter[str] = Counter()
         self.round_regression_ids: dict[int, tuple[str, ...]] = {}
+        self.round_regression_records: dict[int, tuple[dict[str, Any], ...]] = {}
         self.previous_planners: dict[int, dict[str, Any] | None] = {}
         self.admitted_case_ids: list[str] = []
+        self.known_case_ids: set[str] = set()
+        self.corpus_cases: dict[str, dict[str, Any]] = {}
 
     def optimize(self, request, output_dir):
         self.calls["optimize"] += 1
@@ -159,6 +164,9 @@ class FixtureAdapters:
     def evaluate_challenges(self, request, _planner, _output_dir):
         self.calls["evaluate"] += 1
         self.round_regression_ids[request.round_number] = request.regression_case_ids
+        self.round_regression_records[request.round_number] = tuple(
+            case.to_json() for case in request.regression_cases
+        )
         return {
             "status": "complete",
             "heldout_rows": [
@@ -204,14 +212,47 @@ class FixtureAdapters:
         }
         return {**defaults, **self.gates.get(candidate["candidate_id"], {})}
 
-    def admit_case(self, _request, _planner, case, _output_dir):
+    def admit_case(self, request, _planner, case, _output_dir):
         self.calls["admit"] += 1
-        self.admitted_case_ids.append(case["case_id"])
+        identity = json.dumps(case["scenario"], sort_keys=True, separators=(",", ":"))
+        case_id = "case-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()
+        self.admitted_case_ids.append(case_id)
+        status = self.admission_status or (
+            "admitted" if self.admit and case_id not in self.known_case_ids else "duplicate"
+        )
+        if not self.admit:
+            status = "rejected"
+        corpus_case = None
+        if status == "duplicate":
+            corpus_case = self.corpus_cases.get(case_id)
+            if corpus_case is None:
+                corpus_case = {
+                    "case_id": case_id,
+                    "origin_round": None,
+                    "candidate_id": "historical-candidate",
+                    "scenario": case["scenario"],
+                    "source_evidence": {
+                        "source_kind": "preexisting_corpus",
+                        "origin_round": None,
+                    },
+                }
+                self.corpus_cases[case_id] = corpus_case
+        elif status == "admitted":
+            corpus_case = {
+                "case_id": case_id,
+                "origin_round": request.round_number,
+                "candidate_id": case["candidate_id"],
+                "scenario": case["scenario"],
+                "source_evidence": case["source_evidence"],
+            }
+            self.corpus_cases[case_id] = corpus_case
+        self.known_case_ids.add(case_id)
         return {
-            "status": "admitted" if self.admit else "rejected",
-            "admitted": self.admit,
-            "case_id": case["case_id"],
-            "stable_id": case["case_id"],
+            "status": status,
+            "admitted": status == "admitted",
+            "case_id": case_id if status in {"admitted", "duplicate"} else None,
+            "stable_id": case_id if status in {"admitted", "duplicate"} else None,
+            "corpus_case": corpus_case,
         }
 
     def bundle(self) -> CoevolutionAdapters:
@@ -267,6 +308,122 @@ def test_round_one_admission_is_evaluated_as_round_two_regression(tmp_path: Path
         "planner_id": first_selected["planner_id"],
         "config_sha256": first_selected["config_sha256"],
     }
+
+
+def test_same_scenario_duplicate_preserves_first_discovery_provenance(tmp_path: Path) -> None:
+    config = _write_config(tmp_path)
+    adapters = FixtureAdapters(
+        candidates_by_round={
+            2: [
+                _candidate("new-case"),
+                _candidate("routine", planner_outcome="no_failure"),
+            ]
+        }
+    )
+
+    result = run_coevolution(config, adapters.bundle())
+
+    assert result["status"] == "complete"
+    assert result["stop"]["reason"] == "no_new_admissible_counterexample_under_budget"
+    first_discovery = json.loads(
+        (
+            config.parent / "run-output" / "round_001" / "phases" / "discovery_admission.json"
+        ).read_text(encoding="utf-8")
+    )["output"]
+    original_case = first_discovery["corpus_regression_cases"][0]
+    assert original_case["origin_round"] == 1
+    assert original_case["candidate_id"] == "new-case"
+    assert adapters.round_regression_records[2] == (original_case,)
+    assert adapters.admitted_case_ids[0] == adapters.admitted_case_ids[1]
+
+
+def test_duplicate_corpus_case_is_retained_for_next_round_regression(tmp_path: Path) -> None:
+    config = _write_config(tmp_path)
+    adapters = FixtureAdapters(admission_status="duplicate")
+
+    result = run_coevolution(config, adapters.bundle())
+
+    canonical_case_id = adapters.admitted_case_ids[0]
+    assert adapters.round_regression_ids == {1: (), 2: (canonical_case_id,)}
+    first_discovery = json.loads(
+        (
+            config.parent / "run-output" / "round_001" / "phases" / "discovery_admission.json"
+        ).read_text(encoding="utf-8")
+    )["output"]
+    assert first_discovery["newly_admitted_cases"] == []
+    assert [case["case_id"] for case in first_discovery["corpus_regression_cases"]] == [
+        canonical_case_id
+    ]
+    assert first_discovery["corpus_regression_cases"][0] == {
+        "case_id": canonical_case_id,
+        "origin_round": None,
+        "candidate_id": "historical-candidate",
+        "scenario": first_discovery["rows"][0]["scenario"],
+        "source_evidence": {"source_kind": "preexisting_corpus", "origin_round": None},
+    }
+    assert result["rounds"][1]["summary"]["regression_case_count"] == 1
+    assert adapters.round_regression_records[2] == (first_discovery["corpus_regression_cases"][0],)
+    assert result["stop"]["reason"] == "no_new_admissible_counterexample_under_budget"
+
+
+def test_duplicate_corpus_case_hydrates_initial_id_only_regression_memory(tmp_path: Path) -> None:
+    config = _write_config(tmp_path)
+    scenario = _candidate("new-case")["scenario"]
+    identity = json.dumps(scenario, sort_keys=True, separators=(",", ":"))
+    canonical_case_id = "case-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()
+    config_payload = yaml.safe_load(config.read_text(encoding="utf-8"))
+    config_payload["initial_regression_case_ids"] = [canonical_case_id]
+    config.write_text(yaml.safe_dump(config_payload, sort_keys=False), encoding="utf-8")
+    adapters = FixtureAdapters(admission_status="duplicate")
+
+    result = run_coevolution(config, adapters.bundle())
+
+    assert adapters.round_regression_ids == {1: (canonical_case_id,), 2: (canonical_case_id,)}
+    assert adapters.round_regression_records[1][0]["source_evidence"] is None
+    assert adapters.round_regression_records[2] == (
+        {
+            "case_id": canonical_case_id,
+            "origin_round": None,
+            "candidate_id": "historical-candidate",
+            "scenario": scenario,
+            "source_evidence": {"source_kind": "preexisting_corpus", "origin_round": None},
+        },
+    )
+    assert result["stop"]["reason"] == "no_new_admissible_counterexample_under_budget"
+
+
+def test_conflicting_duplicate_provenance_stops_without_completing_round(tmp_path: Path) -> None:
+    config = _write_config(tmp_path)
+
+    class ConflictingDuplicateAdapters(FixtureAdapters):
+        def admit_case(self, request, planner, case, output_dir):
+            receipt = super().admit_case(request, planner, case, output_dir)
+            if receipt["status"] == "duplicate":
+                receipt["corpus_case"]["candidate_id"] = "conflicting-candidate"
+            return receipt
+
+    adapters = ConflictingDuplicateAdapters(
+        candidates_by_round={
+            2: [
+                _candidate("new-case"),
+                _candidate("routine", planner_outcome="no_failure"),
+            ]
+        }
+    )
+
+    result = run_coevolution(config, adapters.bundle())
+
+    assert result["status"] == "diagnostic"
+    assert result["stop"]["reason"] == "infrastructure_failure"
+    assert result["stop"]["failed_phase"] == "regression_case_carry"
+    round_two = json.loads(
+        (config.parent / "run-output" / "round_002" / "round_manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert round_two["status"] == "diagnostic"
+    assert "summary" not in round_two
+    assert round_two["stop_decision"]["reason"] == "infrastructure_failure"
 
 
 def test_adapter_mutation_cannot_change_selected_planner_or_round_carry(tmp_path: Path) -> None:
@@ -511,9 +668,10 @@ def test_no_discovery_still_completes_configured_minimum_two_rounds(tmp_path: Pa
 def test_unknown_mismatch_invalid_fallback_degraded_and_failed_remain_distinct(
     tmp_path: Path,
 ) -> None:
-    config = _write_config(tmp_path, candidate_budget=7)
+    config = _write_config(tmp_path, candidate_budget=8)
     candidates = [
         _candidate("unknown-feasibility"),
+        _candidate("admissible-unknown"),
         _candidate("replay-mismatch"),
         _candidate(
             "invalid",
@@ -538,6 +696,7 @@ def test_unknown_mismatch_invalid_fallback_degraded_and_failed_remain_distinct(
                 "feasibility_status": "unknown",
                 "admissibility_status": "unknown",
             },
+            "admissible-unknown": {"feasibility_status": "unknown"},
             "replay-mismatch": {"replay_status": "mismatch"},
             "infeasible": {
                 "feasibility_status": "infeasible",
@@ -556,6 +715,12 @@ def test_unknown_mismatch_invalid_fallback_degraded_and_failed_remain_distinct(
     indexed = {row["candidate_id"]: row for row in rows}
     assert indexed["unknown-feasibility"]["gate"]["feasibility_status"] == "unknown"
     assert indexed["unknown-feasibility"]["admission"]["status"] == "not_eligible"
+    assert indexed["admissible-unknown"]["gate"]["feasibility_status"] == "unknown"
+    assert indexed["admissible-unknown"]["gate"]["admissibility_status"] == "admissible"
+    assert indexed["admissible-unknown"]["admission"]["status"] in {
+        "admitted",
+        "duplicate",
+    }
     assert indexed["replay-mismatch"]["gate"]["replay_status"] == "mismatch"
     assert indexed["replay-mismatch"]["admission"]["status"] == "not_eligible"
     assert indexed["infeasible"]["gate"]["feasibility_status"] == "infeasible"
@@ -569,8 +734,8 @@ def test_unknown_mismatch_invalid_fallback_degraded_and_failed_remain_distinct(
     assert indexed["degraded"]["gate"]["replay_status"] == "not_run"
     assert indexed["search-failed"]["search_status"] == "failed"
     assert indexed["search-failed"]["raw_candidate"]["execution_status"] == "failed"
-    assert adapters.calls["admit"] == 0
-    assert result["stop"]["reason"] == "no_new_admissible_counterexample_under_budget"
+    assert adapters.calls["admit"] == 2
+    assert result["rounds"][0]["summary"]["admissible_new_case_count"] == 1
 
 
 def test_falsification_sampler_is_required_and_must_match_frozen_round_input(

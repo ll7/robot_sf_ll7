@@ -1071,14 +1071,20 @@ def _validate_gate_output(raw: Mapping[str, Any], candidate_id: str) -> dict[str
 
 
 def _admission_eligible(candidate: Mapping[str, Any], gate: Mapping[str, Any]) -> bool:
-    """Require exact replay, empirical feasibility, admissibility, and a target failure."""
+    """Require exact replay, admissibility, and a confirmed target failure.
+
+    Empirical feasibility is useful corroboration, but it is not required to retain an
+    otherwise admissible counterexample. The corpus owns the explicit
+    ``admissible_feasibility_unknown`` state; this coordinator must preserve it rather
+    than dropping the case or upgrading it to feasible.
+    """
     return all(
         (
             candidate.get("search_status") == "evaluated",
             candidate.get("execution_status") == "ok",
             candidate.get("planner_outcome") == "confirmed_failure",
             gate.get("replay_status") == "exact_match",
-            gate.get("feasibility_status") == "empirically_feasible",
+            gate.get("feasibility_status") in {"empirically_feasible", "unknown"},
             gate.get("admissibility_status") == "admissible",
             gate.get("planner_outcome") == "confirmed_failure",
         )
@@ -1154,13 +1160,13 @@ def _corpus_admission(
     planner: Mapping[str, Any],
     candidate: Mapping[str, Any],
     gate: Mapping[str, Any],
-    case_id: str,
+    discovery_id: str,
     index: int,
     adapters: CoevolutionAdapters,
     output_dir: Path,
 ) -> tuple[dict[str, Any], RegressionCase | None, dict[str, str] | None]:
     case = {
-        "case_id": case_id,
+        "discovery_id": discovery_id,
         "origin_round": request.round_number,
         "candidate_id": candidate["candidate_id"],
         "scenario": candidate["scenario"],
@@ -1183,9 +1189,9 @@ def _corpus_admission(
                 output_dir / f"candidate_{index:04d}",
             ),
         )
-        admission = json.loads(_canonical_json(_mapping(raw, f"corpus admission for {case_id}")))
-        if admission.get("case_id") != case_id:
-            raise ValueError("corpus admission did not preserve stable case_id")
+        admission = json.loads(
+            _canonical_json(_mapping(raw, f"corpus admission for {discovery_id}"))
+        )
         status = admission.get("status")
         admitted = admission.get("admitted")
         if status not in {"admitted", "duplicate", "rejected"}:
@@ -1194,21 +1200,26 @@ def _corpus_admission(
             raise TypeError("corpus admission admitted field must be boolean")
         if (status == "admitted") != admitted:
             raise ValueError("corpus admission status and admitted flag disagree")
-        if not admitted:
+        corpus_case_id = admission.get("case_id")
+        if status in {"admitted", "duplicate"}:
+            corpus_case_id = _non_empty_string(corpus_case_id, "corpus admission canonical case_id")
+        elif corpus_case_id is not None:
+            corpus_case_id = _non_empty_string(corpus_case_id, "rejected corpus admission case_id")
+        if status == "rejected":
             return admission, None, None
-        regression_case = RegressionCase(
-            case_id=case_id,
-            origin_round=request.round_number,
-            candidate_id=str(candidate["candidate_id"]),
-            scenario=dict(candidate["scenario"]),
-            source_evidence=case["source_evidence"],
+        regression_case = _parse_regression_case_record(
+            admission.get("corpus_case"),
+            field_name="corpus admission corpus_case",
+            expected_case_id=str(corpus_case_id),
+            expected_scenario=candidate["scenario"],
         )
         return admission, regression_case, None
     except Exception as exc:  # noqa: BLE001 - admission errors remain in the ledger
         admission = {
             "status": "infrastructure_failure",
             "admitted": False,
-            "case_id": case_id,
+            "case_id": None,
+            "discovery_id": discovery_id,
             "error_type": type(exc).__name__,
             "error": str(exc),
         }
@@ -1224,24 +1235,33 @@ def _process_discovery_candidate(
     index: int,
     adapters: CoevolutionAdapters,
     output_dir: Path,
-) -> tuple[dict[str, Any], RegressionCase | None, list[dict[str, str]]]:
+) -> tuple[
+    dict[str, Any],
+    RegressionCase | None,
+    RegressionCase | None,
+    list[dict[str, str]],
+]:
     candidate = dict(raw_candidate)
     candidate["target_planner_id"] = planner["planner_id"]
-    case_id = _case_id(request, candidate)
-    candidate["case_id"] = case_id
+    discovery_id = _case_id(request, candidate)
+    candidate["discovery_id"] = discovery_id
     gate, gate_error = _candidate_gate(request, planner, candidate, index, adapters, output_dir)
     admission: dict[str, Any] = {"status": "not_eligible", "admitted": False}
     regression_case = None
+    newly_admitted_case = None
     errors = [gate_error] if gate_error else []
     if _admission_eligible(candidate, gate):
         admission, regression_case, admission_error = _corpus_admission(
-            request, planner, candidate, gate, case_id, index, adapters, output_dir
+            request, planner, candidate, gate, discovery_id, index, adapters, output_dir
         )
+        if admission.get("status") == "admitted":
+            newly_admitted_case = regression_case
         if admission_error:
             errors.append(admission_error)
     row = {
         "candidate_id": candidate["candidate_id"],
-        "case_id": case_id,
+        "discovery_id": discovery_id,
+        "case_id": regression_case.case_id if regression_case is not None else None,
         "search_status": candidate["search_status"],
         "execution_status": candidate["execution_status"],
         "source_planner_outcome": candidate["planner_outcome"],
@@ -1249,8 +1269,9 @@ def _process_discovery_candidate(
         "gate": gate,
         "admission": admission,
         "raw_candidate": candidate,
+        "corpus_case": regression_case.to_json() if regression_case is not None else None,
     }
-    return row, regression_case, errors
+    return row, regression_case, newly_admitted_case, errors
 
 
 def _build_discovery_admission(
@@ -1262,10 +1283,11 @@ def _build_discovery_admission(
     output_dir: Path,
 ) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
-    admitted: list[RegressionCase] = []
+    regression_cases: dict[str, RegressionCase] = {}
+    newly_admitted: dict[str, RegressionCase] = {}
     infra_errors: list[dict[str, str]] = []
     for index, candidate in enumerate(falsification["candidates"]):
-        row, regression_case, errors = _process_discovery_candidate(
+        row, regression_case, newly_admitted_case, errors = _process_discovery_candidate(
             request=request,
             planner=selected_planner,
             raw_candidate=candidate,
@@ -1275,15 +1297,115 @@ def _build_discovery_admission(
         )
         rows.append(row)
         if regression_case is not None:
-            admitted.append(regression_case)
+            regression_cases.setdefault(regression_case.case_id, regression_case)
+        if newly_admitted_case is not None:
+            newly_admitted.setdefault(newly_admitted_case.case_id, newly_admitted_case)
         infra_errors.extend(errors)
     return {
         "status": "infrastructure_failure" if infra_errors else "complete",
         "candidate_count": len(rows),
-        "newly_admitted_cases": [case.to_json() for case in admitted],
+        "corpus_regression_cases": [case.to_json() for case in regression_cases.values()],
+        "newly_admitted_cases": [case.to_json() for case in newly_admitted.values()],
         "rows": rows,
         "infrastructure_errors": infra_errors,
     }
+
+
+def _validate_discovery_rows(rows: list[Any]) -> tuple[set[str], set[str]]:
+    """Validate candidate, discovery, and canonical corpus identities in the ledger."""
+    row_ids: list[str] = []
+    discovery_ids: list[str] = []
+    regression_case_ids: set[str] = set()
+    newly_admitted_case_ids: set[str] = set()
+    for index, item in enumerate(rows):
+        row = _mapping(item, f"discovery-admission.rows[{index}]")
+        row_ids.append(_non_empty_string(row.get("candidate_id"), "discovery row candidate_id"))
+        discovery_ids.append(
+            _non_empty_string(row.get("discovery_id"), "discovery row discovery_id")
+        )
+        admission = _mapping(row.get("admission"), "discovery row admission")
+        admission_status = admission.get("status")
+        if admission_status not in {
+            "admitted",
+            "duplicate",
+            "rejected",
+            "not_eligible",
+            "infrastructure_failure",
+        }:
+            raise ValueError(f"unsupported discovery row admission status: {admission_status!r}")
+        if admission_status in {"admitted", "duplicate"}:
+            case_id = _non_empty_string(row.get("case_id"), "discovery row corpus case_id")
+            receipt_case_id = _non_empty_string(
+                admission.get("case_id"), "discovery row admission case_id"
+            )
+            if case_id != receipt_case_id:
+                raise ValueError("discovery row corpus case ID differs from its admission receipt")
+            corpus_case = _parse_regression_case_record(
+                row.get("corpus_case"),
+                field_name=f"discovery-admission.rows[{index}].corpus_case",
+                expected_case_id=case_id,
+            )
+            if admission_status == "admitted":
+                newly_admitted_case_ids.add(case_id)
+            regression_case_ids.add(corpus_case.case_id)
+        elif row.get("case_id") is not None or row.get("corpus_case") is not None:
+            raise ValueError("non-admitted discovery rows cannot carry a corpus case")
+        _mapping(row.get("gate"), "discovery row gate")
+    if len(row_ids) != len(set(row_ids)):
+        raise ValueError("discovery-admission candidate IDs must be unique")
+    if len(discovery_ids) != len(set(discovery_ids)):
+        raise ValueError("discovery-admission IDs must be unique")
+    return regression_case_ids, newly_admitted_case_ids
+
+
+def _parse_regression_case_record(
+    raw: Any,
+    *,
+    field_name: str,
+    expected_case_id: str | None = None,
+    expected_scenario: Mapping[str, Any] | None = None,
+) -> RegressionCase:
+    """Validate a canonical corpus projection without replacing its provenance."""
+    case = _mapping(raw, field_name)
+    case_id = _non_empty_string(case.get("case_id"), f"{field_name}.case_id")
+    if expected_case_id is not None and case_id != expected_case_id:
+        raise ValueError(f"{field_name}.case_id differs from the corpus admission receipt")
+    origin_round_raw = case.get("origin_round")
+    origin_round = (
+        None
+        if origin_round_raw is None
+        else _integer(origin_round_raw, f"{field_name}.origin_round", minimum=1)
+    )
+    candidate_id_raw = case.get("candidate_id")
+    candidate_id = (
+        None
+        if candidate_id_raw is None
+        else _non_empty_string(candidate_id_raw, f"{field_name}.candidate_id")
+    )
+    scenario = _mapping(case.get("scenario"), f"{field_name}.scenario")
+    if expected_scenario is not None and _canonical_json(scenario) != _canonical_json(
+        expected_scenario
+    ):
+        raise ValueError(f"{field_name}.scenario differs from the verified discovery scenario")
+    source_evidence = _mapping(case.get("source_evidence"), f"{field_name}.source_evidence")
+    return RegressionCase(
+        case_id=case_id,
+        origin_round=origin_round,
+        candidate_id=candidate_id,
+        scenario=scenario,
+        source_evidence=source_evidence,
+    )
+
+
+def _validate_regression_case_records(cases: list[Any], *, field_name: str) -> set[str]:
+    """Validate stable corpus-case records and return their canonical identities."""
+    case_ids: set[str] = set()
+    for index, item in enumerate(cases):
+        case = _parse_regression_case_record(item, field_name=f"{field_name}[{index}]")
+        case_ids.add(case.case_id)
+    if len(case_ids) != len(cases):
+        raise ValueError(f"{field_name} must not contain duplicate corpus case IDs")
+    return case_ids
 
 
 def _validate_discovery_admission(raw: dict[str, Any]) -> dict[str, Any]:
@@ -1291,26 +1413,26 @@ def _validate_discovery_admission(raw: dict[str, Any]) -> dict[str, Any]:
     if status not in {"complete", "infrastructure_failure"}:
         raise ValueError(f"unsupported discovery-admission result status: {status!r}")
     rows = raw.get("rows")
+    regression_cases = raw.get("corpus_regression_cases")
     admitted = raw.get("newly_admitted_cases")
     errors = raw.get("infrastructure_errors")
-    if not isinstance(rows, list) or not isinstance(admitted, list) or not isinstance(errors, list):
+    if not all(isinstance(value, list) for value in (rows, regression_cases, admitted, errors)):
         raise TypeError("discovery-admission rows, new cases, and errors must be lists")
     if raw.get("candidate_count") != len(rows):
         raise ValueError("discovery-admission candidate_count does not match its rows")
-    row_ids: list[str] = []
-    for index, item in enumerate(rows):
-        row = _mapping(item, f"discovery-admission.rows[{index}]")
-        row_ids.append(_non_empty_string(row.get("candidate_id"), "discovery row candidate_id"))
-        _non_empty_string(row.get("case_id"), "discovery row case_id")
-        _mapping(row.get("gate"), "discovery row gate")
-        _mapping(row.get("admission"), "discovery row admission")
-    if len(row_ids) != len(set(row_ids)):
-        raise ValueError("discovery-admission candidate IDs must be unique")
-    for index, item in enumerate(admitted):
-        case = _mapping(item, f"newly_admitted_cases[{index}]")
-        _non_empty_string(case.get("case_id"), "newly admitted case ID")
-        _non_empty_string(case.get("candidate_id"), "newly admitted candidate ID")
-        _mapping(case.get("scenario"), "newly admitted scenario")
+    row_case_ids, row_new_case_ids = _validate_discovery_rows(rows)
+    regression_case_ids = _validate_regression_case_records(
+        regression_cases, field_name="corpus_regression_cases"
+    )
+    admitted_case_ids = _validate_regression_case_records(
+        admitted, field_name="newly_admitted_cases"
+    )
+    if not admitted_case_ids.issubset(regression_case_ids):
+        raise ValueError("newly admitted cases must also be available for regression")
+    if regression_case_ids != row_case_ids:
+        raise ValueError("corpus regression cases must match admitted and duplicate discovery rows")
+    if admitted_case_ids != row_new_case_ids:
+        raise ValueError("newly admitted cases must match newly admitted discovery rows")
     if (status == "complete") != (not errors):
         raise ValueError("discovery-admission status and infrastructure_errors disagree")
     return raw
@@ -1729,15 +1851,16 @@ def _record_completed_round(
         progress.plateau_rounds = 0
     else:
         progress.plateau_rounds += 1
-    newly_admitted = [
-        RegressionCase(
-            case_id=str(row["case_id"]),
-            origin_round=request.round_number,
-            candidate_id=str(row["candidate_id"]),
-            scenario=row.get("scenario"),
-            source_evidence=row.get("source_evidence"),
+    corpus_regression_cases = [
+        _parse_regression_case_record(
+            row,
+            field_name="completed round corpus regression case",
         )
-        for row in discovery["newly_admitted_cases"]
+        for row in discovery["corpus_regression_cases"]
+    ]
+    newly_admitted_case_ids = {str(case["case_id"]) for case in discovery["newly_admitted_cases"]}
+    newly_admitted = [
+        case for case in corpus_regression_cases if case.case_id in newly_admitted_case_ids
     ]
     progress.last_round_new_admissions = len(newly_admitted)
     round_state["status"] = "complete"
@@ -1760,9 +1883,54 @@ def _record_completed_round(
         "evaluated_regression_case_ids": list(request.regression_case_ids),
     }
     round_state["stop_decision"] = {"decision": "continue", "reason": "round_complete"}
+    known_case_positions = {
+        case.case_id: index for index, case in enumerate(progress.regression_cases)
+    }
+    for case in corpus_regression_cases:
+        position = known_case_positions.get(case.case_id)
+        if position is None:
+            known_case_positions[case.case_id] = len(progress.regression_cases)
+            progress.regression_cases.append(case)
+        else:
+            progress.regression_cases[position] = _merge_regression_case_provenance(
+                progress.regression_cases[position], case
+            )
     _write_manifests(config, manifest, round_state)
-    progress.regression_cases.extend(newly_admitted)
     return newly_admitted
+
+
+def _merge_regression_case_provenance(
+    existing: RegressionCase, canonical: RegressionCase
+) -> RegressionCase:
+    """Hydrate ID-only seeds from the corpus and reject conflicting identity metadata."""
+    if existing.case_id != canonical.case_id:
+        raise ValueError("cannot merge regression cases with different canonical IDs")
+    for field_name in ("origin_round", "candidate_id", "scenario"):
+        current = getattr(existing, field_name)
+        incoming = getattr(canonical, field_name)
+        if current is not None and incoming is not None:
+            same = (
+                _canonical_json(_deep_thaw(current)) == _canonical_json(_deep_thaw(incoming))
+                if field_name == "scenario"
+                else current == incoming
+            )
+            if not same:
+                raise ValueError(f"corpus regression {field_name} conflicts with existing memory")
+    return RegressionCase(
+        case_id=existing.case_id,
+        origin_round=(
+            existing.origin_round if existing.origin_round is not None else canonical.origin_round
+        ),
+        candidate_id=(
+            existing.candidate_id if existing.candidate_id is not None else canonical.candidate_id
+        ),
+        scenario=existing.scenario if existing.scenario is not None else canonical.scenario,
+        source_evidence=(
+            existing.source_evidence
+            if existing.source_evidence is not None
+            else canonical.source_evidence
+        ),
+    )
 
 
 def _round_stop_decision(
@@ -1871,9 +2039,29 @@ def _run_rounds(
             }
             _write_manifests(config, manifest, round_state)
             return manifest
-        new_cases = _record_completed_round(
-            config, manifest, request, round_state, phases, progress
-        )
+        try:
+            new_cases = _record_completed_round(
+                config, manifest, request, round_state, phases, progress
+            )
+        except (TypeError, ValueError) as exc:
+            round_state["status"] = "diagnostic"
+            round_state.pop("summary", None)
+            round_state["failure"] = {
+                "phase": "regression_case_carry",
+                "error": str(exc),
+            }
+            manifest["status"] = "diagnostic"
+            diagnostic_stop = {
+                "decision": "stop",
+                "reason": "infrastructure_failure",
+                "failed_phase": "regression_case_carry",
+                "round_number": round_number,
+                "claim_boundary": "No scientific conclusion is drawn from a conflicted regression-case identity.",
+            }
+            manifest["stop"] = diagnostic_stop
+            round_state["stop_decision"] = diagnostic_stop
+            _write_manifests(config, manifest, round_state)
+            return manifest
         stop = _round_stop_decision(config, round_number, new_cases, progress.plateau_rounds)
         if stop:
             _record_terminal_stop(config, manifest, round_state, stop)

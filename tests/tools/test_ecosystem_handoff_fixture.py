@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
+
+import pytest
 
 from scripts.tools import build_ecosystem_handoff_fixture as builder
 from scripts.tools import validate_ecosystem_handoff_fixture as validator
@@ -24,6 +27,28 @@ def _tree_bytes(root: Path) -> dict[str, bytes]:
 def test_checked_in_packet_and_negative_variants_validate() -> None:
     """The checked-in packet passes the standalone validator."""
     assert validator.validate_packet(PACKET) == 0
+
+
+def test_checked_in_packet_declares_the_current_fixture_version() -> None:
+    """The public fixture manifest and builder agree on the fixture version."""
+    manifest = builder._load_json(PACKET / "fixture_manifest.json")
+
+    assert manifest["fixture_version"] == builder.FIXTURE_VERSION
+
+
+def test_validator_rejects_mismatched_fixture_minor_version(tmp_path: Path) -> None:
+    """The standalone validator enforces the published fixture version."""
+    candidate = tmp_path / "packet"
+    shutil.copytree(PACKET, candidate)
+    manifest_path = candidate / "fixture_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["fixture_version"] = "1.0.0"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(validator.PacketValidationError) as exc_info:
+        validator._verify_fixture_manifest(candidate)
+
+    assert exc_info.value.reason_code == "fixture_identity"
 
 
 def test_generation_is_byte_identical_in_two_clean_directories(tmp_path: Path) -> None:

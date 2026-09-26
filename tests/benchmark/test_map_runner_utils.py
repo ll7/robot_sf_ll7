@@ -5695,6 +5695,8 @@ def test_camera_ready_roster_keys_reach_serialized_map_runner_rows(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Roster keys survive camera-ready dispatch and the production JSONL writer."""
+    from jsonschema import Draft202012Validator
+
     from robot_sf.benchmark.camera_ready._config_types import PlannerSpec
     from robot_sf.benchmark.camera_ready.campaign import (
         _CampaignPlannerMatrixContext,
@@ -5855,6 +5857,14 @@ def test_camera_ready_roster_keys_reach_serialized_map_runner_rows(
         "shared_config_alias_a",
         "shared_config_alias_b",
     ]
+    planner_key_schema = json.loads(
+        Path("robot_sf/benchmark/schemas/episode_planner_key.schema.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    planner_key_validator = Draft202012Validator(planner_key_schema)
+    assert all(planner_key_validator.is_valid(record["planner_key"]) for record in records)
+    assert not planner_key_validator.is_valid("")
     assert {record["algo"] for record in records} == {"hrvo"}
     assert len({record["config_hash"] for record in records}) == 1
 

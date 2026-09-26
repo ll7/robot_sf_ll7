@@ -178,8 +178,10 @@ effective identity on 47 of the 48 frozen scenarios; `classic_merging_low` is th
 where the v2 guard override distinguishes them. The preserved #6642 episode JSONL rows do not
 contain a planner-key carrier: camera-ready previously added the key only to in-memory
 annotations. New camera-ready map-runner episodes now serialize the exact roster `PlannerSpec.key`
-as an optional root `planner_key`, and the radius resolver continues to reject absent, conflicting,
-or mismatched keys when effective identities collide. This prospective producer fix does not
+as an optional root `planner_key`; its non-empty string value is a separately versioned additive
+ecosystem-contract capability so the pinned episode-v1 schema remains unchanged. The radius
+resolver continues to reject absent, conflicting, or mismatched keys when effective identities
+collide. This prospective producer fix does not
 rewrite or authenticate the consumed #6642 rows; it is an identity-provenance gap, not a claim that
 their measured outcomes are invalid. Recovering independent authoritative row-level keys or
 producing new episodes is still required before the preserved ambiguous rows can enter a Gate 3

@@ -62,6 +62,19 @@ from robot_sf.benchmark.constants import (
     NEAR_MISS_DIST as D_NEAR,
 )
 from robot_sf.benchmark.group_space_metrics import compute_group_space_metrics
+from robot_sf.benchmark.robot_force_contract import (
+    ROBOT_FORCE_POSTHOC_SOURCE,
+    ROBOT_FORCE_QUANTITY,
+    ROBOT_FORCE_RECORDED_SOURCE,
+    ROBOT_FORCE_SAMPLE_TIMING,
+)
+from robot_sf.benchmark.robot_force_kernel import (
+    ROBOT_FORCE_REFERENCE_RULE,
+    robot_force_reference,
+)
+from robot_sf.benchmark.robot_force_kernel import (
+    pedestrian_pair_force as _pedestrian_pair_force,
+)
 from robot_sf.benchmark.signal_metrics import calculate_signal_metrics
 from robot_sf.benchmark.social_compliance import build_social_compliance_episode_block
 from robot_sf.common.math_utils import wrap_angle_pi_array
@@ -140,9 +153,6 @@ class EpisodeData:
     robot_force_samples: list[dict[str, Any]] | None = None
 
 
-ROBOT_FORCE_REFERENCE_RULE = "social_force_head_on_contact_relative_speed_1m_s_v1"
-
-
 def recompute_robot_ped_forces(data: EpisodeData, cfg: dict[str, Any]) -> np.ndarray:
     """Evaluate inverse-cubic robot repulsion from aligned positions, without a simulator.
 
@@ -168,49 +178,6 @@ def recompute_robot_ped_forces(data: EpisodeData, cfg: dict[str, Any]) -> np.nda
     if "response_multipliers" in cfg:
         out *= np.asarray(cfg["response_multipliers"])[..., None]
     return out
-
-
-def _pedestrian_pair_force(
-    delta: np.ndarray, relative_velocity: np.ndarray, cfg: dict
-) -> np.ndarray:
-    """Evaluate the repository's SocialForce pair kernel including its lateral term.
-
-    Returns:
-        Computed model quantity with the declared configuration.
-    """
-    distance = np.linalg.norm(delta, axis=-1)
-    direction = np.divide(
-        delta, distance[..., None], out=np.zeros_like(delta), where=distance[..., None] > 0
-    )
-    interaction = cfg["lambda_importance"] * relative_velocity + direction
-    length = np.linalg.norm(interaction, axis=-1)
-    unit = np.divide(
-        interaction, length[..., None], out=np.zeros_like(delta), where=length[..., None] > 0
-    )
-    theta = np.arctan2(unit[..., 1], unit[..., 0]) - np.arctan2(
-        direction[..., 1], direction[..., 0]
-    )
-    scale = cfg["gamma"] * length + 1e-8
-    along = np.exp(-distance / scale - (cfg["n_prime"] * scale * theta) ** 2)
-    lateral = -np.where(theta >= 0, 1, -1) * np.exp(
-        -distance / scale - (cfg["n"] * scale * theta) ** 2
-    )
-    normal = np.stack((-unit[..., 1], unit[..., 0]), axis=-1)
-    result = cfg["factor"] * (unit * along[..., None] + normal * lateral[..., None])
-    return np.where((distance <= cfg["activation_threshold"])[..., None], result, 0.0)
-
-
-def robot_force_reference(cfg: dict, ped_radius_m: float) -> float:
-    """Resolve full SocialForce magnitude at contact and 1 m/s head-on closing speed.
-
-    Returns:
-        Computed model quantity with the declared configuration.
-    """
-    return float(
-        np.linalg.norm(
-            _pedestrian_pair_force(np.array([2 * ped_radius_m, 0.0]), np.array([1.0, 0.0]), cfg)
-        )
-    )
 
 
 def robot_force_reductions(
@@ -319,15 +286,16 @@ def robot_force_metrics(data: EpisodeData) -> dict[str, Any]:
     result = robot_force_reductions(forces, dt=data.dt, reference=reference)
     result["robot_force_metadata"] = {
         **cfg,
+        "source": ROBOT_FORCE_RECORDED_SOURCE,
         "social_force_config": data.social_force_config,
         "reference_rule": ROBOT_FORCE_REFERENCE_RULE,
         "reference_m_s2": reference,
-        "quantity": "model acceleration, not measured human discomfort",
-        "sample_timing": "pre_integration",
+        "quantity": ROBOT_FORCE_QUANTITY,
+        "sample_timing": ROBOT_FORCE_SAMPLE_TIMING,
     }
     if posthoc:
         result["robot_force_metadata"].update(
-            source="posthoc_recomputed",
+            source=ROBOT_FORCE_POSTHOC_SOURCE,
             sample_timing="caller_supplied_positions_may_be_post_integration",
         )
     if data.robot_force_samples and len(data.robot_force_samples) > 1 and cfg["prf_active"]:

@@ -76,6 +76,8 @@ PROFILE_IMPORTS = frozenset(
         # Dev group (pytest runs the lane).
         "pytest",
         "pytest_cov",
+        "hypothesis",
+        "sortedcontainers",
     }
 )
 

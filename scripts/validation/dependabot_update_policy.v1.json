@@ -110,6 +110,7 @@
       "update_lane": "developer-tooling",
       "packages": [
         "black",
+        "hypothesis",
         "isort",
         "jupyter",
         "myst-parser",

@@ -111,6 +111,11 @@ def test_posthoc_requires_both_explicit_configs(missing):
 
 
 def test_recorded_force_path_keeps_metadata_and_ignores_snapshot_geometry():
+    import json
+    from pathlib import Path
+
+    from jsonschema import validate
+
     data = _data([[[0.0, 0.0]]])  # Recomputing this singular snapshot would raise.
     data.robot_force_config = CFG
     data.social_force_config = asdict(SocialForceConfig())
@@ -118,7 +123,14 @@ def test_recorded_force_path_keeps_metadata_and_ignores_snapshot_geometry():
     result = robot_force_metrics(data)
     assert result["robot_force_peak"] == 1.25
     assert result["robot_force_metadata"]["sample_timing"] == "pre_integration"
-    assert "source" not in result["robot_force_metadata"]
+    assert result["robot_force_metadata"]["source"] == ("recorded_robot_pedestrian_social_force")
+    schema = json.loads(
+        (
+            Path(__file__).parents[2] / "robot_sf/benchmark/schemas/episode.schema.v1.json"
+        ).read_text()
+    )
+    validate(result, schema["properties"]["metrics"])
+    json.dumps(result, allow_nan=False)
 
 
 def test_simulator_capture_recomputes_and_preserves_dynamics():

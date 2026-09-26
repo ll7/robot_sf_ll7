@@ -249,6 +249,8 @@
     "result_provenance.py",
     "risk_layer_ablation.py",
     "rl_trajectory_dataset.py",
+    "robot_force_contract.py",
+    "robot_force_kernel.py",
     "robustness_delta.py",
     "route_choice_observability.py",
     "run_config_provenance.py",

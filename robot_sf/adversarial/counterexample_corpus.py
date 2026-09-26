@@ -1451,25 +1451,27 @@ def _validate_admitted_historical_candidate(
         or provenance.get("source_identity_binding_status") != "verified"
     ):
         raise CorpusError("admitted historical candidate source identity is not verified")
-    if (
-        expected_schema != LEGACY_HISTORICAL_CANDIDATE_SCHEMA_VERSION
-        or source_identity.get("source_issue") != 9656
-    ):
+    if source_identity.get("source_issue") != 9656:
+        _validate_promoted_historical_candidate(candidate, cases_by_id, attempts_by_id)
         return
     if corpus_root is None:
-        raise CorpusError("corpus_root is required to validate admitted legacy #9656 candidates")
-    _validate_admitted_legacy_issue9656_source_binding(
-        candidate, source_identity, corpus, corpus_root
-    )
-    source_candidate = copy.deepcopy(dict(candidate))
-    source_candidate["candidate_status"] = "pending_exact_replay"
-    source_blockers = _historical_candidate_source_blockers(source_candidate, corpus, corpus_root)
-    if source_blockers:
-        raise CorpusError(
-            "admitted legacy #9656 candidate source evidence is invalid: "
-            + "; ".join(source_blockers)
+        raise CorpusError("corpus_root is required to validate admitted #9656 candidates")
+    if expected_schema == LEGACY_HISTORICAL_CANDIDATE_SCHEMA_VERSION:
+        _validate_admitted_legacy_issue9656_source_binding(
+            candidate, source_identity, corpus, corpus_root
         )
     _validate_promoted_historical_candidate(candidate, cases_by_id, attempts_by_id)
+    promoted_case = cases_by_id[candidate.get("promoted_case_id")]
+    source_candidate = copy.deepcopy(dict(candidate))
+    source_candidate["candidate_status"] = "pending_exact_replay"
+    promotion_blockers = _historical_candidate_promotion_blockers(
+        source_candidate, promoted_case, corpus_root, corpus=corpus
+    )
+    if promotion_blockers:
+        raise CorpusError(
+            "admitted #9656 candidate promotion evidence is invalid: "
+            + "; ".join(promotion_blockers)
+        )
 
 
 def _validate_admitted_legacy_issue9656_source_binding(
@@ -1623,16 +1625,6 @@ def _validate_promoted_historical_candidate(
     target_revision = (
         replay_receipt.get("target_revision") if isinstance(replay_receipt, Mapping) else None
     )
-    has_case_binding_evidence = any(
-        isinstance(record, Mapping)
-        and isinstance((promotion := record.get("historical_candidate_promotion")), Mapping)
-        and isinstance(promotion.get("historical_candidate_binding"), Mapping)
-        and all(
-            promotion["historical_candidate_binding"].get(key) == value
-            for key, value in expected_binding.items()
-        )
-        for record in evidence_records
-    )
     has_promotion_evidence = any(
         isinstance(record, Mapping)
         and isinstance((promotion := record.get("historical_candidate_promotion")), Mapping)
@@ -1655,11 +1647,38 @@ def _validate_promoted_historical_candidate(
         and promotion.get("admission_replay_revision") == replay_revision
         for record in evidence_records
     )
-    has_case_binding = isinstance(case_binding, Mapping) or has_case_binding_evidence
+    has_case_binding = _case_record_binds_historical_candidate(case, expected_binding)
     if not has_case_binding:
         raise CorpusError("promoted case has no historical-candidate binding")
     if not has_promotion_evidence:
         raise CorpusError("promoted case evidence does not bind this historical candidate")
+
+
+def _case_record_binds_historical_candidate(
+    case: Mapping[str, Any], expected_binding: Mapping[str, Any]
+) -> bool:
+    discovery = case.get("discovery")
+    discovery_binding = (
+        discovery.get("historical_candidate_binding") if isinstance(discovery, Mapping) else None
+    )
+    if isinstance(discovery_binding, Mapping):
+        return all(discovery_binding.get(key) == value for key, value in expected_binding.items())
+    evidence_records = [case.get("source_evidence")]
+    supporting_evidence = case.get("supporting_source_evidence", [])
+    if isinstance(supporting_evidence, Sequence) and not isinstance(
+        supporting_evidence, (str, bytes)
+    ):
+        evidence_records.extend(supporting_evidence)
+    return any(
+        isinstance(record, Mapping)
+        and isinstance((promotion := record.get("historical_candidate_promotion")), Mapping)
+        and isinstance(promotion.get("historical_candidate_binding"), Mapping)
+        and all(
+            promotion["historical_candidate_binding"].get(key) == value
+            for key, value in expected_binding.items()
+        )
+        for record in evidence_records
+    )
 
 
 def _normalize_legacy_issue9656_candidates_for_read(corpus: Any) -> None:
@@ -2361,8 +2380,6 @@ def _historical_candidate_promotion_blockers(
     blockers.extend(_historical_candidate_source_blockers(candidate, corpus, corpus_root))
     if not isinstance(case_record, Mapping):
         return [*blockers, "completed_case_record_missing"]
-    discovery = case_record.get("discovery")
-    binding = discovery.get("historical_candidate_binding") if isinstance(discovery, dict) else None
     expected_binding = {
         "candidate_id": candidate.get("candidate_id"),
         "source_issue": 9656,
@@ -2370,9 +2387,7 @@ def _historical_candidate_promotion_blockers(
         "source_record_sha256": candidate.get("source_record_sha256"),
         "source_replay_status": candidate.get("source_replay_status"),
     }
-    if not isinstance(binding, dict) or any(
-        binding.get(key) != value for key, value in expected_binding.items()
-    ):
+    if not _case_record_binds_historical_candidate(case_record, expected_binding):
         blockers.append("case_record_does_not_bind_historical_candidate")
     target = case_record.get("target_planner")
     target = target if isinstance(target, dict) else {}

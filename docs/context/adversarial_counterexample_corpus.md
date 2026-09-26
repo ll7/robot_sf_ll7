@@ -143,7 +143,8 @@ when source identity is recomputed from its retained summary and materialized
 case, retained source artifacts validate, its promotion attempt recomputes to a
 successful receipt whose decision matches its case link and retained promotion
 evidence, and the promoted case carries both the matching candidate binding and
-candidate-promotion evidence.
+candidate-promotion evidence. The candidate's replay scenario, planner
+configuration, and map bytes are rechecked against the promoted case.
 An unrelated valid case cannot supply promotion evidence for a downgraded
 candidate.
 

@@ -1692,6 +1692,71 @@ def test_issue9652_v1_downgrade_cannot_forge_admission_to_unrelated_case(
         load_corpus(corpus_path)
 
 
+def test_issue9652_v1_candidate_cannot_use_fabricated_binding_to_unrelated_case(
+    tmp_path: Path,
+) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
+        tmp_path, statuses=("not_attempted",)
+    )
+    corpus_root = tmp_path / "corpus"
+    corpus, _receipt = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=corpus_root,
+    )
+    corpus, pilot = import_issue9645_packet(_SOURCE_PACKET, corpus, corpus_root=corpus_root)
+    tampered = copy.deepcopy(corpus)
+    _rekey_issue9656_import_as_legacy_v1(tampered, corpus_root, version_field="explicit_v1")
+    candidate = tampered["historical_candidates"][0]
+    candidate["source_candidate_status"] = "pending_exact_replay"
+    candidate["candidate_status"] = "admitted"
+    candidate["promoted_case_id"] = pilot["case_id"]
+    case = next(item for item in tampered["cases"] if item["case_id"] == pilot["case_id"])
+    binding = {
+        "candidate_id": candidate["candidate_id"],
+        "source_issue": 9656,
+        "source_case_id": candidate["source_case_id"],
+        "source_record_sha256": candidate["source_record_sha256"],
+        "source_replay_status": candidate["source_replay_status"],
+    }
+    case["discovery"]["historical_candidate_binding"] = binding
+    replay_revision = case["replay_receipt"]["replay_revision"]
+    case.setdefault("supporting_source_evidence", []).append(
+        {
+            "historical_candidate_promotion": {
+                "candidate_id": candidate["candidate_id"],
+                "historical_candidate_binding": binding,
+                "admission_decision": "duplicate",
+                "source_replay_status": candidate["source_replay_status"],
+                "raw_episode_artifact_custody": "digest_only_not_copied_from_campaign_output",
+                "raw_episode_artifact_used_as_admission_evidence": False,
+                "local_ignored_output_used_as_admission_evidence": False,
+                "admission_replay_matches_target_revision": True,
+                "admission_replay_revision": replay_revision,
+            }
+        }
+    )
+    tampered, attempt = counterexample_corpus._record_attempt(
+        tampered,
+        source_kind="issue_9656_historical_candidate",
+        source_id=candidate["candidate_id"],
+        decision="duplicate",
+        blockers=[],
+        candidate_identity=case["effective_scenario_sha256"],
+        duplicate_case_id=case["case_id"],
+        near_duplicate_report=counterexample_corpus._unassessed_near_duplicates(),
+    )
+    candidate["promotion_attempt_id"] = attempt["attempt_id"]
+
+    corpus_path = corpus_root / "corpus.json"
+    corpus_path.write_text(json.dumps(tampered, sort_keys=True), encoding="utf-8")
+    with pytest.raises(CorpusError, match="case_record_scenario_or_planner_differs_from_candidate"):
+        load_corpus(corpus_path)
+
+
 def test_issue9652_properly_promoted_legacy_v1_candidate_remains_readable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

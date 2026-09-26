@@ -20,6 +20,9 @@ from typing import Any
 import numpy as np
 
 FROZEN_SOURCE = "07f7e8d43084de748915e1b1eb8b2a1603357c6e"
+FROZEN_SOURCE_TREE_OID = "3771a78a019823b816cca27a625ec6f29fe93d22"
+SOURCE_STATE_SCHEMA = "issue-9671-frozen-source-state.v1"
+EMPTY_STATUS_SHA256 = hashlib.sha256(b"").hexdigest()
 FORCE_FILE = "robot_sf/ped_npc/ped_robot_force.py"
 SIM_FILE = "robot_sf/sim/simulator.py"
 RUNNER_FILE = "robot_sf/benchmark/map_runner/map_runner_episode.py"
@@ -38,6 +41,40 @@ FORCE_LINES = {"Simulator": 1699, "PedSimulator": 2087}
 
 class ObserverIdentityError(RuntimeError):
     """A force slot cannot be bound to a stable trace actor."""
+
+
+def _frozen_source_state(source: Path) -> dict[str, Any]:
+    """Return a receipt only when the complete source checkout is clean and pinned."""
+    head = subprocess.check_output(
+        ["git", "-C", str(source), "rev-parse", "HEAD"], text=True
+    ).strip()
+    if head != FROZEN_SOURCE:
+        raise ObserverIdentityError("frozen source commit mismatch")
+    status = subprocess.check_output(
+        ["git", "-C", str(source), "status", "--porcelain=v1", "--untracked-files=all"],
+        text=True,
+    )
+    if status:
+        raise ObserverIdentityError("frozen source worktree is not clean")
+    tree_oid = subprocess.check_output(
+        ["git", "-C", str(source), "rev-parse", "HEAD^{tree}"], text=True
+    ).strip()
+    if tree_oid != FROZEN_SOURCE_TREE_OID:
+        raise ObserverIdentityError("frozen source tree identity mismatch")
+    return {
+        "source_state_schema": SOURCE_STATE_SCHEMA,
+        "frozen_source_commit": head,
+        "frozen_source_tree_oid": tree_oid,
+        "frozen_source_worktree_clean": True,
+        "frozen_source_worktree_status_sha256": hashlib.sha256(status.encode()).hexdigest(),
+    }
+
+
+def _recheck_frozen_source_state(source: Path, expected: dict[str, Any]) -> None:
+    """Fail if the frozen checkout changed between observer startup and an episode boundary."""
+    current = _frozen_source_state(source)
+    if current != {key: expected.get(key) for key in current}:
+        raise ObserverIdentityError("frozen source state changed during observer run")
 
 
 def _compiled_target_codes(source_root: Path, relative_path: str) -> dict[str, CodeType]:
@@ -228,6 +265,8 @@ class ForceObserver:
         if event == "call":
             if self.episode is not None:
                 raise ObserverIdentityError("nested episode")
+            if self.provenance.get("source_state_schema") == SOURCE_STATE_SCHEMA:
+                _recheck_frozen_source_state(self.source_root, self.provenance)
             self.episode = {
                 "seed": frame.f_locals["seed"],
                 "algo": frame.f_locals["algo"],
@@ -241,6 +280,8 @@ class ForceObserver:
             }
             self.component_object_ids = None
         elif event == "return" and self.episode is not None:
+            if self.provenance.get("source_state_schema") == SOURCE_STATE_SCHEMA:
+                _recheck_frozen_source_state(self.source_root, self.provenance)
             if not isinstance(arg, dict):
                 raise ObserverIdentityError("episode returned without a record")
             if self.step is not None:
@@ -367,16 +408,7 @@ def install_from_environment() -> ForceObserver | None:
     if actual != expected:
         raise ObserverIdentityError("observer byte hash mismatch")
     source = Path(os.environ["ISSUE9671_FROZEN_SOURCE_ROOT"]).resolve(strict=True)
-    head = subprocess.check_output(
-        ["git", "-C", str(source), "rev-parse", "HEAD"], text=True
-    ).strip()
-    if head != FROZEN_SOURCE:
-        raise ObserverIdentityError("frozen source commit mismatch")
-    if subprocess.check_output(
-        ["git", "-C", str(source), "status", "--porcelain", "--untracked-files=no"],
-        text=True,
-    ).strip():
-        raise ObserverIdentityError("frozen source tracked files are dirty")
+    source_state = _frozen_source_state(source)
     source_hashes = {}
     expected_codes = {}
     for relative_path in SOURCE_MODULES:
@@ -394,7 +426,7 @@ def install_from_environment() -> ForceObserver | None:
         raise ObserverIdentityError("diagnostic config byte hash mismatch")
     provenance = {
         "observer_sha256": actual,
-        "frozen_source_commit": head,
+        **source_state,
         "frozen_source_file_sha256": source_hashes,
         "diagnostic_config_sha256": config_sha,
         "campaign_id": os.environ["ISSUE9671_CAMPAIGN_ID"],

@@ -168,7 +168,12 @@ def _validate_sidecar(  # noqa: C901, PLR0912, PLR0915 - independent custody ass
         or sidecar.get("algorithm") != row.get("algo")
         or sidecar.get("episode_record_canonical_sha256") != _canonical_row_sha(row)
         or sidecar.get("actor_ids") != actors
+        or provenance.get("source_state_schema") != trace_checker.SOURCE_STATE_SCHEMA
         or provenance.get("frozen_source_commit") != trace_checker.SOURCE_SHA
+        or provenance.get("frozen_source_tree_oid") != trace_checker.FROZEN_SOURCE_TREE_OID
+        or provenance.get("frozen_source_worktree_clean") is not True
+        or provenance.get("frozen_source_worktree_status_sha256")
+        != trace_checker.EMPTY_STATUS_SHA256
         or provenance.get("frozen_source_file_sha256") != FROZEN_SOURCE_FILE_SHA256
         or provenance.get("diagnostic_config_sha256") != config_sha256
         or provenance.get("observer_sha256") != observer_sha256
@@ -356,7 +361,12 @@ def build_manifest(  # noqa: C901, PLR0912, PLR0915 - custody gate checks disjoi
         expected_config_sha256=expected_config_sha256,
         expected_effective_hash=expected_effective_hash,
         expected_campaign_ids=campaign_ids,
+        observer_sidecar_dirs=[Path(item["sidecar_dir"]) for item in campaigns.values()],
     )
+    if release_report.get("source_state_validation") != "verified" or not release_report.get(
+        "observer_sidecars_sha256"
+    ):
+        raise ValueError("trace comparison source-state receipt was not verified")
     if (
         release_report["release_archive_sha256"] != _sha(archive)
         or set(release_report["trace_inputs_sha256"]) != {str(path) for path in trace_paths}
@@ -422,6 +432,7 @@ def build_manifest(  # noqa: C901, PLR0912, PLR0915 - custody gate checks disjoi
                 config_sha256=release_report["diagnostic_inputs"][name]["config_sha256"],
                 observer_sha256=observer_sha,
             )
+            source_state = sidecar["observer_provenance"]
             label = _label(name, path, manifests[name].parent)
             sidecar_hashes[label] = _sha(path)
             receipt_rows.append(
@@ -437,6 +448,9 @@ def build_manifest(  # noqa: C901, PLR0912, PLR0915 - custody gate checks disjoi
                     "actor_count": len(sidecar["actor_ids"]),
                     "campaign_id": item["campaign_id"],
                     "job_id": job_id,
+                    "source_tree_oid": source_state["frozen_source_tree_oid"],
+                    "source_worktree_clean": source_state["frozen_source_worktree_clean"],
+                    "source_status_sha256": source_state["frozen_source_worktree_status_sha256"],
                 }
             )
     differences = []
@@ -480,6 +494,9 @@ def build_manifest(  # noqa: C901, PLR0912, PLR0915 - custody gate checks disjoi
     return {
         "schema_version": SCHEMA,
         "frozen_source_commit": trace_checker.SOURCE_SHA,
+        "frozen_source_tree_oid": trace_checker.FROZEN_SOURCE_TREE_OID,
+        "frozen_source_worktree_clean": True,
+        "source_state_validation": release_report["source_state_validation"],
         "release_archive_sha256": release_report["release_archive_sha256"],
         "baseline_report_sha256": baseline_sha,
         "baseline_comparison_counts": baseline["comparison_counts"],

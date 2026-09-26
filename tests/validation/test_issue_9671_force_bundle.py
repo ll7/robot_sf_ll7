@@ -202,7 +202,11 @@ def _fixture(
     }
     sidecar = observer.bind_episode(_capture(row), row)
     sidecar["observer_provenance"] = {
+        "source_state_schema": bundle.trace_checker.SOURCE_STATE_SCHEMA,
         "frozen_source_commit": bundle.trace_checker.SOURCE_SHA,
+        "frozen_source_tree_oid": bundle.trace_checker.FROZEN_SOURCE_TREE_OID,
+        "frozen_source_worktree_clean": True,
+        "frozen_source_worktree_status_sha256": bundle.trace_checker.EMPTY_STATUS_SHA256,
         "frozen_source_file_sha256": bundle.FROZEN_SOURCE_FILE_SHA256,
         "diagnostic_config_sha256": _sha(Path(campaign_items["headon_group"]["config"])),
         "observer_sha256": spec["observer_sha256"],
@@ -229,6 +233,8 @@ def _fixture(
         "release_archive_sha256": _sha(archive),
         "trace_inputs_sha256": {str(new_raw): _sha(new_raw)},
         "producer_manifests_sha256": {str(producer_path): _sha(producer_path)},
+        "source_state_validation": "verified",
+        "observer_sidecars_sha256": {str(sidecar_path): _sha(sidecar_path)},
         "comparisons": [
             {
                 "planner": "ppo",
@@ -329,7 +335,19 @@ def test_manifest_survives_cold_tree_relocation(
 
 
 @pytest.mark.parametrize(
-    "mutation", ["missing", "extra", "nested_extra", "force_missing", "wrong_job", "wrong_row_hash"]
+    "mutation",
+    [
+        "missing",
+        "extra",
+        "nested_extra",
+        "force_missing",
+        "wrong_job",
+        "wrong_row_hash",
+        "wrong_source_tree",
+        "dirty_source",
+        "wrong_status_digest",
+        "missing_source_state",
+    ],
 )
 def test_rejects_sidecar_inventory_and_identity_mutations(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutation: str
@@ -349,8 +367,16 @@ def test_rejects_sidecar_inventory_and_identity_mutations(
             del data["steps"][0]["robot_forces"]
         elif mutation == "wrong_job":
             data["observer_provenance"]["job_id"] = "999"
-        else:
+        elif mutation == "wrong_row_hash":
             data["episode_record_canonical_sha256"] = "0" * 64
+        elif mutation == "wrong_source_tree":
+            data["observer_provenance"]["frozen_source_tree_oid"] = "0" * 40
+        elif mutation == "dirty_source":
+            data["observer_provenance"]["frozen_source_worktree_clean"] = False
+        elif mutation == "missing_source_state":
+            del data["observer_provenance"]["frozen_source_worktree_clean"]
+        else:
+            data["observer_provenance"]["frozen_source_worktree_status_sha256"] = "0" * 64
         sidecar.write_text(json.dumps(data))
     with pytest.raises(ValueError):
         _build(spec)
@@ -375,6 +401,23 @@ def test_rejects_slurm_startup_job_mismatch(
     startup["identities"]["job_id"] = "999"
     path.write_text(json.dumps(startup))
     with pytest.raises(ValueError, match="Slurm startup identity"):
+        _build(spec)
+
+
+def test_source_state_validation_is_required_for_bundle_admission(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec, _, _ = _fixture(tmp_path, monkeypatch)
+    checked_report = bundle.trace_checker.check
+
+    def missing_source_state(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        report = checked_report(*args, **kwargs)
+        report["source_state_validation"] = "not_supplied"
+        return report
+
+    monkeypatch.setattr(bundle.trace_checker, "check", missing_source_state)
+
+    with pytest.raises(ValueError, match="source-state receipt was not verified"):
         _build(spec)
 
 

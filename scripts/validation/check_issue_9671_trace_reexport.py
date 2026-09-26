@@ -22,6 +22,9 @@ from robot_sf.benchmark.termination_reason import TERMINATION_REASONS, outcome_c
 from robot_sf.benchmark.utils import _config_hash
 
 SOURCE_SHA = "07f7e8d43084de748915e1b1eb8b2a1603357c6e"
+FROZEN_SOURCE_TREE_OID = "3771a78a019823b816cca27a625ec6f29fe93d22"
+SOURCE_STATE_SCHEMA = "issue-9671-frozen-source-state.v1"
+EMPTY_STATUS_SHA256 = hashlib.sha256(b"").hexdigest()
 ARCHIVE_SHA256 = "684da7c557c426756f22ddbf5cb3270141ee8ae385669a39d36f324852a6fb2f"
 TRACE_KEYS = ("record_forces", "record_planner_decision_trace", "record_simulation_step_trace")
 CONFIG_SHA256 = {
@@ -311,6 +314,68 @@ def _validate_producer_manifest(
     return hashlib.sha256(sidecar_path.read_bytes()).hexdigest()
 
 
+def _canonical_row_sha(row: dict[str, Any]) -> str:
+    return hashlib.sha256(
+        json.dumps(row, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+
+
+def _validate_observer_source_state(
+    sidecar: dict[str, Any], row: dict[str, Any], binding: dict[str, Any], observer_sha256: str
+) -> None:
+    """Bind a trace row to the observer's recorded clean frozen-checkout state."""
+    provenance = sidecar.get("observer_provenance") or {}
+    if (
+        sidecar.get("episode_id") != row.get("episode_id")
+        or sidecar.get("episode_record_canonical_sha256") != _canonical_row_sha(row)
+        or provenance.get("source_state_schema") != SOURCE_STATE_SCHEMA
+        or provenance.get("frozen_source_commit") != SOURCE_SHA
+        or provenance.get("frozen_source_tree_oid") != FROZEN_SOURCE_TREE_OID
+        or provenance.get("frozen_source_worktree_clean") is not True
+        or provenance.get("frozen_source_worktree_status_sha256") != EMPTY_STATUS_SHA256
+        or provenance.get("diagnostic_config_sha256") != binding["config_sha256"]
+        or provenance.get("campaign_id") != binding["campaign_id"]
+        or provenance.get("observer_sha256") != observer_sha256
+        or not isinstance(provenance.get("job_id"), str)
+        or not provenance["job_id"].isdigit()
+        or not isinstance(provenance.get("pid"), str)
+        or not provenance["pid"].isdigit()
+    ):
+        raise ValueError(f"observer source-state receipt mismatch: {row.get('episode_id')}")
+
+
+def _validate_observer_sidecar_dirs(
+    directories: list[Path],
+    rows: dict[tuple[str, str, int], dict[str, Any]],
+    bindings: dict[str, Any],
+) -> dict[str, str]:
+    """Require exactly one source-state sidecar per trace row when directories are supplied."""
+    sidecars: dict[str, dict[str, Any]] = {}
+    digests: dict[str, str] = {}
+    for directory in directories:
+        for path in sorted(directory.rglob("*.robot-force.json")):
+            sidecar = json.loads(path.read_text())
+            episode_id = sidecar.get("episode_id")
+            if not isinstance(episode_id, str) or episode_id in sidecars:
+                raise ValueError(f"duplicate or missing observer episode identity: {path}")
+            sidecars[episode_id] = sidecar
+            digests[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
+    rows_by_id = {row.get("episode_id"): (key, row) for key, row in rows.items()}
+    if len(rows_by_id) != len(rows) or set(sidecars) != set(rows_by_id):
+        raise ValueError("observer sidecar inventory does not match trace episode inventory")
+    observer_sha256 = hashlib.sha256(
+        Path(__file__).with_name("issue_9671_force_observer_sitecustomize.py").read_bytes()
+    ).hexdigest()
+    bindings_by_tuple = {key: binding for binding in bindings.values() for key in binding["tuples"]}
+    for episode_id, sidecar in sidecars.items():
+        key, row = rows_by_id[episode_id]
+        binding = bindings_by_tuple.get(key)
+        if binding is None:
+            raise ValueError(f"observer tuple has no diagnostic binding: {key}")
+        _validate_observer_source_state(sidecar, row, binding, observer_sha256)
+    return digests
+
+
 def _vector2(value: Any) -> bool:
     return (
         isinstance(value, list)
@@ -532,6 +597,7 @@ def check(  # noqa: PLR0913 - separately pinned campaign IDs are required for ob
     expected_config_sha256: dict[str, str] | None = None,
     expected_effective_hash: dict[str, str] | None = None,
     expected_campaign_ids: dict[str, str] | None = None,
+    observer_sidecar_dirs: list[Path] | None = None,
 ) -> dict[str, Any]:
     """Return every outcome comparison, including absent release rows."""
     archive_sha256 = hashlib.sha256(archive.read_bytes()).hexdigest()
@@ -566,6 +632,11 @@ def check(  # noqa: PLR0913 - separately pinned campaign IDs are required for ob
             f"trace tuple inventory mismatch: missing={sorted(required - set(trace_rows))}; "
             f"extra={sorted(set(trace_rows) - required)}"
         )
+    observer_sidecar_digests = (
+        _validate_observer_sidecar_dirs(observer_sidecar_dirs, trace_rows, bindings)
+        if observer_sidecar_dirs is not None
+        else {}
+    )
     release = _release_rows(archive, {key[0] for key in trace_rows})
     missing_paired_rows = sorted((PAIRED_RELEASE_TUPLES & required) - set(release))
     if missing_paired_rows:
@@ -596,6 +667,10 @@ def check(  # noqa: PLR0913 - separately pinned campaign IDs are required for ob
         "diagnostic_inputs": bindings,
         "trace_inputs_sha256": digests,
         "producer_manifests_sha256": producer_digests,
+        "source_state_validation": (
+            "verified" if observer_sidecar_dirs is not None else "not_supplied"
+        ),
+        "observer_sidecars_sha256": observer_sidecar_digests,
         "comparisons": comparisons,
         "comparison_counts": counts,
     }
@@ -610,6 +685,7 @@ def main() -> int:
     parser.add_argument("--doorway-config", required=True, type=Path)
     parser.add_argument("--headon-manifest", required=True, type=Path)
     parser.add_argument("--doorway-manifest", required=True, type=Path)
+    parser.add_argument("--robot-force-sidecar-dirs", type=Path, nargs="+")
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     report = check(
@@ -617,6 +693,7 @@ def main() -> int:
         args.traces,
         {"headon_group": args.headon_config, "doorway": args.doorway_config},
         {"headon_group": args.headon_manifest, "doorway": args.doorway_manifest},
+        observer_sidecar_dirs=args.robot_force_sidecar_dirs,
     )
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     return 2 if report["comparison_counts"]["mismatch"] else 0

@@ -49,9 +49,10 @@ receipt, producer checksums, result-root path, and cold-readback receipt. Preser
 and logs in durable artifact storage outside Git.
 
 After collection, run `scripts/validation/check_issue_9671_trace_reexport.py` with the exact
-archive, all four episode JSONL files, both diagnostic config files, and both produced
-`campaign_manifest.json` files. The validator accepts the absolute staged config paths recorded by
-those manifests, so the clean checkout can live under any host path. Retain each runner-produced
+archive, all four episode JSONL files, both diagnostic config files, both produced
+`campaign_manifest.json` files, and both robot-force sidecar directories. The validator accepts
+the absolute staged config paths recorded by those manifests, so the clean checkout can live under
+any host path. Retain each runner-produced
 `episodes.jsonl.provenance.json` beside its JSONL: the comparator checks its whole-file checksum,
 every row's line, episode, scenario, seed, source, and scenario-parameter hash, then binds the
 producer file to the matching diagnostic campaign directory. The producer's per-arm scenario
@@ -183,7 +184,10 @@ diagnostic artifact, not an original 0.0.7 release field.
 1. Stage the observer from a reviewed commit under ignored `output/`, verify its SHA-256, and
    load it through an explicitly named `sitecustomize` path in the private Slurm packet. Require
    one in-process worker, matching these configs; write one PID-scoped capture stream. Register
-   both `sys.settrace` and `threading.settrace` at startup. A later thread that enters
+   both `sys.settrace` and `threading.settrace` at startup. Record the pinned Git tree object ID
+   and a clean `git status --porcelain=v1 --untracked-files=all` receipt at startup and each
+   episode boundary; the receipt is embedded in each observer sidecar and required by both
+   validators. A later thread that enters
    `run_map_episode` is observed and rejected before its body executes; a fork with the inherited
    observer is also rejected by PID. At installation, verify the three traced source files
    byte-for-byte against pinned commit `07f7e8d`; on each traced call, require the code filename,
@@ -218,7 +222,8 @@ diagnostic artifact, not an original 0.0.7 release field.
    an episode if behavior changes positions before force evaluation, or if two actors occupy
    identical positions; such a row needs a new identity method before force attribution.
 4. Keep the runner's raw JSONL and producer manifest unchanged. Emit separate per-episode
-   sidecars with observer SHA, frozen source/file SHAs, diagnostic config SHA, campaign and
+   sidecars with observer SHA, frozen source commit/tree and clean-worktree receipt, frozen
+   source-file SHAs, diagnostic config SHA, campaign and
    Slurm job IDs, PID,
    episode ID, per-step arrays and canonical episode-row SHA-256. The later producer/retrieval
    manifest must bind these row digests to the raw JSONL SHA and include checksums for every
@@ -268,6 +273,12 @@ record the printed manifest SHA separately, then use `validate --spec ... --mani
 --manifest-sha256 <recorded-sha>` with both reviewed packet SHA arguments on cold artifacts.
 Exit 2 means a recorded outcome/state
 finding and is not candidate evidence. The writer refuses to overwrite an existing manifest.
+
+The trace comparator's `--robot-force-sidecar-dirs` input is required for the new observer run:
+it binds each trace row's canonical bytes to the sidecar source-state receipt and records every
+sidecar checksum. A historical trace-only recheck without those directories is marked
+`source_state_validation: not_supplied`; it remains an outcome comparison for diagnostics and
+cannot support a new candidate claim.
 
 This plan needs review and #9667 to merge before a new packet or Slurm submission. The observer
 may change timing or planner behavior despite leaving force results untouched; the parity gate

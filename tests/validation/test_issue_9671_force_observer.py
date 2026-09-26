@@ -70,6 +70,87 @@ def _capture() -> dict:
     }
 
 
+def test_records_full_clean_frozen_source_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def check_output(args: list[str], *, text: bool) -> str:
+        assert text is True
+        if args[-2:] == ["rev-parse", "HEAD"]:
+            return observer.FROZEN_SOURCE + "\n"
+        if args[-2:] == ["rev-parse", "HEAD^{tree}"]:
+            return observer.FROZEN_SOURCE_TREE_OID + "\n"
+        if args[-1] == "--untracked-files=all":
+            return ""
+        raise AssertionError(args)
+
+    monkeypatch.setattr(observer.subprocess, "check_output", check_output)
+
+    state = observer._frozen_source_state(tmp_path)
+
+    assert state == {
+        "source_state_schema": observer.SOURCE_STATE_SCHEMA,
+        "frozen_source_commit": observer.FROZEN_SOURCE,
+        "frozen_source_tree_oid": observer.FROZEN_SOURCE_TREE_OID,
+        "frozen_source_worktree_clean": True,
+        "frozen_source_worktree_status_sha256": observer.EMPTY_STATUS_SHA256,
+    }
+
+
+@pytest.mark.parametrize(
+    ("status", "tree", "message"),
+    [
+        (" M robot_sf/sim/simulator.py\n", observer.FROZEN_SOURCE_TREE_OID, "not clean"),
+        ("?? robot_sf/untracked_probe.py\n", observer.FROZEN_SOURCE_TREE_OID, "not clean"),
+        ("", "0" * 40, "tree identity mismatch"),
+    ],
+)
+def test_rejects_dirty_or_wrong_frozen_source_tree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    status: str,
+    tree: str,
+    message: str,
+) -> None:
+    def check_output(args: list[str], *, text: bool) -> str:
+        assert text is True
+        if args[-2:] == ["rev-parse", "HEAD"]:
+            return observer.FROZEN_SOURCE + "\n"
+        if args[-2:] == ["rev-parse", "HEAD^{tree}"]:
+            return tree + "\n"
+        if args[-1] == "--untracked-files=all":
+            return status
+        raise AssertionError(args)
+
+    monkeypatch.setattr(observer.subprocess, "check_output", check_output)
+
+    with pytest.raises(observer.ObserverIdentityError, match=message):
+        observer._frozen_source_state(tmp_path)
+
+
+def test_rechecks_source_cleanliness_at_episode_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    status_checks = 0
+
+    def check_output(args: list[str], *, text: bool) -> str:
+        nonlocal status_checks
+        assert text is True
+        if args[-2:] == ["rev-parse", "HEAD"]:
+            return observer.FROZEN_SOURCE + "\n"
+        if args[-2:] == ["rev-parse", "HEAD^{tree}"]:
+            return observer.FROZEN_SOURCE_TREE_OID + "\n"
+        if args[-1] == "--untracked-files=all":
+            status_checks += 1
+            return "" if status_checks == 1 else " M robot_sf/sim/simulator.py\n"
+        raise AssertionError(args)
+
+    monkeypatch.setattr(observer.subprocess, "check_output", check_output)
+    source_state = observer._frozen_source_state(tmp_path)
+
+    with pytest.raises(observer.ObserverIdentityError, match="not clean"):
+        observer._recheck_frozen_source_state(tmp_path, source_state)
+
+
 def test_binds_each_force_slot_to_reset_actor_id() -> None:
     bound = observer.bind_episode(_capture(), _row())
     assert bound["actor_ids"] == ["simulator-slot-0", "simulator-slot-1"]

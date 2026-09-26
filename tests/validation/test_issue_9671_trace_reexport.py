@@ -8,7 +8,7 @@ import io
 import json
 import sys
 import tarfile
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 import yaml
@@ -16,9 +16,6 @@ import yaml
 from robot_sf.benchmark.utils import _config_hash
 from scripts.validation import check_issue_9671_trace_reexport as checker
 from scripts.validation.check_issue_9671_trace_reexport import SOURCE_SHA, check
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _row(seed: int, status: str, *, trace: bool) -> dict:
@@ -190,7 +187,14 @@ def _producer_trace(tmp_path: Path, rows: list[dict]) -> Path:
     return path
 
 
-def _check(archive: Path, traces: Path, tmp_path: Path, seeds: list[int]) -> dict:
+def _check(
+    archive: Path,
+    traces: Path,
+    tmp_path: Path,
+    seeds: list[int],
+    *,
+    observer_sidecar_dirs: list[Path] | None = None,
+) -> dict:
     configs, manifests, digests, effective = _bindings(tmp_path, seeds)
     traces = _producer_trace(
         tmp_path, [json.loads(line) for line in traces.read_text().splitlines()]
@@ -204,7 +208,28 @@ def _check(archive: Path, traces: Path, tmp_path: Path, seeds: list[int]) -> dic
         expected_archive_sha256=None,
         expected_config_sha256=digests,
         expected_effective_hash=effective,
+        observer_sidecar_dirs=observer_sidecar_dirs,
     )
+
+
+def _observer_sidecar(row: dict, config_sha256: str) -> dict:
+    observer_path = Path(checker.__file__).with_name("issue_9671_force_observer_sitecustomize.py")
+    return {
+        "episode_id": row["episode_id"],
+        "episode_record_canonical_sha256": checker._canonical_row_sha(row),
+        "observer_provenance": {
+            "source_state_schema": checker.SOURCE_STATE_SCHEMA,
+            "frozen_source_commit": SOURCE_SHA,
+            "frozen_source_tree_oid": checker.FROZEN_SOURCE_TREE_OID,
+            "frozen_source_worktree_clean": True,
+            "frozen_source_worktree_status_sha256": checker.EMPTY_STATUS_SHA256,
+            "diagnostic_config_sha256": config_sha256,
+            "campaign_id": checker.CAMPAIGN_ID["headon_group"],
+            "observer_sha256": hashlib.sha256(observer_path.read_bytes()).hexdigest(),
+            "job_id": "123",
+            "pid": "456",
+        },
+    }
 
 
 def test_reports_mismatch_and_absent_release_row(tmp_path: Path) -> None:
@@ -219,12 +244,75 @@ def test_reports_mismatch_and_absent_release_row(tmp_path: Path) -> None:
         + "\n"
     )
     report = _check(archive, traces, tmp_path, [113, 22])
+    assert report["source_state_validation"] == "not_supplied"
     assert [row["comparison"] for row in report["comparisons"]] == [
         "no_release_row",
         "mismatch",
     ]
     assert report["comparisons"][1]["release_interaction_exposure_steps"] == 0
     assert report["comparisons"][1]["trace_interaction_exposure_steps"] == 0
+
+
+def test_validates_clean_frozen_source_state_against_every_episode(tmp_path: Path) -> None:
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [_row(113, "collision", trace=False)])
+    trace = _row(113, "collision", trace=True)
+    traces = tmp_path / "episodes.jsonl"
+    traces.write_text(json.dumps(trace) + "\n")
+    _, _, config_digests, _ = _bindings(tmp_path, [113])
+    sidecar_dir = tmp_path / "robot-force-sidecars"
+    sidecar_dir.mkdir()
+    sidecar_path = sidecar_dir / f"{trace['episode_id']}.robot-force.json"
+    sidecar_path.write_text(json.dumps(_observer_sidecar(trace, config_digests["headon_group"])))
+
+    report = _check(archive, traces, tmp_path, [113], observer_sidecar_dirs=[sidecar_dir])
+
+    assert report["source_state_validation"] == "verified"
+    assert list(report["observer_sidecars_sha256"]) == [str(sidecar_path)]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("frozen_source_tree_oid", "0" * 40),
+        ("frozen_source_worktree_clean", False),
+        ("frozen_source_worktree_status_sha256", "0" * 64),
+    ],
+)
+def test_rejects_dirty_or_mismatched_observer_source_state(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [_row(113, "collision", trace=False)])
+    trace = _row(113, "collision", trace=True)
+    traces = tmp_path / "episodes.jsonl"
+    traces.write_text(json.dumps(trace) + "\n")
+    _, _, config_digests, _ = _bindings(tmp_path, [113])
+    sidecar_dir = tmp_path / "robot-force-sidecars"
+    sidecar_dir.mkdir()
+    sidecar = _observer_sidecar(trace, config_digests["headon_group"])
+    sidecar["observer_provenance"][field] = value
+    (sidecar_dir / f"{trace['episode_id']}.robot-force.json").write_text(json.dumps(sidecar))
+
+    with pytest.raises(ValueError, match="observer source-state receipt mismatch"):
+        _check(archive, traces, tmp_path, [113], observer_sidecar_dirs=[sidecar_dir])
+
+
+def test_rejects_observer_sidecar_bound_to_different_episode_bytes(tmp_path: Path) -> None:
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [_row(113, "collision", trace=False)])
+    trace = _row(113, "collision", trace=True)
+    traces = tmp_path / "episodes.jsonl"
+    traces.write_text(json.dumps(trace) + "\n")
+    _, _, config_digests, _ = _bindings(tmp_path, [113])
+    sidecar_dir = tmp_path / "robot-force-sidecars"
+    sidecar_dir.mkdir()
+    sidecar = _observer_sidecar(trace, config_digests["headon_group"])
+    sidecar["episode_record_canonical_sha256"] = "0" * 64
+    (sidecar_dir / f"{trace['episode_id']}.robot-force.json").write_text(json.dumps(sidecar))
+
+    with pytest.raises(ValueError, match="observer source-state receipt mismatch"):
+        _check(archive, traces, tmp_path, [113], observer_sidecar_dirs=[sidecar_dir])
 
 
 @pytest.mark.parametrize("field", ["outcome", "termination_reason"])

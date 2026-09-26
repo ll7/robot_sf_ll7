@@ -5088,7 +5088,7 @@ wheels = [
 
 [[package]]
 name = "python-motion-planning"
-version = "2.0.1"
+version = "2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "faiss-cpu" },
@@ -5102,9 +5102,9 @@ dependencies = [
     { name = "pyvistaqt" },
     { name = "scipy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/14/fd/f83985db449b57aadc68331cbd7b2c16d2235dde77b796635abf4983258e/python_motion_planning-2.0.1.tar.gz", hash = "sha256:6f79291a934c2d7bf5cd62af2bad6a4c206a46acfadd931e393c22f81fd27321", size = 97418, upload-time = "2026-06-02T08:57:33.89Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ec/c0/2a7530139e16d4aee62f3730bd6dcd476cbae2b7101d0b57bff214fdb816/python_motion_planning-2.1.tar.gz", hash = "sha256:41820af41d77af956d17d65a02fea640793f87d33d23762af26afaaec03d0ca0", size = 100562, upload-time = "2026-09-15T08:04:35.265Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/99/af/ab28e63f12ab16cd6f3c0d630c68c22b46bca856188481c7a11371a85f04/python_motion_planning-2.0.1-py3-none-any.whl", hash = "sha256:0d943df1f281c50359987bc2ee09522bf85c1a2d60b3e32e1696ef002f85e9d0", size = 117730, upload-time = "2026-06-02T08:57:32.675Z" },
+    { url = "https://files.pythonhosted.org/packages/ad/88/e48c7f9cb03080f2fa3a3097ecc8e3ea5a4cd53ff9ddcc7df36310de3f42/python_motion_planning-2.1-py3-none-any.whl", hash = "sha256:da35417665aabcf5b4360664b546c901a4f274bebd2076b29068c4d655435e41", size = 118761, upload-time = "2026-09-15T08:04:33.745Z" },
 ]
 
 [[package]]

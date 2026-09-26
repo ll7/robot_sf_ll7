@@ -251,3 +251,14 @@ The raw preflight-module hash and derived contract/manifest hashes were refreshe
 target, candidate space, budget, seeds, thresholds, decision rule, diagnostic boundary, and
 recertification receipt are unchanged; this is an implementation/provenance refresh only and
 does not authorize a campaign or promotion.
+
+## Outcome-free diagnostic-renderer provenance refresh (2026-09-27)
+
+Commit `35b3696687e030bf23abf340f1413730b3576d2a` adds a render-only path for stored
+empirical sampler comparisons and clarifies the diagnostic report wording. It does not change
+the frozen search method, candidate evaluation, objective, seed schedule, candidate budget,
+confirmation gates, denominator, or decision rule. The raw diagnostic-runner SHA-256 was
+refreshed in the versioned contract inputs, and the derived contract SHA-256 was recomputed in
+the manifest. This refresh did not run a planner, search, replay, or campaign and authorizes
+none; the historical v1 contract remains diagnostic-only, and powered #6145 execution remains
+separately gated.

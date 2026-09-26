@@ -26,6 +26,7 @@ def _write_packet(root: Path, *, critical: bool = False, unknown: bool = False) 
     scenario_id = "candidate_0000"
     outcome = {
         "collision_event": critical,
+        "severe_intrusion_event": False,
         "route_complete": not critical,
         "timeout_event": False,
     }
@@ -393,6 +394,98 @@ def _refresh_bundle_receipts(packet: Path) -> None:
     (packet.parent / "checksums.sha256").write_text(
         "\n".join(checksum_lines) + "\n", encoding="utf-8"
     )
+
+
+def _upgrade_packet_to_v3_unknown_criticality(packet: Path) -> None:
+    """Model #9645 v3: scored success with collision known false and intrusion unknown."""
+    manifest_path = packet / "source_manifests" / "random_seed_17.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    outcome = manifest["candidates"][0]["failure_attribution"]["details"]["outcome"]
+    outcome.pop("severe_intrusion_event")
+    _write_json(manifest_path, manifest)
+    _refresh_manifest_identity_references(packet)
+
+    with (packet / "candidate_evaluations.csv").open(encoding="utf-8", newline="") as handle:
+        csv_row = next(csv.DictReader(handle))
+    counts = {"critical": 0, "not_critical": 0, "unknown": 1}
+    convergence_path = packet / "convergence_report.json"
+    convergence = json.loads(convergence_path.read_text(encoding="utf-8"))
+    convergence["schema_version"] = "adversarial-search-convergence-report.v3"
+    convergence["runs"] = [
+        {
+            "sampler": "random",
+            "seed": 17,
+            "evaluations": [
+                {
+                    "evaluation_index": 1,
+                    "candidate_sha256": csv_row["candidate_sha256"],
+                    "status": "scored",
+                    "within_budget": True,
+                    "criticality_status": "unknown",
+                    "collision_intrusion_tier": {"status": "unknown"},
+                }
+            ],
+            "budget": 1,
+            "num_candidates": 1,
+            "num_budgeted_candidates": 1,
+            "num_over_budget_candidates": 0,
+            "num_missing_evaluations": 0,
+            "num_missing_budgeted_evaluations": 0,
+            "criticality_status_counts": counts,
+            "collision_intrusion_tier_status_counts": counts,
+            "observed_criticality_status_counts": counts,
+            "observed_collision_intrusion_tier_status_counts": counts,
+        }
+    ]
+    accounting = convergence["aggregates"][0]["candidate_accounting"]
+    accounting["criticality_status_counts"] = counts
+    accounting["collision_intrusion_tier_status_counts"] = counts
+    accounting["recorded_attempted_including_over_budget"] = 1
+    accounting["over_budget"] = 0
+    accounting["missing_within_budget"] = 0
+    accounting["missing_all_expected_slots"] = 0
+    _write_json(convergence_path, convergence)
+    _refresh_bundle_receipts(packet)
+
+
+def test_compact_packet_reconciles_v3_unknown_safety_tier_without_zero_claim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    packet = _write_packet(tmp_path)
+    _upgrade_packet_to_v3_unknown_criticality(packet)
+    monkeypatch.setattr(replay_gallery, "_repository_root", lambda: tmp_path)
+
+    result = replay_gallery.build_replay_gallery(
+        packet, tmp_path / "output" / "v3-unknown", render=False, video=False
+    )
+
+    candidate = result["candidates"][0]
+    assert candidate["execution_outcome"] == "successful_execution"
+    assert candidate["case_criticality"] == "unknown"
+    assert candidate["collision_intrusion_tier"]["status"] == "unknown"
+    assert candidate["collision_intrusion_tier"]["severe_intrusion"] is None
+    assert result["summary"]["criticality_unknown_count"] == 1
+    assert result["summary"]["zero_critical_result_verified"] is False
+    assert result["cases"] == []
+
+
+def test_compact_packet_rejects_v3_criticality_status_disagreement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    packet = _write_packet(tmp_path)
+    _upgrade_packet_to_v3_unknown_criticality(packet)
+    convergence_path = packet / "convergence_report.json"
+    convergence = json.loads(convergence_path.read_text(encoding="utf-8"))
+    convergence["runs"][0]["evaluations"][0]["criticality_status"] = "not_critical"
+    _write_json(convergence_path, convergence)
+    _refresh_bundle_receipts(packet)
+    monkeypatch.setattr(replay_gallery, "_repository_root", lambda: tmp_path)
+
+    with pytest.raises(ValueError, match="criticality_status conflicts with candidate ledger"):
+        replay_gallery.build_replay_gallery(
+            packet, tmp_path / "output" / "v3-mismatch", render=False, video=False
+        )
+    assert not (tmp_path / "output" / "v3-mismatch").exists()
 
 
 def test_compact_packet_accounts_success_eligibility_and_missing_inputs_separately(
@@ -1004,6 +1097,22 @@ def test_compact_packet_checks_consumed_bytes_against_bundle_receipts(
         replay_gallery.build_replay_gallery(
             packet, tmp_path / "output" / "tampered-bundle", render=False, video=False
         )
+
+
+def test_compact_packet_ignores_review_sidecars_next_to_source_manifests(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    packet = _write_packet(tmp_path)
+    monkeypatch.setattr(replay_gallery, "_repository_root", lambda: tmp_path)
+    sidecar = packet / "source_manifests" / "random_seed_17.json.review.json"
+    sidecar.write_text('{"classification":"input"}\n', encoding="utf-8")
+
+    result = replay_gallery.build_replay_gallery(
+        packet, tmp_path / "output" / "sidecar-packet", render=False, video=False
+    )
+
+    assert result["summary"]["source_candidate_count"] == 1
+    assert result["cases"] == []
 
 
 def test_compact_packet_requires_bundle_checksum_anchor(

@@ -35,6 +35,14 @@ separate statuses. Missing raw inputs remain missing and do not mean the scenari
 input status covers the candidate's scenario YAML and episode record; it does not certify that all
 maps or runner configuration needed for replay are present.
 
+Convergence report schemas v1 through v3 are accepted. For v3, each report evaluation's candidate
+digest, criticality status, and collision/severe-intrusion tier are reconciled against the packet
+ledger, along with per-run and sampler-level tri-state counts. A completed success with no observed
+collision remains `unknown` when explicit severe-intrusion evidence is absent; the report's
+`unknown_or_scoreless` execution-budget count is not a safety-criticality verdict. This preserves the
+#9645 pilot's 64 completed goal-planner episodes with unknown criticality instead of treating its
+missing intrusion evidence as a verified zero-critical result.
+
 ```bash
 scripts/dev/run_worktree_shared_venv.sh -- uv run python \
   scripts/tools/materialize_adversarial_replay_gallery.py \

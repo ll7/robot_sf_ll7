@@ -38,6 +38,13 @@ _ROW_STATUS_VALUES = {
     "blocked",
 }
 _ADMISSIBLE_CERTIFICATION_CLASSIFICATIONS = frozenset({"valid", "hard_but_solvable"})
+_CONVERGENCE_REPORT_SCHEMAS = frozenset(
+    {
+        "adversarial-search-convergence-report.v1",
+        "adversarial-search-convergence-report.v2",
+        "adversarial-search-convergence-report.v3",
+    }
+)
 
 
 def build_search_evidence_packet_gallery(
@@ -362,7 +369,13 @@ def _snapshot_packet_files(source: Path) -> tuple[dict[str, bytes], list[Path]]:
     manifests_dir = source / "source_manifests"
     if manifests_dir.is_symlink():
         raise ValueError("search evidence packet source_manifests directory must not be a symlink")
-    manifest_paths = sorted(manifests_dir.glob("*.json")) if manifests_dir.is_dir() else []
+    manifest_paths = (
+        sorted(
+            path for path in manifests_dir.glob("*.json") if not path.name.endswith(".review.json")
+        )
+        if manifests_dir.is_dir()
+        else []
+    )
     if not manifest_paths:
         raise ValueError("search evidence packet has no source_manifests/*.json files")
     for path in manifest_paths:
@@ -521,7 +534,7 @@ def _check_source_metadata(payload: dict[str, Any]) -> None:
         or row_status.get("issue") != 9645
     ):
         raise ValueError("unsupported #9645 row-status schema or issue identity")
-    if convergence.get("schema_version") != "adversarial-search-convergence-report.v1":
+    if convergence.get("schema_version") not in _CONVERGENCE_REPORT_SCHEMAS:
         raise ValueError("unsupported falsification convergence report schema")
     source_revision = summary.get("source_revision")
     provenance_revision = run_metadata.get("experiment_source_commit")
@@ -1032,38 +1045,85 @@ def _collision_accounting(row: dict[str, str], *, row_id: str) -> tuple[bool, in
     return collision_event, total_collision_count, ped_collision_count
 
 
-def _candidate_accounting(
+def _severe_intrusion_values(candidate: dict[str, Any]) -> list[Any]:
+    """Collect direct, outcome and metric intrusion evidence from attribution containers."""
+    attribution = candidate.get("failure_attribution")
+    details = attribution.get("details") if isinstance(attribution, dict) else None
+    containers = [candidate]
+    if isinstance(details, dict):
+        containers.append(details)
+    values: list[Any] = []
+    for container in containers:
+        outcome = container.get("outcome")
+        metrics = container.get("metrics")
+        if isinstance(outcome, dict):
+            values.extend(
+                outcome[name]
+                for name in ("severe_intrusion", "severe_intrusion_event")
+                if name in outcome
+            )
+        if isinstance(metrics, dict):
+            values.extend(
+                metrics[name]
+                for name in ("severe_intrusion", "severe_intrusion_event")
+                if name in metrics and metrics[name] is not None
+            )
+    return values
+
+
+def _severe_intrusion_evidence(candidate: dict[str, Any]) -> tuple[bool | None, str | None]:
+    """Return explicit severe-intrusion evidence without treating absence as a negative."""
+    observations: list[bool] = []
+    for value in _severe_intrusion_values(candidate):
+        if not isinstance(value, bool):
+            return None, "severe_intrusion_evidence_malformed"
+        observations.append(value)
+    if observations and any(value != observations[0] for value in observations[1:]):
+        return None, "severe_intrusion_evidence_conflict"
+    if not observations:
+        return None, "severe_intrusion_evidence_missing"
+    return observations[0], None
+
+
+def _collision_intrusion_tier(candidate: dict[str, Any], collision_event: bool) -> dict[str, Any]:
+    """Classify the safety tier only when both collision and intrusion negatives are explicit."""
+    severe_intrusion, reason = _severe_intrusion_evidence(candidate)
+    if collision_event or severe_intrusion is True:
+        status = "critical"
+    elif not collision_event and severe_intrusion is False:
+        status = "not_critical"
+    else:
+        status = "unknown"
+    return {
+        "status": status,
+        "collision": collision_event,
+        "severe_intrusion": severe_intrusion,
+        "reason_codes": [reason] if reason is not None else [],
+    }
+
+
+def _candidate_attribution_outcomes(
     row: dict[str, str],
     candidate: dict[str, Any],
     status: dict[str, Any],
-    *,
-    row_id: str,
-    manifest_path: str,
-    manifest_sha256: str,
-    source_root: Path,
-) -> dict[str, Any]:
-    """Separate execution result, certificate eligibility, criticality and replay inputs."""
+    eligible: bool,
+) -> tuple[bool, bool]:
+    """Recognize clear success or attributed failure only from complete execution evidence."""
     attribution = candidate.get("failure_attribution")
     attribution = attribution if isinstance(attribution, dict) else {}
-    details = attribution.get("details", {})
+    details = attribution.get("details")
     details = details if isinstance(details, dict) else {}
-    outcome = details.get("outcome", {}) if isinstance(details, dict) else {}
+    outcome = details.get("outcome")
+    outcome = outcome if isinstance(outcome, dict) else {}
     primary_failure = attribution.get("primary_failure")
-    analysis = candidate.get("analysis_eligibility")
-    collision_event, total_collision_count, ped_collision_count = _collision_accounting(
-        row, row_id=row_id
-    )
-    eligible = (
-        row["benchmark_eligibility"] == "eligible"
-        and isinstance(analysis, dict)
-        and analysis.get("eligible") is True
-        and analysis.get("certificate_ok") is True
-        and _candidate_has_admissible_certification(row, candidate)
-    )
     candidate_error = candidate.get("error")
     has_evaluation_error = isinstance(candidate_error, str) and bool(candidate_error)
     execution_evidence = _boolean(
         row["counts_as_execution_success_evidence"], "counts_as_execution_success_evidence"
+    )
+    collision_count = _nonnegative_integer(row["total_collision_count"], "total_collision_count")
+    pedestrian_collision_count = _nonnegative_integer(
+        row["ped_collision_count"], "ped_collision_count"
     )
     no_failure = (
         attribution.get("status") == "attributed"
@@ -1078,8 +1138,8 @@ def _candidate_accounting(
         and status.get("fallback_or_degraded") is False
         and eligible
         and not has_evaluation_error
-        and total_collision_count == 0
-        and ped_collision_count == 0
+        and collision_count == 0
+        and pedestrian_collision_count == 0
     )
     explicit_failure = (
         attribution.get("status") == "attributed"
@@ -1100,21 +1160,74 @@ def _candidate_accounting(
             or outcome.get("route_complete") is False
         )
     )
+    return no_failure, explicit_failure
+
+
+def _classify_candidate_execution(
+    row: dict[str, str],
+    candidate: dict[str, Any],
+    status: dict[str, Any],
+    collision_intrusion_tier: dict[str, Any],
+    no_failure: bool,
+    explicit_failure: bool,
+) -> tuple[str, str]:
+    """Classify execution separately from criticality for a reconciled candidate."""
+    candidate_error = candidate.get("error")
+    has_evaluation_error = isinstance(candidate_error, str) and bool(candidate_error)
     if has_evaluation_error or row["row_status"] == "unexpected_failure":
-        criticality = "unknown"
-        execution_outcome = "evaluation_failed"
-    elif status.get("fallback_or_degraded") is True:
-        criticality = "unknown"
-        execution_outcome = "fallback_or_degraded"
-    elif no_failure:
-        criticality = "noncritical_success"
-        execution_outcome = "successful_execution"
-    elif explicit_failure:
-        criticality = "critical_planner_failure"
-        execution_outcome = "completed_with_attributed_failure"
-    else:
-        criticality = "unknown"
-        execution_outcome = "evaluation_failed" if row["error"].strip() else "outcome_unresolved"
+        return "unknown", "evaluation_failed"
+    if status.get("fallback_or_degraded") is True:
+        return "unknown", "fallback_or_degraded"
+    if no_failure:
+        criticality = {
+            "critical": "critical_planner_failure",
+            "not_critical": "noncritical_success",
+        }.get(collision_intrusion_tier["status"], "unknown")
+        return criticality, "successful_execution"
+    if explicit_failure:
+        return "critical_planner_failure", "completed_with_attributed_failure"
+    if collision_intrusion_tier["status"] == "critical":
+        return "critical_planner_failure", "outcome_unresolved"
+    execution_outcome = "evaluation_failed" if row["error"].strip() else "outcome_unresolved"
+    return "unknown", execution_outcome
+
+
+def _candidate_accounting(
+    row: dict[str, str],
+    candidate: dict[str, Any],
+    status: dict[str, Any],
+    *,
+    row_id: str,
+    manifest_path: str,
+    manifest_sha256: str,
+    source_root: Path,
+) -> dict[str, Any]:
+    """Separate execution result, certificate eligibility, criticality and replay inputs."""
+    attribution = candidate.get("failure_attribution")
+    attribution = attribution if isinstance(attribution, dict) else {}
+    primary_failure = attribution.get("primary_failure")
+    candidate_error = candidate.get("error")
+    analysis = candidate.get("analysis_eligibility")
+    collision_event, total_collision_count, ped_collision_count = _collision_accounting(
+        row, row_id=row_id
+    )
+    collision_intrusion_tier = _collision_intrusion_tier(candidate, collision_event)
+    eligible = (
+        row["benchmark_eligibility"] == "eligible"
+        and isinstance(analysis, dict)
+        and analysis.get("eligible") is True
+        and analysis.get("certificate_ok") is True
+        and _candidate_has_admissible_certification(row, candidate)
+    )
+    no_failure, explicit_failure = _candidate_attribution_outcomes(
+        row,
+        candidate,
+        status,
+        eligible,
+    )
+    criticality, execution_outcome = _classify_candidate_execution(
+        row, candidate, status, collision_intrusion_tier, no_failure, explicit_failure
+    )
 
     declared_inputs = {
         "scenario_yaml": (candidate.get("scenario_yaml_path"), row["scenario_yaml_sha256"]),
@@ -1173,6 +1286,7 @@ def _candidate_accounting(
         "evaluation_error": candidate_error,
         "scenario_eligibility": "eligible" if eligible else "ineligible_or_unknown",
         "case_criticality": criticality,
+        "collision_intrusion_tier": collision_intrusion_tier,
         "outcome_metrics": {
             "collision_event": collision_event,
             "route_complete": _boolean(row["route_complete"], "route_complete"),
@@ -1256,7 +1370,9 @@ def _check_budget_summary(
     failed = sum(item["execution_outcome"] == "evaluation_failed" for item in accounting)
     invalid = sum(item["scenario_eligibility"] != "eligible" for item in accounting)
     unknown_or_scoreless = sum(
-        item["case_criticality"] == "unknown" or item["objective_value"] is None
+        item["execution_outcome"]
+        in {"evaluation_failed", "fallback_or_degraded", "outcome_unresolved"}
+        or item["objective_value"] is None
         for item in accounting
     )
     if (
@@ -1397,12 +1513,226 @@ def _check_convergence(report: dict[str, Any], by_run: dict[str, list[dict[str, 
     """Cross-check each sampler aggregate and outcome count with source manifests."""
     aggregate_by_sampler = _index_convergence_aggregates(report)
     expected_by_sampler = _group_runs_by_sampler(by_run)
+    report_schema = report.get("schema_version")
     if set(aggregate_by_sampler) != set(expected_by_sampler):
         raise ValueError("convergence aggregate sampler identities conflict with candidate ledger")
     for sampler, sampler_rows in expected_by_sampler.items():
-        _check_sampler_aggregate(sampler, sampler_rows, aggregate_by_sampler[sampler], by_run)
+        _check_sampler_aggregate(
+            sampler,
+            sampler_rows,
+            aggregate_by_sampler[sampler],
+            by_run,
+            schema_version=report_schema,
+        )
+    if report_schema == "adversarial-search-convergence-report.v3":
+        _check_v3_criticality(report, by_run, aggregate_by_sampler)
     if report.get("claim_scope") is None:
         raise ValueError("convergence report has no explicit claim scope")
+
+
+def _status_counts(statuses: list[str]) -> dict[str, int]:
+    """Return the complete tri-state count shape used by convergence report v3."""
+    return {
+        status: sum(value == status for value in statuses)
+        for status in ("critical", "not_critical", "unknown")
+    }
+
+
+def _ledger_criticality_status(row: dict[str, Any]) -> str:
+    return {
+        "critical_planner_failure": "critical",
+        "noncritical_success": "not_critical",
+    }.get(row["case_criticality"], "unknown")
+
+
+def _check_reported_status_counts(observed: Any, expected: dict[str, int], *, label: str) -> None:
+    if not isinstance(observed, dict) or observed != expected:
+        raise ValueError(f"convergence report {label} conflicts with candidate ledger")
+
+
+def _check_v3_criticality(
+    report: dict[str, Any],
+    by_run: dict[str, list[dict[str, Any]]],
+    aggregate_by_sampler: dict[str, dict[str, Any]],
+) -> None:
+    """Reconcile v3 per-candidate unknowns and both budgeted/observed status counts."""
+    expected_runs: dict[tuple[str, int], list[dict[str, Any]]] = {}
+    for rows in by_run.values():
+        key = (rows[0]["sampler"], rows[0]["sampler_seed"])
+        if key in expected_runs:
+            raise ValueError("candidate ledger has duplicated sampler/seed run identity")
+        expected_runs[key] = rows
+
+    indexed_report_runs = _index_v3_report_runs(report, expected_runs)
+    expected_budgeted_by_sampler: dict[str, list[str]] = defaultdict(list)
+    expected_budgeted_tier_by_sampler: dict[str, list[str]] = defaultdict(list)
+    for key, rows in expected_runs.items():
+        budget = _nonnegative_integer(
+            rows[0]["source_manifest_config"]["budget"], "source manifest budget"
+        )
+        run_criticality, run_tiers = _check_v3_run_criticality(
+            rows, indexed_report_runs[key], budget=budget
+        )
+        expected_budgeted_by_sampler[key[0]].extend(run_criticality)
+        expected_budgeted_tier_by_sampler[key[0]].extend(run_tiers)
+
+    for sampler, aggregate in aggregate_by_sampler.items():
+        _check_reported_status_counts(
+            aggregate.get("criticality_status_counts"),
+            _status_counts(expected_budgeted_by_sampler[sampler]),
+            label="aggregate criticality counts",
+        )
+        _check_reported_status_counts(
+            aggregate.get("collision_intrusion_tier_status_counts"),
+            _status_counts(expected_budgeted_tier_by_sampler[sampler]),
+            label="aggregate safety-tier counts",
+        )
+
+
+def _index_v3_report_runs(
+    report: dict[str, Any], expected_runs: dict[tuple[str, int], list[dict[str, Any]]]
+) -> dict[tuple[str, int], dict[str, Any]]:
+    """Index v3 run records and require a one-to-one sampler/seed match."""
+    report_runs = report.get("runs")
+    if not isinstance(report_runs, list):
+        raise ValueError("convergence report v3 has no per-run candidate statuses")
+    indexed_report_runs: dict[tuple[str, int], dict[str, Any]] = {}
+    for report_run in report_runs:
+        if not isinstance(report_run, dict) or not isinstance(report_run.get("sampler"), str):
+            raise ValueError("convergence report v3 has a malformed run identity")
+        seed = _integer(report_run.get("seed"), "convergence run seed")
+        key = (report_run["sampler"], seed)
+        if key in indexed_report_runs:
+            raise ValueError("convergence report v3 has duplicate sampler/seed run identity")
+        indexed_report_runs[key] = report_run
+    if set(indexed_report_runs) != set(expected_runs):
+        raise ValueError("convergence report v3 run identities conflict with candidate ledger")
+    return indexed_report_runs
+
+
+def _check_v3_run_criticality(
+    rows: list[dict[str, Any]], report_run: dict[str, Any], *, budget: int
+) -> tuple[list[str], list[str]]:
+    """Check candidate identities and run-level budgeted/observed criticality counts."""
+    if _nonnegative_integer(report_run.get("budget"), "convergence run budget") != budget:
+        raise ValueError("convergence report budget conflicts with source manifest")
+    evaluations = report_run.get("evaluations")
+    if not isinstance(evaluations, list):
+        raise ValueError("convergence report v3 run has no evaluation rows")
+    inventory = _check_v3_evaluation_inventory(rows, evaluations, budget=budget)
+    for field, expected in inventory.items():
+        if _nonnegative_integer(report_run.get(field), f"convergence run {field}") != expected:
+            raise ValueError(f"convergence report v3 {field} conflicts with candidate ledger")
+
+    budgeted_rows = [row for row in rows if row["evaluation_index"] <= budget]
+    budgeted_criticality = [_ledger_criticality_status(row) for row in budgeted_rows]
+    budgeted_tiers = [row["collision_intrusion_tier"]["status"] for row in budgeted_rows]
+    _check_reported_status_counts(
+        report_run.get("criticality_status_counts"),
+        _status_counts(budgeted_criticality),
+        label="run criticality counts",
+    )
+    _check_reported_status_counts(
+        report_run.get("collision_intrusion_tier_status_counts"),
+        _status_counts(budgeted_tiers),
+        label="run safety-tier counts",
+    )
+    _check_reported_status_counts(
+        report_run.get("observed_criticality_status_counts"),
+        _status_counts([_ledger_criticality_status(row) for row in rows]),
+        label="observed run criticality counts",
+    )
+    _check_reported_status_counts(
+        report_run.get("observed_collision_intrusion_tier_status_counts"),
+        _status_counts([row["collision_intrusion_tier"]["status"] for row in rows]),
+        label="observed run safety-tier counts",
+    )
+    return budgeted_criticality, budgeted_tiers
+
+
+def _check_v3_evaluation_inventory(
+    rows: list[dict[str, Any]], evaluations: list[Any], *, budget: int
+) -> dict[str, int]:
+    """Reconcile v3 evaluation identities and missing/over-budget counts with packet rows."""
+    row_by_index = {row["evaluation_index"]: row for row in rows}
+    matched_indexes: set[int] = set()
+    seen_indexes: set[int] = set()
+    missing_count = 0
+    missing_budgeted_count = 0
+    budgeted_count = 0
+    over_budget_count = 0
+    for evaluation in evaluations:
+        if not isinstance(evaluation, dict):
+            raise ValueError("convergence report v3 has a malformed evaluation row")
+        index = _integer(evaluation.get("evaluation_index"), "convergence evaluation index")
+        if index is None or index < 1 or index in seen_indexes:
+            raise ValueError("convergence report v3 duplicates an evaluation index")
+        seen_indexes.add(index)
+        within_budget = index <= budget
+        if evaluation.get("within_budget") is not within_budget:
+            raise ValueError("convergence report v3 budget marker conflicts with source manifest")
+        budgeted_count += int(within_budget)
+        over_budget_count += int(not within_budget)
+        row = row_by_index.get(index)
+        if row is None:
+            if not _check_v3_missing_evaluation(evaluation, index=index, budget=budget):
+                raise ValueError("convergence report v3 evaluation is absent from candidate ledger")
+            missing_count += 1
+            missing_budgeted_count += int(within_budget)
+            continue
+        _check_v3_candidate_evaluation(evaluation, row, budget=budget)
+        matched_indexes.add(index)
+    if matched_indexes != set(row_by_index):
+        raise ValueError("convergence report v3 omits candidate ledger evaluations")
+
+    candidate_budgeted_count = sum(row["evaluation_index"] <= budget for row in rows)
+    candidate_over_budget_count = sum(row["evaluation_index"] > budget for row in rows)
+    if budgeted_count != candidate_budgeted_count + missing_budgeted_count:
+        raise ValueError("convergence report v3 budgeted inventory conflicts with source manifest")
+    if over_budget_count != candidate_over_budget_count:
+        raise ValueError(
+            "convergence report v3 over-budget inventory conflicts with source manifest"
+        )
+    return {
+        "num_candidates": len(rows),
+        "num_budgeted_candidates": candidate_budgeted_count,
+        "num_over_budget_candidates": candidate_over_budget_count,
+        "num_missing_evaluations": missing_count,
+        "num_missing_budgeted_evaluations": missing_budgeted_count,
+    }
+
+
+def _check_v3_missing_evaluation(evaluation: dict[str, Any], *, index: int, budget: int) -> bool:
+    """Validate an explicit missing v3 slot; missing slots cannot assert safety negatives."""
+    if (
+        evaluation.get("status") != "missing"
+        or evaluation.get("candidate_sha256") is not None
+        or index > budget
+    ):
+        return False
+    if evaluation.get("criticality_status") != "unknown":
+        raise ValueError("missing convergence evaluation must have unknown criticality")
+    tier = evaluation.get("collision_intrusion_tier")
+    if not isinstance(tier, dict) or tier.get("status") != "unknown":
+        raise ValueError("missing convergence evaluation must have unknown safety tier")
+    return True
+
+
+def _check_v3_candidate_evaluation(
+    evaluation: dict[str, Any], row: dict[str, Any], *, budget: int
+) -> None:
+    """Bind one v3 evaluation's candidate digest and safety statuses to its packet row."""
+    if evaluation.get("within_budget") is not (row["evaluation_index"] <= budget):
+        raise ValueError("convergence report budget marker conflicts with candidate ledger")
+    if evaluation.get("candidate_sha256") != row["candidate_sha256"]:
+        raise ValueError("convergence report v3 candidate digest conflicts with ledger")
+    criticality = _ledger_criticality_status(row)
+    tier = row["collision_intrusion_tier"]["status"]
+    if evaluation.get("criticality_status") != criticality:
+        raise ValueError("convergence report criticality_status conflicts with candidate ledger")
+    reported_tier = evaluation.get("collision_intrusion_tier")
+    if not isinstance(reported_tier, dict) or reported_tier.get("status") != tier:
+        raise ValueError("convergence report safety tier conflicts with candidate ledger")
 
 
 def _index_convergence_aggregates(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -1441,6 +1771,8 @@ def _check_sampler_aggregate(
     rows: list[dict[str, Any]],
     observed: dict[str, Any],
     by_run: dict[str, list[dict[str, Any]]],
+    *,
+    schema_version: str | None = None,
 ) -> None:
     """Compare sampler accounting counts and rates to candidate rows and declared budgets."""
     planned = sum(
@@ -1451,29 +1783,74 @@ def _check_sampler_aggregate(
         for run_rows in by_run.values()
         if run_rows[0]["sampler"] == sampler
     )
-    attempted = len(rows)
-    critical = sum(item["case_criticality"] == "critical_planner_failure" for item in rows)
-    failed = sum(item["execution_outcome"] == "evaluation_failed" for item in rows)
-    invalid = sum(item["scenario_eligibility"] != "eligible" for item in rows)
-    candidate_hashes = [item["candidate_sha256"] for item in rows]
-    duplicate = len(candidate_hashes) - len(set(candidate_hashes))
+    v3 = schema_version == "adversarial-search-convergence-report.v3"
+    if v3:
+        budgeted_rows = [
+            item
+            for item in rows
+            if item["evaluation_index"] <= item["source_manifest_config"]["budget"]
+        ]
+        attempted = len(budgeted_rows)
+        rows_for_counts = budgeted_rows
+        seen_candidate_hashes: set[str] = set()
+        seen_effective_hashes: set[str] = set()
+        duplicate = 0
+        for item in budgeted_rows:
+            candidate_hash = item["candidate_sha256"]
+            effective_hash = item["effective_scenario_sha256"]
+            is_duplicate = (candidate_hash and candidate_hash in seen_candidate_hashes) or (
+                effective_hash and effective_hash in seen_effective_hashes
+            )
+            duplicate += int(bool(is_duplicate))
+            if candidate_hash:
+                seen_candidate_hashes.add(candidate_hash)
+            if effective_hash:
+                seen_effective_hashes.add(effective_hash)
+    else:
+        attempted = len(rows)
+        rows_for_counts = rows
+        candidate_hashes = [item["candidate_sha256"] for item in rows]
+        duplicate = len(candidate_hashes) - len(set(candidate_hashes))
+    critical = sum(
+        item["case_criticality"] == "critical_planner_failure" for item in rows_for_counts
+    )
+    failed = sum(item["execution_outcome"] == "evaluation_failed" for item in rows_for_counts)
+    invalid = sum(item["scenario_eligibility"] != "eligible" for item in rows_for_counts)
+    missing = (
+        planned
+        - len(
+            [
+                item
+                for item in rows
+                if item["evaluation_index"] <= item["source_manifest_config"]["budget"]
+            ]
+        )
+        if v3
+        else planned - len(rows)
+    )
     expected = {
         "attempted": attempted,
         "critical": critical,
         "failed": failed,
         "invalid": invalid,
-        "missing": planned - attempted,
         "duplicate": duplicate,
         "valid_total_minus_invalid_minus_failed": attempted - invalid - failed,
     }
+    if v3:
+        expected["recorded_attempted_including_over_budget"] = len(rows)
+        expected["over_budget"] = len(rows) - len(rows_for_counts)
+        expected["missing_within_budget"] = missing
+        expected["missing_all_expected_slots"] = missing
+    else:
+        expected["missing"] = missing
     for key, value in expected.items():
         if _nonnegative_integer(observed.get(key), f"{sampler} aggregate {key}") != value:
             raise ValueError(
                 f"convergence aggregate {sampler} {key} conflicts with candidate ledger"
             )
     for key, value in (
-        ("duplicate_rate_observed", duplicate / attempted if attempted else 0.0),
-        ("invalid_rate_observed", invalid / attempted if attempted else 0.0),
+        ("duplicate_rate_observed", duplicate / attempted if attempted else None if v3 else 0.0),
+        ("invalid_rate_observed", invalid / attempted if attempted else None if v3 else 0.0),
     ):
         if not _same_finite_number(observed.get(key), value):
             raise ValueError(

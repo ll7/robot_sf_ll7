@@ -93,11 +93,23 @@ def test_recorded_trace_render_checks_digest_and_writes_annotated_figures(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     trace_path, provenance_path = _write_inputs(tmp_path)
+    observed_renderer_roots: list[Path] = []
+
+    def _checkout_state(root: Path) -> dict[str, Any]:
+        observed_renderer_roots.append(root)
+        return {
+            "revision": "d" * 40,
+            "clean": False,
+            "dirty_paths": ["scripts/tools/render_recorded_replay_trace.py"],
+        }
+
+    monkeypatch.setattr(replay_gallery, "_repository_root", lambda: tmp_path)
+    monkeypatch.setattr(replay_gallery, "_git_checkout_state", _checkout_state)
     monkeypatch.setattr(replay_gallery, "run_batch", _forbid_dynamics)
     monkeypatch.setattr(episode_replay_figure, "_resimulate_episode", _forbid_dynamics)
 
     result = render_tool.render_recorded_trace_bundle(
-        trace_path, provenance_path, tmp_path / "render", video=False
+        trace_path, provenance_path, tmp_path / "output" / "render", video=False
     )
 
     render = result["render_result"]
@@ -117,16 +129,23 @@ def test_recorded_trace_render_checks_digest_and_writes_annotated_figures(
         "cases/case_recorded_test/figures/filmstrip.png",
         "cases/case_recorded_test/figures/trajectory.png",
     }
-    assert all((tmp_path / "render" / path).is_file() for path in render["artifacts"])
+    assert all((tmp_path / "output" / "render" / path).is_file() for path in render["artifacts"])
     provenance = json.loads(Path(result["provenance_path"]).read_text(encoding="utf-8"))
     assert provenance["simulation_or_replay_dynamics_executed"] is False
     assert provenance["render_mode"] == "stored_trace_only"
+    assert provenance["renderer"]["revision"] == "d" * 40
+    assert provenance["renderer"]["checkout_clean"] is False
+    assert provenance["renderer"]["dirty_paths"] == [
+        "scripts/tools/render_recorded_replay_trace.py"
+    ]
+    assert observed_renderer_roots == [tmp_path]
 
 
 def test_recorded_video_receives_only_converted_stored_samples(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     trace_path, provenance_path = _write_inputs(tmp_path)
+    monkeypatch.setattr(replay_gallery, "_repository_root", lambda: tmp_path)
     monkeypatch.setattr(replay_gallery, "run_batch", _forbid_dynamics)
     monkeypatch.setattr(episode_replay_figure, "_resimulate_episode", _forbid_dynamics)
     seen: dict[str, Any] = {}
@@ -145,7 +164,7 @@ def test_recorded_video_receives_only_converted_stored_samples(
         video_renderer,
     )
     result = render_tool.render_recorded_trace_bundle(
-        trace_path, provenance_path, tmp_path / "render_video", video=True
+        trace_path, provenance_path, tmp_path / "output" / "render_video", video=True
     )
 
     assert seen == {"times": [0.1, 0.2, 0.3], "max_frames": 3}
@@ -157,14 +176,35 @@ def test_recorded_video_receives_only_converted_stored_samples(
     )
 
 
-def test_recorded_trace_render_rejects_a_mismatched_trace_digest(tmp_path: Path) -> None:
+def test_recorded_trace_render_rejects_a_mismatched_trace_digest(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
     trace_path, provenance_path = _write_inputs(tmp_path)
+    monkeypatch.setattr(replay_gallery, "_repository_root", lambda: tmp_path)
     trace_path.write_text(trace_path.read_text(encoding="utf-8") + " ", encoding="utf-8")
 
     with pytest.raises(ValueError, match="trace bytes do not match"):
         render_tool.render_recorded_trace_bundle(
-            trace_path, provenance_path, tmp_path / "render", video=False
+            trace_path, provenance_path, tmp_path / "output" / "render", video=False
         )
+
+
+def test_recorded_trace_render_preserves_existing_output_directory(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    trace_path, provenance_path = _write_inputs(tmp_path)
+    monkeypatch.setattr(replay_gallery, "_repository_root", lambda: tmp_path)
+    existing_output = tmp_path / "output" / "render"
+    existing_figure = existing_output / "cases" / "case_recorded_test" / "figures" / "filmstrip.png"
+    existing_figure.parent.mkdir(parents=True)
+    existing_figure.write_bytes(b"preserved prior render")
+
+    with pytest.raises(ValueError, match="existing outputs are preserved"):
+        render_tool.render_recorded_trace_bundle(
+            trace_path, provenance_path, existing_output, video=False
+        )
+
+    assert existing_figure.read_bytes() == b"preserved prior render"
 
 
 @pytest.mark.parametrize(
@@ -185,7 +225,7 @@ def test_recorded_trace_render_rejects_malformed_source_digests(
 
     with pytest.raises(ValueError, match=f"source\\.{field}"):
         render_tool.render_recorded_trace_bundle(
-            trace_path, provenance_path, tmp_path / "render", video=False
+            trace_path, provenance_path, tmp_path / "output" / "render", video=False
         )
 
-    assert not (tmp_path / "render").exists()
+    assert not (tmp_path / "output" / "render").exists()

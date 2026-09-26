@@ -6,7 +6,6 @@ import argparse
 import hashlib
 import json
 import re
-import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -24,16 +23,6 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def _git_revision() -> str | None:
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"], check=True, capture_output=True, text=True
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return None
-    return result.stdout.strip()
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -109,9 +98,23 @@ def render_recorded_trace_bundle(
         raise ValueError("fps must be a positive integer")
     trace_path = trace_path.expanduser().resolve()
     provenance_path = provenance_path.expanduser().resolve()
-    output_dir = output_dir.expanduser().resolve()
     trace, provenance = _validate_inputs(trace_path, provenance_path)
     _validate_trace_steps(trace)
+    raw_output_dir = Path(output_dir).expanduser()
+    if raw_output_dir.is_symlink():
+        raise ValueError("render output directory must not be a symlink")
+    root = replay_gallery._repository_root()
+    output_dir = replay_gallery._validated_output_directory(raw_output_dir, root=root)
+    if output_dir.exists():
+        raise ValueError(
+            "render output must be a new child directory; existing outputs are preserved"
+        )
+    try:
+        output_dir.mkdir(parents=True, exist_ok=False)
+    except FileExistsError as exc:
+        raise ValueError(
+            "render output must be a new child directory; existing outputs are preserved"
+        ) from exc
     episode_source = provenance["episode"]
     collision_events = [
         {
@@ -198,6 +201,7 @@ def render_recorded_trace_bundle(
                     "reason": f"{type(exc).__name__}: {exc}",
                 }
 
+    renderer_checkout = replay_gallery._git_checkout_state(root)
     provenance_out: dict[str, Any] = {
         "schema_version": "issue_9647_recorded_trace_render.v1",
         "render_mode": "stored_trace_only",
@@ -219,7 +223,9 @@ def render_recorded_trace_bundle(
         },
         "renderer": {
             "module": "robot_sf.adversarial.replay_gallery._render_replay",
-            "revision": _git_revision(),
+            "revision": renderer_checkout["revision"],
+            "checkout_clean": renderer_checkout["clean"],
+            "dirty_paths": renderer_checkout["dirty_paths"],
             "command": "scripts/tools/render_recorded_replay_trace.py --trace <trace> --provenance <provenance> --out <output>",
             "no_map_overlay": "unavailable_no_map_asset_passed_to_renderer",
         },

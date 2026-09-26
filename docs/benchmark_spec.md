@@ -474,7 +474,10 @@ Empty exposure gives zero total, peak, time and count; conditional means are und
 Despawned NaN rows are excluded. Pedestrian identity is the stable simulation row, not proximity order.
 
 `robot_force_metadata` declares configured radii, activation, multiplier, SocialForce parameters,
-and the computed reference. The reference is the full pedestrian-pair force magnitude at contact
+the acquisition source and sample timing, and the computed reference. Exact recorded values declare
+`source: recorded_robot_pedestrian_social_force` and `sample_timing: pre_integration`; explicit
+recomputation from caller-supplied snapshots declares `source: posthoc_recomputed`. The reference is
+the full pedestrian-pair force magnitude at contact
 (2 × pedestrian radius) and 1 m/s relative head-on speed. Current defaults give
 3.7030154332523164 m/s² for radius 0.35 m; the approximate 2.6 in issue #9666 omitted the kernel's
 lateral contribution. This reference is a model comparison, not an empirical discomfort threshold.

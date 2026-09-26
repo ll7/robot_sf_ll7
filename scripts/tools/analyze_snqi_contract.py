@@ -28,6 +28,7 @@ from robot_sf.benchmark.snqi.campaign_contract import (
     resolve_weight_mapping,
     sanitize_baseline_stats,
 )
+from robot_sf.benchmark.snqi.v2_spec import parse_v2_json
 from robot_sf.benchmark.utils import load_optional_json
 from robot_sf.common.artifact_paths import get_repository_root
 
@@ -39,7 +40,23 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         argparse.Namespace: Parsed argument namespace with threshold invariants checked.
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--campaign-root", type=Path, required=True)
+    parser.add_argument("--campaign-root", type=Path)
+    parser.add_argument("--score-version", choices=["SNQI-v0", "SNQI-v2"], default="SNQI-v0")
+    parser.add_argument("--episodes", type=Path, nargs="+")
+    parser.add_argument(
+        "--execution-map",
+        type=Path,
+        help="Independent JSON file-to-planner declaration for guarded execution; paths are relative to this map.",
+    )
+    parser.add_argument("--anchors", type=Path)
+    parser.add_argument("--family", type=Path)
+    parser.add_argument("--reports-dir", type=Path)
+    parser.add_argument(
+        "--freeze-v2-anchors",
+        type=Path,
+        metavar="OUTPUT",
+        help="Derive anchors from the complete dev101/102 campaign; no scoring.",
+    )
     parser.add_argument("--weights", type=Path, default=None)
     parser.add_argument("--baseline", type=Path, default=None)
     parser.add_argument("--seed", type=int, default=123)
@@ -223,9 +240,130 @@ def _write_csv(path: Path, payload: dict[str, Any]) -> None:
             )
 
 
+def _v2_execution_declarations(args: argparse.Namespace) -> dict[Path, dict[str, Any]]:
+    """Bind explicit offline files to caller declarations, never to episode self-labels.
+
+    Returns:
+        Resolved file paths and independently supplied planner descriptors.
+    """
+    declarations = {}
+    if args.execution_map:
+        document = parse_v2_json(args.execution_map.read_text(encoding="utf-8"))
+        if not isinstance(document, dict):
+            raise ValueError("SNQI-v2 execution map must be a file-to-planner object")
+        for name, planner in document.items():
+            path = (args.execution_map.parent / name).resolve()
+            if (
+                path in declarations
+                or not isinstance(planner, dict)
+                or any(
+                    not isinstance(planner.get(key), str) or not planner[key].strip()
+                    for key in ("key", "algo")
+                )
+                or (
+                    "kinematics" in planner
+                    and planner["kinematics"] is not None
+                    and (
+                        not isinstance(planner["kinematics"], str)
+                        or not planner["kinematics"].strip()
+                    )
+                )
+            ):
+                raise ValueError("SNQI-v2 malformed or duplicate execution declaration")
+            declarations[path] = planner
+        if set(declarations) != {path.resolve() for path in args.episodes}:
+            raise ValueError("SNQI-v2 execution map must bind exactly the supplied episode files")
+    return declarations
+
+
+def _validate_v2_episode_identity(episode: dict[str, Any], planner: dict[str, Any]) -> None:
+    """Reject a map that conflicts with identities explicitly recorded by the producer."""
+    raw_algorithm = episode.get("algo")
+    if not isinstance(raw_algorithm, str) or not raw_algorithm.strip():
+        raise ValueError("SNQI-v2 execution map algorithm identity mismatch")
+    if raw_algorithm != planner["algo"]:
+        raise ValueError("SNQI-v2 execution map algorithm identity mismatch")
+
+    for field, declared in (
+        ("planner_key", planner["key"]),
+        ("kinematics", planner.get("kinematics")),
+    ):
+        observed = episode.get(field)
+        if observed is not None and (
+            not isinstance(observed, str)
+            or not observed.strip()
+            or (declared is not None and observed != declared)
+        ):
+            raise ValueError(f"SNQI-v2 execution map {field} identity mismatch")
+
+
+def _analyze_v2(args: argparse.Namespace) -> int:
+    """Write the mandatory v2 report pair from raw episode records.
+
+    Returns:
+        Zero after successful report creation.
+    """
+    from robot_sf.benchmark.snqi.v2_reports import (
+        compact_report_episode,
+        read_episode_files,
+        write_v2_reports,
+    )
+    from robot_sf.benchmark.snqi.v2_spec import load_snqi_v2_spec
+
+    if not all((args.episodes, args.weights, args.anchors, args.family, args.reports_dir)):
+        raise ValueError("SNQI-v2 requires --episodes --weights --anchors --family --reports-dir")
+    spec = load_snqi_v2_spec(args.weights, args.anchors, args.family)
+    declarations = _v2_execution_declarations(args)
+    episodes, expected_algorithms = [], {}
+    for path in args.episodes:
+        planner = declarations.get(path.resolve())
+        for episode in read_episode_files([path]):
+            expected = planner["algo"] if planner else None
+            if planner:
+                _validate_v2_episode_identity(episode, planner)
+                declared_kinematics = planner.get("kinematics")
+                effective_kinematics = (
+                    declared_kinematics
+                    if declared_kinematics is not None
+                    else episode.get("kinematics")
+                )
+                episode = {
+                    **episode,
+                    "planner_key": planner["key"],
+                }
+                if effective_kinematics is not None:
+                    episode["kinematics"] = effective_kinematics
+                group = planner["key"] + (
+                    f"::{effective_kinematics}" if effective_kinematics else ""
+                )
+                if group in expected_algorithms and expected_algorithms[group] != expected:
+                    raise ValueError("SNQI-v2 conflicting algorithm declarations for report arm")
+                expected_algorithms[group] = expected
+            episodes.append(compact_report_episode(episode, spec, expected_algorithm=expected))
+            del episode
+
+    spec.validate_evaluation_seeds([ep["seed"] for ep in episodes])
+    artifacts = write_v2_reports(
+        episodes, spec, args.reports_dir, expected_algorithms=expected_algorithms
+    )
+    print(json.dumps(artifacts, sort_keys=True))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run SNQI diagnostics for one campaign and write report artifacts."""
     args = _parse_args(argv)
+    if args.freeze_v2_anchors is not None:
+        from robot_sf.benchmark.snqi.v2_calibration import freeze_campaign_anchors
+
+        if args.campaign_root is None:
+            raise ValueError("--freeze-v2-anchors requires --campaign-root")
+        freeze_campaign_anchors(args.campaign_root, args.freeze_v2_anchors)
+        return 0
+    if args.score_version == "SNQI-v2":
+        return _analyze_v2(args)
+    if args.campaign_root is None:
+        raise ValueError("legacy SNQI analysis requires --campaign-root")
     campaign_root = args.campaign_root.resolve()
     summary_path = campaign_root / "reports" / "campaign_summary.json"
     if not summary_path.exists():

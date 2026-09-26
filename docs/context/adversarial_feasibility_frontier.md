@@ -185,7 +185,7 @@ counterexamples states its exact candidate and simulator budgets and explicitly 
 counterexample found does not mean none exists.
 
 This adapter is fixture-first because #9653 has not yet landed a durable round-artifact schema. The
-implementation for Issue #9653 must either emit this v1 bundle or add an explicit, tested adapter
+implementation for Issue #9653 must either emit this v3 bundle or add an explicit, tested adapter
 from its persisted round artifacts. Do not hand-enter summary numbers or label fixtures as
 simulator runs. Acceptance for Issue #9654 additionally requires generating this report directly
 from a real completed 2+ round #9653 run, with held-out/regression evidence and representative replay

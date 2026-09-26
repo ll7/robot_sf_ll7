@@ -7,7 +7,8 @@ import json
 import re
 import subprocess
 import sys
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -23,12 +24,22 @@ from robot_sf.adversarial.feasibility_frontier_report import (
 )
 from robot_sf.benchmark.figures.provenance import _git_sha_short
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
 _REVISION = "a" * 40
 _CONFIG = "b" * 64
 _EXPERIMENT_ID = "fixture-two-round-loop"
+
+
+def test_docs_match_frontier_input_and_report_schema_versions() -> None:
+    """The integration guide and context index name the code's current schemas."""
+    root = Path(__file__).resolve().parents[2]
+    contract = (root / "docs/context/adversarial_feasibility_frontier.md").read_text(
+        encoding="utf-8"
+    )
+    index = (root / "docs/context/INDEX.md").read_text(encoding="utf-8")
+
+    assert INPUT_SCHEMA_VERSION in contract
+    assert frontier_module.REPORT_SCHEMA_VERSION in contract
+    assert "Fixture-backed v3 input and v2 report output" in index
 
 
 def test_report_import_and_clear_optional_renderer_error_without_matplotlib() -> None:

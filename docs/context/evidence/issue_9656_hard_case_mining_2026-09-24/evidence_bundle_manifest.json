@@ -13,7 +13,7 @@
   },
   "totals": {
     "file_count": 3,
-    "total_bytes": 258251
+    "total_bytes": 258338
   },
   "files": [
     {
@@ -25,8 +25,8 @@
     },
     {
       "path": "report.md",
-      "size_bytes": 9867,
-      "sha256": "0bd8772d9c6bdfe1c33cea951c291f98f96806dd3c1a97e3365f55cc2e72d0ee",
+      "size_bytes": 9954,
+      "sha256": "586fbc5e9e36e3b5df794839e94c096e784cd128b76f306220c884f1a53ceaca",
       "kind": "reports",
       "location": "payload/report.md"
     },

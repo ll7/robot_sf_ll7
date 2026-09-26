@@ -18,7 +18,7 @@ from robot_sf.benchmark.fallback_policy import (
     resolve_execution_mode,
     runtime_fallback_or_degraded_marker,
 )
-from robot_sf.benchmark.termination_reason import TERMINATION_REASONS
+from robot_sf.benchmark.termination_reason import TERMINATION_REASONS, outcome_contradictions
 from robot_sf.benchmark.utils import _config_hash
 
 SOURCE_SHA = "07f7e8d43084de748915e1b1eb8b2a1603357c6e"
@@ -75,6 +75,14 @@ def _canonical_outcome(
     termination_reason = row.get("termination_reason")
     if not isinstance(termination_reason, str) or termination_reason not in TERMINATION_REASONS:
         raise ValueError(f"{source} row {key} has missing or invalid termination_reason")
+    contradictions = outcome_contradictions(
+        termination_reason=termination_reason,
+        outcome=outcome,
+    )
+    if contradictions:
+        raise ValueError(
+            f"{source} row {key} has contradictory canonical outcome: {'; '.join(contradictions)}"
+        )
     return {field: outcome[field] for field in OUTCOME_FIELDS}, termination_reason
 
 
@@ -356,6 +364,34 @@ def _validate_steps(key: tuple[str, str, int], row: dict[str, Any], trace: dict[
             raise ValueError(f"trace tuple {key} step {index} lacks pedestrian forces")
 
 
+def _runtime_fallback_status_marker(value: Any, path: str = "algorithm_metadata") -> str | None:
+    """Catch fallback/degraded status labels beyond the shared exact-value set."""
+    status_fields = {
+        "status",
+        "row_status",
+        "readiness_status",
+        "availability_status",
+        "execution_mode",
+    }
+    if isinstance(value, dict):
+        for raw_key, item in value.items():
+            key = str(raw_key)
+            item_path = f"{path}.{key}"
+            if key in status_fields and isinstance(item, str):
+                normalized = item.strip().lower().replace("-", "_")
+                if "fallback" in normalized or "degraded" in normalized:
+                    return f"{item_path}={normalized}"
+            nested = _runtime_fallback_status_marker(item, item_path)
+            if nested is not None:
+                return nested
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            nested = _runtime_fallback_status_marker(item, f"{path}[{index}]")
+            if nested is not None:
+                return nested
+    return None
+
+
 def _compare_row(
     key: tuple[str, str, int],
     row: dict[str, Any],
@@ -388,10 +424,16 @@ def _compare_row(
             "planner_diagnostics",
             "foresight_prediction",
             "benchmark_availability",
+            "policy_step_timeout",
+            "fallback_reason",
+            "fallback_used",
+            "fallback_triggered",
         )
         if field in metadata
     }
-    marker = runtime_fallback_or_degraded_marker(runtime)
+    marker = runtime_fallback_or_degraded_marker(runtime) or _runtime_fallback_status_marker(
+        runtime
+    )
     if mode not in {"native", "adapter"} or marker is not None:
         raise ValueError(f"trace tuple {key} has inadmissible runtime mode {mode}: {marker}")
     params = row.get("scenario_params") or {}

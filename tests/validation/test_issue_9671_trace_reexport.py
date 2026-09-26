@@ -250,6 +250,21 @@ def test_paired_rows_compare_canonical_outcome_fields(tmp_path: Path, field: str
     )
 
 
+@pytest.mark.parametrize("source", ["trace", "release"])
+def test_rejects_contradictory_outcome_flags(tmp_path: Path, source: str) -> None:
+    release_row = _row(113, "collision", trace=False)
+    trace = _row(113, "collision", trace=True)
+    target = release_row if source == "release" else trace
+    target["outcome"]["route_complete"] = True
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [release_row])
+    traces = tmp_path / "episodes.jsonl"
+    traces.write_text(json.dumps(trace) + "\n")
+
+    with pytest.raises(ValueError, match="contradictory canonical outcome"):
+        _check(archive, traces, tmp_path, [113])
+
+
 @pytest.mark.parametrize(
     ("source", "field"),
     [
@@ -353,6 +368,9 @@ def test_rejects_missing_per_pedestrian_force(tmp_path: Path) -> None:
         ("readiness_status", "fallback"),
         ("availability_status", "not_available"),
         ("planner_runtime", {"fallback_used": True}),
+        ("policy_step_timeout", {"fallback_actions": 1}),
+        ("fallback_reason", "policy_step_timeout"),
+        ("status", "policy_step_timeout_fallback"),
     ],
 )
 def test_rejects_fallback_runtime(

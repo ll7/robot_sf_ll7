@@ -61,6 +61,7 @@ ISSUE_9656_SUMMARY_SCHEMA = "benchmark-hard-case-slice.v1"
 ISSUE_9652_REPLAY_INPUT_BINDING_SCHEMA = "adversarial-historical-replay-input-binding.v1"
 HISTORICAL_CANDIDATE_SCHEMA_VERSION = "adversarial-historical-candidate.v2"
 LEGACY_HISTORICAL_CANDIDATE_SCHEMA_VERSION = "adversarial-historical-candidate.v1"
+LEGACY_UNPINNED_SOURCE_EVIDENCE_SCHEMA = "adversarial-legacy-source-evidence.v1"
 SEARCH_MANIFEST_SCHEMA = "adversarial-search-manifest.v1"
 _ROOT = Path(__file__).resolve().parents[2]
 _CORPUS_SCHEMA_PATH = _ROOT / "robot_sf/benchmark/schemas/adversarial-counterexample-corpus.v1.json"
@@ -1362,6 +1363,8 @@ def _historical_candidate_import_indexes(
     source_identity_by_import = {}
     for receipt in imports:
         source_identity = receipt["source_identity"]
+        if source_identity.get("source_issue") != receipt.get("source_issue"):
+            raise CorpusError("historical candidate source issue differs from its import receipt")
         expected_id = hashlib.sha256(_stable_json(source_identity).encode("utf-8")).hexdigest()
         if receipt["import_id"] != expected_id:
             raise CorpusError("historical candidate import ID does not bind its source identity")
@@ -1405,6 +1408,17 @@ def _validate_historical_candidate_registry_row(
             candidate
         ):
             raise CorpusError("historical candidate planner status differs from its evidence")
+    elif source_identity_by_import[import_id].get("source_issue") == 9656:
+        provenance = candidate.get("source_provenance", {})
+        legacy_evidence = candidate.get("legacy_unpinned_source_evidence")
+        if candidate.get("candidate_status") != "admitted" and (
+            candidate.get("candidate_status") != "blocked_source_provenance_mismatch"
+            or not isinstance(provenance, Mapping)
+            or provenance.get("source_identity_binding_status") != "legacy_unpinned"
+            or not isinstance(legacy_evidence, Mapping)
+            or legacy_evidence.get("schema_version") != LEGACY_UNPINNED_SOURCE_EVIDENCE_SCHEMA
+        ):
+            raise CorpusError("legacy #9656 candidate must remain explicitly blocked and unpinned")
     if candidate.get("candidate_status") == "admitted":
         _validate_promoted_historical_candidate(candidate, known_cases, successful_attempts)
 
@@ -1424,6 +1438,66 @@ def _validate_promoted_historical_candidate(
         raise CorpusError("promoted historical candidate has no successful admission attempt")
 
 
+def _normalize_legacy_issue9656_candidates_for_read(corpus: Any) -> None:
+    """Keep legacy #9656 rows readable without trusting unreceipted v1 classifications."""
+    if not isinstance(corpus, dict):
+        return
+    imports = corpus.get("historical_candidate_imports")
+    candidates = corpus.get("historical_candidates")
+    if not isinstance(imports, list) or not isinstance(candidates, list):
+        return
+    imports_by_id = {
+        record.get("import_id"): record
+        for record in imports
+        if isinstance(record, dict) and isinstance(record.get("import_id"), str)
+    }
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        provenance = candidate.get("source_provenance")
+        if not isinstance(provenance, dict):
+            continue
+        import_record = imports_by_id.get(provenance.get("import_id"))
+        source_identity = (
+            import_record.get("source_identity") if isinstance(import_record, dict) else None
+        )
+        if (
+            not isinstance(source_identity, Mapping)
+            or source_identity.get("source_issue") != 9656
+            or source_identity.get(
+                "candidate_schema_version", LEGACY_HISTORICAL_CANDIDATE_SCHEMA_VERSION
+            )
+            != LEGACY_HISTORICAL_CANDIDATE_SCHEMA_VERSION
+            or candidate.get("candidate_status") == "admitted"
+        ):
+            continue
+
+        legacy_evidence = candidate.get("legacy_unpinned_source_evidence")
+        if not (
+            isinstance(legacy_evidence, Mapping)
+            and legacy_evidence.get("schema_version") == LEGACY_UNPINNED_SOURCE_EVIDENCE_SCHEMA
+        ):
+            candidate["legacy_unpinned_source_evidence"] = {
+                "schema_version": LEGACY_UNPINNED_SOURCE_EVIDENCE_SCHEMA,
+                "candidate_status_at_load": candidate.get("candidate_status"),
+                "source_identity_binding_status_at_load": provenance.get(
+                    "source_identity_binding_status"
+                ),
+                "source_identity_binding_issues_at_load": copy.deepcopy(
+                    provenance.get("source_identity_binding_issues", [])
+                ),
+                "reason": "legacy_import_has_no_source_materialization_byte_receipt",
+            }
+        candidate["schema_version"] = LEGACY_HISTORICAL_CANDIDATE_SCHEMA_VERSION
+        candidate["candidate_status"] = "blocked_source_provenance_mismatch"
+        provenance["source_identity_binding_status"] = "legacy_unpinned"
+        provenance["source_identity_binding_issues"] = [
+            "legacy_import_has_no_source_materialization_byte_receipt"
+        ]
+        if isinstance(candidate.get("planner_status_at_import"), Mapping):
+            candidate["planner_status_at_import"] = _issue9656_planner_status_at_import(candidate)
+
+
 def load_corpus(path: str | Path, *, create: bool = False) -> dict[str, Any]:
     """Load and validate a corpus JSON file; optionally create an empty one."""
     corpus_path = Path(path)
@@ -1437,6 +1511,7 @@ def load_corpus(path: str | Path, *, create: bool = False) -> dict[str, Any]:
         value = json.loads(corpus_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise CorpusError(f"could not read corpus {corpus_path}: {exc}") from exc
+    _normalize_legacy_issue9656_candidates_for_read(value)
     validate_corpus(value, corpus_root=corpus_path.parent)
     return value
 

@@ -129,6 +129,17 @@ evidence tier, and claim boundary must match the pinned summary and imported
 candidate records. An admitted candidate retains its original pending
 classification and import counters.
 
+Legacy v1 #9656 candidate rows remain readable, including rows retained with
+their original blocked status. Because those identities have no independent
+source-materialization byte receipt, loading a non-admitted v1 row records its
+prior status and source-binding claim under `legacy_unpinned_source_evidence`,
+then marks it `blocked_source_provenance_mismatch` with
+`source_identity_binding_status: legacy_unpinned`. This prevents an old or
+re-keyed v1 identity from carrying a verified/pending claim into current use;
+re-import the source bundle with the current importer to obtain current-schema
+receipts. Already admitted cases remain governed by their persisted case and
+exact-replay admission evidence.
+
 Each imported candidate explicitly records `feasibility.verdict: unknown`; the
 historical benchmark evidence does not establish dynamic task feasibility. Its
 `planner_status_at_import` is also `unknown` with zero valid current-revision

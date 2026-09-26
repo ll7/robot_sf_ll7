@@ -142,6 +142,73 @@ def _issue9656_candidate_fixture(
     return summary_path, materialized, campaign_root, bundle_root
 
 
+def _rekey_issue9656_import_as_legacy_v1(
+    corpus: dict[str, object],
+    corpus_root: Path,
+    *,
+    version_field: str,
+    identity_source_issue: int = 9656,
+) -> None:
+    """Re-key a persisted-style #9656 import after declaring the legacy v1 identity."""
+    import_record = corpus["historical_candidate_imports"][0]
+    candidate = corpus["historical_candidates"][0]
+    old_import_id = import_record["import_id"]
+    old_candidate_id = candidate["candidate_id"]
+    source_identity = import_record["source_identity"]
+    source_identity.pop("source_materialization_bindings")
+    source_identity.pop("replay_input_binding_schema")
+    if version_field == "absent":
+        source_identity.pop("candidate_schema_version")
+    else:
+        source_identity["candidate_schema_version"] = (
+            counterexample_corpus.LEGACY_HISTORICAL_CANDIDATE_SCHEMA_VERSION
+        )
+    source_identity["source_issue"] = identity_source_issue
+    candidate["schema_version"] = counterexample_corpus.LEGACY_HISTORICAL_CANDIDATE_SCHEMA_VERSION
+    new_import_id = hashlib.sha256(
+        counterexample_corpus._stable_json(source_identity).encode("utf-8")
+    ).hexdigest()
+    new_candidate_id = hashlib.sha256(
+        counterexample_corpus._stable_json(
+            {
+                **source_identity,
+                "source_case_id": candidate["source_case_id"],
+                "source_record_sha256": candidate["source_record_sha256"],
+            }
+        ).encode("utf-8")
+    ).hexdigest()
+    import_record["import_id"] = new_import_id
+    import_record["candidate_ids"] = [new_candidate_id]
+    candidate["candidate_id"] = new_candidate_id
+    candidate["source_provenance"]["import_id"] = new_import_id
+
+    old_import_root = corpus_root / "historical_candidate_imports" / old_import_id
+    new_import_root = corpus_root / "historical_candidate_imports" / new_import_id
+    old_candidate_root = corpus_root / "historical_candidates" / old_candidate_id
+    new_candidate_root = corpus_root / "historical_candidates" / new_candidate_id
+    for receipt in import_record["source_files"]:
+        receipt["stored_path"] = receipt["stored_path"].replace(
+            f"historical_candidate_imports/{old_import_id}/",
+            f"historical_candidate_imports/{new_import_id}/",
+            1,
+        )
+    for paths in (import_record["artifact_paths"], candidate["artifact_paths"]):
+        for name, relative in paths.items():
+            relative = relative.replace(
+                f"historical_candidate_imports/{old_import_id}/",
+                f"historical_candidate_imports/{new_import_id}/",
+                1,
+            )
+            relative = relative.replace(
+                f"historical_candidates/{old_candidate_id}/",
+                f"historical_candidates/{new_candidate_id}/",
+                1,
+            )
+            paths[name] = relative
+    old_candidate_root.rename(new_candidate_root)
+    old_import_root.rename(new_import_root)
+
+
 def _build_issue9656_fixture_candidate(
     index: int,
     status: str,
@@ -1342,8 +1409,9 @@ def test_issue9656_source_identity_mismatch_cannot_be_reclassified_as_verified(
         load_corpus(corpus_path)
 
 
-def test_issue9652_receiptless_v2_source_identity_reclassification_is_rejected(
-    tmp_path: Path,
+@pytest.mark.parametrize("version_field", ("absent", "explicit_v1"))
+def test_issue9652_persisted_v2_to_legacy_downgrade_cannot_restore_pending_status(
+    tmp_path: Path, version_field: str
 ) -> None:
     summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
         tmp_path, statuses=("not_attempted",)
@@ -1372,22 +1440,13 @@ def test_issue9652_receiptless_v2_source_identity_reclassification_is_rejected(
     # the checksum-pinned episode, remove the independent case-byte receipts, and recompute
     # content-derived import/candidate IDs and their references.
     tampered = copy.deepcopy(corpus)
-    import_record = tampered["historical_candidate_imports"][0]
     candidate = tampered["historical_candidates"][0]
-    old_import_id = import_record["import_id"]
-    old_candidate_id = candidate["candidate_id"]
-    candidate_root = corpus_root / "historical_candidates" / old_candidate_id
-    source_case_path = candidate_root / "source_case.json"
+    source_case_path = corpus_root / candidate["artifact_paths"]["source_case"]
     source_case = json.loads(source_case_path.read_text(encoding="utf-8"))
     source_case["source"]["row_git_hash"] = _ISSUE9656_SOURCE_REVISION
     source_case_path.write_text(json.dumps(source_case, sort_keys=True), encoding="utf-8")
     source_case_digest = hashlib.sha256(source_case_path.read_bytes()).hexdigest()
 
-    source_identity = import_record["source_identity"]
-    source_identity.pop("source_materialization_bindings")
-    new_import_id = hashlib.sha256(
-        counterexample_corpus._stable_json(source_identity).encode("utf-8")
-    ).hexdigest()
     summary = json.loads(
         (corpus_root / candidate["artifact_paths"]["import_summary"]).read_text(encoding="utf-8")
     )
@@ -1399,7 +1458,6 @@ def test_issue9652_receiptless_v2_source_identity_reclassification_is_rejected(
     provenance = candidate["source_provenance"]
     provenance.update(
         {
-            "import_id": new_import_id,
             "row_git_hash": _ISSUE9656_SOURCE_REVISION,
             "source_identity_binding_status": "verified",
             "source_identity_binding_issues": [],
@@ -1411,51 +1469,94 @@ def test_issue9652_receiptless_v2_source_identity_reclassification_is_rejected(
     candidate["planner_status_at_import"] = (
         counterexample_corpus._issue9656_planner_status_at_import(candidate)
     )
-    new_candidate_id = hashlib.sha256(
-        counterexample_corpus._stable_json(
-            {
-                **source_identity,
-                "source_case_id": candidate["source_case_id"],
-                "source_record_sha256": candidate["source_record_sha256"],
-            }
-        ).encode("utf-8")
-    ).hexdigest()
-    candidate["candidate_id"] = new_candidate_id
+    _rekey_issue9656_import_as_legacy_v1(tampered, corpus_root, version_field=version_field)
+    tampered["historical_candidates"].sort(key=lambda item: item["candidate_id"])
+    tampered["historical_candidate_imports"].sort(key=lambda item: item["import_id"])
 
-    import_record["import_id"] = new_import_id
-    import_record["candidate_ids"] = [new_candidate_id]
-    import_record["candidate_status_counts"] = {"pending_exact_replay": 1}
-    import_root = corpus_root / "historical_candidate_imports" / old_import_id
-    new_import_root = corpus_root / "historical_candidate_imports" / new_import_id
-    for file_receipt in import_record["source_files"]:
-        file_receipt["stored_path"] = file_receipt["stored_path"].replace(
-            f"historical_candidate_imports/{old_import_id}/",
-            f"historical_candidate_imports/{new_import_id}/",
-            1,
-        )
-    for paths in (import_record["artifact_paths"], candidate["artifact_paths"]):
-        for name, relative in paths.items():
-            relative = relative.replace(
-                f"historical_candidate_imports/{old_import_id}/",
-                f"historical_candidate_imports/{new_import_id}/",
-                1,
-            )
-            relative = relative.replace(
-                f"historical_candidates/{old_candidate_id}/",
-                f"historical_candidates/{new_candidate_id}/",
-                1,
-            )
-            paths[name] = relative
+    with pytest.raises(CorpusError, match="legacy #9656 candidate must remain explicitly blocked"):
+        validate_corpus(tampered, corpus_root=corpus_root)
 
-    candidate_root.rename(corpus_root / "historical_candidates" / new_candidate_id)
-    import_root.rename(new_import_root)
+    corpus_path.write_text(json.dumps(tampered, sort_keys=True), encoding="utf-8")
+    loaded = load_corpus(corpus_path)
+    loaded_candidate = loaded["historical_candidates"][0]
+    assert loaded_candidate["candidate_status"] == "blocked_source_provenance_mismatch"
+    assert loaded_candidate["source_provenance"]["source_identity_binding_status"] == (
+        "legacy_unpinned"
+    )
+    assert loaded_candidate["legacy_unpinned_source_evidence"] == {
+        "schema_version": counterexample_corpus.LEGACY_UNPINNED_SOURCE_EVIDENCE_SCHEMA,
+        "candidate_status_at_load": "pending_exact_replay",
+        "source_identity_binding_status_at_load": "verified",
+        "source_identity_binding_issues_at_load": [],
+        "reason": "legacy_import_has_no_source_materialization_byte_receipt",
+    }
+    validate_corpus(loaded, corpus_root=corpus_root)
+
+
+def test_issue9652_legacy_v1_blocked_import_remains_readable(tmp_path: Path) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
+        tmp_path, statuses=("not_attempted",)
+    )
+    source_case_path = materialized / "cases/case-0000000000000001/case.json"
+    source_case = json.loads(source_case_path.read_text(encoding="utf-8"))
+    source_case["source"]["row_git_hash"] = "0" * 40
+    source_case_path.write_text(json.dumps(source_case, sort_keys=True), encoding="utf-8")
+
+    corpus_root = tmp_path / "corpus"
+    corpus, _receipt = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=corpus_root,
+    )
+    corpus_path = corpus_root / "corpus.json"
+    save_corpus(corpus_path, corpus)
+    tampered = copy.deepcopy(corpus)
+    _rekey_issue9656_import_as_legacy_v1(tampered, corpus_root, version_field="explicit_v1")
     tampered["historical_candidates"].sort(key=lambda item: item["candidate_id"])
     tampered["historical_candidate_imports"].sort(key=lambda item: item["import_id"])
     corpus_path.write_text(json.dumps(tampered, sort_keys=True), encoding="utf-8")
 
-    with pytest.raises(
-        CorpusError, match="schema-v2 imports require source materialization byte receipts"
-    ):
+    loaded = load_corpus(corpus_path)
+    candidate = loaded["historical_candidates"][0]
+    assert candidate["candidate_status"] == "blocked_source_provenance_mismatch"
+    assert candidate["source_provenance"]["source_identity_binding_status"] == ("legacy_unpinned")
+    assert candidate["legacy_unpinned_source_evidence"]["candidate_status_at_load"] == (
+        "blocked_source_provenance_mismatch"
+    )
+    assert (
+        candidate["legacy_unpinned_source_evidence"]["source_identity_binding_status_at_load"]
+        == "blocked"
+    )
+
+
+def test_issue9652_legacy_rekey_cannot_change_identity_source_issue(tmp_path: Path) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
+        tmp_path, statuses=("not_attempted",)
+    )
+    corpus_root = tmp_path / "corpus"
+    corpus, _receipt = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=corpus_root,
+    )
+    corpus_path = corpus_root / "corpus.json"
+    save_corpus(corpus_path, corpus)
+    tampered = copy.deepcopy(corpus)
+    _rekey_issue9656_import_as_legacy_v1(
+        tampered,
+        corpus_root,
+        version_field="absent",
+        identity_source_issue=9657,
+    )
+    corpus_path.write_text(json.dumps(tampered, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(CorpusError, match="source issue differs from its import receipt"):
         load_corpus(corpus_path)
 
 

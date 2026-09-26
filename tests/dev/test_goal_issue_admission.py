@@ -23,6 +23,21 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 
+@pytest.fixture(autouse=True)
+def _healthy_transport_preflight(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep admission unit tests offline unless they exercise transport failure."""
+    monkeypatch.setattr(
+        goal_issue_admission.gh_issue_rest,
+        "preflight_transport",
+        lambda: {
+            "schema": "github_transport_preflight.v1",
+            "status": "ok",
+            "timeout_seconds": 5,
+            "authenticated": True,
+        },
+    )
+
+
 def _preflight(*, ready: bool) -> dict[str, object]:
     return {
         "schema": "issue_implementability.v1",
@@ -166,6 +181,89 @@ def test_atomic_claim_failure_remains_explicit() -> None:
     assert payload["write_attempted"] is True
 
 
+@pytest.mark.parametrize(
+    ("reason", "error"),
+    [
+        ("timeout", "GitHub transport preflight timed out after 5s."),
+        (
+            "malformed_response",
+            "GitHub transport preflight returned a malformed or partial response.",
+        ),
+    ],
+)
+def test_unavailable_transport_is_structured_and_stops_before_live_reads_or_claim(
+    reason: str, error: str
+) -> None:
+    """Timeout and partial reads are distinct from an unclaimed ready issue."""
+    transport = {
+        "schema": "github_transport_preflight.v1",
+        "status": "transport_unavailable",
+        "reason": reason,
+        "timeout_seconds": 5,
+        "authenticated": None,
+        "error": error,
+        "next_action": "Check GitHub connectivity and CLI authentication with `gh auth status`, then retry.",
+    }
+    with (
+        patch(
+            "scripts.dev.goal_issue_admission.gh_issue_rest.preflight_transport",
+            return_value=transport,
+        ),
+        patch(
+            "scripts.dev.goal_issue_admission.issue_implementability.live_issue_report"
+        ) as live_report,
+        patch("scripts.dev.goal_issue_admission.issue_claim.acquire_issue") as acquire,
+    ):
+        payload = admit_issue(
+            7611,
+            repo="ll7/robot_sf_ll7",
+            remote="origin",
+            source_ref="origin/main",
+            check_only=False,
+        )
+
+    assert payload["outcome"] == "transport_unavailable"
+    assert payload["preflight"]["classification"] == "transport_unavailable"
+    assert payload["preflight"]["ready"] is False
+    assert payload["claim_outcome"] == "not_checked"
+    assert payload["write_attempted"] is False
+    assert payload["transport_preflight"] == transport
+    live_report.assert_not_called()
+    acquire.assert_not_called()
+
+
+def test_compact_admission_preserves_transport_unavailable_classification() -> None:
+    """Queue consumers can distinguish a failed transport probe from no claim."""
+    transport = {
+        "schema": "github_transport_preflight.v1",
+        "status": "transport_unavailable",
+        "reason": "timeout",
+        "timeout_seconds": 5,
+        "authenticated": None,
+        "error": "GitHub transport preflight timed out after 5s.",
+        "next_action": "Check connectivity and authentication.",
+    }
+    compact = compact_admission(
+        {
+            "outcome": "transport_unavailable",
+            "write_attempted": False,
+            "transport_preflight": transport,
+            "preflight": {
+                "classification": "transport_unavailable",
+                "reasons": [transport["error"]],
+                "ready": False,
+                "write_allowed": False,
+                "claim": None,
+            },
+        }
+    )
+
+    assert compact["outcome"] == "transport_unavailable"
+    assert compact["classification"] == "transport_unavailable"
+    assert compact["claim_outcome"] == "not_checked"
+    assert compact["transport_preflight"] == transport
+
+
 def test_changed_issue_inputs_fail_closed_before_claim_write() -> None:
     initial = _preflight(ready=True)
     changed = _preflight(ready=True)
@@ -283,13 +381,26 @@ def test_reference_only_open_pr_blocks_admission_before_claim_write() -> None:
     }
     with (
         patch(
+            "scripts.dev.goal_issue_admission.gh_issue_rest.preflight_transport",
+            return_value={
+                "schema": "github_transport_preflight.v1",
+                "status": "ok",
+                "timeout_seconds": 5,
+                "authenticated": True,
+            },
+        ) as transport_preflight,
+        patch(
             "scripts.dev.goal_issue_admission.issue_implementability.fetch_live_issue",
             return_value=issue,
-        ),
+        ) as fetch_issue,
         patch(
             "scripts.dev.goal_issue_admission.issue_implementability.issue_claim.status_issue",
             return_value={"ok": True, "claimed": False, "claim_ref": None, "sha": None},
-        ),
+        ) as read_claim,
+        patch(
+            "scripts.dev.goal_issue_admission.issue_implementability._resolve_issue_dependency_packet",
+            return_value=None,
+        ) as read_dependencies,
         patch(
             "scripts.dev.goal_issue_admission.issue_implementability.issue_claim.open_prs_covering_issue",
             return_value={
@@ -299,7 +410,7 @@ def test_reference_only_open_pr_blocks_admission_before_claim_write() -> None:
                 "source": "graphql",
                 "error": None,
             },
-        ),
+        ) as read_open_prs,
         patch("scripts.dev.goal_issue_admission.issue_claim.acquire_issue") as acquire,
     ):
         payload = admit_issue(
@@ -316,6 +427,11 @@ def test_reference_only_open_pr_blocks_admission_before_claim_write() -> None:
     assert payload["preflight"]["admission_reason"] == "covering_pr_open"
     assert payload["preflight"]["write_allowed"] is False
     assert "#8450" in " ".join(payload["preflight"]["reasons"])
+    transport_preflight.assert_called_once_with()
+    fetch_issue.assert_called_once_with(8449, repo="ll7/robot_sf_ll7")
+    read_claim.assert_called_once_with(8449, remote="origin")
+    read_dependencies.assert_called_once()
+    read_open_prs.assert_called_once_with(repo="ll7/robot_sf_ll7", issue_number=8449)
     acquire.assert_not_called()
 
 

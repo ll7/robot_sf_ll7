@@ -14,7 +14,7 @@ if __package__ in {None, ""}:
     # Direct execution must prefer this checkout over ambient source roots.
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.dev import issue_claim, issue_implementability
+from scripts.dev import gh_issue_rest, issue_claim, issue_implementability
 
 SCHEMA = "goal_issue_admission.v1"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
@@ -74,7 +74,7 @@ def compact_admission(payload: dict[str, Any]) -> dict[str, Any]:
                     )
                     if hint not in reasons:
                         reasons.append(hint)
-    return {
+    result = {
         "schema": SCHEMA,
         "ok": payload.get("ok") is True,
         "outcome": outcome,
@@ -89,6 +89,9 @@ def compact_admission(payload: dict[str, Any]) -> dict[str, Any]:
         "claim": claim,
         "claim_outcome": _claim_outcome(claim, admission_outcome=outcome),
     }
+    if isinstance(payload.get("transport_preflight"), dict):
+        result["transport_preflight"] = payload["transport_preflight"]
+    return result
 
 
 def compact_preflight(
@@ -152,6 +155,39 @@ def admit_issue(
     prospective_ready: bool = False,
 ) -> dict[str, Any]:
     """Evaluate one live issue and create its atomic claim only after a pass."""
+    transport_preflight = gh_issue_rest.preflight_transport()
+    payload: dict[str, Any] = {
+        "schema": SCHEMA,
+        "issue": issue_number,
+        "repo": repo,
+        "remote": remote,
+        "source_ref": source_ref,
+        "check_only": check_only,
+        "transport_preflight": transport_preflight,
+        "write_attempted": False,
+        "claim": None,
+        "ok": False,
+    }
+    if transport_preflight.get("status") != "ok":
+        transport_error = transport_preflight.get(
+            "error", "GitHub transport/authentication preflight failed."
+        )
+        payload["preflight"] = {
+            "schema": issue_implementability.SCHEMA,
+            "classification": "transport_unavailable",
+            "admission_reason": "transport_unavailable",
+            "reasons": [str(transport_error)],
+            "ready": False,
+            "write_allowed": False,
+            "claim": None,
+            "transport_preflight": transport_preflight,
+        }
+        payload["outcome"] = "transport_unavailable"
+        payload["claim_outcome"] = _claim_outcome(
+            payload["claim"], admission_outcome=payload["outcome"]
+        )
+        return payload
+
     preflight_kwargs: dict[str, Any] = {}
     if route_preflight is not None:
         preflight_kwargs["route_preflight"] = route_preflight
@@ -163,18 +199,8 @@ def admit_issue(
         remote=remote,
         **preflight_kwargs,
     )
-    payload: dict[str, Any] = {
-        "schema": SCHEMA,
-        "issue": issue_number,
-        "repo": repo,
-        "remote": remote,
-        "source_ref": source_ref,
-        "check_only": check_only,
-        "preflight": preflight,
-        "write_attempted": False,
-        "claim": preflight.get("claim"),
-        "ok": False,
-    }
+    payload["preflight"] = preflight
+    payload["claim"] = preflight.get("claim")
     if preflight.get("ready") is not True:
         payload["outcome"] = "not_admitted"
         payload["claim_outcome"] = _claim_outcome(

@@ -12,6 +12,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -24,6 +25,7 @@ from scripts.dev.gh_issue_rest import (
     fetch_issue,
     fetch_issue_with_comments,
     main,
+    preflight_transport,
     read_complete_issue_thread,
     render_issue_plain,
     validate_issue_identity,
@@ -65,6 +67,68 @@ def _raw_comment(*, cid: int = 1, login: str = "ll7") -> dict:
         "created_at": "2026-07-10T11:12:48Z",
         "updated_at": "2026-07-10T11:12:48Z",
     }
+
+
+def test_transport_preflight_bounds_a_blackholed_gh_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A stalled authenticated REST probe is terminated at its declared timeout."""
+    fake_gh = tmp_path / "gh"
+    fake_gh.write_text(f"#!{sys.executable}\nimport time\ntime.sleep(30)\n", encoding="utf-8")
+    fake_gh.chmod(0o755)
+    monkeypatch.setenv("PATH", os.pathsep.join([str(tmp_path), os.environ.get("PATH", "")]))
+
+    started = time.monotonic()
+    result = preflight_transport()
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 6
+    assert result["status"] == "transport_unavailable"
+    assert result["reason"] == "timeout"
+    assert result["timeout_seconds"] == 5
+    assert "gh auth status" in result["next_action"]
+
+
+@pytest.mark.parametrize(
+    "stdout",
+    [
+        '{"login":"private-account',
+        '{"login":"private-account"}',
+        "[]",
+    ],
+    ids=["partial-json", "missing-identity-field", "wrong-shape"],
+)
+def test_transport_preflight_rejects_malformed_or_partial_identity(
+    stdout: str,
+) -> None:
+    """Malformed and partial authenticated reads fail closed without echoing data."""
+    with patch("scripts.dev.gh_issue_rest._gh_api") as mock_api:
+        mock_api.return_value = _proc(stdout=stdout)
+        result = preflight_transport()
+
+    assert result["status"] == "transport_unavailable"
+    assert result["reason"] == "malformed_response"
+    assert "private-account" not in json.dumps(result)
+    mock_api.assert_called_once_with(
+        "user",
+        timeout=5,
+        timeout_context="issue admission transport preflight",
+    )
+
+
+def test_transport_preflight_success_validates_auth_without_returning_identity() -> None:
+    """A valid authenticated user response is reduced to a credential-safe status."""
+    with patch("scripts.dev.gh_issue_rest._gh_api") as mock_api:
+        mock_api.return_value = _proc(stdout='{"login":"private-account","id":9876}')
+        result = preflight_transport()
+
+    assert result == {
+        "schema": "github_transport_preflight.v1",
+        "status": "ok",
+        "timeout_seconds": 5,
+        "authenticated": True,
+    }
+    assert "private-account" not in json.dumps(result)
 
 
 def test_fetch_issue_normalizes_rest_fields_to_gh_json_shape() -> None:

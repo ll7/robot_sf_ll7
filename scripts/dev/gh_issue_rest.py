@@ -78,6 +78,7 @@ from scripts.dev.github_transport_policy import (
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_MAX_COMMENT_PAGES = 10
+TRANSPORT_PREFLIGHT_TIMEOUT_SECONDS = 5
 COMMENTS_PAGE_SIZE = 100
 VALID_ISSUE_STATES = frozenset({"OPEN", "CLOSED"})
 PROJECT_CARDS_ERROR_MARKER = _transport_policy.PROJECT_CARDS_ERROR_MARKER
@@ -301,6 +302,75 @@ def _normalize_comment(raw: dict[str, Any]) -> dict[str, Any]:
         "updated_at": _as_str(raw.get("updated_at")),
         "url": _as_str(raw.get("html_url", raw.get("url", ""))),
         "body": _as_str(raw.get("body")),
+    }
+
+
+def preflight_transport() -> dict[str, Any]:
+    """Check bounded authenticated REST access without exposing response data.
+
+    Issue admission performs several live reads before it can make a claim
+    decision. Probe the authenticated ``/user`` endpoint first so a stalled or
+    unauthenticated GitHub CLI fails once at the admission boundary rather
+    than leaving the workflow blocked on a sequence of longer reads.
+    """
+    result = _gh_api(
+        "user",
+        timeout=TRANSPORT_PREFLIGHT_TIMEOUT_SECONDS,
+        timeout_context="issue admission transport preflight",
+    )
+    failure: tuple[str, str, str] | None = None
+    if result.returncode == 124:
+        failure = (
+            "timeout",
+            f"GitHub transport preflight timed out after {TRANSPORT_PREFLIGHT_TIMEOUT_SECONDS}s.",
+            "Check GitHub connectivity and CLI authentication with `gh auth status`, then retry.",
+        )
+    elif result.returncode == 127:
+        failure = (
+            "gh_unavailable",
+            "GitHub transport preflight could not find the `gh` CLI.",
+            "Install GitHub CLI, authenticate it, and retry.",
+        )
+    elif result.returncode != 0:
+        failure = (
+            "authentication_or_transport_error",
+            "GitHub transport preflight could not complete an authenticated REST read.",
+            "Check GitHub connectivity and CLI authentication with `gh auth status`, then retry.",
+        )
+    else:
+        # Parse only to validate shape. Never copy endpoint output, parser
+        # diagnostics, account names, or other response data into the result.
+        data, error = _parse_json(result, what="GitHub transport preflight")
+        if (
+            error
+            or not isinstance(data, dict)
+            or not isinstance(data.get("login"), str)
+            or not data["login"]
+            or type(data.get("id")) is not int
+            or data["id"] <= 0
+        ):
+            failure = (
+                "malformed_response",
+                "GitHub transport preflight returned a malformed or partial response.",
+                "Confirm GitHub API availability and CLI authentication with `gh auth status`, then retry.",
+            )
+
+    if failure is not None:
+        reason, error, next_action = failure
+        return {
+            "schema": "github_transport_preflight.v1",
+            "status": "transport_unavailable",
+            "reason": reason,
+            "timeout_seconds": TRANSPORT_PREFLIGHT_TIMEOUT_SECONDS,
+            "authenticated": None,
+            "error": error,
+            "next_action": next_action,
+        }
+    return {
+        "schema": "github_transport_preflight.v1",
+        "status": "ok",
+        "timeout_seconds": TRANSPORT_PREFLIGHT_TIMEOUT_SECONDS,
+        "authenticated": True,
     }
 
 

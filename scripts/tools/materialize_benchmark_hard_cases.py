@@ -2480,8 +2480,13 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
             same_row = (
                 previous_case.get("source", {}).get("record_sha256") == source_ref["record_sha256"]
             )
+            # A prior attempted receipt can predate current replay-eligibility
+            # guards or have been produced with different command semantics.
+            # Keep it in the source resume bundle, but never promote it as the
+            # current result when this source row is currently ineligible.
             if (
-                same_row
+                not ineligible
+                and same_row
                 and isinstance(previous_replay, dict)
                 and previous_replay.get("attempted") is True
             ):

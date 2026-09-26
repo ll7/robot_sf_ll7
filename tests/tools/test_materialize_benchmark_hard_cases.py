@@ -1837,6 +1837,79 @@ def test_resume_reuses_matching_attempt_without_reexecution(tmp_path: Path) -> N
     assert resumed_case["replay"]["status"] == "replay_checkout_cleanliness_unavailable"
 
 
+def test_resume_does_not_reuse_attempt_for_currently_ineligible_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    summary, campaign_root, matrix = _build_inputs(tmp_path, include_unavailable=False, run_dt=0)
+    previous_dir = tmp_path / "previous"
+    previous = materialize(_args(summary, campaign_root, matrix, previous_dir))
+    case_file = previous_dir / previous["cases"][0]["case_file"]
+    case_record = json.loads(case_file.read_text(encoding="utf-8"))
+    source_episode = campaign_root / "runs/goal__differential_drive/episodes.jsonl"
+    source_row = json.loads(source_episode.read_text(encoding="utf-8").splitlines()[0])
+    replay_dir = case_file.parent / "replay"
+    replay_dir.mkdir()
+    episode_output = replay_dir / "episodes.jsonl"
+    episode_bytes = json.dumps(source_row, sort_keys=True).encode() + b"\n"
+    episode_output.write_bytes(episode_bytes)
+    prior_replay = {
+        "attempted": True,
+        "status": "exact_match",
+        "returncode": 0,
+        "command": ["uv", "run", "robot_sf_bench", "run", "--dt", "0.1"],
+        "command_shell": "uv run robot_sf_bench run --dt 0.1",
+        "source_revision": SOURCE_REVISION,
+        "replay_revision": SOURCE_REVISION,
+        "replay_environment_identity": _fixture_execution_environment(),
+        "replay_checkout_before": _clean_checkout_snapshot(SOURCE_REVISION),
+        "replay_checkout_after": _clean_checkout_snapshot(SOURCE_REVISION),
+        "replay_checkout_clean": True,
+        "same_repository_revision": True,
+        "episode_output": "replay/episodes.jsonl",
+        "episode_output_sha256": hashlib.sha256(episode_bytes).hexdigest(),
+        "episode_output_checksum_status": "verified",
+        "episode_output_checksum_origin": "captured_at_run",
+    }
+    case_record["replay"] = prior_replay
+    case_file.write_text(json.dumps(case_record), encoding="utf-8")
+    previous_manifest_path = previous_dir / "manifest.json"
+    previous_manifest = json.loads(previous_manifest_path.read_text(encoding="utf-8"))
+    previous_manifest["cases"][0]["replay"] = prior_replay
+    previous_manifest["replay"]["attempted"] = 1
+    previous_manifest["replay"]["status_counts"] = {"exact_match": 1}
+    previous_manifest_path.write_text(json.dumps(previous_manifest), encoding="utf-8")
+
+    def fail_if_replay_runs(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        pytest.fail("resuming an ineligible row must not launch replay")
+
+    monkeypatch.setattr(materializer, "_run_replay", fail_if_replay_runs)
+    args = _args(summary, campaign_root, matrix, tmp_path / "resumed")
+    args.resume_from = previous_dir
+    resumed = materialize(args)
+    resumed_case = json.loads(
+        (tmp_path / "resumed" / resumed["cases"][0]["case_file"]).read_text(encoding="utf-8")
+    )
+
+    assert resumed_case["replay_input"]["replay_eligible"] is False
+    assert resumed_case["replay_input"]["replay_ineligibility"] == "unavailable_replay_timestep"
+    assert resumed_case["replay"] == {
+        "status": "unavailable_replay_timestep",
+        "attempted": False,
+    }
+    assert "command" not in resumed_case["replay"]
+    assert resumed["replay"]["attempted"] == 0
+    assert resumed["replay"]["new_attempted"] == 0
+    assert resumed["replay"]["reused_attempts"] == 0
+    assert resumed["replay"]["status_counts"] == {"unavailable_replay_timestep": 1}
+    assert resumed["replay"]["replay_revisions"] == []
+    assert not (tmp_path / "resumed" / "cases" / resumed_case["case_id"] / "replay").exists()
+
+    # The prior bundle remains untouched as historical evidence, but is not
+    # promoted into the current result for an ineligible source row.
+    preserved_prior = json.loads(case_file.read_text(encoding="utf-8"))["replay"]
+    assert preserved_prior == prior_replay
+
+
 @pytest.mark.parametrize(
     ("mutation", "expected_status"),
     [

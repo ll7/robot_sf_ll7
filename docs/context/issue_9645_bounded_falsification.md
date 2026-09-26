@@ -18,6 +18,14 @@ preserves its recorded candidate outcomes, and writes the output and renderer pr
 not infer empirical execution from the input or repeat search and simulation. The provenance records
 the source and rendered report digests, renderer revision, and `search_or_simulation_rerun: false`.
 
-For the pilot, the bounded Random/TPE comparison produced no critical candidate in four runs at 16
-evaluations each. That is a finite-budget null result and a **NO-GO** for the scaled campaign in
-issue #9648; it does not establish that the scenario space has no counterexample.
+For the pilot, the bounded Random/TPE comparison recorded no attributed critical failure in four
+runs at 16 evaluations each. The corrected #9646 report classifies severe-intrusion status as
+unknown for all 64 candidates because that evidence is absent. This remains a finite-budget **NO-GO**
+for scaling this fixed design in issue #9648; it does not establish that the scenario space has no
+counterexample.
+
+The #9646 report now uses schema v3 and is regenerated from the archived comparison and four source
+manifests. It preserves collision/severe-intrusion status as `unknown` when evidence is missing,
+malformed, or contradictory, and reports unknown criticality separately from known critical and
+known non-critical counts. It does not reinterpret the historical v1 objective score or reconstruct
+missing episode records.

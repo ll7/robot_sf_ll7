@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import json
+import os
 import select
 import shutil
 import socket
 import subprocess
+import sys
+import threading
 import time
 from io import BytesIO, StringIO
 from pathlib import Path
 from types import SimpleNamespace
+from typing import BinaryIO
 
 import pytest
 
@@ -47,6 +51,138 @@ FIXTURE = (
     / "audit_campaign_v1"
     / "campaign.json"
 )
+
+# The external child has a distinct cold-start phase: importing Python and
+# connecting to the private bridge precede the initialize response.  Keep that
+# startup bound separate from the tighter steady-state response bound so a
+# slow import remains observable without allowing an unresponsive proxy to
+# hang the test.
+EXTERNAL_MCP_STARTUP_TIMEOUT_SECONDS = 10.0
+EXTERNAL_MCP_RESPONSE_TIMEOUT_SECONDS = 3.0
+EXTERNAL_MCP_MAX_DIAGNOSTICS_BYTES = 8 * 1024
+
+
+def _read_process_stderr(
+    stream: BinaryIO,
+    buffer: bytearray,
+) -> tuple[bool, bool]:
+    """Drain one nonblocking stderr chunk and return ``(closed, truncated)``."""
+
+    try:
+        chunk = os.read(stream.fileno(), 4096)
+    except BlockingIOError:
+        return False, False
+    except OSError:
+        return True, False
+    if not chunk:
+        return True, False
+    buffer.extend(chunk)
+    truncated = len(buffer) > EXTERNAL_MCP_MAX_DIAGNOSTICS_BYTES
+    if truncated:
+        del buffer[:-EXTERNAL_MCP_MAX_DIAGNOSTICS_BYTES]
+    return False, truncated
+
+
+class _ExternalMCPProcessReader:
+    """Read bounded JSON-RPC lines from one external proxy process."""
+
+    def __init__(self, process: subprocess.Popen[bytes], *, redactions: tuple[str, ...] = ()):
+        if process.stdout is None or process.stderr is None:
+            raise AssertionError("external MCP proxy pipes must be captured")
+        self.process = process
+        self.stdout = process.stdout
+        self.stderr = process.stderr
+        os.set_blocking(self.stdout.fileno(), False)
+        os.set_blocking(self.stderr.fileno(), False)
+        self.redactions = redactions
+        self.stdout_buffer = bytearray()
+        self.stderr_buffer = bytearray()
+        self.stdout_closed = False
+        self.stderr_closed = False
+        self.stderr_truncated = False
+
+    def read_response(self, *, phase: str, timeout_seconds: float) -> bytes:
+        """Read one newline-delimited response before the phase deadline."""
+
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            newline = self.stdout_buffer.find(b"\n")
+            if newline >= 0:
+                line = bytes(self.stdout_buffer[: newline + 1])
+                del self.stdout_buffer[: newline + 1]
+                return line
+            if self.stdout_closed:
+                break
+            if not self._wait_for_io(deadline):
+                break
+        if not self.stderr_closed:
+            self.stderr_closed, truncated = _read_process_stderr(
+                self.stderr,
+                self.stderr_buffer,
+            )
+            self.stderr_truncated |= truncated
+        self._raise_timeout(
+            phase,
+            timeout_seconds,
+            stdout_eof=self.stdout_closed,
+        )
+
+    def _wait_for_io(self, deadline: float) -> bool:
+        readers = [self.stdout]
+        if not self.stderr_closed:
+            readers.append(self.stderr)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        ready, _, _ = select.select(readers, [], [], remaining)
+        if self.stdout in ready:
+            self._read_stdout()
+        if self.stderr in ready:
+            self.stderr_closed, truncated = _read_process_stderr(
+                self.stderr,
+                self.stderr_buffer,
+            )
+            self.stderr_truncated |= truncated
+        return bool(ready)
+
+    def _raise_timeout(
+        self,
+        phase: str,
+        timeout_seconds: float,
+        *,
+        stdout_eof: bool,
+    ) -> None:
+        if self.redactions:
+            rendered = (
+                f"<suppressed; captured_bytes={len(self.stderr_buffer)}, "
+                f"truncated={self.stderr_truncated}>"
+            )
+        else:
+            diagnostics = bytes(self.stderr_buffer)
+            rendered = diagnostics.decode("utf-8", errors="replace").strip() or "<empty>"
+            if self.stderr_truncated:
+                rendered = "[truncated] " + rendered
+        if stdout_eof:
+            failure = f"external MCP proxy stdout EOF before delivering a {phase} response"
+        else:
+            failure = (
+                f"external MCP proxy did not deliver a {phase} response within "
+                f"{timeout_seconds:.2f}s"
+            )
+        raise AssertionError(f"{failure} (returncode={self.process.poll()!r}, stderr={rendered!r})")
+
+    def _read_stdout(self) -> None:
+        try:
+            chunk = os.read(self.stdout.fileno(), 4096)
+        except BlockingIOError:
+            return
+        except OSError:
+            self.stdout_closed = True
+            return
+        if chunk:
+            self.stdout_buffer.extend(chunk)
+        else:
+            self.stdout_closed = True
 
 
 def _setup(tmp_path: Path) -> tuple[AuditService, object, AuditMCPDispatcher]:
@@ -529,8 +665,17 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
     tmp_path: Path,
 ) -> None:
     service, session, dispatcher = _setup(tmp_path)
+    dispatch_finished = threading.Event()
+
+    class ObservedDispatcher:
+        def dispatch(self, request):
+            try:
+                return dispatcher.dispatch(request)
+            finally:
+                dispatch_finished.set()
+
     bridge = AuditMCPBridge(
-        dispatcher, session_id=session.session_id, session_token=session.session_token
+        ObservedDispatcher(), session_id=session.session_id, session_token=session.session_token
     )
     process: subprocess.Popen[bytes] | None = None
     try:
@@ -548,17 +693,28 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            bufsize=0,
         )
         assert process.stdin is not None and process.stdout is not None
+        reader = _ExternalMCPProcessReader(
+            process,
+            redactions=(session.session_token,),
+        )
 
-        def exchange(message: dict[str, object]) -> dict[str, object]:
+        def exchange(
+            message: dict[str, object],
+            *,
+            phase: str,
+            timeout_seconds: float,
+            wait_for_dispatch: bool = False,
+        ) -> dict[str, object]:
             process.stdin.write(json.dumps(message).encode() + b"\n")
             process.stdin.flush()
-            ready, _, _ = select.select([process.stdout], [], [], 3.0)
-            assert ready, "MCP proxy did not return a bounded response"
-            line = process.stdout.readline()
-            assert line
-            return json.loads(line)
+            if wait_for_dispatch:
+                assert dispatch_finished.wait(10.0), (
+                    f"MCP request did not finish dispatch; proxy exit={process.poll()}"
+                )
+            return json.loads(reader.read_response(phase=phase, timeout_seconds=timeout_seconds))
 
         initialized = exchange(
             {
@@ -570,7 +726,9 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
                     "capabilities": {},
                     "clientInfo": {"name": "external-proxy", "version": "1"},
                 },
-            }
+            },
+            phase="initialize",
+            timeout_seconds=EXTERNAL_MCP_STARTUP_TIMEOUT_SECONDS,
         )
         assert initialized["result"]["serverInfo"]["name"] == "robot-sf-audit"
         process.stdin.write(
@@ -580,7 +738,11 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
             + b"\n"
         )
         process.stdin.flush()
-        listed = exchange({"jsonrpc": "2.0", "id": "list", "method": "tools/list", "params": {}})
+        listed = exchange(
+            {"jsonrpc": "2.0", "id": "list", "method": "tools/list", "params": {}},
+            phase="tools/list",
+            timeout_seconds=EXTERNAL_MCP_RESPONSE_TIMEOUT_SECONDS,
+        )
         assert len(listed["result"]["tools"]) == len(AUDIT_MCP_TOOLS)
         called = exchange(
             {
@@ -591,7 +753,10 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
                     "name": "read_episode",
                     "arguments": {"episode_id": "fixture-readable"},
                 },
-            }
+            },
+            phase="tools/call",
+            timeout_seconds=EXTERNAL_MCP_RESPONSE_TIMEOUT_SECONDS,
+            wait_for_dispatch=True,
         )
         assert called["result"]["structuredContent"]["status"] == "complete"
         assert session.session_token not in json.dumps(
@@ -608,6 +773,128 @@ def test_private_bridge_runs_external_stdio_proxy_and_validates_dispatcher_token
                 process.wait(timeout=3.0)
         bridge.close()
         service.close()
+
+
+def test_external_mcp_startup_timeout_reports_child_diagnostics() -> None:
+    """A live but silent child fails within a short, observable deadline."""
+
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys, time; "
+                "print('proxy startup stalled', file=sys.stderr, flush=True); "
+                "time.sleep(60)"
+            ),
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=0,
+    )
+    started = time.monotonic()
+    try:
+        reader = _ExternalMCPProcessReader(process)
+        with pytest.raises(AssertionError, match="initialize.*proxy startup stalled"):
+            reader.read_response(phase="initialize", timeout_seconds=0.5)
+        assert time.monotonic() - started < 2.0
+    finally:
+        if process.stdin is not None:
+            process.stdin.close()
+        if process.poll() is None:
+            process.terminate()
+        try:
+            process.wait(timeout=1.0)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=1.0)
+
+
+def test_external_mcp_eof_diagnostics_redact_token_at_tail_boundary() -> None:
+    """EOF fails immediately without exposing a token suffix from the stderr tail."""
+
+    token = "SESSION_TOKEN_123456789"
+    diagnostics = token + "x" * (EXTERNAL_MCP_MAX_DIAGNOSTICS_BYTES - len(token)) + token
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import os, sys, time; "
+                f"sys.stderr.write({diagnostics!r}); "
+                "sys.stderr.flush(); os.close(1); time.sleep(60)"
+            ),
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=0,
+    )
+    started = time.monotonic()
+    try:
+        reader = _ExternalMCPProcessReader(process, redactions=(token,))
+        with pytest.raises(AssertionError) as raised:
+            reader.read_response(phase="initialize", timeout_seconds=5.0)
+        message = str(raised.value)
+        assert "stdout EOF" in message
+        assert "stderr='<suppressed; captured_bytes=" in message
+        assert "truncated=" in message
+        assert token not in message
+        assert token[-7:] not in message
+        assert time.monotonic() - started < 2.0
+    finally:
+        if process.stdin is not None:
+            process.stdin.close()
+        if process.poll() is None:
+            process.terminate()
+        try:
+            process.wait(timeout=1.0)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=1.0)
+
+
+def test_external_mcp_response_reader_waits_and_preserves_coalesced_lines() -> None:
+    """A delayed child response and two coalesced frames remain bounded and ordered."""
+
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys, time; "
+                # Deliberately exceed the former fixed three-second startup wait.
+                "time.sleep(3.2); "
+                'sys.stdout.write(\'{"jsonrpc": "2.0", "id": 1}\\n\' '
+                '\'{"jsonrpc": "2.0", "id": 2}\\n\'); '
+                "sys.stdout.flush(); sys.stdin.read()"
+            ),
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=0,
+    )
+    try:
+        reader = _ExternalMCPProcessReader(process)
+        first = reader.read_response(
+            phase="initialize",
+            timeout_seconds=EXTERNAL_MCP_STARTUP_TIMEOUT_SECONDS,
+        )
+        second = reader.read_response(
+            phase="tools/list",
+            timeout_seconds=EXTERNAL_MCP_RESPONSE_TIMEOUT_SECONDS,
+        )
+        assert [json.loads(first)["id"], json.loads(second)["id"]] == [1, 2]
+    finally:
+        if process.stdin is not None:
+            process.stdin.close()
+        try:
+            process.wait(timeout=1.0)
+        except subprocess.TimeoutExpired:
+            process.terminate()
+            process.wait(timeout=1.0)
 
 
 def test_bridge_close_unblocks_silent_client(tmp_path: Path) -> None:

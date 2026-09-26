@@ -15,7 +15,7 @@ def _result(
     return subprocess.CompletedProcess(["gh", "api"], returncode, json.dumps(payload), stderr)
 
 
-CANONICAL_BODY = """# Example
+LEGACY_RELATIONSHIP_BODY = """# Example
 
 ## Relationships
 
@@ -29,8 +29,8 @@ Keep the task bounded.
 """
 
 
-def test_parse_canonical_relationships_and_none_sentinel() -> None:
-    parsed = parse_relationships(CANONICAL_BODY, issue=11)
+def test_parse_legacy_relationship_block_as_migration_candidate() -> None:
+    parsed = parse_relationships(LEGACY_RELATIONSHIP_BODY, issue=11)
 
     assert parsed["section_present"] is True
     assert {(row["kind"], row["target"]) for row in parsed["declarations"]} == {
@@ -40,6 +40,7 @@ def test_parse_canonical_relationships_and_none_sentinel() -> None:
     }
     assert parsed["errors"] == []
     assert parsed["legacy_mentions"] == []
+    assert {row["origin"] for row in parsed["declarations"]} == {"legacy_body"}
 
 
 def test_legacy_relationship_prose_is_report_only() -> None:
@@ -54,10 +55,18 @@ Child of #42.
     )
 
     assert parsed["declarations"] == []
-    assert "missing canonical ## Relationships section" in parsed["errors"]
+    assert parsed["errors"] == []
     assert {item["kind"] for item in parsed["legacy_mentions"]} == {"parent", "relates_to"}
     assert parsed["legacy_mentions"][0]["targets"] == (40, 42)
     assert parsed["legacy_mentions"][1]["targets"] == (43,)
+
+
+def test_body_without_relationship_block_is_normal() -> None:
+    parsed = parse_relationships("## Goal\nDo useful work.\n", issue=41)
+
+    assert parsed["section_present"] is False
+    assert parsed["declarations"] == []
+    assert parsed["errors"] == []
 
 
 def test_parse_rejects_ambiguous_or_cross_repository_declarations() -> None:
@@ -103,7 +112,7 @@ def test_audit_dry_run_reads_native_state_without_writing() -> None:
                         "number": 11,
                         "id": 111,
                         "title": "child",
-                        "body": CANONICAL_BODY,
+                        "body": LEGACY_RELATIONSHIP_BODY,
                         "html_url": "https://github.com/ll7/robot_sf_ll7/issues/11",
                     }
                 ]

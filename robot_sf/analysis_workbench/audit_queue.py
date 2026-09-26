@@ -391,6 +391,20 @@ def _freeze(value: Any) -> Any:
     return value
 
 
+def _snapshot_signal(signal: Signal) -> Signal:
+    """Return a recursively immutable queue-owned copy of a typed BA-01 signal."""
+
+    try:
+        snapshot = signal_from_dict(record_to_dict(signal, include_type=False))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise QueueInputError(f"typed signal cannot be safely snapshotted: {exc}") from exc
+    object.__setattr__(snapshot, "evidence", _freeze(snapshot.evidence))
+    object.__setattr__(snapshot, "measured", _freeze(snapshot.measured))
+    if snapshot.threshold is not None:
+        object.__setattr__(snapshot, "threshold", _freeze(snapshot.threshold))
+    return snapshot
+
+
 def _thaw(value: Any) -> Any:
     """Return ordinary JSON-shaped containers for serialization boundaries."""
 
@@ -1073,7 +1087,9 @@ class QueueCandidate:
                     f"invalid signal at candidate {episode.episode_id}[{index}]: {exc}"
                 ) from exc
             try:
-                item = _adapt_signal_to_candidate(item, self)
+                owned = _snapshot_signal(item)
+                adapted = _adapt_signal_to_candidate(owned, self)
+                item = adapted if adapted is owned else _snapshot_signal(adapted)
             except QueueInputError as exc:
                 raise QueueInputError(
                     f"invalid signal at candidate {episode.episode_id}[{index}]: {exc}"
@@ -1325,12 +1341,19 @@ class QueueDataset:
             if item.signal_id in global_signal_ids:
                 raise QueueInputError(f"duplicate global signal_id: {item.signal_id}")
             global_signal_ids.add(item.signal_id)
-            adapted, _ = _adapt_global_signal(item, candidates)
+            try:
+                owned = _snapshot_signal(item)
+                adapted, _ = _adapt_global_signal(owned, candidates)
+                snapshot = (
+                    owned if adapted is None or adapted is owned else _snapshot_signal(adapted)
+                )
+            except QueueInputError as exc:
+                raise QueueInputError(f"invalid global signal at index {index}: {exc}") from exc
             if adapted is None:
-                unmatched_global_signals.append(item)
-                global_signals.append(item)
+                unmatched_global_signals.append(snapshot)
+                global_signals.append(snapshot)
                 continue
-            global_signals.append(adapted)
+            global_signals.append(snapshot)
         signal_by_id = {signal.signal_id: signal for signal in global_signals}
         for candidate in candidates:
             for signal in candidate.signals:

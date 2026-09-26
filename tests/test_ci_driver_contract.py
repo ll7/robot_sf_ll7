@@ -178,6 +178,52 @@ def test_workflows_preserve_push_supersession_and_gate_manual_dispatches() -> No
     assert codeql_concurrency.get("cancel-in-progress") is True
 
 
+def test_aggregate_ci_checks_dispatch_failure_only_after_source_checkout() -> None:
+    """The aggregate can report dispatch-gate failures without masking them (#9340)."""
+    workflow = yaml.safe_load(_workflow_text()) or {}
+    steps = workflow["jobs"]["ci"]["steps"]
+    checkout = next(step for step in steps if step.get("id") == "checkout_ci_source")
+    checker = next(step for step in steps if step.get("name") == "Check split job results")
+    observed = next(
+        step for step in steps if step.get("name") == "Record observed exact-head verdict"
+    )
+
+    checkout_if = " ".join(checkout["if"].split())
+    checker_if = " ".join(checker["if"].split())
+    assert checkout_if == (
+        "${{ always() && (needs.dispatch-ownership.result != 'success' || "
+        "needs.dispatch-ownership.outputs.run_full_ci == 'true') }}"
+    )
+    assert checkout.get("continue-on-error", False) is False
+    assert checker_if == (
+        "${{ always() && steps.checkout_ci_source.outcome == 'success' && "
+        "(needs.dispatch-ownership.result != 'success' || "
+        "needs.dispatch-ownership.outputs.run_full_ci == 'true') }}"
+    )
+
+    # Failure and normal full-matrix paths both need checked-out source before
+    # invoking the aggregate checker. A successful observation with no matrix
+    # keeps the lightweight, no-checkout path and records the observed verdict.
+    def checkout_required(owner_result: str, run_full_ci: str) -> bool:
+        return owner_result != "success" or run_full_ci == "true"
+
+    def checker_required(owner_result: str, run_full_ci: str, checkout_outcome: str) -> bool:
+        return checkout_outcome == "success" and checkout_required(owner_result, run_full_ci)
+
+    assert checkout_required("failure", "false")
+    assert checker_required("failure", "false", "success")
+    assert not checker_required("failure", "false", "failure")
+    assert checkout_required("success", "true")
+    assert checker_required("success", "true", "success")
+    assert not checkout_required("success", "false")
+    assert not checker_required("success", "false", "skipped")
+
+    observed_if = " ".join(observed["if"].split())
+    assert "needs.dispatch-ownership.result == 'success'" in observed_if
+    assert "needs.dispatch-ownership.outputs.run_full_ci == 'false'" in observed_if
+    assert all("checkout_duration_cache" not in str(step.get("if", "")) for step in steps)
+
+
 def _workflow_files() -> list[Path]:
     """Return tracked GitHub Actions workflow YAML files."""
     return sorted(WORKFLOWS_DIR.glob("*.yml"))

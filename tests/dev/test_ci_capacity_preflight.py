@@ -237,7 +237,13 @@ def _linked_recovery_fixture(
         "    ;;\n"
         "  sync)\n"
         '    if [[ -n "${UV_SYNC_STARTED:-}" ]]; then : > "$UV_SYNC_STARTED"; fi\n'
-        '    if [[ "${UV_SYNC_SLEEP:-0}" != "0" ]]; then sleep "$UV_SYNC_SLEEP"; fi\n'
+        '    if [[ -n "${UV_SYNC_RELEASE_FILE:-}" ]]; then\n'
+        "      deadline=$((SECONDS + ${UV_SYNC_RELEASE_TIMEOUT:-30}))\n"
+        '      while [[ ! -e "$UV_SYNC_RELEASE_FILE" ]]; do\n'
+        '        if (( SECONDS >= deadline )); then echo "timed out waiting for sync release" >&2; exit 97; fi\n'
+        "        sleep 0.05\n"
+        "      done\n"
+        '    elif [[ "${UV_SYNC_SLEEP:-0}" != "0" ]]; then sleep "$UV_SYNC_SLEEP"; fi\n'
         "    ;;\n"
         "  run)\n"
         "    ;;\n"
@@ -1281,7 +1287,15 @@ def test_shared_venv_recovery_wait_times_out_and_fails_closed(tmp_path: Path) ->
 def test_shared_venv_recovery_portable_lock_wait_timeout(tmp_path: Path) -> None:
     """Portable flock-less lock contender times out and exits 75 with diagnostics."""
     repo, worktree, fake_bin, _capture, sync_started, env = _linked_recovery_fixture(tmp_path)
-    first_env = {**env, "UV_SYNC_STARTED": str(sync_started), "UV_SYNC_SLEEP": "5.0"}
+    stub_bin = tmp_path / "stub-bin"
+    contender_env = {**env, "PATH": _flockless_path(stub_bin, fake_bin)}
+    release_sync = tmp_path / "release-sync"
+    first_env = {
+        **env,
+        "UV_SYNC_STARTED": str(sync_started),
+        "UV_SYNC_RELEASE_FILE": str(release_sync),
+        "UV_SYNC_RELEASE_TIMEOUT": "30",
+    }
     first = subprocess.Popen(
         [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
         cwd=worktree,
@@ -1290,14 +1304,14 @@ def test_shared_venv_recovery_portable_lock_wait_timeout(tmp_path: Path) -> None
         stderr=subprocess.PIPE,
         text=True,
     )
+    first_output = ("", "")
     try:
         deadline = time.monotonic() + 10
         while not sync_started.exists() and first.poll() is None and time.monotonic() < deadline:
             time.sleep(0.02)
         assert sync_started.exists(), "first recovery did not reach the bounded sync window"
+        assert first.poll() is None, "lock holder exited before the contender started"
 
-        stub_bin = tmp_path / "stub-bin"
-        contender_env = {**env, "PATH": _flockless_path(stub_bin, fake_bin)}
         second = subprocess.run(
             [
                 str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name),
@@ -1312,17 +1326,25 @@ def test_shared_venv_recovery_portable_lock_wait_timeout(tmp_path: Path) -> None
             check=False,
         )
         assert second.returncode == 75, second.stderr
+        assert first.poll() is None, "lock holder exited before the contender timed out"
         assert "timed out waiting for repository fast-pysf recovery lock after 1s" in second.stderr
         assert "another fast-pysf recovery is active" in second.stderr
         assert "Lock owner metadata:" in second.stderr
 
-        first_stdout, first_stderr = first.communicate(timeout=30)
-        assert first.returncode == 0, first_stdout + first_stderr
     finally:
-        if first.poll() is None:
-            first.kill()
-            first.wait(timeout=30)
-        _remove_linked_recovery_fixture(repo, worktree)
+        release_sync.touch()
+        try:
+            if first.poll() is None:
+                try:
+                    first_output = first.communicate(timeout=30)
+                except subprocess.TimeoutExpired:
+                    first.kill()
+                    first_output = first.communicate(timeout=30)
+            else:
+                first_output = first.communicate(timeout=30)
+        finally:
+            _remove_linked_recovery_fixture(repo, worktree)
+    assert first.returncode == 0, first_output[0] + first_output[1]
 
 
 def test_run_worktree_shared_venv_concurrent_recovery_waits_safely(tmp_path: Path) -> None:

@@ -266,6 +266,24 @@ Each cycle iteration follows a fixed phase order:
    it does not bypass the guarded merge gate or trigger another review.
 8. `discover` — delegate to `goal-issue-discovery` for one bounded, unsaturated discovery lane.
 
+### Research terminal outcomes in the canonical loop
+
+For completed research or engineering work, keep `issue_completion_receipt.v1` as the delivery
+receipt. Its optional `research_terminal_outcome.v1` value records `success`, `no_signal`, or
+`no_change`, plus a summary and declared evidence-artifact paths captured at the delivered head.
+Supply the receipt together with its Git-backed verification result through the existing
+issue-audit `completion_receipts` input; the goal loop consumes it at
+`closure.completion_receipt.terminal_outcome`. The classification is descriptive: issue criteria,
+passing validation, independent review, merged-PR closure, and specialized scientific or domain
+gates remain authoritative. A `no_signal` or `no_change` label never turns an unmet criterion into
+a pass.
+
+Keep failure recovery on current owners. Record up to three materially different repair cycles in
+the active ledger, and use `goal_blocker_receipt.v1` for an external blocker. Reuse an unchanged
+blocker fingerprint without redispatch; evaluate changed issue, dependency, base/head, or required
+input state through the existing admission/dependency gates. On resume, verify ledger identities and
+artifact digests, then reuse valid completed work instead of rerunning the experiment or replay.
+
 ### Reconciliation and empty-queue policy
 
 Prefer the executable driver for the whole sequence (issue #9534). It composes

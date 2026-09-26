@@ -20,6 +20,7 @@ def sample_zone(
     max_attempts_per_point: int = 20,
     *,
     rng: np.random.Generator | None = None,
+    exclusions: list[PreparedGeometry] | None = None,
 ) -> list[Vec2D]:
     """
     Generate random sample points within a triangular zone, avoiding obstacles when provided.
@@ -31,6 +32,10 @@ def sample_zone(
         max_attempts_per_point: Attempts before giving up per requested sample.
         rng: Optional deterministic random generator. The legacy global NumPy RNG is used
             when omitted.
+        exclusions: Optional prepared geometries (for example walls padded by an agent
+            radius, or robot footprints); candidates intersecting any are rejected. The
+            random draws are identical to the unconstrained call, so a candidate that was
+            valid before stays the chosen sample (issue #9725).
 
     Returns:
         list[Vec2D]: Sampled points that do not intersect obstacles.
@@ -63,13 +68,20 @@ def sample_zone(
             filtered = [pt for pt, keep in zip(candidates, keep_mask, strict=False) if keep]
         else:
             filtered = candidates
+        if exclusions:
+            filtered = [
+                pt
+                for pt in filtered
+                if not any(zone.intersects(_ShapelyPoint(pt)) for zone in exclusions)
+            ]
 
         samples.extend(filtered)
 
     if len(samples) < num_samples:
         raise RuntimeError(
             f"Failed to sample {num_samples} points in zone without obstacle overlap "
-            f"after {attempts} attempts.",
+            f"after {attempts} attempts"
+            + (" with clearance exclusions applied." if exclusions else "."),
         )
     return samples[:num_samples]
 

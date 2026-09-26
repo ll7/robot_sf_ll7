@@ -2678,6 +2678,7 @@ def test_resume_rejects_missing_persisted_elapsed_floor(tmp_path: Path) -> None:
 def test_session_lock_rejects_concurrent_resume(tmp_path: Path) -> None:
     started = threading.Event()
     release = threading.Event()
+    completed = threading.Event()
 
     class Blocking(FakeExecutor):
         def execute(
@@ -2689,23 +2690,32 @@ def test_session_lock_rejects_concurrent_resume(tmp_path: Path) -> None:
             attempt: int,
         ):
             started.set()
-            release.wait(timeout=5)
+            release.wait()
             return super().execute(operation_id, candidate, kind, spec, attempt)
 
     request = _request(_recipe(max_candidates=1, max_executions=2))
     first_result: list[ComponentResult] = []
 
     def first_controller() -> None:
-        first_result.append(_run_injected(request, base=tmp_path, executor=Blocking()))
+        try:
+            first_result.append(_run_injected(request, base=tmp_path, executor=Blocking()))
+        finally:
+            completed.set()
 
     thread = threading.Thread(target=first_controller)
     thread.start()
-    assert started.wait(timeout=5)
-    second = _run_injected(request, base=tmp_path, resume=True, executor=FakeExecutor())
-    assert second.status == "failed"
-    assert "session_lock_owned" in second.reason
-    release.set()
-    thread.join(timeout=5)
+    try:
+        assert started.wait(timeout=5)
+        second = _run_injected(request, base=tmp_path, resume=True, executor=FakeExecutor())
+        assert second.status == "failed"
+        assert "session_lock_owned" in second.reason
+    finally:
+        release.set()
+        finished = completed.wait(timeout=30)
+        thread.join(timeout=1)
+
+    assert finished, "original controller did not complete after releasing the session lock"
+    assert not thread.is_alive()
     assert first_result and first_result[0].status == "complete"
 
 

@@ -9,6 +9,7 @@ browser and agent clients cannot append independently or lose a revision.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -326,6 +327,9 @@ class AuditStore:
         self._fail_after_journal_once = fail_after_journal_once
         self._recover_incomplete = recover_incomplete
         self._closed = False
+        self._validated_journal: (
+            tuple[bytes, dict[str, Any], list[_JournalTransaction], int] | None
+        ) = None
         self._ensure_header()
         self._connection = self._open_connection()
         with _PathLock(self.lock_path):
@@ -363,6 +367,7 @@ class AuditStore:
 
         if not self._closed:
             self._connection.close()
+            self._validated_journal = None
             self._closed = True
 
     def _ensure_open(self) -> None:
@@ -435,6 +440,13 @@ class AuditStore:
             raise AuditCorruptionError(f"cannot read canonical journal: {exc}") from exc
         if not raw:
             raise AuditCorruptionError("canonical journal is empty")
+        # Normal callers hold the path lock; restore also reads its private
+        # staging path before publication. Exact bytes, rather than file
+        # metadata, bind the snapshot. Return copies for mutable mappings.
+        cached = self._validated_journal
+        if cached is not None and raw == cached[0]:
+            return copy.deepcopy(cached[1]), copy.deepcopy(cached[2]), cached[3], raw
+        self._validated_journal = None
         header: dict[str, Any] | None = None
         transactions: list[_JournalTransaction] = []
         operation_ids: set[str] = set()
@@ -542,6 +554,15 @@ class AuditStore:
             if transaction.global_revision <= previous:
                 raise AuditCorruptionError("canonical transaction revisions are not increasing")
             previous = transaction.global_revision
+        # A non-newline-terminated record is recoverable but is not yet a
+        # complete snapshot.  Recovery above appends/truncates before caching.
+        if raw.endswith(b"\n"):
+            self._validated_journal = (
+                raw,
+                copy.deepcopy(header),
+                copy.deepcopy(transactions),
+                valid_offset,
+            )
         return header, transactions, valid_offset, raw
 
     def _transaction_from_dict(  # noqa: C901, PLR0912, PLR0915

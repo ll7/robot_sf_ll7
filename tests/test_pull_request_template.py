@@ -25,7 +25,6 @@ def test_pull_request_template_includes_proof_and_follow_up_sections() -> None:
     for section in (
         "## Summary",
         "## Linked Issues",
-        "## Issue Relationship Mirror",
         "## Stack / Dependency",
         "## What Changed",
         "## Why It Matters",
@@ -39,8 +38,8 @@ def test_pull_request_template_includes_proof_and_follow_up_sections() -> None:
     ):
         assert section in text
 
-    for field in ("Parent issue", "Blocked by", "Blocking", "Relates to"):
-        assert f"- {field}: none" in text
+    assert "Issue Relationship Mirror" not in text
+    assert "Native Parent/Blocked by/Blocking links belong on the issue" in text
     assert "docs/context/issue_relationships.md" in text
 
     # The v2 metadata block carries the machine-enforced approval, evidence,

@@ -28,8 +28,8 @@ inputs, not as hard authority.
    - `docs/project_prioritization.md` (includes the **Research-Leverage Interpretation** and the
      **verify-before-scoring gate** — apply both).
    - `docs/context/issue_713_batch_first_issue_workflow.md` for batch-first Project #5 writes.
-   - `docs/context/issue_relationships.md` so relationship declarations remain explicit while
-     priority fields are assessed.
+   - `docs/context/issue_relationships.md` so native relationship state is considered separately
+     from priority fields.
    - issue body/metadata from GitHub MCP / GitHub app tools or the canonical complete-thread read
      `uv run python scripts/dev/gh_issue_rest.py thread <number> --repo ll7/robot_sf_ll7`
      (issue #5148: plain `gh issue view --comments` fails on some GitHub CLI versions because it
@@ -51,7 +51,7 @@ inputs, not as hard authority.
    - use `gh project item-edit` when a CLI fallback is needed,
    - run score sync once after the batch.
    - do not create or change native issue relationships as a side effect of scoring; route any
-     explicit relationship repair through the relationship audit contract.
+     relationship repair through the native-link workflow.
 6. Keep unresolved cases labeled as uncertain with a clear condition that would change the value.
 7. When the uncertainty is a maintainer-value tradeoff rather than missing evidence, route to
    `issue-audit` priority discussion instead of inventing a score.
@@ -97,8 +97,8 @@ leaves human-set priorities stable.
   empty `Priority Score` items (`--only-empty`).
 - In auto mode, never overwrite an existing (non-empty) priority.
 - Keep issues with contradictions marked for clarifier follow-up.
-- Preserve the canonical `## Relationships` block and never infer Parent, Blocked by, Blocking, or
-  Relates to links from priority text, labels, or Project #5 fields.
+- Read native Parent/Blocked by/Blocking state when relevant, but never create relationship links
+  from priority text, labels, or Project #5 fields.
 
 ## Output
 

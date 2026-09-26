@@ -51,6 +51,7 @@ class MetricDefinition:
     description: str
     unavailable_reason_if_missing: str = MISSING_METRIC_REASON
     source_kind: str = "episode_metric"
+    unit: str | None = None
 
 
 class MetricBindingError(ValueError):
@@ -351,6 +352,117 @@ CANONICAL_METRICS: dict[str, MetricDefinition] = dict(
 )
 
 
+# Model quantities; the pp-equivalent family is an experimental counterfactual.
+CANONICAL_METRICS["robot_force_impulse_total"] = MetricDefinition(
+    name="robot_force_impulse_total",
+    layer="comfort",
+    source_keys=("metrics.robot_force_impulse_total",),
+    reduction="mean",
+    higher_is_better=False,
+    unit="m/s",
+    description="Robot-attributable model force impulse total; simulated component.",
+)
+CANONICAL_METRICS["robot_force_impulse_per_exposed_ped"] = MetricDefinition(
+    name="robot_force_impulse_per_exposed_ped",
+    layer="comfort",
+    source_keys=("metrics.robot_force_impulse_per_exposed_ped",),
+    reduction="mean",
+    higher_is_better=False,
+    unit="m/s",
+    description="Robot-attributable model force impulse per exposed ped; simulated component.",
+)
+CANONICAL_METRICS["robot_force_peak"] = MetricDefinition(
+    name="robot_force_peak",
+    layer="comfort",
+    source_keys=("metrics.robot_force_peak",),
+    reduction="mean",
+    higher_is_better=False,
+    unit="m/s²",
+    description="Robot-attributable model force peak; simulated component.",
+)
+CANONICAL_METRICS["robot_force_mean_active"] = MetricDefinition(
+    name="robot_force_mean_active",
+    layer="comfort",
+    source_keys=("metrics.robot_force_mean_active",),
+    reduction="mean",
+    higher_is_better=False,
+    unit="m/s²",
+    description="Robot-attributable model force mean active; simulated component.",
+)
+CANONICAL_METRICS["robot_force_time_above_ref_s"] = MetricDefinition(
+    name="robot_force_time_above_ref_s",
+    layer="comfort",
+    source_keys=("metrics.robot_force_time_above_ref_s",),
+    reduction="mean",
+    higher_is_better=False,
+    unit="s",
+    description="Robot-attributable model force time above ref s; simulated component.",
+)
+CANONICAL_METRICS["robot_force_exposed_ped_count"] = MetricDefinition(
+    name="robot_force_exposed_ped_count",
+    layer="comfort",
+    source_keys=("metrics.robot_force_exposed_ped_count",),
+    reduction="mean",
+    higher_is_better=False,
+    unit="count",
+    description="Robot-attributable model force exposed ped count; simulated component.",
+)
+CANONICAL_METRICS["robot_force_pp_equiv_impulse_total"] = MetricDefinition(
+    name="robot_force_pp_equiv_impulse_total",
+    layer="comfort",
+    source_keys=("metrics.robot_force_pp_equiv_impulse_total",),
+    reduction="mean",
+    higher_is_better=False,
+    unit="m/s",
+    description="Robot-attributable model force impulse total; experimental counterfactual.",
+)
+CANONICAL_METRICS["robot_force_pp_equiv_impulse_per_exposed_ped"] = MetricDefinition(
+    name="robot_force_pp_equiv_impulse_per_exposed_ped",
+    layer="comfort",
+    source_keys=("metrics.robot_force_pp_equiv_impulse_per_exposed_ped",),
+    reduction="mean",
+    higher_is_better=False,
+    unit="m/s",
+    description="Robot-attributable model force impulse per exposed ped; experimental counterfactual.",
+)
+CANONICAL_METRICS["robot_force_pp_equiv_peak"] = MetricDefinition(
+    name="robot_force_pp_equiv_peak",
+    layer="comfort",
+    source_keys=("metrics.robot_force_pp_equiv_peak",),
+    reduction="mean",
+    higher_is_better=False,
+    unit="m/s²",
+    description="Robot-attributable model force peak; experimental counterfactual.",
+)
+CANONICAL_METRICS["robot_force_pp_equiv_mean_active"] = MetricDefinition(
+    name="robot_force_pp_equiv_mean_active",
+    layer="comfort",
+    source_keys=("metrics.robot_force_pp_equiv_mean_active",),
+    reduction="mean",
+    higher_is_better=False,
+    unit="m/s²",
+    description="Robot-attributable model force mean active; experimental counterfactual.",
+)
+CANONICAL_METRICS["robot_force_pp_equiv_time_above_ref_s"] = MetricDefinition(
+    name="robot_force_pp_equiv_time_above_ref_s",
+    layer="comfort",
+    source_keys=("metrics.robot_force_pp_equiv_time_above_ref_s",),
+    reduction="mean",
+    higher_is_better=False,
+    unit="s",
+    description="Robot-attributable model force time above ref s; experimental counterfactual.",
+)
+CANONICAL_METRICS["robot_force_pp_equiv_exposed_ped_count"] = MetricDefinition(
+    name="robot_force_pp_equiv_exposed_ped_count",
+    layer="comfort",
+    source_keys=("metrics.robot_force_pp_equiv_exposed_ped_count",),
+    reduction="mean",
+    higher_is_better=False,
+    unit="count",
+    description="Robot-attributable model force exposed ped count; experimental counterfactual.",
+)
+
+
 def resolve_metric_source_binding(
     metric_id: str,
     *,
@@ -394,8 +506,8 @@ def resolve_metric_source_binding(
         higher_is_better=definition.higher_is_better,
         direction=direction,
         direction_status=direction_status,
-        unit=None,
-        unit_status="unavailable",
+        unit=definition.unit,
+        unit_status="available" if definition.unit else "unavailable",
     )
     if expected is not None and binding != expected:
         raise MetricBindingError("metric_binding_drift", metric_id)
@@ -708,6 +820,10 @@ def _layer_summary(views: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             metric.name: _summarize_metric(metric, views)
             for metric in CANONICAL_METRICS.values()
             if metric.layer == layer_name
+            and (
+                not metric.name.startswith("robot_force_")
+                or any(key in view for view in views for key in metric.source_keys)
+            )
         }
         layers[layer_name] = {
             "priority": layer_def.priority,

@@ -9,7 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
@@ -212,6 +212,112 @@ class AppendOnlyServiceFakeProvider(ServiceFakeProvider):
         """Reject the legacy body-CAS path so this fake cannot mask routing."""
 
         raise AssertionError("append-only service fake attempted an issue-body update")
+
+
+class ServiceRESTHTTP:
+    """Stateful injected transport for service-to-REST append proofs."""
+
+    def __init__(self) -> None:
+        """Initialize an in-memory issue, comment collection, and call log."""
+
+        self.calls: list[tuple[str, str, bytes | None]] = []
+        self.issue: dict[str, Any] | None = None
+        self.comments: list[dict[str, Any]] = []
+        self.next_comment_id = 100
+        self.timeout_after_comment = False
+        self.incomplete_after_comment = False
+        self.incomplete_comment_reads = 0
+
+    def add_human_comment(self, body: str) -> None:
+        self.comments.append(
+            {
+                "id": self.next_comment_id,
+                "body": body,
+                "html_url": f"https://github.com/{REPOSITORY}/issues/17#issuecomment-"
+                f"{self.next_comment_id}",
+            }
+        )
+        self.next_comment_id += 1
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        body: bytes | None,
+        timeout: float,
+    ) -> HttpResponse:
+        del headers, timeout
+        parsed = urlparse(url)
+        path = parsed.path
+        query = parse_qs(parsed.query)
+        self.calls.append((method, url, body))
+        issue_path = f"/repos/{REPOSITORY}/issues/17"
+        comments_path = f"{issue_path}/comments"
+
+        if method == "POST" and path == f"/repos/{REPOSITORY}/issues":
+            assert body is not None
+            payload = json.loads(body.decode("utf-8"))
+            self.issue = {
+                "repository": REPOSITORY,
+                "number": 17,
+                "html_url": f"https://github.com/{REPOSITORY}/issues/17",
+                "title": payload["title"],
+                "body": payload["body"],
+                "labels": [{"name": label} for label in payload["labels"]],
+                "state": "open",
+                "comments": len(self.comments),
+                "updated_at": "2026-09-23T00:00:00Z",
+            }
+            return HttpResponse(201, self.issue)
+
+        if method == "POST" and path == comments_path:
+            assert self.issue is not None and body is not None
+            payload = json.loads(body.decode("utf-8"))
+            comment = {
+                "id": self.next_comment_id,
+                "body": payload["body"],
+                "html_url": f"{self.issue['html_url']}#issuecomment-{self.next_comment_id}",
+            }
+            self.next_comment_id += 1
+            self.comments.append(comment)
+            self.issue["comments"] = len(self.comments)
+            if self.timeout_after_comment:
+                self.timeout_after_comment = False
+                if self.incomplete_after_comment:
+                    self.incomplete_comment_reads = 8
+                raise TimeoutError("response lost after accepted comment")
+            return HttpResponse(201, comment)
+
+        if method == "GET" and path == "/search/issues":
+            items = [dict(self.issue)] if self.issue is not None else []
+            return HttpResponse(
+                200,
+                {"total_count": len(items), "incomplete_results": False, "items": items},
+            )
+
+        if method == "GET" and path == issue_path:
+            assert self.issue is not None
+            return HttpResponse(200, dict(self.issue))
+
+        if method == "GET" and path == comments_path:
+            assert self.issue is not None
+            per_page = int(query.get("per_page", ["100"])[0])
+            page = int(query.get("page", ["1"])[0])
+            start = (page - 1) * per_page
+            items = self.comments[start : start + per_page]
+            response_headers: dict[str, str] = {}
+            if self.incomplete_comment_reads:
+                self.incomplete_comment_reads -= 1
+            elif start + per_page <= len(self.comments):
+                response_headers["Link"] = (
+                    f"<https://api.github.test{comments_path}?per_page={per_page}"
+                    f'&page={page + 1}>; rel="next"'
+                )
+            return HttpResponse(200, items, response_headers)
+
+        raise AssertionError(f"unexpected injected HTTP request: {method} {url}")
 
 
 def _setup(
@@ -499,6 +605,242 @@ def test_service_rest_initial_create_uses_append_only_provider_without_patch(
         assert not service.authority.snapshot()["reservations"]
         assert not service._reservations
 
+    finally:
+        service.close()
+
+
+def _setup_rest_service(
+    tmp_path: Path,
+    *,
+    issue_write_budget: int = 4,
+) -> tuple[AuditService, Any, Finding, int, GitHubRESTProvider, ServiceRESTHTTP]:
+    http = ServiceRESTHTTP()
+    provider = GitHubRESTProvider(
+        http,
+        allowed_repositories=(REPOSITORY,),
+        api_base_url="https://api.github.test",
+        per_page=2,
+    )
+    service, session, finding, revision, _provider = _setup(
+        tmp_path,
+        provider=provider,  # type: ignore[arg-type]
+        issue_write_budget=issue_write_budget,
+    )
+    return service, session, finding, revision, provider, http
+
+
+def _rest_post_count(http: ServiceRESTHTTP, suffix: str) -> int:
+    return sum(method == "POST" and path.endswith(suffix) for method, path, _body in http.calls)
+
+
+def test_service_rest_append_revision_reads_pages_and_preserves_human_comments(
+    tmp_path: Path,
+) -> None:
+    service, session, finding, revision, _provider, http = _setup_rest_service(tmp_path)
+    try:
+        initial = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revision,
+            operation_id="rest-append-initial",
+        )
+        assert initial.status == "committed"
+        assert initial.value is not None and initial.value.status == "created"
+
+        human_comments = ("human note one", "human note two", "human note three")
+        for body in human_comments:
+            http.add_human_comment(body)
+
+        stored = service.store.get(finding.finding_id)
+        assert stored is not None and isinstance(stored.record, Finding)
+        changed = replace(stored.record, observations=("REST append revision",))
+        revised = service.finding_store.update(
+            changed,
+            operation_id="rest-append-revision",
+            expected_revision=stored.revision,
+            actor="human",
+        )
+        result = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revised.revision,
+            operation_id="rest-append-comment",
+        )
+
+        assert result.status == "committed"
+        assert result.value is not None and result.value.status == "commented"
+        assert result.value.remote_write == "applied"
+        assert result.value.publication_kind == "revision_comment"
+        assert result.value.issue is not None
+        assert [comment["body"] for comment in result.value.issue.comments[:3]] == list(
+            human_comments
+        )
+        assert result.value.issue.body == http.issue["body"]  # type: ignore[index]
+        assert _rest_post_count(http, "/issues") == 1
+        assert _rest_post_count(http, "/comments") == 1
+        assert sum(method == "PATCH" for method, _path, _body in http.calls) == 0
+        comment_pages = [
+            parse_qs(urlparse(url).query).get("page", ["1"])[0]
+            for method, url, _body in http.calls
+            if method == "GET" and urlparse(url).path.endswith("/comments")
+        ]
+        assert "2" in comment_pages
+        assert len(http.comments) == 4
+        assert [comment["body"] for comment in http.comments[:3]] == list(human_comments)
+    finally:
+        service.close()
+
+
+def test_service_rest_append_timeout_with_incomplete_readback_requires_explicit_retry(
+    tmp_path: Path,
+) -> None:
+    service, session, finding, revision, _provider, http = _setup_rest_service(tmp_path)
+    try:
+        initial = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revision,
+            operation_id="rest-timeout-initial",
+        )
+        assert initial.status == "committed"
+
+        for body in ("human note before timeout", "second human note before timeout"):
+            http.add_human_comment(body)
+        stored = service.store.get(finding.finding_id)
+        assert stored is not None and isinstance(stored.record, Finding)
+        changed = replace(stored.record, observations=("ambiguous REST revision",))
+        revised = service.finding_store.update(
+            changed,
+            operation_id="rest-timeout-revision",
+            expected_revision=stored.revision,
+            actor="human",
+        )
+        http.timeout_after_comment = True
+        http.incomplete_after_comment = True
+        first = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revised.revision,
+            operation_id="rest-timeout-append",
+        )
+
+        assert first.status == "unavailable"
+        assert first.value is not None and first.value.status == "ambiguous"
+        assert first.value.remote_write == "ambiguous"
+        assert first.value.outbox is not None and first.value.outbox.state == "ambiguous"
+        assert _rest_post_count(http, "/comments") == 1
+        assert service.get_session(session).usage.issue_writes == 2
+        assert not service.authority.snapshot()["reservations"]
+        assert not service._reservations
+
+        http.incomplete_comment_reads = 0
+        retried = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revised.revision,
+            retry_ambiguous=True,
+            operation_id="rest-timeout-append",
+        )
+        assert retried.status == "committed"
+        assert retried.value is not None and retried.value.status == "reconciled"
+        assert retried.value.remote_write == "none"
+        assert _rest_post_count(http, "/comments") == 1
+        assert sum(method == "PATCH" for method, _path, _body in http.calls) == 0
+        assert http.incomplete_comment_reads == 0
+        assert service.get_session(session).usage.issue_writes == 2
+        assert not service.authority.snapshot()["reservations"]
+        assert not service._reservations
+    finally:
+        service.close()
+
+
+def test_service_rest_duplicate_publication_marker_fails_closed_without_post(
+    tmp_path: Path,
+) -> None:
+    service, session, finding, revision, _provider, http = _setup_rest_service(tmp_path)
+    try:
+        initial = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revision,
+            operation_id="rest-duplicate-initial",
+        )
+        assert initial.status == "committed"
+        for body in ("human note before duplicate", "second human note before duplicate"):
+            http.add_human_comment(body)
+        stored = service.store.get(finding.finding_id)
+        assert stored is not None and isinstance(stored.record, Finding)
+        revised = service.finding_store.update(
+            replace(stored.record, observations=("duplicate marker revision",)),
+            operation_id="rest-duplicate-revision",
+            expected_revision=stored.revision,
+            actor="human",
+        )
+        http.timeout_after_comment = True
+        http.incomplete_after_comment = True
+        first = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revised.revision,
+            operation_id="rest-duplicate-publish",
+        )
+        assert first.status == "unavailable"
+        assert first.value is not None and first.value.status == "ambiguous"
+        assert len(http.comments) == 3
+
+        duplicate = dict(http.comments[-1])
+        duplicate["id"] = http.next_comment_id
+        http.next_comment_id += 1
+        http.comments.append(duplicate)
+        http.incomplete_comment_reads = 0
+        replay = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revised.revision,
+            retry_ambiguous=True,
+            operation_id="rest-duplicate-replay",
+        )
+
+        assert replay.status == "conflict"
+        assert replay.value is not None and replay.value.status == "conflict"
+        assert "duplicate" in replay.reason.lower() or "multiple" in replay.reason.lower()
+        assert _rest_post_count(http, "/comments") == 1
+        assert sum(method == "PATCH" for method, _path, _body in http.calls) == 0
+    finally:
+        service.close()
+
+
+def test_service_rest_stale_canonical_revision_refuses_before_http(tmp_path: Path) -> None:
+    service, session, finding, revision, _provider, http = _setup_rest_service(tmp_path)
+    try:
+        stored = service.store.get(finding.finding_id)
+        assert stored is not None and isinstance(stored.record, Finding)
+        service.finding_store.update(
+            replace(stored.record, observations=("canonical revision moved",)),
+            operation_id="rest-stale-canonical-update",
+            expected_revision=stored.revision,
+            actor="human",
+        )
+        result = service.sync_finding(
+            session,
+            finding_id=finding.finding_id,
+            repository=REPOSITORY,
+            expected_finding_revision=revision,
+            operation_id="rest-stale-canonical",
+        )
+
+        assert result.status == "conflict"
+        assert result.value is None
+        assert "revision" in result.reason.lower()
+        assert http.calls == []
     finally:
         service.close()
 

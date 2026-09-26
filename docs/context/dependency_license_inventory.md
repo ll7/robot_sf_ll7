@@ -128,6 +128,30 @@ so a report built against a substitute manifest or a relaxed policy cannot pass
 as fresh. Adding `--fail-on-unresolved` to the freshness form re-applies the
 strict exit code to the report's recorded `unresolved_count`.
 
+To distinguish new findings from unchanged inventory debt without manual
+snapshot assembly, compare a freshly generated report against a source-bound
+baseline report (same contract version, canonical inputs, generator revision,
+policy content, and profile surface) in one command:
+
+```bash
+python scripts/tools/check_dependency_license_inventory.py \
+  --output output/validation/dependency-license-inventory.json \
+  --fail-on-unresolved \
+  --compare-baseline output/validation/dependency-license-baseline.json
+```
+
+The comparison prints a `dependency_license_comparison.v1` summary with new,
+removed, and unchanged failures, reviewed-exclusion changes by disposition
+identity, and added/removed/changed packages by normalized name. It applies
+only to ordinary installed-environment inventories: do not combine
+`--compare-baseline` with `--candidate-bundle`, and a baseline containing
+candidate provenance (`candidate_binding` or `summary.candidate_bound=true`)
+fails closed. A missing, tampered, source-mismatched, or malformed baseline
+fails with exit `1` before the report is written. `--compare-baseline` requires
+`--output`; the output must be a separate path and file from the baseline
+(including resolved aliases and hardlinks). A blocked inventory still exits
+`2`, and comparison never changes that global exit behavior.
+
 ## Exact package dispositions
 
 The policy's `package_dispositions` registry is the only place where a reviewed

@@ -17,12 +17,15 @@ from __future__ import annotations
 from pathlib import Path
 from xml.etree import ElementTree
 
+import pytest
+
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCENARIO_PATH = REPO_ROOT / "configs/scenarios/single/socnavbench_eth_smoke.yaml"
+SCENARIO_V2_PATH = REPO_ROOT / "configs/scenarios/single/socnavbench_eth_smoke_v2.yaml"
 EXPECTED_OBSTACLE_COUNT = 377
 EXPECTED_MAP_FILE = REPO_ROOT / "maps/svg_maps/socnavbench/socnavbench_eth.svg"
 EXPECTED_ROBOT_ROUTE_ID = "robot_route_0_0"
@@ -102,10 +105,25 @@ def test_socnavbench_eth_map_has_four_bounds() -> None:
     assert len(map_def.bounds) == 4
 
 
-def test_socnavbench_eth_map_runs_headless_environment_smoke() -> None:
-    """Committed ETH map survives headless reset and steps, protecting runtime compatibility."""
+def test_socnavbench_eth_original_spawn_is_rejected_by_clearance_sampling() -> None:
+    """The original ETH robot spawn lies inside the robot radius of the map edge (issue #9725).
+
+    Clearance-aware robot start sampling fails loudly instead of starting in a wall.
+    """
     scenario, _map_def = _load_eth_scenario_and_map()
     config = build_robot_config_from_scenario(scenario, scenario_path=SCENARIO_PATH)
+    with pytest.raises(RuntimeError, match="wall clearance"):
+        make_robot_env(config=config, seed=1134, debug=False)
+
+
+def test_socnavbench_eth_map_runs_headless_environment_smoke() -> None:
+    """The ETH successor map survives headless reset and steps, protecting runtime compatibility.
+
+    The successor differs from the committed map only in a clearance-valid robot spawn
+    zone and route start (issue #9725).
+    """
+    scenario = load_scenarios(SCENARIO_V2_PATH)[0]
+    config = build_robot_config_from_scenario(scenario, scenario_path=SCENARIO_V2_PATH)
     env = make_robot_env(config=config, seed=1134, debug=False)
     try:
         observation, _info = env.reset(seed=1134)

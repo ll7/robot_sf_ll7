@@ -1,0 +1,24 @@
+version: V2-F
+seed: 20260924
+draws: 2000
+dirichlet_alpha:
+- 1
+- 1
+- 1
+- 1
+- 1
+quality_mass: 0.95
+minimum_weight: 0.02
+sampling: reject_below_minimum
+grid:
+- equal
+- each_term_heavy
+- leave_one_out
+heavy_weight: 0.55
+heavy_other_weight: 0.1
+leave_one_out_basis: declared_remaining_proportions
+relaxed_success_weights:
+- 0.5
+relaxed_collision_weights:
+- 0.5
+- 1.0

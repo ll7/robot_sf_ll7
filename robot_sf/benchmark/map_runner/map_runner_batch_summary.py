@@ -137,6 +137,96 @@ def apply_worker_metadata_bridge(
     )
 
 
+def _is_nonnegative_counter(value: Any) -> bool:
+    """Return whether a producer telemetry value is a valid integer counter."""
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _merge_counter_mapping(target: dict[str, Any], source: dict[str, Any]) -> None:
+    """Sum valid counters while retaining malformed values as rejection evidence."""
+    for raw_key, value in source.items():
+        key = str(raw_key)
+        if key not in target:
+            target[key] = deepcopy(value)
+            continue
+        current = target[key]
+        if _is_nonnegative_counter(current) and _is_nonnegative_counter(value):
+            target[key] = current + value
+        elif _is_nonnegative_counter(current):
+            target[key] = deepcopy(value)
+
+
+def _decision_label(value: Any) -> str | None:
+    """Return a normalized decision label from one serialized shield decision."""
+    if not isinstance(value, dict):
+        return None
+    label = value.get("decision_label")
+    if label is None:
+        return None
+    return str(label).strip().lower().replace("-", "_")
+
+
+def _merge_shield_stats(  # noqa: C901
+    target: dict[str, Any], source: dict[str, Any]
+) -> None:
+    """Aggregate canonical shield counters without merging per-episode decisions."""
+    scalar_counter_keys = {
+        "decision_count",
+        "pass_through_count",
+        "intervention_count",
+        "override_count",
+        "hard_constraint_violation_count",
+    }
+    counter_mapping_keys = {"decision_counts", "violated_constraint_counts"}
+    for raw_key, value in source.items():
+        key = str(raw_key)
+        if key in scalar_counter_keys:
+            if key not in target:
+                target[key] = deepcopy(value)
+            elif _is_nonnegative_counter(target[key]) and _is_nonnegative_counter(value):
+                target[key] += value
+            elif _is_nonnegative_counter(target[key]):
+                target[key] = deepcopy(value)
+        elif key in counter_mapping_keys:
+            if key not in target:
+                target[key] = deepcopy(value)
+            elif isinstance(target[key], dict) and isinstance(value, dict):
+                _merge_counter_mapping(target[key], value)
+            elif isinstance(target[key], dict):
+                target[key] = deepcopy(value)
+        elif key == "last_decision":
+            # Each episode owns its typed decision state. Retain only the
+            # minimal sticky stop label; a latest safe decision must not erase
+            # an earlier stop or create a mixed typed payload.
+            if _decision_label(target.get(key)) == "stop_best_effort" or (
+                _decision_label(value) == "stop_best_effort"
+            ):
+                target[key] = {"decision_label": "stop_best_effort"}
+            else:
+                target.pop(key, None)
+        elif key not in target:
+            target[key] = deepcopy(value)
+
+
+def _merge_guard_telemetry(
+    base_contract: dict[str, Any], runtime_algorithm_metadata: dict[str, Any]
+) -> None:
+    """Preserve and aggregate producer guard/shield telemetry across episodes."""
+    for key, merger in (
+        ("guard_stats", _merge_counter_mapping),
+        ("shield_stats", _merge_shield_stats),
+    ):
+        if key not in runtime_algorithm_metadata:
+            continue
+        source = runtime_algorithm_metadata[key]
+        if key not in base_contract:
+            base_contract[key] = deepcopy(source)
+        elif isinstance(base_contract[key], dict) and isinstance(source, dict):
+            merger(base_contract[key], source)
+        elif isinstance(base_contract[key], dict):
+            base_contract[key] = deepcopy(source)
+
+
 def merge_runtime_algorithm_contract(  # noqa: C901, PLR0915
     base_contract: dict[str, Any],
     runtime_algorithm_metadata: Any,
@@ -148,6 +238,8 @@ def merge_runtime_algorithm_contract(  # noqa: C901, PLR0915
     """
     if not isinstance(base_contract, dict) or not isinstance(runtime_algorithm_metadata, dict):
         return base_contract
+
+    _merge_guard_telemetry(base_contract, runtime_algorithm_metadata)
 
     def _merge_mapping(  # noqa: C901, PLR0912
         target: dict[str, Any], source: dict[str, Any]

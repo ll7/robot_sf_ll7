@@ -1,0 +1,22 @@
+# Runtime smoke for the SocNavBench ETH successor map (issue #9725). The original
+# socnavbench_eth_smoke.yaml and its map stay byte-identical for frozen pins; their robot
+# spawn lies inside the robot radius of the map edge, which clearance-aware sampling now
+# rejects, so runtime smokes use this successor.
+scenarios:
+- name: socnavbench_eth_smoke_v2
+  map_file: ../../../maps/successor_svg_maps/socnavbench_eth_v2.svg
+  simulation_config:
+    max_episode_steps: 300
+    ped_density: 0.0
+  single_pedestrians: []
+  robot_config: {}
+  metadata:
+    archetype: socnavbench_eth_map_smoke
+    flow: none
+    behavior: none
+    purpose: Runtime smoke of the SocNavBench ETH map with a clearance-valid robot spawn
+    import_batch: eth_first
+    map_sha256: 8114f827c12ef670aada409906081a5e9128c938fd5035c51b91ee26491ec1ea
+    successor_of: configs/scenarios/single/socnavbench_eth_smoke.yaml
+  seeds:
+  - 1134

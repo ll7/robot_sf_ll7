@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-07-04
+updated_at: 2026-09-25
 freshness:
   policy: manual_registry_edit
   max_age_days: 90
@@ -100,6 +100,74 @@ candidates:
       primitive verifies turn-then-forward recovery maneuvers before selection.
       A larger hard dynamic safety margin preserves pedestrian safety after
       exact static clearance admits more motion through narrow route slices.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
+  hybrid_rule_v4_fast_progress_static_escape_s30_h600_release:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release.yaml
+    hypothesis: >
+      Hybrid v4 twin of hybrid_rule_v3_fast_progress_static_escape_s30_h600_release (issue #9726). Pedestrian speed
+      levels in surface clearance, rollouts limited by the drive's real acceleration and braking,
+      and a braking-feasibility check against constant-velocity pedestrian predictions should
+      remove the moving-robot pedestrian contacts that v3 produces in dense doorways. The
+      v3 config stays unchanged as the paired comparison arm.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
+  hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release.yaml
+    hypothesis: >
+      Hybrid v4 twin of hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release (issue #9726). Pedestrian speed
+      levels in surface clearance, rollouts limited by the drive's real acceleration and braking,
+      and a braking-feasibility check against constant-velocity pedestrian predictions should
+      remove the moving-robot pedestrian contacts that v3 produces in dense doorways. The
+      v3 config stays unchanged as the paired comparison arm.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
+  scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release.yaml
+    hypothesis: >
+      Hybrid v4 twin of scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release (issue #9726). Pedestrian speed
+      levels in surface clearance, rollouts limited by the drive's real acceleration and braking,
+      and a braking-feasibility check against constant-velocity pedestrian predictions should
+      remove the moving-robot pedestrian contacts that v3 produces in dense doorways, keeping the scenario overrides and the ORCA leave-group delegation. The
+      v3 config stays unchanged as the paired comparison arm.
+    required_stages:
+      - smoke
+      - nominal_sanity
+      - stress_slice
+
+  scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release:
+    status: implemented
+    family: hybrid_rule_based
+    training_required: false
+    promotion_gate: tier_b
+    candidate_config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release.yaml
+    hypothesis: >
+      Hybrid v4 twin of scenario_adaptive_hybrid_orca_v2_bottleneck_yield_s30_h600_release (issue #9726). Pedestrian speed
+      levels in surface clearance, rollouts limited by the drive's real acceleration and braking,
+      and a braking-feasibility check against constant-velocity pedestrian predictions should
+      remove the moving-robot pedestrian contacts that v3 produces in dense doorways, keeping the scenario overrides and the ORCA leave-group delegation. The
+      v3 config stays unchanged as the paired comparison arm.
     required_stages:
       - smoke
       - nominal_sanity

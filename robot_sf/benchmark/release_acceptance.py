@@ -40,6 +40,9 @@ from robot_sf.benchmark.effective_algorithm_branches import (
     check_witness_coverage,
     enumerate_effective_branches,
 )
+from robot_sf.benchmark.fallback_policy import (
+    algorithm_metadata_runtime_marker as _canonical_algorithm_metadata_runtime_marker,
+)
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.map_runner.map_runner_trace import _scenario_id as _producer_scenario_id
@@ -110,9 +113,6 @@ _RUNTIME_METADATA_CONTAINERS = frozenset(
         "runtime",
         "runtime_metadata",
     }
-)
-_DECLARATIVE_ALGORITHM_METADATA_CONTAINERS = frozenset(
-    {"config", "planner_contract", "safety_shield_contract"}
 )
 
 
@@ -240,73 +240,14 @@ def _emergency_stop_marker(payload: Any) -> tuple[str, str] | None:  # noqa: C90
 def _algorithm_metadata_runtime_marker(
     metadata: Mapping[str, Any], *, expected_algorithm: str | None = None
 ) -> tuple[str, str] | None:
-    """Scan runtime-bearing algorithm metadata without treating config as execution evidence.
-
-    Guarded PPO's safe Risk-DWA shield command is a declared component of that composite
-    planner.  Its exact ``fallback_safe`` counters are therefore native intervention telemetry;
-    best-effort and uncertainty fallbacks remain forbidden.
+    """Keep the historical private entry point over the canonical metadata scanner.
 
     Returns:
         The first forbidden runtime marker, if present.
     """
-
-    def _is_valid_native_counter(value: Any) -> bool:
-        if not isinstance(value, int) or isinstance(value, bool):
-            return False
-        return value >= 0
-
-    runtime_view: dict[str, Any] = {
-        str(key): value
-        for key, value in metadata.items()
-        if str(key) not in _DECLARATIVE_ALGORITHM_METADATA_CONTAINERS
-    }
-    planner_contract = metadata.get("planner_contract")
-    planner_id = (
-        str(planner_contract.get("planner_id", "")).strip().lower()
-        if isinstance(planner_contract, Mapping)
-        else ""
+    return _canonical_algorithm_metadata_runtime_marker(
+        metadata, expected_algorithm=expected_algorithm
     )
-    guarded_ppo_identity = (
-        str(expected_algorithm or "").strip().lower() == "guarded_ppo"
-        and str(metadata.get("canonical_algorithm", "")).strip().lower() == "guarded_ppo"
-        and str(metadata.get("algorithm", "")).strip().lower() == "ppo"
-        and planner_id == "guarded_ppo"
-    )
-    if guarded_ppo_identity:
-        guard_stats = metadata.get("guard_stats")
-        if isinstance(guard_stats, Mapping):
-            if "fallback_safe" in guard_stats and not _is_valid_native_counter(
-                guard_stats["fallback_safe"]
-            ):
-                return "guard_stats.fallback_safe", "invalid"
-            runtime_view["guard_stats"] = {
-                str(key): value
-                for key, value in guard_stats.items()
-                if key != "fallback_safe" or not _is_valid_native_counter(value)
-            }
-        shield_stats = metadata.get("shield_stats")
-        if isinstance(shield_stats, Mapping):
-            shield_view = dict(shield_stats)
-            decision_counts = shield_stats.get("decision_counts")
-            if isinstance(decision_counts, Mapping):
-                if "fallback_safe" in decision_counts and not _is_valid_native_counter(
-                    decision_counts["fallback_safe"]
-                ):
-                    return "shield_stats.decision_counts.fallback_safe", "invalid"
-                shield_view["decision_counts"] = {
-                    str(key): value
-                    for key, value in decision_counts.items()
-                    if key != "fallback_safe" or not _is_valid_native_counter(value)
-                }
-            last_decision = shield_stats.get("last_decision")
-            if isinstance(last_decision, Mapping):
-                shield_view["last_decision"] = {
-                    str(key): value
-                    for key, value in last_decision.items()
-                    if key != "fallback_controller_state" or not isinstance(value, Mapping)
-                }
-            runtime_view["shield_stats"] = shield_view
-    return runtime_fallback_or_degraded_marker(runtime_view)
 
 
 def _status_markers(  # noqa: C901, PLR0912, PLR0915
@@ -359,7 +300,14 @@ def _status_markers(  # noqa: C901, PLR0912, PLR0915
         markers.append((f"{prefix}.{marker_path}", marker_value))
     planner_runtime = payload.get("planner_runtime")
     if isinstance(planner_runtime, Mapping):
-        runtime_marker = runtime_fallback_or_degraded_marker(planner_runtime)
+        metadata_context = payload.get("algorithm_metadata")
+        if metadata_context is None:
+            metadata_context = payload.get("algorithm_metadata_contract")
+        runtime_marker = runtime_fallback_or_degraded_marker(
+            planner_runtime,
+            expected_algorithm=expected_algorithm,
+            algorithm_metadata=metadata_context,
+        )
         if runtime_marker is not None:
             marker_path, marker_value = runtime_marker
             markers.append((f"{prefix}.planner_runtime.{marker_path}", marker_value))
@@ -397,7 +345,11 @@ def _status_markers(  # noqa: C901, PLR0912, PLR0915
         adapter_impact = metadata.get("adapter_impact")
         if isinstance(adapter_impact, Mapping):
             _add(f"{field}.adapter_impact.execution_mode", adapter_impact.get("execution_mode"))
-        runtime_marker = runtime_fallback_or_degraded_marker(metadata.get("planner_runtime"))
+        runtime_marker = runtime_fallback_or_degraded_marker(
+            metadata.get("planner_runtime"),
+            expected_algorithm=expected_algorithm,
+            algorithm_metadata=metadata,
+        )
         if runtime_marker is not None:
             marker_path, marker_value = runtime_marker
             markers.append((f"{prefix}.{field}.planner_runtime.{marker_path}", marker_value))

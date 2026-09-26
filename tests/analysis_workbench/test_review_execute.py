@@ -962,7 +962,11 @@ def test_budget_reserves_a_complete_pair_before_execution(
 def test_wall_budget_reserves_complete_pair_before_control(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    import robot_sf.analysis_workbench.review_execute as review_execute_module
+
     calls = _patch_fake_execution(monkeypatch)
+    # Keep this assertion independent of test-runner scheduling and admission setup cost.
+    monkeypatch.setattr(review_execute_module._Executor, "_elapsed", lambda _executor: 0.0)
     request = _fixture_request(
         max_candidates=1,
         max_executions=2,

@@ -184,7 +184,7 @@ SREV-16 #9285, SREV-17 #9287 and SREV-18 #9288 had stale dependency and `needs-t
 
 Closed executor issue #9293 does not mean all runtime integrity work is complete. [#9380](https://github.com/ll7/robot_sf_ll7/issues/9380) records post-merge defects. Its resume, planner-parity and deadline slices have reported successor fixes, which must be verified rather than reimplemented blindly. The residual [#9417](https://github.com/ll7/robot_sf_ll7/issues/9417) source-admission enforcement is still implementation work. Its design hold is resolved in Section 12; #9296 now names #9417 as its actual runtime prerequisite. Keep that evidence dependency until proof exists.
 
-Native GitHub parent/dependency links, Project #5 fields and canonical live admission could not be executed by the connector-only publication environment. The issue bodies declare intended relationships. The implementation coordinator must perform scoped native reconciliation and live admission through the repository helpers before dispatch; do not treat these body references as completed native mutations.
+Native GitHub parent/dependency links, Project #5 fields and canonical live admission could not be executed by the connector-only publication environment. Body and comment context may support relationship decisions, but native GitHub links are authoritative and do not need body mirrors. The implementation coordinator must perform scoped native reconciliation and live admission through the repository helpers before dispatch; prose references are not completed native mutations.
 
 ## 4. Campaign identity and evidence accounting
 

@@ -37,6 +37,7 @@ from robot_sf.benchmark.fallback_policy import (
     classify_planner_row_status,
     summarize_benchmark_availability,
 )
+from robot_sf.benchmark.spawn_validity import record_has_spawn_overlap
 from robot_sf.benchmark.synthetic_actuation import (
     SyntheticActuationProfile,
     not_available_saturation_metrics,
@@ -412,6 +413,8 @@ def _resolve_planner_metrics(
         "min_clearance_m": float("nan"),
         "proxemic_intrusion_rate": _metric_mean(metric_block, "social_proxemic_intrusion_frac"),
     }
+    # Issue #9725: spawn-overlap rows stay in the episode JSONL but not in planner rates.
+    records = [record for record in records or [] if not record_has_spawn_overlap(record)]
     if not records:
         return resolved_metrics, success_ci, collision_ci, snqi_ci
 

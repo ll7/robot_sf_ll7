@@ -1,0 +1,48 @@
+{
+  "claim_boundary": "diagnostic_only_finite_search_budget_not_paper_facing_benchmark_evidence_and_not_real_world_safety",
+  "inference": [
+    "The current fixed-seed, clipped geometry pilot was too easy or too narrow to justify scaling unchanged.",
+    "The issue #1501 replay shows at least one archived failure still exists under current code and that the zero-failure pilot did not cover it.",
+    "NO-GO is scoped to scaling this tested search-space/environment design; it is not evidence that no counterexample exists or that the overall falsification infrastructure cannot find one."
+  ],
+  "limitations": [
+    "No planner optimization or held-out evaluation occurred.",
+    "One counterexample archive entry was replayed; 14 other #1501 archived entries were not rerun.",
+    "The current successful pilot representative is not a critical case.",
+    "The finite pilot result cannot establish counterexample absence or real-world safety.",
+    "The execution-context label said Python 3.12.3, but machine-generated runner provenance records Python 3.13.14; the latter is treated as authoritative.",
+    "Per-run driver wall times were not emitted. Candidate timestamp spans are reported as partial run intervals and the entire driver wall time was captured as 39.10 seconds."
+  ],
+  "next_action": "Do not launch #9648. Reuse the replay-verified #1501 case as a regression seed, repair the pilot domain/seed design in a separate bounded proposal, then run a new gate review before any scaled campaign.",
+  "observed_evidence": [
+    "64/64 candidates completed under native baseline-safe goal-planner execution with required certification.",
+    "All best-so-far values were 0.0 across 16 evaluations for both samplers and both sampler seeds.",
+    "Current pilot min-clearance range was 9.717535–11.169427 m; minimum human distance range was 11.117535–12.569427 m; no near miss or collision was observed.",
+    "The tracked #1501 archive contains 15 collision failures from a different search contract; one archived goal case was regenerated and replayed twice under current source and produced identical collision outcomes."
+  ],
+  "schema_version": "evidence_synthesis_summary.v1",
+  "synthesis_table": [
+    {
+      "artifacts": "candidate_evaluations.csv; best_so_far.csv; comparison manifests; replay_validation.json",
+      "caveats": "one planner, one environment seed, generated cases, no held-out family",
+      "config": "issue_9645_pilot_space.v1.yaml; fixed scenario seed 123",
+      "evidence_tier": "diagnostic-only",
+      "mechanism": "#9645 fixed-seed Random vs TPE bounded search",
+      "metrics": "64 valid/successful; 0 failures; all scores 0.0; min clearance 9.7175–11.1694 m",
+      "seeds": "sampler seeds 1101 and 2202",
+      "source_issue": 9645,
+      "verdict": "NO-GO for #9648 scale under unchanged domain"
+    },
+    {
+      "artifacts": "tracked archive.json and row_status_summary.json; regenerated failure_0002 replayed twice under current source",
+      "caveats": "historical run replay sweep was not done then; current replay does not compare against missing historical raw episode metrics; task feasibility remains unknown without a successful reference planner",
+      "config": "crossing_ttc_space.yaml; varied scenario seed, legacy objective",
+      "evidence_tier": "historical diagnostic-only",
+      "mechanism": "#1501 archived crossing/TTC hard cases",
+      "metrics": "15 archived collisions (8 goal, 7 ORCA); 66 invalid; 47 valid non-failures; one selected goal collision reproduced twice",
+      "seeds": "campaign seed 42; candidate environment seeds vary",
+      "source_issue": 1501,
+      "verdict": "use existing failure as initial regression candidate; not new #9645 discovery"
+    }
+  ]
+}

@@ -417,6 +417,15 @@ validation. Rows without those steps are marked `unavailable`; the bridge's `sim
 resimulation fallback is skipped because it would run a new simulation and would not reproduce the
 recorded planner. A replay visualization is not itself new benchmark evidence.
 
+Before invoking the bridge's episode-ID lookup, the showcase rechecks the selected source file
+digest, the selected JSONL line digest and content, and whether exactly one parsed row has the same
+episode ID. The existing renderer resolves the first matching ID, so any duplicate ID is reported
+as `mismatch` and the renderer is skipped; its sidecar's episode, scenario, seed, and whole-file
+digest alone cannot identify the selected row. Missing or changed row provenance also fails closed
+before rendering. `verified` therefore binds the visualization to the selected persisted record
+plus the renderer sidecar and artifact checks; it remains replay provenance, not new benchmark or
+safety evidence.
+
 The Release 0.0.2 records currently have no recorded `replay_steps`, so the showcase can identify and
 link critical source rows but cannot materialize a verified trajectory from this bundle. Findings
 from the existing analyzer remain visible and should be considered before interpreting the summary.
@@ -916,3 +925,37 @@ still requires:
 
 * release metadata finalization:
   + replace `release_tag`/DOI placeholders in campaign config before archival
+
+## Opt-in SNQI-v2
+
+SNQI-v2 adds a declared safety-stratified aggregate while preserving the released
+`metrics.snqi` field. Read the [specification and calibration boundary](context/snqi_v2_spec.md)
+before enabling it. The canonical anchors currently fail closed pending the
+1,344-episode development calibration; do not substitute arbitrary anchors.
+
+After the versioned assets are frozen and merged, add:
+
+```yaml
+snqi_v2_spec:
+  weights_path: configs/benchmarks/snqi_v2/weights.v2.0.json
+  anchors_path: configs/benchmarks/snqi_v2/anchors.v2.0.json
+  family_path: configs/benchmarks/snqi_v2/family.v2.0.yaml
+```
+
+The campaign writes `snqi_v2` and normalized `snqi_v2_terms` in each episode,
+mandatory diagnostics and family reports, and all three file hashes in the
+manifest and summary. Calibration and evaluation seeds must be disjoint.
+Offline recomputation uses the same implementation:
+
+```bash
+uv run python scripts/tools/analyze_snqi_contract.py --score-version SNQI-v2 \
+  --episodes /durable/campaign/episodes.jsonl \
+  --weights configs/benchmarks/snqi_v2/weights.v2.0.json \
+  --anchors configs/benchmarks/snqi_v2/anchors.v2.0.json \
+  --family configs/benchmarks/snqi_v2/family.v2.0.yaml \
+  --reports-dir /durable/campaign/recomputed-reports
+```
+
+SNQI-v2 is a declared benchmark aggregate over simulator quantities, not a
+validated measure of human comfort or safety. It admits no deployment ranking
+on its own; every reported v2 value must be read with its family report.

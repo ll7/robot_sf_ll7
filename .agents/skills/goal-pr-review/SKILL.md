@@ -250,9 +250,18 @@ first per-PR CI diagnosis of a run:
 
 1. `git fetch origin` and record `MAIN_SHA=$(git rev-parse origin/main)`.
 2. In a branch-attached worktree of `origin/main` (some inventory tests call
-   `git symbolic-ref HEAD` and error on a detached HEAD), run the base-sensitive marker suite from
-   `uv run python scripts/dev/base_sensitive_selector.py` plus any check that failed identically on
-   two or more queued PRs.
+   `git symbolic-ref HEAD` and error on a detached HEAD), run the observable base-sensitive marker
+   baseline from
+   `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/base_sensitive_selector.py --base-ref origin/main --json`
+   plus any check that failed identically on two or more queued PRs. The command reports the
+   attached branch, resolved base SHA, and every selected test file, then executes the selection
+   from a temporary worktree materialized at that exact commit. It exits nonzero when the checkout,
+   ref, selection, pytest runner, or test outcome is unavailable. Treat `status: passed` with a
+   clean, branch-attached checkout at the resolved base SHA, a positive `test_result.passed` count,
+   and zero reported failures or errors as the only successful baseline evidence. Dirty or
+   unavailable checkout state, an empty selection, and suites with no passing tests (including
+   all-skipped suites) are blocked evidence; any reported failure or error is failed evidence even
+   if a pytest plugin returns exit code zero.
 3. If it is green, proceed normally.
 4. If it is red: record `shared_main_blocked @ <MAIN_SHA>` with the failing test id in the ledger,
    classify every PR whose only failing check matches it as `awaiting_ci` (reason
@@ -497,8 +506,8 @@ Apply minimum tier by change surface:
 Readiness conditions for both labels:
 - linked issue contract and intended design satisfied, or intentionally narrowed with explicit
   rationale, `Refs #<parent>`, an open parent, and linked successor issues,
-- the PR's `## Issue Relationship Mirror` matches the linked issue's fresh native Parent/Blocked
-  by/Blocking state; `Relates to` remains a manual informational link.
+- the linked issue's fresh native Parent/Blocked by/Blocking state is consistent with the PR's
+  linked-issue scope; the PR body does not duplicate the graph.
 - scope matches contract and focused tests are current for the reviewed SHA,
 - stale-base handling is explicit: current-base subset proof for `base_sensitive` changes, or
   trusted exact-head `ordinary-cas` evidence for the final current-main compare-and-swap path,

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
+import subprocess
+import sys
 import threading
 import zipfile
 from dataclasses import replace
@@ -689,6 +692,79 @@ def test_projection_failure_after_journal_commit_recovers_on_reopen(tmp_path) ->
         loaded = recovered.get("a")
         assert loaded is not None
         assert recovered.checkpoint().revision == 1
+
+
+def test_unchanged_journal_reuses_validated_snapshot_without_mutable_aliases(
+    tmp_path, monkeypatch
+) -> None:
+    with AuditStore(tmp_path) as store:
+        store.save(_annotation("a"), operation_id="op-a", expected_revision=0)
+        parses = 0
+        original = store._transaction_from_dict
+
+        def counted(payload):
+            nonlocal parses
+            parses += 1
+            return original(payload)
+
+        monkeypatch.setattr(store, "_transaction_from_dict", counted)
+        first = store._read_journal(recover=True)
+        first[0]["store_id"] = "caller-mutated"
+        first[1][0].changes[0].record["observed_behavior"] = "caller-mutated"
+        second = store._read_journal(recover=True)
+        assert second[0]["store_id"] != "caller-mutated"
+        assert second[1][0].changes[0].record["observed_behavior"] == ""
+        assert parses == 0
+    assert store._validated_journal is None
+
+
+def test_validated_snapshot_rechecks_exact_bytes_and_recovers_tail(tmp_path) -> None:
+    with AuditStore(tmp_path) as store:
+        store.save(_annotation("a"), operation_id="op-a", expected_revision=0)
+        store._read_journal(recover=True)
+        journal = store.canonical_path
+        original = journal.read_bytes()
+        # A same-size rewrite must not be accepted using size or timestamp metadata.
+        original_stat = journal.stat()
+        journal.write_bytes(original.replace(b"op-a", b"op-b"))
+        os.utime(journal, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
+        assert journal.stat().st_size == original_stat.st_size
+        assert journal.stat().st_mtime_ns == original_stat.st_mtime_ns
+        with pytest.raises(AuditCorruptionError, match="request_digest"):
+            store.history("a")
+        journal.write_bytes(original)
+        assert len(store.history("a")) == 1
+
+        # An incomplete final line is never a reusable validated snapshot.
+        journal.write_bytes(original + b'{"kind":')
+        with pytest.raises(AuditCorruptionError):
+            store._read_journal(recover=False)
+        assert len(store.history("a")) == 1
+        assert journal.read_bytes() == original
+
+        # A separate process writes through the path lock while this instance
+        # retains its old snapshot and open projection connection.
+        subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import sys; from robot_sf.analysis_workbench.audit_store import AuditStore; "
+                "from tests.analysis_workbench.test_audit_store import _annotation; "
+                "s = AuditStore(sys.argv[1]); "
+                "s.save(_annotation('b'), operation_id='op-b', expected_revision=0); s.close()",
+                str(tmp_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        assert [item.record_id for item in store.list_records()] == ["a", "b"]
+
+        # Replacement with a different complete journal is also detected.
+        replacement = tmp_path / "replacement.ndjson"
+        replacement.write_bytes(original)
+        replacement.replace(journal)
+        assert [item.record_id for item in store.list_records()] == ["a"]
 
 
 def test_two_clients_serialize_writes_and_reject_stale_cas(tmp_path) -> None:

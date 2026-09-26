@@ -413,6 +413,25 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Social-force v2 planner contracts (issue #9724) are deterministic adapter
+    # checks on synthetic grids; the four episode tests stay marked slow.
+    "test_issue_9724_social_force_resolution_independent.py",
+    # VV-3 bounded metamorphic tests, including the release-arm episodes, run in
+    # the default lane; none is marked slow, so PR shards execute all of them.
+    "test_grid_resolution_invariance.py",
+    "test_mirror_symmetry.py",
+    "test_pedestrian_removal.py",
+    "test_planner_unit_consistency.py",
+    "test_replay_determinism.py",
+    # socnav_sampling bounded_v2 contracts (issues #9727, #9746) are deterministic
+    # planner checks on synthetic grids; the two episode replays stay marked slow.
+    "test_issue_9727_socnav_sampling.py",
+    # Bounded robot-force contracts cover capture, post-hoc reconstruction, and
+    # legacy compatibility; include them in PR changed-line coverage shards.
+    "test_robot_attributable_force.py",
+    # Force-residual predictor tests are deterministic synthetic contracts and
+    # must cover the changed planner-visible prediction module in PR shards.
+    "test_force_residual_intent_predictor.py",
     # ScenarioBelief projection tests are deterministic identity and data-contract
     # checks; keep them in PR shards so changed-line coverage sees the adapter.
     "test_identity_safe_scenario_belief.py",
@@ -651,6 +670,9 @@ _FAST_FILES = {
     # The preparation-only adversarial search harness uses deterministic data
     # fixtures only; keep its contract coverage in pull-request fast shards.
     "test_search_harness.py",
+    # The bounded falsification report covers deterministic schema, candidate
+    # accounting, and provenance contracts; keep changed lines in fast shards.
+    "test_falsification_report.py",
     # The search-to-trace eligibility fixtures are deterministic gate and
     # round-trip coverage for the changed search loop; keep them in the
     # exact-head fast lane (issue #9304).
@@ -693,7 +715,15 @@ _FAST_FILES = {
     # preflight contracts for the #9348 application module; keep them in fast
     # shards for the exact-head changed-coverage gate (issue #9348).
     "test_issue_9348_three_width_doorway.py",
+    "test_issue_9533_guarded_ppo_trace.py",
     "test_event_ledger.py",
+    "test_spawn_overlap_rate_paths_issue_9725.py",
+    "test_spawn_clearance_issue_9725.py",
+    "test_spawn_preflight_issue_9725.py",
+    "test_hierarchical_paired_release_analysis.py",
+    "test_parquet_export.py",
+    "test_seed_variance.py",
+    "test_map_inventory.py",
     "test_scenario_coverage.py",
     "test_seed_distribution_report.py",
     # ORCA preflight tests are deterministic contract coverage for the changed
@@ -878,8 +908,10 @@ _FAST_FILES = {
     # The release-publication contract is deterministic schema/CLI coverage for
     # the changed release_publication_contract.py producer.
     "test_release_publication_contract.py",
-    # Radius rank-stability schema tests exercise the changed benchmark producer;
-    # keep their deterministic contract coverage in pull-request fast shards.
+    # Radius sweep summary and rank-stability schema tests exercise the changed
+    # benchmark producers; keep their deterministic contract coverage in
+    # pull-request fast shards.
+    "test_radius_sweep_summary.py",
     "test_radius_rank_stability.py",
     # The mechanism-boundary atlas tests are deterministic schema/lineage checks;
     # keep coverage for the changed producer in pull-request fast shards.
@@ -935,6 +967,11 @@ _FAST_FILES = {
     # coverage for the changed planner producer; keep them in the exact-head
     # fast lane for changed-coverage admission.
     "test_force_coupled_potential_field.py",
+    # Maneuver-candidate portfolio and adversarial boundary tests are
+    # deterministic planner-contract coverage for the changed producer; keep
+    # both focused files in the exact-head fast lane.
+    "test_maneuver_candidates.py",
+    "test_maneuver_candidates_counterexamples.py",
     # Versioned obstacle-force dispatch tests are deterministic contract
     # coverage for the planner, simulator, and wrapper seams; keep their
     # top-level modules in PR shards so changed coverage cannot exclude them as

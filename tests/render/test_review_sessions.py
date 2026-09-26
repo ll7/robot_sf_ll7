@@ -994,6 +994,8 @@ def test_start_and_stop_race_serializes_the_inactive_owner_branch(tmp_path: Path
 
 
 def test_stop_before_start_settles_before_a_later_start(tmp_path: Path) -> None:
+    """Prove the valid stop-first serialization still permits a later start."""
+
     request = _request(tmp_path)
     session = review_sessions.ReviewSession(
         request,

@@ -47,21 +47,21 @@ KNOWN_LABELS = {
 
 EXPECTED_ISSUE_FORMS = {
     "blocked-external-artifact.yml": [
-        "Relationships",
+        "Native links are authoritative",
         "Unavailable asset or runtime",
         "Unblock condition",
         "Fail-closed policy",
         "Artifact policy",
     ],
     "epic.yml": [
-        "Relationships",
+        "Native links are authoritative",
         "Child issues or child-creation task",
         "Blocked / ready state",
         "Acceptance criteria",
         "Estimate metadata",
     ],
     "execution-run.yml": [
-        "Relationships",
+        "Native links are authoritative",
         "Runtime and execution location",
         "Current phase",
         "Owner / agent handoff",
@@ -70,14 +70,14 @@ EXPECTED_ISSUE_FORMS = {
         "Next decision point",
     ],
     "research-validation.yml": [
-        "Relationships",
+        "Native links are authoritative",
         "Hypothesis",
         "Evidence grade",
         "Artifact policy",
         "Validation command",
     ],
     "test-debt.yml": [
-        "Relationships",
+        "Native links are authoritative",
         "Skipped or failing test evidence",
         "Intended behavior",
         "Targeted validation",
@@ -158,7 +158,7 @@ def test_specialized_issue_templates_include_domain_specific_sections() -> None:
         "issue_default.md": [
             "## Goal / Problem",
             "## Archetype Metadata",
-            "## Relationships",
+            "Native links are authoritative",
             "archetype:",
             "evidence_tier:",
             "linked_policy:",
@@ -236,9 +236,10 @@ def test_every_issue_template_collects_canonical_issue_metadata() -> None:
         assert "archetype:" in body, f"missing archetype field in {path.name}"
         assert "evidence_tier:" in body, f"missing evidence_tier field in {path.name}"
         assert "linked_policy:" in body, f"missing linked_policy field in {path.name}"
-        assert "## Relationships" in body, f"missing relationships block in {path.name}"
-        for field in ("Parent issue", "Blocked by", "Blocking", "Relates to"):
-            assert f"- {field}:" in body, f"missing relationship field {field!r} in {path.name}"
+        assert "## Relationships" not in body, f"duplicated relationship block in {path.name}"
+        assert "Native links are authoritative" in body, (
+            f"missing native-relationship guidance in {path.name}"
+        )
 
     for path in sorted(TEMPLATE_DIR.glob("*.yml")):
         if path.name == "config.yml":
@@ -261,18 +262,18 @@ def test_every_issue_template_collects_canonical_issue_metadata() -> None:
         assert tuple(fields["archetype"]["attributes"]["options"]) == CANONICAL_ARCHETYPES
         assert tuple(fields["evidence_tier"]["attributes"]["options"]) == CANONICAL_EVIDENCE_TIERS
 
-        relationship_fields = {
-            str(item.get("id")): item
+        relationship_fields = [
+            item for item in body if isinstance(item, dict) and item.get("id") == "relationships"
+        ]
+        assert relationship_fields == [], f"{path.name} must not duplicate native issue links"
+        guidance = [
+            str(item.get("attributes", {}).get("value", ""))
             for item in body
-            if isinstance(item, dict) and item.get("id") == "relationships"
-        }
-        assert set(relationship_fields) == {"relationships"}, (
-            f"{path.name} must collect explicit issue relationships"
+            if isinstance(item, dict) and item.get("type") == "markdown"
+        ]
+        assert any("Native links are authoritative" in value for value in guidance), (
+            f"{path.name} must point authors to native GitHub relationships"
         )
-        relationship = relationship_fields["relationships"]
-        assert relationship["type"] == "textarea"
-        assert relationship["validations"]["required"] is True
-        assert "Parent issue: none" in relationship["attributes"]["placeholder"]
 
     docs_text = DOCS_GUIDE_REFERENCE.read_text(encoding="utf-8")
     assert "canonical `archetype` and `evidence_tier` metadata" in docs_text
@@ -388,8 +389,8 @@ def test_issue_and_pr_skills_share_relationship_contract() -> None:
             f"{name} must reference the canonical relationship contract"
         )
         if metadata.get("category") == "github-pr":
-            assert "Issue Relationship Mirror" in text, (
-                f"{name} must verify the PR relationship mirror"
+            assert "Issue Relationship Mirror" not in text, (
+                f"{name} must not require a duplicate PR relationship mirror"
             )
 
 

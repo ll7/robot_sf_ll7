@@ -5,7 +5,7 @@
       "eligible_record_count": 4,
       "excluded_record_count": 0,
       "input_record_count": 4,
-      "policy": "Rows with algorithm_metadata.foresight_prediction.evidence_eligible=false are excluded from benchmark evidence aggregation."
+      "policy": "Rows with algorithm_metadata.foresight_prediction.evidence_eligible=false are excluded from benchmark evidence aggregation. Rows with spawn_validity.invalid_run=true (invalid_reason=spawn_overlap) are excluded as simulator spawn defects."
     },
     "group_by": "scenario_params.algo",
     "metric_parameters": {
@@ -44,6 +44,11 @@
       "tracks": {
         "state": 4
       }
+    },
+    "spawn_validity": {
+      "records_with_spawn_validity": 0,
+      "reset_clearance_unavailable_count": 0,
+      "spawn_overlap_excluded_count": 0
     },
     "warnings": []
   },

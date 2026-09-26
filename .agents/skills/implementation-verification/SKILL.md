@@ -28,9 +28,8 @@ rather than only a global test pass signal.
      `scripts/dev/create_worktree.sh --mode review`; do not use an ordinary implementation
      worktree for a merge probe.
 2. Extract claims from issue/PR body, docs, and changed code/docs. Read
-   `docs/context/issue_relationships.md`; verify the PR's `## Issue Relationship Mirror` against
-   the linked issue's fresh native Parent/Blocked by/Blocking state, without inferring edges from
-   prose.
+   `docs/context/issue_relationships.md`; inspect the linked issue's fresh native
+   Parent/Blocked by/Blocking state. Do not infer graph edges from an issue mention alone.
 3. Map each claim to a concrete evidence surface:
    - scripts, configs, tests, CLI commands, or artifacts.
 4. Validate claim by claim:

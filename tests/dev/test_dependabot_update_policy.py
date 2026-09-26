@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import subprocess
+import tomllib
 from pathlib import Path
 from typing import Any
 
 import jsonschema
 import pytest
+import yaml
 
 from scripts.dev.check_dependabot_update_policy import (
     PolicyError,
@@ -322,9 +325,33 @@ def test_issue_7480_package_set_is_split_into_distinct_risk_classes() -> None:
 def test_developer_tooling_lane_can_remain_grouped() -> None:
     """A bounded tooling-only group remains one review and rollback surface."""
     policy = load_policy()
-    names = {"ruff", "pre-commit", "pylint", "mypy", "pytest"}
+    names = {"ruff", "pre-commit", "pylint", "mypy", "pytest", "hypothesis"}
     classified = classify_package_names(names, names, policy)
     assert validate_direct_update_lanes(classified) == ["developer-tooling"]
+
+
+def test_hypothesis_is_development_only_and_grouped_with_transitive_guards() -> None:
+    """Property-test tooling stays bounded while its unclassified closure keeps CI coverage."""
+    project = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
+    assert any(
+        requirement.startswith("hypothesis>=")
+        for requirement in project["dependency-groups"]["dev"]
+    )
+    assert not any(
+        requirement.startswith("hypothesis") for requirement in project["project"]["dependencies"]
+    )
+    updates = yaml.safe_load((REPO_ROOT / ".github/dependabot.yml").read_text())["updates"]
+    root = next(
+        row for row in updates if row["package-ecosystem"] == "uv" and row["directory"] == "/"
+    )
+    group = root["groups"]["developer-tooling"]
+    assert any(fnmatch.fnmatchcase("hypothesis", pattern) for pattern in group["patterns"])
+    assert group["applies-to"] == "version-updates"
+    rows = classify_package_names({"hypothesis", "sortedcontainers"}, {"hypothesis"}, load_policy())
+    assert validate_direct_update_lanes(rows) == ["developer-tooling"]
+    transitive = next(row for row in rows if row["name"] == "sortedcontainers")
+    assert transitive["class"] == "transitive-lock-package"
+    assert transitive["required_jobs"] == ["fast-feedback", "compat-matrix"]
 
 
 def test_allowed_examples_profile_is_the_only_profile_only_exception(

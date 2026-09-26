@@ -32,8 +32,8 @@ selection broadly.
 2. Inspect queue:
    - list Project #5 items and issue metadata,
    - use REST for issue fields when GraphQL is constrained.
-   - inspect explicit native Blocked by/Blocking links and the canonical issue-body mirror; a
-     prose mention is not a dependency edge.
+   - inspect native Blocked by/Blocking links for operational readiness. Body or comment context
+     can identify a candidate for relationship review, but mentions alone are not graph edges.
 3. Resolve blockers first:
    - route ambiguous issues to `gh-issue-clarifier`,
    - route implausible priorities to `gh-issue-priority-assessor`,
@@ -81,8 +81,9 @@ only an ordering preference, do not invent new priority-score inputs.
 - Do not ask a priority question when the next issue is already clear, when a blocker/clarification
   question is really needed instead, or when the tradeoff is only agent convenience.
 - Use follow-up handoffs rather than retry loops when quotas are temporarily exhausted.
-- Keep relationship writes separate from queue ordering: only explicit, reviewed Parent/Blocked by/
-  Blocking declarations may affect readiness, and `Relates to` remains informational/manual.
+- Keep relationship writes separate from queue ordering: only native Parent/Blocked by/Blocking
+  links affect readiness. Body/comment candidates must be reviewed and linked before they affect
+  sequencing; `Relates to` remains outside this CLI workflow.
 
 ## Output
 

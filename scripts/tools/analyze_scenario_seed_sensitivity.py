@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.seed_variance import seed_episode_row_is_valid
+
 DEFAULT_SUCCESS_RANGE_THRESHOLD = 0.5
 DEFAULT_HARD_SEED_THRESHOLD = 0.5
 DEFAULT_EASY_SEED_THRESHOLD = 0.75
@@ -162,7 +164,7 @@ def load_selected_episode_rows(
         reader = csv.DictReader(handle)
         for raw in reader:
             planner_key = str(raw.get("planner_key", "")).strip()
-            if planner_key not in selected_planners:
+            if planner_key not in selected_planners or not seed_episode_row_is_valid(raw):
                 continue
             success = _parse_float(raw.get("success"))
             collision = _parse_float(raw.get("collision"))

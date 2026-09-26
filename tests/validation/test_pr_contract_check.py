@@ -19,9 +19,86 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from scripts.ci import pr_contract_check
+from scripts.dev.check_pr_followups import analyze_body as analyze_pr_followups
+from scripts.dev.pr_contract_v2 import parse_pr_contract_v2
 from tests.support.environment_guards import configure_git_identity
 
 ROOT = Path(__file__).resolve().parents[2]
+
+_V2_CONTRACT_BODY_TEMPLATE = """## Summary
+Contract parity regression fixture.
+
+<!-- pr-contract:v2
+change_class: tooling
+linked_issues:
+  closes: []
+  relates: {relates}
+deferred_work:
+  status: {status}
+  issues: {issues}
+evidence:
+  applicability: na
+  tier: null
+  result: na
+domain_approval:
+  required: false
+  status: not_required
+performance:
+  claimed: false
+-->
+"""
+
+
+def _v2_contract_body(*, status: str, issues: str, relates: str = "[]") -> str:
+    return _V2_CONTRACT_BODY_TEMPLATE.format(status=status, issues=issues, relates=relates)
+
+
+def test_standalone_and_readiness_reject_invalid_v2_with_shared_reasons() -> None:
+    body = _v2_contract_body(status="issues", issues="[9488]", relates="[9488]")
+    parsed = parse_pr_contract_v2(body, source="fixture")
+    followups = analyze_pr_followups(body, source="fixture")
+    blockers, _, _ = pr_contract_check.run_all_checks(
+        "contract parity", body, [], "ll7/robot_sf_ll7", "missing-base", None
+    )
+
+    assert parsed.status == "malformed"
+    assert followups.status == "malformed_v2_contract"
+    assert any("deferred_work.status must be one of" in reason for reason in parsed.errors)
+    assert "linked_issues and deferred_work contain duplicate issue references" in parsed.errors
+    for reason in parsed.errors:
+        assert reason in followups.message
+        assert any(reason in blocker for blocker in blockers)
+
+
+def test_standalone_and_readiness_accept_valid_v2_no_deferred_work() -> None:
+    body = _v2_contract_body(status="none", issues="[]", relates="[9488]")
+    followups = analyze_pr_followups(body, source="fixture")
+    blockers, _, _ = pr_contract_check.run_all_checks(
+        "contract parity", body, [], "ll7/robot_sf_ll7", "missing-base", None
+    )
+
+    assert followups.status == "ok"
+    assert not any("PR contract v2" in blocker for blocker in blockers)
+
+
+def test_standalone_and_readiness_keep_v1_markdown_compatibility() -> None:
+    body = """## Summary
+Legacy Markdown contract.
+
+## Follow-Up Issues
+- Deferred work: none
+- Issues opened for follow-up: none
+"""
+    parsed = parse_pr_contract_v2(body, source="fixture")
+    followups = analyze_pr_followups(body, source="fixture")
+    blockers, _, _ = pr_contract_check.run_all_checks(
+        "contract parity", body, [], "ll7/robot_sf_ll7", "missing-base", None
+    )
+
+    assert parsed.status == "absent"
+    assert followups.status == "ok"
+    assert not any("PR contract v2" in blocker for blocker in blockers)
+
 
 # PR #8440 is the known pre-guard regression: its merge reference closed the
 # incident in #8414 before the two-green reconciler criterion was established.

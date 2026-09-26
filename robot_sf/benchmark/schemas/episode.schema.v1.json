@@ -1212,12 +1212,67 @@
                         "prf_active"
                     ],
                     "properties": {
+                        "source": {
+                            "type": "string",
+                            "enum": [
+                                "recorded_robot_pedestrian_social_force",
+                                "posthoc_recomputed"
+                            ]
+                        },
+                        "sample_timing": {
+                            "type": "string",
+                            "enum": [
+                                "pre_integration",
+                                "caller_supplied_positions_may_be_post_integration"
+                            ]
+                        },
+                        "quantity": {
+                            "const": "model acceleration, not measured human discomfort"
+                        },
                         "reference_rule": {
                             "const": "social_force_head_on_contact_relative_speed_1m_s_v1"
                         },
                         "reference_m_s2": {
                             "type": "number",
                             "minimum": 0
+                        },
+                        "prf_active": {
+                            "type": "boolean"
+                        },
+                        "prf_robot_radius_m": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                        },
+                        "prf_ped_radius_m": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                        },
+                        "prf_multiplier": {
+                            "type": "number",
+                            "minimum": 0
+                        },
+                        "prf_activation_m": {
+                            "type": "number",
+                            "minimum": 0
+                        },
+                        "social_force_config": {
+                            "type": "object",
+                            "required": [
+                                "lambda_importance",
+                                "gamma",
+                                "n_prime",
+                                "n",
+                                "factor",
+                                "activation_threshold"
+                            ],
+                            "properties": {
+                                "lambda_importance": {"type": "number", "minimum": 0},
+                                "gamma": {"type": "number", "minimum": 0},
+                                "n_prime": {"type": "number", "minimum": 0},
+                                "n": {"type": "number", "minimum": 0},
+                                "factor": {"type": "number", "minimum": 0},
+                                "activation_threshold": {"type": "number", "minimum": 0}
+                            }
                         }
                     }
                 },

@@ -27,6 +27,11 @@ from robot_sf.benchmark.result_provenance import (
     manifest_path_for_result_jsonl,
     validate_result_provenance_manifest,
 )
+from robot_sf.benchmark.robot_force_contract import (
+    compact_robot_force_metadata,
+    declared_force_source_contract,
+    validate_robot_force_provenance,
+)
 from robot_sf.benchmark.snqi.v2_reports import read_episode_files, validate_episode_execution
 from robot_sf.benchmark.snqi.v2_spec import (
     PP_EQUIV_FORCE,
@@ -37,9 +42,6 @@ from robot_sf.benchmark.snqi.v2_spec import (
 )
 from robot_sf.benchmark.utils import _config_hash
 from robot_sf.common.artifact_paths import get_repository_root
-
-_PP_EQUIV_STATUS = "experimental_counterfactual"
-_PP_EQUIV_VELOCITY_RULE = "backward_difference_first_forward"
 
 
 def derive_calibration_anchors(
@@ -120,11 +122,7 @@ def derive_calibration_anchors(
             "threshold_absolute_rho": 0.90,
             "N": "clip(near_misses/steps/0.25)",
             "selected_source_coverage": len(episodes),
-            **(
-                {"selected_source_contract": selected_source_contract}
-                if selected_source_contract is not None
-                else {}
-            ),
+            "selected_source_contract": selected_source_contract,
         },
         "calibration": {
             "split_id": f"snqi-v2-dev101-102-{grid_hash[:12]}",
@@ -646,15 +644,7 @@ def _compact_calibration_record(
                     "curvature_mean",
                 )
             },
-            "robot_force_metadata": {
-                key: metrics["robot_force_metadata"][key]
-                for key in (
-                    "sample_timing",
-                    "pp_equiv_status",
-                    "pp_equiv_velocity_rule",
-                )
-                if key in metrics["robot_force_metadata"]
-            },
+            "robot_force_metadata": compact_robot_force_metadata(metrics, SIMULATED_FORCE),
         },
     }
 
@@ -673,32 +663,27 @@ def _validate_provenance(run_id: str, source_commit: str, episodes_sha256: str) 
 
 def _selected_force_source_contract(
     episodes: Sequence[Mapping[str, Any]], source: str
-) -> dict[str, str] | None:
+) -> dict[str, str]:
     """Validate and describe the selected force producer contract.
 
     Returns:
-        The declared producer contract for the selected counterfactual source,
-        or ``None`` when the simulated source remains selected.
+        The anchor-declared producer contract after each selected value is validated.
     """
-    if source != PP_EQUIV_FORCE:
-        return None
     for episode in episodes:
         metrics = episode.get("metrics")
-        metadata = metrics.get("robot_force_metadata") if isinstance(metrics, Mapping) else None
-        if (
-            not isinstance(metadata, Mapping)
-            or metadata.get("pp_equiv_status") != _PP_EQUIV_STATUS
-            or metadata.get("pp_equiv_velocity_rule") != _PP_EQUIV_VELOCITY_RULE
-        ):
-            raise ValueError(
-                "SNQI-v2 calibration requires the declared ped-ped-equivalent force "
-                "counterfactual status and velocity rule"
-            )
-        finite_nonnegative(metrics.get(PP_EQUIV_FORCE), PP_EQUIV_FORCE)
-    return {
-        "pp_equiv_status": _PP_EQUIV_STATUS,
-        "pp_equiv_velocity_rule": _PP_EQUIV_VELOCITY_RULE,
-    }
+        if not isinstance(metrics, Mapping):
+            raise ValueError("SNQI-v2 calibration requires force metrics")
+        try:
+            validate_robot_force_provenance(metrics, source)
+        except ValueError as exc:
+            if source == PP_EQUIV_FORCE:
+                raise ValueError(
+                    "SNQI-v2 calibration requires the declared ped-ped-equivalent force "
+                    "counterfactual status and velocity rule"
+                ) from exc
+            raise ValueError(f"SNQI-v2 calibration force provenance is invalid: {exc}") from exc
+        finite_nonnegative(metrics.get(source), source)
+    return declared_force_source_contract(source)
 
 
 def _validate_calibration_episode(
@@ -725,11 +710,7 @@ def _validate_calibration_episode(
         raise ValueError("SNQI-v2 calibration requires H600/dt0.1 with recorded forces")
     _validate_calibration_score_inputs(episode)
     metrics = episode["metrics"]
-    metadata = metrics.get("robot_force_metadata", {})
-    if not isinstance(metadata, Mapping):
-        raise ValueError("SNQI-v2 calibration requires robot force producer metadata")
-    if metadata.get("sample_timing") != "pre_integration":
-        raise ValueError("SNQI-v2 calibration requires pre-integration robot force samples")
+    validate_robot_force_provenance(metrics, SIMULATED_FORCE)
 
 
 def _validate_calibration_score_inputs(episode: Mapping[str, Any]) -> None:

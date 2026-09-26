@@ -12,6 +12,7 @@ import yaml
 from hypothesis import given
 from hypothesis import strategies as st
 
+from robot_sf.benchmark.robot_force_contract import declared_force_source_contract
 from robot_sf.benchmark.snqi.compute import (
     compute_snqi,
     compute_snqi_v0,
@@ -21,11 +22,13 @@ from robot_sf.benchmark.snqi.compute import (
 )
 from robot_sf.benchmark.snqi.v2_reports import (
     build_family_report,
+    compact_report_episode,
     enrich_campaign_v2,
     family_vectors,
     score_episode,
 )
 from robot_sf.benchmark.snqi.v2_spec import (
+    PP_EQUIV_FORCE,
     QUALITY_TERMS,
     SIMULATED_FORCE,
     SOURCES,
@@ -126,6 +129,7 @@ def fixture_spec() -> SnqiV2Spec:
 
 def metrics(**overrides):
     """Return complete synthetic metrics with an independently retained legacy score."""
+    force_metadata = overrides.pop("robot_force_metadata", {})
     document = {
         "success": 1,
         "total_collision_count": 0,
@@ -136,9 +140,38 @@ def metrics(**overrides):
         "jerk_mean": 0,
         "curvature_mean": 0,
         "snqi": -0.12345678901234567,
+        "robot_force_metadata": _force_metadata(**force_metadata),
         **overrides,
     }
     return document
+
+
+def _force_metadata(**overrides):
+    """Return a synthetic recorded-force declaration accepted by SNQI-v2."""
+    from robot_sf.benchmark.metrics import robot_force_reference
+
+    social_force_config = {
+        "lambda_importance": 1.0,
+        "gamma": 1.0,
+        "n_prime": 1.0,
+        "n": 1.0,
+        "factor": 1.0,
+        "activation_threshold": 10.0,
+    }
+    return {
+        "source": "recorded_robot_pedestrian_social_force",
+        "sample_timing": "pre_integration",
+        "reference_rule": "social_force_head_on_contact_relative_speed_1m_s_v1",
+        "reference_m_s2": robot_force_reference(social_force_config, 0.35),
+        "quantity": "model acceleration, not measured human discomfort",
+        "prf_active": True,
+        "prf_robot_radius_m": 0.5,
+        "prf_ped_radius_m": 0.35,
+        "prf_multiplier": 4.0,
+        "prf_activation_m": 1.0,
+        "social_force_config": social_force_config,
+        **overrides,
+    }
 
 
 def _add_synthetic_freeze_custody(document):
@@ -185,6 +218,7 @@ def anchor_document():
         },
         "force_decision": {
             "source": SIMULATED_FORCE,
+            "selected_source_contract": declared_force_source_contract(SIMULATED_FORCE),
             "spearman_rho_F_N": 0.8,
             "spearman_rho_F_exposure_fraction": 0.8,
             "threshold_absolute_rho": 0.90,
@@ -259,10 +293,9 @@ def test_anchor_loader_rejects_boolean_correlation(spec_files, value):
         spearman_rho_F_N=value, source=PP_EQUIV_FORCE if value else SIMULATED_FORCE
     )
     if value:
-        document["force_decision"]["selected_source_contract"] = {
-            "pp_equiv_status": "experimental_counterfactual",
-            "pp_equiv_velocity_rule": "backward_difference_first_forward",
-        }
+        document["force_decision"]["selected_source_contract"] = declared_force_source_contract(
+            PP_EQUIV_FORCE
+        )
     spec_files[1].write_text(json.dumps(document))
     with pytest.raises(ValueError, match="rho"):
         load_snqi_v2_spec(*spec_files)
@@ -365,10 +398,7 @@ def test_anchor_loader_binds_pp_equivalent_counterfactual_contract(spec_files, m
     decision.update(
         source=PP_EQUIV_FORCE,
         spearman_rho_F_N=0.9,
-        selected_source_contract={
-            "pp_equiv_status": "experimental_counterfactual",
-            "pp_equiv_velocity_rule": "backward_difference_first_forward",
-        },
+        selected_source_contract=declared_force_source_contract(PP_EQUIV_FORCE),
     )
     if mutation == "missing":
         decision.pop("selected_source_contract")
@@ -377,7 +407,24 @@ def test_anchor_loader_binds_pp_equivalent_counterfactual_contract(spec_files, m
     else:
         decision["selected_source_contract"]["pp_equiv_velocity_rule"] = "forward_difference"
     spec_files[1].write_text(json.dumps(document))
-    with pytest.raises(ValueError, match="counterfactual status and velocity rule"):
+    with pytest.raises(ValueError, match="recorded producer and reference contract"):
+        load_snqi_v2_spec(*spec_files)
+
+
+@pytest.mark.parametrize("mutation", ["missing", "source", "timing", "reference_rule"])
+def test_anchor_loader_binds_recorded_simulated_force_contract(spec_files, mutation):
+    document = anchor_document()
+    contract = document["force_decision"]["selected_source_contract"]
+    if mutation == "missing":
+        document["force_decision"].pop("selected_source_contract")
+    elif mutation == "source":
+        contract["source"] = "posthoc_recomputed"
+    elif mutation == "timing":
+        contract["sample_timing"] = "post_integration"
+    else:
+        contract["reference_rule"] = "unspecified"
+    spec_files[1].write_text(json.dumps(document))
+    with pytest.raises(ValueError, match="recorded producer and reference contract"):
         load_snqi_v2_spec(*spec_files)
 
 
@@ -550,6 +597,62 @@ def test_no_missing_or_nan_imputation(source):
     for value in (None, float("nan"), float("inf")):
         with pytest.raises(ValueError):
             compute_snqi_v2(metrics(**{source: value}), fixture_spec())
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["missing_metadata", "posthoc", "wrong_timing", "wrong_reference", "reference_drift"],
+)
+def test_snqi_v2_rejects_force_values_without_recorded_provenance(mutation):
+    row = records()[0]
+    metadata = row["metrics"]["robot_force_metadata"]
+    if mutation == "missing_metadata":
+        row["metrics"].pop("robot_force_metadata")
+    elif mutation == "posthoc":
+        metadata["source"] = "posthoc_recomputed"
+    elif mutation == "wrong_timing":
+        metadata["sample_timing"] = "caller_supplied_positions_may_be_post_integration"
+    elif mutation == "wrong_reference":
+        metadata["reference_rule"] = "unspecified"
+    else:
+        metadata["reference_m_s2"] *= 2
+
+    with pytest.raises(ValueError, match="force provenance"):
+        compute_snqi_v2(row["metrics"], fixture_spec())
+    with pytest.raises(ValueError, match="force provenance"):
+        score_episode(row, fixture_spec())
+
+
+@pytest.mark.parametrize("mutation", ["missing_status", "wrong_status", "missing_velocity"])
+def test_snqi_v2_pp_equivalent_force_requires_counterfactual_provenance(mutation):
+    row = records()[0]
+    row["metrics"][PP_EQUIV_FORCE] = 3.0
+    metadata = row["metrics"]["robot_force_metadata"]
+    metadata.update(
+        pp_equiv_status="experimental_counterfactual",
+        pp_equiv_velocity_rule="backward_difference_first_forward",
+    )
+    if mutation == "missing_status":
+        metadata.pop("pp_equiv_status")
+    elif mutation == "wrong_status":
+        metadata["pp_equiv_status"] = "measured"
+    else:
+        metadata.pop("pp_equiv_velocity_rule")
+    pp_spec = replace(fixture_spec(), force_source=PP_EQUIV_FORCE, calibration_rho=0.90)
+
+    with pytest.raises(ValueError, match="force provenance"):
+        compute_snqi_v2(row["metrics"], pp_spec)
+
+
+def test_compact_family_report_preserves_force_producer_contract():
+    spec = fixture_spec()
+    compact = compact_report_episode(records()[0], spec)
+    assert compact["metrics"]["snqi_v2_force_provenance"]["selected_source"] == SIMULATED_FORCE
+    report = build_family_report(records(), spec, bootstrap_samples=2)
+    provenance = report["force_producer_provenance"]["a"][0]
+    assert provenance["source"] == "recorded_robot_pedestrian_social_force"
+    assert provenance["sample_timing"] == "pre_integration"
+    assert provenance["reference_rule"] == "social_force_head_on_contact_relative_speed_1m_s_v1"
 
 
 def records():
@@ -1386,13 +1489,29 @@ def test_calibration_switch_requires_full_pp_coverage():
         )
     result = derive_calibration_anchors(rows, **kwargs)
     assert result["force_decision"]["source"] == PP_EQUIV_FORCE
-    assert result["force_decision"]["selected_source_contract"] == {
-        "pp_equiv_status": "experimental_counterfactual",
-        "pp_equiv_velocity_rule": "backward_difference_first_forward",
-    }
+    assert result["force_decision"]["selected_source_contract"] == declared_force_source_contract(
+        PP_EQUIV_FORCE
+    )
     assert result["anchors"]["F"]["upper"] == 3
     rows[0]["metrics"][PP_EQUIV_FORCE] = float("nan")
     with pytest.raises(ValueError, match="finite"):
+        derive_calibration_anchors(rows, **kwargs)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("source", "posthoc_recomputed"),
+        ("sample_timing", "caller_supplied_positions_may_be_post_integration"),
+        ("reference_rule", "unspecified"),
+    ],
+)
+def test_calibration_rejects_unbound_recorded_force(field, value):
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+
+    rows, kwargs = calibration_records()
+    rows[0]["metrics"]["robot_force_metadata"][field] = value
+    with pytest.raises(ValueError, match="force provenance"):
         derive_calibration_anchors(rows, **kwargs)
 
 
@@ -2470,7 +2589,14 @@ def test_streaming_retains_only_compact_records_and_distinguishes_same_algo_arms
     def checked_reports(rows, *args, **kwargs):
         assert all(ref() is None for ref in refs)
         assert all("algorithm_metadata" not in row for row in rows)
-        assert all(set(row["metrics"]) == set(SOURCES.values()) for row in rows)
+        assert all(
+            set(row["metrics"])
+            == set(SOURCES.values()) | {"robot_force_metadata", "snqi_v2_force_provenance"}
+            for row in rows
+        )
+        assert all(
+            "robot_force_samples" not in row["metrics"]["robot_force_metadata"] for row in rows
+        )
         return original_writer(rows, *args, **kwargs)
 
     monkeypatch.setattr(v2_reports, "read_episode_files", watched_reader)

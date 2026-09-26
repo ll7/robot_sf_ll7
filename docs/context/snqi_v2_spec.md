@@ -78,6 +78,25 @@ is the preregistered decision input. A constant
 correlation, nonpositive p95, missing row or undefined selected source fails.
 The frozen-anchor loader requires `quantile_method: linear` so p95 values cannot
 be loaded under different interpolation semantics.
+
+### Force producer admission
+
+Calibration and scoring admit `robot_force_impulse_total` only with
+`robot_force_metadata.source: recorded_robot_pedestrian_social_force`,
+`sample_timing: pre_integration`, the versioned reference rule and quantity, and
+the recorded robot/SocialForce configuration. The scorer recomputes
+`reference_m_s2` from that configuration and the pedestrian radius; a missing or
+drifting declaration fails closed. `posthoc_recomputed` values are diagnostic
+estimates and cannot supply V2 F. If calibration selects
+`robot_force_pp_equiv_impulse_total`, every row must additionally declare
+`pp_equiv_status: experimental_counterfactual` and
+`pp_equiv_velocity_rule: backward_difference_first_forward`.
+
+The frozen force decision binds this producer contract. Episode enrichment keeps
+the validated per-row source/reference declaration, and the `snqi-v2-family.v2`
+report lists distinct declarations by planner so compaction does not erase force
+provenance. The V0 and V1 scalar APIs keep their prior calculations.
+
 Derive the reviewed artifact with:
 
 ```bash

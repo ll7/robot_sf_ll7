@@ -31,7 +31,9 @@ import json
 from collections.abc import Mapping
 from datetime import datetime
 from subprocess import run
+from typing import Any
 
+from robot_sf.benchmark.robot_force_contract import validate_robot_force_provenance
 from robot_sf.benchmark.snqi.types import SNQIWeights
 from robot_sf.benchmark.snqi.v2_spec import SnqiV2Spec, finite_nonnegative
 
@@ -60,7 +62,7 @@ SNQI_V1_PENALTY_METRICS = (
 MetricName = str
 BaselineStats = Mapping[MetricName, Mapping[str, float]]
 Weights = Mapping[str, float]
-Metrics = Mapping[str, float | int | bool]
+Metrics = Mapping[str, Any]
 
 
 def _weighted_term(weight: float, value: float) -> float:
@@ -248,6 +250,7 @@ def normalize_snqi_v2_terms(metrics: Metrics, spec: SnqiV2Spec) -> dict[str, flo
     Returns:
         Validated result described above.
     """
+    validate_robot_force_provenance(metrics, spec.force_source)
 
     def required(name: str) -> float:
         return finite_nonnegative(metrics.get(name), name)
@@ -285,6 +288,15 @@ def compute_snqi_v2(metrics: Metrics, spec: SnqiV2Spec) -> float:
         Validated result described above.
     """
     terms = normalize_snqi_v2_terms(metrics, spec)
+    return _score_normalized_snqi_v2_terms(terms, spec)
+
+
+def _score_normalized_snqi_v2_terms(terms: Mapping[str, float], spec: SnqiV2Spec) -> float:
+    """Scalarize a complete normalized term map under the declared weights.
+
+    Returns:
+        The declared weighted score.
+    """
     return float(
         sum(
             (1 if term == "S" else -1) * spec.weights[term] * value for term, value in terms.items()

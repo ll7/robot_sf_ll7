@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from robot_sf.benchmark.robot_force_contract import declared_force_source_contract
 from robot_sf.common.artifact_paths import get_repository_root
 
 if TYPE_CHECKING:
@@ -216,6 +217,7 @@ class SnqiV2Spec:
             "snqi_v2_version": "SNQI-v2",
             "snqi_v2_calibration_split_id": self.calibration_split_id,
             "snqi_v2_force_source": self.force_source,
+            "snqi_v2_force_source_contract": declared_force_source_contract(self.force_source),
             **{f"snqi_v2_{key}_path": _provenance_path(value) for key, value in self.paths.items()},
             **{f"snqi_v2_{key}_sha256": value for key, value in self.hashes.items()},
         }
@@ -407,13 +409,9 @@ def _validate_force_decision_contract(anchors_doc: dict[str, Any]) -> None:
     expected_source = PP_EQUIV_FORCE if abs(rho) >= 0.90 else SIMULATED_FORCE
     if source != expected_source:
         raise ValueError("SNQI-v2 force source violates the preregistered rho threshold")
-    if source == PP_EQUIV_FORCE and force_decision.get("selected_source_contract") != {
-        "pp_equiv_status": "experimental_counterfactual",
-        "pp_equiv_velocity_rule": "backward_difference_first_forward",
-    }:
+    if force_decision.get("selected_source_contract") != declared_force_source_contract(source):
         raise ValueError(
-            "SNQI-v2 PP-equivalent force anchor must bind its counterfactual status and "
-            "velocity rule"
+            "SNQI-v2 force anchor must bind its recorded producer and reference contract"
         )
 
 

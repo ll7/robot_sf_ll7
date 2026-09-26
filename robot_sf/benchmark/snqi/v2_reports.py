@@ -25,8 +25,15 @@ from robot_sf.benchmark.result_provenance import (
     validate_result_provenance_manifest,
     write_result_provenance_manifest,
 )
+from robot_sf.benchmark.robot_force_contract import (
+    compact_robot_force_metadata,
+    validate_robot_force_provenance,
+)
 from robot_sf.benchmark.snqi.bootstrap import bootstrap_stability
-from robot_sf.benchmark.snqi.compute import compute_snqi_v2, normalize_snqi_v2_terms
+from robot_sf.benchmark.snqi.compute import (
+    _score_normalized_snqi_v2_terms,
+    normalize_snqi_v2_terms,
+)
 from robot_sf.benchmark.snqi.v2_spec import (
     FAMILY,
     QUALITY_TERMS,
@@ -123,12 +130,14 @@ def score_episode(
         raise ValueError("SNQI-v2 episode requires metrics")
     inputs = {**metrics, "executed_steps": episode.get("steps")}
     normalized = normalize_snqi_v2_terms(inputs, spec)
+    force_provenance = validate_robot_force_provenance(inputs, spec.force_source)
     return {
         **episode,
         "metrics": {
             **metrics,
-            "snqi_v2": compute_snqi_v2(inputs, spec),
+            "snqi_v2": _score_normalized_snqi_v2_terms(normalized, spec),
             "snqi_v2_terms": normalized,
+            "snqi_v2_force_provenance": force_provenance,
         },
     }
 
@@ -263,12 +272,29 @@ def build_family_report(
         if len(groups) > 1
         else {"status": "not_available", "reason": "one planner"}
     )
+    force_producer_provenance = {
+        key: [
+            json.loads(contract)
+            for contract in sorted(
+                {
+                    json.dumps(
+                        episode["metrics"]["snqi_v2_force_provenance"],
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                    for episode in grouped[key]
+                }
+            )
+        ]
+        for key in groups
+    }
     return {
-        "schema_version": "snqi-v2-family.v1",
+        "schema_version": "snqi-v2-family.v2",
         "family": "V2-F",
         "seed": FAMILY["seed"],
         "claim_boundary": CLAIM_BOUNDARY,
         "provenance": spec.provenance(),
+        "force_producer_provenance": force_producer_provenance,
         "episode_count": len(scored),
         "stratified_count": len(stratified),
         "tie_policy": "average ranks for rho; split top-1 credit; lexical top-3 boundary",
@@ -404,6 +430,11 @@ def compact_report_episode(
         An independent compact record accepted by the unchanged report calculations.
     """
     scored = score_episode(episode, spec, expected_algorithm=expected_algorithm)
+    compact_metrics = {source: scored["metrics"].get(source) for source in spec.sources.values()}
+    compact_metrics["robot_force_metadata"] = compact_robot_force_metadata(
+        scored["metrics"], spec.force_source
+    )
+    compact_metrics["snqi_v2_force_provenance"] = scored["metrics"]["snqi_v2_force_provenance"]
     return {
         **{
             key: scored[key]
@@ -420,7 +451,7 @@ def compact_report_episode(
             )
             if key in scored
         },
-        "metrics": {source: scored["metrics"].get(source) for source in spec.sources.values()},
+        "metrics": compact_metrics,
     }
 
 

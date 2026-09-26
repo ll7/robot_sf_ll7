@@ -256,7 +256,10 @@ class FastPysfWrapper:
             other_pos = ped_pos[i]
             other_vel = ped_vel[i]
             pos_diff = (p - other_pos).astype(float)
-            vel_diff = (np.zeros(2) - other_vel).astype(float)
+            # Kernel convention is v_j - v_i (pysocialforce pairs the position
+            # difference p_i - p_j with v_j - v_i); the query point is static
+            # (v_i = 0), so the difference is the pedestrian velocity itself.
+            vel_diff = np.asarray(other_vel, dtype=float)
             try:
                 f_x, f_y = pf_forces.social_force_ped_ped(
                     pos_diff,
@@ -291,7 +294,9 @@ class FastPysfWrapper:
 
         n, n_prime, lambda_importance, gamma, factor = self._social_params()
         factor = float(factor)
-        vel_diffs = -np.asarray(ped_vel, dtype=float)
+        # Same kernel convention as above: query points are static, so each
+        # velocity difference is the pedestrian velocity itself.
+        vel_diffs = np.asarray(ped_vel, dtype=float)
         for i, point in enumerate(points):
             try:
                 pos_diffs = (point - ped_pos).astype(float)

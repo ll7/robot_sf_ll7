@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_9645_objective_coverage_review_2026-09-25/payload/issue_9645_bounded_falsification.md",
+  "artifact_sha256": "a214c4a3fc63ed01e1ee12847b0c06e2df9225b0a243e9045c9bd573d62d81ca",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

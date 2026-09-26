@@ -462,3 +462,32 @@ def test_get_force_field():
     field = wrapper.get_force_field(xs, ys)
     assert field.shape == (len(ys), len(xs), 2)
     assert np.all(np.isfinite(field))
+
+
+def test_head_on_pedestrian_force_points_away_with_kernel_magnitude():
+    """A head-on pedestrian must repel with the kernel-convention magnitude (issue #9742).
+
+    The wrapper once fed an inverted relative-velocity sign (``-v`` instead of
+    ``v_j - v_i`` with static query ``v_i = 0``), which collapsed the head-on
+    force to ~exp(-43). The force must point away from the pedestrian and match
+    a direct kernel computation with the conventional sign.
+    """
+    state = np.array([[1.8, 0.0, -1.0, 0.0, 5.0, 0.0, 1.0]])
+    sim = Simulator(state=state, obstacles=[])
+    wrapper = FastPysfWrapper(sim)
+
+    force = wrapper._compute_social_force_at_point(np.array([0.0, 0.0]))
+
+    n, n_prime, lambda_importance, gamma, factor = wrapper._social_params()
+    expected_x, expected_y = wrapper_module.pf_forces.social_force_ped_ped(
+        np.array([-1.8, 0.0]),
+        np.array([-1.0, 0.0]),
+        int(n),
+        int(n_prime),
+        float(lambda_importance),
+        float(gamma),
+    )
+    expected = np.array([expected_x, expected_y]) * float(factor)
+    assert force == pytest.approx(expected)
+    assert force[0] < 0, "head-on force must point away from the pedestrian"
+    assert abs(force[0]) > 1e-6, "head-on force must not vanish"

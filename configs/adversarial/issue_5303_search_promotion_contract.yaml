@@ -107,9 +107,9 @@ input_provenance:
       sha256: 19c30bbc49ccc11d28998c18517ce91acbb3a403d1282c4cc35b9c8a82e0e6d8
     - id: diagnostic_runner
       path: scripts/tools/compare_adversarial_samplers.py
-      # Refreshed after the additive synthetic temporal-robustness fixture
-      # fields; the frozen #5303 objective and promotion boundary are unchanged.
-      sha256: e06e27c9cd2811797e6f96dc9c9e9a2273dcc72a2398f22bcb054deda7b0d0cd
+      # Refreshed for the outcome-free stored-report renderer; the frozen
+      # #5303 search design and diagnostic boundary are unchanged.
+      sha256: 098514f0917b0af864247be7efade6b2696cce77b2bcbba91c024a9679b85071
     - id: adversarial_search_runner
       path: robot_sf/adversarial/search.py
       # Refreshed after the additive issue #9304 evidence-trace bridge; the

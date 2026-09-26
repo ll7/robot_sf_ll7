@@ -256,3 +256,14 @@ and CLI sources to prove this.
 - Timing gate (merged PR #6586): `robot_sf/benchmark/issue_5303_search_promotion_preflight.py`
 - Focused tests: `tests/adversarial/test_issue_5303_search_promotion_contract_v2.py`
 - Historical packet (immutable): [../issue_5303_search_promotion_preregistration/README.md](../issue_5303_search_promotion_preregistration/README.md)
+
+## Outcome-free diagnostic-renderer provenance refresh (2026-09-27)
+
+Commit `35b3696687e030bf23abf340f1413730b3576d2a` adds a render-only path for stored
+empirical sampler comparisons and clarifies the diagnostic report wording. It does not change
+the frozen search method, candidate evaluation, objective, seed schedule, candidate budget,
+confirmation gates, denominator, or decision rule. The raw diagnostic-runner SHA-256 and
+the powered contract's pinned historical v1 contract-file SHA-256 were refreshed in input
+provenance, and the derived powered contract SHA-256 was recomputed in the manifest. This refresh did not run a planner, search, replay, or campaign and authorizes
+none; the historical v1 contract remains diagnostic-only, and powered #6145 execution remains
+separately gated.

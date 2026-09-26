@@ -2235,6 +2235,60 @@ def _load_resume_records(
     return manifest_path.parent.resolve(), records
 
 
+def _preserved_manifest_attempt(
+    previous: dict[str, Any] | None,
+    previous_file: Path | None,
+    *,
+    current_replay: dict[str, Any],
+    source_record_sha256: str,
+    resume_manifest_sha256: str | None,
+    currently_eligible: bool,
+    case_id: str,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Retain a manifest-only attempt without promoting it for an ineligible row."""
+    if previous is None or previous_file is None or previous_file.is_file():
+        return current_replay, None
+    previous_replay = previous.get("replay")
+    if not isinstance(previous_replay, dict) or previous_replay.get("attempted") is not True:
+        return current_replay, None
+
+    previous_source_record = previous.get("source_record")
+    previous_record_sha256 = (
+        previous_source_record.get("record_sha256")
+        if isinstance(previous_source_record, dict)
+        else None
+    )
+    if previous_record_sha256 != source_record_sha256:
+        raise MaterializationError(
+            f"resume manifest attempt for {case_id} cannot be bound to the current source row "
+            "because its source record identity is missing or differs"
+        )
+
+    if not currently_eligible:
+        return current_replay, {
+            "status": "not_promoted_current_source_ineligible",
+            "source_manifest_sha256": resume_manifest_sha256,
+            "source_case_file": previous.get("case_file"),
+            "source_record_sha256": source_record_sha256,
+            "case_record_status": "missing",
+            "prior_replay": previous_replay,
+        }
+
+    prior_status = previous_replay.get("resume_prior_status", previous_replay.get("status"))
+    return {
+        **previous_replay,
+        "status": "replay_artifact_missing_on_resume",
+        "resume_prior_status": prior_status,
+        "resume_artifact_status": "missing",
+        "resume_artifact_reason": (
+            "prior case record is missing; attempt receipt was retained from the manifest "
+            "without copying replay artifacts"
+        ),
+        "episode_output_checksum_status": "missing",
+        "reused": False,
+    }, None
+
+
 def _annotate_reused_episode_checksum(
     replay: dict[str, Any], previous_case_dir: Path, current_case_dir: Path
 ) -> None:
@@ -2473,6 +2527,15 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
             previous_file = _safe_relative(
                 resume_root, previous.get("case_file"), label="resume case"
             )
+        record["replay"], record["resume_prior_attempt"] = _preserved_manifest_attempt(
+            previous,
+            previous_file,
+            current_replay=record["replay"],
+            source_record_sha256=source_ref["record_sha256"],
+            resume_manifest_sha256=resume_manifest_sha256,
+            currently_eligible=not bool(ineligible),
+            case_id=case["case_id"],
+        )
         if previous and previous_file and previous_file.is_file():
             previous_case = _read_object(previous_file)
             previous_replay = previous_case.get("replay")
@@ -2531,7 +2594,9 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
                     record["replay"] = {
                         **previous_replay,
                         "status": "replay_artifact_missing_on_resume",
-                        "resume_prior_status": prior_status,
+                        "resume_prior_status": previous_replay.get(
+                            "resume_prior_status", prior_status
+                        ),
                         "resume_artifact_status": "missing",
                         "resume_artifact_reason": "prior attempted replay directory is missing",
                         "episode_output_checksum_status": "missing",
@@ -2630,6 +2695,9 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
                 record["replay"].get("status") == "replay_artifact_missing_on_resume"
                 for record in case_records
             ),
+            "prior_attempts_not_promoted": sum(
+                isinstance(record.get("resume_prior_attempt"), dict) for record in case_records
+            ),
             "status_counts": dict(sorted(replay_counts.items())),
             "replay_revision": replay_revisions[0] if len(replay_revisions) == 1 else None,
             "replay_revisions": replay_revisions,
@@ -2658,6 +2726,11 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
                 "source_showcase_renderer": record["source_showcase_renderer"],
                 "replay_input": record["replay_input"],
                 "replay": record["replay"],
+                **(
+                    {"resume_prior_attempt": record["resume_prior_attempt"]}
+                    if isinstance(record.get("resume_prior_attempt"), dict)
+                    else {}
+                ),
             }
             for record in case_records
         ],
@@ -2706,6 +2779,12 @@ def _write_report(path: Path, manifest: dict[str, Any]) -> None:
         diagnostic_lines.append(
             f"- Camera-ready analyzer: `{analyzer.get('status')}` with "
             f"{analyzer.get('finding_count')} retained finding(s)"
+        )
+    prior_attempts_not_promoted = manifest["replay"].get("prior_attempts_not_promoted", 0)
+    if prior_attempts_not_promoted:
+        diagnostic_lines.append(
+            "- Prior attempts retained separately as history because the current source rows "
+            f"are ineligible: {prior_attempts_not_promoted}"
         )
     lines = [
         "# Historical benchmark hard-case slice",

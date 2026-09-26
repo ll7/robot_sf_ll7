@@ -105,6 +105,12 @@ classification. On resume, the manifest replay receipt must also match its per-c
 an otherwise exact replay can remain `exact_match`.
 A resumed attempt whose replay directory is missing remains `attempted` and is counted as
 `replay_artifact_missing_on_resume`; the missing artifact does not reset it to `not_attempted`.
+If the case receipt itself is missing, the prior manifest attempt is retained only when its source
+row hash still matches the current row. Eligible rows retain it as
+`replay_artifact_missing_on_resume`; currently ineligible rows keep their current unattempted
+status and retain the old attempt separately under `resume_prior_attempt`, without copying or
+counting it as a replay result. Repeated resumes preserve the original `resume_prior_status` instead
+of replacing it with the intermediate `replay_artifact_missing_on_resume` status.
 Legacy receipts without both checkout
 snapshots remain `replay_checkout_cleanliness_unavailable` when their rows otherwise match, even
 when they contain a clean pre-run flag; post-run checkout evidence is never inferred on resume.

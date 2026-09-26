@@ -28,7 +28,7 @@ Make the published-release row gate reliable and give its BA-03 signals a typed,
 - Observed: API and CLI used different registry owner names; the configured event list suppressed fallback metrics; comparison covered every non-baseline arm.
 - Observed: BA-03-compatible signal records were emitted but had no supported store handoff.
 - Prior reviews called out a hard-coded pedestrian-free scenario and a same-step detector with no shared outcome/event summary; the replacement reports observed signatures and labels causal attribution unavailable.
-- Independent exact-head review found execution-status bypass, order-sensitive Auditor commits, signal/finding identity drift, and fail-open pedestrian cohort missingness; these remain in scope for this replacement.
+- Independent exact-head reviews found execution-status bypass, order-sensitive Auditor commits, signal/finding identity drift, and fail-open pedestrian cohort/baseline missingness; the gate now fails closed on each case.
 - The BA-06 browser/reconnect/provider workflow remains outside this issue; no simulation or planner source is in scope.
 
 # Validation route

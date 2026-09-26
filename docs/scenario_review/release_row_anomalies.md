@@ -92,8 +92,10 @@ The configured detectors are:
   has a lower success rate than `baseline_planner` in paired rows whose
   effective observed pedestrian count is zero. An empty
   `pedestrian_free_scenarios` list discovers scenario IDs from zero-pedestrian
-  baseline rows; a nonempty list narrows the analysis to those IDs. Each actual
-  baseline/candidate pair must still report zero pedestrians in both rows;
+  baseline rows; a nonempty list narrows the analysis to those IDs. If the
+  configured baseline has no eligible rows, the
+  gate reports it unavailable. Each actual pair must report zero pedestrians
+  in both rows;
 - `universal_failure_unannotated`: every expected planner fails a complete
   scenario-by-seed cell and no matching root-cause annotation exists;
 - `invalid_run_preflight_mismatch`: the row's `invalid_run` value disagrees
@@ -157,11 +159,11 @@ remain visible.
 The release gate is evaluated once at report level. It blocks when the report has
 more unannotated findings than the configured limit, has incomplete planner
 cells or execution admission, requires unavailable or incomplete preflight,
-has a configured pedestrian-aware planner missing from the release roster, or
-has a selected pedestrian-free scenario without its baseline, enough valid
-pairs, or required pedestrian-count evidence. Any invalid-run/preflight
-mismatch also blocks the gate. An empty pedestrian-aware planner list disables
-these comparison checks. The parity reason remains blocking even when that
+has a configured pedestrian-aware planner or baseline planner missing from the
+release roster, has no eligible baseline rows, or has a selected pedestrian-free
+scenario without its baseline, enough valid pairs, or required pedestrian-count
+evidence. Any invalid-run/preflight mismatch also blocks the gate. An empty
+pedestrian-aware planner list disables these comparison checks. The parity reason remains blocking even when that
 finding has an annotation. Detector findings and their annotation state stay
 in the JSON report, while Markdown summarizes the same report-level decision.
 

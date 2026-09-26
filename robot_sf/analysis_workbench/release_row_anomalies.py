@@ -851,6 +851,11 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
         if settings["pedestrian_aware_planners"]
         else []
     )
+    if settings["pedestrian_aware_planners"] and (
+        settings["baseline_planner"] not in expected_planners
+        or not any(planner == settings["baseline_planner"] for _, planner in by_scenario_planner)
+    ):
+        missingness["pedestrian_free_baseline_planner_unavailable"] += 1
     for scenario in pedestrian_free_scenarios:
         baseline_rows = by_scenario_planner.get((scenario, settings["baseline_planner"]), {})
         if not baseline_rows:
@@ -948,8 +953,11 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
         reasons.append("execution_admission_incomplete")
     if missingness.get("pedestrian_aware_planner_missing", 0):
         reasons.append("pedestrian_aware_planner_missing")
+    if missingness.get("pedestrian_free_baseline_planner_unavailable", 0):
+        reasons.append("pedestrian_baseline_planner_unavailable")
     incomplete_pedestrian_cohort_fields = (
         "pedestrian_free_baseline_missing",
+        "pedestrian_free_baseline_planner_unavailable",
         "pedestrian_free_status_unavailable",
         "pedestrian_free_pair_too_small",
     )

@@ -418,6 +418,22 @@ def test_configured_pedestrian_free_scenario_without_baseline_blocks_gate() -> N
     assert report["gate"]["blocked"] is True
 
 
+def test_auto_discovery_blocks_when_baseline_planner_is_absent() -> None:
+    """A pedestrian-free candidate cannot disappear when the blind baseline is missing."""
+
+    rows = [_row("auto-detected-free", 137, "social_force", observation_ped_count=0)]
+    config = {**CONFIG, "pedestrian_free_scenarios": []}
+    report = analyze_release_rows(
+        rows,
+        config=config,
+        source=_source("social_force"),
+    )
+
+    assert report["missingness"]["pedestrian_free_baseline_planner_unavailable"] == 1
+    assert "pedestrian_baseline_planner_unavailable" in report["gate"]["reasons"]
+    assert report["gate"]["blocked"] is True
+
+
 def test_contact_speed_metric_fallback_is_used_when_events_have_no_speed() -> None:
     """An empty/incomplete event list does not suppress the row metric fallback."""
 

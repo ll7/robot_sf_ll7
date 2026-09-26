@@ -72,6 +72,7 @@ def build_worker_fixed_params(  # noqa: PLR0913
     record_planner_decision_trace: bool,
     record_simulation_step_trace: bool,
     cbf_safety_filter: dict[str, Any] | None = None,
+    planner_key: str | None = None,
 ) -> dict[str, Any]:
     """Build the serialized parameter payload shared by all map workers.
 
@@ -85,6 +86,7 @@ def build_worker_fixed_params(  # noqa: PLR0913
         "snqi_weights": snqi_weights,
         "snqi_baseline": snqi_baseline,
         "algo": algo,
+        "planner_key": planner_key,
         "algo_config": raw_policy_cfg,
         "algo_config_path": algo_config_path,
         "scenario_path": str(scenario_path),

@@ -76,4 +76,5 @@ def execute_map_job(
         cbf_safety_filter=params.get("cbf_safety_filter"),
         record_planner_decision_trace=bool(params.get("record_planner_decision_trace", False)),
         record_simulation_step_trace=bool(params.get("record_simulation_step_trace", False)),
+        **({"planner_key": params["planner_key"]} if params.get("planner_key") is not None else {}),
     )

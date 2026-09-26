@@ -565,6 +565,7 @@ def _execute_campaign_planner_batch(
             telemetry=cfg.telemetry,
             snqi_weights=context.snqi_weights,
             snqi_baseline=context.snqi_baseline,
+            planner_key=planner.key,
             algo=planner.algo,
             algo_config_path=(
                 str(planner.algo_config_path) if planner.algo_config_path is not None else None

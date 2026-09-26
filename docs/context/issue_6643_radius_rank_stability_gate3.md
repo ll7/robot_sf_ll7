@@ -175,12 +175,15 @@ The frozen #6642 hybrid manifests contain real effective-identity collisions. In
 `scenario_adaptive_hybrid_orca_v1` and `scenario_adaptive_hybrid_orca_v2_collision_guard` rows both
 resolve to the same ORCA algorithm/config for `francis2023_leave_group`. They share the same
 effective identity on 47 of the 48 frozen scenarios; `classic_merging_low` is the sole scenario
-where the v2 guard override distinguishes them. The current map-runner episode JSONL producer does
-not serialize a planner-key carrier (the camera-ready campaign adds it only to in-memory
-annotations), so those rows cannot be disambiguated from episode bytes and are rejected by the
-composer. This is an identity-provenance gap, not a claim that their measured outcomes are invalid.
-Recovering authoritative row-level keys or producing new episodes with a serialized key is required
-before those ambiguous rows can enter a Gate 3 summary.
+where the v2 guard override distinguishes them. The preserved #6642 episode JSONL rows do not
+contain a planner-key carrier: camera-ready previously added the key only to in-memory
+annotations. New camera-ready map-runner episodes now serialize the exact roster `PlannerSpec.key`
+as an optional root `planner_key`, and the radius resolver continues to reject absent, conflicting,
+or mismatched keys when effective identities collide. This prospective producer fix does not
+rewrite or authenticate the consumed #6642 rows; it is an identity-provenance gap, not a claim that
+their measured outcomes are invalid. Recovering independent authoritative row-level keys or
+producing new episodes is still required before the preserved ambiguous rows can enter a Gate 3
+summary.
 It also reconciles each planner row's serialized success, pedestrian-collision,
 obstacle-collision, total-collision, and SNQI means against those same records at the camera-ready
 four-decimal precision; status/count metadata alone is insufficient.

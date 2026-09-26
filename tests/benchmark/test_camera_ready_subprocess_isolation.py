@@ -575,6 +575,7 @@ class TestSubprocessIsolationMetricEmission:
         assert isinstance(handoff["scenario_matrix_path"], str)
         assert isinstance(handoff["episodes_path"], str)
         assert isinstance(handoff["summary_path"], str)
+        assert handoff["planner_key"] == planner.key
 
         # Issue #4957 acceptance: the metrics are emitted in the run entry.
         assert len(result.run_entries) == 1
@@ -843,6 +844,7 @@ class TestScopedScenarioParity:
             result = _run_single_arm_subprocess(params)
 
         assert captured["scenarios"] == self.SCOPED
+        assert captured["planner_key"] == params.planner_key
         assert Path(captured["scenario_path"]).name == "scoped_scenarios.json"
         assert captured["provenance_scenario_path"] == params.scenario_matrix_path
         assert captured["resume"] is False

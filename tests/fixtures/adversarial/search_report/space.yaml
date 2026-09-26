@@ -1,0 +1,2 @@
+variables:
+  start_x: {min: 0, max: 1}

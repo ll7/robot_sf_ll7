@@ -1,0 +1,11 @@
+{
+  "commit_sha": "abc123",
+  "cpu_model": "fixture-cpu",
+  "hostname": "fixture-host",
+  "platform": "fixture",
+  "python_version": "3.x",
+  "schema_version": "adversarial_execution_context.v1",
+  "thread_env": {
+    "OMP_NUM_THREADS": "1"
+  }
+}

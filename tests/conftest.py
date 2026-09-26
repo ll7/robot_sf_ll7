@@ -670,6 +670,9 @@ _FAST_FILES = {
     # The preparation-only adversarial search harness uses deterministic data
     # fixtures only; keep its contract coverage in pull-request fast shards.
     "test_search_harness.py",
+    # The bounded falsification report covers deterministic schema, candidate
+    # accounting, and provenance contracts; keep changed lines in fast shards.
+    "test_falsification_report.py",
     # The search-to-trace eligibility fixtures are deterministic gate and
     # round-trip coverage for the changed search loop; keep them in the
     # exact-head fast lane (issue #9304).

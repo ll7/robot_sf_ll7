@@ -1,0 +1,54 @@
+{
+  "budget_grid": [
+    2,
+    4
+  ],
+  "claim_scope": "not_paper_facing_benchmark_evidence",
+  "objectives": [
+    "constraints_first_lexicographic_v1"
+  ],
+  "report_status": "diagnostic_local_nominal",
+  "rows": [
+    {
+      "budget": 4,
+      "manifest_path": "tests/fixtures/adversarial/search_report/random_seed_1101/manifest.json",
+      "objective": "constraints_first_lexicographic_v1",
+      "sampler": "random",
+      "seed": 1101
+    },
+    {
+      "budget": 4,
+      "manifest_path": "tests/fixtures/adversarial/search_report/optuna_seed_1101/manifest.json",
+      "objective": "constraints_first_lexicographic_v1",
+      "sampler": "optuna",
+      "seed": 1101
+    },
+    {
+      "budget": 4,
+      "manifest_path": "tests/fixtures/adversarial/search_report/random_seed_2202/manifest.json",
+      "objective": "constraints_first_lexicographic_v1",
+      "sampler": "random",
+      "seed": 2202
+    },
+    {
+      "budget": 4,
+      "manifest_path": "tests/fixtures/adversarial/search_report/optuna_seed_2202/manifest.json",
+      "objective": "constraints_first_lexicographic_v1",
+      "sampler": "optuna",
+      "seed": 2202
+    },
+    {
+      "budget": 2,
+      "manifest_path": "tests/fixtures/adversarial/search_report/missing_manifest.json",
+      "objective": "constraints_first_lexicographic_v1",
+      "sampler": "random",
+      "seed": 3303
+    }
+  ],
+  "schema_version": "adversarial-sampler-comparison.v3",
+  "seeds": [
+    1101,
+    2202,
+    3303
+  ]
+}

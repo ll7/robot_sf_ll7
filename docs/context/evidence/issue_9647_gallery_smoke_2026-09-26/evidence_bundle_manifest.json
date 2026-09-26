@@ -11,6 +11,7 @@
     "output_tree_mirroring": "forbidden",
     "paper_or_benchmark_claim": "not_established_by_bundle_alone"
   },
+  "location": "Every files[].path is relative to the tracked payload/ directory in this bundle; adjacent checksums.sha256 verifies the payload members.",
   "totals": {
     "file_count": 5,
     "total_bytes": 143569

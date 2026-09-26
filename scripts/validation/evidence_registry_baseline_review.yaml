@@ -15,8 +15,24 @@ approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
 latest_reconciliation_issue: 9647
-latest_reviewed_date: 2026-09-25
+latest_reviewed_date: 2026-09-26
 latest_reviewed_by: Codex autonomous lead agent, with an independent provenance review under the user's programme authorization; no additional human sign-off is claimed.
+evidence_tree_refresh_addenda:
+  - issue: 9647
+    reviewed_date: 2026-09-26
+    previous:
+      count: 2442
+      sha256: a1acca979b7f839b93dcc20296d6c7d33ba07f6952344bdddf3f265351d49ee9
+    candidate:
+      count: 2456
+      sha256: eeb2c9c4b87aac65506d53a8b839bda869d90b15bcd3c070857a9c2615cb7e21
+    files_added: 14
+    finding_delta: none
+    decision: >-
+      Reviewed the seven new #9647 smoke-bundle members and their seven exact-byte review sidecars.
+      The bundle now declares that files[].path entries resolve under its tracked payload/ directory;
+      the adjacent checksum gate verifies those payload bytes. The generated candidate retains 438
+      findings with no new or increased finding and updates only the evidence-tree manifest.
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73

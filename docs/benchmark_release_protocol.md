@@ -53,15 +53,15 @@ Benchmark release versioning is independent from `pyproject.toml`.
 While the release process is still evolving, benchmark releases remain in the
 `0.x.y` line.
 
-## Current Canonical Release Unit
+## S30/H600 Release Contract
 
 The approved S30/H600 benchmark-data campaign is:
 
 - campaign config:
   - `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`
-- publication-grade manifest:
+- historical concrete v0.1 manifest (compatibility only):
   - `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml`
-- fresh Zenodo reservation:
+- historical DOI coordinates for that concrete manifest:
   - concept DOI `10.5281/zenodo.22077447`
   - version DOI `10.5281/zenodo.22077448`
 - source contract:
@@ -116,8 +116,10 @@ The release claim boundary must also state:
 
 A future `benchmark-data` v0.2 release must not try to record the SHA of the
 commit containing its own tracked manifest. Instead, review and commit a stable
-template, then generate the release identity from that exact clean commit after
-the publication coordinates are available. Use these tracked files:
+template, freeze the exact clean source commit and intended full-SHA tag, then
+render bootstrap metadata before the first Zenodo reservation. The reservation
+returns the concept/version DOIs needed to generate the final resolved release
+identity. Use these tracked files:
 
 - `configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml`
   is the reusable release-identity template;
@@ -157,33 +159,57 @@ runner binds that receipt and its per-arm checkpoint SHA-256 values alongside
 this resolved identity before execution.
 
 Generate only into a Git-ignored path. The tag must contain one exact full-SHA
-suffix derived from the selected commit; the DOI arguments below are already
-reserved coordinates, not a request to reserve or publish anything:
+suffix derived from the selected commit. `bootstrap-metadata` is the pre-
+reservation step: it resolves the source SHA, first-parent base, and release
+tag while retaining exactly the `{{concept_doi}}` and `{{version_doi}}` tokens
+in the description. Reserve exactly once with that output, then generate the
+final identity from the assigned coordinates:
 
 ```bash
+set -euo pipefail
 SOURCE_COMMIT="$(git rev-parse --verify HEAD^{commit})"
 RELEASE_TAG="${RELEASE_PREFIX:?set the reviewed release prefix}-${SOURCE_COMMIT}"
+TRACKED_RELEASE_TEMPLATE=configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml
+BOOTSTRAP_METADATA=output/release/zenodo_metadata.bootstrap.json
+ZENODO_STATE=output/release/zenodo-deposition.json
 test -z "$(git status --porcelain=v1 --untracked-files=normal)"
+uv run python scripts/tools/resolve_benchmark_release_identity.py bootstrap-metadata \
+  --template "$TRACKED_RELEASE_TEMPLATE" \
+  --output "$BOOTSTRAP_METADATA" \
+  --source-commit "$SOURCE_COMMIT" \
+  --release-tag "$RELEASE_TAG"
+uv run robot-sf release zenodo reserve \
+  --token-file "${ZENODO_TOKEN_FILE:?set the token file path; never print its contents}" \
+  --state "$ZENODO_STATE" \
+  --metadata "$BOOTSTRAP_METADATA"
+RESERVED_CONCEPT_DOI="10.5281/zenodo.$(jq -er '.concept_record_id' "$ZENODO_STATE")"
+RESERVED_VERSION_DOI="$(jq -er '.doi' "$ZENODO_STATE")"
 uv run python scripts/tools/resolve_benchmark_release_identity.py generate \
-  --template "${TRACKED_RELEASE_TEMPLATE:?set the tracked template path}" \
+  --template "$TRACKED_RELEASE_TEMPLATE" \
   --output output/release/release_identity.resolved.json \
   --source-commit "$SOURCE_COMMIT" \
   --release-tag "$RELEASE_TAG" \
-  --concept-doi "${RESERVED_BENCHMARK_CONCEPT_DOI:?set the reserved concept DOI}" \
-  --version-doi "${RESERVED_BENCHMARK_VERSION_DOI:?set the reserved version DOI}"
+  --concept-doi "$RESERVED_CONCEPT_DOI" \
+  --version-doi "$RESERVED_VERSION_DOI"
 uv run python scripts/tools/resolve_benchmark_release_identity.py verify \
   --identity output/release/release_identity.resolved.json
 ```
 
-Generation leaves tracked source untouched and emits canonical resolved
-identity and Zenodo metadata JSON. Verification reconstructs both byte for byte
-from the tracked template at the exact clean `HEAD`. It rejects an unreachable
+Bootstrap generation and final identity generation leave tracked source
+untouched and emit canonical JSON. Reproduce the bootstrap metadata in a cold
+checkout before the tag exists; reproduce and verify the final identity and
+resolved metadata at the same paths. Verification reconstructs them byte for
+byte from the tracked templates at the exact clean `HEAD`. It rejects an unreachable
 or different commit, dirty source, changed tracked inputs, non-canonical bytes,
 path or symlink escapes, stale metadata, malformed or colliding tag identity,
-and mismatched publication coordinates. Repeat `verify` in a disposable cold
-checkout of the same commit at the same repository-relative output path. Pass
-the verified resolved identity—not the tracked template—to the release runner,
-release doctor, and full-release acceptance path.
+and mismatched publication coordinates. Run the passing release doctor with the
+resolved identity before creating the GitHub tag; after publication, check the
+exact tag/source/assets rather than rerunning the unused-tag check. Pass the
+verified resolved identity—not the tracked template—to the release runner,
+release doctor, and full-release acceptance path. A reservation allocates a
+DOI even when unpublished: if its response or local state write has an
+uncertain outcome, do not retry or reserve a replacement; locate and recover
+the same draft first.
 
 ## Benchmark Claim Artifact
 
@@ -231,10 +257,13 @@ uv run python scripts/tools/run_benchmark_release.py \
   --checkpoint-receipt output/release/checkpoints/runtime_smoke_staging_receipt.json
 ```
 
-This command is the bounded smoke path. Use
-`configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml` for the
-full publication campaign; do not replace it with the historical
-seven-planner/S3 manifest.
+This command is the bounded smoke path. The tracked
+`benchmark_data_release_s30_h600.yaml` is a concrete historical v0.1
+compatibility manifest, not the input for a new v0.2 campaign. For a new v0.2
+release, complete the bootstrap/resolution sequence above and use
+`output/release/release_identity.resolved.json` for the full publication
+campaign. Do not replace either path with the historical seven-planner/S3
+manifest.
 
 The release entrypoint:
 
@@ -260,9 +289,10 @@ smoke receipt:
 
 ```bash
 REHEARSAL_SOURCE_COMMIT="$(git rev-parse --verify HEAD)"
+RELEASE_IDENTITY=output/release/release_identity.resolved.json
 test -z "$(git status --porcelain=v1 --untracked-files=all)"
 uv run python scripts/tools/run_benchmark_release.py \
-  --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
+  --manifest "$RELEASE_IDENTITY" \
   --mode rehearsal \
   --source-commit "$REHEARSAL_SOURCE_COMMIT" \
   --checkpoint-receipt output/release/checkpoints/staging_receipt.json \
@@ -280,11 +310,10 @@ receipts are validated independently; their wrapper hashes may differ because
 their campaign-config bindings differ, but their checkpoint arm identities and
 model-byte SHA-256 values must match. Allocation and resume options, including
 `--resume-receipt-max-age-hours`, are rejected in this mode.
-The canonical benchmark-data manifest is a historical compatibility manifest
-without `source_sha`, so `--source-commit` is required and must be an exact
-40-character SHA equal to the clean checked-out `HEAD`. A manifest-declared
-`source_sha`, when present, remains authoritative; an explicit argument that
-disagrees with it is rejected.
+The v0.2 resolved identity declares `source_sha`; it is authoritative, and the
+explicit `--source-commit` must match it and the clean checked-out `HEAD`. The
+older concrete v0.1 manifest omits `source_sha`, so only historical rehearsal
+of that frozen contract requires supplying the exact checked-out SHA directly.
 
 `release/release_result.json` preserves the wrapped campaign semantics in the
 top-level `status`, `status_reason`, `benchmark_success`, `exit_code`,

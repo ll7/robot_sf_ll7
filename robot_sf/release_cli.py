@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -31,7 +32,9 @@ if TYPE_CHECKING:
 # until the reservation request completes.  Those two modes therefore have an
 # explicit pre-reservation exception; every operation after that point must
 # carry the reviewed manifest binding before an authenticated session is built.
-_RELEASE_BOUND_ZENODO_MODES = frozenset({"recover", "upload", "verify", "publish"})
+_RELEASE_BOUND_ZENODO_MODES = frozenset(
+    {"repair-draft-metadata", "recover", "upload", "verify", "publish"}
+)
 
 
 def _add_new_version_arguments(parser: Any) -> None:
@@ -127,16 +130,25 @@ def _add_published_audit_arguments(parser: Any) -> None:
     )
 
 
-def build_subparser(subparsers: Any) -> None:
+def build_subparser(subparsers: Any) -> None:  # noqa: PLR0915
     """Register the ``robot-sf release`` command tree."""
     release = subparsers.add_parser("release", help="Benchmark-data release operations.")
     modes = release.add_subparsers(dest="release_cmd", required=True)
     zenodo = modes.add_parser("zenodo", help="Direct Zenodo benchmark-dataset publisher.")
     zenodo_modes = zenodo.add_subparsers(dest="zenodo_mode", required=True)
-    for mode in ("reserve", "recover", "upload", "publish", "verify", "new-version"):
+    for mode in (
+        "reserve",
+        "repair-draft-metadata",
+        "recover",
+        "upload",
+        "publish",
+        "verify",
+        "new-version",
+    ):
         parser = zenodo_modes.add_parser(mode)
         parser.add_argument("--token-file", type=Path, required=True)
-        parser.add_argument("--state", type=Path, required=True)
+        if mode != "repair-draft-metadata":
+            parser.add_argument("--state", type=Path, required=True)
         parser.add_argument("--api-base", default=zenodo_publisher.ZENODO_API_BASE)
         parser.add_argument(
             "--manifest",
@@ -144,15 +156,50 @@ def build_subparser(subparsers: Any) -> None:
             required=mode in _RELEASE_BOUND_ZENODO_MODES,
             help=(
                 "Validated benchmark release manifest or derived-metadata erratum contract "
-                "that binds Zenodo operations. Required for recover/upload/verify/publish; "
+                "that binds Zenodo operations. Required for repair/recover/upload/verify/publish; "
                 "reserve and new-version may omit it only while the server is assigning a new "
                 "version DOI."
             ),
         )
-        if mode in {"reserve", "recover", "publish", "verify", "new-version"}:
+        if mode in {
+            "reserve",
+            "repair-draft-metadata",
+            "recover",
+            "publish",
+            "verify",
+            "new-version",
+        }:
             parser.add_argument("--metadata", type=Path, required=True)
-        if mode == "recover":
+        if mode in {"repair-draft-metadata", "recover"}:
             parser.add_argument("--deposition-id", type=int, required=True)
+        if mode in _RELEASE_BOUND_ZENODO_MODES:
+            parser.add_argument(
+                "--repository-root",
+                type=Path,
+                required=mode == "repair-draft-metadata",
+                help="Untouched exact-source checkout used to verify the resolved identity.",
+            )
+        if mode == "repair-draft-metadata":
+            parser.add_argument("--version", required=True)
+            parser.add_argument("--publication-date", required=True)
+            parser.add_argument(
+                "--bootstrap-metadata",
+                type=Path,
+                help="Exact DOI-pending metadata used for the original fresh reservation.",
+            )
+            parser.add_argument("--expected-bootstrap-metadata-sha256")
+            parser.add_argument("--expected-remote-metadata-sha256")
+            parser.add_argument("--expected-remote-source-tag")
+            parser.add_argument("--expected-remote-source-sha")
+            parser.add_argument("--expected-remote-base-sha")
+            parser.add_argument(
+                "--apply",
+                action="store_true",
+                help="Update only the already-reserved, empty draft after a matching preview.",
+            )
+        if mode in {"publish", "verify"}:
+            parser.add_argument("--expected-version")
+            parser.add_argument("--expected-publication-date")
         if mode == "new-version":
             _add_new_version_arguments(parser)
         if mode == "upload":
@@ -264,6 +311,9 @@ def _load_release_binding(args: argparse.Namespace) -> tuple[Any, dict[str, Any]
     manifest_path = getattr(args, "manifest", None)
     if manifest_path is None:
         return None
+    repository_root = Path(
+        getattr(args, "repository_root", None) or get_repository_root()
+    ).resolve()
     manifest_input = Path(manifest_path)
     manifest_path = manifest_input.resolve()
     try:
@@ -278,7 +328,7 @@ def _load_release_binding(args: argparse.Namespace) -> tuple[Any, dict[str, Any]
         try:
             contract = load_erratum_contract(
                 manifest_input,
-                repository_root=get_repository_root(),
+                repository_root=repository_root,
             )
         except ReleaseErratumError as exc:
             raise zenodo_publisher.ZenodoPublisherError(
@@ -299,8 +349,8 @@ def _load_release_binding(args: argparse.Namespace) -> tuple[Any, dict[str, Any]
                 "Zenodo metadata path does not match the release erratum contract"
             )
         return contract, binding
-    manifest = load_release_manifest(manifest_path)
-    validation = validate_release_manifest(manifest)
+    manifest = load_release_manifest(manifest_path, repository_root=repository_root)
+    validation = validate_release_manifest(manifest, repository_root=repository_root)
     if validation["status"] != "valid":
         problems = "; ".join(str(problem) for problem in validation["problems"])
         raise zenodo_publisher.ZenodoPublisherError(f"release manifest is invalid: {problems}")
@@ -321,6 +371,79 @@ def _release_metadata_kwargs(binding: dict[str, Any] | None) -> dict[str, str]:
         "expected_source_tag": str(binding["release_tag"]),
         "expected_metadata_sha256": str(binding["metadata_sha256"]),
     }
+
+
+def _operational_metadata_kwargs(args: argparse.Namespace) -> dict[str, Any]:
+    """Require both Zenodo-only publication fields when either is requested.
+
+    Returns:
+        Publisher keyword arguments for the optional metadata overlay.
+    """
+    version = getattr(args, "expected_version", None)
+    publication_date = getattr(args, "expected_publication_date", None)
+    if version is None and publication_date is None:
+        return {}
+    if version is None or publication_date is None:
+        raise zenodo_publisher.ZenodoPublisherError(
+            "Zenodo version and publication_date expectations must be supplied together"
+        )
+    return {
+        "expected_operational_metadata": {
+            "version": version,
+            "publication_date": publication_date,
+        }
+    }
+
+
+def _handle_repair_draft_metadata(
+    args: argparse.Namespace, session: Any, release_binding: dict[str, Any] | None
+) -> int:
+    """Dispatch a guarded repair preview or update without loading deposition state.
+
+    Returns:
+        Zero after a successful preview or verified draft update.
+    """
+    metadata = zenodo_publisher.load_dataset_metadata(
+        args.metadata, **_release_metadata_kwargs(release_binding)
+    )
+    bootstrap_metadata = None
+    bootstrap_metadata_sha256 = None
+    bootstrap_path = getattr(args, "bootstrap_metadata", None)
+    if bootstrap_path is not None:
+        try:
+            bootstrap_metadata_sha256 = hashlib.sha256(
+                Path(bootstrap_path).read_bytes()
+            ).hexdigest()
+        except OSError as exc:
+            raise zenodo_publisher.ZenodoPublisherError(
+                "Zenodo bootstrap metadata file could not be read"
+            ) from exc
+        bootstrap_metadata = zenodo_publisher.load_dataset_metadata(
+            bootstrap_path,
+            expected_source_tag=str(release_binding["release_tag"]),
+            expected_metadata_sha256=bootstrap_metadata_sha256,
+        )
+    report = zenodo_publisher.repair_draft_metadata(
+        session,
+        args.deposition_id,
+        metadata,
+        version=args.version,
+        publication_date=args.publication_date,
+        release_binding=release_binding,
+        bootstrap_metadata=bootstrap_metadata,
+        bootstrap_metadata_sha256=bootstrap_metadata_sha256,
+        expected_bootstrap_metadata_sha256=getattr(
+            args, "expected_bootstrap_metadata_sha256", None
+        ),
+        expected_remote_metadata_sha256=args.expected_remote_metadata_sha256,
+        expected_remote_source_tag=args.expected_remote_source_tag,
+        expected_remote_source_sha=args.expected_remote_source_sha,
+        expected_remote_base_sha=args.expected_remote_base_sha,
+        apply=args.apply,
+        api_base=args.api_base,
+    )
+    _print(report)
+    return 0
 
 
 def _validate_erratum_new_version_arguments(
@@ -451,7 +574,7 @@ def _handle_published_audit(args: argparse.Namespace) -> int:
     return 2
 
 
-def handle(args: argparse.Namespace) -> int:  # noqa: C901
+def handle(args: argparse.Namespace) -> int:  # noqa: C901, PLR0912, PLR0915
     """Dispatch release operations and return a process exit code.
 
     Returns:
@@ -518,6 +641,8 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
         if args.zenodo_mode == "new-version":
             _validate_erratum_new_version_arguments(args, release_definition)
         session = zenodo_publisher.build_session(args.token_file)
+        if args.zenodo_mode == "repair-draft-metadata":
+            return _handle_repair_draft_metadata(args, session, release_binding)
         if args.zenodo_mode in {"reserve", "recover"}:
             metadata_kwargs = _release_metadata_kwargs(release_binding)
             metadata = zenodo_publisher.load_dataset_metadata(args.metadata, **metadata_kwargs)
@@ -592,6 +717,7 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
                 state,
                 metadata,
                 api_base=args.api_base,
+                **_operational_metadata_kwargs(args),
                 **operation_kwargs,
             )
             zenodo_publisher.write_state(args.state, state)
@@ -603,7 +729,12 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
             {"release_binding": release_binding} if release_binding is not None else {}
         )
         report = zenodo_publisher.verify(
-            session, state, metadata, api_base=args.api_base, **operation_kwargs
+            session,
+            state,
+            metadata,
+            api_base=args.api_base,
+            **_operational_metadata_kwargs(args),
+            **operation_kwargs,
         )
         if report.get("status") == "pass":
             zenodo_publisher.write_state(args.state, state)

@@ -12,6 +12,7 @@ from typing import Any
 from robot_sf.benchmark.release_protocol import (
     RESOLVED_RELEASE_METADATA_FILENAME,
     verify_resolved_release_identity,
+    write_release_bootstrap_metadata,
     write_resolved_release_identity,
 )
 from robot_sf.common.artifact_paths import get_repository_root
@@ -34,6 +35,16 @@ def _parser() -> argparse.ArgumentParser:
     generate.add_argument("--version-doi", required=True)
     generate.add_argument("--repository-root", type=Path, default=None)
 
+    bootstrap = subparsers.add_parser(
+        "bootstrap-metadata",
+        help="Generate DOI-pending metadata for one exact fresh Zenodo reservation.",
+    )
+    bootstrap.add_argument("--template", type=Path, required=True)
+    bootstrap.add_argument("--output", type=Path, required=True)
+    bootstrap.add_argument("--source-commit", required=True)
+    bootstrap.add_argument("--release-tag", required=True)
+    bootstrap.add_argument("--repository-root", type=Path, default=None)
+
     verify = subparsers.add_parser("verify", help="Reproduce and verify resolved identity bytes.")
     verify.add_argument("--identity", type=Path, required=True)
     verify.add_argument("--repository-root", type=Path, default=None)
@@ -53,6 +64,25 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     repository_root = (args.repository_root or get_repository_root()).resolve()
     try:
+        if args.command == "bootstrap-metadata":
+            output = args.output if args.output.is_absolute() else repository_root / args.output
+            payload = write_release_bootstrap_metadata(
+                template_path=args.template,
+                output_path=output,
+                source_commit=args.source_commit,
+                release_tag=args.release_tag,
+                repository_root=repository_root,
+            )
+            _print(
+                {
+                    "schema_version": "benchmark-release-bootstrap-metadata-command.v1",
+                    "status": "generated",
+                    **payload,
+                    "pending_doi_tokens": ["{{concept_doi}}", "{{version_doi}}"],
+                }
+            )
+            return 0
+
         if args.command == "generate":
             output = args.output if args.output.is_absolute() else repository_root / args.output
             payload = write_resolved_release_identity(

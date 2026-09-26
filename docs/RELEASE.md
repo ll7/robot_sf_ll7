@@ -4,7 +4,8 @@ This checklist covers the approved S30/H600 benchmark-data release. It is a
 different release lane from the Robot SF software/package release: the
 benchmark-data tag identifies an immutable campaign contract, while the
 software tag identifies installable source. Do not infer a package version from
-the benchmark-data tag, or reuse a software-release DOI for benchmark data.
+the benchmark-data tag, or reuse a software-release Digital Object Identifier
+(DOI) for benchmark data.
 
 For the software-package lane, first build the immutable candidate with
 [`software_release_candidate.md`](./software_release_candidate.md), then follow
@@ -12,9 +13,10 @@ For the software-package lane, first build the immutable candidate with
 TestPyPI → PyPI promotion. That workflow is separate from this benchmark-data checklist and
 requires a passed public-index cold-install gate before production publication.
 
-The current campaign contract is the 14-arm, differential-drive matrix in
+The S30/H600 campaign contract is the 14-arm, differential-drive matrix in
 `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`.
-Its publication-grade manifest is
+The earlier concrete v0.1 manifest and DOI pair are retained as historical
+compatibility references:
 `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml`, with fresh
 concept DOI `10.5281/zenodo.22077447` and reserved version DOI
 `10.5281/zenodo.22077448`.
@@ -33,9 +35,10 @@ The smoke is execution evidence only: the Social Navigation Quality Index
 ## Before Running
 
 - confirm the target branch/tag is the intended immutable code state
-- confirm the approved S30/H600 full-release manifest is
-  `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml`; do not
-  substitute the historical v1 seven-planner/S3 manifest
+- for a new v0.2 release, complete the bootstrap/resolution sequence below and
+  use `output/release/release_identity.resolved.json` as the campaign manifest;
+  the tracked concrete v0.1 manifest is historical compatibility input only
+- do not substitute the historical v1 seven-planner/S3 manifest
 - confirm the bounded smoke manifest is correct:
   - `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`
 - confirm the fallback-prone hybrid stress manifest is correct:
@@ -50,9 +53,11 @@ The smoke is execution evidence only: the Social Navigation Quality Index
   again after publication and require a passing published-record receipt; the
   historical concepts `10.5281/zenodo.19482025` and
   `10.5281/zenodo.19563812` must not be reused
-- confirm the dataset metadata is the tracked benchmark-specific file
+- for the historical v0.1 release, confirm the dataset metadata is the tracked
+  benchmark-specific file
   `configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.json`;
-  do not modify or reuse the root software-release `.zenodo.json`
+  for v0.2, use the tracked metadata template and its generated bootstrap and
+  resolved outputs; never modify or reuse the root software-release `.zenodo.json`
 - confirm SNQI is documented as advisory/no-ranking, including when calibration
   reports a warning
 - classify smoke artifacts before handoff: raw episode files remain worktree-local
@@ -61,9 +66,14 @@ The smoke is execution evidence only: the Social Navigation Quality Index
   root in the release evidence
 
 For a future v0.2 benchmark-data release, freeze a tracked identity template
-instead of writing its own final commit SHA into tracked bytes. After the exact
-clean source commit and already-reserved concept/version DOI coordinates are
-known, generate and verify the ignored resolved identity:
+instead of writing its own final commit SHA into tracked bytes. Freeze the
+candidate source SHA and intended full-SHA tag while the tag is still unused.
+Render the DOI-pending metadata, reserve the Zenodo draft exactly once with that
+metadata, then use the returned concept/version DOI coordinates to generate and
+verify the ignored resolved identity. A successful reservation allocates a DOI
+even though the draft is unpublished; if the request or local state write has
+an uncertain outcome, do not retry `reserve` or mint a replacement. Locate and
+recover that exact draft first.
 
 - Manifest template:
   `configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml`
@@ -78,26 +88,47 @@ the selected source commit (and applies the same value to the optional
 the moving `origin/main` or creating a self-referential manifest.
 
 ```bash
+set -euo pipefail
 SOURCE_COMMIT="$(git rev-parse --verify HEAD^{commit})"
 RELEASE_TAG="${RELEASE_PREFIX:?set the reviewed release prefix}-${SOURCE_COMMIT}"
+BOOTSTRAP_METADATA=output/release/zenodo_metadata.bootstrap.json
+ZENODO_STATE=output/release/zenodo-deposition.json
+TRACKED_RELEASE_TEMPLATE=configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml
+test -z "$(git status --porcelain=v1 --untracked-files=normal)"
+uv run python scripts/tools/resolve_benchmark_release_identity.py bootstrap-metadata \
+  --template configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml \
+  --output "$BOOTSTRAP_METADATA" \
+  --source-commit "$SOURCE_COMMIT" \
+  --release-tag "$RELEASE_TAG"
+uv run robot-sf release zenodo reserve \
+  --token-file /home/<user>/.config/robot-sf/zenodo.token \
+  --state "$ZENODO_STATE" \
+  --metadata "$BOOTSTRAP_METADATA"
+RESERVED_CONCEPT_DOI="10.5281/zenodo.$(jq -er '.concept_record_id' "$ZENODO_STATE")"
+RESERVED_VERSION_DOI="$(jq -er '.doi' "$ZENODO_STATE")"
 uv run python scripts/tools/resolve_benchmark_release_identity.py generate \
-  --template "${TRACKED_RELEASE_TEMPLATE:?set the tracked template path}" \
+  --template "$TRACKED_RELEASE_TEMPLATE" \
   --output output/release/release_identity.resolved.json \
   --source-commit "$SOURCE_COMMIT" \
   --release-tag "$RELEASE_TAG" \
-  --concept-doi "${RESERVED_BENCHMARK_CONCEPT_DOI:?set the reserved concept DOI}" \
-  --version-doi "${RESERVED_BENCHMARK_VERSION_DOI:?set the reserved version DOI}"
+  --concept-doi "$RESERVED_CONCEPT_DOI" \
+  --version-doi "$RESERVED_VERSION_DOI"
 uv run python scripts/tools/resolve_benchmark_release_identity.py verify \
   --identity output/release/release_identity.resolved.json
 ```
 
-Run the same verify command at the same repository-relative output path in a
-disposable cold checkout of `SOURCE_COMMIT`. The identity and sibling
-`zenodo_metadata.resolved.json` must be byte-identical to the first generation.
-Use the resolved identity as `--manifest` for future runner and doctor checks. See
+Run both `bootstrap-metadata` and `generate` at the same repository-relative
+output paths in a disposable cold checkout of `SOURCE_COMMIT`. Compare both
+metadata files and the resolved identity byte-for-byte with the first
+generation. Use the resolved identity as `--manifest` for the campaign runner
+and pre-tag doctor. Save the passing doctor JSON and checksum before creating
+or publishing the GitHub tag; after tag publication, verify the exact tag,
+source SHA, and assets without rerunning the now-inapplicable unused-tag check.
+See
 [`benchmark_release_protocol.md`](./benchmark_release_protocol.md#future-tracked-template-identity-resolution)
-for the template slots and fail-closed rules. These commands do not reserve a
-DOI, create a tag, publish a release, or submit a campaign.
+for the template slots and fail-closed rules. The resolver commands do not
+reserve a DOI, create a tag, publish a release, or submit a campaign; the
+separate `reserve` command is the one irreversible DOI-allocation step.
 
 ## Preflight
 
@@ -204,9 +235,10 @@ runtime-smoke receipt, then stops before campaign allocation:
 
 ```bash
 REHEARSAL_SOURCE_COMMIT="$(git rev-parse --verify HEAD)"
+RELEASE_IDENTITY=output/release/release_identity.resolved.json
 test -z "$(git status --porcelain=v1 --untracked-files=all)"
 uv run python scripts/tools/run_benchmark_release.py \
-  --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
+  --manifest "$RELEASE_IDENTITY" \
   --mode rehearsal \
   --source-commit "$REHEARSAL_SOURCE_COMMIT" \
   --checkpoint-receipt output/release/checkpoints/staging_receipt.json \
@@ -215,11 +247,11 @@ uv run python scripts/tools/run_benchmark_release.py \
 
 The command pins and records the exact clean checkout being rehearsed; if a
 reviewed SHA was selected separately, set `REHEARSAL_SOURCE_COMMIT` to that
-exact 40-character value instead. Never substitute a planning/base SHA.
-The canonical benchmark-data manifest is retained as a historical compatibility
-manifest without `source_sha`, so this explicit pin is required. If a future
-manifest declares `source_sha`, that manifest value is authoritative and any
-explicit argument must match it.
+exact 40-character value instead. Never substitute a planning/base SHA. The
+v0.2 resolved identity declares `source_sha`; it is authoritative, and the
+explicit pin must match it and the clean checked-out `HEAD`. Only historical
+rehearsal of the concrete v0.1 manifest requires supplying the exact SHA
+directly because that legacy manifest omits `source_sha`.
 
 Successful rehearsal output is admission/preflight evidence only. It reports
 `campaign_execution_status: not_started` and must not be treated as benchmark
@@ -254,13 +286,16 @@ planner-outcome evidence and do not treat them as successful navigation.
 Guarded PPO's exact `fallback_safe` label is likewise its declared Risk-DWA
 shield intervention; best-effort, uncertainty, and generic fallback markers
 remain forbidden. A benign one-cell runtime smoke does not replace this stress
-gate. Then run:
+gate. For a new v0.2 campaign, after bootstrap reservation and cold identity
+verification above, use the resolved identity and a fresh campaign ID:
 
 ```bash
+RELEASE_IDENTITY=output/release/release_identity.resolved.json
+CAMPAIGN_ID=<fresh-unique-v0.2-campaign-id>
 uv run python scripts/tools/run_benchmark_release.py \
-  --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
+  --manifest "$RELEASE_IDENTITY" \
   --label release \
-  --campaign-id issue7742_benchmark_data_release_s30_h600_20260822 \
+  --campaign-id "$CAMPAIGN_ID" \
   --checkpoint-receipt output/release/checkpoints/staging_receipt.json \
   --runtime-smoke-receipt output/benchmarks/camera_ready/<smoke_id>/release/release_result.json
 ```
@@ -299,21 +334,34 @@ note.
 
 ## Publication
 
-Before campaign submission, run the fail-closed release doctor against the
-exact release worktree. Supply the private-ops packet and dissertation checkout
-when they are available:
+After the v0.2 resolved identity and campaign evidence are ready, run the
+fail-closed release doctor against the exact release worktree while the planned
+GitHub tag and release are still unused. Save its credential-free JSON output
+before creating or publishing the GitHub release; the doctor includes an
+unused-tag check and is a pre-tag gate, not a post-tag publishing check. Supply
+the private-ops packet and dissertation checkout when they are available:
 
 ```bash
-uv run robot-sf release doctor \
+set -euo pipefail
+mkdir -p output/release
+if ! uv run robot-sf release doctor \
   --repo "$PWD" \
-  --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
+  --manifest output/release/release_identity.resolved.json \
   --expected-release-sha <exact-release-sha> \
-  --expected-base-sha cd831d7582c117ac9529065e7d1c60386933c92d \
-  --tag paper-matrix-v2-h600-s30-2026-08-cd831d7582c1 \
+  --expected-base-sha <exact-base-sha-from-resolved-release-identity> \
+  --tag <exact-release-tag-from-resolved-release-identity> \
   --checkpoint-receipt output/release/checkpoints/staging_receipt.json \
   --private-launch-packet <private-ops-launch-packet> \
   --dissertation <dissertation-worktree> \
-  --token-file /home/luttkule/.config/robot-sf/zenodo.token
+  --token-file /home/luttkule/.config/robot-sf/zenodo.token \
+  > output/release/release_doctor_pre_tag.json; then
+  echo "release doctor failed; do not create the GitHub release or tag" >&2
+  exit 2
+fi
+jq --exit-status '.status == "pass"' output/release/release_doctor_pre_tag.json \
+  > /dev/null
+sha256sum output/release/release_doctor_pre_tag.json \
+  > output/release/release_doctor_pre_tag.json.sha256
 ```
 
 For diagnostic local validation of an exact receipt whose checkpoint paths belong to another
@@ -324,7 +372,9 @@ registry bindings. This option does not rewrite the receipt and does not authori
 turn a diagnostic remap into benchmark evidence.
 
 The report must be `pass`. It prints stable status and identity data, never the
-credential. The release doctor verifies that each required workflow (`CI`, `CodeQL`)
+credential. Preserve the passing report and its checksum with the durable
+release evidence before removing the worktree; a copy only under disposable
+`output/` is not durable. The release doctor verifies that each required workflow (`CI`, `CodeQL`)
 possesses at least one complete successful run for the exact source SHA (`--expected-release-sha`).
 If subsequent historical runs or manual dispatches for that SHA were cancelled due to
 GitHub Actions moving-main concurrency, the completed green run provides valid exact-SHA evidence
@@ -332,6 +382,34 @@ and the doctor records supporting run IDs. If all runs for a required workflow a
 pending, or failed, the doctor fails closed and lists the blocking run IDs. To reconcile a
 blocking workflow run without altering workflow history, trigger a clean run for that exact ref
 (`gh workflow run <workflow>.yml --ref <ref>`) and allow it to finish.
+
+The saved `release_doctor_pre_tag.json` is the record of the unused-tag
+check. Do not rerun this doctor after the GitHub tag exists: its expected
+`tag_collision` failure only says that the pre-tag condition has changed. After
+publishing the GitHub release, verify the exact tag and its assets instead:
+
+```bash
+set -euo pipefail
+SOURCE_SHA=<full source SHA from the resolved release identity>
+RELEASE_TAG=<exact tag from the resolved release identity>
+
+git fetch --no-tags origin \
+  "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+test "$(git rev-parse "${RELEASE_TAG}^{commit}")" = "$SOURCE_SHA"
+gh release view "$RELEASE_TAG" --repo ll7/robot_sf_ll7 \
+  --json tagName,isDraft,assets \
+  --jq '{tagName,isDraft,assets:[.assets[] | {name,size,state,digest}]}'
+```
+
+Require the peeled tag commit to equal `SOURCE_SHA`, `isDraft` to be `false`,
+and exactly the expected archive, `checksums.sha256`, and
+`publication_manifest.json` assets. Each asset must be uploaded and its size
+and SHA-256 digest must match the local files recorded from the frozen release
+bundle. Stop before Zenodo upload on any difference. This readback replaces
+only the now-inapplicable unused-tag check; it does not replace the saved
+passing doctor report or weaken any other release gate. The detailed
+[camera-ready release guide](./benchmark_camera_ready_release.md) gives the
+end-to-end GitHub and Zenodo sequence.
 
 ### Preserved post-execution evidence
 
@@ -368,15 +446,11 @@ This mode is read-only and emits no credentials. A passing report is still
 only an acceptance gate: publication requires the independent GitHub/Zenodo
 cold-download checks below, and SNQI remains advisory when calibration fails.
 
-For a future release, reserve a fresh benchmark-data
-concept/version before freezing the DOI into its v0.2 manifest:
-
-```bash
-uv run robot-sf release zenodo reserve \
-  --token-file /home/luttkule/.config/robot-sf/zenodo.token \
-  --state <credential-free-zenodo-state.json> \
-  --metadata configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.json
-```
+For a new v0.2 release, use only the DOI-pending metadata produced by the
+`bootstrap-metadata` step above for its one fresh `reserve`. The tracked
+`benchmark_data_release_s30_h600_zenodo_metadata.json` is a historical v0.1
+artifact; do not use it to create a new draft or DOI. Follow the complete
+bootstrap, reservation, and final-identity sequence above instead.
 
 Keep the token file outside Git with mode `0600`. The state file contains no
 credential. This initial `reserve` is intentionally the only unbound
@@ -386,7 +460,16 @@ manifest before continuing. The direct CLI requires `--manifest` for every
 post-reservation `recover`, `upload`, `verify`, and irreversible `publish`
 operation and rejects an omitted binding before constructing an authenticated
 HTTP session. Do not run `publish` until the accepted 20,160-cell campaign
-bundle has passed independent cold verification.
+bundle has passed independent cold verification. The reserved version DOI is
+bound to the draft before publication and normally does not resolve through
+`doi.org` yet; resolver success is not a pre-publication gate. After Zenodo
+publication, check DOI resolution separately as described in the
+[camera-ready release guide](./benchmark_camera_ready_release.md#doi-resolution-after-publication).
+If that post-publication resolver check returns 404 while the anonymous record
+audit succeeds, report “record public, DOI resolution pending,” share the
+Zenodo record URL, and contact Zenodo support if a later recheck remains
+unresolved. Do not republish, mint a new version, or reserve a replacement DOI
+to work around resolver delay.
 
 ### Immutable publication errata
 
@@ -630,13 +713,15 @@ is immutable; its authoritative source identity is the manifest/bundle SHA
 
 ## Credential-free public audit
 
-After publication, a reviewer can start the cold audit with only the exact
-public GitHub tag and Zenodo version DOI:
+After publication, take the exact public GitHub tag and version DOI from the
+resolved identity and use them for the cold audit:
 
 ```bash
+RELEASE_TAG=<exact-published-tag-from-resolved-identity>
+VERSION_DOI=<published-version-doi-from-resolved-identity>
 uv run robot-sf release audit-published \
-  --tag paper-matrix-v2-h600-s30-2026-08-cd831d7582c1 \
-  --doi 10.5281/zenodo.22077448 \
+  --tag "$RELEASE_TAG" \
+  --doi "$VERSION_DOI" \
   --output /tmp/published-release-audit.json
 ```
 

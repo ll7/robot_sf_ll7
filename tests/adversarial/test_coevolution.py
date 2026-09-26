@@ -269,6 +269,77 @@ def test_round_one_admission_is_evaluated_as_round_two_regression(tmp_path: Path
     }
 
 
+def test_adapter_mutation_cannot_change_selected_planner_or_round_carry(tmp_path: Path) -> None:
+    config = _write_config(tmp_path)
+
+    class MutatingAdapters(FixtureAdapters):
+        def __init__(self):
+            super().__init__()
+            self.seen_planner_ids: list[tuple[str, int, str]] = []
+
+        def _mutate(self, phase: str, request, planner):
+            self.seen_planner_ids.append((phase, request.round_number, planner["planner_id"]))
+            planner["planner_id"] = f"mutated-by-{phase}"
+
+        def evaluate_challenges(self, request, planner, output_dir):
+            self._mutate("evaluator", request, planner)
+            return super().evaluate_challenges(request, planner, output_dir)
+
+        def falsify(self, request, planner, output_dir):
+            self._mutate("falsifier", request, planner)
+            return super().falsify(request, planner, output_dir)
+
+        def verify_discovery(self, request, planner, candidate, output_dir):
+            self._mutate("verifier", request, planner)
+            return super().verify_discovery(request, planner, candidate, output_dir)
+
+        def admit_case(self, request, planner, case, output_dir):
+            self._mutate("admitter", request, planner)
+            return super().admit_case(request, planner, case, output_dir)
+
+    adapters = MutatingAdapters()
+    result = run_coevolution(config, adapters.bundle())
+
+    assert result["status"] == "complete"
+    assert adapters.seen_planner_ids == [
+        ("evaluator", 1, "fixture-planner-r1"),
+        ("falsifier", 1, "fixture-planner-r1"),
+        ("verifier", 1, "fixture-planner-r1"),
+        ("admitter", 1, "fixture-planner-r1"),
+        ("evaluator", 2, "fixture-planner-r2"),
+        ("falsifier", 2, "fixture-planner-r2"),
+    ]
+    output_dir = config.parent / "run-output"
+    first_optimizer = json.loads(
+        (output_dir / "round_001" / "phases" / "optimization.json").read_text(encoding="utf-8")
+    )["output"]
+    second_input = json.loads(
+        (output_dir / "round_002" / "round_input.json").read_text(encoding="utf-8")
+    )
+    second_optimizer = json.loads(
+        (output_dir / "round_002" / "phases" / "optimization.json").read_text(encoding="utf-8")
+    )["output"]
+    expected_prior = first_optimizer["selected_planner"]
+    assert expected_prior["planner_id"] == "fixture-planner-r1"
+    assert second_input["previous_selected_planner"] == expected_prior
+    assert second_optimizer["baseline_planner"] == {
+        "planner_id": expected_prior["planner_id"],
+        "config_sha256": expected_prior["config_sha256"],
+    }
+    first_discovery = json.loads(
+        (output_dir / "round_001" / "phases" / "discovery_admission.json").read_text(
+            encoding="utf-8"
+        )
+    )["output"]
+    assert first_discovery["rows"][0]["raw_candidate"]["target_planner_id"] == (
+        "fixture-planner-r1"
+    )
+    assert (
+        first_discovery["newly_admitted_cases"][0]["source_evidence"]["target_planner_id"]
+        == "fixture-planner-r1"
+    )
+
+
 def test_round_two_rejects_an_optimizer_that_resets_its_baseline(tmp_path: Path) -> None:
     config = _write_config(tmp_path)
 

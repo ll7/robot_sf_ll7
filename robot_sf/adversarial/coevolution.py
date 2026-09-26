@@ -145,6 +145,11 @@ def _mapping(value: Any, name: str) -> Mapping[str, Any]:
     return value
 
 
+def _detached_json_mapping(value: Mapping[str, Any], name: str) -> dict[str, Any]:
+    """Return a mutable adapter-owned copy of a validated JSON mapping."""
+    return json.loads(_canonical_json(_mapping(value, name)))
+
+
 def _non_empty_string(value: Any, name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name} must be a non-empty string")
@@ -1048,7 +1053,10 @@ def _candidate_gate(
         )
     try:
         result = adapters.verify_discovery(
-            request, planner, candidate, output_dir / f"candidate_{index:04d}"
+            request,
+            _detached_json_mapping(planner, "selected planner for discovery verification"),
+            _detached_json_mapping(candidate, "discovery candidate for verification"),
+            output_dir / f"candidate_{index:04d}",
         )
         return _validate_gate_output(result, str(candidate["candidate_id"])), None
     except Exception as exc:  # noqa: BLE001 - preserve the row and stop below
@@ -1088,7 +1096,12 @@ def _corpus_admission(
         },
     }
     try:
-        raw = adapters.admit_case(request, planner, case, output_dir / f"candidate_{index:04d}")
+        raw = adapters.admit_case(
+            request,
+            _detached_json_mapping(planner, "selected planner for corpus admission"),
+            _detached_json_mapping(case, "counterexample for corpus admission"),
+            output_dir / f"candidate_{index:04d}",
+        )
         admission = json.loads(_canonical_json(_mapping(raw, f"corpus admission for {case_id}")))
         if admission.get("case_id") != case_id:
             raise ValueError("corpus admission did not preserve stable case_id")
@@ -1547,12 +1560,20 @@ def _run_round_phases(
     selected = optimizer["selected_planner"]
     challenge_evaluation = phase(
         "challenge_evaluation",
-        lambda: adapters.evaluate_challenges(request, selected, round_dir / "challenge_evaluation"),
+        lambda: adapters.evaluate_challenges(
+            request,
+            _detached_json_mapping(selected, "selected planner for challenge evaluation"),
+            round_dir / "challenge_evaluation",
+        ),
         lambda payload: _validate_challenge_evaluations(payload, request),
     )
     falsification = phase(
         "falsification",
-        lambda: adapters.falsify(request, selected, round_dir / "falsification"),
+        lambda: adapters.falsify(
+            request,
+            _detached_json_mapping(selected, "selected planner for falsification"),
+            round_dir / "falsification",
+        ),
         lambda payload: _validate_falsification_output(payload, request),
     )
     discovery = phase(
@@ -1595,7 +1616,9 @@ def _record_completed_round(
     challenge = phases["challenge_evaluation"]
     falsification = phases["falsification"]
     discovery = phases["discovery_admission"]
-    progress.selected_planner = optimizer["selected_planner"]
+    progress.selected_planner = _detached_json_mapping(
+        optimizer["selected_planner"], "selected planner for coevolution progress"
+    )
     selection_score = _score_key(optimizer["selection_tuple"])
     prior_best = progress.best_score
     if prior_best is None or selection_score > prior_best:

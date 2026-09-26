@@ -2253,7 +2253,7 @@ def _text_setting(config: dict[str, Any], name: str, *, default: str) -> str:
 
 def _render_replay(
     record: dict[str, Any],
-    episode_records: Path,
+    episode_records: Path | None,
     replay_dir: Path,
     figure_dir: Path,
     output_dir: Path,
@@ -2271,6 +2271,19 @@ def _render_replay(
     if len(replay_steps) < 2:
         return {"status": "unavailable", "reason": "replay_trace_too_short", "artifacts": []}
 
+    annotations = _trace_visual_annotations(record, trace, replay_steps)
+    frame_steps = _deterministic_trace_frame_steps(
+        len(replay_steps),
+        protected_indices=[
+            value.get("render_step_index")
+            for value in [
+                annotations.get("minimum_clearance"),
+                *annotations.get("collision_events", []),
+            ]
+            if isinstance(value, dict)
+        ],
+    )
+
     row_payload = dict(record)
     row_payload["replay_steps"] = replay_steps
     row_payload["replay_dt"] = trace.get("dt")
@@ -2278,12 +2291,14 @@ def _render_replay(
     render_map_path = map_path if map_context["status"] == "renderable" else None
     row_payload["replay_map_path"] = str(render_map_path) if render_map_path is not None else None
     episode_row = EpisodeRow.from_dict(row_payload)
-    frame_steps = [critical_step] if critical_step is not None else [len(replay_steps) - 1]
+    still_step = critical_step if critical_step is not None else len(replay_steps) - 1
     rendered, error = _generate_replay_figures(
         episode_row,
         figure_dir=figure_dir,
         frame_steps=frame_steps,
         episode_records=episode_records,
+        still_step=still_step,
+        annotations=annotations,
     )
     if error is not None or rendered is None:
         reason = (
@@ -2308,6 +2323,8 @@ def _render_replay(
         "determinism_check_status": rendered.get("determinism_check_status"),
         "critical_frame_step": critical_step,
         "smallest_surface_clearance_m": smallest_clearance,
+        "frame_steps": frame_steps,
+        "visual_annotations": annotations,
         "track_continuity": continuity,
         "map_context": {
             "status": map_context["status"],
@@ -2465,6 +2482,165 @@ def _replay_steps_from_trace(
     )
 
 
+def _deterministic_trace_frame_steps(
+    step_count: int,
+    *,
+    protected_indices: list[Any] | None = None,
+) -> list[int]:
+    """Select stable time-spaced frames while retaining source event samples."""
+    if step_count < 1:
+        return []
+    anchor_count = min(5, step_count)
+    if anchor_count == 1:
+        indices = {0}
+    else:
+        indices = {
+            round(index * (step_count - 1) / (anchor_count - 1)) for index in range(anchor_count)
+        }
+    for candidate in protected_indices or []:
+        if isinstance(candidate, int) and not isinstance(candidate, bool):
+            if 0 <= candidate < step_count:
+                indices.add(candidate)
+    return sorted(indices)
+
+
+def _trace_visual_annotations(
+    record: dict[str, Any],
+    trace: dict[str, Any],
+    replay_steps: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Bind collision and clearance labels to their distinct source fields and samples."""
+    trace_steps = trace.get("steps")
+    minimum = (
+        _minimum_clearance_annotation(trace_steps, replay_steps)
+        if isinstance(trace_steps, list)
+        else None
+    )
+    collision_events = _collision_event_annotations(record, replay_steps)
+    return {
+        "schema_version": "replay_trace_visual_annotations.v1",
+        "minimum_clearance": minimum,
+        "collision_events": collision_events,
+        "interpretation": (
+            "The minimum-clearance sample comes from per-pedestrian trace surface_clearance_m; "
+            "collision timing comes from the separate exact event ledger. Render markers show "
+            "the nearest recorded robot sample and do not alter either source measurement."
+        ),
+    }
+
+
+def _minimum_clearance_annotation(
+    trace_steps: list[Any], replay_steps: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    """Return the most negative finite pedestrian surface-clearance sample."""
+    candidates: list[dict[str, Any]] = []
+    for trace_index, step in enumerate(trace_steps):
+        if not isinstance(step, dict):
+            continue
+        time_s = _finite_number(step.get("time_s"))
+        pedestrians = step.get("pedestrians")
+        if time_s is None or not isinstance(pedestrians, list):
+            continue
+        candidates.extend(
+            _pedestrian_clearance_annotations(
+                pedestrians,
+                trace_index=trace_index,
+                time_s=time_s,
+                replay_steps=replay_steps,
+            )
+        )
+    return min(candidates, key=lambda candidate: candidate["value_m"]) if candidates else None
+
+
+def _pedestrian_clearance_annotations(
+    pedestrians: list[Any],
+    *,
+    trace_index: int,
+    time_s: float,
+    replay_steps: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Extract clearance samples and bind them to the closest replay-step index."""
+    candidates: list[dict[str, Any]] = []
+    for pedestrian_index, pedestrian in enumerate(pedestrians):
+        if not isinstance(pedestrian, dict):
+            continue
+        clearance = _finite_number(pedestrian.get("surface_clearance_m"))
+        if clearance is None:
+            continue
+        render_index = _nearest_replay_sample(replay_steps, time_s)
+        if render_index is None:
+            continue
+        candidates.append(
+            {
+                "value_m": clearance,
+                "source_trace_step_index": trace_index,
+                "source_pedestrian_index": pedestrian_index,
+                "time_s": time_s,
+                "render_step_index": render_index,
+                "source_path": (
+                    "algorithm_metadata.simulation_step_trace.steps["
+                    f"{trace_index}].pedestrians[{pedestrian_index}].surface_clearance_m"
+                ),
+            }
+        )
+    return candidates
+
+
+def _collision_event_annotations(
+    record: dict[str, Any], replay_steps: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Return exact collision-ledger times with their nearest recorded samples."""
+    event_ledger = record.get("event_ledger")
+    exact_events = event_ledger.get("exact_events") if isinstance(event_ledger, dict) else None
+    raw_collision_events = (
+        event_ledger.get("collision_events") if isinstance(event_ledger, dict) else None
+    )
+    if (
+        not isinstance(exact_events, dict)
+        or exact_events.get("collision") is not True
+        or not isinstance(raw_collision_events, list)
+    ):
+        return []
+    result: list[dict[str, Any]] = []
+    for event_index, event in enumerate(raw_collision_events):
+        if not isinstance(event, dict):
+            continue
+        event_time = _finite_number(event.get("collision_time"))
+        source = event.get("exact_event_source")
+        if event_time is None or not isinstance(source, str) or not source.strip():
+            continue
+        render_index = _nearest_replay_sample(replay_steps, event_time)
+        if render_index is None:
+            continue
+        sample_time = replay_steps[render_index].get("t")
+        if not isinstance(sample_time, int | float):
+            continue
+        result.append(
+            {
+                "event_index": event_index,
+                "event_time_s": event_time,
+                "exact_event_source": source,
+                "source_path": f"event_ledger.collision_events[{event_index}].collision_time",
+                "render_step_index": render_index,
+                "sample_time_s": float(sample_time),
+                "sample_time_offset_s": abs(float(sample_time) - event_time),
+            }
+        )
+    return result
+
+
+def _nearest_replay_sample(replay_steps: list[dict[str, Any]], time_s: float) -> int | None:
+    """Return the closest converted trace sample to a source timestamp."""
+    candidates = [
+        (abs(float(step["t"]) - time_s), index)
+        for index, step in enumerate(replay_steps)
+        if isinstance(step, dict)
+        and isinstance(step.get("t"), int | float)
+        and math.isfinite(float(step["t"]))
+    ]
+    return min(candidates)[1] if candidates else None
+
+
 def _trace_step_to_replay_step(step: Any) -> tuple[dict[str, Any] | None, float | None]:
     """Convert one trace step and return its closest pedestrian clearance."""
     if not isinstance(step, dict):
@@ -2541,7 +2717,9 @@ def _generate_replay_figures(
     *,
     figure_dir: Path,
     frame_steps: list[int],
-    episode_records: Path,
+    episode_records: Path | None,
+    still_step: int,
+    annotations: dict[str, Any],
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Call the existing renderer and keep its failure available to the case receipt."""
     try:
@@ -2553,6 +2731,9 @@ def _generate_replay_figures(
             frame_steps=frame_steps,
             episodes_jsonl_path=episode_records,
             scenario_matrix_path=None,
+            no_determinism_check=episode_records is None,
+            still_step=still_step,
+            annotations=annotations,
         )
     except (OSError, RuntimeError, TypeError, ValueError, KeyError) as exc:
         return None, f"{type(exc).__name__}: {exc}"

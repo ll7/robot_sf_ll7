@@ -444,6 +444,7 @@ def generate_still(
     out_path: Path,
     fmt: str = "png",
     map_path: str | None = None,
+    annotations: dict[str, Any] | None = None,
 ) -> FigureArtifact:
     """Generate still frame at specific step.
 
@@ -453,6 +454,7 @@ def generate_still(
         out_path: Output file path.
         fmt: Output format (png, pdf, svg).
         map_path: Optional map SVG path for background.
+        annotations: Source-tied collision and minimum-clearance sample annotations.
 
     Returns:
         FigureArtifact with metadata.
@@ -478,6 +480,10 @@ def generate_still(
 
     ax.plot(step.x, step.y, "bo", markersize=15, label="Robot")
 
+    _draw_step_annotation_markers(
+        ax, step, step_idx, annotations, step_count=len(replay_episode.steps), markersize=15
+    )
+
     if step.ped_positions:
         ped_x = [p[0] for p in step.ped_positions]
         ped_y = [p[1] for p in step.ped_positions]
@@ -499,6 +505,19 @@ def generate_still(
     ax.set_xlabel("X (m)")
     ax.set_ylabel("Y (m)")
     ax.set_title(f"Still Frame - Step {step_idx}")
+    annotation_lines = _annotation_lines_for_step(
+        annotations, step_idx, step_count=len(replay_episode.steps)
+    )
+    if annotation_lines:
+        ax.text(
+            0.02,
+            0.02,
+            "\n".join(annotation_lines),
+            transform=ax.transAxes,
+            fontsize=8,
+            verticalalignment="bottom",
+            bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.75},
+        )
     ax.legend()
     ax.grid(True, alpha=0.3)
 
@@ -521,6 +540,7 @@ def generate_filmstrip(
     out_path: Path,
     fmt: str = "png",
     frame_steps: list[int] | None = None,
+    annotations: dict[str, Any] | None = None,
 ) -> FigureArtifact:
     """Generate filmstrip showing multiple frames in sequence.
 
@@ -529,6 +549,7 @@ def generate_filmstrip(
         out_path: Output file path.
         fmt: Output format (png, pdf).
         frame_steps: List of step indices to show, or None for uniform sampling.
+        annotations: Source-tied collision and minimum-clearance sample annotations.
 
     Returns:
         FigureArtifact with metadata.
@@ -560,12 +581,19 @@ def generate_filmstrip(
         step = replay_episode.steps[step_idx]
 
         ax.plot(step.x, step.y, "bo", markersize=10)
+        _draw_step_annotation_markers(
+            ax, step, step_idx, annotations, step_count=len(replay_episode.steps), markersize=10
+        )
         if step.ped_positions:
             ped_x = [p[0] for p in step.ped_positions]
             ped_y = [p[1] for p in step.ped_positions]
             ax.plot(ped_x, ped_y, "ro", markersize=6)
 
-        ax.set_title(f"t={step.t:.1f}s")
+        annotation_lines = _annotation_lines_for_step(
+            annotations, step_idx, step_count=len(replay_episode.steps)
+        )
+        title_lines = [f"t={step.t:.1f}s", *annotation_lines]
+        ax.set_title("\n".join(title_lines), fontsize=8)
         ax.set_aspect("equal")
         ax.grid(True, alpha=0.3)
 
@@ -591,6 +619,7 @@ def generate_trajectory(
     out_path: Path,
     fmt: str = "png",
     map_path: str | None = None,
+    annotations: dict[str, Any] | None = None,
 ) -> FigureArtifact:
     """Generate trajectory plot showing robot and pedestrian paths.
 
@@ -599,6 +628,7 @@ def generate_trajectory(
         out_path: Output file path.
         fmt: Output format (png, pdf, svg).
         map_path: Optional map SVG path for background.
+        annotations: Source-tied collision and minimum-clearance sample annotations.
 
     Returns:
         FigureArtifact with metadata.
@@ -626,6 +656,34 @@ def generate_trajectory(
     ax.plot(robot_x, robot_y, "b-", linewidth=2, label="Robot trajectory")
     ax.plot(robot_x[0], robot_y[0], "go", markersize=12, label="Start")
     ax.plot(robot_x[-1], robot_y[-1], "rs", markersize=12, label="End")
+
+    for annotation in _step_annotations(annotations, step_count=len(replay_episode.steps)):
+        step_idx = annotation["render_step_index"]
+        step = replay_episode.steps[step_idx]
+        if annotation["kind"] == "minimum_clearance":
+            ax.plot(
+                step.x,
+                step.y,
+                marker="*",
+                color="gold",
+                markeredgecolor="black",
+                markersize=15,
+                linestyle="None",
+                label="Minimum-clearance sample",
+                zorder=5,
+            )
+        else:
+            ax.plot(
+                step.x,
+                step.y,
+                marker="X",
+                color="crimson",
+                markeredgecolor="black",
+                markersize=11,
+                linestyle="None",
+                label=f"Collision event (ledger t={annotation['event_time_s']:.2f}s)",
+                zorder=6,
+            )
 
     ped_trajectories = _pedestrian_trajectories(replay_episode)
 
@@ -702,6 +760,124 @@ def _pedestrian_trajectories(
             key = pedestrian_id or f"unknown-step-{step_idx}-actor-{ped_idx}"
             trajectories.setdefault(key, []).append(position)
     return trajectories
+
+
+def _step_annotations(
+    annotations: dict[str, Any] | None,
+    *,
+    step_count: int | None = None,
+) -> list[dict[str, Any]]:
+    """Return structurally valid, ordered annotations for recorded replay samples."""
+    if not isinstance(annotations, dict):
+        return []
+    result: list[dict[str, Any]] = []
+    minimum = annotations.get("minimum_clearance")
+    if isinstance(minimum, dict):
+        step_idx = minimum.get("render_step_index")
+        value = _finite_floats(minimum.get("value_m"))
+        time_s = _finite_floats(minimum.get("time_s"))
+        if (
+            isinstance(step_idx, int)
+            and not isinstance(step_idx, bool)
+            and 0 <= step_idx
+            and (step_count is None or step_idx < step_count)
+            and value
+            and time_s
+        ):
+            result.append(
+                {
+                    "kind": "minimum_clearance",
+                    "render_step_index": step_idx,
+                    "value_m": value[0],
+                    "time_s": time_s[0],
+                    "source_path": minimum.get("source_path"),
+                }
+            )
+    collision_events = annotations.get("collision_events")
+    if isinstance(collision_events, list):
+        for event in collision_events:
+            if not isinstance(event, dict):
+                continue
+            step_idx = event.get("render_step_index")
+            event_time = _finite_floats(event.get("event_time_s"))
+            sample_time = _finite_floats(event.get("sample_time_s"))
+            if (
+                isinstance(step_idx, int)
+                and not isinstance(step_idx, bool)
+                and 0 <= step_idx
+                and (step_count is None or step_idx < step_count)
+                and event_time
+                and sample_time
+            ):
+                result.append(
+                    {
+                        "kind": "collision_event",
+                        "render_step_index": step_idx,
+                        "event_time_s": event_time[0],
+                        "sample_time_s": sample_time[0],
+                        "source_path": event.get("source_path"),
+                    }
+                )
+    return result
+
+
+def _annotation_lines_for_step(
+    annotations: dict[str, Any] | None,
+    step_idx: int,
+    *,
+    step_count: int | None = None,
+) -> list[str]:
+    """Describe exact source annotations that fall on one rendered trace sample.
+
+    Returns:
+        Human-readable labels for the selected sample.
+    """
+    lines: list[str] = []
+    for annotation in _step_annotations(annotations, step_count=step_count):
+        if annotation["render_step_index"] != step_idx:
+            continue
+        if annotation["kind"] == "minimum_clearance":
+            lines.append(f"minimum surface clearance: {annotation['value_m']:.4f} m")
+        else:
+            lines.append(f"collision ledger event: t={annotation['event_time_s']:.2f}s")
+    return lines
+
+
+def _draw_step_annotation_markers(
+    ax: Any,
+    step: ReplayStep,
+    step_idx: int,
+    annotations: dict[str, Any] | None,
+    *,
+    step_count: int,
+    markersize: int,
+) -> None:
+    """Mark recorded event and clearance samples at their robot trace positions."""
+    for annotation in _step_annotations(annotations, step_count=step_count):
+        if annotation["render_step_index"] != step_idx:
+            continue
+        if annotation["kind"] == "minimum_clearance":
+            ax.plot(
+                step.x,
+                step.y,
+                marker="*",
+                color="gold",
+                markeredgecolor="black",
+                markersize=markersize,
+                linestyle="None",
+                zorder=5,
+            )
+        else:
+            ax.plot(
+                step.x,
+                step.y,
+                marker="X",
+                color="crimson",
+                markeredgecolor="black",
+                markersize=max(markersize - 2, 4),
+                linestyle="None",
+                zorder=6,
+            )
 
 
 def generate_caption_fragment(
@@ -793,6 +969,9 @@ def _generate_requested_artifacts(
     fmt: str,
     frame_steps: list[int] | None,
     map_path: str | None,
+    *,
+    still_step: int | None = None,
+    annotations: dict[str, Any] | None = None,
 ) -> tuple[list[FigureArtifact], list[dict[str, Any]]]:
     """Generate requested figure artifacts and collect metadata.
 
@@ -803,9 +982,22 @@ def _generate_requested_artifacts(
     artifact_metadata: list[dict[str, Any]] = []
 
     if "still" in outputs:
-        step_idx = frame_steps[0] if frame_steps else len(replay_episode.steps) // 2
+        step_idx = (
+            still_step
+            if still_step is not None
+            else frame_steps[0]
+            if frame_steps
+            else len(replay_episode.steps) // 2
+        )
         still_path = out_dir / f"still_{step_idx}.{fmt}"
-        still = generate_still(replay_episode, step_idx, still_path, fmt, map_path)
+        still = generate_still(
+            replay_episode,
+            step_idx,
+            still_path,
+            fmt,
+            map_path,
+            annotations,
+        )
         artifacts.append(still)
         artifact_metadata.append(
             {
@@ -814,12 +1006,19 @@ def _generate_requested_artifacts(
                 "format": still.format,
                 "sha256": still.sha256,
                 "step_idx": step_idx,
+                "annotations": _annotation_lines_for_step(annotations, step_idx),
             }
         )
 
     if "filmstrip" in outputs:
         filmstrip_path = out_dir / f"filmstrip.{fmt}"
-        filmstrip = generate_filmstrip(replay_episode, filmstrip_path, fmt, frame_steps)
+        filmstrip = generate_filmstrip(
+            replay_episode,
+            filmstrip_path,
+            fmt,
+            frame_steps,
+            annotations,
+        )
         artifacts.append(filmstrip)
         artifact_metadata.append(
             {
@@ -828,12 +1027,23 @@ def _generate_requested_artifacts(
                 "format": filmstrip.format,
                 "sha256": filmstrip.sha256,
                 "frame_steps": frame_steps,
+                "frame_annotations": {
+                    str(step_idx): _annotation_lines_for_step(annotations, step_idx)
+                    for step_idx in (frame_steps or [])
+                    if _annotation_lines_for_step(annotations, step_idx)
+                },
             }
         )
 
     if "trajectory" in outputs:
         trajectory_path = out_dir / f"trajectory.{fmt}"
-        trajectory = generate_trajectory(replay_episode, trajectory_path, fmt, map_path)
+        trajectory = generate_trajectory(
+            replay_episode,
+            trajectory_path,
+            fmt,
+            map_path,
+            annotations,
+        )
         artifacts.append(trajectory)
         artifact_metadata.append(
             {
@@ -1021,6 +1231,8 @@ def replay_episode_and_generate_figures(  # noqa: PLR0913
     scenario_matrix_path: Path | None = None,
     config_hash: str | None = None,
     no_determinism_check: bool = False,
+    still_step: int | None = None,
+    annotations: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Main entry point: replay episode and generate figure artifacts.
 
@@ -1036,6 +1248,8 @@ def replay_episode_and_generate_figures(  # noqa: PLR0913
         scenario_matrix_path: Scenario matrix path.
         config_hash: Campaign config hash.
         no_determinism_check: Skip determinism check (diagnostic only).
+        still_step: Optional independent still-frame index, separate from filmstrip samples.
+        annotations: Source-tied collision and clearance annotations for recorded samples.
 
     Returns:
         Dictionary with result metadata.
@@ -1106,7 +1320,14 @@ def replay_episode_and_generate_figures(  # noqa: PLR0913
     try:
         map_path = episode_row.raw.get("replay_map_path")
         artifacts, artifact_metadata = _generate_requested_artifacts(
-            replay_episode, outputs, out_dir, fmt, frame_steps, map_path
+            replay_episode,
+            outputs,
+            out_dir,
+            fmt,
+            frame_steps,
+            map_path,
+            still_step=still_step,
+            annotations=annotations,
         )
 
         caption = generate_caption_fragment(episode_row, replay_result, artifacts)

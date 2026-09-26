@@ -1281,6 +1281,61 @@ def test_reused_pedestrian_slot_is_split_into_distinct_tracks() -> None:
     assert continuity["maximum_assumed_track_speed_mps"] == 12.0
 
 
+def test_trace_visual_annotations_keep_collision_and_clearance_sources_separate() -> None:
+    trace = {
+        "schema_version": "simulation-step-trace.v1",
+        "steps": [
+            {
+                "time_s": 0.1,
+                "robot": {"position": [0.0, 0.0], "heading": 0.0},
+                "pedestrians": [{"position": [1.0, 0.0], "surface_clearance_m": 0.4}],
+            },
+            {
+                "time_s": 0.2,
+                "robot": {"position": [0.1, 0.0], "heading": 0.0},
+                "pedestrians": [{"position": [0.2, 0.0], "surface_clearance_m": -0.01}],
+            },
+            {
+                "time_s": 0.3,
+                "robot": {"position": [0.2, 0.0], "heading": 0.0},
+                "pedestrians": [{"position": [0.2, 0.0], "surface_clearance_m": 0.0}],
+            },
+        ],
+    }
+    replay_steps, _critical, _clearance, _continuity = replay_gallery._replay_steps_from_trace(
+        trace
+    )
+    record = {
+        "event_ledger": {
+            "exact_events": {"collision": True},
+            "collision_events": [
+                {
+                    "collision_time": 0.3,
+                    "exact_event_source": "runtime.step.meta.is_pedestrian_collision",
+                }
+            ],
+        }
+    }
+
+    annotations = replay_gallery._trace_visual_annotations(record, trace, replay_steps)
+
+    minimum = annotations["minimum_clearance"]
+    collision = annotations["collision_events"][0]
+    assert minimum["source_trace_step_index"] == 1
+    assert minimum["render_step_index"] == 1
+    assert minimum["source_path"].endswith("steps[1].pedestrians[0].surface_clearance_m")
+    assert collision["event_time_s"] == 0.3
+    assert collision["render_step_index"] == 2
+    assert collision["source_path"] == "event_ledger.collision_events[0].collision_time"
+    assert minimum["render_step_index"] != collision["render_step_index"]
+
+
+def test_trace_filmstrip_sampling_retains_distinct_source_events() -> None:
+    assert replay_gallery._deterministic_trace_frame_steps(
+        10, protected_indices=[8, 9, 8, "invalid", -1, 10]
+    ) == [0, 2, 4, 7, 8, 9]
+
+
 def test_gallery_detects_materialized_map_bytes_changed_before_replay(
     tmp_path: Path, monkeypatch: Any
 ) -> None:

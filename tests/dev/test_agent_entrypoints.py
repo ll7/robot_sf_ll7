@@ -378,6 +378,31 @@ def test_agent_workflow_entrypoints_documents_route_boundaries_and_negative_rule
     assert "Privacy and provenance boundaries" in text
 
 
+def test_exact_head_read_only_reviewer_fallback_is_bounded() -> None:
+    """The named Luna reviewer fallback preserves the frozen, read-only review route."""
+    text = ENTRYPOINTS_DOC.read_text(encoding="utf-8")
+    section = text.split("### Exact-head read-only reviewer fallback", maxsplit=1)[1].split(
+        "### handoff.v2 request format", maxsplit=1
+    )[0]
+
+    assert "Configured role names do not guarantee" in section
+    assert "luna_exact_head_reviewer" in section
+    assert section.count("agent type is currently not available") == 1
+    assert "no separate callable-role preflight query" in section
+    assert "Only after that specific unavailable-profile response" in section
+    assert "exactly one retry" in section
+    assert "generic/default native profile" in section
+    assert "`gpt-5.6-luna`" in section
+    assert "max effort" in section
+
+    for frozen_field in ("same prompt", "target SHA", "base SHA", "head SHA", "read-only"):
+        assert frozen_field in section
+    assert re.search(r"do not\s+refresh the head", section)
+    assert "route-unavailable" in section
+    assert "Do not try another profile, model, effort, or permission boundary" in section
+    assert "external shared resolver" in section
+
+
 def test_compact_final_handoff_contract_fields() -> None:
     """The handoff contract must specify all standard acceptance elements."""
     text = ENTRYPOINTS_DOC.read_text(encoding="utf-8")

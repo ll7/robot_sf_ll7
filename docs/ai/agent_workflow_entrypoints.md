@@ -154,6 +154,26 @@ exhausted, or for a non-retryable startup/task failure, `recovery.fallback` requ
 local review and keeps `independent_review_authorized` false. A successful prior worker suppresses
 later retries to avoid duplicate work; every route manifest remains route evidence only.
 
+### Exact-head read-only reviewer fallback
+
+Configured role names do not guarantee that the current Codex runtime can start those roles; the
+dispatch result is authoritative. The named `luna_exact_head_reviewer` role may be listed while
+dispatch returns `agent type is currently not available`.
+
+The current collaboration endpoint provides no separate callable-role preflight query; do not infer availability from repository configuration or invent a probe.
+
+For an exact-head read-only review packet, follow this bounded recovery path:
+
+1. Dispatch the configured `luna_exact_head_reviewer` role with the frozen review packet.
+2. Only after that specific unavailable-profile response, allow exactly one retry using the
+   generic/default native profile pinned to `gpt-5.6-luna` with max effort.
+3. Reuse the same prompt, target SHA, base SHA, head SHA, and read-only review instruction; do not
+   refresh the head, change authority, or silently select another model or effort.
+4. If route equivalence cannot be preserved or the retry fails, stop with `route-unavailable`.
+   Do not try another profile, model, effort, or permission boundary.
+
+This is a runtime recovery path only; it does not change provider/model selection, the external shared resolver, or other routes.
+
 ### handoff.v2 request format
 
 The accepted handoff input is a flat `handoff.v2` request (there is no nested `packet`):

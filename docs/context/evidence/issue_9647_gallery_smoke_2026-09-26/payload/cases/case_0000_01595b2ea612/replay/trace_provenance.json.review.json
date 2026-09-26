@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_9647_gallery_smoke_2026-09-26/payload/cases/case_0000_01595b2ea612/replay/trace_provenance.json",
+  "artifact_sha256": "5f2ac197e51e629c023c1ecbbb669d4f2ccc69e6c5bc4ee2b211c21e43407d23",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

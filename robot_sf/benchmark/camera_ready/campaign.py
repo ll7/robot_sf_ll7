@@ -2944,6 +2944,25 @@ def _build_run_meta_seed_variability_metrics(
     }
 
 
+def _run_meta_throughput_definition() -> dict[str, str]:
+    """Describe campaign-wide serialized-row throughput fields.
+
+    Returns:
+        Mapping that names the numerator, denominator, rate, units, and scope.
+    """
+    return {
+        "scope": "campaign_all_planner_arms",
+        "numerator_field": "total_episodes",
+        "numerator_unit": "episode_rows",
+        "numerator_semantics": "serialized_episode_rows",
+        "denominator_field": "runtime_sec",
+        "denominator_unit": "seconds",
+        "denominator_semantics": "campaign_elapsed_through_outcome_snapshot",
+        "rate_field": "episodes_per_second",
+        "rate_unit": "episode_rows/second",
+    }
+
+
 def _build_run_meta(
     cfg: CampaignConfig,
     *,
@@ -3016,17 +3035,7 @@ def _build_run_meta(
         "episodes_per_second": (
             (outcome.total_episodes / outcome.runtime_sec) if outcome.runtime_sec > 0 else 0.0
         ),
-        "throughput_definition": {
-            "scope": "campaign_all_planner_arms",
-            "numerator_field": "total_episodes",
-            "numerator_unit": "episode_rows",
-            "numerator_semantics": "serialized_episode_rows",
-            "denominator_field": "runtime_sec",
-            "denominator_unit": "seconds",
-            "denominator_semantics": "campaign_elapsed_through_outcome_snapshot",
-            "rate_field": "episodes_per_second",
-            "rate_unit": "episode_rows/second",
-        },
+        "throughput_definition": _run_meta_throughput_definition(),
     }
 
 

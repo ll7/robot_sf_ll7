@@ -464,7 +464,8 @@ def render_frontier_markdown(
                 f"scenario/seed manifest SHA-256 "
                 f"`{summary['scenario_seed_manifest_sha256'][:12]}`; cohort comparison "
                 f"`{summary['cohort_comparison_status']}`; success-rate comparison "
-                f"`{summary['success_rate_comparison_status']}`); "
+                f"`{summary['success_rate_comparison_status']}`; collision-rate comparison "
+                f"`{summary['collision_rate_comparison_status']}`); "
                 f"{summary['missing_record_count']} expected rows missing "
                 f"`{summary['missing_record_ids']}`, "
                 f"{summary['unexpected_record_count']} unexpected; "
@@ -1457,6 +1458,7 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
                     replay_artifact=candidate.get("replay_artifact"),
                     require_replay_binding=candidate.get("replay_status") == "verified",
                 ),
+                evidence_root=evidence_root,
                 prefix=f"{candidate_prefix}.admissibility_evidence_artifact",
                 errors=errors,
             )
@@ -1490,6 +1492,7 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
                     replay_artifact=candidate.get("replay_artifact"),
                     require_replay_binding=candidate.get("replay_status") == "verified",
                 ),
+                evidence_root=evidence_root,
                 prefix=f"{candidate_prefix}.admissibility_evidence_artifact",
                 errors=errors,
             )
@@ -1669,6 +1672,7 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
                         and observation.get("replay_status") == "verified"
                     ),
                 ),
+                evidence_root=evidence_root,
                 prefix=f"{obs_prefix}.admissibility_evidence_artifact",
                 errors=errors,
             )
@@ -2035,6 +2039,8 @@ def _add_cohort_comparability(
             summary["cohort_comparison_status"] = "baseline"
             summary["success_rate_comparable_to_previous_round"] = None
             summary["success_rate_comparison_status"] = "baseline"
+            summary["collision_rate_comparable_to_previous_round"] = None
+            summary["collision_rate_comparison_status"] = "baseline"
             continue
         comparable = digest == previous_sets[set_name]["scenario_seed_manifest_sha256"]
         summary["cohort_comparable_to_previous_round"] = comparable
@@ -2053,6 +2059,25 @@ def _add_cohort_comparability(
             summary["success_rate_comparison_status"] = "non_comparable_success_sample"
         else:
             summary["success_rate_comparison_status"] = "comparable"
+        collision_sample_available = (
+            summary["collision_denominator"] > 0
+            and previous_sets[set_name]["collision_denominator"] > 0
+        )
+        collision_sample_matches = (
+            summary["collision_rate_sample_sha256"]
+            == previous_sets[set_name]["collision_rate_sample_sha256"]
+        )
+        summary["collision_rate_comparable_to_previous_round"] = (
+            comparable and collision_sample_available and collision_sample_matches
+        )
+        if not comparable:
+            summary["collision_rate_comparison_status"] = "non_comparable_cohort"
+        elif not collision_sample_available:
+            summary["collision_rate_comparison_status"] = "no_collision_outcomes"
+        elif not collision_sample_matches:
+            summary["collision_rate_comparison_status"] = "non_comparable_collision_sample"
+        else:
+            summary["collision_rate_comparison_status"] = "comparable"
 
 
 def _validate_budget(
@@ -2221,6 +2246,7 @@ def _validate_admissibility_evidence_source(  # noqa: C901 - report independent 
     source: Any,
     artifact: Any,
     context: _AdmissibilityContext,
+    evidence_root: Path,
     prefix: str,
     errors: list[str],
 ) -> None:
@@ -2253,6 +2279,7 @@ def _validate_admissibility_evidence_source(  # noqa: C901 - report independent 
     _validate_scenario_artifact_identity(
         scenario_identity,
         context.scenario_artifact_sha256,
+        evidence_root,
         prefix,
         errors,
     )
@@ -2334,10 +2361,11 @@ def _validate_admissibility_record_shape(  # noqa: C901 - report independent sch
 def _validate_scenario_artifact_identity(
     identity: Any,
     expected_sha256: Any,
+    evidence_root: Path,
     prefix: str,
     errors: list[str],
 ) -> None:
-    """Bind the producer's captured scenario bytes to the search and corpus identity."""
+    """Bind captured scenario bytes to the search and corpus identity."""
     if not isinstance(identity, dict):
         errors.append(f"{prefix}.evidence.scenario_artifact_identity must be an object")
         return
@@ -2352,6 +2380,13 @@ def _validate_scenario_artifact_identity(
         errors.append(
             f"{prefix}.scenario_artifact_identity does not match the candidate or corpus scenario"
         )
+    artifact_path = _resolve_scenario_artifact_path(
+        identity.get("path"), evidence_root, prefix, errors
+    )
+    if artifact_path is not None:
+        _validate_scenario_artifact_bytes(
+            artifact_path, actual_sha256, expected_sha256, prefix, errors
+        )
     requires_effective = identity.get("requires_effective_input_binding")
     if not isinstance(requires_effective, bool):
         errors.append(
@@ -2361,6 +2396,63 @@ def _validate_scenario_artifact_identity(
         effective_sha256 = identity.get("effective_input_sha256")
         if not isinstance(effective_sha256, str) or _SHA256.fullmatch(effective_sha256) is None:
             errors.append(f"{prefix}.scenario_artifact_identity.effective_input_sha256 is required")
+
+
+def _resolve_scenario_artifact_path(
+    relative_path: Any,
+    evidence_root: Path,
+    prefix: str,
+    errors: list[str],
+) -> Path | None:
+    """Resolve one scenario artifact only when it stays inside the evidence bundle."""
+    identity_prefix = f"{prefix}.scenario_artifact_identity.path"
+    if not isinstance(relative_path, str) or not relative_path.strip():
+        errors.append(f"{identity_prefix} is required")
+        return None
+    scenario_path = PurePosixPath(relative_path)
+    if scenario_path.is_absolute() or ".." in scenario_path.parts or "\\" in relative_path:
+        errors.append(f"{identity_prefix} must stay relative to the evidence bundle")
+        return None
+    try:
+        bundle_root = evidence_root.resolve(strict=True)
+        artifact_path = (bundle_root / Path(*scenario_path.parts)).resolve(strict=True)
+    except (OSError, RuntimeError, ValueError):
+        errors.append(f"{identity_prefix} does not resolve to an available file")
+        return None
+    try:
+        artifact_path.relative_to(bundle_root)
+    except ValueError:
+        errors.append(f"{identity_prefix} resolves outside the evidence bundle")
+        return None
+    if not artifact_path.is_file():
+        errors.append(f"{identity_prefix} does not exist: {relative_path}")
+        return None
+    return artifact_path
+
+
+def _validate_scenario_artifact_bytes(
+    artifact_path: Path,
+    actual_sha256: Any,
+    expected_sha256: Any,
+    prefix: str,
+    errors: list[str],
+) -> None:
+    """Require staged scenario bytes to match producer and candidate digests."""
+    try:
+        captured_sha256 = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+    except OSError as exc:
+        errors.append(f"{prefix}.scenario_artifact_identity.path could not be read: {exc}")
+        return
+    if (
+        not isinstance(actual_sha256, str)
+        or captured_sha256.lower() != actual_sha256.lower()
+        or not isinstance(expected_sha256, str)
+        or captured_sha256.lower() != expected_sha256.lower()
+    ):
+        errors.append(
+            f"{prefix}.scenario_artifact_identity.path bytes do not match "
+            "the producer and candidate scenario digests"
+        )
 
 
 def _validate_confirmed_admissibility_support(  # noqa: C901 - keep verdict proof diagnostics explicit.
@@ -2889,6 +2981,7 @@ def _summarize_evaluation_set(data: dict[str, Any]) -> dict[str, Any]:
         "success_denominator": len(success_rows),
         "success_rate_sample_sha256": _scenario_seed_rows_digest(success_rows),
         "collision_denominator": len(collision_rows),
+        "collision_rate_sample_sha256": _scenario_seed_rows_digest(collision_rows),
         "excluded_episode_count": reported_count - len(eligible_rows),
         "accounting_complete": not missing_ids and not unexpected_ids,
         "identity_accounting_status": "verified",
@@ -3077,7 +3170,13 @@ def _format_collision_rate(summary: dict[str, Any]) -> str:
     rate = summary["collision_rate"]
     if rate is None:
         return "unknown (0 collision outcomes recorded)"
-    return f"{rate:.3f} ({summary['collisions']}/{summary['collision_denominator']})"
+    marker = (
+        "*"
+        if summary["collision_rate_comparison_status"]
+        in {"non_comparable_cohort", "non_comparable_collision_sample"}
+        else ""
+    )
+    return f"{rate:.3f} ({summary['collisions']}/{summary['collision_denominator']}){marker}"
 
 
 def _require_text(data: dict[str, Any], key: str, errors: list[str], prefix: str) -> None:

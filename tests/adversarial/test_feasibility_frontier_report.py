@@ -134,8 +134,19 @@ def _scenario_id(case_id: str) -> str:
     return f"scenario-{case_id}"
 
 
+def _scenario_artifact_bytes(case_id: str) -> bytes:
+    return f"scenario_id: {_scenario_id(case_id)}\n".encode()
+
+
+def _write_scenario_artifact(root: Path, case_id: str) -> Path:
+    path = root / "fixture" / f"{_scenario_id(case_id)}.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_scenario_artifact_bytes(case_id))
+    return path
+
+
 def _scenario_digest(case_id: str) -> str:
-    return hashlib.sha256(f"fixture-scenario:{case_id}".encode()).hexdigest()
+    return hashlib.sha256(_scenario_artifact_bytes(case_id)).hexdigest()
 
 
 def _execution_record(
@@ -196,6 +207,7 @@ def _admissibility_artifact(
             "c" * 64 if round_match and int(round_match.group(1)) > 1 else _CONFIG
         )
     scenario_id = _scenario_id(case_id)
+    _write_scenario_artifact(root, case_id)
     evidence: dict[str, Any] = {
         "scenario_artifact_identity": {
             "status": "available",
@@ -1568,6 +1580,9 @@ def test_frontier_report_marks_changed_held_out_cohort_non_comparable(
     assert second["evaluation_sets"]["held_out"]["success_rate_comparison_status"] == (
         "non_comparable_cohort"
     )
+    assert second["evaluation_sets"]["held_out"]["collision_rate_comparison_status"] == (
+        "non_comparable_cohort"
+    )
     assert second["evaluation_sets"]["fixed"]["cohort_comparable_to_previous_round"] is True
     assert "cohort comparison `non_comparable_cohort`" in render_frontier_markdown(report)
     axis = Mock()
@@ -1592,6 +1607,8 @@ def test_frontier_report_omits_success_trend_when_eligible_sample_changes(
     assert fixed_summary["cohort_comparison_status"] == "comparable"
     assert fixed_summary["success_rate_comparison_status"] == "non_comparable_success_sample"
     assert fixed_summary["success_rate_comparable_to_previous_round"] is False
+    assert fixed_summary["collision_rate_comparison_status"] == "non_comparable_collision_sample"
+    assert fixed_summary["collision_rate_comparable_to_previous_round"] is False
 
     axis = Mock()
     frontier_module._plot_evaluation_performance(axis, report["rounds"], [1, 2])
@@ -1599,6 +1616,56 @@ def test_frontier_report_omits_success_trend_when_eligible_sample_changes(
         call for call in axis.plot.call_args_list if call.kwargs.get("label") == "_nolegend_"
     ]
     assert len(connecting_segments) == 2
+
+
+def test_frontier_report_marks_collision_rates_non_comparable_when_outcome_sample_changes(
+    tmp_path: Path,
+) -> None:
+    """The same cohort does not make collision rates comparable when observed rows differ."""
+    payload = _evidence(tmp_path)
+    first_rows = payload["rounds"][0]["evaluation_sets"]["held_out"]["episodes"]
+    second_rows = payload["rounds"][1]["evaluation_sets"]["held_out"]["episodes"]
+    first_rows[0]["collision"] = False
+    first_rows[1]["collision"] = None
+    second_rows[0]["collision"] = None
+    second_rows[1]["collision"] = True
+    _refresh_source_artifacts(payload, tmp_path)
+
+    report = build_frontier_report(payload, evidence_root=tmp_path)
+    first, second = (item["evaluation_sets"]["held_out"] for item in report["rounds"])
+    assert first["collision_denominator"] == second["collision_denominator"] == 1
+    assert first["collision_rate"] == 0.0
+    assert second["collision_rate"] == 1.0
+    assert first["collision_rate_sample_sha256"] != second["collision_rate_sample_sha256"]
+    assert second["cohort_comparison_status"] == "comparable"
+    assert second["success_rate_comparison_status"] == "comparable"
+    assert second["collision_rate_comparable_to_previous_round"] is False
+    assert second["collision_rate_comparison_status"] == "non_comparable_collision_sample"
+
+    markdown = render_frontier_markdown(report)
+    assert "collision-rate comparison `non_comparable_collision_sample`" in markdown
+    assert "collision-rate comparison `baseline`" in markdown
+    assert "0.000 (0/1) collision" in markdown
+    assert "1.000 (1/1)* collision" in markdown
+
+
+def test_frontier_report_does_not_compare_collision_rates_without_outcomes(
+    tmp_path: Path,
+) -> None:
+    """An empty collision sample remains unknown, even when both rounds match."""
+    payload = _evidence(tmp_path)
+    for round_data in payload["rounds"]:
+        for row in round_data["evaluation_sets"]["held_out"]["episodes"]:
+            row["collision"] = None
+    _refresh_source_artifacts(payload, tmp_path)
+
+    report = build_frontier_report(payload, evidence_root=tmp_path)
+    summary = report["rounds"][1]["evaluation_sets"]["held_out"]
+    assert summary["collision_denominator"] == 0
+    assert summary["collision_rate"] is None
+    assert summary["collision_rate_comparable_to_previous_round"] is False
+    assert summary["collision_rate_comparison_status"] == "no_collision_outcomes"
+    assert "collision-rate comparison `no_collision_outcomes`" in render_frontier_markdown(report)
 
 
 def test_frontier_report_rejects_fixed_cohort_manifest_drift(tmp_path: Path) -> None:
@@ -1751,6 +1818,44 @@ def test_frontier_report_binds_corpus_status_artifact_to_case_identity(
         build_frontier_report(payload, evidence_root=tmp_path)
 
 
+@pytest.mark.parametrize(
+    ("scenario_path", "message"),
+    [
+        ("fixture/missing-scenario.yaml", "does not resolve to an available file"),
+        ("../outside-scenario.yaml", "must stay relative to the evidence bundle"),
+    ],
+)
+def test_frontier_report_rejects_unavailable_or_escaping_scenario_artifact_paths(
+    tmp_path: Path, scenario_path: str, message: str
+) -> None:
+    """Scenario identities must resolve to bytes inside the evidence bundle."""
+    payload = _evidence(tmp_path)
+
+    def replace_scenario_path(record: dict[str, Any]) -> None:
+        record["evidence"]["scenario_artifact_identity"]["path"] = scenario_path
+
+    _rewrite_admissibility_artifact(payload, tmp_path, 0, replace_scenario_path)
+
+    with pytest.raises(FrontierReportError, match=message):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_binds_scenario_artifact_path_to_captured_bytes(tmp_path: Path) -> None:
+    """Changing scenario bytes while retaining declared digests invalidates the case."""
+    payload = _evidence(tmp_path)
+    candidate = payload["rounds"][0]["falsification"]["candidates"][0]
+    admissibility = json.loads(
+        (tmp_path / candidate["admissibility_evidence_artifact"]["path"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    relative_path = admissibility["evidence"]["scenario_artifact_identity"]["path"]
+    (tmp_path / relative_path).write_bytes(b"scenario_id: tampered-after-capture\n")
+
+    with pytest.raises(FrontierReportError, match="path bytes do not match"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
 def test_frontier_report_rejects_missing_budget_and_incomplete_candidate_ledger(
     tmp_path: Path,
 ) -> None:
@@ -1778,14 +1883,17 @@ def test_frontier_report_writer_emits_deterministic_json_markdown_and_figure(
     first = write_frontier_report(input_path, output_dir)
     first_json = (output_dir / "frontier_report.json").read_bytes()
     first_markdown = (output_dir / "frontier_report.md").read_bytes()
-    first_sidecar = json.loads(
-        (output_dir / "frontier.provenance.json").read_text(encoding="utf-8")
-    )
+    first_pdf = (output_dir / "frontier.pdf").read_bytes()
+    first_sidecar_bytes = (output_dir / "frontier.provenance.json").read_bytes()
+    first_sidecar = json.loads(first_sidecar_bytes.decode("utf-8"))
     second = write_frontier_report(input_path, second_output_dir)
 
     assert first == second
     assert (second_output_dir / "frontier_report.json").read_bytes() == first_json
     assert (second_output_dir / "frontier_report.md").read_bytes() == first_markdown
+    assert (second_output_dir / "frontier.pdf").read_bytes() == first_pdf
+    assert b"D:20000101000000" in first_pdf
+    assert (second_output_dir / "frontier.provenance.json").read_bytes() == first_sidecar_bytes
     assert (output_dir / "frontier.png").is_file()
     assert (output_dir / "frontier.pdf").is_file()
     sidecar = first_sidecar

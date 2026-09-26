@@ -22,7 +22,8 @@ uv run python scripts/tools/build_adversarial_feasibility_frontier_report.py \
 The command writes:
 
 - `frontier_report.json` — round summaries, exact finite budgets, per-set denominators, candidate
-  accounting, case status transitions, and checksummed evidence references;
+  accounting, success/collision outcome-sample digests and comparison statuses, case status
+  transitions, and checksummed evidence references;
 - `frontier_report.md` — concise round-by-round performance and case tables, including invalid,
   failed, unknown, and replay-unavailable search rows. Its heading is evidence-kind-aware:
   synthetic fixtures are marked implementation-only, caller-declared simulator runs are marked
@@ -55,7 +56,11 @@ round/candidate, scenario ID and scenario-artifact digest, admissibility artifac
 planner/config identity, and recorded status fields must match the enclosing observation.
 Admissibility evidence uses the producer's `scenario_admissibility.v1` contract; its case ID,
 scenario ID, verdict, and retain/reject disposition must match the candidate or observation. The
-report parses the JSON and binds the captured scenario bytes to the candidate and corpus record.
+report parses the JSON and binds captured scenario bytes to the candidate and corpus record. The
+producer's `scenario_artifact_identity.path` must be relative to the evidence bundle, resolve to a
+file inside that bundle, and contain bytes whose SHA-256 matches both the producer identity and
+candidate/corpus digest; adapters must stage the scenario file into the bundle when an upstream
+producer only records a host-local absolute path.
 For a confirmed verdict, named execution records must include the producer's run status, original
 scenario variant, fallback state, seed/horizon, scenario/robot/simulator/planner/environment
 digests, source commit, and execution reference. Their scenario digest and source commit must match
@@ -158,6 +163,12 @@ Success-rate segments also require the same eligible outcome sample in adjacent 
 missing, or otherwise excluded rows change the rate denominator, the summary uses
 `non_comparable_success_sample` and the figure leaves a gap. Each evaluation summary includes the
 ordered episode-ID digest, sorted scenario/seed identity digest, and success-rate sample digest.
+Collision-rate comparisons independently require a matching cohort and matching eligible rows with
+recorded collision outcomes. A zero-outcome sample remains unknown and is labeled
+`no_collision_outcomes`, even when both rounds have the same empty sample. Each evaluation summary
+therefore includes a collision-rate sample digest and comparison status; Markdown marks a changed
+collision sample as `non_comparable_collision_sample` instead of implying that the two rates are
+directly comparable.
 These normalized envelopes are a fixture-first #9654 input contract;
 adapters from future #9653 artifacts must prove the same identity bindings rather than filling
 summary fields independently.
@@ -184,7 +195,10 @@ The figure sidecar distinguishes `repo_commit` (the checkout that generated the 
 `source_revision` (the revision named by the evidence bundle). Neither field authenticates the
 caller-declared `evidence_kind`; simulator-run evidence remains visibly unverified in the figure,
 generated report, and sidecar until independently bound to a trusted producer. Neither revision
-field changes the evidence claim boundary. The focused fixture contract is exercised in
-`tests/adversarial/test_feasibility_frontier_report.py`. The tests create synthetic source artifacts
-in temporary directories, check digests and fail-closed cases, cover repeated known cases and a flat
-campaign with no verified discovery, and render the figure without starting a simulator.
+field changes the evidence claim boundary. A fixed report export timestamp is applied to PDF
+creation/modification metadata and the sidecar; repeated exports with the same evidence and
+rendering toolchain produce identical PDF and sidecar bytes. The focused fixture contract is
+exercised in `tests/adversarial/test_feasibility_frontier_report.py`. The tests create synthetic
+source artifacts in temporary directories, check digests and fail-closed cases, cover repeated
+known cases and a flat campaign with no verified discovery, and render the figure without starting
+a simulator.

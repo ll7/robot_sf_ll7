@@ -1796,6 +1796,126 @@ def test_issue9652_properly_promoted_legacy_v1_candidate_remains_readable(
     }
 
 
+def test_duplicate_promotions_preserve_primary_and_supporting_candidate_bindings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    legacy, _corpus_root = _legacy_admitted_issue9656_corpus_fixture(tmp_path, monkeypatch)
+    candidate_a = legacy["historical_candidates"][0]
+    case = next(
+        item for item in legacy["cases"] if item["case_id"] == candidate_a["promoted_case_id"]
+    )
+    attempt_a = next(
+        item
+        for item in legacy["admission_attempts"]
+        if item["attempt_id"] == candidate_a["promotion_attempt_id"]
+    )
+    import_record = next(
+        item
+        for item in legacy["historical_candidate_imports"]
+        if item["import_id"] == candidate_a["source_provenance"]["import_id"]
+    )
+    binding_a = {
+        "candidate_id": candidate_a["candidate_id"],
+        "source_issue": 9656,
+        "source_case_id": candidate_a["source_case_id"],
+        "source_record_sha256": candidate_a["source_record_sha256"],
+        "source_replay_status": candidate_a["source_replay_status"],
+    }
+    case["discovery"]["historical_candidate_binding"] = binding_a
+
+    candidate_b = copy.deepcopy(candidate_a)
+    candidate_b["source_case_id"] = "case-candidate-b"
+    candidate_b["source_record_sha256"] = hashlib.sha256(b"candidate B source row").hexdigest()
+    candidate_b["candidate_id"] = hashlib.sha256(
+        counterexample_corpus._stable_json(
+            {
+                **import_record["source_identity"],
+                "source_case_id": candidate_b["source_case_id"],
+                "source_record_sha256": candidate_b["source_record_sha256"],
+            }
+        ).encode("utf-8")
+    ).hexdigest()
+    candidate_b["promoted_case_id"] = case["case_id"]
+    candidate_b["source_candidate_status"] = "pending_exact_replay"
+    candidate_b["candidate_status"] = "admitted"
+
+    attempt_b = {
+        "schema_version": counterexample_corpus.ATTEMPT_SCHEMA_VERSION,
+        "source_kind": "issue_9656_historical_candidate",
+        "source_id": candidate_b["candidate_id"],
+        "decision": "duplicate",
+        "blockers": [],
+        "candidate_identity": case["effective_scenario_sha256"],
+        "duplicate_case_id": case["case_id"],
+        "near_duplicate_report": copy.deepcopy(attempt_a["near_duplicate_report"]),
+    }
+    attempt_b["attempt_id"] = hashlib.sha256(
+        counterexample_corpus._stable_json(attempt_b).encode("utf-8")
+    ).hexdigest()
+    candidate_b["promotion_attempt_id"] = attempt_b["attempt_id"]
+
+    binding_b = {
+        "candidate_id": candidate_b["candidate_id"],
+        "source_issue": 9656,
+        "source_case_id": candidate_b["source_case_id"],
+        "source_record_sha256": candidate_b["source_record_sha256"],
+        "source_replay_status": candidate_b["source_replay_status"],
+    }
+    replay_revision = case["replay_receipt"]["replay_revision"]
+    case.setdefault("supporting_source_evidence", []).append(
+        {
+            "historical_candidate_promotion": {
+                "candidate_id": candidate_b["candidate_id"],
+                "historical_candidate_binding": binding_b,
+                "admission_decision": "duplicate",
+                "source_replay_status": candidate_b["source_replay_status"],
+                "raw_episode_artifact_custody": "digest_only_not_copied_from_campaign_output",
+                "raw_episode_artifact_used_as_admission_evidence": False,
+                "local_ignored_output_used_as_admission_evidence": False,
+                "admission_replay_matches_target_revision": True,
+                "admission_replay_revision": replay_revision,
+            }
+        }
+    )
+    attempts_by_id = {
+        attempt_a["attempt_id"]: [attempt_a],
+        attempt_b["attempt_id"]: [attempt_b],
+    }
+    cases_by_id = {case["case_id"]: case}
+
+    counterexample_corpus._validate_promoted_historical_candidate(
+        candidate_a, cases_by_id, attempts_by_id
+    )
+    counterexample_corpus._validate_promoted_historical_candidate(
+        candidate_b, cases_by_id, attempts_by_id
+    )
+    assert (
+        case["discovery"]["historical_candidate_binding"]["candidate_id"]
+        == (candidate_a["candidate_id"])
+    )
+    assert any(
+        evidence.get("historical_candidate_promotion", {}).get("candidate_id")
+        == candidate_b["candidate_id"]
+        and evidence["historical_candidate_promotion"]["historical_candidate_binding"] == binding_b
+        for evidence in case["supporting_source_evidence"]
+    )
+
+    forged_case = copy.deepcopy(case)
+    forged_promotion = next(
+        evidence["historical_candidate_promotion"]
+        for evidence in forged_case["supporting_source_evidence"]
+        if evidence.get("historical_candidate_promotion", {}).get("candidate_id")
+        == candidate_b["candidate_id"]
+    )
+    forged_promotion["admission_replay_matches_target_revision"] = False
+    with pytest.raises(
+        CorpusError, match="promoted case evidence does not bind this historical candidate"
+    ):
+        counterexample_corpus._validate_promoted_historical_candidate(
+            candidate_b, {forged_case["case_id"]: forged_case}, attempts_by_id
+        )
+
+
 def test_issue9652_legacy_v1_promotion_attempt_receipt_is_recomputed_on_load(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

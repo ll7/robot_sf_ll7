@@ -1596,10 +1596,6 @@ def _validate_promoted_historical_candidate(
     ):
         raise CorpusError("promotion attempt does not bind the candidate and promoted case")
 
-    discovery = case.get("discovery")
-    case_binding = (
-        discovery.get("historical_candidate_binding") if isinstance(discovery, Mapping) else None
-    )
     expected_binding = {
         "candidate_id": candidate_id,
         "source_issue": 9656,
@@ -1607,11 +1603,6 @@ def _validate_promoted_historical_candidate(
         "source_record_sha256": candidate.get("source_record_sha256"),
         "source_replay_status": candidate.get("source_replay_status"),
     }
-    if isinstance(case_binding, Mapping) and any(
-        case_binding.get(key) != value for key, value in expected_binding.items()
-    ):
-        raise CorpusError("promoted case historical-candidate binding differs from candidate")
-
     evidence_records = [case.get("source_evidence")]
     supporting_evidence = case.get("supporting_source_evidence", [])
     if isinstance(supporting_evidence, Sequence) and not isinstance(
@@ -1661,8 +1652,12 @@ def _case_record_binds_historical_candidate(
     discovery_binding = (
         discovery.get("historical_candidate_binding") if isinstance(discovery, Mapping) else None
     )
-    if isinstance(discovery_binding, Mapping):
-        return all(discovery_binding.get(key) == value for key, value in expected_binding.items())
+    if isinstance(discovery_binding, Mapping) and all(
+        discovery_binding.get(key) == value for key, value in expected_binding.items()
+    ):
+        return True
+    # Deduplicated cases keep the original discovery binding and record each
+    # later candidate's binding in its candidate-specific supporting evidence.
     evidence_records = [case.get("source_evidence")]
     supporting_evidence = case.get("supporting_source_evidence", [])
     if isinstance(supporting_evidence, Sequence) and not isinstance(

@@ -498,7 +498,10 @@ Primary locations:
   + `started_at_utc`
   + `finished_at_utc`
   + `runtime_sec`
+  + `total_episodes`
   + `episodes_per_second`
+  + `throughput_definition` (campaign-wide episode-row count across planner arms,
+    not per-arm throughput)
   + `seed_policy.*`
   + `preflight_artifacts.*`
 * `output/benchmarks/camera_ready/<campaign_id>/preflight/validate_config.json`
@@ -512,6 +515,21 @@ Primary locations:
 * `output/benchmarks/camera_ready/<campaign_id>/reports/campaign_report.md`
   + command in header
   + per-planner timing columns in the summary table
+
+In `run_meta.json`, `episodes_per_second` is the campaign-wide episode-row count divided by the
+recorded campaign runtime: `total_episodes / runtime_sec`. The numerator sums each planner-arm
+run's `summary.episodes_total` (episode JSONL rows), falling back to `summary.written` (validated
+rows written) when the former is absent. It is a row count, not necessarily a count of distinct
+logical episode identities. `throughput_definition` names these fields, identifies the numerator
+unit as `episode_rows`, and sets its scope to `campaign_all_planner_arms`; the rate is not an
+individual planner-arm throughput value. Its declared unit is `episode_rows/second`. This records
+the operational rate basis and does not replace per-run status or benchmark-evidence gates.
+The current denominator semantics are `campaign_elapsed_through_outcome_snapshot`: monotonic
+elapsed time starts immediately before campaign preflight and is sampled for the outcome snapshot
+after planner execution, post-run integrity/fairness, and initial table/breakdown writes. It excludes
+later diagnostic/report and publication-finalization writes, so it is not end-to-end command wall
+time. Keep this descriptor aligned with the outcome-snapshot boundary if the producer lifecycle
+moves.
 
 ## Fixed-Scenario Multi-Seed Variability
 

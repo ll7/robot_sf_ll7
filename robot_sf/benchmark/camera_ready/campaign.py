@@ -3012,9 +3012,21 @@ def _build_run_meta(
         "finished_at_utc": outcome.campaign_finished_at_utc,
         "invoked_command": invoked_command,
         "runtime_sec": outcome.runtime_sec,
+        "total_episodes": outcome.total_episodes,
         "episodes_per_second": (
             (outcome.total_episodes / outcome.runtime_sec) if outcome.runtime_sec > 0 else 0.0
         ),
+        "throughput_definition": {
+            "scope": "campaign_all_planner_arms",
+            "numerator_field": "total_episodes",
+            "numerator_unit": "episode_rows",
+            "numerator_semantics": "serialized_episode_rows",
+            "denominator_field": "runtime_sec",
+            "denominator_unit": "seconds",
+            "denominator_semantics": "campaign_elapsed_through_outcome_snapshot",
+            "rate_field": "episodes_per_second",
+            "rate_unit": "episode_rows/second",
+        },
     }
 
 

@@ -3027,6 +3027,32 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     summary_payload = json.loads(
         (campaign_root / "reports" / "campaign_summary.json").read_text(encoding="utf-8")
     )
+    throughput_definition = run_meta["throughput_definition"]
+    assert throughput_definition == {
+        "scope": "campaign_all_planner_arms",
+        "numerator_field": "total_episodes",
+        "numerator_unit": "episode_rows",
+        "numerator_semantics": "serialized_episode_rows",
+        "denominator_field": "runtime_sec",
+        "denominator_unit": "seconds",
+        "denominator_semantics": "campaign_elapsed_through_outcome_snapshot",
+        "rate_field": "episodes_per_second",
+        "rate_unit": "episode_rows/second",
+    }
+    numerator = run_meta[throughput_definition["numerator_field"]]
+    denominator = run_meta[throughput_definition["denominator_field"]]
+    assert numerator == result["total_episodes"]
+    assert numerator == summary_payload["campaign"]["total_episodes"]
+    assert denominator == run_meta["runtime_sec"]
+    assert denominator == result["runtime_sec"]
+    assert denominator == summary_payload["campaign"]["runtime_sec"]
+    assert run_meta[throughput_definition["rate_field"]] == pytest.approx(numerator / denominator)
+    arm_episode_row_counts = [
+        int(run["summary"]["episodes_total"]) for run in summary_payload["runs"]
+    ]
+    assert len(arm_episode_row_counts) == 2
+    assert numerator == sum(arm_episode_row_counts)
+    assert numerator > max(arm_episode_row_counts)
     assert len(summary_payload["arm_rollup"]) == len(summary_payload["runs"])
     assert [arm["planner_key"] for arm in summary_payload["arm_rollup"]] == [
         run["planner"]["key"] for run in summary_payload["runs"]

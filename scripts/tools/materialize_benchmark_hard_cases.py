@@ -732,7 +732,8 @@ def _replay_ineligibility(row: dict[str, Any], matrix: Path, matrix_match: bool)
     horizon = row.get("horizon") or params.get("run_horizon")
     if not isinstance(horizon, int | float) or isinstance(horizon, bool) or horizon <= 0:
         return "unavailable_replay_horizon"
-    if _finite_number(params.get("run_dt")) is None:
+    run_dt = _finite_number(params.get("run_dt"))
+    if run_dt is None or run_dt <= 0:
         return "unavailable_replay_timestep"
     if _scenario_map_path(params, matrix) is None:
         return "unavailable_scenario_map"
@@ -1516,6 +1517,9 @@ def _replay_command(
     profile: str,
 ) -> list[str]:
     params = row.get("scenario_params") if isinstance(row.get("scenario_params"), dict) else {}
+    run_dt = _finite_number(params.get("run_dt"))
+    if run_dt is None or run_dt <= 0:
+        raise MaterializationError("source scenario run_dt must be a positive finite number")
     command = [
         "uv",
         "run",
@@ -1532,7 +1536,7 @@ def _replay_command(
         "--horizon",
         str(row.get("horizon") or params.get("run_horizon") or 0),
         "--dt",
-        str(params.get("run_dt") or 0.1),
+        str(params["run_dt"]),
         "--algo",
         str(case["planner_key"]),
         "--algo-config",

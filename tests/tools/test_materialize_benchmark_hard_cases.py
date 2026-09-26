@@ -21,6 +21,7 @@ from scripts.tools.materialize_benchmark_hard_cases import (
     _materialize_replay_matrix,
     _replay_checkout_provenance,
     _replay_checkout_stability_status,
+    _replay_command,
     _replay_identity,
     _replay_ineligibility,
     _run_replay,
@@ -262,7 +263,7 @@ def _clean_checkout_snapshot(revision: str) -> dict[str, Any]:
 
 
 def _source_row(
-    *, scenario_id: str, episode_id: str, include_params: bool = True
+    *, scenario_id: str, episode_id: str, include_params: bool = True, run_dt: Any = 0.1
 ) -> dict[str, Any]:
     row: dict[str, Any] = {
         "algo": "goal",
@@ -301,14 +302,16 @@ def _source_row(
             "map_file": "maps/svg_maps/classic_bottleneck_high.svg",
             "record_forces": True,
             "robot_config": {"type": "differential_drive"},
-            "run_dt": 0.1,
+            "run_dt": run_dt,
             "run_horizon": 10,
         }
         _record_fixture_runtime_inputs(row)
     return row
 
 
-def _build_inputs(root: Path, *, include_unavailable: bool = True) -> tuple[Path, Path, Path]:
+def _build_inputs(
+    root: Path, *, include_unavailable: bool = True, run_dt: Any = 0.1
+) -> tuple[Path, Path, Path]:
     campaign_root = root / "payload"
     (campaign_root / "release").mkdir(parents=True)
     (campaign_root / "runs").mkdir(parents=True)
@@ -326,7 +329,7 @@ def _build_inputs(root: Path, *, include_unavailable: bool = True) -> tuple[Path
     campaign_path = campaign_root / "campaign_manifest.json"
     campaign_path.write_text(json.dumps(campaign_manifest), encoding="utf-8")
 
-    rows = [_source_row(scenario_id="scenario_a", episode_id="episode-a")]
+    rows = [_source_row(scenario_id="scenario_a", episode_id="episode-a", run_dt=run_dt)]
     cases = []
     for index, row in enumerate(rows):
         cases.append(_case_for_row(row, index, "collision_event"))
@@ -495,6 +498,81 @@ def test_materializes_rows_deterministically_and_keeps_unavailable_rows_visible(
     assert (replay_matrix.parent / replay_payload["scenarios"][0]["map_file"]).resolve() == (
         REPO_ROOT / "maps/svg_maps/classic_bottleneck_high.svg"
     ).resolve()
+
+
+@pytest.mark.parametrize("run_dt", [None, 0, -0.1, float("nan"), float("inf")])
+def test_replay_timestep_must_be_finite_and_positive(run_dt: Any) -> None:
+    row = _source_row(scenario_id="scenario_a", episode_id="episode-a", run_dt=run_dt)
+    case = {"seed": 111, "planner_key": "goal"}
+
+    assert _replay_ineligibility(row, REPO_ROOT / MATRIX_RELATIVE, True) == (
+        "unavailable_replay_timestep"
+    )
+    with pytest.raises(MaterializationError, match="positive finite number"):
+        _replay_command(
+            case,
+            row,
+            REPO_ROOT / MATRIX_RELATIVE,
+            REPO_ROOT / "output/replay.jsonl",
+            REPO_ROOT / "output/config.yaml",
+            "baseline-safe",
+        )
+
+
+def test_zero_timestep_preserves_row_accounting_without_replay_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    summary, campaign_root, matrix = _build_inputs(tmp_path, run_dt=0)
+    args = _args(summary, campaign_root, matrix, tmp_path / "zero-timestep")
+    args.replay_limit = 1
+
+    def fail_if_replay_is_started(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        pytest.fail("ineligible zero-timestep row reached replay execution")
+
+    monkeypatch.setattr(materializer, "_run_replay", fail_if_replay_is_started)
+    manifest = materialize(args)
+    records = [
+        json.loads((args.out_dir / item["case_file"]).read_text(encoding="utf-8"))
+        for item in manifest["cases"]
+    ]
+    zero_timestep_case = next(
+        record for record in records if record["scenario"]["scenario_id"] == "scenario_a"
+    )
+
+    assert manifest["selection"]["case_count"] == 2
+    assert manifest["replay"]["attempted"] == 0
+    assert manifest["replay"]["new_attempted"] == 0
+    assert manifest["replay"]["status_counts"]["unavailable_replay_timestep"] == 1
+    assert zero_timestep_case["replay"] == {
+        "status": "unavailable_replay_timestep",
+        "attempted": False,
+    }
+    assert "command" not in zero_timestep_case["replay"]
+
+
+def test_issue_9656_report_matches_execution_availability_classification() -> None:
+    evidence_root = (
+        REPO_ROOT / "docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/payload"
+    )
+    manifest = json.loads(
+        (evidence_root / "current_head_no_replay_manifest.json").read_text(encoding="utf-8")
+    )
+    report = (evidence_root / "report.md").read_text(encoding="utf-8")
+    unavailable = [
+        case["replay"]
+        for case in manifest["cases"]
+        if case["replay"].get("status") == "unavailable_execution_evidence"
+    ]
+
+    assert len(unavailable) == 4
+    assert all(
+        item.get("execution_evidence_replay") == "unavailable_execution_availability"
+        for item in unavailable
+    )
+    assert all(item.get("replay_environment_identity") is None for item in unavailable)
+    assert "each has `execution_evidence_replay=unavailable_execution_availability`" in report
+    assert "`replay_environment_identity` is also unavailable as a separate limitation" in report
+    assert "because those historical receipts lack replay environment identities" not in report
 
 
 def test_showcase_execution_revision_is_preserved_when_snapshot_does_not_match() -> None:

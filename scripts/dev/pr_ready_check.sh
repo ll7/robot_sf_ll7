@@ -842,6 +842,19 @@ mark_pr_ready_progress "changed_file_scope" "none" "classifying changed files fo
 changed_files=()
 core_changed_files=()
 optional_changed_files=()
+# Issue #9754: the core lane runs a fixed path list plus changed test files, and
+# the optional lane runs only the allowlist. Some test roots therefore belong to
+# neither lane and are never executed by a readiness run, so a green readiness
+# report can silently omit them. Track those roots explicitly instead of letting
+# a PR body imply coverage that no lane produced.
+pr_ready_uncovered_test_roots=()
+for pr_ready_candidate_root in tests/validation tests/maps; do
+  if [[ -e "$pr_ready_candidate_root" ]] && ! is_optional_readiness_path "${pr_ready_candidate_root}/"; then
+    pr_ready_uncovered_test_roots+=("$pr_ready_candidate_root")
+  fi
+done
+pr_ready_extended_required=0
+pr_ready_extended_trigger_files=()
 while IFS= read -r changed_file; do
   [[ -z "$changed_file" ]] && continue
   changed_files+=("$changed_file")
@@ -850,6 +863,22 @@ while IFS= read -r changed_file; do
   else
     core_changed_files+=("$changed_file")
   fi
+  # A change to shipped behavior (robot_sf/, configs/, maps/) or to a test root
+  # that no lane covers can break the uncovered roots, so they must run.
+  case "$changed_file" in
+    robot_sf/*|configs/*|maps/*)
+      pr_ready_extended_required=1
+      pr_ready_extended_trigger_files+=("$changed_file")
+      ;;
+  esac
+  for pr_ready_uncovered_root in "${pr_ready_uncovered_test_roots[@]}"; do
+    case "$changed_file" in
+      "${pr_ready_uncovered_root}"/*)
+        pr_ready_extended_required=1
+        pr_ready_extended_trigger_files+=("$changed_file")
+        ;;
+    esac
+  done
 done < <(git diff --name-only --diff-filter=ACMRT "$BASE_REF...HEAD")
 
 # Validate that every changed test file under tests/ or fast-pysf/tests/ is classified
@@ -1094,6 +1123,42 @@ else
   else
     printf 'No committed changed files require the optional-extra lane.\n' >&2
   fi
+fi
+
+# Issue #9754: run the test roots that no readiness lane covers when the change
+# can affect them, and always report which roots this run did and did not cover.
+pr_ready_extended_ran=0
+if [[ ${#pr_ready_uncovered_test_roots[@]} -gt 0 ]]; then
+  if [[ "$pr_ready_extended_required" -eq 1 ]]; then
+    printf 'Running extended readiness lane for test roots no other lane covers.\n' >&2
+    printf 'Extended roots: %s\n' "${pr_ready_uncovered_test_roots[*]}" >&2
+    run_pr_ready_lane extended env \
+      ROBOT_SF_TEST_LANE=core \
+      "$SCRIPT_DIR/run_tests_parallel.sh" --lane core "${pr_ready_uncovered_test_roots[@]}"
+    pr_ready_extended_ran=1
+  else
+    printf 'Extended readiness lane not required: no robot_sf/, configs/, maps/ or uncovered-root change.\n' >&2
+  fi
+  mark_pr_ready_progress "lane_coverage_summary" "none" "reporting readiness lane coverage"
+  {
+    printf 'Readiness lane coverage summary (issue #9754)\n'
+    printf '  core lane:      ran\n'
+    if [[ ${#optional_changed_files[@]} -gt 0 ]]; then
+      printf '  optional lane:  ran\n'
+    else
+      printf '  optional lane:  skipped (no optional-extra changed files)\n'
+    fi
+    if [[ ${#pr_ready_uncovered_test_roots[@]} -eq 0 ]]; then
+      printf '  uncovered roots: none\n'
+    elif [[ "$pr_ready_extended_ran" -eq 1 ]]; then
+      printf '  extended lane:  ran (%s)\n' "${pr_ready_uncovered_test_roots[*]}"
+      printf '  uncovered roots: none remaining\n'
+    else
+      printf '  extended lane:  NOT RUN\n'
+      printf '  NOT COVERED by this readiness run: %s\n' "${pr_ready_uncovered_test_roots[*]}"
+      printf '  A PR body must not claim full-suite or benchmark/validation/map coverage from this run.\n'
+    fi
+  } | tee -a "${REPO_ROOT}/output/validation/pr_ready/lane_coverage.txt" >&2
 fi
 mark_pr_ready_progress "post_lane_checks" "none" "running post-lane readiness checks"
 "$SCRIPT_DIR/check_changed_coverage.sh"

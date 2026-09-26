@@ -163,6 +163,7 @@ def test_flat_socnav_observation_preserves_declared_frames() -> None:
     robot = simulator.robots[0]
     robot.pose = ((4.0, 3.0), heading)
     robot.current_speed = np.array([0.8, 0.15], dtype=np.float32)
+    source_robot_speed = robot.current_speed.copy()
     robot.state = SimpleNamespace(velocity_xy=source_robot_velocity)
     simulator.goal_pos = [np.array([8.0, 7.0], dtype=np.float32)]
     simulator.next_goal_pos = [np.array([6.0, 6.0], dtype=np.float32)]
@@ -196,6 +197,7 @@ def test_flat_socnav_observation_preserves_declared_frames() -> None:
     np.testing.assert_allclose(flat_obs["goal_next"], [6.0, 6.0])
     np.testing.assert_allclose(flat_obs["pedestrians_positions"][0], [5.0, 4.0])
     np.testing.assert_array_equal(flat_obs["pedestrians_positions"][1], [0.0, 0.0])
+    np.testing.assert_array_equal(flat_obs["robot_speed"], source_robot_speed)
     np.testing.assert_allclose(flat_obs["robot_velocity_xy"], source_robot_velocity)
 
     cos_h = np.cos(heading)

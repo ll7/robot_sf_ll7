@@ -67,10 +67,11 @@ three recording flags. For seeds 22–24, the parameters are compared to the sam
 scenario/planner at a release seed with only `route_spawn_seed` substituted; their outcomes remain
 `no_release_row`. It writes every row's `match`, `mismatch`, or `no_release_row` classification
 with input checksums. A doorway outcome mismatch remains in the report and makes the CLI exit 2;
-it is never silently corrected. The frozen simulator has no #9666 robot-attributable force split,
-so these traces **do not contain that component**, even if #9666 lands before acquisition. A
-separate #9666 diagnostic may establish the component on a later source; it cannot retroactively
-change this frozen-source trace record.
+it is never silently corrected. The frozen 0.0.7 writer does not add the later #9666 metric to
+`episodes.jsonl`, and the observer does not alter a release row. Because #9666 has landed, the
+passive observer described below records each `PedRobotForce` vector per pedestrian and step in a
+separate, SHA-pinned diagnostic sidecar. The force-bundle validator binds that sidecar to its
+frozen-source episode; no later simulator source is substituted.
 
 ## Status
 

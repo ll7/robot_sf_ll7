@@ -23,7 +23,8 @@ Both diagnostic configs turn on force, planner-decision, and simulation-step rec
 worker count is one; the release used its campaign execution context. Accordingly, outcome
 differences are findings, and per-step values are diagnostic observations from the rerun context.
 The frozen execution worktree stays Git-clean: the two tracked PR config bytes are hydrated at
-`output/benchmarks/issue9671/inputs/` from config-origin commit `cb1d650a`, then checked against
+`output/benchmarks/issue9671/inputs/` from PR-reachable config-origin commit
+`3210ef22b4d0b1a6f84161daedbfbd01d30599fa`, then checked against
 their SHA-256 values above before preflight and run. `output/` is transient; the tracked PR and
 packet provide the durable source. Staging changes the runner's effective config hashes to
 `b195d55f16871ba2` (head-on/group) and `a30c4555ce8a3f0a` (doorway), while the config bytes and

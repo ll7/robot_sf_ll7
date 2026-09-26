@@ -57,8 +57,19 @@ def _rows(lines: Any) -> list[dict[str, Any]]:
     return [json.loads(line) for line in lines if line.strip()]
 
 
+def _declared_algorithm(row: dict[str, Any], *, source: str) -> str:
+    """Require the row algorithm and scenario-parameter algorithm to agree."""
+    algorithm = row.get("algo")
+    params = row.get("scenario_params")
+    if not isinstance(algorithm, str) or not algorithm or not isinstance(params, dict):
+        raise ValueError(f"{source} row lacks canonical algorithm identity")
+    if params.get("algo") != algorithm:
+        raise ValueError(f"{source} row top-level algo differs from scenario_params.algo")
+    return algorithm
+
+
 def _key(row: dict[str, Any]) -> tuple[str, str, int]:
-    return str(row["scenario_params"]["algo"]), str(row["scenario_id"]), int(row["seed"])
+    return _declared_algorithm(row, source="episode"), str(row["scenario_id"]), int(row["seed"])
 
 
 def _canonical_outcome(
@@ -99,7 +110,12 @@ def _release_rows(archive: Path, planners: set[str]) -> dict[tuple[str, str, int
             if stream is None:
                 raise ValueError(f"cannot read release member {member.name}")
             for row in _rows(stream):
-                key = (planner, str(row["scenario_id"]), int(row["seed"]))
+                row_algorithm = _declared_algorithm(row, source=f"release {member.name}")
+                if row_algorithm != planner:
+                    raise ValueError(
+                        f"release row algorithm does not match planner path {member.name}"
+                    )
+                key = (row_algorithm, str(row["scenario_id"]), int(row["seed"]))
                 if key in indexed:
                     raise ValueError(f"duplicate release tuple {key}")
                 indexed[key] = row
@@ -365,7 +381,7 @@ def _validate_steps(key: tuple[str, str, int], row: dict[str, Any], trace: dict[
 
 
 def _runtime_fallback_status_marker(value: Any, path: str = "algorithm_metadata") -> str | None:
-    """Catch fallback/degraded status labels beyond the shared exact-value set."""
+    """Catch fallback/degraded/unavailable labels beyond the shared exact-value set."""
     status_fields = {
         "status",
         "row_status",
@@ -379,7 +395,7 @@ def _runtime_fallback_status_marker(value: Any, path: str = "algorithm_metadata"
             item_path = f"{path}.{key}"
             if key in status_fields and isinstance(item, str):
                 normalized = item.strip().lower().replace("-", "_")
-                if "fallback" in normalized or "degraded" in normalized:
+                if any(marker in normalized for marker in ("fallback", "degraded", "unavailable")):
                     return f"{item_path}={normalized}"
             nested = _runtime_fallback_status_marker(item, item_path)
             if nested is not None:
@@ -390,6 +406,21 @@ def _runtime_fallback_status_marker(value: Any, path: str = "algorithm_metadata"
             if nested is not None:
                 return nested
     return None
+
+
+def _normalize_no_fallback_diagnostics(value: Any) -> Any:
+    """Normalize Social Force's explicit no-fallback diagnostic shape for shared policy."""
+    if isinstance(value, dict):
+        normalized = {key: _normalize_no_fallback_diagnostics(item) for key, item in value.items()}
+        if normalized.get("fallback") is False:
+            if "fallback_used" not in normalized and "fallback_triggered" not in normalized:
+                normalized["fallback_used"] = False
+            if normalized.get("fallback_reasons") == {}:
+                normalized.pop("fallback_reasons")
+        return normalized
+    if isinstance(value, list):
+        return [_normalize_no_fallback_diagnostics(item) for item in value]
+    return value
 
 
 def _compare_row(
@@ -431,6 +462,10 @@ def _compare_row(
         )
         if field in metadata
     }
+    if "planner_diagnostics" in runtime:
+        runtime["planner_diagnostics"] = _normalize_no_fallback_diagnostics(
+            runtime["planner_diagnostics"]
+        )
     marker = runtime_fallback_or_degraded_marker(runtime) or _runtime_fallback_status_marker(
         runtime
     )

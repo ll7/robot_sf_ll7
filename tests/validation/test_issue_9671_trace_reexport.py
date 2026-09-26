@@ -265,6 +265,74 @@ def test_rejects_contradictory_outcome_flags(tmp_path: Path, source: str) -> Non
         _check(archive, traces, tmp_path, [113])
 
 
+@pytest.mark.parametrize("source", ["trace", "release"])
+def test_rejects_mismatched_algorithm_identity(tmp_path: Path, source: str) -> None:
+    release_row = _row(113, "collision", trace=False)
+    trace = _row(113, "collision", trace=True)
+    target = release_row if source == "release" else trace
+    target["algo"] = "social_force"
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [release_row])
+    traces = tmp_path / "episodes.jsonl"
+    traces.write_text(json.dumps(trace) + "\n")
+
+    with pytest.raises(ValueError, match="top-level algo differs from scenario_params.algo"):
+        _check(archive, traces, tmp_path, [113])
+
+
+def test_accepts_native_no_fallback_planner_diagnostics(tmp_path: Path) -> None:
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [_row(113, "collision", trace=False)])
+    trace = _row(113, "collision", trace=True)
+    trace["algorithm_metadata"]["planner_diagnostics"] = {
+        "planner_type": "SocialForcePlanner",
+        "fallback": False,
+        "fallback_count": 0,
+        "fallback_reason": None,
+        "fallback_reasons": {},
+        "fast_pysf_wrapper": {
+            "fallback": False,
+            "fallback_count": 0,
+            "fallback_reason": None,
+            "fallback_reasons": {},
+        },
+    }
+    traces = tmp_path / "episodes.jsonl"
+    traces.write_text(json.dumps(trace) + "\n")
+
+    report = _check(archive, traces, tmp_path, [113])
+
+    assert report["comparison_counts"] == {"match": 1, "mismatch": 0, "no_release_row": 0}
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("fallback", True),
+        ("fallback_count", 1),
+        ("fallback_reasons", {"kernel": 1}),
+    ],
+)
+def test_rejects_positive_social_force_fallback_diagnostics(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [_row(113, "collision", trace=False)])
+    trace = _row(113, "collision", trace=True)
+    trace["algorithm_metadata"]["planner_diagnostics"] = {
+        "fallback": False,
+        "fallback_count": 0,
+        "fallback_reason": None,
+        "fallback_reasons": {},
+        field: value,
+    }
+    traces = tmp_path / "episodes.jsonl"
+    traces.write_text(json.dumps(trace) + "\n")
+
+    with pytest.raises(ValueError, match="inadmissible runtime mode"):
+        _check(archive, traces, tmp_path, [113])
+
+
 @pytest.mark.parametrize(
     ("source", "field"),
     [
@@ -371,6 +439,8 @@ def test_rejects_missing_per_pedestrian_force(tmp_path: Path) -> None:
         ("policy_step_timeout", {"fallback_actions": 1}),
         ("fallback_reason", "policy_step_timeout"),
         ("status", "policy_step_timeout_fallback"),
+        ("status", "policy_step_isolation_unavailable"),
+        ("planner_runtime", {"status": "planner_unavailable"}),
     ],
 )
 def test_rejects_fallback_runtime(

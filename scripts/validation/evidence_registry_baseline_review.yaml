@@ -33,6 +33,26 @@ evidence_tree_refresh_addenda:
       The bundle now declares that files[].path entries resolve under its tracked payload/ directory;
       the adjacent checksum gate verifies those payload bytes. The generated candidate retains 438
       findings with no new or increased finding and updates only the evidence-tree manifest.
+  - issue: 9647
+    reviewed_date: 2026-09-26
+    previous:
+      count: 2456
+      sha256: eeb2c9c4b87aac65506d53a8b839bda869d90b15bcd3c070857a9c2615cb7e21
+    candidate:
+      count: 2462
+      sha256: d76bed17284d321a99cc2fd51e19c5d0e32de11af9f3c49b8e5ebd3b1007a29f
+    files_added: 6
+    finding_delta: none
+    decision: >-
+      Reviewed the six newly tracked #9647 visual-evidence paths: the compact recorded trace,
+      trace provenance, render-only provenance, and one exact-byte review sidecar for each. Their
+      bytes are bound by the refreshed bundle manifest and checksums; the generated baseline still
+      has 438 findings and this refresh changes only the evidence-tree path inventory. The compact
+      trace and both provenance documents were cross-checked against the local source row and
+      source-sidecar digests; the full ignored JSONL and output tree were intentionally not promoted.
+      Those source artifacts remain available only in ignored local output in this checkout and are
+      not preserved by the tracked bundle. The render-only claims remain limited to byte-reproducible
+      figures from stored trace samples; no simulator, replay, search, or campaign result is asserted.
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73

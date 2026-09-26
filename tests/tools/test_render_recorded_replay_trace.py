@@ -165,3 +165,27 @@ def test_recorded_trace_render_rejects_a_mismatched_trace_digest(tmp_path: Path)
         render_tool.render_recorded_trace_bundle(
             trace_path, provenance_path, tmp_path / "render", video=False
         )
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid_digest"),
+    [
+        (field, invalid)
+        for field in ("episode_record_sha256", "episode_record_provenance_sha256")
+        for invalid in ("", "x", "g" * 64, "a" * 63, "a" * 65)
+    ],
+)
+def test_recorded_trace_render_rejects_malformed_source_digests(
+    tmp_path: Path, field: str, invalid_digest: str
+) -> None:
+    trace_path, provenance_path = _write_inputs(tmp_path)
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    provenance["source"][field] = invalid_digest
+    provenance_path.write_text(json.dumps(provenance), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=f"source\\.{field}"):
+        render_tool.render_recorded_trace_bundle(
+            trace_path, provenance_path, tmp_path / "render", video=False
+        )
+
+    assert not (tmp_path / "render").exists()

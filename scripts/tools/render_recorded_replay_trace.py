@@ -69,10 +69,12 @@ def _validate_trace_payload(
 def _validate_source_metadata(provenance: dict[str, Any]) -> None:
     """Check source artifact identities needed to interpret the stored trace."""
     source = provenance.get("source")
-    if not isinstance(source, dict) or not isinstance(source.get("episode_record_sha256"), str):
-        raise ValueError("provenance is missing the source episode-record digest")
-    if not isinstance(source.get("episode_record_provenance_sha256"), str):
-        raise ValueError("provenance is missing the original record-sidecar digest")
+    if not isinstance(source, dict):
+        raise ValueError("provenance is missing source artifact digests")
+    for field in ("episode_record_sha256", "episode_record_provenance_sha256"):
+        digest = source.get(field)
+        if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", digest):
+            raise ValueError(f"provenance source.{field} must be a 64-character SHA-256 hex digest")
     episode = provenance.get("episode")
     if not isinstance(episode, dict):
         raise ValueError("provenance is missing source episode identity")

@@ -101,7 +101,7 @@ array shape in the observation payload.
 | --- | --- | --- | --- | --- |
 | `robot_position` | `robot.position` | `(2,)` | world/map XY, m | Robot position, clipped to the declared map extent. |
 | `robot_heading` | `robot.heading` | `(1,)` | world/map orientation, rad | Robot heading wrapped to `[-pi, pi]`. |
-| `robot_speed` | `robot.speed` | `(2,)` | `(m/s, rad/s)` | Benchmark speed pair `(linear_speed, angular_speed)`; not an XY velocity vector. |
+| `robot_speed` | `robot.speed` | `(2,)` | kinematic-model-specific component units | Pair copied from the selected robot model's `current_speed`; see the model-specific note below. |
 | `robot_velocity_xy` | `robot.velocity_xy` | `(2,)` | world/map XY, m/s | Robot translational velocity in world coordinates; no ego rotation or robot-velocity subtraction is applied. |
 | `robot_angular_velocity` | `robot.angular_velocity` | `(1,)` | rad/s | Robot yaw rate. |
 | `robot_radius` | `robot.radius` | `(1,)` | m | Robot radius. |
@@ -113,6 +113,12 @@ array shape in the observation payload.
 | `pedestrians_count` | `pedestrians.count` | `(1,)` | dimensionless count | Number of visible, presented pedestrian rows before padding. |
 | `map_size` | `map.size` | `(2,)` | world/map extent XY, m | Declared map width and height. |
 | `sim_timestep` | `sim.timestep` | `(1,)` | s | Simulation step duration. |
+
+`robot_speed` is not a universal `(linear_speed, angular_speed)` pair. For example,
+`BicycleDriveRobot.current_speed` returns `(velocity, orient)` (m/s, rad), while
+`HolonomicDriveRobot.current_speed` returns `(linear_speed, angular_speed)` (m/s, rad/s).
+Use the selected robot model's contract when interpreting these components. The separate
+`robot_velocity_xy` field is the world-frame translational velocity.
 
 The producer may expose additional opt-in leaves (for example, observation-derived
 `pedestrians_track_id` or `route_waypoints`); those are outside this standard field set and

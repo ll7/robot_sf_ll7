@@ -2147,20 +2147,23 @@ def test_replay_limit_is_cumulative_across_resume(
 
     manifest_path = previous_dir / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    for item in manifest["cases"][:4]:
+    for index, item in enumerate(manifest["cases"][:4]):
         replay = {
             "attempted": True,
             "status": "runner_failed",
             "returncode": 1,
             "replay_revision": "prior-replay-revision",
         }
-        item["replay"] = replay
+        if index < 3:
+            item["replay"] = replay
         case_path = previous_dir / item["case_file"]
         case_record = json.loads(case_path.read_text(encoding="utf-8"))
         case_record["replay"] = replay
         case_path.write_text(json.dumps(case_record), encoding="utf-8")
-    manifest["replay"]["attempted"] = 4
-    manifest["replay"]["cumulative_attempted"] = 4
+    # The fourth attempted receipt exists only in case.json. Resume must charge
+    # it before selecting new candidates, even though the manifest says false.
+    manifest["replay"]["attempted"] = 3
+    manifest["replay"]["cumulative_attempted"] = 3
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
     replayed_case_ids: list[str] = []
@@ -2187,6 +2190,51 @@ def test_replay_limit_is_cumulative_across_resume(
     assert "Cumulative bounded single-scenario replays attempted: 5/5" in (
         (tmp_path / "resumed" / "report.md").read_text(encoding="utf-8")
     )
+
+
+def test_repeated_resume_preserves_case_file_only_attempt_for_ineligible_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    summary_path, campaign_root, matrix = _build_inputs(tmp_path, include_unavailable=False)
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["cases"][0]["benchmark_eligible"] = False
+    summary_path.write_text(json.dumps(summary, sort_keys=True), encoding="utf-8")
+    previous_dir = tmp_path / "previous"
+    previous = materialize(_args(summary_path, campaign_root, matrix, previous_dir))
+
+    prior_replay = {
+        "attempted": True,
+        "status": "runner_failed",
+        "returncode": 1,
+        "replay_revision": "case-file-only-replay-revision",
+    }
+    case_file = previous_dir / previous["cases"][0]["case_file"]
+    case_record = json.loads(case_file.read_text(encoding="utf-8"))
+    case_record["replay"] = prior_replay
+    case_file.write_text(json.dumps(case_record), encoding="utf-8")
+
+    def fail_if_replayed(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        pytest.fail("an ineligible case-file-only attempt must never be rerun")
+
+    monkeypatch.setattr(materializer, "_run_replay", fail_if_replayed)
+    first_args = _args(summary_path, campaign_root, matrix, tmp_path / "resumed-once")
+    first_args.replay_limit = 5
+    first_args.resume_from = previous_dir
+    first_resume = materialize(first_args)
+    second_args = _args(summary_path, campaign_root, matrix, tmp_path / "resumed-twice")
+    second_args.replay_limit = 5
+    second_args.resume_from = tmp_path / "resumed-once"
+    second_resume = materialize(second_args)
+
+    first_lineage = first_resume["cases"][0]["resume_prior_attempt"]
+    assert first_lineage["attempt_source"] == "case_file"
+    assert first_lineage["prior_replay"] == prior_replay
+    assert second_resume["cases"][0]["resume_prior_attempt"] == first_lineage
+    assert first_resume["replay"]["prior_attempted"] == 1
+    assert second_resume["replay"]["prior_attempted"] == 1
+    assert first_resume["replay"]["cumulative_attempted"] == 1
+    assert second_resume["replay"]["cumulative_attempted"] == 1
+    assert second_resume["replay"]["new_attempted"] == 0
 
 
 def test_resume_missing_case_attempt_requires_matching_manifest_source_identity(

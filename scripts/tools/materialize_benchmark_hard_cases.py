@@ -2235,6 +2235,37 @@ def _load_resume_records(
     return manifest_path.parent.resolve(), records
 
 
+def _load_resume_case_receipt(previous_file: Path | None, *, case_id: str) -> dict[str, Any] | None:
+    """Load and identify an existing resumed case receipt, when available."""
+    if previous_file is None or not previous_file.is_file():
+        return None
+    case_record = _read_object(previous_file)
+    if case_record.get("case_id") != case_id:
+        raise MaterializationError(
+            f"resume case receipt identity differs from manifest for {case_id}"
+        )
+    return case_record
+
+
+def _attempted_replay_receipt(
+    manifest_replay: Any, case_replay: Any, *, case_id: str
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Choose one consistent attempted receipt from manifest or case file."""
+    manifest_attempted = (
+        isinstance(manifest_replay, dict) and manifest_replay.get("attempted") is True
+    )
+    case_attempted = isinstance(case_replay, dict) and case_replay.get("attempted") is True
+    if manifest_attempted and case_attempted and manifest_replay != case_replay:
+        raise MaterializationError(
+            f"resume attempted receipts conflict between manifest and case file for {case_id}"
+        )
+    if manifest_attempted:
+        return manifest_replay, "manifest"
+    if case_attempted:
+        return case_replay, "case_file"
+    return None, None
+
+
 def _preserved_manifest_attempt(
     previous: dict[str, Any] | None,
     previous_file: Path | None,
@@ -2254,14 +2285,15 @@ def _preserved_manifest_attempt(
             prior_history, source_record_sha256=source_record_sha256, case_id=case_id
         )
 
-    previous_replay = previous.get("replay")
-    if not isinstance(previous_replay, dict) or previous_replay.get("attempted") is not True:
+    case_record = _load_resume_case_receipt(previous_file, case_id=case_id)
+    case_replay = case_record.get("replay") if case_record is not None else None
+    previous_replay, attempt_source = _attempted_replay_receipt(
+        previous.get("replay"), case_replay, case_id=case_id
+    )
+    if previous_replay is None:
         return current_replay, prior_history if isinstance(prior_history, dict) else None
 
-    case_record_status = "missing"
-    if previous_file is not None and previous_file.is_file():
-        case_record_status = "present"
-
+    case_record_status = "present" if case_record is not None else "missing"
     previous_source_record = previous.get("source_record")
     previous_record_sha256 = (
         previous_source_record.get("record_sha256")
@@ -2273,6 +2305,12 @@ def _preserved_manifest_attempt(
             f"resume manifest attempt for {case_id} cannot be bound to the current source row "
             "because its source record identity is missing or differs"
         )
+    case_source = case_record.get("source") if case_record is not None else None
+    case_source_hash = case_source.get("record_sha256") if isinstance(case_source, dict) else None
+    if attempt_source == "case_file" and case_source_hash != previous_record_sha256:
+        raise MaterializationError(
+            f"resume case-file attempt for {case_id} cannot be bound to the manifest source row"
+        )
 
     if not currently_eligible:
         preserved_attempt = {
@@ -2281,13 +2319,14 @@ def _preserved_manifest_attempt(
             "source_case_file": previous.get("case_file"),
             "source_record_sha256": source_record_sha256,
             "case_record_status": case_record_status,
+            "attempt_source": attempt_source,
             "prior_replay": previous_replay,
         }
         if isinstance(prior_history, dict):
             preserved_attempt["previous_resume_prior_attempt"] = prior_history
         return current_replay, preserved_attempt
 
-    if case_record_status == "present":
+    if attempt_source == "case_file":
         # The case file carries the current receipt and the manifest carries any
         # older unpromoted lineage. The caller may reuse the receipt below.
         return current_replay, prior_history if isinstance(prior_history, dict) else None
@@ -2332,11 +2371,81 @@ def _resume_attempt_count(attempt: Any) -> int:
     return current + _resume_attempt_count(attempt.get("previous_resume_prior_attempt"))
 
 
-def _resume_record_attempt_count(record: dict[str, Any]) -> int:
-    """Count the latest receipt and any older attempts retained outside it."""
-    replay = record.get("replay")
-    current = int(isinstance(replay, dict) and replay.get("attempted") is True)
-    return current + _resume_attempt_count(record.get("resume_prior_attempt"))
+def _resume_record_attempt_count(
+    record: dict[str, Any], case_record: dict[str, Any] | None = None
+) -> int:
+    """Count current and older attempts across the manifest and its case receipt."""
+    manifest_replay = record.get("replay")
+    case_replay = case_record.get("replay") if case_record is not None else None
+    case_id = record.get("case_id", "unknown")
+    current_receipt, _ = _attempted_replay_receipt(manifest_replay, case_replay, case_id=case_id)
+    current = int(current_receipt is not None)
+
+    manifest_history = record.get("resume_prior_attempt")
+    case_history = case_record.get("resume_prior_attempt") if case_record is not None else None
+    if isinstance(manifest_history, dict) and isinstance(case_history, dict):
+        if manifest_history != case_history:
+            raise MaterializationError(
+                f"resume attempt history conflicts between manifest and case file for {case_id}"
+            )
+        history = _resume_attempt_count(manifest_history)
+    else:
+        history = _resume_attempt_count(
+            manifest_history if isinstance(manifest_history, dict) else case_history
+        )
+    return current + history
+
+
+def _prior_resume_attempt_count(
+    resume_root: Path | None, resume_records: dict[str, dict[str, Any]]
+) -> int:
+    """Count source-bound prior attempts in both manifest and case-file receipts."""
+    total = 0
+    for case_id, record in resume_records.items():
+        case_record = None
+        if resume_root is not None:
+            case_path = _safe_relative(resume_root, record.get("case_file"), label="resume case")
+            if case_path.is_file():
+                case_record = _read_object(case_path)
+                if case_record.get("case_id") != case_id:
+                    raise MaterializationError(
+                        f"resume case receipt identity differs from manifest for {case_id}"
+                    )
+                manifest_source = record.get("source_record")
+                manifest_hash = (
+                    manifest_source.get("record_sha256")
+                    if isinstance(manifest_source, dict)
+                    else None
+                )
+                case_source = case_record.get("source")
+                case_hash = (
+                    case_source.get("record_sha256") if isinstance(case_source, dict) else None
+                )
+                attempted_receipt, _ = _attempted_replay_receipt(
+                    record.get("replay"),
+                    case_record.get("replay"),
+                    case_id=case_id,
+                )
+                if attempted_receipt is not None and (
+                    not isinstance(manifest_hash, str) or manifest_hash != case_hash
+                ):
+                    raise MaterializationError(
+                        f"resume attempted receipt for {case_id} is not bound to the manifest source row"
+                    )
+                for owner in (record, case_record):
+                    history = owner.get("resume_prior_attempt")
+                    if isinstance(history, dict):
+                        if not isinstance(manifest_hash, str):
+                            raise MaterializationError(
+                                f"resume attempt history for {case_id} has no manifest source-row identity"
+                            )
+                        _validate_resume_attempt_history(
+                            history,
+                            source_record_sha256=manifest_hash,
+                            case_id=case_id,
+                        )
+        total += _resume_record_attempt_count(record, case_record)
+    return total
 
 
 def _annotate_reused_episode_checksum(
@@ -2509,9 +2618,7 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
     case_records = []
     replay_candidates = []
     reused_count = 0
-    prior_attempt_count = sum(
-        _resume_record_attempt_count(record) for record in resume_records.values()
-    )
+    prior_attempt_count = _prior_resume_attempt_count(resume_root, resume_records)
     for case in cases:
         row, source_ref = _load_source_row(campaign_root, case)
         selector_outcome, selector_metrics = _selector_case_measurements(case, row)

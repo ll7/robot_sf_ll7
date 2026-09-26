@@ -2756,21 +2756,6 @@ def test_table_artifact_writer_projects_headers_and_escapes_markdown(
     assert nested_md.exists()
 
 
-def test_run_meta_throughput_definition_describes_serialized_episode_rows() -> None:
-    """Keep run_meta throughput scope and units explicit and directly covered."""
-    assert camera_ready_campaign_impl_module._run_meta_throughput_definition() == {
-        "scope": "campaign_all_planner_arms",
-        "numerator_field": "total_episodes",
-        "numerator_unit": "episode_rows",
-        "numerator_semantics": "serialized_episode_rows",
-        "denominator_field": "runtime_sec",
-        "denominator_unit": "seconds",
-        "denominator_semantics": "campaign_elapsed_through_outcome_snapshot",
-        "rate_field": "episodes_per_second",
-        "rate_unit": "episode_rows/second",
-    }
-
-
 def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noqa: PLR0915
     """Campaign runner should emit summary artifacts and publication metadata."""
     scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")

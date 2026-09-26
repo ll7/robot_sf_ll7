@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
 EXTRA_MODULES = {
-    "viz": ("pygame", "matplotlib", "PIL", "moviepy", "seaborn"),
+    "viz": ("pygame", "matplotlib", "PIL", "moviepy", "imageio_ffmpeg", "seaborn"),
     "maps": ("osmnx", "geopandas", "pyproj"),
     "benchmark": ("pandas", "scipy"),
     "gpu": ("torch",),

@@ -1339,6 +1339,7 @@ class _EpisodeRunContext:
     actuation_profile: SyntheticActuationProfile | None
     latency_profile: LatencyStressProfile | None
     algo: str
+    planner_key: str | None
     policy_cfg: dict[str, Any]
 
 
@@ -1431,6 +1432,7 @@ def _resolve_episode_run_context(  # noqa: PLR0913
     safety_wrapper: dict[str, Any] | None,
     cbf_safety_filter: dict[str, Any] | None,
     runtime_input_records: list[dict[str, str]] | None = None,
+    planner_key: str | None = None,
 ) -> _EpisodeRunContext:
     """Normalize episode inputs, build the env config, and resolve the policy cfg.
 
@@ -1561,6 +1563,7 @@ def _resolve_episode_run_context(  # noqa: PLR0913
         actuation_profile=actuation_profile,
         latency_profile=latency_profile,
         algo=algo,
+        planner_key=planner_key,
         policy_cfg=policy_cfg,
     )
 
@@ -4738,6 +4741,7 @@ def _build_episode_record_dict(  # noqa: PLR0913
     outcome: dict[str, Any],
     contradictions: list[str],
     view_integrity: dict[str, Any] | None,
+    planner_key: str | None = None,
 ) -> dict[str, Any]:
     """Assemble the core episode record dictionary.
 
@@ -4762,7 +4766,7 @@ def _build_episode_record_dict(  # noqa: PLR0913
     retained_metric_values = metrics.get("metric_values")
     if not isinstance(retained_metric_values, Mapping):
         retained_metric_values = {}
-    return {
+    record = {
         "version": "v1",
         "metric_schema_version": METRIC_SCHEMA_VERSION,
         "episode_id": _compute_map_episode_id(scenario_params, seed),
@@ -4800,6 +4804,9 @@ def _build_episode_record_dict(  # noqa: PLR0913
             "effective_view": view_integrity,
         },
     }
+    if planner_key is not None:
+        record["planner_key"] = planner_key
+    return record
 
 
 def _finalize_metadata_outputs(
@@ -5356,6 +5363,7 @@ def _assemble_episode_record(  # noqa: PLR0913
         outcome=outcome,
         contradictions=contradictions,
         view_integrity=loop_result.view_integrity,
+        planner_key=ctx.planner_key,
     )
     runtime_law = record.get("algorithm_metadata", {}).get("obstacle_force_law")
     if isinstance(runtime_law, dict) and isinstance(runtime_law.get("sites"), dict):
@@ -5644,6 +5652,7 @@ def run_map_episode(  # noqa: PLR0913
     close_policy: bool = True,
     policy_builder: PolicyBuilder,
     runtime_input_records: list[dict[str, str]] | None = None,
+    planner_key: str | None = None,
 ) -> EpisodeRecordDict:
     """Run one scenario/seed episode and return a benchmark JSONL record.
 
@@ -5676,6 +5685,7 @@ def run_map_episode(  # noqa: PLR0913
         safety_wrapper=safety_wrapper,
         cbf_safety_filter=cbf_safety_filter,
         runtime_input_records=runtime_input_records,
+        planner_key=planner_key,
     )
     learned_execution_context = admit_episode_context(ctx.algo)
     scenario = ctx.scenario

@@ -344,6 +344,29 @@ def load_baseline(path: Path) -> dict[str, Any]:
     return data
 
 
+def tool_version_drift(baseline: dict[str, Any], current_ty_version: str | None) -> str | None:
+    """Return a diagnostic when the scan tool differs from the baseline tool.
+
+    A missing current version is left unclassified because offline fixture
+    checks may not have a ``uvx`` executable available to identify the tool.
+    When both sides are known, a mismatch invalidates per-module comparisons:
+    findings from different ``ty`` releases are not evidence of a per-PR
+    regression.
+    """
+    if current_ty_version is None:
+        return None
+    baseline_ty_version = baseline.get("ty_version")
+    if baseline_ty_version == current_ty_version:
+        return None
+    recorded = baseline_ty_version or "<missing>"
+    return (
+        "baseline/toolchain version mismatch: baseline records "
+        f"{recorded!r}, but the current scan uses {current_ty_version!r}. "
+        "Re-baseline with the current pinned tool before interpreting "
+        "per-module findings."
+    )
+
+
 def _detect_ty_version(repo_root: Path) -> str | None:
     """Best-effort detect the ty version for baseline provenance."""
     try:
@@ -414,6 +437,14 @@ def check_against_baseline(
 def write_json(path: Path, payload: dict[str, Any] | list[Any]) -> None:
     """Write stable, reviewable, sort-keyed JSON."""
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def write_findings_fixture(path: Path, findings: list[dict[str, Any]]) -> None:
+    """Write one compact, sorted JSON finding per line inside a valid JSON array."""
+    records = [
+        "  " + json.dumps(finding, sort_keys=True, separators=(",", ":")) for finding in findings
+    ]
+    path.write_text("[\n" + ",\n".join(records) + "\n]\n", encoding="utf-8")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -501,7 +532,7 @@ def _emit_baseline_fixture(args: argparse.Namespace, repo_root: Path, baseline_p
     fixture = materialize_findings_from_baseline(baseline)
     fixture_path = args.fixture if args.fixture.is_absolute() else repo_root / args.fixture
     fixture_path.parent.mkdir(parents=True, exist_ok=True)
-    write_json(fixture_path, fixture)
+    write_findings_fixture(fixture_path, fixture)
     agg = aggregate(fixture)
     print(
         f"Wrote deterministic ty findings fixture to {fixture_path}: "
@@ -525,9 +556,23 @@ def _print_aggregate(findings: list[dict[str, Any]]) -> None:
 
 
 def _report_check(
-    payload: dict[str, Any], baseline: dict[str, Any], failures: list[str], notices: list[str]
+    payload: dict[str, Any],
+    baseline: dict[str, Any],
+    failures: list[str],
+    notices: list[str],
+    *,
+    version_drift: str | None = None,
 ) -> int:
     """Print the ``--check`` ratchet result and return the exit code."""
+    if version_drift:
+        print(f"ty advisory ratchet DRIFT: {version_drift}", file=sys.stderr)
+        print(
+            "Per-module regression comparison skipped until the baseline is "
+            "regenerated with the matching tool version.",
+            file=sys.stderr,
+        )
+        return 1
+
     print(
         f"ty advisory ratchet: general={payload['summary']['general_findings']} "
         f"(baseline general={sum(int(m.get('general', 0)) for m in baseline.get('modules', {}).values())}), "
@@ -597,6 +642,15 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
     baseline = load_baseline(baseline_path)
+    version_drift = tool_version_drift(baseline, payload.get("ty_version"))
+    if version_drift:
+        return _report_check(
+            payload,
+            baseline,
+            [],
+            [],
+            version_drift=version_drift,
+        )
     failures, notices = check_against_baseline(findings, baseline)
     return _report_check(payload, baseline, failures, notices)
 

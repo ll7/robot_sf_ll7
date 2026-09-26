@@ -6,11 +6,13 @@ import hashlib
 import json
 import shlex
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
 
 from robot_sf.adversarial.config import SearchConfig
+from robot_sf.benchmark import issue_5303_search_promotion_analysis as issue5303_analysis
 from robot_sf.benchmark.issue_5303_search_promotion_analysis import (
     OUTCOME_ROW_SCHEMA_VERSION,
     analyze_issue_5303_search_promotion,
@@ -26,6 +28,15 @@ FROZEN_INPUTS = {
     for entry in FROZEN_CONTRACT["input_provenance"]["required_inputs"]
     if isinstance(entry, dict) and isinstance(entry.get("id"), str)
 }
+
+
+def _ready_preflight_for_isolated_fixture(*_args: object, **_kwargs: object) -> SimpleNamespace:
+    """Isolate fixture accounting from the immutable historical source digest."""
+    return SimpleNamespace(
+        ready=True,
+        blockers=(),
+        metadata={"contract_file_sha256": hashlib.sha256(CONTRACT_PATH.read_bytes()).hexdigest()},
+    )
 
 
 def _frozen_input(input_id: str) -> tuple[str, str]:
@@ -489,6 +500,12 @@ def test_diagnostic_runner_rejects_unapproved_execution(
     command = step3_execution["diagnostic_search_command"]
     assert isinstance(command, str)
     command_parts = shlex.split(command)
+
+    monkeypatch.setattr(
+        compare_adversarial_samplers,
+        "preflight_issue_5303_contract",
+        _ready_preflight_for_isolated_fixture,
+    )
     monkeypatch.setattr(
         compare_adversarial_samplers,
         "run_sampler_comparison",
@@ -513,6 +530,11 @@ def test_diagnostic_runner_rejects_argument_drift_before_search(
 
     monkeypatch.setattr(
         compare_adversarial_samplers,
+        "preflight_issue_5303_contract",
+        _ready_preflight_for_isolated_fixture,
+    )
+    monkeypatch.setattr(
+        compare_adversarial_samplers,
         "run_sampler_comparison",
         lambda **_kwargs: pytest.fail("search must not start after frozen-command drift"),
     )
@@ -522,11 +544,16 @@ def test_diagnostic_runner_rejects_argument_drift_before_search(
 
 
 def test_diagnostic_analysis_retains_duplicate_attempt_in_primary_denominator(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Global within-arm duplicate collapse changes only the unique endpoint, not 192 attempts."""
     outcomes = tmp_path / "outcomes.jsonl"
     _write_complete_outcomes(outcomes, duplicate_first_optuna_hash=True)
+    monkeypatch.setattr(
+        issue5303_analysis,
+        "preflight_issue_5303_contract",
+        _ready_preflight_for_isolated_fixture,
+    )
 
     result = analyze_issue_5303_search_promotion(
         outcomes,
@@ -575,7 +602,9 @@ def test_diagnostic_analysis_recomputes_candidate_hash_before_deduplication(
     )
 
 
-def test_diagnostic_analysis_normalizes_numeric_candidate_hashes(tmp_path: Path) -> None:
+def test_diagnostic_analysis_normalizes_numeric_candidate_hashes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Equivalent integer/float spellings retain one validated candidate identity."""
     outcomes = tmp_path / "outcomes.jsonl"
     _write_complete_outcomes(outcomes)
@@ -590,6 +619,11 @@ def test_diagnostic_analysis_normalizes_numeric_candidate_hashes(tmp_path: Path)
         encoding="utf-8",
     )
 
+    monkeypatch.setattr(
+        issue5303_analysis,
+        "preflight_issue_5303_contract",
+        _ready_preflight_for_isolated_fixture,
+    )
     result = analyze_issue_5303_search_promotion(
         outcomes,
         contract_path=CONTRACT_PATH,

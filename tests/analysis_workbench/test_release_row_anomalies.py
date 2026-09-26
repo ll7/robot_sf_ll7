@@ -223,6 +223,129 @@ def test_empty_pedestrian_free_scenario_list_discovers_observed_free_cells() -> 
     assert finding["planner_id"] == "social_force"
 
 
+def test_auto_discovery_uses_aware_rows_when_baseline_has_no_free_cells() -> None:
+    """A candidate's zero-pedestrian row cannot hide a non-free baseline row."""
+
+    rows = [
+        _row(
+            "inconsistent-free-metadata",
+            130,
+            "blind_goal",
+            success=True,
+            timeout=False,
+            observation_ped_count=1,
+        ),
+        _row(
+            "inconsistent-free-metadata",
+            130,
+            "social_force",
+            observation_ped_count=0,
+        ),
+    ]
+    config = {**CONFIG, "pedestrian_free_scenarios": []}
+    report = analyze_release_rows(
+        rows,
+        config=config,
+        source=_source("blind_goal", "social_force"),
+    )
+
+    assert not _findings(report, "pedestrian_free_baseline_regression")
+    assert report["missingness"]["pedestrian_free_pair_too_small"] == 1
+    assert "pedestrian_comparison_cohort_incomplete" in report["gate"]["reasons"]
+    assert report["gate"]["blocked"] is True
+
+
+def test_auto_discovery_blocks_inconsistent_pedestrian_counts_in_a_partial_cohort() -> None:
+    """One mismatched cell blocks even when enough consistent pairs remain."""
+
+    rows = [
+        _row(
+            "mixed-free-metadata",
+            130,
+            "blind_goal",
+            success=True,
+            timeout=False,
+            observation_ped_count=1,
+        ),
+        _row("mixed-free-metadata", 130, "social_force", observation_ped_count=0),
+        _row(
+            "mixed-free-metadata",
+            131,
+            "blind_goal",
+            success=True,
+            timeout=False,
+            observation_ped_count=0,
+        ),
+        _row("mixed-free-metadata", 131, "social_force", observation_ped_count=0),
+    ]
+    config = {
+        **CONFIG,
+        "max_unannotated_findings": 5,
+        "pedestrian_free_scenarios": [],
+    }
+    report = analyze_release_rows(
+        rows,
+        config=config,
+        source=_source("blind_goal", "social_force"),
+    )
+
+    assert report["missingness"]["pedestrian_free_status_mismatch"] == 1
+    assert "pedestrian_comparison_cohort_incomplete" in report["gate"]["reasons"]
+    assert report["gate"]["blocked"] is True
+
+
+def test_auto_discovery_blocks_when_pedestrian_counts_are_unavailable() -> None:
+    """Missing metadata cannot make the automatic comparison cohort disappear."""
+
+    rows = [
+        _row("unknown-free-metadata", 130, "blind_goal"),
+        _row("unknown-free-metadata", 130, "social_force"),
+    ]
+    for row in rows:
+        del row["integrity"]["effective_view"]["observation_ped_count"]
+    config = {**CONFIG, "pedestrian_free_scenarios": []}
+    report = analyze_release_rows(
+        rows,
+        config=config,
+        source=_source("blind_goal", "social_force"),
+    )
+
+    assert report["missingness"]["pedestrian_free_status_unavailable"] == 2
+    assert "pedestrian_comparison_cohort_incomplete" in report["gate"]["reasons"]
+    assert report["gate"]["blocked"] is True
+
+
+def test_auto_discovery_skips_comparison_when_all_counts_are_known_nonzero() -> None:
+    """A fully observed release with no pedestrian-free rows has no such comparison cohort."""
+
+    rows = [
+        _row(
+            "known-pedestrian-cohort",
+            130,
+            "blind_goal",
+            success=True,
+            timeout=False,
+            observation_ped_count=1,
+        ),
+        _row(
+            "known-pedestrian-cohort",
+            130,
+            "social_force",
+            observation_ped_count=1,
+        ),
+    ]
+    config = {**CONFIG, "pedestrian_free_scenarios": []}
+    report = analyze_release_rows(
+        rows,
+        config=config,
+        source=_source("blind_goal", "social_force"),
+    )
+
+    assert not _findings(report, "pedestrian_free_baseline_regression")
+    assert "pedestrian_comparison_cohort_incomplete" not in report["gate"]["reasons"]
+    assert report["gate"]["blocked"] is False
+
+
 def test_same_step_finding_reports_mixed_outcome_and_event_modes() -> None:
     """Shared timing stays visible while mixed terminal modes remain explicit."""
 

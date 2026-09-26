@@ -92,10 +92,13 @@ The configured detectors are:
   has a lower success rate than `baseline_planner` in paired rows whose
   effective observed pedestrian count is zero. An empty
   `pedestrian_free_scenarios` list discovers scenario IDs from zero-pedestrian
-  baseline rows; a nonempty list narrows the analysis to those IDs. If the
-  configured baseline has no eligible rows, the
-  gate reports it unavailable. Each actual pair must report zero pedestrians
-  in both rows;
+  rows belonging to the baseline or a configured pedestrian-aware planner; a
+  nonempty list narrows the analysis to those IDs. If a candidate reveals a
+  zero-pedestrian scenario but the baseline has no eligible zero-pedestrian
+  rows, the gate reports the cohort as incomplete. Missing counts on the rows
+  used for automatic discovery or conflicting counts between paired rows also
+  block the gate. Each actual comparison pair must report zero pedestrians in
+  both rows;
 - `universal_failure_unannotated`: every expected planner fails a complete
   scenario-by-seed cell and no matching root-cause annotation exists;
 - `invalid_run_preflight_mismatch`: the row's `invalid_run` value disagrees
@@ -127,8 +130,14 @@ planners whose effective observation contract includes pedestrians. The
 checked-in 0.0.7 configuration names the observed non-baseline arms.
 `pedestrian_free_scenarios` is an optional scenario filter and is empty by
 default, so the detector discovers applicable scenarios from each release's
-effective-view pedestrian counts instead of baking a scenario name into the
-gate configuration.
+effective-view pedestrian counts on the baseline and configured comparison
+planners instead of baking a scenario name into the gate configuration. If
+those rows disagree about whether pedestrians were observed in a paired cell,
+the gate records `pedestrian_free_status_mismatch` and blocks the cohort. If
+automatic discovery has no zero-pedestrian candidate and relevant row counts
+are missing, the gate records `pedestrian_free_status_unavailable`; fully
+observed rows with only positive counts mean no pedestrian-free comparison
+cohort was present in that release.
 
 The preflight input is either a list or an object with schema version
 `release-row-preflight.v1` and a `cells` list:

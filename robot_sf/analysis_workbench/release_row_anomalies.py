@@ -35,7 +35,7 @@ from robot_sf.analysis_workbench.audit_store import AuditStore, BatchCommitResul
 from robot_sf.analysis_workbench.release_row_bundle import load_release_rows
 
 SCHEMA_VERSION = "release-row-anomalies.v1"
-DETECTOR_VERSION = "1.0.0"
+DETECTOR_VERSION = "1.0.1"
 DEFAULT_CONFIG: dict[str, Any] = {
     "short_collision_max_steps": 20,
     "same_step_max_steps": 20,
@@ -838,19 +838,38 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
                     )
                 )
 
+    automatic_pedestrian_free_discovery = bool(
+        settings["pedestrian_aware_planners"] and not settings["pedestrian_free_scenarios"]
+    )
     pedestrian_free_scenarios = (
         settings["pedestrian_free_scenarios"]
         or sorted(
             {
                 scenario
                 for (scenario, planner), seed_rows in by_scenario_planner.items()
-                if planner == settings["baseline_planner"]
+                if planner
+                in {
+                    settings["baseline_planner"],
+                    *settings["pedestrian_aware_planners"],
+                }
                 and any(_pedestrian_free(row) is True for row in seed_rows.values())
             }
         )
         if settings["pedestrian_aware_planners"]
         else []
     )
+    if automatic_pedestrian_free_discovery:
+        discovery_planners = {
+            settings["baseline_planner"],
+            *settings["pedestrian_aware_planners"],
+        }
+        unavailable_discovery_rows = sum(
+            _pedestrian_free(row) is None
+            for row in records
+            if row["_release_arm"] in discovery_planners
+        )
+        if unavailable_discovery_rows:
+            missingness["pedestrian_free_status_unavailable"] += unavailable_discovery_rows
     if settings["pedestrian_aware_planners"] and (
         settings["baseline_planner"] not in expected_planners
         or not any(planner == settings["baseline_planner"] for _, planner in by_scenario_planner)
@@ -873,13 +892,19 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
                 if _pedestrian_free(baseline_rows[seed]) is True
                 and _pedestrian_free(candidate_rows[seed]) is True
             )
-            unavailable_pairs = sum(
-                _pedestrian_free(baseline_rows[seed]) is None
-                or _pedestrian_free(candidate_rows[seed]) is None
-                for seed in shared_seeds
-            )
-            if unavailable_pairs:
+            unavailable_pairs = 0
+            mismatched_pairs = 0
+            for seed in shared_seeds:
+                baseline_free = _pedestrian_free(baseline_rows[seed])
+                candidate_free = _pedestrian_free(candidate_rows[seed])
+                if baseline_free is None or candidate_free is None:
+                    unavailable_pairs += 1
+                elif baseline_free != candidate_free:
+                    mismatched_pairs += 1
+            if unavailable_pairs and not automatic_pedestrian_free_discovery:
                 missingness["pedestrian_free_status_unavailable"] += unavailable_pairs
+            if mismatched_pairs:
+                missingness["pedestrian_free_status_mismatch"] += mismatched_pairs
             if len(paired_seeds) < settings["min_paired_cells"]:
                 missingness["pedestrian_free_pair_too_small"] += 1
                 continue
@@ -959,6 +984,7 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
         "pedestrian_free_baseline_missing",
         "pedestrian_free_baseline_planner_unavailable",
         "pedestrian_free_status_unavailable",
+        "pedestrian_free_status_mismatch",
         "pedestrian_free_pair_too_small",
     )
     if any(missingness.get(key, 0) for key in incomplete_pedestrian_cohort_fields):

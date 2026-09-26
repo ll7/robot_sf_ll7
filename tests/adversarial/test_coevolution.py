@@ -115,10 +115,14 @@ class FixtureAdapters:
         self.admit = admit
         self.calls: Counter[str] = Counter()
         self.round_regression_ids: dict[int, tuple[str, ...]] = {}
+        self.previous_planners: dict[int, dict[str, Any] | None] = {}
         self.admitted_case_ids: list[str] = []
 
     def optimize(self, request, output_dir):
         self.calls["optimize"] += 1
+        self.previous_planners[request.round_number] = request.to_json()[
+            "previous_selected_planner"
+        ]
         if self.fail_phase == "optimization":
             raise OSError("fixture optimizer unavailable")
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -136,6 +140,14 @@ class FixtureAdapters:
             },
             "selection_tuple": selection,
             "improves_over_baseline": request.round_number > 1,
+            "baseline_planner": (
+                {
+                    "planner_id": request.previous_selected_planner["planner_id"],
+                    "config_sha256": request.previous_selected_planner["config_sha256"],
+                }
+                if request.previous_selected_planner is not None
+                else None
+            ),
             "budget": {
                 "trials_per_method": request.optimizer_trials_per_method,
                 "random_seed": request.optimizer_random_seed,
@@ -223,12 +235,63 @@ def test_round_one_admission_is_evaluated_as_round_two_regression(tmp_path: Path
     assert len(result["rounds"]) == 2
     case_id = adapters.admitted_case_ids[0]
     assert adapters.round_regression_ids == {1: (), 2: (case_id,)}
+    assert adapters.previous_planners[1] is None
+    assert adapters.previous_planners[2]["planner_id"] == "fixture-planner-r1"
+    assert (
+        adapters.previous_planners[2]["config_sha256"]
+        == hashlib.sha256(b"planner_id: fixture-planner-r1\n").hexdigest()
+    )
     eval_path = Path(
         config.parent / "run-output" / "round_002" / "phases" / "challenge_evaluation.json"
     )
     persisted = json.loads(eval_path.read_text(encoding="utf-8"))
     assert [row["case_id"] for row in persisted["output"]["regression_rows"]] == [case_id]
     assert result["rounds"][1]["summary"]["regression_case_count"] == 1
+    round_two_input = json.loads(
+        (config.parent / "run-output" / "round_002" / "round_input.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    first_selected = json.loads(
+        (config.parent / "run-output" / "round_001" / "phases" / "optimization.json").read_text(
+            encoding="utf-8"
+        )
+    )["output"]["selected_planner"]
+    assert round_two_input["previous_selected_planner"] == first_selected
+    second_optimizer = json.loads(
+        (config.parent / "run-output" / "round_002" / "phases" / "optimization.json").read_text(
+            encoding="utf-8"
+        )
+    )["output"]
+    assert second_optimizer["baseline_planner"] == {
+        "planner_id": first_selected["planner_id"],
+        "config_sha256": first_selected["config_sha256"],
+    }
+
+
+def test_round_two_rejects_an_optimizer_that_resets_its_baseline(tmp_path: Path) -> None:
+    config = _write_config(tmp_path)
+
+    class ResetBaseline(FixtureAdapters):
+        def optimize(self, request, output_dir):
+            result = super().optimize(request, output_dir)
+            if request.round_number == 2:
+                result["baseline_planner"]["planner_id"] = "static-config-baseline"
+            return result
+
+    adapters = ResetBaseline()
+    result = run_coevolution(config, adapters.bundle())
+
+    assert result["status"] == "diagnostic"
+    assert result["rounds"][1]["failure"]["phase"] == "optimization"
+    assert (
+        "does not match the prior round's selected planner"
+        in result["rounds"][1]["failure"]["error"]
+    )
+    assert adapters.previous_planners[2]["planner_id"] == "fixture-planner-r1"
+    assert adapters.calls == Counter(
+        {"optimize": 2, "evaluate": 1, "falsify": 1, "verify": 1, "admit": 1}
+    )
 
 
 def test_no_discovery_still_completes_configured_minimum_two_rounds(tmp_path: Path) -> None:
@@ -367,6 +430,9 @@ def test_nested_regression_case_payload_is_detached_and_deeply_immutable(tmp_pat
                 assert case.scenario is not None
                 with pytest.raises(TypeError):
                     case.scenario["geometry"]["points"][0][0] = -99.0
+                assert request.previous_selected_planner is not None
+                with pytest.raises(TypeError):
+                    request.previous_selected_planner["planner_id"] = "mutated"
                 detached = case.to_json()
                 detached["scenario"]["geometry"]["points"][0][0] = -99.0
                 assert request.to_json() == before

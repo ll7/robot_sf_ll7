@@ -49,8 +49,8 @@ import yaml
 from robot_sf.adversarial.samplers import SUPPORTED_SAMPLERS
 
 CONFIG_SCHEMA = "adversarial_coevolution_config.v1"
-RUN_SCHEMA = "adversarial_coevolution_run.v1"
-ROUND_SCHEMA = "adversarial_coevolution_round.v1"
+RUN_SCHEMA = "adversarial_coevolution_run.v2"
+ROUND_SCHEMA = "adversarial_coevolution_round.v2"
 PHASE_SCHEMA = "adversarial_coevolution_phase.v1"
 MANIFEST_TRANSACTION_SCHEMA = "adversarial_coevolution_manifest_transaction.v1"
 
@@ -431,8 +431,17 @@ class RoundRequest:
     falsification_sampler: str
     heldout_case_ids: tuple[str, ...]
     regression_cases: tuple[RegressionCase, ...]
+    previous_selected_planner: Mapping[str, Any] | None
     source_revision: str
     config: CoevolutionConfig
+
+    def __post_init__(self) -> None:
+        """Pin the prior planner identity shared with every adapter in this round."""
+        planner = self.previous_selected_planner
+        if planner is None:
+            return
+        detached = json.loads(_canonical_json(_deep_thaw(planner)))
+        object.__setattr__(self, "previous_selected_planner", _deep_freeze(detached))
 
     @property
     def regression_case_ids(self) -> tuple[str, ...]:
@@ -456,6 +465,11 @@ class RoundRequest:
             },
             "heldout_case_ids": list(self.heldout_case_ids),
             "regression_cases": [case.to_json() for case in self.regression_cases],
+            "previous_selected_planner": (
+                _deep_thaw(self.previous_selected_planner)
+                if self.previous_selected_planner is not None
+                else None
+            ),
             "optimizer_config_path": str(self.config.optimizer_config),
             "scenario_template_path": str(self.config.scenario_template),
             "search_space_path": str(self.config.search_space),
@@ -858,10 +872,23 @@ def _validate_optimizer_output(raw: dict[str, Any], request: RoundRequest) -> di
     improves = raw.get("improves_over_baseline")
     if not isinstance(improves, bool):
         raise TypeError("optimizer.improves_over_baseline must be boolean")
+    baseline = raw.get("baseline_planner")
+    if request.previous_selected_planner is None:
+        if baseline is not None:
+            raise ValueError("round-one optimizer must not declare a prior-round baseline planner")
+    else:
+        baseline = _mapping(baseline, "optimizer.baseline_planner")
+        prior = request.previous_selected_planner
+        for key in ("planner_id", "config_sha256"):
+            if baseline.get(key) != prior.get(key):
+                raise ValueError(
+                    f"optimizer baseline {key} does not match the prior round's selected planner"
+                )
     _validate_optimizer_budget(raw, request)
     return {
         **raw,
         "selected_planner": selected_planner,
+        "baseline_planner": dict(baseline) if baseline is not None else None,
         "selection_tuple": score,
         "improves_over_baseline": improves,
     }
@@ -1206,6 +1233,7 @@ def _round_request(
     round_dir: Path,
     source_revision: str,
     regression_cases: Sequence[RegressionCase],
+    previous_selected_planner: Mapping[str, Any] | None,
 ) -> RoundRequest:
     offset = round_number - 1
     return RoundRequest(
@@ -1220,6 +1248,7 @@ def _round_request(
         falsification_sampler=config.falsification_sampler,
         heldout_case_ids=config.heldout_case_ids,
         regression_cases=tuple(regression_cases),
+        previous_selected_planner=previous_selected_planner,
         source_revision=source_revision,
         config=config,
     )
@@ -1441,11 +1470,19 @@ def _prepare_round(
     manifest: dict[str, Any],
     round_number: int,
     regression_cases: Sequence[RegressionCase],
+    previous_selected_planner: Mapping[str, Any] | None,
 ) -> tuple[RoundRequest, dict[str, Any]]:
     round_dir = config.output_dir / f"round_{round_number:03d}"
     round_dir.mkdir(parents=True, exist_ok=True)
     source_revision = manifest["source_identity"]["revision"]
-    request = _round_request(config, round_number, round_dir, source_revision, regression_cases)
+    request = _round_request(
+        config,
+        round_number,
+        round_dir,
+        source_revision,
+        regression_cases,
+        previous_selected_planner,
+    )
     input_payload = request.to_json()
     input_sha = _sha256_bytes(_canonical_json(input_payload))
     input_path = round_dir / "round_input.json"
@@ -1540,6 +1577,7 @@ def _run_round_phases(
 @dataclass(slots=True)
 class _LoopProgress:
     regression_cases: list[RegressionCase]
+    selected_planner: Mapping[str, Any] | None = None
     best_score: tuple[float, ...] | None = None
     plateau_rounds: int = 0
     last_round_new_admissions: int | None = None
@@ -1557,6 +1595,7 @@ def _record_completed_round(
     challenge = phases["challenge_evaluation"]
     falsification = phases["falsification"]
     discovery = phases["discovery_admission"]
+    progress.selected_planner = optimizer["selected_planner"]
     selection_score = _score_key(optimizer["selection_tuple"])
     prior_best = progress.best_score
     if prior_best is None or selection_score > prior_best:
@@ -1662,7 +1701,11 @@ def _run_rounds(
     )
     for round_number in range(1, config.maximum_rounds + 1):
         request, round_state = _prepare_round(
-            config, manifest, round_number, progress.regression_cases
+            config,
+            manifest,
+            round_number,
+            progress.regression_cases,
+            progress.selected_planner,
         )
         try:
             phases = _run_round_phases(

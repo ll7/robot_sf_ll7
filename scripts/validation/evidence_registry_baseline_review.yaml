@@ -15,7 +15,24 @@ approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
 latest_reconciliation_issue: 9645
-latest_reviewed_date: 2026-09-25
+latest_reviewed_date: 2026-09-26
+evidence_tree_refresh_addenda:
+  - issue: 9645
+    reviewed_date: 2026-09-26
+    previous:
+      count: 2489
+      sha256: 85ba83560cac962818906d8d15ae48a06250db7e00260ba88e7ef245a2fc7f4c
+    candidate:
+      count: 2551
+      sha256: d16be03241211b7ac543c7be9013953cdecf40ade38659d448ff3513aa82c0ca
+    files_added: 62
+    finding_delta: none
+    decision: >-
+      Reviewed the 62 added evidence-review-marker.v1 sidecars for the #9645 evidence bundle.
+      Each sidecar binds one tracked artifact by safe relative path and SHA-256 while preserving
+      the original artifact bytes. The evidence-tree manifest must be refreshed to track these
+      files; linter findings remain 514 with no new or increased findings. This records a
+      path-manifest update only and does not admit any new integrity finding.
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73

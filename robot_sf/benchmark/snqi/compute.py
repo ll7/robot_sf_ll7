@@ -31,8 +31,11 @@ import json
 from collections.abc import Mapping
 from datetime import datetime
 from subprocess import run
+from typing import Any
 
+from robot_sf.benchmark.robot_force_contract import validate_robot_force_provenance
 from robot_sf.benchmark.snqi.types import SNQIWeights
+from robot_sf.benchmark.snqi.v2_spec import SnqiV2Spec, finite_nonnegative
 
 WEIGHT_NAMES = [
     "w_success",
@@ -46,6 +49,7 @@ WEIGHT_NAMES = [
 
 SNQI_SCORE_VERSION_V0 = "SNQI-v0"
 SNQI_SCORE_VERSION_V1 = "SNQI-v1"
+SNQI_SCORE_VERSION_V2 = "SNQI-v2"
 SNQI_V1_PENALTY_METRICS = (
     "time_to_goal_norm",
     "collisions",
@@ -58,7 +62,7 @@ SNQI_V1_PENALTY_METRICS = (
 MetricName = str
 BaselineStats = Mapping[MetricName, Mapping[str, float]]
 Weights = Mapping[str, float]
-Metrics = Mapping[str, float | int | bool]
+Metrics = Mapping[str, Any]
 
 
 def _weighted_term(weight: float, value: float) -> float:
@@ -236,12 +240,77 @@ def compute_snqi_v1(metrics: Metrics, weights: Weights, baseline_stats: Baseline
     return float(score)
 
 
+def normalize_snqi_v2_terms(metrics: Metrics, spec: SnqiV2Spec) -> dict[str, float]:
+    """Normalize all seven terms; undefined active inputs fail instead of imputing zero.
+
+    ``executed_steps`` must be copied from the episode's top-level ``steps`` by
+    record consumers. Time is excess over ideal time, with zero excess at r=1;
+    failures have no time penalty and need no defined time-to-goal ratio.
+
+    Returns:
+        Validated result described above.
+    """
+    validate_robot_force_provenance(metrics, spec.force_source)
+
+    def required(name: str) -> float:
+        return finite_nonnegative(metrics.get(name), name)
+
+    # The episode producer declares success as a boolean; other inputs are numeric.
+    raw_success = metrics.get("success")
+    success = float(raw_success) if isinstance(raw_success, bool) else required("success")
+    if success not in (0, 1):
+        raise ValueError("SNQI-v2 success must be binary")
+    steps = required("executed_steps")
+    near = required("near_misses")
+    collisions = required("total_collision_count")
+    if steps < 1 or not steps.is_integer() or not near.is_integer() or near > steps:
+        raise ValueError("SNQI-v2 needs positive executed steps and valid near-miss step count")
+    if not collisions.is_integer():
+        raise ValueError("SNQI-v2 total_collision_count must be an integer")
+    result = {
+        "S": success,
+        "C": float(collisions > 0),
+        "T": 0.0,
+        "N": min(near / steps / spec.upper_anchors["N"], 1.0),
+    }
+    if success:
+        ratio = required("time_to_goal_ideal_ratio")
+        result["T"] = min(max((ratio - 1) / (spec.upper_anchors["T"] - 1), 0), 1)
+    for term in ("F", "J", "K"):
+        result[term] = min(required(spec.sources[term]) / spec.upper_anchors[term], 1.0)
+    return result
+
+
+def compute_snqi_v2(metrics: Metrics, spec: SnqiV2Spec) -> float:
+    """Compute the declared safety-stratified v2 score with no legacy defaults.
+
+    Returns:
+        Validated result described above.
+    """
+    terms = normalize_snqi_v2_terms(metrics, spec)
+    return _score_normalized_snqi_v2_terms(terms, spec)
+
+
+def _score_normalized_snqi_v2_terms(terms: Mapping[str, float], spec: SnqiV2Spec) -> float:
+    """Scalarize a complete normalized term map under the declared weights.
+
+    Returns:
+        The declared weighted score.
+    """
+    return float(
+        sum(
+            (1 if term == "S" else -1) * spec.weights[term] * value for term, value in terms.items()
+        )
+    )
+
+
 def compute_snqi(
     metrics: Metrics,
     weights: Weights,
     baseline_stats: BaselineStats,
     *,
     score_version: str = SNQI_SCORE_VERSION_V0,
+    spec: SnqiV2Spec | None = None,
 ) -> float:
     """Compute a versioned SNQI score for a single episode.
 
@@ -252,6 +321,10 @@ def compute_snqi(
         return compute_snqi_v0(metrics, weights, baseline_stats)
     if score_version == SNQI_SCORE_VERSION_V1:
         return compute_snqi_v1(metrics, weights, baseline_stats)
+    if score_version == SNQI_SCORE_VERSION_V2:
+        if spec is None:
+            raise ValueError("SNQI-v2 requires a frozen spec")
+        return compute_snqi_v2(metrics, spec)
     raise ValueError(f"unknown SNQI score version: {score_version}")
 
 
@@ -390,13 +463,16 @@ def compute_snqi_ablation(
 __all__ = [
     "SNQI_SCORE_VERSION_V0",
     "SNQI_SCORE_VERSION_V1",
+    "SNQI_SCORE_VERSION_V2",
     "SNQI_V1_PENALTY_METRICS",
     "WEIGHT_NAMES",
     "compute_snqi",
     "compute_snqi_ablation",
     "compute_snqi_v0",
     "compute_snqi_v1",
+    "compute_snqi_v2",
     "normalize_metric",
     "normalize_metric_required",
+    "normalize_snqi_v2_terms",
     "recompute_snqi_weights",
 ]

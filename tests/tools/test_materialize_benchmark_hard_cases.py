@@ -382,6 +382,38 @@ def _build_inputs(
     return summary_path, campaign_root, matrix
 
 
+def _expand_fixture_cases(summary_path: Path, campaign_root: Path, count: int) -> None:
+    """Create distinct eligible fixture rows for cumulative replay-budget tests."""
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    episode_relative = "runs/goal__differential_drive/episodes.jsonl"
+    episode_path = campaign_root / episode_relative
+    original = json.loads(episode_path.read_text(encoding="utf-8").splitlines()[0])
+    rows = []
+    cases = []
+    for index in range(count):
+        row = json.loads(json.dumps(original))
+        row["episode_id"] = f"episode-budget-{index}"
+        row["scenario_id"] = f"scenario-budget-{index}"
+        row["seed"] = 111 + index
+        row["scenario_params"]["id"] = row["scenario_id"]
+        rows.append(row)
+        cases.append(_case_for_row(row, index, "collision_event"))
+
+    raw_lines = [json.dumps(row, sort_keys=True).encode() + b"\n" for row in rows]
+    episode_path.write_bytes(b"".join(raw_lines))
+    episode_hash = _sha256(episode_path)
+    for index, (case, raw_line) in enumerate(zip(cases, raw_lines, strict=True)):
+        case["source"] = {
+            "episode_file": episode_relative,
+            "episode_file_sha256": episode_hash,
+            "line_number": index + 1,
+            "record_sha256": hashlib.sha256(raw_line).hexdigest(),
+        }
+    summary["cases"] = cases
+    summary["source"]["source_files_sha256"][episode_relative] = episode_hash
+    summary_path.write_text(json.dumps(summary, sort_keys=True), encoding="utf-8")
+
+
 def _case_for_row(row: dict[str, Any], index: int, group: str) -> dict[str, Any]:
     source_metrics = row["metrics"]
     showcase_metrics = {
@@ -2039,6 +2071,122 @@ def test_repeated_resume_preserves_original_missing_artifact_prior_status(
         assert resumed["replay"]["preserved_attempts_missing_artifacts"] == 1
         assert resumed["replay"]["replay_revisions"] == ["original-replay-revision"]
         assert not (case_file.parent / replay["episode_output"]).exists()
+
+
+def test_repeated_resume_preserves_ineligible_manifest_only_attempt_lineage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    summary_path, campaign_root, matrix = _build_inputs(tmp_path, include_unavailable=False)
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["cases"][0]["benchmark_eligible"] = False
+    summary_path.write_text(json.dumps(summary, sort_keys=True), encoding="utf-8")
+
+    previous_dir = tmp_path / "previous"
+    previous = materialize(_args(summary_path, campaign_root, matrix, previous_dir))
+    manifest_path = previous_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    prior_replay = {
+        "attempted": True,
+        "status": "runner_failed",
+        "returncode": 1,
+        "replay_revision": "prior-replay-revision",
+    }
+    manifest["cases"][0]["replay"] = prior_replay
+    manifest["replay"]["attempted"] = 1
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    (previous_dir / previous["cases"][0]["case_file"]).unlink()
+
+    def fail_if_replayed(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        pytest.fail("an ineligible prior attempt must never be replayed on resume")
+
+    monkeypatch.setattr(materializer, "_run_replay", fail_if_replayed)
+    first_args = _args(summary_path, campaign_root, matrix, tmp_path / "resumed-once")
+    first_args.replay_limit = 5
+    first_args.resume_from = previous_dir
+    first_resume = materialize(first_args)
+
+    second_args = _args(summary_path, campaign_root, matrix, tmp_path / "resumed-twice")
+    second_args.replay_limit = 5
+    second_args.resume_from = tmp_path / "resumed-once"
+    second_resume = materialize(second_args)
+
+    first_case = first_resume["cases"][0]
+    second_case = second_resume["cases"][0]
+    first_case_file = tmp_path / "resumed-once" / first_case["case_file"]
+    second_case_file = tmp_path / "resumed-twice" / second_case["case_file"]
+    first_record = json.loads(first_case_file.read_text(encoding="utf-8"))
+    second_record = json.loads(second_case_file.read_text(encoding="utf-8"))
+    lineage = first_case["resume_prior_attempt"]
+
+    assert (
+        first_case["replay"]
+        == second_case["replay"]
+        == {
+            "status": "unavailable_source_row_not_benchmark_eligible",
+            "attempted": False,
+        }
+    )
+    assert first_record["resume_prior_attempt"] == lineage
+    assert second_case["resume_prior_attempt"] == lineage
+    assert second_record["resume_prior_attempt"] == lineage
+    assert lineage["prior_replay"] == prior_replay
+    assert first_resume["replay"]["prior_attempts_not_promoted"] == 1
+    assert second_resume["replay"]["prior_attempts_not_promoted"] == 1
+    assert first_resume["replay"]["cumulative_attempted"] == 1
+    assert second_resume["replay"]["cumulative_attempted"] == 1
+    assert second_resume["replay"]["new_attempted"] == 0
+
+
+def test_replay_limit_is_cumulative_across_resume(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    summary_path, campaign_root, matrix = _build_inputs(tmp_path, include_unavailable=False)
+    _expand_fixture_cases(summary_path, campaign_root, count=6)
+    previous_dir = tmp_path / "previous"
+    previous = materialize(_args(summary_path, campaign_root, matrix, previous_dir))
+
+    manifest_path = previous_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for item in manifest["cases"][:4]:
+        replay = {
+            "attempted": True,
+            "status": "runner_failed",
+            "returncode": 1,
+            "replay_revision": "prior-replay-revision",
+        }
+        item["replay"] = replay
+        case_path = previous_dir / item["case_file"]
+        case_record = json.loads(case_path.read_text(encoding="utf-8"))
+        case_record["replay"] = replay
+        case_path.write_text(json.dumps(case_record), encoding="utf-8")
+    manifest["replay"]["attempted"] = 4
+    manifest["replay"]["cumulative_attempted"] = 4
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    replayed_case_ids: list[str] = []
+
+    def record_replay(case: dict[str, Any], *_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        replayed_case_ids.append(case["case_id"])
+        return {"attempted": True, "status": "runner_failed", "returncode": 1}
+
+    monkeypatch.setattr(materializer, "_run_replay", record_replay)
+    args = _args(summary_path, campaign_root, matrix, tmp_path / "resumed")
+    args.replay_limit = 5
+    args.resume_from = previous_dir
+    resumed = materialize(args)
+
+    assert replayed_case_ids == [previous["cases"][4]["case_id"]]
+    assert resumed["replay"]["requested_limit"] == 5
+    assert resumed["replay"]["prior_attempted"] == 4
+    assert resumed["replay"]["remaining_budget_before_run"] == 1
+    assert resumed["replay"]["effective_limit"] == 1
+    assert resumed["replay"]["new_attempted"] == 1
+    assert resumed["replay"]["attempted"] == 5
+    assert resumed["replay"]["cumulative_attempted"] == 5
+    assert resumed["replay"]["cumulative_attempted"] <= resumed["replay"]["maximum_allowed"]
+    assert "Cumulative bounded single-scenario replays attempted: 5/5" in (
+        (tmp_path / "resumed" / "report.md").read_text(encoding="utf-8")
+    )
 
 
 def test_resume_missing_case_attempt_requires_matching_manifest_source_identity(

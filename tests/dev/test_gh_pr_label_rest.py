@@ -20,6 +20,7 @@ from scripts.dev.gh_pr_label_rest import (
     RATE_LIMIT_MAX_ATTEMPTS,
     RATE_LIMIT_MAX_WAIT_SECONDS,
     TERMINAL_PR_RECEIPT_SCHEMA,
+    _add_label_once,
     _get_label_names,
     _is_ambiguous_write_failure,
     _is_rate_limit_failure,
@@ -1925,3 +1926,35 @@ def test_ambiguous_5xx_with_rate_limit_wording_never_retries_mutation() -> None:
     mock_post.assert_called_once()
     mock_labels.assert_called_once_with(5220, repo="ll7/robot_sf_ll7")
     mock_sleep.assert_not_called()
+
+
+def test_add_label_once_accepts_applied_write_with_unparsable_response() -> None:
+    """A successful POST with an empty body resolves via inventory, not parse error (issue #9556)."""
+    with (
+        patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post,
+        patch("scripts.dev.gh_pr_label_rest.get_label_names") as mock_labels,
+    ):
+        mock_post.return_value = _proc(stdout="")
+        mock_labels.return_value = {"status": "ok", "labels": ["merge-ready"]}
+        result = _add_label_once(5220, "merge-ready", repo="ll7/robot_sf_ll7")
+
+    assert result["status"] == "ok"
+    assert result["action"] == "add"
+    assert "response_note" in result
+    mock_post.assert_called_once()
+    mock_labels.assert_called_once_with(5220, repo="ll7/robot_sf_ll7")
+
+
+def test_add_label_once_still_fails_when_label_missing_after_unparsable_response() -> None:
+    """An unparsable body without inventory proof remains a failure (issue #9556)."""
+    with (
+        patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post,
+        patch("scripts.dev.gh_pr_label_rest.get_label_names") as mock_labels,
+    ):
+        mock_post.return_value = _proc(stdout="not json {")
+        mock_labels.return_value = {"status": "ok", "labels": ["bug"]}
+        result = _add_label_once(5220, "merge-ready", repo="ll7/robot_sf_ll7")
+
+    assert result["status"] == "error"
+    assert "was not found in labels after add" in result["error"]
+    assert "unparsable add response" in result["error"]

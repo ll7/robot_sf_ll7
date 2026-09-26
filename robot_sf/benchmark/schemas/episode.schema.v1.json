@@ -109,6 +109,11 @@
         "algo": {
             "type": "string"
         },
+        "planner_key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Authoritative campaign roster identity when supplied; omitted for legacy callers."
+        },
         "observation_mode": {
             "type": "string",
             "description": "Active planner observation-mode contract for this episode."

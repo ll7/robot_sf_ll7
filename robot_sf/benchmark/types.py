@@ -235,6 +235,7 @@ class EpisodeRecordDict(TypedDict, total=False):
     """
 
     version: str
+    planner_key: str
     episode_id: str
     scenario_id: str
     seed: int
@@ -548,6 +549,8 @@ class MapBatchConfig:
     workers: int = 1
     resume: bool = True
     circuit_breaker_threshold: int | None = None
+    # Appended to preserve positional compatibility for legacy config construction.
+    planner_key: str | None = None
 
 
 __all__ = [

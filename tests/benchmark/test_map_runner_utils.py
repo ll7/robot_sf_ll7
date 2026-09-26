@@ -269,6 +269,7 @@ def test_map_batch_plan_builds_worker_fixed_params(tmp_path: Path) -> None:
         safety_wrapper={"enabled": True, "arm_key": "wrapper_on"},
         record_planner_decision_trace=True,
         record_simulation_step_trace=True,
+        planner_key="shared-config-roster-entry",
     )
 
     assert fixed_params["horizon"] == 7
@@ -291,6 +292,7 @@ def test_map_batch_plan_builds_worker_fixed_params(tmp_path: Path) -> None:
     assert fixed_params["safety_wrapper"] == {"enabled": True, "arm_key": "wrapper_on"}
     assert fixed_params["record_planner_decision_trace"] is True
     assert fixed_params["record_simulation_step_trace"] is True
+    assert fixed_params["planner_key"] == "shared-config-roster-entry"
 
 
 def test_map_runner_execution_boundaries_stay_extracted() -> None:
@@ -5225,6 +5227,7 @@ def test_run_map_job_worker_forwards_metadata_params(monkeypatch: pytest.MonkeyP
                 "snqi_weights": None,
                 "snqi_baseline": None,
                 "algo": "goal",
+                "planner_key": "worker-forwarded-key",
                 "algo_config": {"max_speed": 1.0},
                 "algo_config_path": None,
                 "scenario_path": "configs/scenarios/demo.yaml",
@@ -5252,6 +5255,7 @@ def test_run_map_job_worker_forwards_metadata_params(monkeypatch: pytest.MonkeyP
     assert captured["benchmark_track"] == "lidar"
     assert captured["track_schema_version"] == "track-v1"
     assert captured["record_simulation_step_trace"] is True
+    assert captured["planner_key"] == "worker-forwarded-key"
     assert captured["paired_wrapper_off_record"] == {"episode_id": "wrapper-off-counterpart"}
     assert record["algorithm_metadata"]["benchmark_track"]["benchmark_track"] == "lidar"
 
@@ -5643,6 +5647,175 @@ def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(
     lines = out_path.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 1
     assert "hrvo_smoke" in lines[0]
+    assert "planner_key" not in json.loads(lines[0])
+
+
+def test_camera_ready_roster_keys_reach_serialized_map_runner_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Roster keys survive camera-ready dispatch and the production JSONL writer."""
+    from robot_sf.benchmark.camera_ready._config_types import PlannerSpec
+    from robot_sf.benchmark.camera_ready.campaign import (
+        _CampaignPlannerMatrixContext,
+        _CampaignPlannerVariantRun,
+        _execute_campaign_planner_batch,
+    )
+    from robot_sf.benchmark.runner import run_batch
+
+    monkeypatch.setattr(map_runner, "validate_scenario_list", lambda _: [])
+
+    class _DummySim:
+        """Small deterministic simulator backing the production episode serializer."""
+
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.array([[1.2, 0.0]], dtype=float)
+            self.goal_pos = [np.array([2.0, 0.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((1, 2), dtype=float)
+
+        def iter_obstacle_segments(self):
+            return [((0.5, -0.5), (0.5, 0.5))]
+
+    class _DummyEnv:
+        """One-step environment used by the real map-runner dispatch and writer."""
+
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+            self.action_space = None
+
+        def reset(self, seed: int | None = None):
+            del seed
+            return (
+                {
+                    "robot": {
+                        "position": np.array([0.0, 0.0], dtype=np.float32),
+                        "heading": np.array([0.0], dtype=np.float32),
+                        "speed": np.array([0.0, 0.0], dtype=np.float32),
+                        "radius": np.array([0.5], dtype=np.float32),
+                    },
+                    "goal": {
+                        "current": np.array([2.0, 0.0], dtype=np.float32),
+                        "next": np.array([0.0, 0.0], dtype=np.float32),
+                    },
+                    "pedestrians": {
+                        "positions": np.array([[1.2, 0.0]], dtype=np.float32),
+                        "velocities": np.zeros((1, 2), dtype=np.float32),
+                        "radius": np.array([0.4], dtype=np.float32),
+                        "count": np.array([1.0], dtype=np.float32),
+                    },
+                    "map": {"size": np.array([5.0, 4.0], dtype=np.float32)},
+                    "sim": {"timestep": np.array([0.1], dtype=np.float32)},
+                },
+                {},
+            )
+
+        def step(self, action):
+            del action
+            observation, _ = self.reset()
+            return observation, 0.0, True, False, {"meta": {"is_route_complete": True}}
+
+        def close(self) -> None:
+            return None
+
+    dummy_config = type(
+        "Cfg",
+        (),
+        {
+            "sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})(),
+            "robot_config": HolonomicDriveSettings(
+                max_speed=1.0,
+                max_angular_speed=1.0,
+                command_mode="vx_vy",
+            ),
+        },
+    )
+    monkeypatch.setattr(
+        map_runner,
+        "_build_env_config",
+        lambda _scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        map_runner,
+        "make_robot_env",
+        lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
+    )
+    monkeypatch.setattr(map_runner, "compute_shortest_path_length", lambda *_args: 1.0)
+    monkeypatch.setattr(
+        map_runner,
+        "compute_all_metrics",
+        lambda *_args, **_kwargs: {"success": 1.0, "collisions": 0.0},
+    )
+    monkeypatch.setattr(map_runner, "post_process_metrics", lambda metrics, **_kwargs: metrics)
+    monkeypatch.setattr(
+        map_runner,
+        "sample_obstacle_points",
+        lambda segments, spacing: np.array([[0.5, 0.0], [0.5, 0.25]], dtype=float),
+    )
+
+    scenario = {
+        "name": "shared_effective_planner_identity",
+        "metadata": {"supported": True},
+        "robot_config": {"type": "holonomic", "command_mode": "vx_vy"},
+        "simulation_config": {"max_episode_steps": 1},
+        "seeds": [1],
+    }
+    scenario_matrix = tmp_path / "source-scenarios.yaml"
+    scenario_matrix.write_text("- name: shared_effective_planner_identity\n", encoding="utf-8")
+    cfg = SimpleNamespace(
+        retained_metric_contract_path=None,
+        checkpoint_provenance_enforcement="off",
+        record_forces=True,
+        record_planner_decision_trace=False,
+        record_simulation_step_trace=False,
+        telemetry=None,
+        scenario_matrix_path=scenario_matrix,
+        observation_noise=None,
+        synthetic_actuation_profile=None,
+        latency_stress_profile=None,
+        resume=False,
+        safety_wrapper=None,
+    )
+    context = _CampaignPlannerMatrixContext(
+        cfg=cfg,
+        scenarios=[scenario],
+        snqi_weights=None,
+        snqi_baseline=None,
+        runs_dir=tmp_path / "runs",
+        dependencies=SimpleNamespace(run_batch=run_batch),
+    )
+    config_path = Path("configs/algos/hrvo_camera_ready.yaml")
+    records = []
+    for roster_key in ("shared_config_alias_a", "shared_config_alias_b"):
+        planner_dir = tmp_path / "runs" / roster_key
+        episodes_path = planner_dir / "episodes.jsonl"
+        run = _CampaignPlannerVariantRun(
+            kinematics="holonomic",
+            active_observation_mode="socnav_state",
+            planner_dir=planner_dir,
+            episodes_path=episodes_path,
+            effective_workers=1,
+            effective_horizon=1,
+            effective_dt=0.1,
+            scoped_scenarios=[scenario],
+        )
+        planner = PlannerSpec(
+            key=roster_key,
+            algo="hrvo",
+            benchmark_profile="experimental",
+            algo_config_path=config_path,
+        )
+        result = _execute_campaign_planner_batch(context, planner, run)
+        assert result.status == "ok"
+        row = json.loads(episodes_path.read_text(encoding="utf-8").strip())
+        records.append(row)
+
+    assert [record["planner_key"] for record in records] == [
+        "shared_config_alias_a",
+        "shared_config_alias_b",
+    ]
+    assert {record["algo"] for record in records} == {"hrvo"}
+    assert len({record["config_hash"] for record in records}) == 1
 
 
 def test_run_map_episode_skips_force_buffer_reads_when_not_recording(

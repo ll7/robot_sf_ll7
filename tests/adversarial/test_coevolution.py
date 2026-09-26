@@ -410,6 +410,58 @@ def test_adapter_cannot_mutate_selected_planner_config_bytes(tmp_path: Path, bou
     assert persisted_manifest["status"] == "diagnostic"
 
 
+def test_next_round_optimizer_cannot_mutate_prior_selected_planner_config(tmp_path: Path) -> None:
+    config = _write_config(tmp_path)
+
+    class MutatingOptimizer(FixtureAdapters):
+        def __init__(self) -> None:
+            super().__init__()
+            self.mutated_config_path: Path | None = None
+
+        def optimize(self, request, output_dir):
+            if request.round_number == 2:
+                previous = request.to_json()["previous_selected_planner"]
+                self.mutated_config_path = Path(previous["config_path"])
+                self.mutated_config_path.write_text(
+                    "planner_id: optimizer-mutated-prior-planner\n", encoding="utf-8"
+                )
+            return super().optimize(request, output_dir)
+
+    adapters = MutatingOptimizer()
+    result = run_coevolution(config, adapters.bundle())
+
+    assert result["status"] == "diagnostic"
+    assert result["stop"]["reason"] == "infrastructure_failure"
+    assert result["rounds"][0]["status"] == "complete"
+    assert result["rounds"][1]["status"] == "diagnostic"
+    assert result["rounds"][1]["failure"]["phase"] == "optimization"
+    assert adapters.calls["optimize"] == 2
+    assert adapters.calls["evaluate"] == 1
+    assert not (config.parent / "run-output" / "round_003").exists()
+
+    first_optimization = json.loads(
+        (config.parent / "run-output" / "round_001" / "phases" / "optimization.json").read_text(
+            encoding="utf-8"
+        )
+    )["output"]
+    first_selected = first_optimization["selected_planner"]
+    selected_path = Path(first_selected["config_path"])
+    assert adapters.mutated_config_path == selected_path
+    assert selected_path.read_bytes() == b"planner_id: fixture-planner-r1\n"
+    assert hashlib.sha256(selected_path.read_bytes()).hexdigest() == first_selected["config_sha256"]
+
+    second_input = json.loads(
+        (config.parent / "run-output" / "round_002" / "round_input.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert second_input["previous_selected_planner"] == first_selected
+    persisted_manifest = json.loads(
+        (config.parent / "run-output" / "run_manifest.json").read_text(encoding="utf-8")
+    )
+    assert persisted_manifest["status"] == "diagnostic"
+
+
 def test_round_two_rejects_an_optimizer_that_resets_its_baseline(tmp_path: Path) -> None:
     config = _write_config(tmp_path)
 

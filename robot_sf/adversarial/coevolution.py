@@ -1633,9 +1633,23 @@ def _run_round_phases(
             validate=validate,
         )
 
+    def optimize() -> Mapping[str, Any]:
+        previous_selected = request.previous_selected_planner
+
+        def call() -> Mapping[str, Any]:
+            return adapters.optimize(request, round_dir / "optimization")
+
+        if previous_selected is None:
+            return call()
+        return _call_with_selected_planner_integrity(
+            previous_selected,
+            "optimization using the prior selected planner",
+            call,
+        )
+
     optimizer = phase(
         "optimization",
-        lambda: adapters.optimize(request, round_dir / "optimization"),
+        optimize,
         lambda payload: _validate_optimizer_output(payload, request),
     )
     selected = optimizer["selected_planner"]

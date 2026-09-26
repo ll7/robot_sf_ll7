@@ -1342,6 +1342,123 @@ def test_issue9656_source_identity_mismatch_cannot_be_reclassified_as_verified(
         load_corpus(corpus_path)
 
 
+def test_issue9652_receiptless_v2_source_identity_reclassification_is_rejected(
+    tmp_path: Path,
+) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
+        tmp_path, statuses=("not_attempted",)
+    )
+    source_case_path = materialized / "cases/case-0000000000000001/case.json"
+    source_case = json.loads(source_case_path.read_text(encoding="utf-8"))
+    source_case["source"]["row_git_hash"] = "0" * 40
+    source_case_path.write_text(json.dumps(source_case, sort_keys=True), encoding="utf-8")
+
+    corpus_root = tmp_path / "corpus"
+    corpus, _receipt = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=corpus_root,
+    )
+    corpus_path = corpus_root / "corpus.json"
+    save_corpus(corpus_path, corpus)
+    assert corpus["historical_candidates"][0]["candidate_status"] == (
+        "blocked_source_provenance_mismatch"
+    )
+
+    # Simulate a direct persisted-corpus edit: rewrite the blocked source identity to match
+    # the checksum-pinned episode, remove the independent case-byte receipts, and recompute
+    # content-derived import/candidate IDs and their references.
+    tampered = copy.deepcopy(corpus)
+    import_record = tampered["historical_candidate_imports"][0]
+    candidate = tampered["historical_candidates"][0]
+    old_import_id = import_record["import_id"]
+    old_candidate_id = candidate["candidate_id"]
+    candidate_root = corpus_root / "historical_candidates" / old_candidate_id
+    source_case_path = candidate_root / "source_case.json"
+    source_case = json.loads(source_case_path.read_text(encoding="utf-8"))
+    source_case["source"]["row_git_hash"] = _ISSUE9656_SOURCE_REVISION
+    source_case_path.write_text(json.dumps(source_case, sort_keys=True), encoding="utf-8")
+    source_case_digest = hashlib.sha256(source_case_path.read_bytes()).hexdigest()
+
+    source_identity = import_record["source_identity"]
+    source_identity.pop("source_materialization_bindings")
+    new_import_id = hashlib.sha256(
+        counterexample_corpus._stable_json(source_identity).encode("utf-8")
+    ).hexdigest()
+    summary = json.loads(
+        (corpus_root / candidate["artifact_paths"]["import_summary"]).read_text(encoding="utf-8")
+    )
+    summary_case = summary["cases"][0]
+    source_binding = counterexample_corpus._issue9656_source_identity_binding(
+        summary_case, source_case, source_case["source_record"], summary["source"]
+    )
+    assert source_binding["status"] == "verified"
+    provenance = candidate["source_provenance"]
+    provenance.update(
+        {
+            "import_id": new_import_id,
+            "row_git_hash": _ISSUE9656_SOURCE_REVISION,
+            "source_identity_binding_status": "verified",
+            "source_identity_binding_issues": [],
+            "source_case_file_sha256": source_case_digest,
+        }
+    )
+    candidate["candidate_status"] = "pending_exact_replay"
+    candidate["target_planner"]["config_hash"] = source_binding["episode_planner_config_hash"]
+    candidate["planner_status_at_import"] = (
+        counterexample_corpus._issue9656_planner_status_at_import(candidate)
+    )
+    new_candidate_id = hashlib.sha256(
+        counterexample_corpus._stable_json(
+            {
+                **source_identity,
+                "source_case_id": candidate["source_case_id"],
+                "source_record_sha256": candidate["source_record_sha256"],
+            }
+        ).encode("utf-8")
+    ).hexdigest()
+    candidate["candidate_id"] = new_candidate_id
+
+    import_record["import_id"] = new_import_id
+    import_record["candidate_ids"] = [new_candidate_id]
+    import_record["candidate_status_counts"] = {"pending_exact_replay": 1}
+    import_root = corpus_root / "historical_candidate_imports" / old_import_id
+    new_import_root = corpus_root / "historical_candidate_imports" / new_import_id
+    for file_receipt in import_record["source_files"]:
+        file_receipt["stored_path"] = file_receipt["stored_path"].replace(
+            f"historical_candidate_imports/{old_import_id}/",
+            f"historical_candidate_imports/{new_import_id}/",
+            1,
+        )
+    for paths in (import_record["artifact_paths"], candidate["artifact_paths"]):
+        for name, relative in paths.items():
+            relative = relative.replace(
+                f"historical_candidate_imports/{old_import_id}/",
+                f"historical_candidate_imports/{new_import_id}/",
+                1,
+            )
+            relative = relative.replace(
+                f"historical_candidates/{old_candidate_id}/",
+                f"historical_candidates/{new_candidate_id}/",
+                1,
+            )
+            paths[name] = relative
+
+    candidate_root.rename(corpus_root / "historical_candidates" / new_candidate_id)
+    import_root.rename(new_import_root)
+    tampered["historical_candidates"].sort(key=lambda item: item["candidate_id"])
+    tampered["historical_candidate_imports"].sort(key=lambda item: item["import_id"])
+    corpus_path.write_text(json.dumps(tampered, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(
+        CorpusError, match="schema-v2 imports require source materialization byte receipts"
+    ):
+        load_corpus(corpus_path)
+
+
 def test_issue9656_import_receipt_fields_cannot_be_rewritten(
     tmp_path: Path,
 ) -> None:

@@ -838,7 +838,7 @@ def _issue9656_source_materialization_receipts(
 ) -> dict[str, Mapping[str, Any]]:
     receipt_rows = source_identity.get("source_materialization_bindings")
     if receipt_rows is None:
-        return {}
+        raise CorpusError("#9652 schema-v2 imports require source materialization byte receipts")
     if not isinstance(receipt_rows, list) or len(receipt_rows) != len(summary_rows):
         raise CorpusError("#9656 source materialization receipts are incomplete")
     receipts = {

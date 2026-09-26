@@ -91,6 +91,50 @@ def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _assert_stale_v1_runner_preflight(payload: dict[str, Any]) -> None:
+    """Keep the v1 contract frozen while requiring its changed runner to fail closed."""
+    assert payload["ready"] is False
+    assert payload["blocked"] is True
+    blockers = payload["blockers"]
+    assert isinstance(blockers, list)
+    checks = payload["checks"]
+    assert isinstance(checks, dict)
+    failed_checks = sorted(name for name, ok in checks.items() if not ok)
+    assert failed_checks == ["input_provenance_hashes"]
+
+    contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    metadata = payload["metadata"]
+    assert isinstance(contract, dict)
+    assert isinstance(metadata, dict)
+    contract_sha256 = _sha256_file(CONTRACT_PATH)
+    assert metadata["contract_file_sha256"] == contract_sha256
+    assert manifest["contract_sha256"] == contract_sha256
+    assert checks["contract_hash_matches_manifest"] is True
+
+    provenance = contract["input_provenance"]["required_inputs"]
+    expected_hashes = {entry["id"]: entry["sha256"] for entry in provenance}
+    actual_hashes = metadata["input_provenance_sha256"]
+    assert set(actual_hashes) == set(expected_hashes)
+    mismatched_ids = sorted(
+        input_id
+        for input_id, expected_sha256 in expected_hashes.items()
+        if actual_hashes[input_id] != expected_sha256
+    )
+    assert mismatched_ids == ["adversarial_search_runner"]
+    runner_path = REPO_ROOT / next(
+        entry["path"] for entry in provenance if entry["id"] == "adversarial_search_runner"
+    )
+    assert actual_hashes["adversarial_search_runner"] == _sha256_file(runner_path)
+    assert (
+        actual_hashes["adversarial_search_runner"] != expected_hashes["adversarial_search_runner"]
+    )
+    assert any(
+        "input provenance SHA-256 mismatch for 'adversarial_search_runner'" in blocker
+        for blocker in blockers
+    )
+
+
 def _set_nested_contract_value(
     contract: dict[str, Any], path: tuple[str, ...], value: object
 ) -> None:
@@ -129,14 +173,10 @@ def _preflight_rehashed_contract(
 # ---------------------------------------------------------------------------
 
 
-def test_preflight_passes_on_frozen_contract() -> None:
-    """The committed frozen contract passes every check with no blockers."""
+def test_preflight_blocks_changed_runner_under_unchanged_frozen_contract() -> None:
+    """The historical v1 contract stays immutable and blocks the changed runner hash."""
     result = preflight_issue_5303_contract(repo_root=REPO_ROOT)
-    assert result.ready, "blockers:\n  " + "\n  ".join(result.blockers)
-    assert result.blocked is False
-    assert not result.blockers
-    failed = [name for name, ok in result.checks.items() if not ok]
-    assert failed == [], f"failed checks: {failed}"
+    _assert_stale_v1_runner_preflight(result.to_payload())
 
 
 def test_warm_start_space_errors_fail_closed_for_malformed_inputs(tmp_path: Path) -> None:
@@ -362,7 +402,6 @@ def test_frozen_design_fields() -> None:
         "gates_fail_closed",
         "input_provenance_complete",
         "input_provenance_algorithm",
-        "input_provenance_hashes",
         "entry_gate_bindings_frozen",
         "controls_frozen",
         "method_entries_frozen",
@@ -389,6 +428,7 @@ def test_frozen_design_fields() -> None:
         "step3_analysis_command_complete",
     ):
         assert result.checks[check_name], check_name
+    _assert_stale_v1_runner_preflight(result.to_payload())
 
 
 # ---------------------------------------------------------------------------
@@ -440,16 +480,15 @@ def test_preflight_runtime_does_not_import_forbidden_modules() -> None:
     )
 
 
-def test_check_command_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:
-    """The CLI check command reproduces the contract hash and exits zero."""
+def test_check_command_reports_stale_v1_runner(capsys: pytest.CaptureFixture[str]) -> None:
+    """The CLI reports that the frozen v1 contract cannot authorize changed runner code."""
     from scripts.tools.check_issue_5303_search_promotion_preregistration import main
 
     exit_code = main(["--repo-root", str(REPO_ROOT)])
     captured = capsys.readouterr()
-    assert exit_code == 0, captured.err
+    assert exit_code == 1, captured.err
     payload = json.loads(captured.out)
-    assert payload["ready"] is True
-    assert payload["blocked"] is False
+    _assert_stale_v1_runner_preflight(payload)
 
 
 def test_preflight_detects_contract_field_tampering(tmp_path: Path) -> None:
@@ -874,8 +913,8 @@ def test_preflight_fails_closed_for_missing_contract_and_writes_requested_payloa
     result = preflight_issue_5303_contract(repo_root=REPO_ROOT)
     dump_preflight_payload(result, output)
     payload = json.loads(output.read_text(encoding="utf-8"))
-    assert payload["ready"] is True
-    assert payload["metadata"]["contract_file_sha256"] == _sha256_file(CONTRACT_PATH)
+    _assert_stale_v1_runner_preflight(payload)
+    assert payload == result.to_payload()
 
 
 # ---------------------------------------------------------------------------
@@ -927,8 +966,12 @@ def test_future_run_is_diagnostic_inconclusive_without_weakening_thresholds() ->
 
 
 def test_reimporting_preflight_module_is_idempotent() -> None:
-    """Re-importing the module does not mutate global sampler/optimizer registries."""
-    importlib.reload(
-        importlib.import_module("robot_sf.benchmark.issue_5303_search_promotion_preregistration")
+    """Reloading preserves the frozen contract's deterministic stale-runner block."""
+    module = importlib.import_module(
+        "robot_sf.benchmark.issue_5303_search_promotion_preregistration"
     )
-    test_preflight_passes_on_frozen_contract()
+    before = module.preflight_issue_5303_contract(repo_root=REPO_ROOT).to_payload()
+    reloaded = importlib.reload(module)
+    after = reloaded.preflight_issue_5303_contract(repo_root=REPO_ROOT).to_payload()
+    assert before == after
+    _assert_stale_v1_runner_preflight(after)

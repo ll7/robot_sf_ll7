@@ -16,8 +16,11 @@ from robot_sf.planner import socnav as _socnav
 from robot_sf.planner.socnav_base import (
     SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1,
     SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1,
+    SOCIAL_FORCE_PED_LEGACY_KERNEL,
+    SOCIAL_FORCE_PED_SURFACE_V3,
     SOCIAL_FORCE_PLANNER_LEGACY_V1,
     SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2,
+    resolve_social_force_ped_version,
     resolve_social_force_planner_version,
 )
 from robot_sf.sim.pedestrian_model_variants import _pairwise_social_force_kernel
@@ -54,6 +57,26 @@ SOCIAL_FORCE_GOAL_APPROACH_METADATA_SCHEMA = "social_force_goal_approach_metadat
 # robot surface and negligible beyond a few metres, independent of how finely
 # the occupancy grid resolves the wall.  (The v1 per-cell sum reached 40-550
 # at the same distances because every occupied cell added its own term.)
+
+# Issue #9758: parameter derivation for the opt-in ``surface_v3`` pedestrian
+# term (defaults live on ``SocNavPlannerConfig``).
+#
+# The legacy ped term evaluates the ped-ped kernel at CENTRE distance, so at
+# the release radii (robot 1.0 m, pedestrian 0.4 m) a pedestrian at 1.4 m
+# centre distance contributes about 0.09 against a goal force of about 2: the
+# robot drives through standing pedestrians.  The v3 term is one exponential
+# repulsion per pedestrian, ``F(d_s) = A * exp(-d_s / B)`` along the
+# velocity-anisotropic interaction direction, where d_s is the SURFACE
+# distance (centre distance minus both radii, floored at zero).  With
+# A = 6 m/s^2 and B = 0.5 m (and w = 0.8 as above):
+#   d_s = 0.0 m -> w*F = 4.8 (2.4x the largest goal force: contact is refused)
+#   d_s = 0.5 m -> w*F = 1.77 (goal-force order half a metre before contact)
+#   d_s = 1.0 m -> w*F = 0.65 (clear steering bias)
+#   d_s = 2.0 m -> w*F = 0.09 (negligible, like the wall term at range)
+# So the ped term exceeds the goal term before contact at release speeds and
+# fades within about a metre of the robot surface.  The direction keeps the
+# kernel's velocity anisotropy (``lambda * v_rel + dir``) but does not touch
+# the kernel's angle wrap (issue #9764 owns that seam).
 
 
 class SocialForcePlannerAdapter(SamplingPlannerAdapter):
@@ -136,7 +159,15 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         desired_vel = goal_dir * desired_speed
         desired_force = (desired_vel - robot_vel) / max(self.config.social_force_tau, self._EPS)
 
-        social_force = self._compute_social_force(robot_pos, robot_vel, ped_state, robot_heading)
+        # Passed positionally (not by keyword) so existing ``*_args`` test
+        # doubles keep working without churn.
+        social_force = self._compute_social_force(
+            robot_pos,
+            robot_vel,
+            ped_state,
+            robot_heading,
+            float(self._as_1d_float(robot_state.get("radius", [0.0]), pad=1)[0]),
+        )
         if goal_approach is None:
             obstacle_force = self._compute_obstacle_force(
                 observation, robot_pos, robot_heading, robot_vel, robot_state
@@ -402,6 +433,12 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             getattr(self.config, "social_force_planner_version", None)
         )
 
+    def _ped_version(self) -> str:
+        """Return the resolved pedestrian-term version (issue #9758)."""
+        return resolve_social_force_ped_version(
+            getattr(self.config, "social_force_ped_version", None)
+        )
+
     def _speed_limit(self) -> float:
         """Return the translational speed cap for the configured planner version.
 
@@ -446,8 +483,14 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         robot_vel: np.ndarray,
         ped_state: dict,
         robot_heading: float,
+        robot_radius: float | None = None,
     ) -> np.ndarray:
         """Compute social-force repulsion from pedestrians.
+
+        The legacy kernel path evaluates the ped-ped law at centre distance.
+        ``surface_v3`` (issue #9758) instead repels per pedestrian from the
+        surface distance; see the module derivation.  ``robot_radius`` selects
+        the release default (1.0 m) when absent or non-positive.
 
         Returns:
             np.ndarray: Combined social-force vector.
@@ -467,6 +510,11 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             ped_velocities = ped_velocities.reshape(-1, 2)
         ped_velocities = ped_velocities[:ped_count]
         ped_vel_world = self._rotate_velocities_to_world(ped_velocities, robot_heading)
+
+        if self._ped_version() == SOCIAL_FORCE_PED_SURFACE_V3:
+            return self._compute_ped_surface_v3(
+                robot_pos, robot_vel, ped_positions, ped_vel_world, ped_state, robot_radius
+            )
 
         # Vectorized social-force broadcast (issue #5412). Each pedestrian
         # contributed via the scalar ``sf_forces.social_force_ped_ped`` kernel in
@@ -498,6 +546,77 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         finite_mask = np.isfinite(forces).all(axis=1)
         total = np.sum(forces[finite_mask], axis=0) if np.any(finite_mask) else np.zeros(2)
         return total * float(self.config.social_force_factor)
+
+    def _compute_ped_surface_v3(
+        self,
+        robot_pos: np.ndarray,
+        robot_vel: np.ndarray,
+        ped_positions: np.ndarray,
+        ped_vel_world: np.ndarray,
+        ped_state: dict,
+        robot_radius: float | None,
+    ) -> np.ndarray:
+        """Compute per-pedestrian surface-distance repulsion (issue #9758).
+
+        One exponential term per pedestrian, ``F = A * exp(-d_s / B)`` along the
+        velocity-anisotropic interaction direction, where ``d_s`` is the surface
+        distance (centre distance minus both radii, floored at zero).  The
+        direction mirrors the shared kernel (``lambda * v_rel + dir``,
+        normalized; degenerate pairs contribute zero) but the kernel's angle
+        wrap is untouched (issue #9764 owns that seam).
+
+        Returns:
+            np.ndarray: World-frame ped force, scaled so the historical
+                ``social_force_factor`` default normalizes away (as the v2
+                obstacle term normalizes ``obstacle_factor``).
+        """
+        radius = float(robot_radius) if robot_radius else 0.0
+        if radius <= 0.0:
+            radius = 1.0  # release robot radius; ped_state rarely carries it
+        default_ped_radius = float(self.config.social_force_ped_v3_default_ped_radius)
+        # Nested observations carry a scalar ``radius``; the flat form carries
+        # ``pedestrians_radius`` (see ``_socnav_fields``).  Either may be absent.
+        raw_radius = ped_state.get("radii", ped_state.get("radius", default_ped_radius))
+        radius_arr = np.atleast_1d(np.asarray(raw_radius, dtype=float)).reshape(-1)
+        count = ped_positions.shape[0]
+        if radius_arr.size == count:
+            ped_radii = radius_arr
+        else:
+            scalar = float(radius_arr.flat[0]) if radius_arr.size > 0 else default_ped_radius
+            ped_radii = np.full(count, scalar)
+        ped_radii = np.where(
+            np.isfinite(ped_radii) & (ped_radii > 0.0), ped_radii, default_ped_radius
+        )
+        strength = float(self.config.social_force_ped_v3_strength)
+        length = max(float(self.config.social_force_ped_v3_length), self._EPS)
+        lambda_importance = float(self.config.social_force_lambda_importance)
+
+        diff = (np.asarray(robot_pos, dtype=float)[np.newaxis, :] - ped_positions).astype(float)
+        centre = np.linalg.norm(diff, axis=1)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            diff_dir = np.where(
+                centre[:, np.newaxis] > 0.0,
+                diff / np.maximum(centre, self._EPS)[:, np.newaxis],
+                0.0,
+            )
+        vel_diff = (ped_vel_world - np.asarray(robot_vel, dtype=float)[np.newaxis, :]).astype(float)
+        interaction = lambda_importance * vel_diff + diff_dir
+        inter_length = np.linalg.norm(interaction, axis=1)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            interaction_dir = np.where(
+                inter_length[:, np.newaxis] > 0.0,
+                interaction / np.maximum(inter_length, self._EPS)[:, np.newaxis],
+                0.0,
+            )
+        surface = np.maximum(centre - (radius + ped_radii), 0.0)
+        magnitudes = strength * np.exp(-surface / length)
+        forces = magnitudes[:, np.newaxis] * interaction_dir
+        finite_mask = np.isfinite(forces).all(axis=1)
+        total = np.sum(forces[finite_mask], axis=0) if np.any(finite_mask) else np.zeros(2)
+        # ``social_force_factor`` keeps its role as an on/off and ablation
+        # scale; the v3 magnitude lives in ``ped_v3_strength``, so the
+        # historical default of 5.1 is normalised away here.
+        return total * (float(self.config.social_force_factor) / 5.1)
 
     def _compute_obstacle_force(
         self,
@@ -963,6 +1082,9 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             "planner_version": self._planner_version()
             if getattr(self, "config", None) is not None
             else SOCIAL_FORCE_PLANNER_LEGACY_V1,
+            "ped_version": self._ped_version()
+            if getattr(self, "config", None) is not None
+            else SOCIAL_FORCE_PED_LEGACY_KERNEL,
             "obstacle_force_law": self.obstacle_force_law_metadata(),
             "goal_approach": self.goal_approach_metadata(),
         }

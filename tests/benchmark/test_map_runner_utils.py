@@ -4754,6 +4754,14 @@ def test_run_map_batch_filters_and_validation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Cover validation failures and unsupported scenario filtering."""
+    with pytest.raises(ValueError, match="planner_key must be a non-empty string"):
+        run_map_batch(
+            [],
+            tmp_path / "invalid-planner-key.jsonl",
+            schema_path=tmp_path / "schema.json",
+            planner_key="",
+        )
+
     bad_scenarios = [{"name": "bad"}]
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list",

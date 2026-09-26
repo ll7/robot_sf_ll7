@@ -1,0 +1,56 @@
+{
+  "case": {
+    "case_id": "case_0000_01595b2ea612",
+    "dynamic_task_feasibility": "unknown",
+    "planner": "goal",
+    "scenario_id": "crossing_ttc_template_adversarial_0008",
+    "seed": 320,
+    "source_input_binding": "unknown_source_episode_map_registry_digest_missing",
+    "static_route_certificate": "passed_hard_but_solvable_post_hoc"
+  },
+  "claim_boundary": "Diagnostic selector, replay-outcome reproduction at a changed code revision, and existing-renderer smoke only. Not a new search discovery, exact-source reproduction, dynamic-feasibility proof, planner comparison, safety result, or real-world safety claim.",
+  "current_base_at_capture": "7815da2daaf646d8fb6d3bada1ab8c31fb2d3572",
+  "environment": {
+    "python_version": "3.13.14",
+    "replay_batch_runtime_seconds": 5.728581277653575,
+    "workers": 1
+  },
+  "input": {
+    "fixture": "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json",
+    "historical_origin": "#1501 failure_0002",
+    "kind": "tracked_historical_compatibility_fixture",
+    "new_search_discovery": false,
+    "represented_candidate_rows": 1,
+    "source_search_manifest_budget": 32,
+    "source_search_manifest_method": "Optuna",
+    "source_search_manifest_seed": 42
+  },
+  "purpose": "diagnostic_one_case_replay_and_render_smoke",
+  "rendering": {
+    "critical_frame_png_step": 9,
+    "filmstrip_png_frames": 1,
+    "map_overlay": "unavailable_existing_reader_does_not_load_source_svg",
+    "trajectory_png": "included",
+    "video": "unavailable_canonical_runner_did_not_emit_video_artifact"
+  },
+  "result": "passed_smoke",
+  "runner_revision": "4b9617338ecbaf6bd3612b4d8c5269f993581a0a",
+  "schema_version": "issue_9647_gallery_smoke_summary.v1",
+  "selection_and_replay": {
+    "collision_count": 1,
+    "failure_attribution_match": true,
+    "identity_match": true,
+    "near_misses": 5,
+    "objective_value": 4.833333333333333,
+    "outcome": "collision",
+    "outcome_match": true,
+    "path_efficiency": 1.0,
+    "replayed": 1,
+    "route_complete": false,
+    "selected": 1,
+    "termination_reason": "collision",
+    "top_k": 1
+  },
+  "source_episode_revision_for_verification": "58e516aa4f69ff3098bf518199f483006589758c",
+  "source_revision_match": false
+}

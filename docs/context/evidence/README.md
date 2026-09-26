@@ -125,6 +125,16 @@ for retention classes, preservation proof, and cleanup-eligibility workflows.
 
 ## Current Bundles
 
+- `issue_9647_gallery_smoke_2026-09-26/`: one-case replay and renderer smoke on code revision
+  `4b9617338ecbaf6bd3612b4d8c5269f993581a0a`, based on current main `7815da2`. The case is a
+  tracked #1501 `failure_0002` compatibility fixture, not a discovery from #9645; the fixture
+  records Optuna/seed 42/budget 32 but represents only one candidate row. Its replay matches the
+  collision outcome and objective at a changed code revision. The post-hoc static route certificate
+  passes, while dynamic feasibility and full source map-registry binding remain unknown. Three small
+  figures are included; SVG map overlay and video are unavailable. This is diagnostic gallery
+  plumbing evidence only. See the [receipt and figures](issue_9647_gallery_smoke_2026-09-26/payload/evidence_promotion/receipt.md)
+  and [machine-readable summary](issue_9647_gallery_smoke_2026-09-26/payload/evidence_promotion/summary.json).
+
 - `issue_9647_gallery_demo_2026-09-25/`: current strict-gate one-case replay and rendering smoke
   from the #9647 gallery CLI. At code revision `4ad36ecae489eea9e6461932a0b208a58ee27663`, the
   documented command selected one tracked #1501 `failure_0002` compatibility row and replayed one

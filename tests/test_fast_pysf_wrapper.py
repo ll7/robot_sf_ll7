@@ -465,7 +465,7 @@ def test_get_force_field():
 
 
 def test_head_on_pedestrian_force_points_away_with_kernel_magnitude():
-    """A head-on pedestrian must repel with the kernel-convention magnitude (issue #9742).
+    """Scalar and batched wrapper paths must preserve the kernel convention (#9742).
 
     The wrapper once fed an inverted relative-velocity sign (``-v`` instead of
     ``v_j - v_i`` with static query ``v_i = 0``), which collapsed the head-on
@@ -491,3 +491,8 @@ def test_head_on_pedestrian_force_points_away_with_kernel_magnitude():
     assert force == pytest.approx(expected)
     assert force[0] < 0, "head-on force must point away from the pedestrian"
     assert abs(force[0]) > 1e-6, "head-on force must not vanish"
+
+    batch_force = wrapper._compute_social_forces_at_points(np.array([[0.0, 0.0]]))[0]
+    assert batch_force == pytest.approx(expected)
+    assert batch_force[0] < 0, "batched head-on force must point away from the pedestrian"
+    assert abs(batch_force[0]) > 1e-6, "batched head-on force must not vanish"

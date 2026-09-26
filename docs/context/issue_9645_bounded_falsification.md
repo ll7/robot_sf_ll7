@@ -75,6 +75,12 @@ efficiency, elapsed time, energy, and broader comfort outcomes also remain outsi
 objective despite the scalar helper's general "comfort/efficiency" label. See the
 [objective-coverage review addendum](evidence/issue_9645_objective_coverage_review_2026-09-25/).
 
+The #9646 report contract was subsequently updated to schema v3 and regenerated from the archived
+comparison and four source manifests. It preserves collision/severe-intrusion status as
+`unknown` when either component is absent or contradictory, and reports unknown criticality counts
+separately from known critical and known non-critical counts. It does not reinterpret the historical
+v1 score or reconstruct missing episode records.
+
 The post-review audit counted 64 rows in the tracked candidate table: collision, timeout, and
 near-miss counts are zero for every row; route completion is true for every row; and no intrusion
 field appears in the table or any of the four candidate manifests. These observed fields still

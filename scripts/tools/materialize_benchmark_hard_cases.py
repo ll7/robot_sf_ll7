@@ -2245,12 +2245,22 @@ def _preserved_manifest_attempt(
     currently_eligible: bool,
     case_id: str,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
-    """Retain a manifest-only attempt without promoting it for an ineligible row."""
-    if previous is None or previous_file is None or previous_file.is_file():
+    """Retain prior attempts and their lineage without promoting ineligible rows."""
+    if previous is None:
         return current_replay, None
+    prior_history = previous.get("resume_prior_attempt")
+    if isinstance(prior_history, dict):
+        _validate_resume_attempt_history(
+            prior_history, source_record_sha256=source_record_sha256, case_id=case_id
+        )
+
     previous_replay = previous.get("replay")
     if not isinstance(previous_replay, dict) or previous_replay.get("attempted") is not True:
-        return current_replay, None
+        return current_replay, prior_history if isinstance(prior_history, dict) else None
+
+    case_record_status = "missing"
+    if previous_file is not None and previous_file.is_file():
+        case_record_status = "present"
 
     previous_source_record = previous.get("source_record")
     previous_record_sha256 = (
@@ -2265,14 +2275,22 @@ def _preserved_manifest_attempt(
         )
 
     if not currently_eligible:
-        return current_replay, {
+        preserved_attempt = {
             "status": "not_promoted_current_source_ineligible",
             "source_manifest_sha256": resume_manifest_sha256,
             "source_case_file": previous.get("case_file"),
             "source_record_sha256": source_record_sha256,
-            "case_record_status": "missing",
+            "case_record_status": case_record_status,
             "prior_replay": previous_replay,
         }
+        if isinstance(prior_history, dict):
+            preserved_attempt["previous_resume_prior_attempt"] = prior_history
+        return current_replay, preserved_attempt
+
+    if case_record_status == "present":
+        # The case file carries the current receipt and the manifest carries any
+        # older unpromoted lineage. The caller may reuse the receipt below.
+        return current_replay, prior_history if isinstance(prior_history, dict) else None
 
     prior_status = previous_replay.get("resume_prior_status", previous_replay.get("status"))
     return {
@@ -2286,7 +2304,39 @@ def _preserved_manifest_attempt(
         ),
         "episode_output_checksum_status": "missing",
         "reused": False,
-    }, None
+    }, prior_history if isinstance(prior_history, dict) else None
+
+
+def _validate_resume_attempt_history(
+    attempt: dict[str, Any], *, source_record_sha256: str, case_id: str
+) -> None:
+    """Fail closed if retained attempt lineage is not bound to this source row."""
+    if attempt.get("source_record_sha256") != source_record_sha256:
+        raise MaterializationError(
+            f"resume attempt history for {case_id} cannot be bound to the current source row "
+            "because its source record identity is missing or differs"
+        )
+    previous_attempt = attempt.get("previous_resume_prior_attempt")
+    if isinstance(previous_attempt, dict):
+        _validate_resume_attempt_history(
+            previous_attempt, source_record_sha256=source_record_sha256, case_id=case_id
+        )
+
+
+def _resume_attempt_count(attempt: Any) -> int:
+    """Count actual replay receipts in nested unpromoted resume lineage."""
+    if not isinstance(attempt, dict):
+        return 0
+    prior_replay = attempt.get("prior_replay")
+    current = int(isinstance(prior_replay, dict) and prior_replay.get("attempted") is True)
+    return current + _resume_attempt_count(attempt.get("previous_resume_prior_attempt"))
+
+
+def _resume_record_attempt_count(record: dict[str, Any]) -> int:
+    """Count the latest receipt and any older attempts retained outside it."""
+    replay = record.get("replay")
+    current = int(isinstance(replay, dict) and replay.get("attempted") is True)
+    return current + _resume_attempt_count(record.get("resume_prior_attempt"))
 
 
 def _annotate_reused_episode_checksum(
@@ -2459,6 +2509,9 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
     case_records = []
     replay_candidates = []
     reused_count = 0
+    prior_attempt_count = sum(
+        _resume_record_attempt_count(record) for record in resume_records.values()
+    )
     for case in cases:
         row, source_ref = _load_source_row(campaign_root, case)
         selector_outcome, selector_metrics = _selector_case_measurements(case, row)
@@ -2606,7 +2659,9 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
         case_records.append(record)
         if not ineligible and not record["replay"].get("attempted"):
             replay_candidates.append((case, row, record, case_dir))
-    attempted_cases = replay_candidates[: args.replay_limit]
+    remaining_replay_budget = max(0, MAX_REPLAYS - prior_attempt_count)
+    effective_replay_limit = min(args.replay_limit, remaining_replay_budget)
+    attempted_cases = replay_candidates[:effective_replay_limit]
     for case, row, record, case_dir in attempted_cases:
         record["replay"] = _run_replay(
             case,
@@ -2688,6 +2743,10 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
         "replay": {
             "requested_limit": args.replay_limit,
             "maximum_allowed": MAX_REPLAYS,
+            "prior_attempted": prior_attempt_count,
+            "remaining_budget_before_run": remaining_replay_budget,
+            "effective_limit": effective_replay_limit,
+            "cumulative_attempted": prior_attempt_count + len(attempted_cases),
             "attempted": sum(record["replay"].get("attempted") is True for record in case_records),
             "new_attempted": len(attempted_cases),
             "reused_attempts": reused_count,
@@ -2813,7 +2872,8 @@ def _write_report(path: Path, manifest: dict[str, Any]) -> None:
         f"- Distinct scenario IDs: {manifest['selection']['scenario_id_count']}",
         f"- Source anomaly counts: `{manifest['criticality_anomaly_counts']}`",
         f"- Scenario/config snapshots: `{dict(sorted(Counter(case['replay_input']['status'] for case in manifest['cases']).items()))}`",
-        f"- Bounded single-scenario replays attempted: {manifest['replay']['attempted']}/{manifest['replay']['maximum_allowed']}",
+        f"- Cumulative bounded single-scenario replays attempted: {manifest['replay']['cumulative_attempted']}/{manifest['replay']['maximum_allowed']}",
+        f"- New replay limit applied: {manifest['replay']['effective_limit']} of {manifest['replay']['requested_limit']} requested",
         f"- Source showcase renderer statuses: `{manifest['source_showcase_renderer_status_counts']}`",
         *diagnostic_lines,
         "",

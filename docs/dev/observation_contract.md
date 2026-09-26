@@ -47,9 +47,9 @@ and downstream tooling.
 
 | Key | Shape | Description |
 | --- | --- | --- |
-| `robot.position` | `(2,)` | Robot position `(x, y)` clipped to 50m |
+| `robot.position` | `(2,)` | Robot position `(x, y)` clipped to a per-axis representable bound of at least 50 m, expanded to the map dimensions on larger maps |
 | `robot.heading` | `(1,)` | Heading in radians, wrapped to `[-pi, pi]` |
-| `robot.speed` | `(2,)` | Robot speed contract `(linear_speed, angular_speed)` |
+| `robot.speed` | `(2,)` | Pair copied from the selected robot model's `current_speed`; component meanings and units are model-specific (see the flat-field note below) |
 | `robot.velocity_xy` | `(2,)` | Robot translational velocity `(vx, vy)` in world coordinates |
 | `robot.angular_velocity` | `(1,)` | Robot yaw rate in radians per second |
 | `robot.radius` | `(1,)` | Robot radius |
@@ -60,7 +60,7 @@ and downstream tooling.
 | `pedestrians.radius` | `(1,)` | Ped radius |
 | `pedestrians.count` | `(1,)` | Count of visible pedestrians |
 | `pedestrians.track_id` | `(max_pedestrians,)` | Optional episode-local observation-derived IDs; `-1` means padded or unavailable |
-| `map.size` | `(2,)` | Map width/height capped to 50m |
+| `map.size` | `(2,)` | Declared map width and height in meters |
 | `sim.timestep` | `(1,)` | Simulation step duration in seconds |
 
 `max_pedestrians` is derived from `SimulationSettings.max_total_pedestrians` or defaults to 64.

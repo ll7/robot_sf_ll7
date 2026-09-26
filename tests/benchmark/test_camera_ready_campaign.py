@@ -9,6 +9,7 @@ import inspect
 import io
 import json
 import math
+import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -3044,6 +3045,42 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     summary_payload = json.loads(
         (campaign_root / "reports" / "campaign_summary.json").read_text(encoding="utf-8")
     )
+    throughput_definition = run_meta["throughput_definition"]
+    assert throughput_definition == {
+        "scope": "campaign_all_planner_arms",
+        "numerator_field": "episodes_written_this_invocation",
+        "numerator_unit": "episode_rows",
+        "numerator_semantics": "episode_rows_newly_written_during_this_campaign_invocation",
+        "retained_count_field": "total_episodes",
+        "retained_count_semantics": "complete_serialized_episode_rows_retained_across_resume",
+        "denominator_field": "runtime_sec",
+        "denominator_unit": "seconds",
+        "denominator_semantics": "campaign_elapsed_through_outcome_snapshot",
+        "rate_field": "episodes_per_second",
+        "rate_unit": "episode_rows/second",
+    }
+    numerator = run_meta[throughput_definition["numerator_field"]]
+    denominator = run_meta[throughput_definition["denominator_field"]]
+    assert numerator == result["total_episodes"]
+    assert numerator == result["episodes_written_this_invocation"]
+    assert run_meta["total_episodes"] == result["total_episodes"]
+    assert run_meta["episodes_written_this_invocation"] == numerator
+    assert numerator == summary_payload["campaign"]["total_episodes"]
+    assert summary_payload["campaign"]["episodes_written_this_invocation"] == numerator
+    assert denominator == run_meta["runtime_sec"]
+    assert denominator == result["runtime_sec"]
+    assert denominator == summary_payload["campaign"]["runtime_sec"]
+    assert run_meta[throughput_definition["rate_field"]] == pytest.approx(numerator / denominator)
+    arm_episode_row_counts = [
+        int(run["summary"]["episodes_total"]) for run in summary_payload["runs"]
+    ]
+    arm_invocation_row_counts = [
+        int(run["summary"]["episodes_written_this_invocation"]) for run in summary_payload["runs"]
+    ]
+    assert len(arm_episode_row_counts) == 2
+    assert numerator == sum(arm_invocation_row_counts)
+    assert result["total_episodes"] == sum(arm_episode_row_counts)
+    assert numerator > max(arm_episode_row_counts)
     assert len(summary_payload["arm_rollup"]) == len(summary_payload["runs"])
     assert [arm["planner_key"] for arm in summary_payload["arm_rollup"]] == [
         run["planner"]["key"] for run in summary_payload["runs"]
@@ -3858,6 +3895,214 @@ def test_run_campaign_continues_after_failure_when_stop_disabled(
     )
 
 
+@pytest.mark.parametrize("arm_isolation", ["in_process", "subprocess"])
+def test_run_campaign_resume_throughput_counts_only_rows_written_this_invocation(  # noqa: PLR0915
+    tmp_path: Path,
+    monkeypatch,
+    arm_isolation: str,
+) -> None:
+    """Partial resumes count new rows; cached arms retain rows but write none."""
+    scenario_rel = Path("configs/scenarios/single/resume_throughput.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke_a\n"
+        "  id: smoke_a\n"
+        "  map_file: maps/svg_maps/classic_crossing.svg\n"
+        "  seeds: [1001]\n"
+        "- name: smoke_b\n"
+        "  id: smoke_b\n"
+        "  map_file: maps/svg_maps/classic_crossing.svg\n"
+        "  seeds: [1001]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_resume_throughput.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: test_campaign_resume_throughput",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "resume: true",
+                f"arm_isolation: {arm_isolation}",
+                "export_publication_bundle: false",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [1001]",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    benchmark_profile: baseline-safe",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+    calls: list[int] = []
+
+    def _fake_run_batch(
+        scenarios_or_path,
+        out_path,
+        schema_path,
+        *,
+        algo,
+        benchmark_profile,
+        **kwargs,
+    ):
+        """Append only missing scenario/seed rows and report this call's writes."""
+        del schema_path, kwargs
+        calls.append(len(calls) + 1)
+        scenarios = list(scenarios_or_path)
+        out_file = Path(out_path)
+        out_file.parent.mkdir(parents=True, exist_ok=True)
+        existing = []
+        if out_file.is_file():
+            existing = [
+                json.loads(line)
+                for line in out_file.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+        existing_ids = {(row["scenario_id"], int(row["seed"])) for row in existing}
+        jobs = [
+            (str(scenario.get("id") or scenario.get("name")), int(seed))
+            for scenario in scenarios
+            for seed in scenario.get("seeds", [1001])
+        ]
+        missing = [job for job in jobs if job not in existing_ids]
+        to_write = missing[:1] if len(calls) == 1 else missing
+        records = [
+            {
+                "episode_id": f"{scenario_id}-{seed}",
+                "scenario_id": scenario_id,
+                "seed": seed,
+                "scenario_params": {
+                    "algo": algo,
+                    "metadata": {"archetype": "crossing"},
+                },
+                "metrics": {
+                    "success": 1.0,
+                    "collisions": 0.0,
+                    "near_misses": 0.0,
+                    "snqi": 0.5,
+                },
+                "algorithm_metadata": {"algorithm": algo, "status": "ok"},
+            }
+            for scenario_id, seed in to_write
+        ]
+        for record in records:
+            record["scenario_params"]["algo_config_hash"] = _config_hash({})
+            record["config_hash"] = _config_hash(record["scenario_params"])
+        with out_file.open("a", encoding="utf-8") as handle:
+            for record in records:
+                handle.write(json.dumps(record) + "\n")
+        failed_jobs = len(missing) - len(records)
+        unwritten = missing[len(records) :]
+        return {
+            "status": "partial-failure" if failed_jobs else "ok",
+            "total_jobs": len(jobs),
+            "written": len(records),
+            "failed_jobs": failed_jobs,
+            "failures": (
+                [
+                    {"scenario_id": job[0], "seed": job[1], "error": "interrupted"}
+                    for job in unwritten
+                ]
+            ),
+            "out_path": str(out_file),
+            "algorithm_readiness": {
+                "name": algo,
+                "tier": "baseline-ready",
+                "profile": benchmark_profile,
+            },
+            "preflight": {
+                "status": "ok",
+                "learned_policy_contract": {"status": "not_applicable"},
+            },
+        }
+
+    def _fake_aggregates(
+        records,
+        *,
+        group_by,
+        bootstrap_samples,
+        bootstrap_confidence,
+        bootstrap_seed,
+    ):
+        """Return stable report metrics without running bootstrap analysis."""
+        del records, group_by, bootstrap_samples, bootstrap_confidence, bootstrap_seed
+        return {
+            "mock_group": {
+                "success": {"mean": 1.0, "mean_ci": [1.0, 1.0]},
+                "collisions": {"mean": 0.0, "mean_ci": [0.0, 0.0]},
+                "near_misses": {"mean": 0.0, "mean_ci": [0.0, 0.0]},
+                "time_to_goal_norm": {"mean": 0.5, "mean_ci": [0.4, 0.6]},
+                "path_efficiency": {"mean": 0.9, "mean_ci": [0.8, 0.95]},
+                "comfort_exposure": {"mean": 0.2, "mean_ci": [0.1, 0.3]},
+                "jerk_mean": {"mean": 0.1, "mean_ci": [0.08, 0.12]},
+                "snqi": {"mean": 0.7, "mean_ci": [0.65, 0.75]},
+            },
+            "_meta": {"warnings": [], "missing_algorithms": []},
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.camera_ready_campaign.compute_aggregates_with_ci", _fake_aggregates
+    )
+    if arm_isolation == "subprocess":
+        from robot_sf.benchmark.camera_ready import resource_lifecycle
+
+        monkeypatch.setattr("robot_sf.benchmark.runner.run_batch", _fake_run_batch)
+
+        def _run_worker(args, **subprocess_kwargs):
+            """Exercise the actual subprocess worker body without a second Python process."""
+            params_dict = json.loads(subprocess_kwargs["input"])
+            for field_name in resource_lifecycle._SUBPROCESS_ARM_PATH_FIELDS:
+                field_value = params_dict.get(field_name)
+                if field_value:
+                    params_dict[field_name] = Path(field_value)
+            params = resource_lifecycle._SubprocessArmParams(**params_dict)
+            result = resource_lifecycle._run_single_arm_subprocess(params)
+            return subprocess.CompletedProcess(args, 0, json.dumps(result), "")
+
+        monkeypatch.setattr(
+            camera_ready_campaign_impl_module,
+            "subprocess",
+            SimpleNamespace(run=_run_worker),
+        )
+
+    output_root = tmp_path / "campaign_out"
+    first = run_campaign(cfg, output_root=output_root, campaign_id="resume-throughput")
+    assert first["episodes_written_this_invocation"] == 1
+    assert first["total_episodes"] == 1
+
+    second = run_campaign(cfg, output_root=output_root, campaign_id="resume-throughput")
+    assert second["episodes_written_this_invocation"] == 1
+    assert second["total_episodes"] == 2
+    summary_path = next(Path(second["campaign_root"]).glob("runs/*/summary.json"))
+    persisted_summary_after_resume = summary_path.read_bytes()
+    persisted_summary_payload = json.loads(persisted_summary_after_resume)
+    assert persisted_summary_payload["written"] == 1
+    assert persisted_summary_payload["episodes_written_this_invocation"] == 1
+    assert persisted_summary_payload["episodes_total"] == 2
+
+    third = run_campaign(cfg, output_root=output_root, campaign_id="resume-throughput")
+    assert len(calls) == 2
+    assert third["episodes_written_this_invocation"] == 0
+    assert third["total_episodes"] == 2
+    assert summary_path.read_bytes() == persisted_summary_after_resume
+
+    campaign_summary = json.loads(Path(third["summary_json"]).read_text(encoding="utf-8"))
+    run_entry = campaign_summary["runs"][0]
+    assert run_entry["summary"]["written"] == 1
+    assert run_entry["summary"]["episodes_written_this_invocation"] == 0
+    assert run_entry["summary"]["episodes_total"] == 2
+    assert campaign_summary["campaign"]["total_episodes"] == 2
+    assert campaign_summary["campaign"]["episodes_written_this_invocation"] == 0
+    assert campaign_summary["campaign"]["episodes_per_second"] == 0.0
+    assert campaign_summary["arm_rollup"][0]["episodes_written"] == 0
+    assert campaign_summary["arm_rollup"][0]["episodes_total"] == 2
+
+
 def test_run_campaign_counts_existing_records_when_resumed_attempt_fails(
     tmp_path: Path,
     monkeypatch,
@@ -3936,6 +4181,177 @@ def test_run_campaign_counts_existing_records_when_resumed_attempt_fails(
     assert planner_row["status"] == "failed"
     assert planner_row["episodes"] == 1
     assert planner_row["most_likely_failure_reason"] == "resume crash"
+
+
+def test_run_campaign_counts_rows_written_before_runner_exception(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Rows appended before a post-run validation exception remain in throughput."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
+        encoding="utf-8",
+    )
+
+    config_path = tmp_path / "campaign_runner_exception.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: test_campaign_runner_exception",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [1001]",
+                "resume: true",
+                "stop_on_failure: false",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    benchmark_profile: baseline-safe",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    def _fake_run_batch(_scenarios, out_path, *_args, **_kwargs):
+        """Model the runner failing after a complete row has been durably appended."""
+        Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        with Path(out_path).open("a", encoding="utf-8") as handle:
+            handle.write(
+                json.dumps(
+                    {
+                        "scenario_id": "smoke",
+                        "seed": 1001,
+                        "termination_reason": "success",
+                        "metrics": {"success": 1.0, "collisions": 0.0, "snqi": 0.5},
+                    },
+                )
+                + "\n",
+            )
+        raise RuntimeError("post-run retained metric validation failed")
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="runner_exception")
+    summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
+    planner_row = summary_payload["planner_rows"][0]
+    arm_summary = summary_payload["runs"][0]["summary"]
+
+    assert planner_row["status"] == "failed"
+    assert planner_row["episodes"] == 1
+    assert arm_summary["written"] == 1
+    assert arm_summary["episodes_written_this_invocation"] == 1
+    assert arm_summary["episodes_total"] == 1
+    assert result["episodes_written_this_invocation"] == 1
+    assert result["total_episodes"] == 1
+
+
+@pytest.mark.parametrize("resume", [True, False], ids=["resume", "reused-id-without-resume"])
+def test_run_campaign_counts_only_appended_rows_when_reused_runner_raises(
+    tmp_path: Path,
+    monkeypatch,
+    resume: bool,
+) -> None:
+    """A runner exception counts its appended rows, not rows retained from earlier runs."""
+    scenario_rel = Path("configs/scenarios/single/resume_throughput.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke_a\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n"
+        "- name: smoke_b\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [1001]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_resumed_runner_exception.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: test_campaign_resumed_runner_exception",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [1001]",
+                f"resume: {str(resume).lower()}",
+                "stop_on_failure: false",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    benchmark_profile: baseline-safe",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+    output_root = tmp_path / "campaign_out"
+    campaign_id = "resumed-runner-exception"
+    retained_row = {
+        "scenario_id": "smoke_a",
+        "seed": 1001,
+        "termination_reason": "success",
+        "metrics": {"success": 1.0, "collisions": 0.0, "snqi": 0.5},
+    }
+    retained_row["scenario_params"] = {"algo": "goal", "algo_config_hash": _config_hash({})}
+    retained_row["config_hash"] = _config_hash(retained_row["scenario_params"])
+    calls = 0
+
+    def _fake_run_batch(_scenarios, out_path, *_args, algo="goal", **_kwargs):
+        """Create valid resume state, then append one new row and fail."""
+        nonlocal calls
+        calls += 1
+        with Path(out_path).open("a", encoding="utf-8") as handle:
+            handle.write(
+                json.dumps(
+                    retained_row
+                    if calls == 1
+                    else {
+                        **retained_row,
+                        "scenario_id": "smoke_b",
+                        "seed": 1001,
+                        "termination_reason": "success",
+                        "metrics": {"success": 1.0, "collisions": 0.0, "snqi": 0.5},
+                    }
+                )
+                + "\n",
+            )
+        if calls == 1:
+            return {
+                "status": "ok",
+                "total_jobs": 1,
+                "written": 1,
+                "failed_jobs": 0,
+                "failures": [],
+                "out_path": str(out_path),
+                "algorithm_readiness": {
+                    "name": algo,
+                    "tier": "baseline-ready",
+                    "profile": "baseline-safe",
+                },
+                "preflight": {
+                    "status": "ok",
+                    "learned_policy_contract": {"status": "not_applicable"},
+                },
+            }
+        raise RuntimeError("post-run retained metric validation failed")
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+
+    first_result = run_campaign(cfg, output_root=output_root, campaign_id=campaign_id)
+    assert first_result["episodes_written_this_invocation"] == 1
+
+    result = run_campaign(cfg, output_root=output_root, campaign_id=campaign_id)
+    summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
+    arm_summary = summary_payload["runs"][0]["summary"]
+
+    assert arm_summary["episodes_total"] == 2
+    assert arm_summary["written"] == 1
+    assert arm_summary["episodes_written_this_invocation"] == 1
+    assert result["total_episodes"] == 2
+    assert result["episodes_written_this_invocation"] == 1
 
 
 def test_write_campaign_report_escapes_markdown_cells(tmp_path: Path) -> None:

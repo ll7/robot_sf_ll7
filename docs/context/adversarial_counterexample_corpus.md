@@ -138,7 +138,14 @@ then marks it `blocked_source_provenance_mismatch` with
 re-keyed v1 identity from carrying a verified/pending claim into current use;
 re-import the source bundle with the current importer to obtain current-schema
 receipts. Already admitted cases remain governed by their persisted case and
-exact-replay admission evidence.
+exact-replay admission evidence. An admitted legacy candidate is preserved only
+when source identity is recomputed from its retained summary and materialized
+case, retained source artifacts validate, its promotion attempt recomputes to a
+successful receipt whose decision matches its case link and retained promotion
+evidence, and the promoted case carries both the matching candidate binding and
+candidate-promotion evidence.
+An unrelated valid case cannot supply promotion evidence for a downgraded
+candidate.
 
 Each imported candidate explicitly records `feasibility.verdict: unknown`; the
 historical benchmark evidence does not establish dynamic task feasibility. Its

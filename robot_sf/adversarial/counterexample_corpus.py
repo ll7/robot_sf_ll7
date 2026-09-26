@@ -576,19 +576,21 @@ def _validate_historical_candidate_registry(
     )
     imports_by_id_record = {receipt["import_id"]: receipt for receipt in imports}
     candidates_by_id = {candidate["candidate_id"]: candidate for candidate in candidates}
-    known_cases = {case["case_id"] for case in corpus.get("cases", [])}
-    successful_attempts = {
-        (attempt.get("attempt_id"), attempt.get("source_id"))
-        for attempt in corpus.get("admission_attempts", [])
-        if attempt.get("decision") in {"admitted", "duplicate"}
-    }
+    cases_by_id = {case["case_id"]: case for case in corpus.get("cases", [])}
+    attempts_by_id: dict[str, list[Mapping[str, Any]]] = {}
+    for attempt in corpus.get("admission_attempts", []):
+        attempt_id = attempt.get("attempt_id")
+        if isinstance(attempt_id, str):
+            attempts_by_id.setdefault(attempt_id, []).append(attempt)
     for candidate in candidates:
         _validate_historical_candidate_registry_row(
             candidate,
             imports_by_id,
             source_identity_by_import,
-            known_cases,
-            successful_attempts,
+            cases_by_id,
+            attempts_by_id,
+            corpus,
+            corpus_root,
         )
     _validate_issue9656_candidate_imports(
         corpus,
@@ -1382,8 +1384,10 @@ def _validate_historical_candidate_registry_row(
     candidate: Mapping[str, Any],
     imports_by_id: Mapping[str, set[str]],
     source_identity_by_import: Mapping[str, Mapping[str, Any]],
-    known_cases: set[str],
-    successful_attempts: set[tuple[Any, Any]],
+    cases_by_id: Mapping[str, Mapping[str, Any]],
+    attempts_by_id: Mapping[str, Sequence[Mapping[str, Any]]],
+    corpus: Mapping[str, Any],
+    corpus_root: Path | None,
 ) -> None:
     import_id = candidate["source_provenance"]["import_id"]
     if import_id not in imports_by_id or candidate["candidate_id"] not in imports_by_id[import_id]:
@@ -1420,22 +1424,242 @@ def _validate_historical_candidate_registry_row(
         ):
             raise CorpusError("legacy #9656 candidate must remain explicitly blocked and unpinned")
     if candidate.get("candidate_status") == "admitted":
-        _validate_promoted_historical_candidate(candidate, known_cases, successful_attempts)
+        _validate_admitted_historical_candidate(
+            candidate,
+            expected_schema=expected_schema,
+            source_identity=source_identity_by_import[import_id],
+            cases_by_id=cases_by_id,
+            attempts_by_id=attempts_by_id,
+            corpus=corpus,
+            corpus_root=corpus_root,
+        )
+
+
+def _validate_admitted_historical_candidate(
+    candidate: Mapping[str, Any],
+    *,
+    expected_schema: Any,
+    source_identity: Mapping[str, Any],
+    cases_by_id: Mapping[str, Mapping[str, Any]],
+    attempts_by_id: Mapping[str, Sequence[Mapping[str, Any]]],
+    corpus: Mapping[str, Any],
+    corpus_root: Path | None,
+) -> None:
+    provenance = candidate.get("source_provenance")
+    if (
+        not isinstance(provenance, Mapping)
+        or provenance.get("source_identity_binding_status") != "verified"
+    ):
+        raise CorpusError("admitted historical candidate source identity is not verified")
+    if (
+        expected_schema != LEGACY_HISTORICAL_CANDIDATE_SCHEMA_VERSION
+        or source_identity.get("source_issue") != 9656
+    ):
+        return
+    if corpus_root is None:
+        raise CorpusError("corpus_root is required to validate admitted legacy #9656 candidates")
+    _validate_admitted_legacy_issue9656_source_binding(
+        candidate, source_identity, corpus, corpus_root
+    )
+    source_candidate = copy.deepcopy(dict(candidate))
+    source_candidate["candidate_status"] = "pending_exact_replay"
+    source_blockers = _historical_candidate_source_blockers(source_candidate, corpus, corpus_root)
+    if source_blockers:
+        raise CorpusError(
+            "admitted legacy #9656 candidate source evidence is invalid: "
+            + "; ".join(source_blockers)
+        )
+    _validate_promoted_historical_candidate(candidate, cases_by_id, attempts_by_id)
+
+
+def _validate_admitted_legacy_issue9656_source_binding(
+    candidate: Mapping[str, Any],
+    source_identity: Mapping[str, Any],
+    corpus: Mapping[str, Any],
+    corpus_root: Path,
+) -> None:
+    """Recompute source identity before preserving an admitted legacy-v1 row."""
+    provenance = candidate.get("source_provenance")
+    import_id = provenance.get("import_id") if isinstance(provenance, Mapping) else None
+    imports = corpus.get("historical_candidate_imports", [])
+    import_record = next(
+        (
+            item
+            for item in imports
+            if isinstance(item, Mapping) and item.get("import_id") == import_id
+        ),
+        None,
+    )
+    import_candidate_ids = (
+        import_record.get("candidate_ids") if isinstance(import_record, Mapping) else None
+    )
+    if not isinstance(import_candidate_ids, list) or not import_candidate_ids:
+        raise CorpusError("admitted legacy #9656 candidate has no source import inventory")
+    candidates_by_id = {
+        item.get("candidate_id"): item
+        for item in corpus.get("historical_candidates", [])
+        if isinstance(item, Mapping) and isinstance(item.get("candidate_id"), str)
+    }
+    if any(candidate_id not in candidates_by_id for candidate_id in import_candidate_ids):
+        raise CorpusError("admitted legacy #9656 import references an absent candidate")
+    summary, materialized_manifest = _load_issue9656_import_summary(
+        corpus,
+        str(import_id),
+        import_candidate_ids,
+        candidates_by_id,
+        corpus_root=corpus_root,
+    )
+    summary_rows = summary.get("cases")
+    if not isinstance(summary_rows, list):
+        raise CorpusError("admitted legacy #9656 import summary has no source rows")
+    source_case_id = candidate.get("source_case_id")
+    summary_case = next(
+        (
+            row
+            for row in summary_rows
+            if isinstance(row, Mapping) and row.get("case_id") == source_case_id
+        ),
+        None,
+    )
+    if not isinstance(summary_case, Mapping):
+        raise CorpusError("admitted legacy #9656 summary omits its source case")
+    _validate_issue9656_summary_case(summary_case, source_identity, candidates_by_id)
+    materialized_cases = _issue9656_materialized_manifest_case_lookup(
+        materialized_manifest, summary_rows
+    )
+    materialized_case = materialized_cases.get(str(source_case_id))
+    if not isinstance(materialized_case, Mapping):
+        raise CorpusError("admitted legacy #9656 manifest omits its source case")
+    source_receipts = (
+        _issue9656_source_materialization_receipts(source_identity, summary_rows)
+        if "source_materialization_bindings" in source_identity
+        else {}
+    )
+    _validate_issue9656_candidate_source_binding(
+        candidate,
+        summary_case,
+        materialized_case,
+        summary.get("source"),
+        source_identity=source_identity,
+        source_materialization_receipts=source_receipts,
+        corpus_root=corpus_root,
+    )
 
 
 def _validate_promoted_historical_candidate(
     candidate: Mapping[str, Any],
-    known_cases: set[str],
-    successful_attempts: set[tuple[Any, Any]],
+    cases_by_id: Mapping[str, Mapping[str, Any]],
+    attempts_by_id: Mapping[str, Sequence[Mapping[str, Any]]],
 ) -> None:
-    if candidate.get("promoted_case_id") not in known_cases:
+    candidate_id = candidate.get("candidate_id")
+    promoted_case_id = candidate.get("promoted_case_id")
+    case = cases_by_id.get(promoted_case_id)
+    if case is None:
         raise CorpusError("promoted historical candidate references an absent case")
     if candidate.get("source_candidate_status") != "pending_exact_replay":
         raise CorpusError("promoted historical candidate lost its original pending status")
-    if (candidate.get("promotion_attempt_id"), candidate.get("candidate_id")) not in (
-        successful_attempts
-    ):
+    attempt_id = candidate.get("promotion_attempt_id")
+    matching_attempts = attempts_by_id.get(attempt_id, [])
+    if len(matching_attempts) != 1:
         raise CorpusError("promoted historical candidate has no successful admission attempt")
+    attempt = matching_attempts[0]
+    attempt_identity = {
+        key: attempt.get(key)
+        for key in (
+            "schema_version",
+            "source_kind",
+            "source_id",
+            "decision",
+            "blockers",
+            "candidate_identity",
+            "duplicate_case_id",
+            "near_duplicate_report",
+        )
+    }
+    expected_attempt_id = hashlib.sha256(_stable_json(attempt_identity).encode("utf-8")).hexdigest()
+    if attempt.get("attempt_id") != expected_attempt_id:
+        raise CorpusError("promotion attempt ID does not bind its stored receipt")
+    if (
+        attempt.get("schema_version") != ATTEMPT_SCHEMA_VERSION
+        or attempt.get("source_kind") != "issue_9656_historical_candidate"
+        or attempt.get("source_id") != candidate_id
+        or attempt.get("decision") not in {"admitted", "duplicate"}
+        or attempt.get("blockers") != []
+        or attempt.get("candidate_identity") != case.get("effective_scenario_sha256")
+        or (attempt.get("decision") == "admitted" and attempt.get("duplicate_case_id") is not None)
+        or (
+            attempt.get("decision") == "duplicate"
+            and attempt.get("duplicate_case_id") != promoted_case_id
+        )
+    ):
+        raise CorpusError("promotion attempt does not bind the candidate and promoted case")
+
+    discovery = case.get("discovery")
+    case_binding = (
+        discovery.get("historical_candidate_binding") if isinstance(discovery, Mapping) else None
+    )
+    expected_binding = {
+        "candidate_id": candidate_id,
+        "source_issue": 9656,
+        "source_case_id": candidate.get("source_case_id"),
+        "source_record_sha256": candidate.get("source_record_sha256"),
+        "source_replay_status": candidate.get("source_replay_status"),
+    }
+    if isinstance(case_binding, Mapping) and any(
+        case_binding.get(key) != value for key, value in expected_binding.items()
+    ):
+        raise CorpusError("promoted case historical-candidate binding differs from candidate")
+
+    evidence_records = [case.get("source_evidence")]
+    supporting_evidence = case.get("supporting_source_evidence", [])
+    if isinstance(supporting_evidence, Sequence) and not isinstance(
+        supporting_evidence, (str, bytes)
+    ):
+        evidence_records.extend(supporting_evidence)
+    replay_receipt = case.get("replay_receipt")
+    replay_revision = (
+        replay_receipt.get("replay_revision") if isinstance(replay_receipt, Mapping) else None
+    )
+    target_revision = (
+        replay_receipt.get("target_revision") if isinstance(replay_receipt, Mapping) else None
+    )
+    has_case_binding_evidence = any(
+        isinstance(record, Mapping)
+        and isinstance((promotion := record.get("historical_candidate_promotion")), Mapping)
+        and isinstance(promotion.get("historical_candidate_binding"), Mapping)
+        and all(
+            promotion["historical_candidate_binding"].get(key) == value
+            for key, value in expected_binding.items()
+        )
+        for record in evidence_records
+    )
+    has_promotion_evidence = any(
+        isinstance(record, Mapping)
+        and isinstance((promotion := record.get("historical_candidate_promotion")), Mapping)
+        and promotion.get("candidate_id") == candidate_id
+        and isinstance(promotion.get("historical_candidate_binding"), Mapping)
+        and all(
+            promotion["historical_candidate_binding"].get(key) == value
+            for key, value in expected_binding.items()
+        )
+        and promotion.get("admission_decision") == attempt.get("decision")
+        and promotion.get("source_replay_status") == candidate.get("source_replay_status")
+        and promotion.get("raw_episode_artifact_custody")
+        == "digest_only_not_copied_from_campaign_output"
+        and promotion.get("raw_episode_artifact_used_as_admission_evidence") is False
+        and promotion.get("local_ignored_output_used_as_admission_evidence") is False
+        and promotion.get("admission_replay_matches_target_revision") is True
+        and _is_full_git_revision(replay_revision)
+        and replay_revision == target_revision
+        and replay_receipt.get("target_and_replay_revision_match") is True
+        and promotion.get("admission_replay_revision") == replay_revision
+        for record in evidence_records
+    )
+    has_case_binding = isinstance(case_binding, Mapping) or has_case_binding_evidence
+    if not has_case_binding:
+        raise CorpusError("promoted case has no historical-candidate binding")
+    if not has_promotion_evidence:
+        raise CorpusError("promoted case evidence does not bind this historical candidate")
 
 
 def _normalize_legacy_issue9656_candidates_for_read(corpus: Any) -> None:
@@ -2071,6 +2295,16 @@ def promote_historical_candidate(
     }
     case_for_admission["source_evidence"]["historical_candidate_promotion"] = {
         "candidate_id": candidate["candidate_id"],
+        "historical_candidate_binding": {
+            key: binding[key]
+            for key in (
+                "candidate_id",
+                "source_issue",
+                "source_case_id",
+                "source_record_sha256",
+                "source_replay_status",
+            )
+        },
         **binding["historical_source_replay"],
     }
     corpus, receipt = admit_case_record(
@@ -2082,6 +2316,24 @@ def promote_historical_candidate(
         source_id=candidate_id,
     )
     if receipt["decision"] in {"admitted", "duplicate"}:
+        admitted_case = next(
+            (item for item in corpus["cases"] if item.get("case_id") == receipt.get("case_id")),
+            None,
+        )
+        if admitted_case is None:
+            raise CorpusError("successful candidate promotion has no persisted case")
+        evidence_records = [admitted_case.get("source_evidence")]
+        evidence_records.extend(admitted_case.get("supporting_source_evidence", []))
+        matching_promotions = [
+            record.get("historical_candidate_promotion")
+            for record in evidence_records
+            if isinstance(record, Mapping)
+            and isinstance(record.get("historical_candidate_promotion"), dict)
+            and record["historical_candidate_promotion"].get("candidate_id") == candidate_id
+        ]
+        if len(matching_promotions) != 1:
+            raise CorpusError("successful candidate promotion has no unique case evidence")
+        matching_promotions[0]["admission_decision"] = receipt["decision"]
         candidate["source_candidate_status"] = candidate["candidate_status"]
         candidate["candidate_status"] = "admitted"
         candidate["promoted_case_id"] = receipt["case_id"]

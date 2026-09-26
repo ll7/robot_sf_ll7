@@ -205,8 +205,102 @@ def _rekey_issue9656_import_as_legacy_v1(
                 1,
             )
             paths[name] = relative
+    for asset in candidate.get("replay_inputs", {}).get("map_assets", []):
+        if isinstance(asset, dict) and isinstance(asset.get("stored_path"), str):
+            asset["stored_path"] = asset["stored_path"].replace(
+                f"historical_candidates/{old_candidate_id}/",
+                f"historical_candidates/{new_candidate_id}/",
+                1,
+            )
     old_candidate_root.rename(new_candidate_root)
     old_import_root.rename(new_import_root)
+
+
+def _legacy_admitted_issue9656_corpus_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[dict[str, object], Path]:
+    """Build a properly promoted candidate, then re-key it as a coherent legacy-v1 record."""
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
+        tmp_path, statuses=("not_attempted",), promotion_case=True
+    )
+    corpus_root = tmp_path / "corpus"
+    corpus, _receipt = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=corpus_root,
+    )
+    corpus, _pilot = import_issue9645_packet(_SOURCE_PACKET, corpus, corpus_root=corpus_root)
+    candidate = corpus["historical_candidates"][0]
+    case = copy.deepcopy(corpus["cases"][0])
+    case["replay_receipt"] = _single_replay_admission_receipt(case, corpus_root)
+    target_revision = case["replay_receipt"]["target_revision"]
+    monkeypatch.setattr(counterexample_corpus, "_current_target_revision", lambda: target_revision)
+    case_record = _stage_case_under_candidate(case, corpus_root, candidate["candidate_id"])
+    case_record["discovery"]["historical_candidate_binding"] = {
+        "candidate_id": candidate["candidate_id"],
+        "source_issue": 9656,
+        "source_case_id": candidate["source_case_id"],
+        "source_record_sha256": candidate["source_record_sha256"],
+        "source_replay_status": candidate["source_replay_status"],
+    }
+    corpus, receipt = promote_historical_candidate(
+        candidate["candidate_id"], case_record, corpus, corpus_root=corpus_root
+    )
+    assert receipt["decision"] == "duplicate"
+    assert corpus["historical_candidates"][0]["candidate_status"] == "admitted"
+
+    old_candidate_id = candidate["candidate_id"]
+    old_attempt_id = candidate["promotion_attempt_id"]
+    legacy = copy.deepcopy(corpus)
+    _rekey_issue9656_import_as_legacy_v1(legacy, corpus_root, version_field="explicit_v1")
+    candidate = legacy["historical_candidates"][0]
+    new_candidate_id = candidate["candidate_id"]
+    for case_record in legacy["cases"]:
+        binding = case_record.get("discovery", {}).get("historical_candidate_binding")
+        if isinstance(binding, dict) and binding.get("candidate_id") == old_candidate_id:
+            binding["candidate_id"] = new_candidate_id
+        evidence_records = [case_record.get("source_evidence")]
+        evidence_records.extend(case_record.get("supporting_source_evidence", []))
+        for evidence in evidence_records:
+            if not isinstance(evidence, dict):
+                continue
+            promotion = evidence.get("historical_candidate_promotion")
+            if isinstance(promotion, dict) and promotion.get("candidate_id") == old_candidate_id:
+                promotion["candidate_id"] = new_candidate_id
+                candidate_binding = promotion.get("historical_candidate_binding")
+                if (
+                    isinstance(candidate_binding, dict)
+                    and candidate_binding.get("candidate_id") == old_candidate_id
+                ):
+                    candidate_binding["candidate_id"] = new_candidate_id
+
+    attempt = next(
+        row for row in legacy["admission_attempts"] if row["attempt_id"] == old_attempt_id
+    )
+    attempt["source_id"] = new_candidate_id
+    attempt_payload = {
+        key: attempt[key]
+        for key in (
+            "schema_version",
+            "source_kind",
+            "source_id",
+            "decision",
+            "blockers",
+            "candidate_identity",
+            "duplicate_case_id",
+            "near_duplicate_report",
+        )
+    }
+    attempt["attempt_id"] = hashlib.sha256(
+        counterexample_corpus._stable_json(attempt_payload).encode("utf-8")
+    ).hexdigest()
+    candidate["promotion_attempt_id"] = attempt["attempt_id"]
+    legacy["historical_candidates"].sort(key=lambda item: item["candidate_id"])
+    legacy["historical_candidate_imports"].sort(key=lambda item: item["import_id"])
+    return legacy, corpus_root
 
 
 def _build_issue9656_fixture_candidate(
@@ -1530,6 +1624,168 @@ def test_issue9652_legacy_v1_blocked_import_remains_readable(tmp_path: Path) -> 
         candidate["legacy_unpinned_source_evidence"]["source_identity_binding_status_at_load"]
         == "blocked"
     )
+
+
+@pytest.mark.parametrize("source_binding_status", ("blocked", "verified"))
+def test_issue9652_v1_downgrade_cannot_forge_admission_to_unrelated_case(
+    tmp_path: Path, source_binding_status: str
+) -> None:
+    summary_path, materialized, campaign_root, bundle_root = _issue9656_candidate_fixture(
+        tmp_path, statuses=("not_attempted",)
+    )
+    source_case_path = materialized / "cases/case-0000000000000001/case.json"
+    if source_binding_status == "blocked":
+        source_case = json.loads(source_case_path.read_text(encoding="utf-8"))
+        source_case["source"]["row_git_hash"] = "0" * 40
+        source_case_path.write_text(json.dumps(source_case, sort_keys=True), encoding="utf-8")
+
+    corpus_root = tmp_path / "corpus"
+    corpus, _import_receipt = import_issue9656_candidates(
+        summary_path,
+        materialized,
+        bundle_root,
+        campaign_root,
+        new_corpus(),
+        corpus_root=corpus_root,
+    )
+    corpus, pilot = import_issue9645_packet(_SOURCE_PACKET, corpus, corpus_root=corpus_root)
+    assert corpus["historical_candidates"][0]["candidate_status"] == (
+        "blocked_source_provenance_mismatch"
+        if source_binding_status == "blocked"
+        else "pending_exact_replay"
+    )
+    corpus_path = corpus_root / "corpus.json"
+    save_corpus(corpus_path, corpus)
+
+    tampered = copy.deepcopy(corpus)
+    _rekey_issue9656_import_as_legacy_v1(tampered, corpus_root, version_field="explicit_v1")
+    candidate = tampered["historical_candidates"][0]
+    candidate["source_candidate_status"] = "pending_exact_replay"
+    candidate["candidate_status"] = "admitted"
+    candidate["promoted_case_id"] = pilot["case_id"]
+    if source_binding_status == "blocked":
+        # Forge the status flag as well as the admission record. Load must
+        # recompute source identity from the retained summary/materialization.
+        candidate["source_provenance"]["source_identity_binding_status"] = "verified"
+        candidate["source_provenance"]["source_identity_binding_issues"] = []
+    tampered, attempt = counterexample_corpus._record_attempt(
+        tampered,
+        source_kind="issue_9656_historical_candidate",
+        source_id=candidate["candidate_id"],
+        decision="duplicate",
+        blockers=[],
+        candidate_identity=pilot["case_id"].removeprefix("case-"),
+        duplicate_case_id=pilot["case_id"],
+        near_duplicate_report=counterexample_corpus._unassessed_near_duplicates(),
+    )
+    candidate["promotion_attempt_id"] = attempt["attempt_id"]
+    tampered["historical_candidates"].sort(key=lambda item: item["candidate_id"])
+    tampered["historical_candidate_imports"].sort(key=lambda item: item["import_id"])
+    corpus_path.write_text(json.dumps(tampered, sort_keys=True), encoding="utf-8")
+
+    expected_error = (
+        "candidate source identity binding differs from pinned materialized evidence"
+        if source_binding_status == "blocked"
+        else "promoted case has no historical-candidate binding"
+    )
+    with pytest.raises(CorpusError, match=expected_error):
+        load_corpus(corpus_path)
+
+
+def test_issue9652_properly_promoted_legacy_v1_candidate_remains_readable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    legacy, corpus_root = _legacy_admitted_issue9656_corpus_fixture(tmp_path, monkeypatch)
+    corpus_path = corpus_root / "corpus.json"
+    corpus_path.write_text(json.dumps(legacy, sort_keys=True), encoding="utf-8")
+
+    loaded = load_corpus(corpus_path)
+
+    candidate = loaded["historical_candidates"][0]
+    assert (
+        candidate["schema_version"]
+        == counterexample_corpus.LEGACY_HISTORICAL_CANDIDATE_SCHEMA_VERSION
+    )
+    assert candidate["candidate_status"] == "admitted"
+    assert candidate["source_provenance"]["source_identity_binding_status"] == "verified"
+    case = next(
+        item for item in loaded["cases"] if item["case_id"] == candidate["promoted_case_id"]
+    )
+    assert any(
+        evidence.get("historical_candidate_promotion", {}).get("candidate_id")
+        == candidate["candidate_id"]
+        for evidence in case.get("supporting_source_evidence", [])
+    )
+    promotion = next(
+        evidence["historical_candidate_promotion"]
+        for evidence in case.get("supporting_source_evidence", [])
+        if evidence.get("historical_candidate_promotion", {}).get("candidate_id")
+        == candidate["candidate_id"]
+    )
+    assert promotion["historical_candidate_binding"] == {
+        "candidate_id": candidate["candidate_id"],
+        "source_issue": 9656,
+        "source_case_id": candidate["source_case_id"],
+        "source_record_sha256": candidate["source_record_sha256"],
+        "source_replay_status": candidate["source_replay_status"],
+    }
+
+
+def test_issue9652_legacy_v1_promotion_attempt_receipt_is_recomputed_on_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    legacy, corpus_root = _legacy_admitted_issue9656_corpus_fixture(tmp_path, monkeypatch)
+    candidate = legacy["historical_candidates"][0]
+    attempt = next(
+        item
+        for item in legacy["admission_attempts"]
+        if item["attempt_id"] == candidate["promotion_attempt_id"]
+    )
+    attempt["source_id"] = "0" * 64
+
+    corpus_path = corpus_root / "corpus.json"
+    corpus_path.write_text(json.dumps(legacy, sort_keys=True), encoding="utf-8")
+    with pytest.raises(CorpusError, match="promotion attempt ID does not bind its stored receipt"):
+        load_corpus(corpus_path)
+
+
+def test_issue9652_legacy_v1_promotion_attempt_decision_must_match_case_link(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    legacy, corpus_root = _legacy_admitted_issue9656_corpus_fixture(tmp_path, monkeypatch)
+    candidate = legacy["historical_candidates"][0]
+    attempt = next(
+        item
+        for item in legacy["admission_attempts"]
+        if item["attempt_id"] == candidate["promotion_attempt_id"]
+    )
+    assert attempt["decision"] == "duplicate"
+    attempt["decision"] = "admitted"
+    attempt["duplicate_case_id"] = None
+    attempt_payload = {
+        key: attempt[key]
+        for key in (
+            "schema_version",
+            "source_kind",
+            "source_id",
+            "decision",
+            "blockers",
+            "candidate_identity",
+            "duplicate_case_id",
+            "near_duplicate_report",
+        )
+    }
+    attempt["attempt_id"] = hashlib.sha256(
+        counterexample_corpus._stable_json(attempt_payload).encode("utf-8")
+    ).hexdigest()
+    candidate["promotion_attempt_id"] = attempt["attempt_id"]
+
+    corpus_path = corpus_root / "corpus.json"
+    corpus_path.write_text(json.dumps(legacy, sort_keys=True), encoding="utf-8")
+    with pytest.raises(
+        CorpusError, match="promoted case evidence does not bind this historical candidate"
+    ):
+        load_corpus(corpus_path)
 
 
 def test_issue9652_legacy_rekey_cannot_change_identity_source_issue(tmp_path: Path) -> None:

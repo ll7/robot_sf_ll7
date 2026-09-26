@@ -8,15 +8,22 @@ import json
 import subprocess
 from typing import TYPE_CHECKING, Any
 
+import pytest
+
 if TYPE_CHECKING:
     from pathlib import Path
 
 from scripts.dev import single_account_merge_receipt as receipt_module
+from scripts.dev import stacked_prs as stacked_prs_module
 from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 from scripts.dev.stacked_prs import (
+    _check_run_identifier,
     _closing_discipline_reasons,
+    _enrich_merge_queue_gate_check_runs,
     _get_paginated_list,
+    _merge_queue_gate_reasons,
     _parse_expected_heads,
+    _resolve_check_run_workflow_name,
     _retarget_plan,
     _review_digest,
     build_stack_status,
@@ -218,6 +225,47 @@ def test_check_summary_drops_older_cancelled_run() -> None:
     assert summary["failures"] == []
 
 
+def test_check_run_identifier_rejects_oversized_decimal_string() -> None:
+    """An oversized REST identifier must fail closed instead of escaping conversion."""
+    assert _check_run_identifier({"id": "9" * 5000}) is None
+
+
+@pytest.mark.parametrize(
+    ("raw_identifier", "expected"),
+    [
+        (9223372036854775807, 9223372036854775807),
+        ("9223372036854775807", 9223372036854775807),
+        (9223372036854775808, None),
+        ("9223372036854775808", None),
+        ("9" * 4000, None),
+    ],
+)
+def test_check_run_identifier_enforces_int64_range(
+    raw_identifier: int | str, expected: int | None
+) -> None:
+    """Only positive signed-int64 Check Run identifiers can bind gate evidence."""
+    assert _check_run_identifier({"id": raw_identifier}) == expected
+
+
+def test_run_gh_api_rejects_oversized_numeric_json_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An oversized numeric ID in a mocked gh response stays on the structured error path."""
+    payload = '{"check_runs":[{"id":' + "9" * 5000 + "}]}"
+    response = _completed(["gh", "api"], stdout=payload)
+    monkeypatch.setattr(
+        stacked_prs_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: response,
+    )
+
+    decoded, error = stacked_prs_module._run_gh_api(
+        "GET", "repos/ll7/robot_sf_ll7/commits/" + "a" * 40 + "/check-runs"
+    )
+
+    assert decoded is None
+    assert error is not None
+    assert error.startswith("gh api returned invalid JSON:")
+
+
 def test_check_summary_fails_closed_for_pending_and_failed_current_runs() -> None:
     pending = summarize_check_runs(
         [{"id": 1, "name": "CI", "status": "in_progress", "conclusion": None}]
@@ -232,11 +280,36 @@ def test_check_summary_fails_closed_for_pending_and_failed_current_runs() -> Non
     assert missing["overall"] == "unknown"
 
 
+def test_check_summary_rejects_malformed_newest_run_instead_of_using_old_result() -> None:
+    """Malformed newest ordinary check data must not report a green summary."""
+    summary = summarize_check_runs(
+        [
+            {
+                "id": 200,
+                "name": "CI",
+                "status": "completed",
+                "conclusion": "failure",
+                "completed_at": "2026-08-17T10:00:00Z",
+            },
+            {
+                "name": "CI",
+                "status": "completed",
+                "conclusion": "success",
+                "completed_at": "2026-08-17T11:00:00Z",
+            },
+        ]
+    )
+
+    assert summary["overall"] == "malformed"
+    assert summary["malformed"] == ["CI"]
+
+
 def test_merge_queue_gate_requires_newest_exact_head_success() -> None:
     head_sha = "a" * 40
     older = {
         "id": 1,
         "name": "merge-queue-gate",
+        "workflow_name": "Merge Queue Gate",
         "status": "completed",
         "conclusion": "success",
         "completed_at": "2026-08-17T10:00:00Z",
@@ -256,6 +329,23 @@ def test_merge_queue_gate_requires_newest_exact_head_success() -> None:
         summarize_merge_queue_gate([older, newer_pending], head_sha=head_sha)["status"] == "pending"
     )
     assert (
+        summarize_merge_queue_gate(
+            [
+                older,
+                {
+                    **older,
+                    "id": 3,
+                    "status": "queued",
+                    "conclusion": None,
+                    "completed_at": None,
+                    "started_at": None,
+                },
+            ],
+            head_sha=head_sha,
+        )["status"]
+        == "pending"
+    )
+    assert (
         summarize_merge_queue_gate([{**older, "head_sha": "b" * 40}], head_sha=head_sha)["status"]
         == "mismatch"
     )
@@ -267,6 +357,215 @@ def test_merge_queue_gate_requires_newest_exact_head_success() -> None:
         == "malformed"
     )
     assert summarize_merge_queue_gate([older], head_sha=head_sha)["status"] == "success"
+
+
+def test_merge_queue_gate_rejects_malformed_newest_run_instead_of_using_old_success() -> None:
+    """Malformed latest check data must not hide behind an older green run."""
+    head_sha = "a" * 40
+    older = {
+        "id": 100,
+        "name": "merge-queue-gate",
+        "workflow_name": "Merge Queue Gate",
+        "status": "completed",
+        "conclusion": "success",
+        "completed_at": "2026-08-17T10:00:00Z",
+        "head_sha": head_sha,
+    }
+    malformed_newer = {
+        **older,
+        "id": "not-a-check-run-id",
+        "status": "queued",
+        "conclusion": None,
+        "completed_at": None,
+        "started_at": "2026-08-17T11:00:00Z",
+    }
+
+    summary = summarize_merge_queue_gate([older, malformed_newer], head_sha=head_sha)
+
+    assert summary["status"] == "malformed"
+
+
+def test_merge_queue_gate_rejects_out_of_range_check_run_id() -> None:
+    """An out-of-range identifier cannot make exact-head gate evidence green."""
+    head_sha = "a" * 40
+    summary = summarize_merge_queue_gate(
+        [
+            {
+                "id": 9223372036854775808,
+                "name": "merge-queue-gate",
+                "workflow_name": "Merge Queue Gate",
+                "status": "completed",
+                "conclusion": "success",
+                "completed_at": "2026-08-17T11:00:00Z",
+                "head_sha": head_sha,
+            }
+        ],
+        head_sha=head_sha,
+    )
+
+    assert summary["status"] == "malformed"
+
+
+def test_merge_queue_gate_rejects_missing_workflow_identity() -> None:
+    """A job name alone cannot prove the exact required workflow context."""
+    head_sha = "a" * 40
+    summary = summarize_merge_queue_gate(
+        [
+            {
+                "id": 4,
+                "name": "merge-queue-gate",
+                "status": "completed",
+                "conclusion": "success",
+                "completed_at": "2026-08-17T12:00:00Z",
+                "head_sha": head_sha,
+            }
+        ],
+        head_sha=head_sha,
+    )
+
+    assert summary["status"] == "mismatch"
+    assert summary["workflow_name"] is None
+
+
+def test_merge_queue_gate_reasons_distinguish_workflow_identity_mismatch() -> None:
+    """Workflow identity failures should be actionable in stack diagnostics."""
+    assert _merge_queue_gate_reasons(
+        {"merge_queue_gate": {"status": "mismatch", "workflow_name": None}}
+    ) == ["merge_queue_gate_workflow_mismatch"]
+    assert _merge_queue_gate_reasons(
+        {"merge_queue_gate": {"status": "mismatch", "workflow_name": "Other Workflow"}}
+    ) == ["merge_queue_gate_workflow_mismatch"]
+    assert _merge_queue_gate_reasons(
+        {"merge_queue_gate": {"status": "mismatch", "workflow_name": "Merge Queue Gate"}}
+    ) == ["merge_queue_gate_head_mismatch"]
+
+
+@pytest.mark.parametrize(
+    "details_url",
+    [
+        "https://example.com/owner/repo/actions/runs/123/job/456",
+        "https://github.com/owner/repo/actions/runs/123/job/not-a-job",
+        "https://github.com/other/repo/actions/runs/123/job/456",
+        "https://github.com/owner/repo/actions/runs/123",
+    ],
+)
+def test_workflow_resolution_rejects_untrusted_details_urls(details_url: str) -> None:
+    """Only canonical GitHub URLs for this repository may identify a workflow run."""
+    calls: list[str] = []
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        calls.append(path)
+        return {"name": "Merge Queue Gate", "head_sha": "a" * 40}, None
+
+    assert (
+        _resolve_check_run_workflow_name(
+            {"details_url": details_url, "head_sha": "a" * 40},
+            repo="owner/repo",
+            api=fake_api,
+            cache={},
+        )
+        == ""
+    )
+    assert calls == []
+
+
+def test_workflow_resolution_handles_malformed_url_without_raising() -> None:
+    """Malformed URL parsing must remain a structured fail-closed result."""
+    assert (
+        _resolve_check_run_workflow_name(
+            {"details_url": "https://[::1", "head_sha": "a" * 40},
+            repo="owner/repo",
+            api=lambda *_args: pytest.fail("malformed URL must not call the API"),
+            cache={},
+        )
+        == ""
+    )
+
+
+def test_workflow_resolution_requires_matching_run_head() -> None:
+    """A workflow run from another commit cannot establish the current gate identity."""
+    calls: list[str] = []
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        calls.append(path)
+        return {"name": "Merge Queue Gate", "head_sha": "b" * 40}, None
+
+    assert (
+        _resolve_check_run_workflow_name(
+            {
+                "details_url": "https://github.com/owner/repo/actions/runs/123/job/456",
+                "head_sha": "a" * 40,
+            },
+            repo="owner/repo",
+            api=fake_api,
+            cache={},
+        )
+        == ""
+    )
+    assert calls == ["repos/owner/repo/actions/runs/123"]
+
+
+def test_workflow_resolution_reports_run_head_mismatch_diagnostic() -> None:
+    """A rejected fetched run head should remain distinct from URL identity failure."""
+    head_sha = "a" * 40
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        return {"name": "Merge Queue Gate", "head_sha": "b" * 40}, None
+
+    enriched = _enrich_merge_queue_gate_check_runs(
+        [
+            {
+                "id": 701,
+                "name": "merge-queue-gate",
+                "details_url": "https://github.com/owner/repo/actions/runs/701/job/702",
+                "head_sha": head_sha,
+                "status": "completed",
+                "conclusion": "success",
+            }
+        ],
+        repo="owner/repo",
+        api=fake_api,
+        cache={},
+    )
+    summary = summarize_merge_queue_gate(enriched, head_sha=head_sha)
+
+    assert summary["status"] == "mismatch"
+    assert summary["workflow_identity_error"] == "workflow_run_head_mismatch"
+    assert _merge_queue_gate_reasons({"merge_queue_gate": summary}) == [
+        "merge_queue_gate_head_mismatch"
+    ]
+
+
+def test_workflow_resolution_does_not_cache_incomplete_payloads() -> None:
+    """An incomplete run response must be retried within the same snapshot."""
+    calls: list[str] = []
+    responses = [
+        {},
+        {"name": "Merge Queue Gate", "head_sha": "a" * 40},
+    ]
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        calls.append(path)
+        return responses.pop(0), None
+
+    check_run = {
+        "details_url": "https://github.com/owner/repo/actions/runs/701/job/702",
+        "head_sha": "a" * 40,
+    }
+    cache: dict[str, dict[str, Any]] = {}
+
+    assert (
+        _resolve_check_run_workflow_name(check_run, repo="owner/repo", api=fake_api, cache=cache)
+        == ""
+    )
+    assert (
+        _resolve_check_run_workflow_name(check_run, repo="owner/repo", api=fake_api, cache=cache)
+        == "Merge Queue Gate"
+    )
+    assert calls == [
+        "repos/owner/repo/actions/runs/701",
+        "repos/owner/repo/actions/runs/701",
+    ]
 
 
 def test_explicit_holds_and_withdrawn_review_carriers_fail_closed() -> None:
@@ -317,7 +616,21 @@ def test_explicit_holds_and_withdrawn_review_carriers_fail_closed() -> None:
     )
 
 
-def test_status_positive_control_requires_current_merge_queue_gate(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+@pytest.mark.parametrize(
+    ("actions_run", "expected_status", "expected_workflow_name", "expected_merge_ready"),
+    [
+        ({"workflow_id": 987, "name": "Merge Queue Gate"}, "success", "Merge Queue Gate", True),
+        ({"workflow_id": 988, "name": "Other Workflow"}, "mismatch", "Other Workflow", False),
+        (None, "mismatch", None, False),
+    ],
+)
+def test_status_resolves_gate_workflow_from_actions_run_and_fails_closed(
+    monkeypatch,
+    actions_run: dict[str, Any] | None,
+    expected_status: str,
+    expected_workflow_name: str | None,
+    expected_merge_ready: bool,
+) -> None:  # type: ignore[no-untyped-def]
     main_sha = "m" * 40
     head_sha = "a" * 40
     title = "feat: stack 1"
@@ -360,6 +673,7 @@ def test_status_positive_control_requires_current_merge_queue_gate(monkeypatch) 
                 {
                     "id": 2,
                     "name": "merge-queue-gate",
+                    "details_url": "https://github.com/owner/repo/actions/runs/123/job/456",
                     "status": "completed",
                     "conclusion": "success",
                     "head_sha": head_sha,
@@ -369,9 +683,15 @@ def test_status_positive_control_requires_current_merge_queue_gate(monkeypatch) 
         },
     }
 
-    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, str | None]:
         assert method == "GET"
         assert payload is None
+        if path == "repos/owner/repo/actions/runs/123":
+            resolved_run = None if actions_run is None else {**actions_run, "head_sha": head_sha}
+            return (
+                resolved_run,
+                None if resolved_run is not None else "Actions run lookup unavailable",
+            )
         return payloads[path], None
 
     monkeypatch.setattr(
@@ -397,9 +717,11 @@ def test_status_positive_control_requires_current_merge_queue_gate(monkeypatch) 
     )
 
     entry = result["entries"][0]
-    assert entry["merge_queue_gate"]["status"] == "success"
-    assert entry["explicit_holds"] == []
-    assert entry["merge_ready"] is True
+    assert entry["merge_queue_gate"]["status"] == expected_status
+    assert entry["merge_queue_gate"].get("workflow_name") == expected_workflow_name
+    if expected_merge_ready:
+        assert entry["explicit_holds"] == []
+    assert entry["merge_ready"] is expected_merge_ready
 
 
 def test_review_digest_changes_when_review_content_changes() -> None:
@@ -460,6 +782,166 @@ def test_paginated_list_accepts_check_run_object_envelope() -> None:
     assert pagination is not None and pagination["row_count"] == 1
 
 
+def test_paginated_check_runs_follow_declared_count_across_short_pages() -> None:
+    calls: list[str] = []
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        assert method == "GET"
+        assert payload is None
+        calls.append(path)
+        item = {"id": len(calls), "name": f"check-{len(calls)}"}
+        return {"total_count": 2, "check_runs": [item]}, None
+
+    rows, pagination, error = _get_paginated_list(
+        "repos/owner/repo/commits/sha/check-runs?per_page=100",
+        api=fake_api,
+        response_key="check_runs",
+    )
+
+    assert error is None
+    assert rows == [
+        {"id": 1, "name": "check-1"},
+        {"id": 2, "name": "check-2"},
+    ]
+    assert pagination == {
+        "pages_read": 2,
+        "page_size": 100,
+        "page_budget": 100,
+        "row_count": 2,
+        "truncated": False,
+        "total_count": 2,
+    }
+    assert calls == [
+        "repos/owner/repo/commits/sha/check-runs?per_page=100",
+        "repos/owner/repo/commits/sha/check-runs?per_page=100&page=2",
+    ]
+
+
+def test_paginated_check_runs_reject_short_incomplete_page() -> None:
+    calls: list[str] = []
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        assert method == "GET"
+        assert payload is None
+        calls.append(path)
+        rows = [{"id": 1, "name": "CI"}] if len(calls) == 1 else []
+        return {"total_count": 2, "check_runs": rows}, None
+
+    rows, pagination, error = _get_paginated_list(
+        "repos/owner/repo/commits/sha/check-runs?per_page=100",
+        api=fake_api,
+        response_key="check_runs",
+    )
+
+    assert rows is None
+    assert pagination == {
+        "pages_read": 2,
+        "page_size": 100,
+        "page_budget": 100,
+        "row_count": 1,
+        "truncated": True,
+        "total_count": 2,
+    }
+    assert "returned 1 of 2 declared rows" in (error or "")
+    assert len(calls) == 2
+
+
+def test_paginated_check_runs_require_an_envelope_on_every_page() -> None:
+    calls: list[str] = []
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        assert method == "GET"
+        assert payload is None
+        calls.append(path)
+        if len(calls) == 1:
+            return {"total_count": 2, "check_runs": [{"id": 1, "name": "CI"}]}, None
+        return [{"id": 2, "name": "newer failure"}], None
+
+    rows, pagination, error = _get_paginated_list(
+        "repos/owner/repo/commits/sha/check-runs?per_page=100",
+        api=fake_api,
+        response_key="check_runs",
+    )
+
+    assert rows is None
+    assert pagination == {
+        "pages_read": 2,
+        "page_size": 100,
+        "page_budget": 100,
+        "row_count": 1,
+        "truncated": True,
+        "total_count": 2,
+    }
+    assert "response was not an object" in (error or "")
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize(
+    "envelope",
+    [
+        {"check_runs": []},
+        {"total_count": True, "check_runs": []},
+        {"total_count": -1, "check_runs": []},
+        {"total_count": 1.5, "check_runs": []},
+    ],
+)
+def test_paginated_check_runs_reject_invalid_total_count(envelope: dict[str, Any]) -> None:
+    rows, pagination, error = _get_paginated_list(
+        "repos/owner/repo/commits/sha/check-runs?per_page=100",
+        api=lambda *_args: (envelope, None),
+        response_key="check_runs",
+    )
+
+    assert rows is None
+    assert pagination is not None and pagination["truncated"] is True
+    assert "invalid total_count" in (error or "")
+
+
+def test_paginated_check_runs_reject_changed_total_count() -> None:
+    calls = 0
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        nonlocal calls
+        assert method == "GET"
+        assert payload is None
+        calls += 1
+        count = 2 if calls == 1 else 3
+        return {"total_count": count, "check_runs": [{"id": calls}]}, None
+
+    rows, pagination, error = _get_paginated_list(
+        "repos/owner/repo/commits/sha/check-runs?per_page=100",
+        api=fake_api,
+        response_key="check_runs",
+    )
+
+    assert rows is None
+    assert pagination is not None and pagination["total_count"] == 2
+    assert pagination["truncated"] is True
+    assert "total_count changed from 2 to 3" in (error or "")
+
+
+def test_paginated_check_runs_reject_duplicate_ids_across_pages() -> None:
+    calls = 0
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        nonlocal calls
+        assert method == "GET"
+        assert payload is None
+        calls += 1
+        return {"total_count": 2, "check_runs": [{"id": 7, "name": f"page-{calls}"}]}, None
+
+    rows, pagination, error = _get_paginated_list(
+        "repos/owner/repo/commits/sha/check-runs?per_page=100",
+        api=fake_api,
+        response_key="check_runs",
+    )
+
+    assert rows is None
+    assert pagination is not None and pagination["truncated"] is True
+    assert "repeated check-run ID 7" in (error or "")
+    assert calls == 2
+
+
 def test_paginated_list_rejects_malformed_page() -> None:
     def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
         assert method == "GET"
@@ -473,7 +955,13 @@ def test_paginated_list_rejects_malformed_page() -> None:
     )
 
     assert rows is None
-    assert pagination is None
+    assert pagination == {
+        "pages_read": 2,
+        "page_size": 100,
+        "page_budget": 100,
+        "row_count": 100,
+        "truncated": True,
+    }
     assert "was not a list" in (error or "")
 
 

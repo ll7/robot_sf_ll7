@@ -1,5 +1,9 @@
 """Fixture coverage for historical benchmark hard-case materialization."""
 
+# evidence-writer-exempt: tests create synthetic and intentionally malformed fixtures under
+# pytest tmp_path; shared evidence writers normalize or mark bytes and would change the fixture
+# inputs being tested, and no durable repository evidence is produced by these writes.
+
 from __future__ import annotations
 
 import argparse

@@ -77,6 +77,7 @@ DETECTOR_IDS = (
     "universal_failure_unannotated",
     "invalid_run_preflight_mismatch",
 )
+RELEASE_TERMINAL_STATUSES = frozenset({"success", "collision", "failure"})
 
 
 class ReleaseRowError(ValueError):
@@ -110,6 +111,28 @@ def _unique_string_ids(value: object, name: str) -> list[str]:
     if len(value) != len(set(value)):
         raise ReleaseRowError(f"{name} contains duplicates")
     return list(value)
+
+
+def _release_row_admission(row: Mapping[str, Any]) -> tuple[str, str] | None:
+    """Apply shared execution admission while preserving valid terminal outcomes.
+
+    Returns:
+        The shared admission failure, if one exists.
+    """
+
+    admission_row = dict(row)
+    has_terminal_status = "status" in row
+    terminal_status = row.get("status")
+    valid_terminal_status = (
+        isinstance(terminal_status, str)
+        and terminal_status.strip().lower() in RELEASE_TERMINAL_STATUSES
+    )
+    if valid_terminal_status:
+        admission_row.pop("status", None)
+    admission = execution_admission_failure(admission_row, check_nonfinite=False)
+    if has_terminal_status and not valid_terminal_status and admission is None:
+        return "unavailable", "unknown_release_terminal_outcome_status"
+    return admission
 
 
 def _configured(config: Mapping[str, Any] | None) -> dict[str, Any]:  # noqa: C901
@@ -199,9 +222,7 @@ def _rows(rows: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str, Any]], list
         # outcome (`success`, `collision`, or `failure`). Execution admission
         # remains bound to the Auditor's explicit execution-status fields and
         # nested provenance surfaces.
-        admission_row = dict(row)
-        admission_row.pop("status", None)
-        admission = execution_admission_failure(admission_row, check_nonfinite=False)
+        admission = _release_row_admission(row)
         row["_release_execution_status"] = "eligible" if admission is None else admission[0]
         row["_release_execution_reason"] = "" if admission is None else admission[1]
         row["_release_arm"] = planner
@@ -817,13 +838,18 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
                     )
                 )
 
-    pedestrian_free_scenarios = settings["pedestrian_free_scenarios"] or sorted(
-        {
-            scenario
-            for (scenario, planner), seed_rows in by_scenario_planner.items()
-            if planner == settings["baseline_planner"]
-            and any(_pedestrian_free(row) is True for row in seed_rows.values())
-        }
+    pedestrian_free_scenarios = (
+        settings["pedestrian_free_scenarios"]
+        or sorted(
+            {
+                scenario
+                for (scenario, planner), seed_rows in by_scenario_planner.items()
+                if planner == settings["baseline_planner"]
+                and any(_pedestrian_free(row) is True for row in seed_rows.values())
+            }
+        )
+        if settings["pedestrian_aware_planners"]
+        else []
     )
     for scenario in pedestrian_free_scenarios:
         baseline_rows = by_scenario_planner.get((scenario, settings["baseline_planner"]), {})
@@ -922,6 +948,13 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
         reasons.append("execution_admission_incomplete")
     if missingness.get("pedestrian_aware_planner_missing", 0):
         reasons.append("pedestrian_aware_planner_missing")
+    incomplete_pedestrian_cohort_fields = (
+        "pedestrian_free_baseline_missing",
+        "pedestrian_free_status_unavailable",
+        "pedestrian_free_pair_too_small",
+    )
+    if any(missingness.get(key, 0) for key in incomplete_pedestrian_cohort_fields):
+        reasons.append("pedestrian_comparison_cohort_incomplete")
     return {
         "schema_version": SCHEMA_VERSION,
         "claim_boundary": "Diagnostic release-row signals; no per-step reconstruction or causal attribution.",
@@ -997,7 +1030,7 @@ def _validated_release_registry(report: Mapping[str, Any]) -> str:
     return registry_digest
 
 
-def _validated_release_source(report: Mapping[str, Any]) -> Mapping[str, Any]:
+def _validated_release_source(report: Mapping[str, Any], registry_digest: str) -> Mapping[str, Any]:
     """Require loader-produced publication provenance for the BA store handoff.
 
     Returns:
@@ -1006,6 +1039,8 @@ def _validated_release_source(report: Mapping[str, Any]) -> Mapping[str, Any]:
     source = report.get("source")
     if not isinstance(source, Mapping):
         raise ReleaseRowError("release-row report lacks source identity")
+    if source.get("detector_registry_digest") != registry_digest:
+        raise ReleaseRowError("release-row source does not match the detector registry")
     if not re.fullmatch(r"[0-9a-f]{64}", str(source.get("manifest_sha256", ""))):
         raise ReleaseRowError("release-row Auditor handoff requires a verified manifest digest")
     bundle_digest = source.get("bundle_sha256")
@@ -1048,8 +1083,60 @@ def _typed_release_signal(index: int, payload: Any) -> Signal:
     return signal
 
 
-def _release_signal_records(report: Mapping[str, Any]) -> list[Signal]:
-    """Return unique typed signals from the report's canonical signal list."""
+def _expected_release_signal(index: int, finding: Any, source: Mapping[str, Any]) -> Signal:
+    """Construct a typed BA-03 signal from one report finding.
+
+    Returns:
+        The expected typed signal.
+    """
+
+    if not isinstance(finding, Mapping):
+        raise ReleaseRowError(f"release-row finding {index} must be an object")
+    try:
+        scope = {
+            "scenario_id": finding["scenario_id"],
+            "seed": finding["seed"],
+            "planner_id": finding["planner_id"],
+        }
+        if finding.get("finding_id") != _finding_id(finding["detector_id"], scope, source):
+            raise ReleaseRowError(f"release-row finding {index} does not match its source identity")
+        return _typed_release_signal(index, _signal(finding, source))
+    except ReleaseRowError:
+        raise
+    except (AuditContractError, KeyError, TypeError, ValueError, RecursionError) as error:
+        raise ReleaseRowError(f"release-row finding {index} is malformed") from error
+
+
+def _expected_release_signals(
+    finding_payloads: list[Any], source: Mapping[str, Any]
+) -> dict[str, dict[str, Any]]:
+    """Index canonical BA-03 projections by source-bound finding IDs.
+
+    Returns:
+        The expected canonical payloads keyed by signal ID.
+    """
+
+    expected: dict[str, dict[str, Any]] = {}
+    for index, finding in enumerate(finding_payloads):
+        expected_signal = _expected_release_signal(index, finding, source)
+        if expected_signal.signal_id in expected:
+            raise ReleaseRowError(f"release-row finding {index} duplicates a finding ID")
+        expected[expected_signal.signal_id] = record_to_dict(expected_signal)
+    return expected
+
+
+def _release_signal_records(report: Mapping[str, Any], source: Mapping[str, Any]) -> list[Signal]:
+    """Validate that typed signals exactly project the report findings.
+
+    Returns:
+        The canonical signal records sorted by ID.
+    """
+
+    finding_payloads = report.get("findings")
+    if not isinstance(finding_payloads, list):
+        raise ReleaseRowError("release-row report findings must be an array")
+    expected = _expected_release_signals(finding_payloads, source)
+
     signal_payloads = report.get("signals")
     if not isinstance(signal_payloads, list):
         raise ReleaseRowError("release-row report signals must be an array")
@@ -1061,7 +1148,10 @@ def _release_signal_records(report: Mapping[str, Any]) -> list[Signal]:
             raise ReleaseRowError(f"release-row signal {index} duplicates a signal ID")
         seen_signal_ids.add(signal.signal_id)
         signals.append(signal)
-    return signals
+    observed = {signal.signal_id: record_to_dict(signal) for signal in signals}
+    if observed != expected:
+        raise ReleaseRowError("release-row signals do not match report findings and source")
+    return sorted(signals, key=lambda signal: signal.signal_id)
 
 
 def handoff_release_row_signals(
@@ -1081,8 +1171,8 @@ def handoff_release_row_signals(
     if not isinstance(report, Mapping) or report.get("schema_version") != SCHEMA_VERSION:
         raise ReleaseRowError("release-row report has an unsupported schema")
     registry_digest = _validated_release_registry(report)
-    source = _validated_release_source(report)
-    signals = _release_signal_records(report)
+    source = _validated_release_source(report, registry_digest)
+    signals = _release_signal_records(report, source)
     if not signals:
         return None
     try:

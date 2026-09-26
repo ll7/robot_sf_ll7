@@ -154,14 +154,16 @@ annotation removes the missing-root-cause finding and increments
 `counts.annotated_universal_cells` instead; the cell's other detector findings
 remain visible.
 
-The release gate is evaluated once at report level. `gate.blocked` is true if
-the report has more unannotated findings than `max_unannotated_findings`, has
-incomplete planner cells or execution admission, requires unavailable or
-incomplete preflight, has an allowlisted pedestrian-aware planner missing from
-the release cohort, or has any `invalid_run_preflight_mismatch`. The parity
-reason remains blocking even when that finding has an annotation. Detector
-findings and their annotation state stay in the JSON report, while the Markdown
-report summarizes the same report-level decision.
+The release gate is evaluated once at report level. It blocks when the report has
+more unannotated findings than the configured limit, has incomplete planner
+cells or execution admission, requires unavailable or incomplete preflight,
+has a configured pedestrian-aware planner missing from the release roster, or
+has a selected pedestrian-free scenario without its baseline, enough valid
+pairs, or required pedestrian-count evidence. Any invalid-run/preflight
+mismatch also blocks the gate. An empty pedestrian-aware planner list disables
+these comparison checks. The parity reason remains blocking even when that
+finding has an annotation. Detector findings and their annotation state stay
+in the JSON report, while Markdown summarizes the same report-level decision.
 
 The JSON report also carries `detector_registry` and its
 `detector_registry_digest`. Every entry in `signals` is a canonical BA-03
@@ -177,7 +179,10 @@ detector executions. To persist the typed BA-03 signals in the Benchmark
 Auditor's local store, pass `--audit-store <directory>`. Commits are atomic and
 idempotent for the same source, registry, and signal set. This handoff does not
 fabricate a BA-01 campaign scan, BA-02 queue summary, or human finding; those
-remain owned by their respective Auditor contracts.
+remain owned by their respective Auditor contracts. Before committing, it
+verifies that every typed signal exactly matches one report finding, that each
+finding ID still binds to the report's source and registry digests, and that
+signal ordering does not affect the idempotency key.
 
 ## Running the report
 

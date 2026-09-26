@@ -336,7 +336,9 @@ def test_pedestrian_free_detector_excludes_nonfree_observations() -> None:
     )
 
     assert not _findings(report, "pedestrian_free_baseline_regression")
-    assert report["gate"]["blocked"] is False
+    assert report["missingness"]["pedestrian_free_pair_too_small"] == 1
+    assert "pedestrian_comparison_cohort_incomplete" in report["gate"]["reasons"]
+    assert report["gate"]["blocked"] is True
 
 
 def test_pedestrian_free_detector_uses_only_configured_aware_planners() -> None:
@@ -376,6 +378,46 @@ def test_missing_configured_pedestrian_aware_planner_blocks_gate() -> None:
     assert report["gate"]["blocked"] is True
 
 
+def test_pedestrian_free_cohort_with_no_valid_pairs_blocks_gate() -> None:
+    """Configured pedestrian-free comparisons cannot pass without enough valid pairs."""
+
+    rows = [
+        _row(
+            "pedestrian-free",
+            116,
+            "blind_goal",
+            success=True,
+            timeout=False,
+            observation_ped_count=0,
+        ),
+        _row("pedestrian-free", 116, "social_force", observation_ped_count=1),
+    ]
+    report = analyze_release_rows(
+        rows,
+        config=CONFIG,
+        source=_source("blind_goal", "social_force"),
+    )
+
+    assert report["missingness"]["pedestrian_free_pair_too_small"] == 1
+    assert "pedestrian_comparison_cohort_incomplete" in report["gate"]["reasons"]
+    assert report["gate"]["blocked"] is True
+
+
+def test_configured_pedestrian_free_scenario_without_baseline_blocks_gate() -> None:
+    """A configured comparison scenario with no blind baseline is unavailable."""
+
+    rows = [_row("pedestrian-free", 117, "social_force")]
+    report = analyze_release_rows(
+        rows,
+        config=CONFIG,
+        source=_source("social_force"),
+    )
+
+    assert report["missingness"]["pedestrian_free_baseline_missing"] == 1
+    assert "pedestrian_comparison_cohort_incomplete" in report["gate"]["reasons"]
+    assert report["gate"]["blocked"] is True
+
+
 def test_contact_speed_metric_fallback_is_used_when_events_have_no_speed() -> None:
     """An empty/incomplete event list does not suppress the row metric fallback."""
 
@@ -411,17 +453,41 @@ def test_non_admissible_execution_rows_are_excluded_and_block_gate() -> None:
     assert "incomplete_planner_cells" in report["gate"]["reasons"]
 
 
+def test_invalid_top_level_statuses_cannot_bypass_execution_admission() -> None:
+    """Only documented terminal outcomes are exempted from execution-status admission."""
+
+    for invalid_status in ("fallback", "degraded", "unavailable", "timeout", "garbage"):
+        admitted = _row(f"top-status-{invalid_status}", 134, "planner_a")
+        admitted["status"] = "failure"
+        invalid = _row(f"top-status-{invalid_status}", 134, "planner_b")
+        invalid["status"] = invalid_status
+        report = analyze_release_rows(
+            [admitted, invalid],
+            config=BASIC_CONFIG,
+            source=_source("planner_a", "planner_b"),
+        )
+
+        assert report["execution_admission"]["eligible_rows"] == 1
+        assert report["execution_admission"]["unavailable_rows"] == 1
+        assert "execution_admission_incomplete" in report["gate"]["reasons"]
+
+
 def test_release_row_signals_commit_to_audit_store_idempotently(tmp_path: Path) -> None:
     """The aggregate detector's typed BA-03 signals have a durable Auditor handoff."""
 
     report = analyze_release_rows(
-        [_row("auditor-handoff", 128, "planner_a", steps=2, collision=True, timeout=False)],
+        [
+            _row("auditor-handoff", 128, "planner_a", steps=2, collision=True, timeout=False),
+            _row("auditor-handoff", 128, "planner_b", steps=2, collision=True, timeout=False),
+        ],
         config=BASIC_CONFIG,
-        source=_source("planner_a"),
+        source=_source("planner_a", "planner_b"),
     )
+    assert len(report["signals"]) > 1
 
     with AuditStore(tmp_path / "audit-store") as store:
         first = handoff_release_row_signals(report, store)
+        report["signals"].reverse()
         second = handoff_release_row_signals(report, store)
         persisted = store.get(report["signals"][0]["signal_id"])
 
@@ -430,6 +496,45 @@ def test_release_row_signals_commit_to_audit_store_idempotently(tmp_path: Path) 
     assert second.replayed is True
     assert isinstance(persisted.record, Signal)
     assert persisted.record.signal_id == report["signals"][0]["signal_id"]
+
+
+def test_release_row_auditor_handoff_binds_signals_to_findings(tmp_path: Path) -> None:
+    """A typed but modified BA-03 payload cannot diverge from its report finding."""
+
+    report = analyze_release_rows(
+        [_row("auditor-handoff", 135, "planner_a", steps=2, collision=True, timeout=False)],
+        config=CONFIG,
+        source=_source("planner_a"),
+    )
+    report["signals"][0]["measured"]["forged_speed_m_s"] = 999999.0
+
+    with AuditStore(tmp_path / "audit-store") as store:
+        try:
+            handoff_release_row_signals(report, store)
+        except ReleaseRowError as error:
+            assert "match report findings" in str(error)
+        else:
+            raise AssertionError("signal payload divergent from its finding was accepted")
+        assert store.list_records(record_type="signal") == []
+
+
+def test_release_row_auditor_handoff_binds_finding_ids_to_source_digest(tmp_path: Path) -> None:
+    """Changing the claimed manifest identity invalidates source-bound finding IDs."""
+
+    report = analyze_release_rows(
+        [_row("auditor-handoff", 136, "planner_a", steps=2, collision=True, timeout=False)],
+        config=CONFIG,
+        source=_source("planner_a"),
+    )
+    report["source"]["manifest_sha256"] = "e" * 64
+
+    with AuditStore(tmp_path / "audit-store") as store:
+        try:
+            handoff_release_row_signals(report, store)
+        except ReleaseRowError as error:
+            assert "source identity" in str(error)
+        else:
+            raise AssertionError("finding with mismatched source digest was accepted")
 
 
 def test_release_row_auditor_handoff_rejects_malformed_signal(tmp_path: Path) -> None:
@@ -469,7 +574,7 @@ def test_root_cause_annotation_removes_a_universal_failure_finding() -> None:
 
     report = analyze_release_rows(
         rows,
-        config=CONFIG,
+        config=BASIC_CONFIG,
         annotations=annotations,
         source=_source("planner_a", "planner_b"),
     )

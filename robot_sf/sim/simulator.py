@@ -579,6 +579,7 @@ class Simulator:
         init=False, repr=False, default=None
     )
     sampler_capture: SpawnSamplerCapture | None = field(init=False, repr=False, default=None)
+    _pysf_build_kwargs: dict = field(init=False, repr=False, default_factory=dict)
     last_spawn_relocation: Any = field(init=False, repr=False, default=None)
     last_oracle_transition_traces: tuple[OracleTransitionTraceV1, ...] | None = field(
         init=False, repr=False, default=None
@@ -625,25 +626,29 @@ class Simulator:
         )
 
         self.sampler_capture = self._new_sampler_capture()
+        # Stored so repopulate_crowd() (issue #9760) can replay the exact
+        # construction-time population arguments, preserving the per-class
+        # divergence documented at the call site (issue #4618 R2).
+        self._pysf_build_kwargs = {
+            "config": self.config,
+            "map_def": self.map_def,
+            "robots": self.robots,
+            "robot_pose_provider": lambda: self.robot_poses,
+            "peds_have_obstacle_forces": self.peds_have_obstacle_forces,
+            "add_ego_state": False,
+            "include_response_law_multipliers": True,
+            "response_law_composition": self.config.response_law_composition,
+            "response_law_seed": self.config.response_law_seed,
+            "force_population_size": self.config.population_size,
+            "sampler_capture": self.sampler_capture,
+        }
         (
             self.pysf_sim,
             self.pysf_state,
             self.groups,
             self.peds_behaviors,
             self.pedestrian_response_multipliers,
-        ) = _build_pysf_simulation(
-            config=self.config,
-            map_def=self.map_def,
-            robots=self.robots,
-            robot_pose_provider=lambda: self.robot_poses,
-            peds_have_obstacle_forces=self.peds_have_obstacle_forces,
-            add_ego_state=False,
-            include_response_law_multipliers=True,
-            response_law_composition=self.config.response_law_composition,
-            response_law_seed=self.config.response_law_seed,
-            force_population_size=self.config.population_size,
-            sampler_capture=self.sampler_capture,
-        )
+        ) = _build_pysf_simulation(**self._pysf_build_kwargs)
 
         # Cache the SocialForce component once instead of scanning forces every step (#6493)
         self._cached_social_force = next(
@@ -689,6 +694,46 @@ class Simulator:
         """Return a fresh sampler-decision record when explicitly enabled, else None."""
         enabled = bool(getattr(self.config, "sampler_capture_enabled", False))
         return SpawnSamplerCapture() if enabled else None
+
+    def repopulate_crowd(self) -> None:
+        """Re-sample the pedestrian crowd by replaying construction-time population.
+
+        Re-runs :func:`_build_pysf_simulation` with the exact arguments stored at
+        construction (issue #9760), so a directly-constructed simulator whose crowd
+        was sampled from an unseeded RNG can establish a deterministic crowd under
+        a caller-held seeded RNG context (e.g. ``global_reset_seed``). The
+        per-class population divergence (issue #4618 R2) is preserved because the
+        replayed arguments are the class-specific ones stored at construction.
+
+        Only crowd/physics internals are replaced (``pysf_sim``, ``pysf_state``,
+        ``groups``, ``peds_behaviors``, response multipliers, cached SocialForce
+        handle, and the reset snapshots consumed by ``_reset_social_force_state``).
+        Robots and their navigators are left intact; the caller runs the normal
+        reset flow afterwards.
+        """
+        if not self._pysf_build_kwargs:
+            raise RuntimeError("repopulate_crowd() requires construction-time build args")
+        self.sampler_capture = self._new_sampler_capture()
+        build_kwargs = dict(self._pysf_build_kwargs)
+        build_kwargs["robot_pose_provider"] = lambda: self.robot_poses
+        build_kwargs["sampler_capture"] = self.sampler_capture
+        (
+            self.pysf_sim,
+            self.pysf_state,
+            self.groups,
+            self.peds_behaviors,
+            self.pedestrian_response_multipliers,
+        ) = _build_pysf_simulation(**build_kwargs)
+        self._cached_social_force = next(
+            (f for f in self.pysf_sim.forces if isinstance(f, SocialForce)), None
+        )
+        self.last_ped_forces = np.zeros((0, 2), dtype=float)
+        self.last_robot_ped_forces = np.zeros((0, 2), dtype=float)
+        self.last_robot_force_inputs = {}
+        self.ped_headings = self._headings_from_current_ped_velocities()
+        self._initial_ped_headings = self.ped_headings.copy()
+        self.ped_angular_velocities = np.zeros_like(self.ped_headings)
+        self._initial_pysf_states = self.pysf_state.pysf_states().copy()
 
     def obstacle_force_law_metadata(self) -> dict[str, Any]:
         """Return the active fast-pysf obstacle-law metadata for this simulator."""
@@ -2034,22 +2079,27 @@ class PedSimulator(Simulator):
         # simulator; the appended ego-pedestrian row would otherwise misalign the
         # per-pedestrian multiplier vector.
         self.sampler_capture = self._new_sampler_capture()
+        # Stored so repopulate_crowd() (issue #9760) can replay the exact
+        # construction-time population arguments. The #4618 R2 divergence is
+        # preserved (not unified): PedSimulator omits the response-law spawn
+        # fields and requests no response multipliers.
+        self._pysf_build_kwargs = {
+            "config": self.config,
+            "map_def": self.map_def,
+            "robots": self.robots,
+            "robot_pose_provider": lambda: self.robot_poses,
+            "peds_have_obstacle_forces": self.peds_have_obstacle_forces,
+            "add_ego_state": True,
+            "include_response_law_multipliers": False,
+            "sampler_capture": self.sampler_capture,
+        }
         (
             self.pysf_sim,
             self.pysf_state,
             self.groups,
             self.peds_behaviors,
             self.pedestrian_response_multipliers,
-        ) = _build_pysf_simulation(
-            config=self.config,
-            map_def=self.map_def,
-            robots=self.robots,
-            robot_pose_provider=lambda: self.robot_poses,
-            peds_have_obstacle_forces=self.peds_have_obstacle_forces,
-            add_ego_state=True,
-            include_response_law_multipliers=False,
-            sampler_capture=self.sampler_capture,
-        )
+        ) = _build_pysf_simulation(**self._pysf_build_kwargs)
 
         # Cache the SocialForce component once instead of scanning forces every step (#6493)
         self._cached_social_force = next(

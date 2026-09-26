@@ -340,6 +340,76 @@ def test_adapter_mutation_cannot_change_selected_planner_or_round_carry(tmp_path
     )
 
 
+@pytest.mark.parametrize(
+    "boundary",
+    ["challenge_evaluation", "falsification", "discovery_verification", "corpus_admission"],
+)
+def test_adapter_cannot_mutate_selected_planner_config_bytes(tmp_path: Path, boundary: str) -> None:
+    config = _write_config(tmp_path)
+
+    class ConfigMutatingAdapters(FixtureAdapters):
+        def __init__(self) -> None:
+            super().__init__()
+            self.target_config_path: Path | None = None
+
+        def _mutate_selected_config(self, adapter_boundary: str, planner) -> None:
+            if boundary == adapter_boundary:
+                self.target_config_path = Path(planner["config_path"])
+                self.target_config_path.write_text(
+                    "planner_id: adapter-mutated-selected-planner\n", encoding="utf-8"
+                )
+
+        def evaluate_challenges(self, request, planner, output_dir):
+            self._mutate_selected_config("challenge_evaluation", planner)
+            return super().evaluate_challenges(request, planner, output_dir)
+
+        def falsify(self, request, planner, output_dir):
+            self._mutate_selected_config("falsification", planner)
+            return super().falsify(request, planner, output_dir)
+
+        def verify_discovery(self, request, planner, candidate, output_dir):
+            self._mutate_selected_config("discovery_verification", planner)
+            return super().verify_discovery(request, planner, candidate, output_dir)
+
+        def admit_case(self, request, planner, case, output_dir):
+            self._mutate_selected_config("corpus_admission", planner)
+            return super().admit_case(request, planner, case, output_dir)
+
+    adapters = ConfigMutatingAdapters()
+    result = run_coevolution(config, adapters.bundle())
+
+    assert result["status"] == "diagnostic"
+    assert result["stop"]["reason"] == "infrastructure_failure"
+    assert result["rounds"][0]["status"] == "diagnostic"
+    assert adapters.calls["optimize"] == 1
+    assert not (config.parent / "run-output" / "round_002").exists()
+
+    optimization = json.loads(
+        (config.parent / "run-output" / "round_001" / "phases" / "optimization.json").read_text(
+            encoding="utf-8"
+        )
+    )["output"]
+    selected = optimization["selected_planner"]
+    selected_path = Path(selected["config_path"])
+    assert adapters.target_config_path == selected_path
+    assert selected_path.read_bytes() == b"planner_id: fixture-planner-r1\n"
+    assert hashlib.sha256(selected_path.read_bytes()).hexdigest() == selected["config_sha256"]
+
+    if boundary in {"discovery_verification", "corpus_admission"}:
+        discovery = json.loads(
+            (
+                config.parent / "run-output" / "round_001" / "phases" / "discovery_admission.json"
+            ).read_text(encoding="utf-8")
+        )["output"]
+        assert discovery["status"] == "infrastructure_failure"
+        assert discovery["newly_admitted_cases"] == []
+
+    persisted_manifest = json.loads(
+        (config.parent / "run-output" / "run_manifest.json").read_text(encoding="utf-8")
+    )
+    assert persisted_manifest["status"] == "diagnostic"
+
+
 def test_round_two_rejects_an_optimizer_that_resets_its_baseline(tmp_path: Path) -> None:
     config = _write_config(tmp_path)
 

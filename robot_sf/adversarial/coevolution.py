@@ -29,6 +29,7 @@ import json
 import math
 import os
 import platform
+import stat
 import subprocess
 import sys
 import tempfile
@@ -687,6 +688,78 @@ def _verify_selected_planner_artifact(output: Mapping[str, Any], *, artifact_dir
         raise CoevolutionError(f"selected planner config digest mismatch: {artifact_path}")
 
 
+def _atomic_write_bytes(path: Path, payload: bytes, *, mode: int) -> None:
+    """Atomically restore selected planner bytes without changing file permissions."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, mode)
+        os.replace(temporary, path)
+        _fsync_directory(path.parent)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _call_with_selected_planner_integrity(
+    selected_planner: Mapping[str, Any],
+    boundary: str,
+    call: Callable[[], Any],
+) -> Any:
+    """Run an adapter only while its selected planner config stays digest-bound.
+
+    Adapters receive detached planner descriptors, but the referenced file remains
+    shared state. Snapshot and verify its bytes at the filesystem boundary, restore
+    any mutation, and fail the owning phase so stale config hashes cannot propagate.
+    """
+    config_path = Path(
+        _non_empty_string(selected_planner.get("config_path"), "selected_planner.config_path")
+    ).resolve()
+    expected = _non_empty_string(
+        selected_planner.get("config_sha256"), "selected_planner.config_sha256"
+    ).lower()
+    try:
+        original_bytes = config_path.read_bytes()
+        original_mode = stat.S_IMODE(config_path.stat().st_mode)
+    except OSError as exc:
+        raise CoevolutionError(
+            f"selected planner config is unavailable before {boundary}: {config_path}"
+        ) from exc
+    if _sha256_bytes(original_bytes) != expected:
+        raise CoevolutionError(
+            f"selected planner config digest mismatch before {boundary}: {config_path}"
+        )
+
+    try:
+        return call()
+    finally:
+        try:
+            current_bytes = config_path.read_bytes()
+        except OSError:
+            current_bytes = None
+        if current_bytes is None or _sha256_bytes(current_bytes) != expected:
+            try:
+                _atomic_write_bytes(config_path, original_bytes, mode=original_mode)
+            except OSError as exc:
+                raise CoevolutionError(
+                    f"selected planner config changed during {boundary} and could not be restored: "
+                    f"{config_path}"
+                ) from exc
+            if _sha256_file(config_path) != expected:
+                raise CoevolutionError(
+                    f"selected planner config changed during {boundary}; restoration did not "
+                    f"restore its declared digest: {config_path}"
+                )
+            raise CoevolutionError(
+                f"selected planner config changed during {boundary}; original bytes were restored: "
+                f"{config_path}"
+            )
+
+
 def _verify_phase_file(
     round_dir: Path, phase: str, phase_record: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -1052,11 +1125,15 @@ def _candidate_gate(
             None,
         )
     try:
-        result = adapters.verify_discovery(
-            request,
-            _detached_json_mapping(planner, "selected planner for discovery verification"),
-            _detached_json_mapping(candidate, "discovery candidate for verification"),
-            output_dir / f"candidate_{index:04d}",
+        result = _call_with_selected_planner_integrity(
+            planner,
+            "discovery verification",
+            lambda: adapters.verify_discovery(
+                request,
+                _detached_json_mapping(planner, "selected planner for discovery verification"),
+                _detached_json_mapping(candidate, "discovery candidate for verification"),
+                output_dir / f"candidate_{index:04d}",
+            ),
         )
         return _validate_gate_output(result, str(candidate["candidate_id"])), None
     except Exception as exc:  # noqa: BLE001 - preserve the row and stop below
@@ -1096,11 +1173,15 @@ def _corpus_admission(
         },
     }
     try:
-        raw = adapters.admit_case(
-            request,
-            _detached_json_mapping(planner, "selected planner for corpus admission"),
-            _detached_json_mapping(case, "counterexample for corpus admission"),
-            output_dir / f"candidate_{index:04d}",
+        raw = _call_with_selected_planner_integrity(
+            planner,
+            "corpus admission",
+            lambda: adapters.admit_case(
+                request,
+                _detached_json_mapping(planner, "selected planner for corpus admission"),
+                _detached_json_mapping(case, "counterexample for corpus admission"),
+                output_dir / f"candidate_{index:04d}",
+            ),
         )
         admission = json.loads(_canonical_json(_mapping(raw, f"corpus admission for {case_id}")))
         if admission.get("case_id") != case_id:
@@ -1560,19 +1641,27 @@ def _run_round_phases(
     selected = optimizer["selected_planner"]
     challenge_evaluation = phase(
         "challenge_evaluation",
-        lambda: adapters.evaluate_challenges(
-            request,
-            _detached_json_mapping(selected, "selected planner for challenge evaluation"),
-            round_dir / "challenge_evaluation",
+        lambda: _call_with_selected_planner_integrity(
+            selected,
+            "challenge evaluation",
+            lambda: adapters.evaluate_challenges(
+                request,
+                _detached_json_mapping(selected, "selected planner for challenge evaluation"),
+                round_dir / "challenge_evaluation",
+            ),
         ),
         lambda payload: _validate_challenge_evaluations(payload, request),
     )
     falsification = phase(
         "falsification",
-        lambda: adapters.falsify(
-            request,
-            _detached_json_mapping(selected, "selected planner for falsification"),
-            round_dir / "falsification",
+        lambda: _call_with_selected_planner_integrity(
+            selected,
+            "falsification",
+            lambda: adapters.falsify(
+                request,
+                _detached_json_mapping(selected, "selected planner for falsification"),
+                round_dir / "falsification",
+            ),
         ),
         lambda payload: _validate_falsification_output(payload, request),
     )

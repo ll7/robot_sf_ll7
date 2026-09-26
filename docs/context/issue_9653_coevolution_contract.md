@@ -41,6 +41,10 @@ marked `failed`, is not automatically repeated because that could duplicate
 simulator work; its diagnostic remains in the run manifest. Nested scenario
 and evidence payloads in regression cases are copied and recursively frozen
 before adapters receive the round request; `to_json()` returns a detached copy.
+Each adapter that receives the selected planner is also checked against its
+declared config digest immediately before and after the call. If the adapter
+changes or removes those bytes, the coordinator restores the original bytes and
+stops diagnostically; the planner is not carried into a later round.
 
 A discovered case reaches the next round only when the search row is an
 evaluated target-planner failure with normal execution, replay matches exactly,
@@ -68,5 +72,7 @@ minimum-two-round no-discovery behavior, distinct invalid/unknown/replay-mismatc
 fallback/degraded/failed rows, sampler identity validation, immutable nested
 regression payloads, optimizer improvement and plateau, round-budget exhaustion,
 infrastructure failure, crash-window manifest recovery, and resume digest
-validation without re-running completed phases. These fixtures do not establish
+validation without re-running completed phases. They also mutate the selected
+planner file from each planner-consuming adapter and assert byte restoration,
+digest agreement, and diagnostic termination. These fixtures do not establish
 planner or search performance.

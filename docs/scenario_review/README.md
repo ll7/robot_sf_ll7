@@ -13,7 +13,9 @@ rerunning simulations.
 The [release-row anomaly gate](./release_row_anomalies.md) checks a published
 bundle's episode summaries for shared early failures, impossible contacts,
 stall patterns, baseline regressions, and invalid-run accounting. It emits
-JSON and Markdown reports without requiring simulation-step traces.
+JSON and Markdown reports without requiring simulation-step traces, and can
+optionally commit its typed BA-03 signals to the Benchmark Auditor's local
+store.
 
 The bounded [BA-05 source-first materialization leaf](./audit_materialize.md)
 verifies historical recordings and lazily renders retained trace or replay

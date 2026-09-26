@@ -12,14 +12,26 @@ import argparse
 import hashlib
 import json
 import math
+import re
 import sys
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from robot_sf.analysis_workbench.audit_contracts import Signal, record_to_dict
-from robot_sf.analysis_workbench.audit_detectors import DetectorRegistry, DetectorSpec
+from robot_sf.analysis_workbench.audit_contracts import (
+    AuditContractError,
+    Signal,
+    canonical_json,
+    record_from_dict,
+    record_to_dict,
+)
+from robot_sf.analysis_workbench.audit_detectors import (
+    DetectorRegistry,
+    DetectorSpec,
+    execution_admission_failure,
+)
+from robot_sf.analysis_workbench.audit_store import AuditStore, BatchCommitResult, CommitResult
 from robot_sf.analysis_workbench.release_row_bundle import load_release_rows
 
 SCHEMA_VERSION = "release-row-anomalies.v1"
@@ -36,7 +48,23 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "min_paired_cells": 5,
     "min_success_rate_gap": 0.2,
     "baseline_planner": "goal",
-    "pedestrian_free_scenarios": ["classic_bottleneck_low"],
+    # Empty means discover pedestrian-free scenarios from paired release rows.
+    "pedestrian_free_scenarios": [],
+    "pedestrian_aware_planners": [
+        "guarded_ppo",
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca",
+        "ppo",
+        "prediction_planner",
+        "predictive_mppi",
+        "risk_dwa",
+        "sacadrl",
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "social_force",
+        "socnav_sampling",
+    ],
     "max_unannotated_findings": 0,
     "require_preflight": True,
 }
@@ -66,6 +94,22 @@ def _positive_integer(value: object, name: str, *, minimum: int = 0) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
         raise ReleaseRowError(f"{name} must be an integer >= {minimum}")
     return value
+
+
+def _unique_string_ids(value: object, name: str) -> list[str]:
+    """Validate one unique list of non-empty scenario or planner identifiers.
+
+    Returns:
+        A copy of the validated ID list.
+    """
+
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item.strip() for item in value
+    ):
+        raise ReleaseRowError(f"{name} must be a list of non-empty IDs")
+    if len(value) != len(set(value)):
+        raise ReleaseRowError(f"{name} contains duplicates")
+    return list(value)
 
 
 def _configured(config: Mapping[str, Any] | None) -> dict[str, Any]:  # noqa: C901
@@ -107,13 +151,15 @@ def _configured(config: Mapping[str, Any] | None) -> dict[str, Any]:  # noqa: C9
         raise ReleaseRowError("max_progress_ratio must be <= 1")
     if not isinstance(result["baseline_planner"], str) or not result["baseline_planner"].strip():
         raise ReleaseRowError("baseline_planner must be a nonempty string")
-    scenarios = result["pedestrian_free_scenarios"]
-    if not isinstance(scenarios, list) or any(
-        not isinstance(item, str) or not item.strip() for item in scenarios
-    ):
-        raise ReleaseRowError("pedestrian_free_scenarios must be a list of scenario IDs")
-    if len(scenarios) != len(set(scenarios)):
-        raise ReleaseRowError("pedestrian_free_scenarios contains duplicates")
+    result["pedestrian_free_scenarios"] = _unique_string_ids(
+        result["pedestrian_free_scenarios"], "pedestrian_free_scenarios"
+    )
+    aware_planners = _unique_string_ids(
+        result["pedestrian_aware_planners"], "pedestrian_aware_planners"
+    )
+    result["pedestrian_aware_planners"] = aware_planners
+    if result["baseline_planner"] in aware_planners:
+        raise ReleaseRowError("pedestrian_aware_planners must not include baseline_planner")
     if type(result["require_preflight"]) is not bool:
         raise ReleaseRowError("require_preflight must be a boolean")
     return result
@@ -149,6 +195,15 @@ def _rows(rows: Sequence[Mapping[str, Any]]) -> tuple[list[dict[str, Any]], list
             raise ReleaseRowError(f"row {index} lacks explicit outcome booleans")
         if not isinstance(row.get("metrics"), Mapping):
             raise ReleaseRowError(f"row {index} lacks metrics object")
+        # In this published-row contract, top-level `status` is the episode
+        # outcome (`success`, `collision`, or `failure`). Execution admission
+        # remains bound to the Auditor's explicit execution-status fields and
+        # nested provenance surfaces.
+        admission_row = dict(row)
+        admission_row.pop("status", None)
+        admission = execution_admission_failure(admission_row, check_nonfinite=False)
+        row["_release_execution_status"] = "eligible" if admission is None else admission[0]
+        row["_release_execution_reason"] = "" if admission is None else admission[1]
         row["_release_arm"] = planner
         row.setdefault("episode_id", f"{planner}:{scenario}:{seed}")
         if not isinstance(row["episode_id"], str) or not row["episode_id"].strip():
@@ -276,7 +331,7 @@ def _pedestrian_free(row: Mapping[str, Any]) -> bool | None:
     return count == 0
 
 
-def _contact_speeds(row: Mapping[str, Any]) -> list[float] | None:
+def _contact_speeds(row: Mapping[str, Any]) -> tuple[list[float] | None, str | None]:
     ledger = row.get("event_ledger")
     events = ledger.get("collision_events") if isinstance(ledger, Mapping) else None
     if events is not None:
@@ -285,13 +340,98 @@ def _contact_speeds(row: Mapping[str, Any]) -> list[float] | None:
         values = [_finite(item.get("relative_speed_at_contact")) for item in events]
         if any(value is not None and value < 0 for value in values):
             raise ReleaseRowError("relative_speed_at_contact must be >= 0")
-        return [value for value in values if value is not None] or None
+        available = [value for value in values if value is not None]
+        if available:
+            return available, "event_ledger.collision_events[].relative_speed_at_contact"
     value = _finite(row["metrics"].get("max_relative_contact_speed_m_s"))
     if value is not None:
         if value < 0:
             raise ReleaseRowError("max_relative_contact_speed_m_s must be >= 0")
-        return [value]
-    return None
+        return [value], "metrics.max_relative_contact_speed_m_s"
+    return None, None
+
+
+def _reported_failure_mode(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Summarize shared row-level outcome and collision metadata without inferring cause.
+
+    Returns:
+        A planner-indexed summary and a consistency classification.
+    """
+
+    by_planner: dict[str, dict[str, Any]] = {}
+    partially_observed = False
+    for row in rows:
+        planner = row["_release_arm"]
+        outcome = row["outcome"]
+        ledger = row.get("event_ledger")
+        events = ledger.get("collision_events") if isinstance(ledger, Mapping) else None
+        collision = outcome["collision_event"]
+        valid_events = isinstance(events, list) and all(
+            isinstance(event, Mapping) for event in events
+        )
+        partner_types = (
+            sorted(
+                {
+                    value
+                    for event in events
+                    if isinstance((value := event.get("collision_partner_type")), str) and value
+                }
+            )
+            if valid_events
+            else None
+        )
+        event_sources = (
+            sorted(
+                {
+                    value
+                    for event in events
+                    if isinstance((value := event.get("exact_event_source")), str) and value
+                }
+            )
+            if valid_events
+            else None
+        )
+        invalid_run = _invalid_run(row)
+        missing_event_detail = collision and (
+            not valid_events
+            or not events
+            or any(
+                not isinstance(event.get("collision_partner_type"), str)
+                or not event.get("collision_partner_type")
+                or not isinstance(event.get("exact_event_source"), str)
+                or not event.get("exact_event_source")
+                for event in events
+            )
+        )
+        partially_observed |= invalid_run is None or missing_event_detail
+        signature = {
+            "outcome": {
+                "route_complete": outcome["route_complete"],
+                "collision_event": collision,
+                "timeout_event": outcome["timeout_event"],
+            },
+            "reported_status": row.get("status") if isinstance(row.get("status"), str) else None,
+            "invalid_run": invalid_run,
+            "collision_event_count": len(events) if valid_events else None,
+            "collision_partner_types": partner_types,
+            "exact_event_sources": event_sources,
+        }
+        by_planner[planner] = signature
+
+    encoded = {
+        planner: json.dumps(signature, sort_keys=True, separators=(",", ":"))
+        for planner, signature in by_planner.items()
+    }
+    consistent = len(set(encoded.values())) == 1
+    consistency = (
+        "mixed" if not consistent else "partially_observed" if partially_observed else "consistent"
+    )
+    return {
+        "consistency": consistency,
+        "common_signature": next(iter(by_planner.values())) if consistent else None,
+        "by_planner": dict(sorted(by_planner.items())),
+        "root_cause_attribution": "unavailable_from_release_rows",
+    }
 
 
 def _finding_id(detector_id: str, scope: Mapping[str, Any], source: Mapping[str, Any]) -> str:
@@ -397,6 +537,7 @@ def release_row_registry(config: Mapping[str, Any] | None = None) -> DetectorReg
         "pedestrian_free_baseline_regression": (
             "baseline_planner",
             "pedestrian_free_scenarios",
+            "pedestrian_aware_planners",
             "min_paired_cells",
             "min_success_rate_gap",
         ),
@@ -414,7 +555,7 @@ def release_row_registry(config: Mapping[str, Any] | None = None) -> DetectorReg
             parameters={key: settings[key] for key in parameters[detector_id]},
             units={"steps": "count", "contact_speed": "m/s", "displacement": "m"},
             provenance={
-                "owner": __name__,
+                "owner": "robot_sf.analysis_workbench.release_row_anomalies",
                 "source": "published_episode_rows",
                 "evidence_boundary": "diagnostic_only",
             },
@@ -441,7 +582,10 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
     settings = _configured(config)
     registry = release_row_registry(settings)
     records, observed_planners = _rows(rows)
-    source_info = dict(source or {})
+    try:
+        source_info = json.loads(canonical_json(dict(source or {})))
+    except (AuditContractError, TypeError, ValueError, RecursionError) as error:
+        raise ReleaseRowError("source identity must be strict JSON") from error
     source_info["detector_registry_digest"] = registry.digest
     expected_planners = source_info.get("planner_ids", observed_planners)
     if (
@@ -459,9 +603,16 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
     preflight_map = _preflight_cells(preflight)
     grouped: dict[tuple[str, int], list[dict[str, Any]]] = defaultdict(list)
     by_scenario_planner: dict[tuple[str, str], dict[int, dict[str, Any]]] = defaultdict(dict)
+    admission_counts: Counter[str] = Counter()
+    admission_reasons: Counter[str] = Counter()
     for row in records:
         grouped[(row["scenario_id"], row["seed"])].append(row)
-        by_scenario_planner[(row["scenario_id"], row["_release_arm"])][row["seed"]] = row
+        status = row["_release_execution_status"]
+        admission_counts[status] += 1
+        if status == "eligible":
+            by_scenario_planner[(row["scenario_id"], row["_release_arm"])][row["seed"]] = row
+        else:
+            admission_reasons[row["_release_execution_reason"]] += 1
 
     findings: list[dict[str, Any]] = []
     missingness: Counter[str] = Counter()
@@ -480,7 +631,8 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
         )
         findings.append(finding)
 
-    for (scenario, seed), cell in sorted(grouped.items()):
+    for (scenario, seed), all_cell_rows in sorted(grouped.items()):
+        cell = [row for row in all_cell_rows if row["_release_execution_status"] == "eligible"]
         planners = {row["_release_arm"] for row in cell}
         complete = planners == set(expected_planners)
         coverage["complete_cells" if complete else "incomplete_cells"] += 1
@@ -503,7 +655,11 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
                     scenario_id=scenario,
                     seed=seed,
                     rows=cell,
-                    measured={"planner_count": len(planners), "failure_step": next(iter(steps))},
+                    measured={
+                        "planner_count": len(planners),
+                        "failure_step": next(iter(steps)),
+                        "reported_failure_mode": _reported_failure_mode(cell),
+                    },
                     threshold={"max_step": settings["same_step_max_steps"]},
                     reason="common_early_failure_step",
                     source=source_info,
@@ -524,7 +680,7 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
                 annotated_universal_cells += 1
             else:
                 append(candidate)
-        if preflight_map is not None:
+        if cell and preflight_map is not None:
             expected_invalid = preflight_map.get((scenario, seed))
             if expected_invalid is None:
                 missingness["preflight_cell_missing"] += 1
@@ -568,7 +724,7 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
                     )
                 )
             if row["outcome"]["collision_event"]:
-                speeds = _contact_speeds(row)
+                speeds, speed_source = _contact_speeds(row)
                 if speeds is None:
                     missingness["contact_speed_unavailable"] += 1
                 elif max(speeds) > settings["max_contact_speed_m_s"]:
@@ -579,7 +735,10 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
                             seed=seed,
                             planner_id=planner,
                             rows=[row],
-                            measured={"max_relative_speed_at_contact_m_s": max(speeds)},
+                            measured={
+                                "max_relative_speed_at_contact_m_s": max(speeds),
+                                "speed_source": speed_source,
+                            },
                             threshold={"max_contact_speed_m_s": settings["max_contact_speed_m_s"]},
                             reason="contact_speed_exceeds_physical_limit",
                             source=source_info,
@@ -658,13 +817,22 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
                     )
                 )
 
-    for scenario in settings["pedestrian_free_scenarios"]:
+    pedestrian_free_scenarios = settings["pedestrian_free_scenarios"] or sorted(
+        {
+            scenario
+            for (scenario, planner), seed_rows in by_scenario_planner.items()
+            if planner == settings["baseline_planner"]
+            and any(_pedestrian_free(row) is True for row in seed_rows.values())
+        }
+    )
+    for scenario in pedestrian_free_scenarios:
         baseline_rows = by_scenario_planner.get((scenario, settings["baseline_planner"]), {})
         if not baseline_rows:
             missingness["pedestrian_free_baseline_missing"] += 1
             continue
-        for planner in expected_planners:
-            if planner == settings["baseline_planner"]:
+        for planner in settings["pedestrian_aware_planners"]:
+            if planner not in expected_planners:
+                missingness["pedestrian_aware_planner_missing"] += 1
                 continue
             candidate_rows = by_scenario_planner.get((scenario, planner), {})
             shared_seeds = set(baseline_rows) & set(candidate_rows)
@@ -750,6 +918,10 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
     counts = dict(sorted(Counter(item["detector_id"] for item in findings).items()))
     if counts.get("invalid_run_preflight_mismatch", 0):
         reasons.append("invalid_run_preflight_mismatch")
+    if admission_counts.get("unavailable", 0) or admission_counts.get("error", 0):
+        reasons.append("execution_admission_incomplete")
+    if missingness.get("pedestrian_aware_planner_missing", 0):
+        reasons.append("pedestrian_aware_planner_missing")
     return {
         "schema_version": SCHEMA_VERSION,
         "claim_boundary": "Diagnostic release-row signals; no per-step reconstruction or causal attribution.",
@@ -758,6 +930,12 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
         "detector_registry": registry.to_dict(),
         "detector_registry_digest": registry.digest,
         "coverage": coverage,
+        "execution_admission": {
+            "eligible_rows": admission_counts.get("eligible", 0),
+            "unavailable_rows": admission_counts.get("unavailable", 0),
+            "error_rows": admission_counts.get("error", 0),
+            "by_reason": dict(sorted(admission_reasons.items())),
+        },
         "preflight_accounting": {
             "status": preflight_status,
             "expected_cells": len(preflight_map) if preflight_map is not None else None,
@@ -769,6 +947,7 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
             "rows": len(records),
             "cells": len(grouped),
             "planners": len(expected_planners),
+            "admissible_rows": admission_counts.get("eligible", 0),
             "findings": len(findings),
             "by_detector": counts,
             "annotated_universal_cells": annotated_universal_cells,
@@ -785,6 +964,146 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
     }
 
 
+def _validated_release_registry(report: Mapping[str, Any]) -> str:
+    """Validate the aggregate detector registry.
+
+    Returns:
+        The verified detector-registry digest.
+    """
+    registry_payload = report.get("detector_registry")
+    registry_digest = report.get("detector_registry_digest")
+    if not isinstance(registry_payload, Mapping) or not isinstance(registry_digest, str):
+        raise ReleaseRowError("release-row report lacks detector registry identity")
+    try:
+        observed_registry_digest = hashlib.sha256(
+            canonical_json(registry_payload).encode()
+        ).hexdigest()
+    except (AuditContractError, TypeError, ValueError, RecursionError) as error:
+        raise ReleaseRowError("release-row detector registry is malformed") from error
+    if observed_registry_digest != registry_digest:
+        raise ReleaseRowError("release-row detector registry digest does not match")
+    registry_detectors = registry_payload.get("detectors")
+    detector_ids = (
+        [item.get("detector_id") for item in registry_detectors if isinstance(item, Mapping)]
+        if isinstance(registry_detectors, list)
+        else []
+    )
+    if (
+        len(detector_ids) != len(DETECTOR_IDS)
+        or any(not isinstance(item, str) for item in detector_ids)
+        or set(detector_ids) != set(DETECTOR_IDS)
+    ):
+        raise ReleaseRowError("release-row detector registry has an invalid detector set")
+    return registry_digest
+
+
+def _validated_release_source(report: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Require loader-produced publication provenance for the BA store handoff.
+
+    Returns:
+        The verified source identity mapping.
+    """
+    source = report.get("source")
+    if not isinstance(source, Mapping):
+        raise ReleaseRowError("release-row report lacks source identity")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(source.get("manifest_sha256", ""))):
+        raise ReleaseRowError("release-row Auditor handoff requires a verified manifest digest")
+    bundle_digest = source.get("bundle_sha256")
+    if bundle_digest is not None and not re.fullmatch(r"[0-9a-f]{64}", str(bundle_digest)):
+        raise ReleaseRowError("release-row Auditor handoff has a malformed bundle digest")
+    if not source.get("bundle_sha256") and not source.get("manifest_sha256"):
+        raise ReleaseRowError("release-row Auditor handoff requires verified bundle provenance")
+    members = source.get("episode_members")
+    if (
+        not isinstance(members, list)
+        or not members
+        or any(not isinstance(item, str) or not item for item in members)
+    ):
+        raise ReleaseRowError("release-row Auditor handoff requires verified episode members")
+    try:
+        canonical_json(source)
+    except (AuditContractError, TypeError, ValueError, RecursionError) as error:
+        raise ReleaseRowError("release-row source identity is not strict JSON") from error
+    return source
+
+
+def _typed_release_signal(index: int, payload: Any) -> Signal:
+    """Deserialize and validate one canonical BA-03 release candidate signal.
+
+    Returns:
+        The validated typed BA-03 signal.
+    """
+    if not isinstance(payload, Mapping):
+        raise ReleaseRowError(f"release-row signal {index} must be an object")
+    try:
+        signal = record_from_dict(payload)
+    except (AuditContractError, KeyError, TypeError, ValueError) as error:
+        raise ReleaseRowError(f"release-row signal {index} is malformed") from error
+    if not isinstance(signal, Signal):
+        raise ReleaseRowError(f"release-row signal {index} is not a BA-03 Signal")
+    if signal.detector_id not in DETECTOR_IDS or signal.status != "flagged":
+        raise ReleaseRowError(f"release-row signal {index} is outside the candidate contract")
+    if record_to_dict(signal) != dict(payload):
+        raise ReleaseRowError(f"release-row signal {index} is not canonically serialized")
+    return signal
+
+
+def _release_signal_records(report: Mapping[str, Any]) -> list[Signal]:
+    """Return unique typed signals from the report's canonical signal list."""
+    signal_payloads = report.get("signals")
+    if not isinstance(signal_payloads, list):
+        raise ReleaseRowError("release-row report signals must be an array")
+    signals: list[Signal] = []
+    seen_signal_ids: set[str] = set()
+    for index, payload in enumerate(signal_payloads):
+        signal = _typed_release_signal(index, payload)
+        if signal.signal_id in seen_signal_ids:
+            raise ReleaseRowError(f"release-row signal {index} duplicates a signal ID")
+        seen_signal_ids.add(signal.signal_id)
+        signals.append(signal)
+    return signals
+
+
+def handoff_release_row_signals(
+    report: Mapping[str, Any], store: AuditStore
+) -> CommitResult | BatchCommitResult | None:
+    """Validate and persist release-row findings as typed BA-03 signals.
+
+    This is a signal-store handoff only. It deliberately does not construct a
+    BA-01 campaign scan, BA-02 queue summary, or human finding identity from
+    aggregate release cells.
+
+    Returns:
+        The idempotent BA-03 store commit receipt, or ``None`` when no flagged
+        signals were produced.
+    """
+
+    if not isinstance(report, Mapping) or report.get("schema_version") != SCHEMA_VERSION:
+        raise ReleaseRowError("release-row report has an unsupported schema")
+    registry_digest = _validated_release_registry(report)
+    source = _validated_release_source(report)
+    signals = _release_signal_records(report)
+    if not signals:
+        return None
+    try:
+        identity = canonical_json(
+            {
+                "source": source,
+                "detector_registry_digest": registry_digest,
+                "signals": [record_to_dict(item) for item in signals],
+            }
+        )
+    except (AuditContractError, TypeError, ValueError, RecursionError) as error:
+        raise ReleaseRowError("release-row signal source identity is not strict JSON") from error
+    operation_id = "release-row-anomalies:" + hashlib.sha256(identity.encode()).hexdigest()
+    return store.commit(
+        signals,
+        operation_id=operation_id,
+        actor="detector",
+        actor_id="release-row-anomaly-gate",
+    )
+
+
 def render_markdown(report: Mapping[str, Any]) -> str:
     """Render a complete, deterministic review table from a machine report.
 
@@ -796,6 +1115,7 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         return str(value if value is not None else "—").replace("|", "\\|").replace("\n", " ")
 
     gate = report["gate"]
+    handoff = report.get("auditor_handoff")
     lines = [
         "# Release-row anomaly report",
         "",
@@ -804,6 +1124,9 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         f"- Findings: {report['counts']['findings']} ({gate['unannotated_findings']} unannotated)",
         f"- Preflight accounting: {report['preflight_accounting']['status']}",
         f"- Bundle SHA-256: `{report['source'].get('bundle_sha256') or 'unavailable'}`",
+        f"- Execution rows: {report['execution_admission']['eligible_rows']} eligible, "
+        f"{report['execution_admission']['unavailable_rows']} unavailable, "
+        f"{report['execution_admission']['error_rows']} malformed",
         "",
         "These are diagnostic row signals, not proof of planner causation. Missing summary fields remain unavailable.",
         "",
@@ -812,6 +1135,12 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         "| Detector | Findings |",
         "| --- | ---: |",
     ]
+    if isinstance(handoff, Mapping):
+        lines.insert(
+            7,
+            "- Benchmark Auditor BA-03 store handoff: "
+            f"**{handoff['status']}** ({handoff['signal_count']} signals)",
+        )
     lines += [
         f"| {cell(name)} | {count} |" for name, count in report["counts"]["by_detector"].items()
     ]
@@ -865,6 +1194,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--output-json", type=Path, required=True)
     parser.add_argument("--output-markdown", type=Path, required=True)
     parser.add_argument(
+        "--audit-store",
+        type=Path,
+        help="optionally commit typed release-row BA-03 signals to this AuditStore directory",
+    )
+    parser.add_argument(
         "--expected-bundle-sha256",
         help="Require the archive bytes to match a separately recorded SHA-256 digest",
     )
@@ -889,6 +1223,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             preflight=_json_file(args.preflight) if args.preflight else None,
             source=source,
         )
+        if args.audit_store is not None:
+            with AuditStore(args.audit_store) as store:
+                receipt = handoff_release_row_signals(report, store)
+            report["auditor_handoff"] = {
+                "status": "submitted" if receipt is not None else "no_findings",
+                "operation_id": receipt.operation_id if receipt is not None else None,
+                "signal_count": len(report["signals"]),
+            }
         for path, content in (
             (
                 args.output_json,
@@ -898,7 +1240,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8")
-    except (OSError, ValueError, TypeError, json.JSONDecodeError) as error:
+    except (OSError, RuntimeError, ValueError, TypeError, json.JSONDecodeError) as error:
         sys.stderr.write(f"release-row audit: {error}\n")
         return 2
     return 1 if args.release_gate and report["gate"]["blocked"] else 0

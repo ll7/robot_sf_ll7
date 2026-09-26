@@ -6,8 +6,15 @@ import hashlib
 import json
 from typing import TYPE_CHECKING, Any
 
-from robot_sf.analysis_workbench.audit_contracts import record_from_dict, record_to_dict
-from robot_sf.analysis_workbench.release_row_anomalies import analyze_release_rows, main
+from robot_sf.analysis_workbench.audit_contracts import Signal, record_from_dict, record_to_dict
+from robot_sf.analysis_workbench.audit_store import AuditStore
+from robot_sf.analysis_workbench.release_row_anomalies import (
+    ReleaseRowError,
+    analyze_release_rows,
+    handoff_release_row_signals,
+    main,
+)
+from robot_sf.analysis_workbench.release_row_bundle import load_release_rows
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -23,10 +30,12 @@ CONFIG: dict[str, object] = {
     "max_unannotated_findings": 0,
     "baseline_planner": "blind_goal",
     "pedestrian_free_scenarios": ["pedestrian-free"],
+    "pedestrian_aware_planners": ["social_force"],
     "min_planners_per_cell": 2,
     "min_paired_cells": 1,
     "require_preflight": False,
 }
+BASIC_CONFIG = {**CONFIG, "pedestrian_free_scenarios": [], "pedestrian_aware_planners": []}
 
 
 def _row(  # noqa: PLR0913
@@ -64,7 +73,12 @@ def _row(  # noqa: PLR0913
 
 
 def _source(*planners: str) -> dict[str, object]:
-    return {"release_id": "synthetic-issue-9734", "planner_ids": list(planners)}
+    return {
+        "release_id": "synthetic-issue-9734",
+        "planner_ids": list(planners),
+        "manifest_sha256": "f" * 64,
+        "episode_members": ["payload/runs/synthetic__differential_drive/episodes.jsonl"],
+    }
 
 
 def _findings(report: Mapping[str, Any], detector_id: str) -> list[Mapping[str, Any]]:
@@ -183,6 +197,108 @@ def test_pedestrian_free_finding_is_scenario_level() -> None:
     assert finding["planner_id"] == "social_force"
 
 
+def test_empty_pedestrian_free_scenario_list_discovers_observed_free_cells() -> None:
+    """An empty scenario filter discovers cells from paired effective observations."""
+
+    rows = [
+        _row(
+            "auto-detected-free",
+            130,
+            "blind_goal",
+            success=True,
+            timeout=False,
+            observation_ped_count=0,
+        ),
+        _row("auto-detected-free", 130, "social_force", observation_ped_count=0),
+    ]
+    config = {**CONFIG, "pedestrian_free_scenarios": []}
+    report = analyze_release_rows(
+        rows,
+        config=config,
+        source=_source("blind_goal", "social_force"),
+    )
+
+    finding = _findings(report, "pedestrian_free_baseline_regression")[0]
+    assert finding["scenario_id"] == "auto-detected-free"
+    assert finding["planner_id"] == "social_force"
+
+
+def test_same_step_finding_reports_mixed_outcome_and_event_modes() -> None:
+    """Shared timing stays visible while mixed terminal modes remain explicit."""
+
+    timeout = _row("mixed-mode", 131, "planner_a", steps=2)
+    collision = _row("mixed-mode", 131, "planner_b", steps=2, collision=True, timeout=False)
+    collision["event_ledger"]["collision_events"] = [
+        {
+            "collision_partner_type": "pedestrian",
+            "exact_event_source": "runtime.step.meta.is_pedestrian_collision",
+            "relative_speed_at_contact": 0.5,
+        }
+    ]
+    report = analyze_release_rows(
+        [timeout, collision],
+        config=BASIC_CONFIG,
+        source=_source("planner_a", "planner_b"),
+    )
+
+    finding = _findings(report, "same_step_all_planners")[0]
+    mode = finding["measured"]["reported_failure_mode"]
+    assert mode["consistency"] == "mixed"
+    assert mode["common_signature"] is None
+    assert mode["by_planner"]["planner_b"]["collision_partner_types"] == ["pedestrian"]
+    assert mode["root_cause_attribution"] == "unavailable_from_release_rows"
+
+
+def test_same_step_finding_reports_consistent_collision_signature_without_cause_claim() -> None:
+    """Matching observed event summaries are descriptive, not causal evidence."""
+
+    rows = []
+    for planner in ("planner_a", "planner_b"):
+        row = _row("shared-collision", 132, planner, steps=2, collision=True, timeout=False)
+        row["status"] = "collision"
+        row["event_ledger"]["collision_events"] = [
+            {
+                "collision_partner_type": "pedestrian",
+                "exact_event_source": "runtime.step.meta.is_pedestrian_collision",
+                "relative_speed_at_contact": 0.5,
+            }
+        ]
+        rows.append(row)
+
+    report = analyze_release_rows(
+        rows,
+        config=BASIC_CONFIG,
+        source=_source("planner_a", "planner_b"),
+    )
+
+    mode = _findings(report, "same_step_all_planners")[0]["measured"]["reported_failure_mode"]
+    assert mode["consistency"] == "consistent"
+    assert mode["common_signature"]["collision_partner_types"] == ["pedestrian"]
+    assert mode["root_cause_attribution"] == "unavailable_from_release_rows"
+
+
+def test_same_step_finding_marks_collision_signature_partially_observed() -> None:
+    """Missing collision events stay visible as missing evidence in the signature."""
+
+    rows = [
+        _row("missing-event-summary", 133, planner, steps=2, collision=True, timeout=False)
+        for planner in ("planner_a", "planner_b")
+    ]
+    for row in rows:
+        row["status"] = "collision"
+
+    report = analyze_release_rows(
+        rows,
+        config=BASIC_CONFIG,
+        source=_source("planner_a", "planner_b"),
+    )
+
+    mode = _findings(report, "same_step_all_planners")[0]["measured"]["reported_failure_mode"]
+    assert mode["consistency"] == "partially_observed"
+    assert mode["common_signature"]["collision_event_count"] is None
+    assert mode["common_signature"]["collision_partner_types"] is None
+
+
 def test_flagged_signal_round_trips_through_audit_contract() -> None:
     """Release-row signals use the canonical BA-03 audit-record envelope."""
 
@@ -223,6 +339,118 @@ def test_pedestrian_free_detector_excludes_nonfree_observations() -> None:
     assert report["gate"]["blocked"] is False
 
 
+def test_pedestrian_free_detector_uses_only_configured_aware_planners() -> None:
+    """Unconfigured comparison arms cannot create pedestrian-aware findings."""
+
+    rows = [
+        _row("pedestrian-free", 115, "blind_goal", success=True, timeout=False),
+        _row("pedestrian-free", 115, "social_force"),
+        _row("pedestrian-free", 115, "blind_other"),
+    ]
+    report = analyze_release_rows(
+        rows,
+        config=CONFIG,
+        source=_source("blind_goal", "social_force", "blind_other"),
+    )
+
+    findings = _findings(report, "pedestrian_free_baseline_regression")
+    assert [finding["planner_id"] for finding in findings] == ["social_force"]
+
+
+def test_missing_configured_pedestrian_aware_planner_blocks_gate() -> None:
+    """A configured comparison planner missing from the bundle is not silently skipped."""
+
+    config = {**CONFIG, "pedestrian_aware_planners": ["social_force", "missing_planner"]}
+    rows = [
+        _row("pedestrian-free", 115, "blind_goal", success=True, timeout=False),
+        _row("pedestrian-free", 115, "social_force"),
+    ]
+    report = analyze_release_rows(
+        rows,
+        config=config,
+        source=_source("blind_goal", "social_force"),
+    )
+
+    assert report["missingness"]["pedestrian_aware_planner_missing"] == 1
+    assert "pedestrian_aware_planner_missing" in report["gate"]["reasons"]
+    assert report["gate"]["blocked"] is True
+
+
+def test_contact_speed_metric_fallback_is_used_when_events_have_no_speed() -> None:
+    """An empty/incomplete event list does not suppress the row metric fallback."""
+
+    row = _row("teleport-contact", 113, "planner_a", collision=True, timeout=False)
+    row["event_ledger"]["collision_events"] = []
+    row["metrics"]["max_relative_contact_speed_m_s"] = 710.0
+
+    report = analyze_release_rows([row], config=BASIC_CONFIG, source=_source("planner_a"))
+
+    finding = _findings(report, "impossible_contact_speed")[0]
+    assert finding["measured"]["max_relative_speed_at_contact_m_s"] == 710.0
+    assert finding["measured"]["speed_source"] == "metrics.max_relative_contact_speed_m_s"
+
+
+def test_non_admissible_execution_rows_are_excluded_and_block_gate() -> None:
+    """Fallback rows do not count as benchmark episodes; outcome failures still do."""
+
+    admitted = _row("execution-status", 127, "planner_a", steps=1)
+    admitted["status"] = "failure"
+    unavailable = _row("execution-status", 127, "planner_b", steps=1)
+    unavailable["row_status"] = "fallback"
+    report = analyze_release_rows(
+        [admitted, unavailable],
+        config=BASIC_CONFIG,
+        source=_source("planner_a", "planner_b"),
+    )
+
+    assert report["execution_admission"]["eligible_rows"] == 1
+    assert report["execution_admission"]["unavailable_rows"] == 1
+    assert report["counts"]["rows"] == 2
+    assert not _findings(report, "same_step_all_planners")
+    assert "execution_admission_incomplete" in report["gate"]["reasons"]
+    assert "incomplete_planner_cells" in report["gate"]["reasons"]
+
+
+def test_release_row_signals_commit_to_audit_store_idempotently(tmp_path: Path) -> None:
+    """The aggregate detector's typed BA-03 signals have a durable Auditor handoff."""
+
+    report = analyze_release_rows(
+        [_row("auditor-handoff", 128, "planner_a", steps=2, collision=True, timeout=False)],
+        config=BASIC_CONFIG,
+        source=_source("planner_a"),
+    )
+
+    with AuditStore(tmp_path / "audit-store") as store:
+        first = handoff_release_row_signals(report, store)
+        second = handoff_release_row_signals(report, store)
+        persisted = store.get(report["signals"][0]["signal_id"])
+
+    assert first.operation_id == second.operation_id
+    assert first.committed is True and first.replayed is False
+    assert second.replayed is True
+    assert isinstance(persisted.record, Signal)
+    assert persisted.record.signal_id == report["signals"][0]["signal_id"]
+
+
+def test_release_row_auditor_handoff_rejects_malformed_signal(tmp_path: Path) -> None:
+    """Only canonical BA-03 Signal records can be handed to the Auditor store."""
+
+    report = analyze_release_rows(
+        [_row("auditor-handoff", 129, "planner_a", steps=2, collision=True, timeout=False)],
+        config=CONFIG,
+        source=_source("planner_a"),
+    )
+    report["signals"] = [{"schema_version": "audit-record.v1", "record_type": "annotation"}]
+
+    with AuditStore(tmp_path / "audit-store") as store:
+        try:
+            handoff_release_row_signals(report, store)
+        except ReleaseRowError as error:
+            assert "signal" in str(error).lower()
+        else:
+            raise AssertionError("malformed signal payload was accepted")
+
+
 def test_root_cause_annotation_removes_a_universal_failure_finding() -> None:
     """A matching annotation is retained in counts and clears the gate."""
 
@@ -254,7 +482,7 @@ def test_root_cause_annotation_removes_a_universal_failure_finding() -> None:
 def test_unannotated_threshold_allows_configured_count() -> None:
     """The configured unannotated count is a threshold, not a Boolean switch."""
 
-    config = {**CONFIG, "max_unannotated_findings": 1}
+    config = {**BASIC_CONFIG, "max_unannotated_findings": 1}
     rows = [
         _row("universal-failure", 119, "planner_a"),
         _row("universal-failure", 119, "planner_b"),
@@ -276,10 +504,10 @@ def test_finding_id_changes_with_detector_configuration() -> None:
 
     rows = [_row("short-collision", 126, "planner_a", steps=1, collision=True, timeout=False)]
     source = _source("planner_a")
-    first = analyze_release_rows(rows, config=CONFIG, source=source)
+    first = analyze_release_rows(rows, config=BASIC_CONFIG, source=source)
     second = analyze_release_rows(
         rows,
-        config={**CONFIG, "short_collision_max_steps": 3},
+        config={**BASIC_CONFIG, "short_collision_max_steps": 3},
         source=source,
     )
 
@@ -299,7 +527,7 @@ def test_missing_row_metrics_do_not_create_phantom_measurement_findings() -> Non
 
     report = analyze_release_rows(
         rows,
-        config=CONFIG,
+        config=BASIC_CONFIG,
         source=_source("planner_a", "planner_b"),
     )
     detector_ids = {
@@ -324,7 +552,7 @@ def test_preflight_match_does_not_flag_invalid_run_accounting() -> None:
 
     report = analyze_release_rows(
         rows,
-        config=CONFIG,
+        config=BASIC_CONFIG,
         preflight=preflight,
         source=_source("planner_a", "planner_b"),
     )
@@ -341,7 +569,7 @@ def test_annotated_invalid_run_mismatch_still_blocks_gate() -> None:
     ]
     report = analyze_release_rows(
         rows,
-        config=CONFIG,
+        config=BASIC_CONFIG,
         preflight=[{"scenario_id": "accounting-mismatch", "seed": 124, "invalid_run": False}],
         annotations=[
             {
@@ -364,7 +592,7 @@ def test_annotated_invalid_run_mismatch_still_blocks_gate() -> None:
 def test_required_preflight_without_input_is_explicitly_unavailable() -> None:
     """A gate requiring preflight reports unavailable evidence and blocks."""
 
-    config = {**CONFIG, "require_preflight": True}
+    config = {**BASIC_CONFIG, "require_preflight": True}
     report = analyze_release_rows(
         [_row("preflight-required", 122, "planner_a")],
         config=config,
@@ -417,8 +645,10 @@ def test_cli_writes_json_and_markdown_and_returns_gate_status(tmp_path: Path) ->
         _row("cli-universal", 123, "planner_b"),
     ]
     bundle = _write_extracted_bundle(tmp_path / "bundle", rows)
+    api_rows, source = load_release_rows(bundle)
+    api_report = analyze_release_rows(api_rows, config=BASIC_CONFIG, source=source)
     config_path = tmp_path / "config.json"
-    config_path.write_text(json.dumps(CONFIG), encoding="utf-8")
+    config_path.write_text(json.dumps(BASIC_CONFIG), encoding="utf-8")
     report_json = tmp_path / "report.json"
     report_md = tmp_path / "report.md"
 
@@ -437,7 +667,17 @@ def test_cli_writes_json_and_markdown_and_returns_gate_status(tmp_path: Path) ->
     assert report_json.is_file()
     assert report_md.is_file()
     assert json.loads(report_json.read_text(encoding="utf-8"))["gate"]["blocked"] is True
+    cli_report = json.loads(report_json.read_text(encoding="utf-8"))
+    assert cli_report["detector_registry_digest"] == api_report["detector_registry_digest"]
+    assert cli_report["findings"] == api_report["findings"]
     assert "Release-row anomaly report" in report_md.read_text(encoding="utf-8")
+
+    audit_store = tmp_path / "benchmark-auditor"
+    assert main(args[:-1] + ["--audit-store", str(audit_store), "--release-gate"]) == 1
+    handed_off = json.loads(report_json.read_text(encoding="utf-8"))
+    assert handed_off["auditor_handoff"]["status"] == "submitted"
+    with AuditStore(audit_store) as store:
+        assert len(store.list_records(record_type="signal")) == len(handed_off["signals"])
 
     annotations_path = tmp_path / "annotations.json"
     annotations_path.write_text(

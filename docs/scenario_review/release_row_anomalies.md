@@ -53,6 +53,14 @@ also requires a non-empty, member-unique `episode_id`. `metrics` must be an
 object. `event_ledger.exact_events.invalid_run` is used when present for
 preflight parity. Optional measurements remain unavailable when absent.
 
+The published row's top-level `status` is a terminal outcome (`success`,
+`collision`, or `failure`), not an execution-availability marker. The gate
+applies the Benchmark Auditor's shared execution-admission policy to explicit
+execution-status fields, nested planner metadata, and fallback counters. Rows
+marked fallback, degraded, unavailable for execution, or with malformed
+admission metadata are excluded from detector cohorts and block the release
+gate; their scenario/seed cells remain incomplete.
+
 Pedestrian-free baseline comparisons use
 `integrity.effective_view.observation_ped_count` from both paired rows. A row
 is eligible only when this integer is exactly zero, even if its scenario ID is
@@ -62,8 +70,12 @@ listed in `pedestrian_free_scenarios`. A positive count excludes that pair.
 
 The configured detectors are:
 
-- `same_step_all_planners`: every sufficiently populated planner cell fails at
-  the same terminal step at or below `same_step_max_steps`;
+- `same_step_all_planners`: every expected planner in a complete cell fails at
+  the same terminal step at or below `same_step_max_steps`. The finding includes
+  the rows' reported outcome, invalid-run, and collision-event signature, with
+  a `consistent`, `mixed`, or `partially_observed` label. It explicitly records
+  that root-cause attribution is unavailable from release rows; matching
+  signatures are not a causal finding;
 - `short_collision`: a row ends in `collision_event` at or below
   `short_collision_max_steps`;
 - `impossible_contact_speed`: a collision contact speed from
@@ -78,7 +90,10 @@ The configured detectors are:
   `metrics.displacement_m`; and the deadlock flag is `metrics.deadlock`;
 - `pedestrian_free_baseline_regression`: a configured pedestrian-aware planner
   has a lower success rate than `baseline_planner` in paired rows whose
-  effective observed pedestrian count is zero;
+  effective observed pedestrian count is zero. An empty
+  `pedestrian_free_scenarios` list discovers scenario IDs from zero-pedestrian
+  baseline rows; a nonempty list narrows the analysis to those IDs. Each actual
+  baseline/candidate pair must still report zero pedestrians in both rows;
 - `universal_failure_unannotated`: every expected planner fails a complete
   scenario-by-seed cell and no matching root-cause annotation exists;
 - `invalid_run_preflight_mismatch`: the row's `invalid_run` value disagrees
@@ -99,8 +114,19 @@ keys are:
 `max_contact_speed_m_s`, `min_orbit_curvature`,
 `min_orbit_path_length_m`, `max_zero_progress_m`, `max_progress_ratio`,
 `min_planners_per_cell`, `min_paired_cells`, `min_success_rate_gap`,
-`baseline_planner`, `pedestrian_free_scenarios`,
+`baseline_planner`, `pedestrian_free_scenarios`, `pedestrian_aware_planners`,
 `max_unannotated_findings`, and `require_preflight`.
+
+`pedestrian_aware_planners` is an explicit release-cohort allowlist. The
+detector compares only those planner IDs against the blind baseline; an
+allowlisted planner absent from a pedestrian-free scenario's release roster is
+reported as unavailable and blocks the gate. Keep this list aligned with the
+planners whose effective observation contract includes pedestrians. The
+checked-in 0.0.7 configuration names the observed non-baseline arms.
+`pedestrian_free_scenarios` is an optional scenario filter and is empty by
+default, so the detector discovers applicable scenarios from each release's
+effective-view pedestrian counts instead of baking a scenario name into the
+gate configuration.
 
 The preflight input is either a list or an object with schema version
 `release-row-preflight.v1` and a `cells` list:
@@ -130,18 +156,28 @@ remain visible.
 
 The release gate is evaluated once at report level. `gate.blocked` is true if
 the report has more unannotated findings than `max_unannotated_findings`, has
-incomplete planner cells, requires unavailable or incomplete preflight, or has
-any `invalid_run_preflight_mismatch`. The parity reason remains blocking even
-when that finding has an annotation. Detector findings and their annotation
-state stay in the JSON report, while the Markdown report summarizes the same
-report-level decision.
+incomplete planner cells or execution admission, requires unavailable or
+incomplete preflight, has an allowlisted pedestrian-aware planner missing from
+the release cohort, or has any `invalid_run_preflight_mismatch`. The parity
+reason remains blocking even when that finding has an annotation. Detector
+findings and their annotation state stay in the JSON report, while the Markdown
+report summarizes the same report-level decision.
 
 The JSON report also carries `detector_registry` and its
 `detector_registry_digest`. Every entry in `signals` is a canonical BA-03
 `signal` audit record, so consumers can validate and deserialize it with
 `robot_sf.analysis_workbench.audit_contracts.record_from_dict`. Finding IDs
 bind the source digests and detector-registry digest, so a threshold change
-produces a new identity for an otherwise matching cell.
+produces a new identity for an otherwise matching cell. The registry uses a
+stable module owner, so API and command-line runs produce the same digest and
+signal IDs for the same source and configuration.
+
+These are aggregate cross-planner detector signals, not BA-01 per-episode
+detector executions. To persist the typed BA-03 signals in the Benchmark
+Auditor's local store, pass `--audit-store <directory>`. Commits are atomic and
+idempotent for the same source, registry, and signal set. This handoff does not
+fabricate a BA-01 campaign scan, BA-02 queue summary, or human finding; those
+remain owned by their respective Auditor contracts.
 
 ## Running the report
 
@@ -154,6 +190,11 @@ python -m robot_sf.analysis_workbench.release_row_anomalies \
   --output-json output/release-row-anomalies.json \
   --output-markdown output/release-row-anomalies.md
 ```
+
+Add `--audit-store output/benchmark-auditor` to also commit the produced BA-03
+signals to a local Benchmark Auditor store. The optional handoff is summarized
+in both reports; with no candidate findings, the store has no release-row
+signal transaction.
 
 To bind an archive run to a separately recorded digest, add
 `--expected-bundle-sha256 <64-lowercase-hex-digits>`. This check applies to

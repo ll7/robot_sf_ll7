@@ -593,7 +593,6 @@ def _source_ref_from_value(  # noqa: C901, PLR0912
                 payload,
                 names=("config_identity", "config_hash"),
                 label="config_identity",
-                include_episode_rows=True,
             )
             if isinstance(payload, Mapping)
             else None
@@ -639,7 +638,6 @@ def _source_ref_from_value(  # noqa: C901, PLR0912
             payload,
             names=("config_identity", "config_hash"),
             label="config_identity",
-            include_episode_rows=True,
         )
         if isinstance(payload, Mapping)
         else None

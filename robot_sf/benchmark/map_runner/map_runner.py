@@ -74,7 +74,10 @@ from robot_sf.benchmark.map_runner.map_runner_env import (
 from robot_sf.benchmark.map_runner.map_runner_env import (
     validate_sensor_fusion_adapter_config as _validate_sensor_fusion_adapter_config,  # noqa: F401 - compatibility re-export.
 )
-from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode as _execute_map_episode
+from robot_sf.benchmark.map_runner.map_runner_episode import _PairResetHook
+from robot_sf.benchmark.map_runner.map_runner_episode import (
+    run_map_episode as _execute_map_episode,
+)
 from robot_sf.benchmark.map_runner.map_runner_identity import (
     _compute_map_episode_id,
     _resolve_seed_list,
@@ -2473,6 +2476,7 @@ def _run_map_episode(  # noqa: PLR0913
     cbf_safety_filter: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
+    pair_reset_hook: _PairResetHook | None = None,
     close_policy: bool = True,
     policy_builder: Any | None = None,
     runtime_input_records: list[dict[str, str]] | None = None,
@@ -2511,6 +2515,7 @@ def _run_map_episode(  # noqa: PLR0913
             "cbf_safety_filter": cbf_safety_filter,
             "record_planner_decision_trace": record_planner_decision_trace,
             "record_simulation_step_trace": record_simulation_step_trace,
+            "pair_reset_hook": pair_reset_hook,
             "close_policy": close_policy,
             "policy_builder": policy_builder or _build_policy,
             "runtime_input_records": consumed_runtime_inputs,

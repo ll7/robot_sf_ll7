@@ -130,6 +130,95 @@ def test_report_derives_candidate_accounting_and_preserves_legacy_summary() -> N
     assert random_1101["availability_status_counts"] == {"available": 2, "unknown": 2}
 
 
+@pytest.mark.parametrize(
+    ("outcome", "expected_tier", "expected_critical"),
+    [
+        ({"collision_event": False}, "unknown", None),
+        (
+            {"collision_event": False, "severe_intrusion_event": False},
+            "not_critical",
+            False,
+        ),
+        ({"collision_event": True}, "critical", True),
+    ],
+)
+def test_collision_intrusion_criticality_is_tristate(
+    tmp_path: Path,
+    outcome: dict[str, bool],
+    expected_tier: str,
+    expected_critical: bool | None,
+) -> None:
+    def add_safety_outcome(manifest: dict[str, Any]) -> None:
+        candidate = manifest["candidates"][0]
+        attribution = candidate["failure_attribution"]
+        attribution["primary_failure"] = "success"
+        attribution["details"]["outcome"] = outcome
+
+    report = _report_with_manifest(tmp_path, row_index=2, mutate=add_safety_outcome)
+    random_2202 = next(
+        run for run in report["runs"] if run["sampler"] == "random" and run["seed"] == 2202
+    )
+    evaluation = random_2202["evaluations"][0]
+
+    assert evaluation["collision_intrusion_tier"]["status"] == expected_tier
+    assert evaluation["criticality_status"] == expected_tier
+    assert evaluation["critical"] is expected_critical
+    if expected_tier == "unknown":
+        assert evaluation["collision_intrusion_tier"]["reason_codes"] == [
+            "severe_intrusion_evidence_missing"
+        ]
+        assert random_2202["num_criticality_unknown_candidates"] >= 1
+        assert random_2202["num_collision_intrusion_tier_unknown_candidates"] >= 1
+        assert "unknown" in render_markdown(report)
+
+
+def test_conflicting_collision_evidence_remains_unknown(tmp_path: Path) -> None:
+    def add_conflicting_safety_outcome(manifest: dict[str, Any]) -> None:
+        candidate = manifest["candidates"][0]
+        attribution = candidate["failure_attribution"]
+        attribution["primary_failure"] = "collision"
+        attribution["details"]["outcome"] = {"collision_event": False}
+
+    report = _report_with_manifest(tmp_path, row_index=2, mutate=add_conflicting_safety_outcome)
+    random_2202 = next(
+        run for run in report["runs"] if run["sampler"] == "random" and run["seed"] == 2202
+    )
+    evaluation = random_2202["evaluations"][0]
+
+    assert evaluation["collision_intrusion_tier"]["status"] == "unknown"
+    assert "collisions_evidence_conflict" in evaluation["collision_intrusion_tier"]["reason_codes"]
+    assert evaluation["criticality_status"] == "critical"
+    assert evaluation["critical"] is True
+
+
+@pytest.mark.parametrize(
+    ("safety_evidence", "expected_reason"),
+    [
+        ({"outcome": {"collision_event": "false"}}, "collisions_evidence_malformed"),
+        ({"metrics": {"collisions": "0"}}, "collisions_evidence_malformed"),
+    ],
+)
+def test_malformed_safety_evidence_remains_unknown(
+    tmp_path: Path, safety_evidence: dict[str, Any], expected_reason: str
+) -> None:
+    def add_malformed_safety_evidence(manifest: dict[str, Any]) -> None:
+        candidate = manifest["candidates"][0]
+        attribution = candidate["failure_attribution"]
+        attribution["primary_failure"] = "success"
+        attribution["details"].update(safety_evidence)
+
+    report = _report_with_manifest(tmp_path, row_index=2, mutate=add_malformed_safety_evidence)
+    random_2202 = next(
+        run for run in report["runs"] if run["sampler"] == "random" and run["seed"] == 2202
+    )
+    evaluation = random_2202["evaluations"][0]
+
+    assert evaluation["collision_intrusion_tier"]["status"] == "unknown"
+    assert expected_reason in evaluation["collision_intrusion_tier"]["reason_codes"]
+    assert evaluation["criticality_status"] == "unknown"
+    assert evaluation["critical"] is None
+
+
 def test_report_keeps_missing_scoreless_duplicate_and_degraded_attempts_visible() -> None:
     report = _report()
     tpe_1101 = next(
@@ -313,6 +402,11 @@ def test_markdown_distinguishes_run_checks_from_pairs_and_shows_runtime() -> Non
         for line in markdown.splitlines()
         if line.startswith("| `") and " | " in line
     ]
+    headers = next(
+        [cell.strip() for cell in line.split("|")[1:-1]]
+        for line in markdown.splitlines()
+        if line.startswith("| Objective |")
+    )
     random_1101 = next(
         [cell.strip() for cell in row]
         for row in per_run_rows
@@ -332,7 +426,7 @@ def test_markdown_distinguishes_run_checks_from_pairs_and_shows_runtime() -> Non
     assert "| Search runtime (s) |" in markdown
     assert "| Run input status |" in markdown
     assert random_1101[4] == "Not recorded"
-    assert random_1101[15] == "input checks passed"
+    assert random_1101[headers.index("Run input status")] == "input checks passed"
     assert tpe_1101[4] == "4.25"
     assert incomplete["reason_codes"] == ["incomplete_budgeted_evaluations"]
 
@@ -415,7 +509,10 @@ def test_cli_writes_machine_readable_summary_table_and_figure(
     assert console["run_count"] == 5
     assert (output / "falsification_report.json").is_file()
     markdown = (output / "falsification_report.md").read_text(encoding="utf-8")
-    assert "Observed best and critical counts retain raw candidate evidence" in markdown
+    assert (
+        "Criticality columns report known critical, known non-critical, and unknown candidate counts separately"
+        in markdown
+    )
     assert "analysis_eligibility.eligible=true" in markdown
     assert "native: 2, unknown: 2" in markdown
     assert "available: 2, unknown: 2" in markdown

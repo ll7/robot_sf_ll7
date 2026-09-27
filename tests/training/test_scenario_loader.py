@@ -1255,7 +1255,7 @@ def test_scenario_geometry_contract_reaches_the_map_pool(tmp_path: Path) -> None
 
 def test_map_definition_cache_separates_geometry_contracts() -> None:
     """Legacy and corrected loads of one SVG never share a cache entry."""
-    scenario_loader._load_map_definition.cache_clear()
+    scenario_loader._load_map_definition_cached.cache_clear()
     try:
         legacy = scenario_loader._load_map_definition(str(_TRANSFORMED_SVG), "legacy")
         corrected = scenario_loader._load_map_definition(str(_TRANSFORMED_SVG), "corrected")
@@ -1267,4 +1267,4 @@ def test_map_definition_cache_separates_geometry_contracts() -> None:
         assert scenario_loader._load_map_definition(str(_TRANSFORMED_SVG), "legacy") is legacy
         assert scenario_loader._load_map_definition(str(_TRANSFORMED_SVG), "corrected") is corrected
     finally:
-        scenario_loader._load_map_definition.cache_clear()
+        scenario_loader._load_map_definition_cached.cache_clear()

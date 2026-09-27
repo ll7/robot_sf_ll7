@@ -82,6 +82,25 @@ route-only scenarios and Issue #6139 recertification. The powered template and d
 manifest hashes were refreshed after this input change. No outcomes were generated and no
 campaign execution is authorized by this refresh.
 
+## Outcome-free admissibility-filter provenance refresh (2026-09-25)
+
+Issue #9651 adds bound scenario-admissibility metadata to search bundles. Its optional
+pre-evaluation rejection filter is disabled by default, so the frozen #5303 runner continues to
+send candidates through its existing certification and evaluator path. The raw hashes for the
+search runner, bundle writer, and search config, along with the derived contract hash, were
+refreshed before any #6145 outcome was generated. The 768 scheduled identities, methods, planner,
+family split, candidate space, budget, objective, gates, denominator, inference, decision rule, and
+evidence boundary are unchanged. This outcome-free implementation/provenance refresh does not
+authorize a campaign, transfer, or promotion.
+
+## Outcome-free positional-compatibility provenance refresh (2026-09-25)
+
+The new filter option now follows all pre-existing `SearchConfig` fields, preserving the generated
+constructor's positional argument order while keeping the filter disabled by default. The
+adversarial-config source hash and derived contract hash were refreshed; the frozen design and all
+768 scheduled identities remain unchanged. No outcome was generated or read, and no campaign is
+authorized by this compatibility repair.
+
 ## The claim under test (frozen, falsifiable)
 
 > Under a frozen family-disjoint design and matched candidate (64 per search seed per

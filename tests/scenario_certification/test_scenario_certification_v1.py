@@ -162,6 +162,45 @@ def test_geometrically_infeasible_when_inflated_path_is_blocked() -> None:
     assert _classify(blocked) == GEOMETRICALLY_INFEASIBLE
 
 
+def test_planner_exception_preserves_legacy_geometric_classification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """scenario_cert.v1 preserves its historical exclusion contract for planner errors."""
+
+    monkeypatch.setattr(
+        scenario_certification_v1.ClassicGlobalPlanner,
+        "plan",
+        Mock(side_effect=RuntimeError("injected planner failure")),
+    )
+    certificate = certify_map_definition(
+        _map([(2.0, 2.0), (10.0, 2.0)]),
+        source="planner-error-test",
+        scenario={"name": "planner-error-test"},
+        robot_config=DifferentialDriveSettings(radius=0.4),
+        settings=CertificationSettings(planner_cells_per_meter=2.0),
+    )
+    payload = certificate_to_dict(certificate)
+    schema = json.loads(Path("robot_sf/benchmark/schemas/scenario_cert.v1.json").read_text())
+    jsonschema.validate(payload, schema)
+
+    assert certificate.classification == GEOMETRICALLY_INFEASIBLE
+    assert certificate.benchmark_eligibility == "excluded"
+    assert certificate.route_certificates[0].checks["inflated_collision_free_path"] is False
+    assert "planner" not in certificate.route_certificates[0].checks
+    assert set(payload["evidence"]) == {
+        "scenario_fingerprint",
+        "difficulty_analysis",
+        "actor_source_census",
+    }
+    assert not {
+        "source_artifact_sha256",
+        "effective_input_sha256",
+        "effective_input_identity_stable",
+        "runtime_input_identity_stable",
+    }.intersection(payload["evidence"])
+    assert certificate.reasons == ["no_inflated_collision_free_path: injected planner failure"]
+
+
 def test_kinodynamically_infeasible_for_tighter_turn_than_bicycle_limit() -> None:
     """Bicycle routes with turns tighter than the configured limit are excluded."""
 

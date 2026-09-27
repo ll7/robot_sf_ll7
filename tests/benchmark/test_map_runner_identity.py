@@ -13,6 +13,7 @@ from robot_sf.benchmark.map_runner.map_runner_identity import (
     _scenario_with_episode_seed_defaults,
     _select_seeds,
     _suite_key,
+    selected_map_identity_from_runtime_inputs,
 )
 
 
@@ -247,3 +248,82 @@ class TestScenarioWithEpisodeSeedDefaults:
         scenario = {"name": "sc-1"}
         result = _scenario_with_episode_seed_defaults(scenario, seed=7)
         assert result["simulation_config"]["route_spawn_seed"] == 7
+
+
+class TestSelectedMapIdentity:
+    """Tests for binding the realized map to parser-captured resource bytes."""
+
+    def test_multi_map_pool_selects_the_realized_map_record(self) -> None:
+        records = [
+            {
+                "role": "default_map_pool",
+                "scenario_id": "scene-a",
+                "map_id": "map-a",
+                "path": "/maps/map-a.svg",
+                "sha256": "a" * 64,
+            },
+            {
+                "role": "default_map_pool",
+                "scenario_id": "scene-a",
+                "map_id": "map-b",
+                "path": "/maps/map-b.svg",
+                "sha256": "b" * 64,
+            },
+        ]
+
+        identity = selected_map_identity_from_runtime_inputs(
+            "map-b", records, scenario_id="scene-a"
+        )
+
+        assert identity == {
+            "schema_version": "selected_map_identity.v1",
+            "status": "available",
+            "map_id": "map-b",
+            "path": "/maps/map-b.svg",
+            "sha256": "b" * 64,
+            "source_role": "default_map_pool",
+            "reason": None,
+        }
+
+    def test_missing_or_ambiguous_realized_map_source_is_unavailable(self) -> None:
+        records = [
+            {
+                "role": "default_map_pool",
+                "scenario_id": "scene-a",
+                "map_id": "map-a",
+                "path": "/maps/map-a.svg",
+                "sha256": "a" * 64,
+            },
+            {
+                "role": "default_map_pool",
+                "scenario_id": "scene-a",
+                "map_id": "map-a",
+                "path": "/archive/map-a.svg",
+                "sha256": "b" * 64,
+            },
+        ]
+
+        identity = selected_map_identity_from_runtime_inputs(
+            "map-a", records, scenario_id="scene-a"
+        )
+
+        assert identity["status"] == "unavailable"
+        assert identity["reason"] == "realized_map_source_not_unique"
+
+    def test_explicit_single_map_without_declared_id_binds_unambiguously(self) -> None:
+        identity = selected_map_identity_from_runtime_inputs(
+            "custom-map",
+            [
+                {
+                    "role": "map_file",
+                    "scenario_id": "scene-a",
+                    "path": "/scenarios/custom.svg",
+                    "sha256": "c" * 64,
+                }
+            ],
+            scenario_id="scene-a",
+        )
+
+        assert identity["status"] == "available"
+        assert identity["map_id"] == "custom-map"
+        assert identity["source_role"] == "map_file"

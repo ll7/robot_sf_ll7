@@ -108,7 +108,8 @@ AUDITED_UNIT_FIELDS = frozenset(
     safety_margin slow_distance_human social_force_desired_speed
     social_force_goal_approach_clearance social_force_goal_approach_max_speed
     social_force_goal_approach_radius social_force_goal_approach_stop_distance
-    social_force_obstacle_range social_force_tau soft_prediction_horizon
+    social_force_obstacle_range social_force_ped_v3_default_ped_radius
+    social_force_ped_v3_length social_force_tau soft_prediction_horizon
     static_clearance_escape_max_speed static_clearance_escape_min_clearance
     static_clearance_escape_tolerance static_corridor_transit_initial_band
     static_corridor_transit_min_progress_3s static_corridor_transit_tolerance
@@ -212,7 +213,12 @@ DRIVE_ANGULAR_ACCEL_FIELDS = frozenset(
 )
 ROBOT_RADIUS_FIELDS = frozenset(("predictive_robot_radius", "robot_radius", "robot_radius_default"))
 PEDESTRIAN_RADIUS_FIELDS = frozenset(
-    ("pedestrian_radius", "pedestrian_radius_default", "predictive_pedestrian_radius")
+    (
+        "pedestrian_radius",
+        "pedestrian_radius_default",
+        "predictive_pedestrian_radius",
+        "social_force_ped_v3_default_ped_radius",
+    )
 )
 # Body radii must lie in [physical radius, 1.5 x physical radius]: smaller plans
 # through contact; a diameter (2 x) or larger is a unit error. Proxemic zones and

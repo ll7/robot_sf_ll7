@@ -239,6 +239,8 @@ class EpisodeRecordDict(TypedDict, total=False):
     scenario_id: str
     seed: int
     scenario_params: dict[str, Any]
+    runtime_input_records: list[dict[str, str]]
+    selected_map_identity: dict[str, str | None]
     metrics: dict[str, Any]
     safety_predicates: dict[str, Any]
     public_requirement: dict[str, Any]

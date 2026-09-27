@@ -413,6 +413,19 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Scenario-admissibility tests exercise deterministic candidate, manifest,
+    # materialization, and provenance contracts used by the adversarial search.
+    "test_scenario_admissibility.py",
+    # Issue #9651 search-consumer contracts use a fake sampler/certifier and do
+    # not construct a simulator; keep the changed search adapter in PR coverage.
+    "test_search.py",
+    # MAP-Elites QD unit tests inject candidate evaluations and are CPU-only.
+    "test_issue_5308_qd.py",
+    # Map migration/source-capture tests use local SVG fixtures only.
+    "test_map_migration.py",
+    # Scenario-cache profiler tests use synthetic data and patched loaders; keep
+    # the changed cache instrumentation covered in the fast lane.
+    "test_perf_scenario_cache.py",
     # Social-force v2 planner contracts (issue #9724) are deterministic adapter
     # checks on synthetic grids; the four episode tests stay marked slow.
     "test_issue_9724_social_force_resolution_independent.py",
@@ -437,6 +450,9 @@ _FAST_FILES = {
     # Force-residual predictor tests are deterministic synthetic contracts and
     # must cover the changed planner-visible prediction module in PR shards.
     "test_force_residual_intent_predictor.py",
+    # Surface-distance pedestrian-term contracts include deterministic rollout
+    # and construction-validation checks; keep changed lines in PR shards.
+    "test_socnav_ped_surface_v3.py",
     # ScenarioBelief projection tests are deterministic identity and data-contract
     # checks; keep them in PR shards so changed-line coverage sees the adapter.
     "test_identity_safe_scenario_belief.py",
@@ -492,6 +508,10 @@ _FAST_FILES = {
     # offline contracts; keep changed coverage in the exact-head fast lane.
     "test_audit_scan.py",
     "test_audit_detectors.py",
+    # VV-4 release-row bundle and anomaly checks are deterministic offline
+    # contracts; include them in fast shards for changed-line coverage.
+    "test_release_row_bundle.py",
+    "test_release_row_anomalies.py",
     "test_grid_socnav_extractor.py",
     "map_test.py",
     "navigation_test.py",

@@ -87,6 +87,68 @@ def _bind(planner: HybridRuleLocalPlannerAdapter, robot_config) -> None:
     planner.bind_env(env)
 
 
+def test_v4_continuous_static_acceptance_still_checks_pedestrian_collision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Coarse grid clearance must not bypass v4's independent pedestrian gate."""
+    planner = _v4_planner(
+        continuous_static_clearance_enabled=True,
+        rollout_horizon=0.4,
+        v4_braking_check_enabled=False,
+    )
+    planner._continuous_static_context = SimpleNamespace()
+    monkeypatch.setattr(planner, "_continuous_static_collision", lambda *_args: False)
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda _observation: None)
+    # Emulate a conservative occupancy-grid cell while continuous geometry is clear.
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda *_args: 0.2)
+    observation: dict[str, object] = {}
+    state = _state(clearance=-0.25)
+    candidate = HybridRuleCandidate(0.2, 0.0, "dynamic_window")
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=0.2,
+        nearest_ped=0.25,
+    )
+
+    assert evaluation["accepted"] is False
+    assert evaluation["reason"] == "dynamic_collision"
+
+
+def test_v4_oscillation_threshold_is_stable_at_float_boundary() -> None:
+    """Treat mirrored v4 turns at the 0.15 boundary identically; retain v3 strictness."""
+    v4 = _v4_planner()
+    v4._recent_commands.extend(
+        [
+            (0.6, 0.1499999999999999),
+            (0.6, -0.3),
+        ]
+    )
+    base_penalty = v4._oscillation_penalty(0.1499999999999999)
+    v4.reset()
+    v4._recent_commands.extend(
+        [
+            (0.6, -0.15000000000000002),
+            (0.6, 0.3),
+        ]
+    )
+    mirror_penalty = v4._oscillation_penalty(-0.14999984263899568)
+    assert base_penalty == mirror_penalty == pytest.approx(1.0)
+
+    v3 = HybridRuleLocalPlannerAdapter(
+        HybridRuleLocalPlannerConfig(planner_variant="hybrid_rule_v3_teb_like_rollout")
+    )
+    v3._recent_commands.extend(
+        [
+            (0.6, 0.1499999999999999),
+            (0.6, -0.3),
+        ]
+    )
+    assert v3._oscillation_penalty(0.15) == 0.0
+
+
 # ---------------------------------------------------------------------------
 # Stopping-distance model and threshold derivation
 # ---------------------------------------------------------------------------

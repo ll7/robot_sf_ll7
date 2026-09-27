@@ -1474,7 +1474,9 @@ def test_pr_ready_check_captures_validated_base_sha_for_drift_guard(tmp_path: Pa
     assert "revalidate against" in script_text
     # The drift recheck must sit before the freshness stamp write.
     drift_index = script_text.find('uv run python "$SCRIPT_DIR/check_base_drift.py"')
-    freshness_write_index = script_text.find('uv run python "$SCRIPT_DIR/pr_ready_freshness.py"')
+    # Final mode also calls this entry point before the lanes to capture worktree
+    # identity; assert ordering against the last call, which writes the stamp.
+    freshness_write_index = script_text.rfind('uv run python "$SCRIPT_DIR/pr_ready_freshness.py"')
     assert 0 < drift_index < freshness_write_index, (
         "base-drift recheck must precede the stamp write"
     )

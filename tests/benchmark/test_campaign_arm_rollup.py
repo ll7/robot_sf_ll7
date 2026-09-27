@@ -31,6 +31,7 @@ def test_arm_rollup_ok_arms_produces_ok_rows() -> None:
     assert rollup[0]["kinematics"] == "diff"
     assert rollup[0]["status"] == "ok"
     assert rollup[0]["episodes_written"] == 10
+    assert rollup[0]["episodes_total"] == 10
     assert rollup[0]["episodes_failed"] == 0
     assert "first_error" not in rollup[0]
     assert "distinct_error_count" not in rollup[0]
@@ -153,6 +154,25 @@ def test_arm_rollup_none_optional_values_fail_closed_to_zero() -> None:
     assert "first_error" not in arm
 
 
+def test_arm_rollup_separates_current_writes_from_retained_rows() -> None:
+    """A cached arm reports zero current writes and preserves its retained count."""
+    arm = _build_arm_rollup(
+        [
+            {
+                "status": "ok",
+                "summary": {
+                    "written": 5,
+                    "episodes_written_this_invocation": 0,
+                    "episodes_total": 9,
+                },
+            }
+        ]
+    )[0]
+
+    assert arm["episodes_written"] == 0
+    assert arm["episodes_total"] == 9
+
+
 def test_arm_rollup_not_available_arm_has_no_error() -> None:
     """Dependency-gated not_available arm has no error fields."""
     run_entries: list[dict[str, Any]] = [
@@ -185,6 +205,7 @@ def test_arm_rollup_appears_in_campaign_report(tmp_path: Path) -> None:
                 "kinematics": "diff",
                 "status": "ok",
                 "episodes_written": 10,
+                "episodes_total": 10,
                 "episodes_failed": 0,
             },
             {
@@ -193,6 +214,7 @@ def test_arm_rollup_appears_in_campaign_report(tmp_path: Path) -> None:
                 "kinematics": "ackermann",
                 "status": "failed",
                 "episodes_written": 0,
+                "episodes_total": 0,
                 "episodes_failed": 3,
                 "first_error": "RuntimeError('map resolution')",
                 "distinct_error_count": 1,
@@ -222,6 +244,7 @@ def test_arm_rollup_report_all_ok_no_error_columns(tmp_path: Path) -> None:
                 "kinematics": "diff",
                 "status": "ok",
                 "episodes_written": 10,
+                "episodes_total": 10,
                 "episodes_failed": 0,
             },
         ],
@@ -233,3 +256,32 @@ def test_arm_rollup_report_all_ok_no_error_columns(tmp_path: Path) -> None:
     assert "## Arm Rollup" in text
     assert "first_error" not in text
     assert "distinct_errors" not in text
+
+
+def test_arm_rollup_report_labels_invocation_and_retained_counts(tmp_path: Path) -> None:
+    """Report headers distinguish newly written rows from retained rows."""
+    report_path = tmp_path / "campaign_report.md"
+    write_campaign_report(
+        report_path,
+        {
+            "campaign": {"campaign_id": "test", "name": "test_campaign", "status": "ok"},
+            "planner_rows": [],
+            "arm_rollup": [
+                {
+                    "planner_key": "goal",
+                    "algo": "goal",
+                    "kinematics": "diff",
+                    "status": "ok",
+                    "episodes_written": 0,
+                    "episodes_total": 9,
+                    "episodes_failed": 0,
+                }
+            ],
+            "warnings": [],
+        },
+    )
+
+    text = report_path.read_text(encoding="utf-8")
+    assert "written this invocation" in text
+    assert "retained rows" in text
+    assert "| goal | diff | ok | 0 | 9 | 0 |" in text

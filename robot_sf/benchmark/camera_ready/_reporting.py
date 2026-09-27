@@ -1455,7 +1455,7 @@ def _write_arm_rollup(lines: list[str], arm_rollup: list[dict[str, Any]]) -> Non
     has_errors = any(arm.get("first_error") for arm in arm_rollup)
     if has_errors:
         lines.append(
-            "| planner | kinematics | status | written | failed | first_error | distinct_errors |"
+            "| planner | kinematics | status | written this invocation | retained rows | failed | first_error | distinct_errors |"
         )
         lines.append("|---|---|---|---:|---:|---|---:|")
         for arm in arm_rollup:
@@ -1465,13 +1465,16 @@ def _write_arm_rollup(lines: list[str], arm_rollup: list[dict[str, Any]]) -> Non
                 f"{_escape_markdown_cell(arm.get('kinematics'))} | "
                 f"{_escape_markdown_cell(arm.get('status'))} | "
                 f"{_escape_markdown_cell(arm.get('episodes_written', 0))} | "
+                f"{_escape_markdown_cell(arm.get('episodes_total', 0))} | "
                 f"{_escape_markdown_cell(arm.get('episodes_failed', 0))} | "
                 f"{_escape_markdown_cell(arm.get('first_error', ''))} | "
                 f"{_escape_markdown_cell(arm.get('distinct_error_count', 0))} |"
             )
     else:
-        lines.append("| planner | kinematics | status | written | failed |")
-        lines.append("|---|---|---|---:|---:|")
+        lines.append(
+            "| planner | kinematics | status | written this invocation | retained rows | failed |"
+        )
+        lines.append("|---|---|---|---:|---:|---:|")
         for arm in arm_rollup:
             lines.append(
                 "| "
@@ -1479,6 +1482,7 @@ def _write_arm_rollup(lines: list[str], arm_rollup: list[dict[str, Any]]) -> Non
                 f"{_escape_markdown_cell(arm.get('kinematics'))} | "
                 f"{_escape_markdown_cell(arm.get('status'))} | "
                 f"{_escape_markdown_cell(arm.get('episodes_written', 0))} | "
+                f"{_escape_markdown_cell(arm.get('episodes_total', 0))} | "
                 f"{_escape_markdown_cell(arm.get('episodes_failed', 0))} |"
             )
 

@@ -18,10 +18,13 @@ planner-level integrity findings remain visible in the evidence packet.
 
 Four distinct cases each produced one episode row on the corrected replay run. Their scenario,
 seed, planner/config identity, and all three canonical event flags matched the selected source
-rows, but named metrics differed in every case. The replay checkout
+rows; retained per-metric comparisons record differences in every case. The replay checkout
 (`5cccee50be333adceee4c978b54bf63d32454cc9`) differs from the source campaign
-(`f7ebdcae2375d085e925213197a75a386e26a79c`), so every result is
-`mismatch_different_revision`, not an exact historical replay.
+(`f7ebdcae2375d085e925213197a75a386e26a79c`). The historical `summary.json` records
+`mismatch_different_revision` for those rows. The separate current-head no-replay refresh reused
+the four receipts with zero new evaluations and classifies the rows as
+`unavailable_execution_evidence`, because replay execution evidence is unavailable. The refreshed
+row-level status and per-metric observations are distinct; neither establishes exact replay parity.
 
 ## Source and reproducibility
 

@@ -13,7 +13,7 @@
   },
   "totals": {
     "file_count": 3,
-    "total_bytes": 258475
+    "total_bytes": 259077
   },
   "files": [
     {
@@ -25,8 +25,8 @@
     },
     {
       "path": "report.md",
-      "size_bytes": 10092,
-      "sha256": "9e49a4657f42819f13426895737fc9e1febc311ac042bdc7d569e26018605964",
+      "size_bytes": 10694,
+      "sha256": "0edf31cda7a38623e7a68f84d34ce4d4eca3dc1ba2f075e517f1e715a4ec9d3a",
       "kind": "reports",
       "location": "payload/report.md"
     },
@@ -47,5 +47,13 @@
     "after_sha256": "c5f2d799d0b645ce13f2ab592263da85f55db922c1b54ff300a36e53b7f1418c",
     "data_effect": "Only local output path strings were normalized; portable artifact-availability annotations were carried forward for the unchanged case IDs. No case identity, source row, replay receipt/result, metric, or checksum value changed.",
     "source_prefix_description": "ignored output cache root for issue 9656"
+  },
+  "post_package_correction": {
+    "recorded_at_utc": "2026-09-27T13:52:20Z",
+    "files_updated": [
+      "payload/report.md"
+    ],
+    "reason": "Clarify per-metric replay differences separately from the refreshed row-level unavailable execution-evidence classification after exact-head review.",
+    "data_effect": "Report wording only; no source rows, replay rows, metric observations, status values, case identities, or checksums in the evidence payload were changed."
   }
 }

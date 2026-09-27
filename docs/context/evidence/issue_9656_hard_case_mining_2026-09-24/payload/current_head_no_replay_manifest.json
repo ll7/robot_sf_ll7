@@ -2970,14 +2970,14 @@
   "execution_environment": {
     "materializer_environment_identity": {
       "complete": true,
-      "identity_sha256": "657d168f362e14760729e500bff7d25d557751943682eccd125f3ff41fae8e33",
+      "identity_sha256": "047c36e814862ff445e3e348b5a657a344fdf251a01dd75b2ac373b7a6cf018e",
       "machine": "x86_64",
       "platform_release": "7.0.0-29-generic",
       "platform_system": "Linux",
       "python_implementation": "CPython",
       "python_version": "3.13.14",
       "schema_version": "benchmark-execution-environment.v1",
-      "uv_lock_sha256": "20f53b5e117938b62ead7276f5d97bebdce5e1f1df6c8639937a64477df63cb8"
+      "uv_lock_sha256": "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023"
     },
     "replay_attempt_environments": {
       "case-2fa6f8a28dafddc0": null,
@@ -2989,12 +2989,17 @@
   },
   "replay": {
     "attempted": 4,
+    "cumulative_attempted": 4,
+    "effective_limit": 0,
     "materializer_checkout_clean": true,
     "materializer_checkout_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "materializer_revision": "e58be7bd141be58ac3bbd99658fc1665b8bcc717",
+    "materializer_revision": "dc9e8f6fdebb39da7c4450d2dcc1d5e9b991dfc0",
     "maximum_allowed": 5,
     "new_attempted": 0,
     "preserved_attempts_missing_artifacts": 0,
+    "prior_attempted": 4,
+    "prior_attempts_not_promoted": 0,
+    "remaining_budget_before_run": 1,
     "replay_revision": "5cccee50be333adceee4c978b54bf63d32454cc9",
     "replay_revisions": [
       "5cccee50be333adceee4c978b54bf63d32454cc9"
@@ -3007,11 +3012,6 @@
       "unavailable_execution_evidence": 4,
       "unavailable_model_artifact": 5
     }
-  },
-  "portable_artifact_availability": {
-    "planner_config_bytes": "unavailable_from_portable_bundle",
-    "scenario_matrix_bytes": "unavailable_from_portable_bundle",
-    "digest_scope": "SHA-256 values identify prior local materialization outputs; the compact bundle does not contain the bytes needed to independently revalidate them."
   },
   "schema_version": "benchmark-hard-case-slice.v1",
   "selection": {
@@ -3298,5 +3298,10 @@
   "source_showcase_renderer_status_counts": {
     "unavailable": 36
   },
-  "status": "materialized"
+  "status": "materialized",
+  "portable_artifact_availability": {
+    "planner_config_bytes": "unavailable_from_portable_bundle",
+    "scenario_matrix_bytes": "unavailable_from_portable_bundle",
+    "digest_scope": "SHA-256 values identify prior local materialization outputs; the compact bundle does not contain the bytes needed to independently revalidate them."
+  }
 }

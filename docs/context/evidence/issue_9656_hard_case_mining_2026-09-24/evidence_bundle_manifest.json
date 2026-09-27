@@ -1,10 +1,10 @@
 {
   "schema_version": "evidence_bundle.v1",
-  "created_at_utc": "2026-09-25T21:39:59.248907Z",
+  "created_at_utc": "2026-09-27T01:34:15Z",
   "bundle_name": "issue_9656_hard_case_mining_2026-09-24",
   "source_root": "issue-9656-evidence-stage",
-  "command": "uv run python scripts/tools/materialize_benchmark_hard_cases.py --summary \"${ISSUE9656_LOCAL_ROOT}/showcase_topk15_latest9662/showcase_summary.json\" --campaign-root \"${ISSUE9656_LOCAL_ROOT}/showcase_topk15_latest9662/input/extracted-64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle/payload\" --bundle \"${ISSUE9656_LOCAL_ROOT}/showcase_topk15_latest9662/input/cache/bundle-64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90.tar.gz\" --matrix configs/scenarios/classic_interactions_francis2023.yaml --out-dir \"${ISSUE9656_LOCAL_ROOT}/materialized_head_e58be7b_no_replay\" --resume-from \"${ISSUE9656_LOCAL_ROOT}/materialized_final_provenance_fix/manifest.json\" --replay-limit 0",
-  "commit": "e58be7bd141be58ac3bbd99658fc1665b8bcc717",
+  "command": "uv run python scripts/tools/materialize_benchmark_hard_cases.py --summary \"${ISSUE9656_LOCAL_ROOT}/showcase_topk15_latest9662/showcase_summary.json\" --campaign-root \"${ISSUE9656_LOCAL_ROOT}/showcase_topk15_latest9662/input/extracted-64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle/payload\" --bundle \"${ISSUE9656_LOCAL_ROOT}/showcase_topk15_latest9662/input/cache/bundle-64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90.tar.gz\" --matrix configs/scenarios/classic_interactions_francis2023.yaml --out-dir \"${ISSUE9656_LOCAL_ROOT}/materialized_resume_original_showcase_at_dc9\" --resume-from \"${ISSUE9656_LOCAL_ROOT}/materialized_final_provenance_fix/manifest.json\" --replay-limit 0",
+  "commit": "dc9e8f6fdebb39da7c4450d2dcc1d5e9b991dfc0",
   "claim_boundary": "diagnostic_only: historical simulator records and four finite replays; no planner safety, benchmark generalization, or real-world safety claim",
   "policy": {
     "large_raw_artifacts": "excluded",
@@ -13,39 +13,39 @@
   },
   "totals": {
     "file_count": 3,
-    "total_bytes": 258369
+    "total_bytes": 258475
   },
   "files": [
     {
       "path": "current_head_no_replay_manifest.json",
-      "size_bytes": 124353,
-      "sha256": "5e8f9f803f6dea43e9b00d38ea72a2b7e18aa9b0da7cf21b8a18a528c5c384be",
+      "size_bytes": 124512,
+      "sha256": "c5f2d799d0b645ce13f2ab592263da85f55db922c1b54ff300a36e53b7f1418c",
       "kind": "misc",
       "location": "payload/current_head_no_replay_manifest.json"
     },
     {
       "path": "report.md",
-      "size_bytes": 10145,
-      "sha256": "72b1173ce1fe553d3283df6daa427d688b9bde1212bf2b46d23b5ce2bc4ad05b",
+      "size_bytes": 10092,
+      "sha256": "9e49a4657f42819f13426895737fc9e1febc311ac042bdc7d569e26018605964",
       "kind": "reports",
       "location": "payload/report.md"
     },
     {
       "path": "summary.json",
       "size_bytes": 123871,
-      "sha256": "5b055840bfa08354641d3a7200c97ce5067cbf233d1d954f466f8c3fc78d6e90",
+      "sha256": "bc0ea6bb6ebbd9259611bffa9e3cf11a17861eb4e4a1ab93a837edf1d8f0be59",
       "kind": "aggregates",
       "location": "payload/summary.json"
     }
   ],
   "packaging_normalization": {
-    "recorded_at_utc": "2026-09-26T20:07:07Z",
-    "reason": "Replace ignored local output-root literals in the tracked compact manifest with its documented relocatable root placeholder.",
+    "recorded_at_utc": "2026-09-27T01:34:15Z",
+    "reason": "Promote the exact-head no-replay resume manifest and normalize ignored local cache paths for a relocatable tracked receipt.",
     "replacement_prefix": "${ISSUE9656_LOCAL_ROOT}/",
-    "replacement_count": 16,
-    "before_sha256": "d6d5cf60afb71a462ce6a33ee695ee107a82d8cdb2c287dc728983497ee103ff",
-    "after_sha256": "5e8f9f803f6dea43e9b00d38ea72a2b7e18aa9b0da7cf21b8a18a528c5c384be",
-    "data_effect": "Path strings only; no case identity, source row, replay result, metric, or checksum value was changed.",
-    "source_prefix_description": "repository ignored-cache root for issue 9656"
+    "replacement_count": 28,
+    "before_sha256": "4447f52a62af1e69550de55ab1719accb6496143404d3c365d8ce268a053bfdf",
+    "after_sha256": "c5f2d799d0b645ce13f2ab592263da85f55db922c1b54ff300a36e53b7f1418c",
+    "data_effect": "Only local output path strings were normalized; portable artifact-availability annotations were carried forward for the unchanged case IDs. No case identity, source row, replay receipt/result, metric, or checksum value changed.",
+    "source_prefix_description": "ignored output cache root for issue 9656"
   }
 }

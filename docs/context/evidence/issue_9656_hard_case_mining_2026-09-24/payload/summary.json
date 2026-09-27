@@ -3242,5 +3242,5 @@
   },
   "status": "materialized",
   "materializer_revision_status": "historical_id_unavailable_from_published_refs",
-  "materializer_revision_note": "Retained as the original materializer execution identifier. Commit 0a5f73283b98279900797b75d20adf6d4676086b is not reachable from published refs, so this bundle does not independently verify that historical implementation. The separate current_head_no_replay_manifest.json records the reproducible current refresh at e58be7bd141be58ac3bbd99658fc1665b8bcc717."
+  "materializer_revision_note": "Retained as the original materializer execution identifier. Commit 0a5f73283b98279900797b75d20adf6d4676086b is not reachable from published refs, so this bundle does not independently verify that historical implementation. The separate current_head_no_replay_manifest.json records the reproducible current refresh at dc9e8f6fdebb39da7c4450d2dcc1d5e9b991dfc0."
 }

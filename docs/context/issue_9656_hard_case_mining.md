@@ -43,8 +43,8 @@ without rewriting the historical execution revision. An earlier packet named loc
 `0a5f73283b98279900797b75d20adf6d4676086b`, later found not to be retrievable from published refs.
 The old `materializer_revision` values remain as historical execution identifiers only; the
 bundle does not independently verify that unavailable implementation. The current-head manifest
-records the reproducible refresh at `e58be7bd141be58ac3bbd99658fc1665b8bcc717` and uses the
-reachable `120c870...` selector snapshot. Repeated selection at the same output path produced
+records the reproducible refresh at `dc9e8f6fdebb39da7c4450d2dcc1d5e9b991dfc0` and verifies the
+selector source files against reachable merged snapshot `120c870d80daba4a06389f9df3c469a2f467da94`. Repeated selection at the same output path produced
 the same summary hash and the same case IDs at another output path. The full analyzer subreport
 records absolute output paths, so running in a different directory changes that subreport's hashes.
 The materializer consumes the versioned JSON contract without copying or reranking the selector.

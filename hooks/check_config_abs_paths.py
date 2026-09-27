@@ -20,6 +20,7 @@ handed (staged files at commit time), plus the whole tracked tree under ``--all`
 import argparse
 import hashlib
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -184,28 +185,29 @@ def _is_grandfathered_evidence(path: Path) -> bool:
 
 
 def _repo_relative_path(path: Path) -> str | None:
-    """Resolve a path relative to its repository root, or the test cwd.
+    """Normalize a lexical path relative to its repository root, or the test cwd.
 
     Git supplies repo-relative paths to ``--all``; tests and direct callers may supply
-    absolute paths. Looking for the nearest ``.git`` marker keeps both forms tied to the
-    actual repository path instead of accepting a matching suffix from a nested alias.
-    Temporary test roots without Git metadata use their current working directory.
+    absolute paths. Normalize ``.`` and ``..`` without resolving symlinks, so an alias to
+    a pinned source remains a different path. Looking for the nearest ``.git`` marker
+    keeps both forms tied to the actual repository/worktree root. Temporary test roots
+    without Git metadata use their current working directory.
     """
     try:
-        resolved = path.resolve()
-    except (OSError, RuntimeError):
+        lexical_absolute = Path(os.path.abspath(path.expanduser()))
+    except (OSError, RuntimeError, TypeError):
         return None
 
-    anchor = resolved if resolved.is_dir() else resolved.parent
-    for parent in (anchor, *anchor.parents):
+    for parent in (lexical_absolute.parent, *lexical_absolute.parent.parents):
         if (parent / ".git").exists():
             try:
-                return resolved.relative_to(parent).as_posix()
+                return lexical_absolute.relative_to(parent).as_posix()
             except ValueError:
                 return None
 
     try:
-        return resolved.relative_to(Path.cwd().resolve()).as_posix()
+        cwd = Path(os.path.abspath(Path.cwd()))
+        return lexical_absolute.relative_to(cwd).as_posix()
     except (OSError, ValueError, RuntimeError):
         return None
 
@@ -213,7 +215,7 @@ def _repo_relative_path(path: Path) -> str | None:
 def _is_pinned_verbatim_evidence(path: Path) -> bool:
     """Return whether ``path`` is an exact pinned recovery artifact.
 
-    The path must resolve to the exact repository-relative key. The digest match makes the
+    The lexical path must match the exact repository-relative key. The digest match makes the
     exception fail closed if a recovered artifact is edited or replaced.
     """
 

@@ -235,6 +235,30 @@ class TestCheckConfigAbsPaths:
         assert result["status"] == "fail"
         assert len(result["violations"]) == 1
 
+    def test_issue_9645_pinned_digest_does_not_allow_symlink_alias(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """A symlink at another path cannot inherit a pinned source's exception."""
+        monkeypatch.chdir(tmp_path)
+        repo_root = Path(__file__).resolve().parents[2]
+        rel = next(
+            path
+            for path in abs_path_hook.PINNED_VERBATIM_EVIDENCE_SHA256
+            if path.startswith("docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/")
+        )
+        source = repo_root / rel
+        alias = tmp_path / "docs/context/evidence/issue_9999_symlink_alias" / rel
+        alias.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            alias.symlink_to(source)
+        except (NotImplementedError, OSError) as exc:
+            pytest.skip(f"symlinks are unavailable in this environment: {exc}")
+
+        assert alias.is_symlink()
+        result = find_abs_path_violations([str(alias)])
+        assert result["status"] == "fail"
+        assert len(result["violations"]) == 1
+
     def test_ignores_docs_outside_evidence(self, tmp_path, monkeypatch):
         """Docs files outside docs/context/evidence/ are not scanned."""
         monkeypatch.chdir(tmp_path)

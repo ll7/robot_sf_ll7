@@ -450,6 +450,9 @@ _FAST_FILES = {
     # Force-residual predictor tests are deterministic synthetic contracts and
     # must cover the changed planner-visible prediction module in PR shards.
     "test_force_residual_intent_predictor.py",
+    # Surface-distance pedestrian-term contracts include deterministic rollout
+    # and construction-validation checks; keep changed lines in PR shards.
+    "test_socnav_ped_surface_v3.py",
     # ScenarioBelief projection tests are deterministic identity and data-contract
     # checks; keep them in PR shards so changed-line coverage sees the adapter.
     "test_identity_safe_scenario_belief.py",

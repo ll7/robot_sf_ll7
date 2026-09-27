@@ -8,13 +8,23 @@ it does not replace those owners.
 
 ## Current implementation boundary
 
-The coordinator and deterministic fixtures are implemented. The optimizer,
-challenge-evaluator, and search adapters are explicit callables. Replay,
-feasibility/admissibility, and corpus admission are also explicit callables and
-must be connected only through reviewed upstream contracts. This branch has no
-default production adapter set or command-line runner yet, and it has not run a
-simulator, search, replay, or empirical co-evolution experiment. The tests are
-implementation-integrity evidence only.
+The coordinator and deterministic fixtures are implemented. The new production
+falsification adapter binds the selected #9650 `best_candidate.yaml` through the
+canonical policy-search loader, writes the merged runtime planner config under
+the round output, and supplies that file through #9645 `SearchConfig`'s
+`algo_config_path`. It records the optimizer wrapper, registry, optimizer
+manifest, previous-round planner identity/config digest, runtime config, search
+config, search manifest, and generated search files as digest-checked round
+artifacts. Its focused test injects evaluator and certifier callables, so it
+exercises the real search plumbing without starting a simulator.
+
+The optimizer and held-out challenge adapters remain explicit callables.
+Replay, feasibility/admissibility, and corpus admission must be connected only
+through reviewed upstream contracts. No real simulator/search, replay, or
+empirical co-evolution experiment has run on this branch. A normal-execution
+planner outcome is derived only from the search owner's canonical failure
+attribution; fallback, degraded, or incomplete attribution remains unknown.
+The tests are implementation-integrity evidence only.
 
 The normalized adapter result shapes and strict checks are in
 [`coevolution.py`](../../robot_sf/adversarial/coevolution.py). The config loader

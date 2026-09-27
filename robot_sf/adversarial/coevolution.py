@@ -36,6 +36,7 @@ import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
+from importlib import import_module
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Protocol
@@ -47,7 +48,8 @@ except ImportError:  # pragma: no cover - Windows has no POSIX flock implementat
 
 import yaml
 
-from robot_sf.adversarial.samplers import SUPPORTED_SAMPLERS
+from robot_sf.adversarial.config import SearchConfig
+from robot_sf.adversarial.samplers import SUPPORTED_SAMPLERS, CandidateSampler, build_sampler
 
 CONFIG_SCHEMA = "adversarial_coevolution_config.v1"
 RUN_SCHEMA = "adversarial_coevolution_run.v2"
@@ -518,6 +520,573 @@ class FalsificationAdapter(Protocol):
         """Return every search candidate, including invalid and failed rows."""
 
 
+@dataclass(frozen=True, slots=True)
+class PreparedFalsificationSearch:
+    """Round-owned #9645 input prepared from a verified #9650 optimizer result.
+
+    The prepared object is intentionally separate from search execution. Callers can pass
+    ``config`` and ``sampler`` to ``run_adversarial_search``; fixture tests can inspect the
+    resulting ``algo_config_path`` without starting a simulator or candidate search.
+    """
+
+    config: SearchConfig
+    sampler: CandidateSampler
+    planner_binding: Mapping[str, Any]
+    artifacts: tuple[Mapping[str, str], ...]
+
+    def phase_provenance(self) -> dict[str, Any]:
+        """Return JSON-safe provenance for the co-evolution falsification phase."""
+        return {
+            "planner_config_binding": _deep_thaw(self.planner_binding),
+            "search_config": self.config.to_json(),
+            "artifacts": [_deep_thaw(artifact) for artifact in self.artifacts],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class _OptimizerSearchSource:
+    """Digest-bound optimizer artifacts selected for one falsification round."""
+
+    planner: Mapping[str, Any]
+    config_path: Path
+    registry_path: Path
+    manifest_path: Path
+    config_sha256: str
+    registry_sha256: str
+    manifest_sha256: str
+
+
+def _validate_optimizer_search_source(
+    request: RoundRequest, selected_planner: Mapping[str, Any]
+) -> _OptimizerSearchSource:
+    """Validate that the selected candidate is the completed current-round optimizer output."""
+    planner, source_config_path = _validate_selected_planner(selected_planner, request)
+    optimization_dir = (request.round_dir / "optimization").resolve()
+    expected_source_path = (optimization_dir / "best_candidate.yaml").resolve()
+    if source_config_path.resolve() != expected_source_path:
+        raise ValueError(
+            "selected optimizer config must be the current round's best_candidate.yaml"
+        )
+
+    registry_path = optimization_dir / "candidate_registry.yaml"
+    optimizer_manifest_path = optimization_dir / "run_manifest.json"
+    if not registry_path.is_file() or not optimizer_manifest_path.is_file():
+        raise FileNotFoundError(
+            "the optimizer output must include candidate_registry.yaml and run_manifest.json"
+        )
+    source_digest = _sha256_file(source_config_path)
+    if source_digest != planner["config_sha256"]:
+        raise CoevolutionError("selected optimizer config changed during search preparation")
+    registry_digest = _sha256_file(registry_path)
+    optimizer_manifest_digest = _sha256_file(optimizer_manifest_path)
+    optimizer_manifest = _read_json(optimizer_manifest_path)
+    if optimizer_manifest.get("schema") != "planner_optimizer_run.v1":
+        raise ValueError("optimizer run manifest schema must be planner_optimizer_run.v1")
+    if optimizer_manifest.get("status") != "complete":
+        raise ValueError("optimizer run manifest must be complete before search preparation")
+
+    planner_id = planner["planner_id"]
+    selected_record = _mapping(optimizer_manifest.get("selected"), "optimizer.selected")
+    if selected_record.get("candidate_name") != planner_id:
+        raise ValueError("selected planner ID differs from the optimizer manifest candidate name")
+    if selected_record.get("candidate_config_path") != source_config_path.name:
+        raise ValueError("optimizer manifest does not select the bound candidate config file")
+    if optimizer_manifest.get("selected_candidate_config") != source_config_path.name:
+        raise ValueError("optimizer manifest selected_candidate_config does not match its output")
+    return _OptimizerSearchSource(
+        planner=planner,
+        config_path=source_config_path.resolve(),
+        registry_path=registry_path.resolve(),
+        manifest_path=optimizer_manifest_path.resolve(),
+        config_sha256=source_digest,
+        registry_sha256=registry_digest,
+        manifest_sha256=optimizer_manifest_digest,
+    )
+
+
+def _load_optimizer_runtime_config(
+    request: RoundRequest, source: _OptimizerSearchSource
+) -> tuple[str, Mapping[str, Any]]:
+    """Use the canonical policy-search loader to resolve wrapper plus overrides."""
+    # This is the canonical owner loader for the policy-search candidate wrapper format.
+    loader_module = import_module("scripts.validation.run_policy_search_candidate")
+    load_candidate_definition = loader_module.load_candidate_definition
+    planner_id = source.planner["planner_id"]
+    _entry, candidate_payload, effective_config, loaded_candidate_path = load_candidate_definition(
+        source.registry_path, planner_id
+    )
+    if loaded_candidate_path.resolve() != source.config_path:
+        raise ValueError("optimizer candidate registry resolves to a different selected config")
+    if candidate_payload.get("name") != planner_id:
+        raise ValueError("optimizer candidate wrapper name differs from the selected planner ID")
+    candidate_policy = _non_empty_string(candidate_payload.get("algo"), "candidate.algo").lower()
+    if candidate_policy != request.config.policy.lower():
+        raise ValueError(
+            "optimizer candidate policy differs from the configured falsification policy: "
+            f"{candidate_policy!r} != {request.config.policy.lower()!r}"
+        )
+    if not isinstance(effective_config, Mapping):
+        raise TypeError("canonical optimizer candidate loader must return a mapping config")
+    return candidate_policy, effective_config
+
+
+def _capture_previous_planner(
+    request: RoundRequest,
+) -> tuple[dict[str, Any] | None, Path | None, bytes | None]:
+    """Record the previous planner identity and retain its exact config bytes."""
+    previous_binding: dict[str, Any] | None = None
+    previous_path: Path | None = None
+    previous_bytes: bytes | None = None
+    if request.previous_selected_planner is not None:
+        previous = _deep_thaw(request.previous_selected_planner)
+        previous_path = Path(
+            _non_empty_string(previous.get("config_path"), "previous_selected_planner.config_path")
+        ).resolve()
+        previous_digest = _non_empty_string(
+            previous.get("config_sha256"), "previous_selected_planner.config_sha256"
+        ).lower()
+        previous_bytes = previous_path.read_bytes()
+        if _sha256_bytes(previous_bytes) != previous_digest:
+            raise CoevolutionError("previous-round selected planner config digest mismatch")
+        previous_binding = {
+            "planner_id": _non_empty_string(
+                previous.get("planner_id"), "previous_selected_planner.planner_id"
+            ),
+            "config_path": _relative_run_path(previous_path, request.config.output_dir),
+            "config_sha256": previous_digest,
+        }
+    return previous_binding, previous_path, previous_bytes
+
+
+def _build_search_planner_binding(
+    request: RoundRequest,
+    source: _OptimizerSearchSource,
+    *,
+    candidate_policy: str,
+    runtime_config_path: Path,
+    runtime_config_digest: str,
+    runtime_config_json_digest: str,
+    previous_binding: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Bind optimizer selection, runtime config, prior planner, and finite search inputs."""
+    planner_id = source.planner["planner_id"]
+    return {
+        "schema": "coevolution_search_planner_binding.v1",
+        "run_id": request.run_id,
+        "round_number": request.round_number,
+        "source_revision": request.source_revision,
+        "previous_selected_planner": dict(previous_binding) if previous_binding else None,
+        "selected_planner": {
+            "planner_id": planner_id,
+            "optimizer_config_path": _relative_run_path(
+                source.config_path, request.config.output_dir
+            ),
+            "optimizer_config_sha256": source.config_sha256,
+            "candidate_registry_path": _relative_run_path(
+                source.registry_path, request.config.output_dir
+            ),
+            "candidate_registry_sha256": source.registry_sha256,
+            "optimizer_manifest_path": _relative_run_path(
+                source.manifest_path, request.config.output_dir
+            ),
+            "optimizer_manifest_sha256": source.manifest_sha256,
+        },
+        "runtime_planner_config": {
+            "policy": candidate_policy,
+            "path": _relative_run_path(runtime_config_path, request.config.output_dir),
+            "sha256": runtime_config_digest,
+            "canonical_config_sha256": runtime_config_json_digest,
+        },
+        "search_budget": request.falsification_candidates,
+        "search_seed": request.falsification_seed,
+        "search_sampler": request.falsification_sampler,
+    }
+
+
+def _verify_falsification_inputs_unchanged(
+    source: _OptimizerSearchSource,
+    previous_path: Path | None,
+    previous_bytes: bytes | None,
+) -> None:
+    """Reject concurrent edits to optimizer artifacts or the previous planner config."""
+    for path, expected, label in (
+        (source.config_path, source.config_sha256, "selected optimizer config"),
+        (source.registry_path, source.registry_sha256, "optimizer candidate registry"),
+        (source.manifest_path, source.manifest_sha256, "optimizer run manifest"),
+    ):
+        if _sha256_file(path) != expected:
+            raise CoevolutionError(f"{label} changed during search preparation: {path}")
+    if previous_bytes is not None and previous_path is not None:
+        if previous_path.read_bytes() != previous_bytes:
+            raise CoevolutionError(
+                "previous-round selected planner config changed during preparation"
+            )
+
+
+def _falsification_artifact_claims(
+    request: RoundRequest,
+    source: _OptimizerSearchSource,
+    runtime_config_path: Path,
+    provenance_path: Path,
+    previous_path: Path | None,
+) -> tuple[Mapping[str, str], ...]:
+    """Return hashes for every exact source and round-owned config artifact."""
+    phase_dir = request.round_dir / "phases"
+    artifact_paths = [
+        source.config_path,
+        source.registry_path,
+        source.manifest_path,
+        runtime_config_path,
+        provenance_path,
+    ]
+    if previous_path is not None:
+        artifact_paths.append(previous_path)
+    return tuple(
+        {
+            "path": os.path.relpath(path.resolve(), start=phase_dir.resolve()),
+            "sha256": _sha256_file(path),
+        }
+        for path in artifact_paths
+    )
+
+
+def prepare_falsification_search(
+    request: RoundRequest,
+    selected_planner: Mapping[str, Any],
+) -> PreparedFalsificationSearch:
+    """Resolve optimizer output into #9645's direct per-round planner config.
+
+    The selected optimizer wrapper is loaded through its canonical owner, then written
+    with immutable create-or-verify semantics. Search receives the direct config path;
+    all selected, previous-round, and runtime config identities remain digest-bound.
+    """
+    source = _validate_optimizer_search_source(request, selected_planner)
+    candidate_policy, effective_config = _load_optimizer_runtime_config(request, source)
+    runtime_config_bytes = yaml.safe_dump(
+        dict(effective_config), sort_keys=True, allow_unicode=True
+    ).encode("utf-8")
+    runtime_config_digest = _sha256_bytes(runtime_config_bytes)
+    runtime_config_json_digest = _sha256_bytes(_canonical_json(dict(effective_config)))
+    falsification_dir = request.round_dir / "falsification"
+    algo_config_path = falsification_dir / "planner_algo_config.yaml"
+    provenance_path = falsification_dir / "planner_config_provenance.json"
+    _write_or_verify_bytes(algo_config_path, runtime_config_bytes)
+    previous_binding, previous_path, previous_bytes = _capture_previous_planner(request)
+    binding = _build_search_planner_binding(
+        request,
+        source,
+        candidate_policy=candidate_policy,
+        runtime_config_path=algo_config_path,
+        runtime_config_digest=runtime_config_digest,
+        runtime_config_json_digest=runtime_config_json_digest,
+        previous_binding=previous_binding,
+    )
+    _write_or_verify_bytes(provenance_path, _canonical_json(binding) + b"\n")
+    _verify_falsification_inputs_unchanged(source, previous_path, previous_bytes)
+
+    search_config = SearchConfig.from_files(
+        policy=candidate_policy,
+        scenario_template=request.config.scenario_template,
+        search_space=request.config.search_space,
+        objective=request.config.objective,
+        output_dir=falsification_dir / "search",
+        budget=request.falsification_candidates,
+        seed=request.falsification_seed,
+        algo_config_path=algo_config_path,
+        horizon=request.config.horizon,
+        dt=request.config.dt,
+        workers=request.config.workers,
+        record_forces=request.config.record_forces,
+        require_certification=request.config.require_certification,
+        benchmark_profile=request.config.benchmark_profile,
+    )
+    search_config.validate()
+    sampler = build_sampler(
+        request.falsification_sampler,
+        search_config.search_space,
+        seed=request.falsification_seed,
+    )
+    artifacts = _falsification_artifact_claims(
+        request, source, algo_config_path, provenance_path, previous_path
+    )
+    return PreparedFalsificationSearch(
+        config=search_config,
+        sampler=sampler,
+        planner_binding=binding,
+        artifacts=artifacts,
+    )
+
+
+def _search_artifact_path(value: Any, *, search_output_dir: Path, field: str) -> Path | None:
+    """Resolve a search-manifest path and keep it inside this round's search output."""
+    if value is None:
+        return None
+    raw = Path(_non_empty_string(value, field))
+    path = raw.resolve() if raw.is_absolute() else (search_output_dir / raw).resolve()
+    try:
+        path.relative_to(search_output_dir.resolve())
+    except ValueError as exc:
+        raise ValueError(f"{field} points outside the round search output: {path}") from exc
+    return path
+
+
+def _search_scenario_payload(row: Mapping[str, Any], *, search_output_dir: Path) -> dict[str, Any]:
+    """Retain sampled controls and the materialized scenario/route input when present."""
+    candidate = dict(_mapping(row.get("candidate"), "search candidate"))
+    scenario_path = _search_artifact_path(
+        row.get("scenario_yaml_path"),
+        search_output_dir=search_output_dir,
+        field="search candidate scenario_yaml_path",
+    )
+    bundle_path = _search_artifact_path(
+        row.get("bundle_path"),
+        search_output_dir=search_output_dir,
+        field="search candidate bundle_path",
+    )
+    if scenario_path is None or not scenario_path.is_file():
+        return {"materialized": False, "sampled_candidate": candidate}
+    scenario_payload = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))
+    if not isinstance(scenario_payload, Mapping):
+        raise TypeError(f"search scenario artifact must contain a mapping: {scenario_path}")
+    scenarios = scenario_payload.get("scenarios")
+    if (
+        not isinstance(scenarios, list)
+        or len(scenarios) != 1
+        or not isinstance(scenarios[0], Mapping)
+    ):
+        raise ValueError(
+            f"search scenario artifact must contain exactly one scenario: {scenario_path}"
+        )
+    route_path = (
+        _search_artifact_path(
+            (bundle_path / "route_overrides.yaml").as_posix(),
+            search_output_dir=search_output_dir,
+            field="search candidate route_overrides.yaml",
+        )
+        if bundle_path is not None
+        else None
+    )
+    route_payload: Mapping[str, Any] = {}
+    if route_path is not None and route_path.is_file():
+        loaded_route = yaml.safe_load(route_path.read_text(encoding="utf-8")) or {}
+        if not isinstance(loaded_route, Mapping):
+            raise TypeError(f"search route artifact must contain a mapping: {route_path}")
+        route_payload = loaded_route
+    return {
+        "materialized": True,
+        "sampled_candidate": candidate,
+        "scenario": dict(scenarios[0]),
+        "route_overrides": dict(route_payload),
+        "scenario_file": _relative_run_path(scenario_path, search_output_dir.parent.parent),
+        "scenario_file_sha256": _sha256_file(scenario_path),
+        "route_file": (
+            _relative_run_path(route_path, search_output_dir.parent.parent)
+            if route_path is not None and route_path.is_file()
+            else None
+        ),
+        "route_file_sha256": _sha256_file(route_path)
+        if route_path is not None and route_path.is_file()
+        else None,
+    }
+
+
+def _search_execution_status(row: Mapping[str, Any], search_status: str) -> str:
+    """Map canonical benchmark availability into the co-evolution status vocabulary."""
+    if search_status == "invalid":
+        return "not_run"
+    if search_status == "failed":
+        return "failed"
+    attribution = row.get("failure_attribution")
+    if not isinstance(attribution, Mapping):
+        return "unknown"
+    details = attribution.get("details")
+    if not isinstance(details, Mapping):
+        return "unknown"
+    availability = str(details.get("availability_status", "")).strip().lower()
+    readiness = str(details.get("readiness_status", "")).strip().lower()
+    execution_mode = str(details.get("execution_mode", "")).strip().lower()
+    if availability == "fallback" or readiness == "fallback":
+        return "fallback"
+    if availability == "degraded" or readiness == "degraded":
+        return "degraded"
+    if availability in {"failed", "partial-failure"}:
+        return "failed"
+    if availability == "available" and execution_mode in {"native", "adapter", "mixed"}:
+        return "ok"
+    return "unknown"
+
+
+def _search_planner_outcome(row: Mapping[str, Any], *, execution_status: str) -> str:
+    """Use explicit canonical failure attribution only for normal executions."""
+    if execution_status != "ok":
+        return "unknown"
+    attribution = row.get("failure_attribution")
+    if not isinstance(attribution, Mapping):
+        return "unknown"
+    primary = attribution.get("primary_failure")
+    if primary == "success":
+        return "no_failure"
+    if primary in {"collision", "severe_intrusion", "timeout", "incomplete"}:
+        return "confirmed_failure"
+    return "unknown"
+
+
+def _search_candidate_status(row: Mapping[str, Any]) -> str:
+    """Distinguish rejected inputs from failed executions and completed evaluations."""
+    attribution = row.get("failure_attribution")
+    if isinstance(attribution, Mapping) and (
+        attribution.get("status") == "not_evaluated"
+        and attribution.get("primary_failure") == "invalid_candidate"
+    ):
+        return "invalid"
+    if row.get("error") or (
+        isinstance(attribution, Mapping) and attribution.get("status") == "evaluation_failed"
+    ):
+        return "failed"
+    objective_value = row.get("objective_value")
+    if objective_value is not None:
+        if (
+            isinstance(objective_value, int | float)
+            and not isinstance(objective_value, bool)
+            and math.isfinite(float(objective_value))
+        ):
+            return "evaluated"
+        return "failed"
+    # A completed evaluator can produce attribution even when its objective metric is absent.
+    # Preserve that as an evaluation, since planner outcome and objective availability differ.
+    if isinstance(attribution, Mapping) and attribution.get("status") == "attributed":
+        return "evaluated"
+    return "failed"
+
+
+def _normalize_search_manifest_row(
+    row: Any,
+    *,
+    index: int,
+    request: RoundRequest,
+    search_output_dir: Path,
+    manifest_digest: str,
+) -> dict[str, Any]:
+    """Preserve one owner search row with fail-closed status and stable identity."""
+    source = _mapping(row, f"search manifest candidates[{index}]")
+    candidate = _mapping(source.get("candidate"), f"search candidates[{index}].candidate")
+    objective_value = source.get("objective_value")
+    error = source.get("error")
+    search_status = _search_candidate_status(source)
+    execution_status = _search_execution_status(source, search_status)
+    planner_outcome = (
+        "not_assessed"
+        if search_status != "evaluated"
+        else _search_planner_outcome(source, execution_status=execution_status)
+    )
+    candidate_digest = _sha256_bytes(
+        _canonical_json(
+            {
+                "run_id": request.run_id,
+                "round_number": request.round_number,
+                "seed": request.falsification_seed,
+                "index": index,
+                "candidate": dict(candidate),
+            }
+        )
+    )
+    return {
+        "candidate_id": f"r{request.round_number:03d}-c{index:04d}-{candidate_digest[:12]}",
+        "search_status": search_status,
+        "execution_status": execution_status,
+        "planner_outcome": planner_outcome,
+        "scenario": _search_scenario_payload(source, search_output_dir=search_output_dir),
+        "objective_value": objective_value,
+        "error": error,
+        "search_manifest_candidate_index": index,
+        "search_manifest_candidate_sha256": _sha256_bytes(_canonical_json(dict(source))),
+        "search_manifest_sha256": manifest_digest,
+    }
+
+
+class ProductionFalsificationAdapter:
+    """Run the canonical bounded search against the selected optimizer config.
+
+    Evaluator and certifier injection keeps this adapter testable without simulator work.
+    The default path delegates to ``run_adversarial_search`` and its canonical evaluator.
+    """
+
+    def __init__(self, *, evaluator: Any = None, certifier: Any = None) -> None:
+        self._evaluator = evaluator
+        self._certifier = certifier
+
+    def __call__(
+        self,
+        request: RoundRequest,
+        selected_planner: Mapping[str, Any],
+        output_dir: Path,
+    ) -> Mapping[str, Any]:
+        """Execute one configured search and return all candidate dispositions."""
+        expected_output = (request.round_dir / "falsification").resolve()
+        if output_dir.resolve() != expected_output:
+            raise ValueError("falsification adapter output_dir must be the round-owned directory")
+        prepared = prepare_falsification_search(request, selected_planner)
+        search_module = import_module("robot_sf.adversarial.search")
+        run_adversarial_search = search_module.run_adversarial_search
+        result = run_adversarial_search(
+            prepared.config,
+            evaluator=self._evaluator,
+            certifier=self._certifier,
+            sampler=prepared.sampler,
+        )
+        search_output_dir = prepared.config.output_dir.resolve()
+        manifest_path = Path(result.manifest_path).resolve()
+        if manifest_path.parent != search_output_dir or not manifest_path.is_file():
+            raise CoevolutionError("search runner returned a manifest outside its round output")
+        manifest = _read_json(manifest_path)
+        if _canonical_json(manifest.get("config")) != _canonical_json(prepared.config.to_json()):
+            raise CoevolutionError("search manifest config differs from the prepared round config")
+        rows = manifest.get("candidates")
+        if not isinstance(rows, list) or len(rows) != request.falsification_candidates:
+            raise CoevolutionError("search manifest candidate rows differ from the frozen budget")
+        manifest_digest = _sha256_file(manifest_path)
+        candidates = [
+            _normalize_search_manifest_row(
+                row,
+                index=index,
+                request=request,
+                search_output_dir=search_output_dir,
+                manifest_digest=manifest_digest,
+            )
+            for index, row in enumerate(rows)
+        ]
+        phase_dir = request.round_dir / "phases"
+        output_files = sorted(path for path in search_output_dir.rglob("*") if path.is_file())
+        if any(path.is_symlink() for path in output_files):
+            raise CoevolutionError("search output contains an untrusted symlink artifact")
+        artifacts = [dict(item) for item in prepared.artifacts]
+        artifacts.extend(
+            {
+                "path": os.path.relpath(path.resolve(), start=phase_dir.resolve()),
+                "sha256": _sha256_file(path),
+            }
+            for path in output_files
+        )
+        summary = _mapping(manifest.get("summary"), "search manifest summary")
+        return {
+            "status": "complete",
+            "candidate_budget": request.falsification_candidates,
+            "seed": request.falsification_seed,
+            "sampler": request.falsification_sampler,
+            "candidates": candidates,
+            "invalid_count": summary.get("num_invalid_candidates"),
+            "failed_count": summary.get("num_failed_evaluations"),
+            "planner_config_binding": _deep_thaw(prepared.planner_binding),
+            "search_output": {
+                "manifest_path": _relative_run_path(manifest_path, request.config.output_dir),
+                "manifest_sha256": manifest_digest,
+                "config_sha256": _sha256_bytes(_canonical_json(manifest["config"])),
+                "candidate_count": len(candidates),
+            },
+            "artifacts": artifacts,
+        }
+
+
 class DiscoveryVerifierAdapter(Protocol):
     """Adapter over replay plus reviewed feasibility/admissibility contracts."""
 
@@ -703,6 +1272,28 @@ def _atomic_write_bytes(path: Path, payload: bytes, *, mode: int) -> None:
         _fsync_directory(path.parent)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _write_or_verify_bytes(path: Path, payload: bytes) -> None:
+    """Create an immutable round artifact or accept an exact-byte resume match."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.is_symlink():
+        raise CoevolutionError(f"round artifact must not be a symlink: {path}")
+    if path.exists():
+        if not path.is_file() or path.read_bytes() != payload:
+            raise CoevolutionError(f"round artifact already exists with different bytes: {path}")
+        return
+    _atomic_write_bytes(path, payload, mode=0o644)
+
+
+def _relative_run_path(path: Path, run_dir: Path) -> str:
+    """Return a stable run-relative artifact path, refusing paths outside the run."""
+    try:
+        return path.resolve().relative_to(run_dir.resolve()).as_posix()
+    except ValueError as exc:
+        raise ValueError(
+            f"round artifact is outside the co-evolution output directory: {path}"
+        ) from exc
 
 
 def _call_with_selected_planner_integrity(

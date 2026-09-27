@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -12,12 +13,18 @@ import pytest
 import yaml
 
 from robot_sf.adversarial import coevolution as coevolution_module
+from robot_sf.adversarial.attribution import FailureAttribution
+from robot_sf.adversarial.certification import passed_status
 from robot_sf.adversarial.coevolution import (
     CoevolutionAdapters,
     CoevolutionError,
+    ProductionFalsificationAdapter,
+    RoundRequest,
     load_coevolution_config,
+    prepare_falsification_search,
     run_coevolution,
 )
+from robot_sf.adversarial.config import CandidateEvaluation
 
 
 def _write_config(
@@ -993,3 +1000,322 @@ def test_round_contract_rejects_a_minimum_of_one(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="rounds.minimum must be an integer >= 2"):
         load_coevolution_config(config_path)
+
+
+def _optimizer_output_fixture(
+    request: RoundRequest,
+    *,
+    planner_id: str,
+    base_config: Path,
+) -> dict[str, str]:
+    """Write the file contract emitted by #9650 without running its evaluator."""
+    output_dir = request.round_dir / "optimization"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    candidate_path = output_dir / "best_candidate.yaml"
+    candidate_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": planner_id,
+                "algo": request.config.policy,
+                "base_config_path": str(base_config.resolve()),
+                "params": {"max_linear_speed": 2.5},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    registry_path = output_dir / "candidate_registry.yaml"
+    registry_path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "candidates": {planner_id: {"candidate_config_path": candidate_path.name}},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    manifest_path = output_dir / "run_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "planner_optimizer_run.v1",
+                "status": "complete",
+                "selected": {
+                    "candidate_name": planner_id,
+                    "candidate_config_path": candidate_path.name,
+                },
+                "selected_candidate_config": candidate_path.name,
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return {
+        "planner_id": planner_id,
+        "config_path": candidate_path.name,
+        "config_sha256": hashlib.sha256(candidate_path.read_bytes()).hexdigest(),
+    }
+
+
+def _search_request_fixture(tmp_path: Path, *, round_number: int) -> RoundRequest:
+    config = load_coevolution_config(_write_config(tmp_path))
+    config.scenario_template.write_text(
+        yaml.safe_dump({"scenarios": [{"name": "fixture-scenario"}]}, sort_keys=False),
+        encoding="utf-8",
+    )
+    config.search_space.write_text(
+        "variables:\n"
+        "  start_x: {min: 0, max: 1}\n"
+        "  start_y: {min: 0, max: 1}\n"
+        "  goal_x: {min: 2, max: 3}\n"
+        "  goal_y: {min: 0, max: 1}\n"
+        "  spawn_time_s: {min: 0, max: 0}\n"
+        "  pedestrian_speed_mps: {min: 1, max: 1}\n"
+        "  pedestrian_delay_s: {min: 0, max: 0}\n"
+        "  scenario_seed: {min: 1, max: 2}\n",
+        encoding="utf-8",
+    )
+    round_dir = config.output_dir / f"round_{round_number:03d}"
+    return RoundRequest(
+        run_id=config.run_id,
+        round_number=round_number,
+        round_dir=round_dir,
+        optimizer_trials_per_method=config.optimizer_trials_per_method,
+        falsification_candidates=config.falsification_candidates_per_round,
+        optimizer_random_seed=config.optimizer_random_seed_base + round_number - 1,
+        optimizer_tpe_seed=config.optimizer_tpe_seed_base + round_number - 1,
+        falsification_seed=config.falsification_seed_base + round_number - 1,
+        falsification_sampler=config.falsification_sampler,
+        heldout_case_ids=config.heldout_case_ids,
+        regression_cases=(),
+        previous_selected_planner=None,
+        source_revision="fixture-revision",
+        config=config,
+    )
+
+
+def test_prepare_falsification_search_uses_optimizer_candidate_and_preserves_prior_bytes(
+    tmp_path: Path,
+) -> None:
+    request = _search_request_fixture(tmp_path, round_number=2)
+    previous_path = request.config.output_dir / "round_001" / "optimization" / "best_candidate.yaml"
+    previous_path.parent.mkdir(parents=True, exist_ok=True)
+    previous_bytes = b"planner_id: planner-r1\nconfig: unchanged\n"
+    previous_path.write_bytes(previous_bytes)
+    request = replace(
+        request,
+        previous_selected_planner={
+            "planner_id": "planner-r1",
+            "config_path": str(previous_path),
+            "config_sha256": hashlib.sha256(previous_bytes).hexdigest(),
+        },
+    )
+    base_config_path = tmp_path / "base-planner.yaml"
+    base_config_path.write_text(
+        "max_linear_speed: 1.5\ngoal_progress_weight: 4.0\n", encoding="utf-8"
+    )
+    selected_planner = _optimizer_output_fixture(
+        request, planner_id="planner-r2", base_config=base_config_path
+    )
+
+    prepared = prepare_falsification_search(request, selected_planner)
+
+    assert prepared.config.algo_config_path == (
+        request.round_dir / "falsification" / "planner_algo_config.yaml"
+    )
+    assert prepared.config.budget == request.falsification_candidates
+    assert prepared.config.seed == request.falsification_seed
+    assert prepared.config.policy == request.config.policy
+    assert yaml.safe_load(prepared.config.algo_config_path.read_text(encoding="utf-8")) == {
+        "goal_progress_weight": 4.0,
+        "max_linear_speed": 2.5,
+    }
+    assert previous_path.read_bytes() == previous_bytes
+
+    provenance_path = request.round_dir / "falsification" / "planner_config_provenance.json"
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    assert provenance["previous_selected_planner"] == {
+        "planner_id": "planner-r1",
+        "config_path": "round_001/optimization/best_candidate.yaml",
+        "config_sha256": hashlib.sha256(previous_bytes).hexdigest(),
+    }
+    assert provenance["selected_planner"]["planner_id"] == "planner-r2"
+    assert (
+        provenance["runtime_planner_config"]["sha256"]
+        == hashlib.sha256(prepared.config.algo_config_path.read_bytes()).hexdigest()
+    )
+    phase_provenance = prepared.phase_provenance()
+    assert phase_provenance["search_config"]["algo_config_path"] == str(
+        prepared.config.algo_config_path
+    )
+    for artifact in prepared.artifacts:
+        artifact_path = (request.round_dir / "phases" / artifact["path"]).resolve()
+        assert artifact_path.is_file()
+        assert hashlib.sha256(artifact_path.read_bytes()).hexdigest() == artifact["sha256"]
+
+
+def test_prepare_falsification_search_rejects_optimizer_candidate_digest_mismatch(
+    tmp_path: Path,
+) -> None:
+    request = _search_request_fixture(tmp_path, round_number=1)
+    base_config_path = tmp_path / "base-planner.yaml"
+    base_config_path.write_text("max_linear_speed: 1.5\n", encoding="utf-8")
+    selected_planner = _optimizer_output_fixture(
+        request, planner_id="planner-r1", base_config=base_config_path
+    )
+    selected_planner["config_sha256"] = "0" * 64
+
+    with pytest.raises(ValueError, match="config digest mismatch"):
+        prepare_falsification_search(request, selected_planner)
+
+
+def test_production_falsification_adapter_uses_injected_evaluator_and_binds_outputs(
+    tmp_path: Path,
+) -> None:
+    request = _search_request_fixture(tmp_path, round_number=2)
+    previous_path = request.config.output_dir / "round_001" / "optimization" / "best_candidate.yaml"
+    previous_path.parent.mkdir(parents=True, exist_ok=True)
+    previous_bytes = b"planner_id: planner-r1\nconfig: preserved\n"
+    previous_path.write_bytes(previous_bytes)
+    request = replace(
+        request,
+        previous_selected_planner={
+            "planner_id": "planner-r1",
+            "config_path": str(previous_path),
+            "config_sha256": hashlib.sha256(previous_bytes).hexdigest(),
+        },
+    )
+    base_config_path = tmp_path / "base-planner.yaml"
+    base_config_path.write_text("max_linear_speed: 1.5\n", encoding="utf-8")
+    selected_planner = _optimizer_output_fixture(
+        request, planner_id="planner-r2", base_config=base_config_path
+    )
+    evaluations: list[Path] = []
+
+    def fake_evaluator(config, candidate, scenario_path, candidate_dir):
+        del config
+        record = {
+            "outcome": {
+                "collision": False,
+                "timeout": False,
+                "route_complete": True,
+            },
+            "metrics": {"success": 1.0, "near_misses": 0.0},
+        }
+        episode_path = candidate_dir / "episode_records.jsonl"
+        episode_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+        evaluations.append(episode_path)
+        return CandidateEvaluation(
+            candidate=candidate,
+            certification_status=passed_status(),
+            objective_value=None,
+            failure_attribution=FailureAttribution(
+                status="attributed",
+                primary_failure="success",
+                reasons=["fixture evaluator reported route completion"],
+                details={
+                    "execution_mode": "native",
+                    "readiness_status": "native",
+                    "availability_status": "available",
+                },
+            ),
+            episode_record_path=episode_path,
+            trajectory_csv_path=None,
+            scenario_yaml_path=scenario_path,
+            bundle_path=candidate_dir,
+        )
+
+    def fake_certifier(_candidate, _scenario_path, _required):
+        return passed_status("fixture certification")
+
+    output = ProductionFalsificationAdapter(
+        evaluator=fake_evaluator,
+        certifier=fake_certifier,
+    )(request, selected_planner, request.round_dir / "falsification")
+
+    assert len(evaluations) == request.falsification_candidates
+    assert previous_path.read_bytes() == previous_bytes
+    assert output["status"] == "complete"
+    assert output["candidate_budget"] == request.falsification_candidates
+    assert output["seed"] == request.falsification_seed
+    assert output["sampler"] == request.falsification_sampler
+    assert len(output["candidates"]) == request.falsification_candidates
+    assert all(row["search_status"] == "evaluated" for row in output["candidates"])
+    assert all(row["execution_status"] == "ok" for row in output["candidates"])
+    assert all(row["planner_outcome"] == "no_failure" for row in output["candidates"])
+    assert all(row["scenario"]["materialized"] for row in output["candidates"])
+
+    search_manifest = request.config.output_dir / output["search_output"]["manifest_path"]
+    assert (
+        hashlib.sha256(search_manifest.read_bytes()).hexdigest()
+        == output["search_output"]["manifest_sha256"]
+    )
+    assert output["search_output"]["config_sha256"]
+    for artifact in output["artifacts"]:
+        artifact_path = (request.round_dir / "phases" / artifact["path"]).resolve()
+        assert artifact_path.is_file()
+        assert hashlib.sha256(artifact_path.read_bytes()).hexdigest() == artifact["sha256"]
+
+
+def test_search_adapter_keeps_certificate_rejection_invalid_not_failed(tmp_path: Path) -> None:
+    request = _search_request_fixture(tmp_path, round_number=1)
+    row = coevolution_module._normalize_search_manifest_row(
+        {
+            "candidate": {"scenario_seed": 17},
+            "certification_status": {"status": "failed"},
+            "objective_value": None,
+            "error": "scenario was structurally invalid",
+            "failure_attribution": {
+                "status": "not_evaluated",
+                "primary_failure": "invalid_candidate",
+                "details": {},
+            },
+            "scenario_yaml_path": None,
+            "bundle_path": None,
+        },
+        index=0,
+        request=request,
+        search_output_dir=request.round_dir / "falsification" / "search",
+        manifest_digest="f" * 64,
+    )
+
+    assert row["search_status"] == "invalid"
+    assert row["execution_status"] == "not_run"
+    assert row["planner_outcome"] == "not_assessed"
+    assert row["scenario"]["materialized"] is False
+
+
+def test_search_adapter_preserves_evaluation_when_objective_is_unscored(
+    tmp_path: Path,
+) -> None:
+    request = _search_request_fixture(tmp_path, round_number=1)
+    row = coevolution_module._normalize_search_manifest_row(
+        {
+            "candidate": {"scenario_seed": 17},
+            "certification_status": {"status": "not_available"},
+            "objective_value": None,
+            "error": None,
+            "failure_attribution": {
+                "status": "attributed",
+                "primary_failure": "success",
+                "details": {
+                    "execution_mode": "native",
+                    "readiness_status": "native",
+                    "availability_status": "available",
+                },
+            },
+            "scenario_yaml_path": None,
+            "bundle_path": None,
+        },
+        index=0,
+        request=request,
+        search_output_dir=request.round_dir / "falsification" / "search",
+        manifest_digest="f" * 64,
+    )
+
+    assert row["search_status"] == "evaluated"
+    assert row["execution_status"] == "ok"
+    assert row["planner_outcome"] == "no_failure"
+    assert row["objective_value"] is None

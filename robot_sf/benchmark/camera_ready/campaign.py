@@ -610,7 +610,6 @@ def _execute_campaign_planner_batch(
             "written": _count_episode_rows_written_since(
                 run.episodes_path,
                 episode_file_before,
-                resume=cfg.resume,
             ),
             "failed_jobs": 0,
             "failures": [],

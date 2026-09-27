@@ -4231,9 +4231,11 @@ def test_run_campaign_counts_rows_written_before_runner_exception(
     assert result["total_episodes"] == 1
 
 
-def test_run_campaign_counts_only_appended_rows_when_resumed_runner_raises(
+@pytest.mark.parametrize("resume", [True, False], ids=["resume", "reused-id-without-resume"])
+def test_run_campaign_counts_only_appended_rows_when_reused_runner_raises(
     tmp_path: Path,
     monkeypatch,
+    resume: bool,
 ) -> None:
     """A runner exception counts its appended rows, not rows retained from earlier runs."""
     scenario_rel = Path("configs/scenarios/single/resume_throughput.yaml")
@@ -4253,7 +4255,7 @@ def test_run_campaign_counts_only_appended_rows_when_resumed_runner_raises(
                 "seed_policy:",
                 "  mode: fixed-list",
                 "  seeds: [111]",
-                "resume: true",
+                f"resume: {str(resume).lower()}",
                 "stop_on_failure: false",
                 "planners:",
                 "  - key: goal",

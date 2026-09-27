@@ -395,8 +395,6 @@ def _episode_jsonl_snapshot(path: Path) -> tuple[int, int, int, int, int] | None
 def _count_episode_rows_written_since(
     path: Path,
     before: tuple[int, int, int, int, int] | None,
-    *,
-    resume: bool,
 ) -> int:
     """Count completed JSONL rows written before a runner failure.
 
@@ -408,7 +406,7 @@ def _count_episode_rows_written_since(
         return 0
 
     start_offset = 0
-    if resume and before is not None and before[:2] == after[:2] and after[2] >= before[2]:
+    if before is not None and before[:2] == after[:2] and after[2] >= before[2]:
         start_offset = before[2]
 
     with path.open("rb") as handle:

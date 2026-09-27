@@ -20,6 +20,7 @@ import json
 import subprocess
 import sys
 import time
+from io import StringIO
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -930,6 +931,47 @@ class TestScopedScenarioParity:
         assert result["summary"]["written"] == 1
         assert result["summary"]["episodes_written_this_invocation"] == 1
         assert result["summary"]["episodes_total"] == 2
+
+    def test_worker_counts_appended_rows_for_unexpected_exception_without_resume(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """The outer worker handler counts only this invocation's rows for any Exception."""
+        from robot_sf.benchmark.camera_ready import resource_lifecycle
+
+        episodes_path = tmp_path / "episodes.jsonl"
+        episodes_path.write_text(
+            json.dumps({"scenario_id": "retained", "seed": 1}) + "\n",
+            encoding="utf-8",
+        )
+        params = _SubprocessArmParams(
+            **{
+                **_make_arm_params().__dict__,
+                "episodes_path": episodes_path,
+                "summary_path": tmp_path / "summary.json",
+                "resume": False,
+            }
+        )
+
+        def append_then_raise(_params):
+            with episodes_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps({"scenario_id": "new", "seed": 2}) + "\n")
+            raise TypeError("unexpected post-run error")
+
+        monkeypatch.setattr(sys, "stdin", StringIO(_serialize_subprocess_arm_params(params)))
+        monkeypatch.setattr(resource_lifecycle, "_run_single_arm_subprocess", append_then_raise)
+        monkeypatch.setattr(
+            resource_lifecycle,
+            "_cleanup_gpu_memory_before_exit",
+            lambda **_kwargs: {},
+        )
+
+        exit_code = _main_subprocess_worker()
+        output = json.loads(capsys.readouterr().out)
+
+        assert exit_code == 1
+        assert output["summary"]["status"] == "failed"
+        assert output["summary"]["written"] == 1
+        assert output["summary"]["episodes_written_this_invocation"] == 1
 
     def test_worker_runtime_includes_run_batch_execution(self, tmp_path, monkeypatch):
         """The arm timer starts before the batch and ends after its work."""

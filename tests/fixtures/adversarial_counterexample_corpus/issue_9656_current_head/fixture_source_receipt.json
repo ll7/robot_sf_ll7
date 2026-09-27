@@ -1,0 +1,15 @@
+{
+  "bundle_file_count": 3,
+  "bundle_manifest_commit": "dc9e8f6fdebb39da7c4450d2dcc1d5e9b991dfc0",
+  "bundle_manifest_sha256": "40cfa4c052dea005f5b39984663ee134c09d69d282fdc36f49d35475802d2c2a",
+  "checksums_sha256": "977f7e8d1176b8583391edba8269fc26ee7f7051c6b3801f1d5e8c4497deebf5",
+  "claim_boundary": "diagnostic_only_no_exact_replay_match",
+  "current_head_manifest_sha256": "c5f2d799d0b645ce13f2ab592263da85f55db922c1b54ff300a36e53b7f1418c",
+  "materializer_revision": "dc9e8f6fdebb39da7c4450d2dcc1d5e9b991dfc0",
+  "schema_version": "issue_9652_fixture_source_receipt.v1",
+  "source_branch": "autopilot/issue9656-evidence-mining-20260927",
+  "source_campaign_revision": "f7ebdcae2375d085e925213197a75a386e26a79c",
+  "source_head": "58b51c0419e6052e5c75eb3059e2b53205d8276d",
+  "source_issue": 9656,
+  "summary_sha256": "bc0ea6bb6ebbd9259611bffa9e3cf11a17861eb4e4a1ab93a837edf1d8f0be59"
+}

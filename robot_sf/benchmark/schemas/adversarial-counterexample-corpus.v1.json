@@ -1,0 +1,696 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/adversarial-counterexample-corpus.v1.json",
+  "title": "Robot SF Adversarial Counterexample Corpus (v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "claim_boundary",
+    "search_runs",
+    "cases",
+    "admission_attempts",
+    "planner_evaluations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "adversarial-counterexample-corpus.v1"
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "search_runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "run_id",
+          "source_issue",
+          "source_revision",
+          "objective",
+          "search_space",
+          "attempted_candidates",
+          "completed_candidates",
+          "failed_candidates",
+          "invalid_candidates",
+          "new_counterexamples_discovered",
+          "new_counterexamples_admitted",
+          "evidence_tier",
+          "source_files",
+          "manifest_files"
+        ],
+        "properties": {
+          "schema_version": {"const": "adversarial-counterexample-search-run.v1"},
+          "run_id": {"type": "string", "minLength": 1},
+          "source_issue": {"type": "integer", "minimum": 1},
+          "source_revision": {"type": "string", "minLength": 1},
+          "objective": {"type": "object"},
+          "search_space": {"type": "object"},
+          "attempted_candidates": {"type": "integer", "minimum": 0},
+          "completed_candidates": {"type": "integer", "minimum": 0},
+          "failed_candidates": {"type": "integer", "minimum": 0},
+          "invalid_candidates": {"type": "integer", "minimum": 0},
+          "new_counterexamples_discovered": {"type": "integer", "minimum": 0},
+          "new_counterexamples_admitted": {"type": "integer", "minimum": 0},
+          "evidence_tier": {"type": "string", "minLength": 1},
+          "source_files": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["path", "sha256"],
+              "properties": {
+                "path": {"type": "string", "minLength": 1},
+                "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+              },
+              "additionalProperties": false
+            }
+          },
+          "manifest_files": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["path", "sha256"],
+              "properties": {
+                "path": {"type": "string", "minLength": 1},
+                "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "candidate_count": {"type": "integer", "minimum": 0}
+              },
+              "additionalProperties": false
+            }
+          },
+          "bundle_receipts": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["source_path", "path", "sha256"],
+              "properties": {
+                "source_path": {"type": "string", "minLength": 1},
+                "path": {"type": "string", "minLength": 1},
+                "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "case_id",
+          "effective_scenario_sha256",
+          "scenario_id",
+          "scenario_seed",
+          "inputs",
+          "structural_validation",
+          "discovery",
+          "admissibility",
+          "target_planner",
+          "replay_receipt",
+          "source_evidence"
+        ],
+        "properties": {
+          "schema_version": {"const": "adversarial-counterexample.v1"},
+          "case_id": {"type": "string", "minLength": 1},
+          "effective_scenario_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "scenario_id": {"type": "string", "minLength": 1},
+          "scenario_seed": {"type": "integer"},
+          "inputs": {
+            "type": "object",
+            "required": [
+              "scenario_path",
+              "scenario_sha256",
+              "route_overrides_path",
+              "route_overrides_sha256",
+              "map_assets"
+            ],
+            "properties": {
+              "scenario_path": {"type": "string", "minLength": 1},
+              "scenario_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "route_overrides_path": {"type": "string", "minLength": 1},
+              "route_overrides_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "map_assets": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["role", "path", "source_path", "sha256"],
+                  "properties": {
+                    "role": {"enum": ["map", "map_registry"]},
+                    "path": {"type": "string", "minLength": 1},
+                    "source_path": {"type": "string", "minLength": 1},
+                    "source_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+                  },
+                  "additionalProperties": true
+                }
+              }
+            },
+            "additionalProperties": true
+          },
+          "structural_validation": {
+            "type": "object",
+            "required": ["status", "validator", "schema_sha256", "error_count"],
+            "properties": {
+              "status": {"const": "valid"},
+              "validator": {"type": "string", "minLength": 1},
+              "schema_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "error_count": {"const": 0}
+            },
+            "additionalProperties": true
+          },
+          "discovery": {
+            "type": "object",
+            "required": ["candidate_parameters", "objective", "search_source"],
+            "properties": {
+              "candidate_parameters": {"type": "object", "minProperties": 1},
+              "objective": {"type": "object", "minProperties": 1},
+              "search_source": {"type": "object", "minProperties": 1}
+            },
+            "additionalProperties": true
+          },
+          "admissibility": {
+            "type": "object",
+            "required": ["verdict"],
+            "properties": {
+              "verdict": {
+                "enum": [
+                  "admissible_feasibility_unknown",
+                  "empirically_feasible",
+                  "planner_specific_failure"
+                ]
+              },
+              "evidence_receipt": {
+                "type": "object",
+                "required": [
+                  "schema_version",
+                  "case_id",
+                  "effective_scenario_sha256",
+                  "verdict",
+                  "evaluation_id"
+                ],
+                "properties": {
+                  "schema_version": {"const": "adversarial-case-admissibility-evidence.v1"},
+                  "case_id": {"type": "string", "minLength": 1},
+                  "effective_scenario_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                  "verdict": {
+                    "enum": ["empirically_feasible", "planner_specific_failure"]
+                  },
+                  "evaluation_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": true
+          },
+          "target_planner": {
+            "type": "object",
+            "required": ["planner_id", "config_identity", "configuration_snapshot"],
+            "properties": {
+              "planner_id": {"type": "string", "minLength": 1},
+              "config_identity": {"type": "string", "minLength": 1},
+              "configuration_snapshot": {"type": "object"}
+            },
+            "additionalProperties": true
+          },
+          "replay_receipt": {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "verification_status",
+              "target_revision",
+              "replay_revision",
+              "target_and_replay_revision_match",
+              "replay_count",
+              "selected_projection",
+              "selected_projection_sha256",
+              "replay_artifacts",
+              "effective_scenario_sha256",
+              "scenario_input_sha256",
+              "route_overrides_sha256",
+              "map_assets",
+              "planner_id",
+              "planner_config_identity"
+            ],
+            "properties": {
+              "schema_version": {
+                "enum": [
+                  "adversarial-case-admission-replay.v1",
+                  "adversarial-case-admission-replay.v2"
+                ]
+              },
+              "verification_status": {
+                "enum": ["exact_current_revision_match", "repeated_current_revision_match"]
+              },
+              "target_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+              "replay_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+              "target_and_replay_revision_match": {"const": true},
+              "replay_count": {"type": "integer", "minimum": 1},
+              "selected_projection": {
+                "type": "object",
+                "required": [
+                  "scenario_id",
+                  "seed",
+                  "planner_id",
+                  "planner_config_identity",
+                  "source_revision",
+                  "outcome",
+                  "termination_reason",
+                  "metrics",
+                  "selected_event_identity"
+                ],
+                "properties": {
+                  "scenario_id": {"type": "string", "minLength": 1},
+                  "seed": {"type": "integer"},
+                  "planner_id": {"type": "string", "minLength": 1},
+                  "planner_config_identity": {"type": "string", "minLength": 1},
+                  "source_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                  "outcome": {"type": "object"},
+                  "termination_reason": {"type": "string", "minLength": 1},
+                  "metrics": {"type": "object"},
+                  "selected_event_identity": {"type": "object"}
+                },
+                "additionalProperties": true
+              },
+              "selected_projection_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "replay_artifacts": {"type": "array", "minItems": 1, "items": {"type": "object"}},
+              "artifact_receipts": {"type": "array", "items": {"type": "object"}},
+              "input_binding_status": {"enum": ["bound", "unknown_historical"]},
+              "input_binding_limitation": {"type": "string", "minLength": 1},
+              "effective_scenario_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "scenario_input_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "route_overrides_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "map_assets": {"type": "array", "minItems": 1, "items": {"type": "object"}},
+              "planner_id": {"type": "string", "minLength": 1},
+              "planner_config_identity": {"type": "string", "minLength": 1}
+            },
+            "allOf": [
+              {
+                "if": {"properties": {"schema_version": {"const": "adversarial-case-admission-replay.v2"}}},
+                "then": {"required": ["artifact_receipts", "input_binding_status"]}
+              },
+              {
+                "if": {
+                  "properties": {"input_binding_status": {"const": "unknown_historical"}},
+                  "required": ["input_binding_status"]
+                },
+                "then": {"required": ["input_binding_limitation"]}
+              }
+            ],
+            "additionalProperties": true
+          },
+          "source_evidence": {"type": "object", "minProperties": 1}
+        },
+        "additionalProperties": true
+      }
+    },
+    "historical_candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "candidate_id",
+          "source_issue",
+          "source_case_id",
+          "source_record_sha256",
+          "source_provenance",
+          "candidate_status",
+          "source_replay_status",
+          "source_replay",
+          "scenario_id",
+          "scenario_family",
+          "scenario_seed",
+          "benchmark_eligible",
+          "target_planner",
+          "criticality",
+          "replay_inputs",
+          "artifact_paths"
+        ],
+        "properties": {
+          "schema_version": {
+            "enum": [
+              "adversarial-historical-candidate.v1",
+              "adversarial-historical-candidate.v2"
+            ]
+          },
+          "candidate_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "source_issue": {"const": 9656},
+          "source_case_id": {"type": "string", "pattern": "^case-[0-9a-f]{16}$"},
+          "source_record_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "source_provenance": {"type": "object"},
+          "candidate_status": {
+            "enum": [
+              "pending_exact_replay",
+              "blocked_unavailable_model_artifact",
+              "blocked_replay_revision_mismatch",
+              "blocked_source_provenance_mismatch",
+              "admitted"
+            ]
+          },
+          "source_candidate_status": {"const": "pending_exact_replay"},
+          "promoted_case_id": {"type": "string", "pattern": "^case-[0-9a-f]{64}$"},
+          "promotion_attempt_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "source_replay_status": {
+            "enum": [
+              "not_attempted",
+              "unavailable_model_artifact",
+              "mismatch_different_revision"
+            ]
+          },
+          "source_replay": {"type": "object"},
+          "feasibility": {
+            "type": "object",
+            "required": ["verdict", "reason_codes"],
+            "properties": {
+              "verdict": {"const": "unknown"},
+              "reason_codes": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string", "minLength": 1}
+              }
+            },
+            "additionalProperties": false
+          },
+          "planner_status_at_import": {
+            "type": "object",
+            "required": ["status", "planner_id", "config_hash", "valid_observation_count", "reason_codes"],
+            "properties": {
+              "status": {"const": "unknown"},
+              "planner_id": {"type": "string", "minLength": 1},
+              "config_hash": {"type": ["string", "null"]},
+              "valid_observation_count": {"const": 0},
+              "reason_codes": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string", "minLength": 1}
+              }
+            },
+            "additionalProperties": false
+          },
+          "scenario_id": {"type": "string", "minLength": 1},
+          "scenario_family": {"type": "string", "minLength": 1},
+          "scenario_seed": {"type": "integer"},
+          "benchmark_eligible": {"type": "boolean"},
+          "target_planner": {"type": "object"},
+          "criticality": {"type": "object"},
+          "replay_inputs": {"type": "object"},
+          "artifact_paths": {"type": "object"}
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {"schema_version": {"const": "adversarial-historical-candidate.v2"}},
+              "required": ["schema_version"]
+            },
+            "then": {"required": ["feasibility", "planner_status_at_import"]}
+          }
+        ],
+        "additionalProperties": true
+      }
+    },
+    "historical_candidate_imports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "import_id",
+          "source_issue",
+          "source_identity",
+          "source_files",
+          "candidate_ids",
+          "candidate_count",
+          "source_rows_verified",
+          "candidate_status_counts",
+          "source_replay_status_counts",
+          "criticality_anomaly_counts",
+          "failed_replay_attempts",
+          "failed_setup_jobs",
+          "evidence_tier",
+          "claim_boundary",
+          "artifact_paths"
+        ],
+        "properties": {
+          "schema_version": {"const": "adversarial-historical-candidate-import.v1"},
+          "import_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "source_issue": {"const": 9656},
+          "source_identity": {"type": "object"},
+          "source_files": {"type": "array", "items": {"type": "object"}},
+          "candidate_ids": {
+            "type": "array",
+            "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "uniqueItems": true
+          },
+          "candidate_count": {"type": "integer", "minimum": 0},
+          "source_rows_verified": {"type": "integer", "minimum": 0},
+          "candidate_status_counts": {"type": "object"},
+          "source_replay_status_counts": {"type": "object"},
+          "criticality_anomaly_counts": {"type": "object"},
+          "failed_replay_attempts": {"type": "object"},
+          "failed_setup_jobs": {"type": "integer", "minimum": 0},
+          "evidence_tier": {"type": "string", "minLength": 1},
+          "claim_boundary": {"type": "string", "minLength": 1},
+          "artifact_paths": {"type": "object"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "admission_attempts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "attempt_id",
+          "source_kind",
+          "source_id",
+          "decision",
+          "blockers",
+          "candidate_identity",
+          "duplicate_case_id",
+          "near_duplicate_report"
+        ],
+        "properties": {
+          "schema_version": {"const": "adversarial-counterexample-admission-attempt.v1"},
+          "attempt_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "source_kind": {"type": "string", "minLength": 1},
+          "source_id": {"type": "string", "minLength": 1},
+          "decision": {"enum": ["admitted", "duplicate", "rejected"]},
+          "blockers": {"type": "array", "items": {"type": "string"}},
+          "candidate_identity": {"type": ["string", "null"]},
+          "duplicate_case_id": {"type": ["string", "null"]},
+          "near_duplicate_report": {"type": "object"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "planner_evaluations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "evaluation_id",
+          "case_id",
+          "effective_scenario_sha256",
+          "planner_id",
+          "planner_config_identity",
+          "source_revision",
+          "episode_sha256",
+          "execution_mode",
+          "readiness_status",
+          "availability_status",
+          "fallback_or_degraded",
+          "evidence_status",
+          "error",
+          "outcome",
+          "termination_reason",
+          "metrics"
+        ],
+        "properties": {
+          "schema_version": {"const": "adversarial-counterexample-planner-evaluation.v1"},
+          "evaluation_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "case_id": {"type": "string", "minLength": 1},
+          "effective_scenario_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "planner_id": {"type": "string", "minLength": 1},
+          "planner_config_identity": {"type": "string", "minLength": 1},
+          "source_revision": {"type": "string", "minLength": 1},
+          "episode_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+          "execution_mode": {"type": "string", "minLength": 1},
+          "readiness_status": {"type": "string", "minLength": 1},
+          "availability_status": {"type": "string", "minLength": 1},
+          "fallback_or_degraded": {"type": ["boolean", "null"]},
+          "evidence_status": {"enum": ["complete", "failed", "partial", "missing", "unknown"]},
+          "error": {"type": ["string", "null"]},
+          "outcome": {
+            "type": ["object", "null"],
+            "properties": {
+              "collision_event": {"type": ["boolean", "null"]},
+              "route_complete": {"type": ["boolean", "null"]},
+              "timeout_event": {"type": ["boolean", "null"]}
+            }
+          },
+          "termination_reason": {"type": ["string", "null"], "minLength": 1},
+          "metrics": {"type": "object"},
+          "replay_receipt": {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "verification_status",
+              "artifact_path",
+              "artifact_sha256",
+              "case_id",
+              "effective_scenario_sha256",
+              "scenario_id",
+              "scenario_seed",
+              "scenario_input_sha256",
+              "route_overrides_sha256",
+              "map_assets",
+              "planner_id",
+              "planner_config_identity",
+              "source_revision",
+              "episode_sha256",
+              "outcome",
+              "termination_reason",
+              "metrics",
+              "selected_event_identity",
+              "execution_mode",
+              "readiness_status",
+              "availability_status",
+              "fallback_or_degraded"
+            ],
+            "properties": {
+              "schema_version": {
+                "enum": [
+                  "adversarial-planner-replay-receipt.v1",
+                  "adversarial-planner-replay-receipt.v2"
+                ]
+              },
+              "verification_status": {"const": "artifact_projection_match"},
+              "artifact_path": {"type": "string", "minLength": 1},
+              "artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "run_id": {"type": "string", "minLength": 1},
+              "input_binding": {
+                "type": "object",
+                "required": ["schema_version", "status"],
+                "properties": {
+                  "schema_version": {"const": "benchmark-episode-case-input-identity.v1"},
+                  "status": {"enum": ["bound", "unknown_historical"]},
+                  "run_id": {"type": "string", "minLength": 1},
+                  "scenario_semantic_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                  "route_overrides_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                  "map_assets": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["role", "sha256"],
+                      "properties": {
+                        "role": {"enum": ["map", "map_registry"]},
+                        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "reason_codes": {"type": "array", "items": {"type": "string"}},
+                  "reason": {"type": "string", "minLength": 1}
+                },
+                "allOf": [
+                  {
+                    "if": {"properties": {"status": {"const": "bound"}}},
+                    "then": {
+                      "required": [
+                        "run_id",
+                        "scenario_semantic_sha256",
+                        "route_overrides_sha256",
+                        "map_assets",
+                        "reason_codes"
+                      ]
+                    }
+                  },
+                  {
+                    "if": {"properties": {"status": {"const": "unknown_historical"}}},
+                    "then": {"required": ["reason"]}
+                  }
+                ],
+                "additionalProperties": false
+              },
+              "case_id": {"type": "string", "minLength": 1},
+              "effective_scenario_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "scenario_id": {"type": "string", "minLength": 1},
+              "scenario_seed": {"type": "integer"},
+              "scenario_input_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "route_overrides_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "map_assets": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["role", "sha256"],
+                  "properties": {
+                    "role": {"enum": ["map", "map_registry"]},
+                    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "planner_id": {"type": "string", "minLength": 1},
+              "planner_config_identity": {"type": "string", "minLength": 1},
+              "source_revision": {"type": "string", "minLength": 1},
+              "episode_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "outcome": {"type": "object"},
+              "termination_reason": {"type": "string", "minLength": 1},
+              "metrics": {"type": "object"},
+              "selected_event_identity": {"type": "object"},
+              "execution_mode": {"enum": ["native", "adapter", "mixed", "unknown"]},
+              "readiness_status": {"enum": ["native", "adapter", "fallback", "degraded", "unknown"]},
+              "availability_status": {"type": "string", "minLength": 1},
+              "fallback_or_degraded": {"type": "boolean"}
+            },
+            "allOf": [
+              {
+                "if": {"properties": {"schema_version": {"const": "adversarial-planner-replay-receipt.v2"}}},
+                "then": {"required": ["run_id", "input_binding"]}
+              }
+            ],
+            "additionalProperties": false
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {"evidence_status": {"const": "complete"}},
+              "required": ["evidence_status"]
+            },
+            "then": {
+              "properties": {
+                "episode_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "fallback_or_degraded": {"type": "boolean"},
+                "outcome": {
+                  "type": "object",
+                  "required": ["collision_event", "route_complete", "timeout_event"],
+                  "properties": {
+                    "collision_event": {"type": "boolean"},
+                    "route_complete": {"type": "boolean"},
+                    "timeout_event": {"type": "boolean"}
+                  }
+                },
+                "termination_reason": {"type": "string", "minLength": 1}
+              }
+            }
+          }
+        ],
+        "additionalProperties": true
+      }
+    }
+  }
+}

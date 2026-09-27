@@ -88,6 +88,22 @@ class ScenarioValidationReport:
     raw_entry_count: int
 
 
+@dataclass(frozen=True)
+class RouteOverrideSnapshot:
+    """One route-override input read whose bytes can be shared by parsing and provenance."""
+
+    path: Path | None
+    source_bytes: bytes | None
+    reason: str | None = None
+
+    @property
+    def sha256(self) -> str | None:
+        """Return the digest derived from the exact immutable source bytes."""
+        if self.source_bytes is None:
+            return None
+        return hashlib.sha256(self.source_bytes).hexdigest()
+
+
 class _ScenarioValidationMapping(dict[str, Any]):
     """Expanded scenario mapping carrying its manifest source internally."""
 
@@ -1464,9 +1480,37 @@ def select_scenario(
     return scenarios[0]
 
 
-@lru_cache(maxsize=256)
 def _load_map_definition(map_path: str, geometry_contract: str = "legacy") -> MapDefinition | None:
-    """Load and convert a map definition, caching by absolute path and geometry contract.
+    """Load a map from one byte snapshot and cache by its content identity.
+
+    Reading the file before consulting the cache prevents a pathname hit from
+    returning geometry parsed from older bytes. SVG parsing receives this same
+    snapshot, so the reported digest identifies the exact content consumed.
+
+    Returns:
+        The map definition parsed from the byte snapshot, or ``None`` when the
+        file cannot be read or its format is unsupported.
+    """
+    path = Path(map_path)
+    try:
+        source_bytes = path.read_bytes()
+    except OSError:
+        logger.warning("Scenario map file not found or unreadable: {}", path)
+        return None
+    source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+    return _load_map_definition_from_snapshot(
+        str(path), geometry_contract, source_bytes, source_sha256
+    )
+
+
+@lru_cache(maxsize=256)
+def _load_map_definition_from_snapshot(
+    map_path: str,
+    geometry_contract: str,
+    source_bytes: bytes,
+    source_sha256: str,
+) -> MapDefinition | None:
+    """Load a map definition, caching by path, geometry, and exact source bytes.
 
     The cache size is set to 256 to accommodate all unique maps across typical
     multi-scenario SAC training runs. ``classic_interactions.yaml`` alone
@@ -1492,30 +1536,40 @@ def _load_map_definition(map_path: str, geometry_contract: str = "legacy") -> Ma
         )
 
     path = Path(map_path)
-    if not path.exists():
-        logger.warning("Scenario map file not found: {}", path)
-        return None
     if path.suffix.lower() == ".svg":
-        return convert_map(str(path), geometry_contract=geometry_contract)
+        map_definition = convert_map(
+            str(path), geometry_contract=geometry_contract, svg_bytes=source_bytes
+        )
+        if map_definition is not None:
+            map_definition._consumed_map_sha256 = source_sha256
+        return map_definition
     if path.suffix.lower() in {".json", ".yaml", ".yml"}:
         if geometry_contract != GEOMETRY_CONTRACT_LEGACY:
             raise ValueError(
                 f"geometry_contract {geometry_contract!r} is only supported for SVG maps; "
                 f"map {map_path!r} is {path.suffix.lower()} and uses the legacy map format."
             )
-        data = _load_yaml_documents(path)
+        data = yaml.safe_load(source_bytes) or {}
         if not isinstance(data, dict):
             logger.warning("Map definition '{}' must contain a mapping.", path)
             return None
-        return serialize_map(data)
+        map_definition = serialize_map(data)
+        map_definition._consumed_map_sha256 = source_sha256
+        return map_definition
     logger.warning("Unsupported map extension '{}' for scenario maps", path.suffix)
     return None
+
+
+# Preserve the small cache-inspection surface used by tests and diagnostics.
+_load_map_definition.cache_clear = _load_map_definition_from_snapshot.cache_clear  # type: ignore[attr-defined]
+_load_map_definition.cache_info = _load_map_definition_from_snapshot.cache_info  # type: ignore[attr-defined]
 
 
 def build_robot_config_from_scenario(
     scenario: Mapping[str, Any],
     *,
     scenario_path: Path,
+    route_override_snapshot: RouteOverrideSnapshot | None = None,
 ) -> RobotSimulationConfig:
     """Create a ``RobotSimulationConfig`` derived from a scenario definition.
 
@@ -1525,6 +1579,8 @@ def build_robot_config_from_scenario(
         scenario_path: Path to the scenario YAML file, not its containing directory.
             Relative map and route-override references are resolved from
             ``scenario_path.parent``.
+        route_override_snapshot: Optional exact route bytes captured by an episode
+            identity boundary and shared with route parsing.
 
     Returns:
         RobotSimulationConfig: Config populated with overrides and map pool.
@@ -1543,7 +1599,12 @@ def build_robot_config_from_scenario(
     )
     _apply_map_pool(config, scenario, scenario_path)
     _apply_generated_replay_runtime(config, scenario.get("generated_replay"))
-    _apply_route_overrides(config, scenario.get("route_overrides_file"), scenario_path)
+    _apply_route_overrides(
+        config,
+        scenario.get("route_overrides_file"),
+        scenario_path,
+        route_override_snapshot=route_override_snapshot,
+    )
     _apply_single_pedestrian_overrides(
         config,
         scenario.get("single_pedestrians"),
@@ -2764,7 +2825,7 @@ def _apply_map_pool(
     config.map_id = map_name
 
 
-def _resolve_route_overrides_path(path_value: str, *, scenario_path: Path) -> Path:
+def resolve_route_override_path(path_value: str, *, scenario_path: Path) -> Path:
     """Resolve a route override file path relative to scenario YAML.
 
     Returns:
@@ -2772,8 +2833,41 @@ def _resolve_route_overrides_path(path_value: str, *, scenario_path: Path) -> Pa
     """
     candidate = Path(path_value)
     if not candidate.is_absolute():
-        candidate = (scenario_path.parent / candidate).resolve()
-    return candidate
+        candidate = scenario_path.parent / candidate
+    return candidate.resolve(strict=False)
+
+
+def capture_route_override_snapshot(
+    scenario: Mapping[str, Any], *, scenario_path: str | Path
+) -> RouteOverrideSnapshot:
+    """Read route override bytes once for shared parsing and episode identity.
+
+    Returns:
+        A snapshot with exact source bytes and digest, or an unavailable snapshot
+        carrying a reason when the route input cannot be resolved or read.
+    """
+    reference = scenario.get("route_overrides_file")
+    if not isinstance(reference, str) or not reference.strip():
+        return RouteOverrideSnapshot(
+            path=None,
+            source_bytes=None,
+            reason="route_overrides_not_declared",
+        )
+    try:
+        path = resolve_route_override_path(
+            reference, scenario_path=Path(scenario_path).expanduser().resolve()
+        ).resolve(strict=True)
+        source_bytes = path.read_bytes()
+    except (OSError, RuntimeError, ValueError):
+        return RouteOverrideSnapshot(
+            path=None,
+            source_bytes=None,
+            reason="route_overrides_unavailable",
+        )
+    return RouteOverrideSnapshot(
+        path=path,
+        source_bytes=source_bytes,
+    )
 
 
 def _route_zone_from_map(
@@ -2886,13 +2980,15 @@ def apply_route_overrides(
     map_def.__post_init__()
 
 
-def _load_route_override_payload(route_overrides_path: Path) -> Mapping[str, Any]:
-    """Load route override payload from YAML artifact file.
+def _load_route_override_payload(
+    route_overrides_path: Path, *, source_bytes: bytes
+) -> Mapping[str, Any]:
+    """Parse route override YAML from the exact bytes captured for this input.
 
     Returns:
         Mapping[str, Any]: Payload containing robot_routes/ped_routes lists.
     """
-    data = yaml.safe_load(route_overrides_path.read_text(encoding="utf-8")) or {}
+    data = yaml.safe_load(source_bytes.decode("utf-8")) or {}
     if not isinstance(data, Mapping):
         raise ValueError(f"Route override file must contain a mapping: {route_overrides_path}")
     if "route_payload" in data:
@@ -2907,6 +3003,8 @@ def _apply_route_overrides(
     config: RobotSimulationConfig,
     route_overrides_file: Any,
     scenario_path: Path,
+    *,
+    route_override_snapshot: RouteOverrideSnapshot | None = None,
 ) -> None:
     """Apply route overrides artifact to the active scenario map."""
     if route_overrides_file is None:
@@ -2915,16 +3013,26 @@ def _apply_route_overrides(
         raise ValueError("route_overrides_file must be a non-empty string path")
     if not getattr(config, "map_pool", None) or not config.map_pool.map_defs:
         raise ValueError("route_overrides_file provided but no map_pool is loaded")
-    route_overrides_path = _resolve_route_overrides_path(
+    route_overrides_path = resolve_route_override_path(
         route_overrides_file, scenario_path=scenario_path
     )
-    if not route_overrides_path.exists():
-        raise ValueError(f"route_overrides_file does not exist: {route_overrides_path}")
+    snapshot = route_override_snapshot or capture_route_override_snapshot(
+        {"route_overrides_file": route_overrides_file}, scenario_path=scenario_path
+    )
+    if snapshot.path is None or snapshot.source_bytes is None or snapshot.sha256 is None:
+        reason = snapshot.reason or "route override snapshot unavailable"
+        raise ValueError(f"Cannot apply route override input: {reason}")
+    if snapshot.path != route_overrides_path:
+        raise ValueError(
+            "route_override_snapshot path does not match the scenario route override path: "
+            f"{snapshot.path} != {route_overrides_path}"
+        )
     map_name, map_def = next(iter(config.map_pool.map_defs.items()))
     map_copy = deepcopy(map_def)
-    payload = _load_route_override_payload(route_overrides_path)
+    payload = _load_route_override_payload(route_overrides_path, source_bytes=snapshot.source_bytes)
     apply_route_overrides(map_copy, payload)
     config.map_pool.map_defs[map_name] = map_copy
+    config._consumed_route_overrides_sha256 = snapshot.sha256
 
 
 def map_cache_info() -> dict[str, int]:

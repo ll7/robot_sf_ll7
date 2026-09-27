@@ -10,7 +10,10 @@ from loguru import logger
 from robot_sf.benchmark.run_config_provenance import metric_affecting_run_config
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
-from robot_sf.training.scenario_loader import build_robot_config_from_scenario
+from robot_sf.training.scenario_loader import (
+    RouteOverrideSnapshot,
+    build_robot_config_from_scenario,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -22,13 +25,18 @@ def build_env_config(
     scenario: dict[str, Any],
     *,
     scenario_path: Path,
+    route_override_snapshot: RouteOverrideSnapshot | None = None,
 ) -> RobotSimulationConfig:
     """Build the benchmark environment config for one scenario.
 
     Returns:
         RobotSimulationConfig: Config with SocNav structured observations and grid enabled.
     """
-    config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+    config = build_robot_config_from_scenario(
+        scenario,
+        scenario_path=scenario_path,
+        route_override_snapshot=route_override_snapshot,
+    )
     config.observation_mode = ObservationMode.SOCNAV_STRUCT
     config.use_occupancy_grid = True
     config.include_grid_in_observation = True

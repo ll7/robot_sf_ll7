@@ -150,7 +150,13 @@ class SvgMapConverter:
     _INDEX_FALLBACK_ZONE_EDGE: float = 0.1
     _CURVE_MAX_STEP: float = 0.75
 
-    def __init__(self, svg_file: str, *, geometry_contract: str = GEOMETRY_CONTRACT_LEGACY):
+    def __init__(
+        self,
+        svg_file: str,
+        *,
+        geometry_contract: str = GEOMETRY_CONTRACT_LEGACY,
+        svg_bytes: bytes | None = None,
+    ):
         """Initialize the SVG map converter and perform full parsing.
 
         Loads the SVG file, extracts all labeled elements, and constructs the
@@ -162,6 +168,8 @@ class SvgMapConverter:
                 transform-ignoring coordinates exactly. ``"corrected"`` applies
                 nested ancestor ``translate(...)`` transforms and fails closed
                 on any other transform class (issue #8314).
+            svg_bytes: Optional immutable content snapshot. When supplied, this
+                exact byte string is parsed instead of reopening ``svg_file``.
 
         Raises:
             FileNotFoundError: If svg_file does not exist.
@@ -177,6 +185,7 @@ class SvgMapConverter:
             )
         self.svg_file_str = svg_file
         self.geometry_contract = geometry_contract
+        self._svg_bytes = svg_bytes
         self._load_svg_root()
 
         self._get_svg_info()
@@ -196,8 +205,11 @@ class SvgMapConverter:
 
         # Parse the SVG file with actionable error handling
         try:
-            svg_tree = ET.parse(self.svg_file_str)
-            self.svg_root = svg_tree.getroot()
+            if self._svg_bytes is None:
+                svg_tree = ET.parse(self.svg_file_str)
+                self.svg_root = svg_tree.getroot()
+            else:
+                self.svg_root = ET.fromstring(self._svg_bytes)
         except FileNotFoundError:
             raise_fatal_with_remedy(
                 f"Map file not found: {self.svg_file_str}",
@@ -1934,7 +1946,10 @@ class SvgMapConverter:
 
 
 def convert_map(
-    svg_file: str, *, geometry_contract: str = GEOMETRY_CONTRACT_LEGACY
+    svg_file: str,
+    *,
+    geometry_contract: str = GEOMETRY_CONTRACT_LEGACY,
+    svg_bytes: bytes | None = None,
 ) -> MapDefinition | None:
     """Create a MapDefinition object from an SVG file.
 
@@ -1948,6 +1963,8 @@ def convert_map(
             transform-ignoring coordinates exactly. ``"corrected"`` applies
             nested ancestor ``translate(...)`` transforms and fails closed on
             any other transform class (issue #8314).
+        svg_bytes: Optional immutable content snapshot parsed instead of reopening
+            ``svg_file``.
 
     Returns:
         MapDefinition object on successful conversion, or None if parsing fails
@@ -1967,7 +1984,9 @@ def convert_map(
     logger.debug(f'Converting SVG map "{svg_file}" to MapDefinition object.')
 
     try:
-        converter = SvgMapConverter(svg_file, geometry_contract=geometry_contract)
+        converter = SvgMapConverter(
+            svg_file, geometry_contract=geometry_contract, svg_bytes=svg_bytes
+        )
         if not isinstance(converter.map_definition, MapDefinition):
             raise TypeError(
                 f"SVG map converter produced unexpected type: {type(converter.map_definition)}",

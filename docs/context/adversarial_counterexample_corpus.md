@@ -1,0 +1,380 @@
+# Adversarial counterexample corpus
+
+Current contract: [issue #9652](https://github.com/ll7/robot_sf_ll7/issues/9652). The
+versioned corpus API and CLI are the implementation surface for the planned #9653 loop; the
+initial fixture is the persisted [#9645 bounded pilot](https://github.com/ll7/robot_sf_ll7/issues/9645)
+and its historical #1501 case, whose replay projections match but direct input binding is unknown.
+
+The versioned corpus in `robot_sf.adversarial.counterexample_corpus` stores
+admitted challenge cases, search-run provenance, admission attempts, and planner
+observations. A case remains in the corpus after another planner solves it.
+Planner status is computed from the retained observations for a selected planner
+and configuration; no stored discovery or failure record is rewritten.
+
+## Initialize and import the bounded pilot
+
+The following command uses the small checked-in #9645 test/evidence fixture. It
+exercises the import path; it is not the durable output of the bounded pilot.
+The fixture contains a zero-discovery search result and a separate
+historical #1501 collision with two matching replay projections under one
+current revision.
+The importer records the pilot's 64 completed candidates and explicit zero
+discoveries, then applies the admission checks to the independently replayed
+historical case. It does not treat the pilot's successful candidates as newly
+discovered counterexamples.
+
+```bash
+uv run python scripts/tools/manage_adversarial_counterexample_corpus.py init \
+  --corpus output/adversarial-corpus/corpus.json
+
+uv run python scripts/tools/manage_adversarial_counterexample_corpus.py import-9645 \
+  --payload tests/fixtures/adversarial_counterexample_corpus/issue_9645/payload \
+  --corpus output/adversarial-corpus/corpus.json \
+  --corpus-root output/adversarial-corpus
+```
+
+Rejected admission attempts are persisted in the corpus and cause the import
+command to exit nonzero. The importer binds both current replay JSONL files,
+their provenance, the scenario and route inputs, resolved map bytes and map registry,
+the archived source record,
+the historical search source snapshots, and the #9645 accounting packet. It
+checks the packet's outer file inventory and checksum sidecar, compares the
+source-hash receipt with run metadata, and verifies each consumed payload file
+before admission. The corpus retains the outer manifest and checksum sidecar
+digests alongside the copied accounting evidence. Later corpus validation
+recomputes the stored search-run record from the copied summary, metadata,
+candidate table, row-status receipt, and manifests. This keeps the pilot's
+explicit zero-discovery and zero-admission counts bound to their source packet.
+
+The #1501 original episode and search manifest were not archived. Its two
+regenerated rows and source sidecars have distinct run IDs, matching event and
+metric projections, and matching target/replay revisions. However, those rows
+predate direct runtime binding to the materialized scenario, route, and map
+bytes. The corpus labels their input binding `unknown_historical`; their planner
+status therefore remains `unknown`, even though the retained projections and
+sidecar custody verify. The persisted #9645 packet rewrites local paths in its
+bundled replay artifacts, so each replay receipt keeps the source digest before
+path normalization separate from the normalized bundle digest. The
+normalization receipt pins the allowed local-path rewrites.
+
+Dynamic feasibility for this case remains `admissible_feasibility_unknown`.
+The current `scenario_cert.v1` result is a static route certificate, not proof
+that the dynamic task is feasible. The #9656 mined rows are not admitted by the
+#9645 importer. Use the historical candidate importer below to retain their
+source aliases and provenance without treating mismatched, unavailable, or
+unattempted replays as verified cases.
+
+An affirmative feasibility verdict requires an
+`adversarial-case-admissibility-evidence.v1` receipt bound to the case ID,
+effective scenario digest, verdict, and a planner evaluation ID. That evaluation
+must reference a verified, successful replay at the admitted source revision;
+static certification and a target-planner collision replay do not establish
+dynamic feasibility. The case's selected replay projection must also match each
+verified replay artifact, and the target planner's configuration snapshot must
+match the configuration recorded in its replay episode.
+
+## Import historical #9656 candidates
+
+The promoted #9656 artifact at source head
+`58b51c0419e6052e5c75eb3059e2b53205d8276d` records materializer revision
+`dc9e8f6fdebb39da7c4450d2dcc1d5e9b991dfc0`, zero exact replay matches, and
+current replay statuses of four `unavailable_execution_evidence`, five
+`unavailable_model_artifact`, and 27 `not_attempted`. The older source summary
+still records the four attempted rows as `mismatch_different_revision`; that is
+their historical attempt result, not current replay availability. The promoted
+bundle contains only the summary, report, and current no-replay manifest. It does
+not contain the materialized case files, planner configurations, scenario
+matrices, or source episode bytes required by the candidate importer. The
+checked-in exact-packet fixture therefore verifies these counts and confirms
+that import stops without changing the corpus. Do not use ignored output or
+private rematerializations to fill this gap.
+
+The #9656 evidence bundle stores the digest-bound hard-case summary. Its
+materialized candidate directory is produced by the materializer command
+recorded in the #9656 report; pass that directory separately because its replay
+inputs are local generated artifacts. Set `ISSUE9656_CAMPAIGN_ROOT` to the
+extracted release bundle's `payload` directory. The importer rechecks each
+episode-file and raw-row digest, binds materialized source revision and planner
+identity to the summary and pinned episode row, and verifies campaign matrix and
+map bytes against the source Git revision. Planner identity comes from the
+materializer's `algorithm_metadata.config_hash`; the distinct
+`scenario_params.algo_config_hash` is retained separately. A source metadata
+conflict remains a blocked candidate; missing or mismatched historical map
+provenance fails closed.
+It then verifies the evidence bundle, all 36 source aliases, materialized case
+and input digests, replay-status accounting, and criticality anomaly totals. It copies the summary,
+source manifests, source case records, original input bytes, normalized replay
+inputs, referenced map files, and the complete evidence payload into corpus custody.
+
+```bash
+ISSUE9656_MATERIALIZED_ROOT=output/issue9656_hard_case_mining/materialized_final_provenance_fix
+uv run python scripts/tools/manage_adversarial_counterexample_corpus.py import-9656-candidates \
+  --summary docs/context/evidence/issue_9656_hard_case_mining_2026-09-24/payload/summary.json \
+  --evidence-root docs/context/evidence/issue_9656_hard_case_mining_2026-09-24 \
+  --campaign-root "$ISSUE9656_CAMPAIGN_ROOT" \
+  --materialized-root "$ISSUE9656_MATERIALIZED_ROOT" \
+  --corpus output/adversarial-corpus/corpus.json \
+  --corpus-root output/adversarial-corpus
+```
+
+Each candidate keeps its original `case-<16 hex>` source alias and receives a
+separate content-derived candidate ID. The 27 `not_attempted` rows stay
+`pending_exact_replay`, the five `unavailable_model_artifact` rows stay blocked
+on the missing model when source identity is verified, and the four
+historical `mismatch_different_revision` attempts stay blocked on replay parity
+when their underlying campaign and materialization inputs are available. The
+current promoted snapshot classifies those four rows as
+`unavailable_execution_evidence`; it does not qualify them as matches. A row whose
+materialized source identity conflicts with its checksum-pinned episode record
+is retained as `blocked_source_provenance_mismatch`, while its original replay
+status remains unchanged. Their source outcomes, 17 collision-event metric
+anomalies, and the 12 failed replay setup jobs remain visible in the candidate
+records and import receipt. These rows do not enter `cases`, planner status,
+admission attempts, or exported regression slices. They become admitted cases
+only after the existing exact-replay, input-binding, admissibility, and duplicate
+checks pass.
+
+Validation of current-schema #9656 imports requires the corpus root. Saving or
+loading the corpus rechecks each imported replay status and its original status
+counters against the digest-pinned summary. A mismatch row cannot be relabelled
+as `not_attempted` by changing its candidate and derived planner status. Source
+identity binding status is recomputed from the retained materialized case and
+checked against the import receipt; new import identities also digest-pin each
+materialized source-case digest, binding status, and issue list. Failure attempts,
+failed setup counts, criticality anomalies, feasibility and planner-status counts,
+evidence tier, and claim boundary must match the pinned summary and imported
+candidate records. An admitted candidate retains its original pending
+classification and import counters.
+
+Legacy v1 #9656 candidate rows remain readable, including rows retained with
+their original blocked status. Because those identities have no independent
+source-materialization byte receipt, loading a non-admitted v1 row records its
+prior status and source-binding claim under `legacy_unpinned_source_evidence`,
+then marks it `blocked_source_provenance_mismatch` with
+`source_identity_binding_status: legacy_unpinned`. This prevents an old or
+re-keyed v1 identity from carrying a verified/pending claim into current use;
+re-import the source bundle with the current importer to obtain current-schema
+receipts. Already admitted cases remain governed by their persisted case and
+exact-replay admission evidence. An admitted legacy candidate is preserved only
+when source identity is recomputed from its retained summary and materialized
+case, retained source artifacts validate, its promotion attempt recomputes to a
+successful receipt whose decision matches its case link and retained promotion
+evidence, and the promoted case carries both the matching candidate binding and
+candidate-promotion evidence. The candidate's replay scenario, planner
+configuration, and map bytes are rechecked against the promoted case.
+An unrelated valid case cannot supply promotion evidence for a downgraded
+candidate.
+
+Each imported candidate explicitly records `feasibility.verdict: unknown`; the
+historical benchmark evidence does not establish dynamic task feasibility. Its
+`planner_status_at_import` is also `unknown` with zero valid current-revision
+observations and a reason tied to the replay or source-provenance state. In
+particular, a different-revision replay is neither a current solved result nor a
+current unsolved result. These candidate-level fields preserve the evidence
+state without adding unadmitted candidates to the corpus's recomputed planner
+status.
+
+The imported #9656 source episode JSONL is retained as a path and digest reference; its raw bytes
+are not copied from campaign output into the corpus. A file that remains only in ignored local
+output is not admission evidence. Each candidate records this custody boundary explicitly and
+requires a new replay at the exact current target revision before admission.
+
+## Promote a pending candidate after exact replay
+
+`import-9656-candidates` never runs a simulator and leaves `not_attempted` rows in
+`pending_exact_replay`. Once a candidate has been replayed at the current target revision,
+prepare a complete case record with an explicit admissibility verdict, planner identity,
+discovery objective, source binding, and exact replay receipt. Store the case's scenario,
+route, map, and one-row replay artifacts beneath
+`historical_candidates/<candidate-id>/`; the case record paths must point into that candidate's
+stored directory. Promotion rechecks the source summary and source row, candidate materialization
+digests, scenario and planner configuration correspondence, case admissibility, replay receipt,
+and duplicate identity. Any changed candidate input or metadata is rejected and the candidate stays
+pending. Promotion records an admission attempt and keeps the original #9656 candidate row as
+history. The promoted case also records that the historical source episode bytes were not durably
+archived and that admission relied on the exact-target replay receipt. Promotion does not execute or
+independently authenticate a replay.
+
+The public `create_case_admission_replay_receipt` helper binds an existing one-row episode JSONL
+to the case inputs and selected event/metric projection. Its `artifact_path` is relative to the
+corpus root. The helper independently resolves the exact `HEAD` of the checkout that provides the
+corpus module and requires the source checkout to be clean and the replay's source revision to
+match `HEAD`. An optional `target_revision` argument is only an expected-value check; it cannot set
+or override the target. If checkout `HEAD` is unavailable, the source checkout is dirty, or the
+replay was produced by another revision, receipt creation and case admission reject the evidence.
+The helper does not run a simulator. Corpus
+validation later preserves the recorded admission-time claim and does not compare it with a newer
+checkout `HEAD`.
+
+Admission receipts use v2 and bind their replay inventory one-to-one to the stored artifact
+receipts by path, digest, run ID, and selected event identity. Repeated artifacts require distinct
+run IDs and paths. Historical v1 admission receipts remain readable with their original claim
+boundary; they are not silently upgraded to direct input-bound evidence.
+
+```python
+from robot_sf.adversarial.counterexample_corpus import (
+    create_case_admission_replay_receipt,
+    load_corpus,
+)
+
+corpus_root = "output/adversarial-corpus"
+corpus = load_corpus(f"{corpus_root}/corpus.json")
+case = reviewed_case_record  # full record with inputs staged under the candidate directory
+case["replay_receipt"] = create_case_admission_replay_receipt(
+    replay_observation,
+    case,
+    artifact_path="historical_candidates/<candidate-id>/replay_output/current.jsonl",
+    corpus_root=corpus_root,
+)
+```
+
+Write that full case record to `candidate-case.json`, then promote it with the CLI:
+
+```bash
+uv run python scripts/tools/manage_adversarial_counterexample_corpus.py promote-candidate \
+  --candidate-id <candidate-id> \
+  --case candidate-case.json \
+  --corpus output/adversarial-corpus/corpus.json \
+  --corpus-root output/adversarial-corpus \
+  --output output/adversarial-corpus/promotion-receipt.json
+```
+
+For a case that did not originate from a #9656 row, use `admit-case` with a complete case record
+and an `--artifact-root` directory below the corpus root that contains every referenced scenario,
+route, map, and replay artifact. Both paths apply the same fail-closed case validator and duplicate
+policy. Admission rereads the digest-pinned scenario bytes and reruns the canonical row/schema,
+manifest-metadata, and strict unknown-field checks; a caller-supplied `structural_validation`
+receipt is not sufficient by itself. Case manifests must be self-contained: includes, selection,
+overrides, and map search paths are rejected so the runtime row stays within the pinned inputs.
+The supported v1 admission criticality predicate requires the exact target-planner replay to show
+noncompletion with a canonical collision or timeout outcome, consistent termination reason, and
+non-contradictory selected metrics. Discovery criticality metadata alone and successful replay rows
+do not qualify. Other metric extremes require a separately versioned objective and replay-bound
+threshold contract before they can be admitted.
+
+## Record an evaluation and recompute status
+
+An evaluation JSON object can be appended with `record-evaluation`. Complete
+observations require canonical outcome flags, a replay episode digest, metrics,
+planner/config identity, and explicit execution/readiness/availability state.
+They also require a `replay_receipt` that points to a one-record episode JSONL
+artifact stored under the directory containing `corpus.json`. The public
+`create_planner_replay_receipt` helper builds the receipt from that stored file;
+it checks the case and seed, planner/config identity, source revision, outcomes,
+selected metrics, exact event identities, raw episode status, and the event
+ledger's `invalid_run` flag. V2 receipts also bind a unique run ID, the behavior-affecting scenario
+identity, exact route override bytes, and map plus registry bytes captured around environment
+configuration. Route overrides are parsed from the same immutable byte snapshot whose digest is
+recorded; the episode identity is reconciled against the digest attached to the applied config.
+Map parsing follows the same snapshot-and-reconcile rule. The corpus separately retains the
+scenario file digest. If behavior-affecting inputs cannot be bound to the bytes consumed during
+configuration, the row is marked unavailable for exact case binding. A
+complete evaluation requires the same full Git
+commit identifier in the evaluation, episode, event ledger, and receipt; a
+placeholder such as `unknown` is insufficient. Both append and status
+recomputation recheck the artifact checksum and projection. A changed or missing
+artifact makes the observation `unknown`; a digest alone is not accepted as
+episode evidence. The receipt also pins the case's materialized scenario and
+route input digests and compares the episode's captured identity against the case's scenario
+semantics and exact route, map, and registry bytes. Rehashing changed scenario semantics or
+route/map bytes does not make a stale episode row match. The raw episode status must match the
+canonical `status_from_termination_reason` result for a supported termination reason;
+unsupported or contradictory status/reason pairs remain `unknown`.
+
+Build the receipt after placing the one-row JSONL artifact below the corpus root:
+
+```python
+from robot_sf.adversarial.counterexample_corpus import (
+    create_planner_replay_receipt,
+    load_corpus,
+)
+
+corpus_root = "output/adversarial-corpus"
+corpus = load_corpus(f"{corpus_root}/corpus.json")
+case = next(row for row in corpus["cases"] if row["case_id"] == observation["case_id"])
+receipt = create_planner_replay_receipt(
+    observation,
+    case,
+    artifact_path="replay_artifacts/planner-run.jsonl",
+    corpus_root=corpus_root,
+)
+observation["episode_sha256"] = receipt["episode_sha256"]
+observation["replay_receipt"] = receipt
+```
+
+The receipt proves that the retained artifact agrees with the observation. It
+does not rerun the simulator or independently authenticate who produced the
+artifact. The source revision and case input identity remain explicit, and the
+case's admission receipt records its own replay-verification boundary. Native
+execution is eligible with native readiness; declared adapter and mixed
+execution are eligible with adapter readiness. Every complete evaluation must
+also be available and free of fallback or degraded markers. Failed, partial,
+missing, and unknown observations can be retained with an explicit
+`evidence_status` and a reason; they contribute `unknown` status rather than
+being dropped or counted as a solve. Episodes with invalid/error status,
+`termination_reason=error`, or `invalid_run=true`, and receipts that do not bind
+raw status plus `invalid_run`, remain `unknown` rather than being counted as
+planner-specific failures. Older receipts missing those bindings remain
+loadable but recompute as `unknown`; historical rows with explicit
+`unknown_historical` input binding are visible but never count as solved or unsolved planner
+evidence. Dynamic feasibility remains a separate case-level verdict and is not inferred from
+planner status.
+Legacy complete evaluation rows without a replay receipt remain loadable and
+visible, but recomputation reports them as `unknown`. New complete rows cannot
+be appended without a receipt.
+
+```bash
+uv run python scripts/tools/manage_adversarial_counterexample_corpus.py record-evaluation \
+  --corpus output/adversarial-corpus/corpus.json \
+  --observation evaluation.json
+
+uv run python scripts/tools/manage_adversarial_counterexample_corpus.py status \
+  --corpus output/adversarial-corpus/corpus.json \
+  --planner-id goal \
+  --planner-config-identity 44136fa355b3678a
+```
+
+Status is specific to the exact planner ID and configuration identity:
+
+- `solved`: every complete, eligible observation for the pair succeeds and no
+  incomplete, fallback, degraded, or contradictory row is present;
+- `unsolved`: every complete, eligible observation has the challenge outcome;
+- `mixed`: complete eligible observations disagree;
+- `unknown`: no complete eligible observation exists, or any observation is
+  incomplete, degraded, fallback, unavailable, or contradictory.
+
+## Export a replay slice
+
+The slice contains a canonical scenario matrix, copied route overrides and map bytes,
+a map registry when the scenario uses `map_id`, a planner configuration snapshot per case,
+a checksum manifest, and a replay command for each case. Export refuses to overwrite an existing
+directory and checks the stored scenario/route/map bytes against their recorded digests and
+map-aware effective scenario identity. Each case manifest preserves its source case ID, records
+`replay_input_binding_status` (including `unknown_historical` where runtime input hashes were not
+captured), and includes an explicit identity mapping from the source effective-scenario
+hash to the exported hash after `route_overrides_file` is normalized to the
+slice's `routes/` path. The exporter recomputes both identities and verifies the
+exported matrix against the mapping.
+
+```bash
+uv run python scripts/tools/manage_adversarial_counterexample_corpus.py export-slice \
+  --corpus output/adversarial-corpus/corpus.json \
+  --corpus-root output/adversarial-corpus \
+  --output-dir output/adversarial-corpus/regression-slice
+```
+
+From the exported directory, set `PLANNER_CONFIG_PATH` to the selected case's
+`planner_config_path` from the generated manifest, then use a listed command:
+
+```bash
+uv run robot_sf_bench run --matrix replay_matrix.yaml \
+  --out results/<case-id>.jsonl --algo goal \
+  --algo-config "$PLANNER_CONFIG_PATH" \
+  --scenario-id crossing_ttc_template_adversarial_0008 --no-video
+```
+
+The slice is a set of replay inputs, not evidence that a new execution matches
+the admission receipt. Each new result must be checked and appended as another
+planner observation. The corpus does not provide a mathematical feasibility
+oracle, merge near-duplicates, or establish search-space coverage or real-world
+safety.

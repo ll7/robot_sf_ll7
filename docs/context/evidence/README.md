@@ -184,7 +184,9 @@ for retention classes, preservation proof, and cleanup-eligibility workflows.
   ranking, paper-facing benchmark result, or safety result.
   `payload/metadata.json` declares the mixed conventions in `candidate_evaluations.csv`:
   `distance_to_human_min_m` is center-to-center distance, while `min_clearance_m` is
-  surface clearance after subtracting the robot and pedestrian radii.
+  surface clearance after subtracting the robot and pedestrian radii. Entries in
+  `distance_convention_by_column` override the scalar `distance_convention` for their named
+  columns; the scalar applies where no column override is listed.
 
 - `issue_6151_simulator_dependence_synthesis_2026-09-13/`: bounded negative synthesis for the
   #3207 validity-boundary parent. The only defensible verdict is `invalid_missing_evidence`:

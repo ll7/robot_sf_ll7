@@ -67,8 +67,8 @@
     "dynamic_task_feasibility": "unknown_without_reference_planner_success; scenario_cert.v1 demonstrates only a static route certificate",
     "historical_case_id": "issue_1501/failure_0002",
     "limitations": [
-      "Regenerated from the tracked archived candidate payload under current source revision, not from the absent historical raw episode file.",
-      "Two current-code runs match each other; the historical raw metrics were not tracked, so this is not a bitwise comparison to the 2026-05-28 execution."
+      "Regenerated from the tracked archived candidate payload at recorded source revision 58e516aa4f69ff3098bf518199f483006589758c, not from the absent historical raw episode file.",
+      "The two replays at the recorded regeneration revision match each other; this is not a replay at the current PR head and is not a bitwise comparison to the 2026-05-28 execution because historical raw metrics were not tracked."
     ],
     "planner": "goal",
     "planner_execution_mode": "native",
@@ -80,6 +80,7 @@
       "024ed6c8049019915d991a10dfa8b182f83f068ac397fda1cd1600c1c17f9133",
       "f84a03e8e42702256f28d319ed8b20ab27d395f9735576ea57e037d52a9d0592"
     ],
+    "replay_revision_scope": "Both replay files describe runs at regeneration_commit 58e516aa4f69ff3098bf518199f483006589758c; no replay was executed at the current PR head.",
     "replay_signature_sha256": "6e34dc5d810fecaea9921934fd6b386e4c21319a3e59d225538fb8b0cb818c00",
     "replays_identical": true,
     "scenario_seed": 320,

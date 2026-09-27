@@ -1,10 +1,10 @@
 {
   "schema_version": "evidence_bundle.v1",
-  "created_at_utc": "2026-09-24T11:32:38.462488Z",
+  "created_at_utc": "2026-09-27T00:29:07.482844Z",
   "bundle_name": "issue_9645_bounded_falsification_2026-09-24",
-  "source_root": "output/issue9645-evidence-stage",
-  "command": "time -p env LOGURU_LEVEL=ERROR uv run python scripts/tools/compare_adversarial_samplers.py --scenario-template configs/scenarios/templates/crossing_ttc.yaml --search-space configs/adversarial/issue_9645_pilot_space.v1.yaml --policy goal --objective constraints_first_lexicographic_v1 --budget 16 --seed 1101 --seed 2202 --sampler random --sampler optuna --require-certification --empirical --execution-context-label issue-9645-local-cpu-python3.12.3 --output-dir output/issue9645-pilot/results --out-json output/issue9645-pilot/comparison.json --out-md output/issue9645-pilot/comparison.md",
-  "commit": "58e516aa4f69ff3098bf518199f483006589758c",
+  "source_root": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload",
+  "command": "Clean-root reproduction of report_falsification_search.py using the checksum-bound comparison and four archived manifests; no search or simulation rerun.",
+  "commit": "8ba6abdfca95bc638b7cef768aa7621ab5aa8119",
   "claim_boundary": "diagnostic_only_not_benchmark_evidence",
   "policy": {
     "large_raw_artifacts": "excluded",
@@ -12,10 +12,40 @@
     "paper_or_benchmark_claim": "not_established_by_bundle_alone"
   },
   "totals": {
-    "file_count": 50,
-    "total_bytes": 1129041
+    "file_count": 57,
+    "total_bytes": 1416187
   },
   "files": [
+    {
+      "path": "archive/report_schema_v1/convergence_constraints_first_lexicographic_v1.png",
+      "size_bytes": 53149,
+      "sha256": "1ed3edb2685a799af0eaeb6f1829032c9b3e8d66c566cfeae7936cfbf38496d1",
+      "kind": "plots"
+    },
+    {
+      "path": "archive/report_schema_v1/convergence_constraints_first_lexicographic_v1.png.review.json",
+      "size_bytes": 394,
+      "sha256": "434545f51150ccdffd87f858182b2b9755b616e4ac7bee796b7b4c012724b456",
+      "kind": "misc"
+    },
+    {
+      "path": "archive/report_schema_v1/convergence_report.json",
+      "size_bytes": 133101,
+      "sha256": "3bc5b4f56f8161b395ceec01b635b66ee56b44c8409f2bc6fe8e605185eb7818",
+      "kind": "reports"
+    },
+    {
+      "path": "archive/report_schema_v1/convergence_report.md",
+      "size_bytes": 4193,
+      "sha256": "0a6ce16639699e4c0e3a4e8cb6ee187a01180a2610aac93fab3b70e12c1391e3",
+      "kind": "reports"
+    },
+    {
+      "path": "archive/report_schema_v1/report_provenance.json",
+      "size_bytes": 1519,
+      "sha256": "3a03a1bd23eaa2e3d85476a2fb105828a3885ea1da5e7cad820e9d829986429c",
+      "kind": "reports"
+    },
     {
       "path": "best_so_far.csv",
       "size_bytes": 2694,
@@ -30,26 +60,32 @@
     },
     {
       "path": "convergence_constraints_first_lexicographic_v1.png",
-      "size_bytes": 53149,
-      "sha256": "1ed3edb2685a799af0eaeb6f1829032c9b3e8d66c566cfeae7936cfbf38496d1",
+      "size_bytes": 68442,
+      "sha256": "ff02f0984a4a34b848451d4e6310b52b82f5237a0e4c5c117b1ab623013461f5",
       "kind": "plots"
     },
     {
+      "path": "convergence_constraints_first_lexicographic_v1.png.review.json",
+      "size_bytes": 369,
+      "sha256": "54d5153d51650af4fcdf7d150726800c2afdc2a634b24c8583b4584b809a3e88",
+      "kind": "misc"
+    },
+    {
       "path": "convergence_report.json",
-      "size_bytes": 133101,
-      "sha256": "3bc5b4f56f8161b395ceec01b635b66ee56b44c8409f2bc6fe8e605185eb7818",
+      "size_bytes": 199926,
+      "sha256": "8a438c02e0a7352d79e093f74fc804eee3fcee1fd985259031592f1e5c8243ce",
       "kind": "reports"
     },
     {
       "path": "convergence_report.md",
-      "size_bytes": 4193,
-      "sha256": "0a6ce16639699e4c0e3a4e8cb6ee187a01180a2610aac93fab3b70e12c1391e3",
+      "size_bytes": 8838,
+      "sha256": "19627fb173a3d0dd518875a538fd1f7692b510700c40555e55e7a6a749bed115",
       "kind": "reports"
     },
     {
       "path": "evidence_synthesis.json",
-      "size_bytes": 3765,
-      "sha256": "eaf44ef19005fe6bf75723234525bf0bd51cdb8921e5c0e69ff0301159252f12",
+      "size_bytes": 4593,
+      "sha256": "c1d62e48cb68f83d91f2632bb968d395a6ec46a27e5fc34438fd883508a298ec",
       "kind": "misc"
     },
     {
@@ -137,21 +173,27 @@
       "kind": "misc"
     },
     {
+      "path": "pilot_report_manifest_path_map.v1.json",
+      "size_bytes": 1797,
+      "sha256": "692db3b44f12b1fd4d0d7ff506b8924e4009710b5062e71c30840ce74e4a8b28",
+      "kind": "reports"
+    },
+    {
       "path": "replay_validation.json",
-      "size_bytes": 3891,
-      "sha256": "acf56dbe0421391a4d786e74de4baebef75f6707472e13c324bdbdbaf7062f21",
+      "size_bytes": 4181,
+      "sha256": "5a1117636869bf18692dd6bef2eabdfe2816e1c19d17bc317c7e90a782e8731a",
       "kind": "misc"
     },
     {
       "path": "report.md",
-      "size_bytes": 7098,
-      "sha256": "ef1e14bba4cc46869510f342e326507b6712c5c0b323defa9a057955ed89e2f8",
+      "size_bytes": 8855,
+      "sha256": "efe23f0ce6d8f0b29eb6e20ba3f6dd58167b8799c929b9a7b20370e3cf71494d",
       "kind": "reports"
     },
     {
       "path": "report_provenance.json",
-      "size_bytes": 1519,
-      "sha256": "3a03a1bd23eaa2e3d85476a2fb105828a3885ea1da5e7cad820e9d829986429c",
+      "size_bytes": 3444,
+      "sha256": "d19ddbe7fe61715e80dcbd1a7c55943b0d18112d1ed34a18ed2e2465f43edd82",
       "kind": "reports"
     },
     {
@@ -312,8 +354,8 @@
     },
     {
       "path": "summary.json",
-      "size_bytes": 10735,
-      "sha256": "366ef1622e0c3df23f0357d605693316cbfb969edb3d44e9bb040b87fd7122c0",
+      "size_bytes": 11796,
+      "sha256": "8ec5762b72ac30d25e7cfb3d402749e3166bc7b248d458f16f8682fbfbaa50b0",
       "kind": "aggregates"
     }
   ]

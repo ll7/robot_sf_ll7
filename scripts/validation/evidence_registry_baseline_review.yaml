@@ -15,7 +15,11 @@ approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
 latest_reconciliation_issue: 9431
-latest_reviewed_date: 2026-09-23
+latest_reviewed_date: 2026-09-27
+latest_review_actor: Codex autonomous lead engineer, independently reviewed by a read-only Codex subagent under the user-directed task
+latest_evidence_tree_refresh_issue: 9645
+latest_evidence_tree_refresh_files_added: 136
+latest_evidence_tree_refresh_sha256: 35f8de8cc9bf539eecc54fd0315470b1d35c340be8aa07e38efcc682d69582e7
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
@@ -162,6 +166,20 @@ decision_summary: >-
 # docs/RELEASE.md bytes and is already current at this head. No
 # artifact_hash_mismatch was admitted to the machine baseline; the six
 # pre-existing hash_without_artifact_path findings remain unchanged.
+latest_refresh_review_addendum: >-
+  Evidence-tree refresh addendum (Issue #9645; 2026-09-27): the diagnostic falsification packet adds 136
+  tracked evidence files. The candidate registry projection remains 438
+  findings across 98 files, unchanged from the committed baseline, and strict CI still excludes zero active
+  findings. This review checked the retained 64 candidate episode records against producer digests, rebuilt
+  schema-v3 JSON/Markdown/PNG outputs byte-for-byte in a temporary root containing only tracked evidence
+  and required config files, and verified the bundle checksums. The finite search found no counterexample in
+  its 64 evaluations; criticality remains unknown for all candidates because severe-intrusion metrics are
+  absent. Historical Issue #1501 remains pending and unadmitted because its original input binding is
+  unknown, with empirical feasibility still unknown. The generated machine baseline now records the 2,563-file evidence tree at SHA-256
+  35f8de8cc9bf539eecc54fd0315470b1d35c340be8aa07e38efcc682d69582e7; its 438 findings across
+  98 files are unchanged from the prior baseline, and no new provenance finding is admitted.
+  This baseline refresh makes no planner-safety or feasibility claim. This addendum was reviewed by the Codex autonomous lead engineer and an independent read-only
+  Codex subagent under the current user-directed task; it is not a maintainer approval.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the

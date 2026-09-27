@@ -241,6 +241,7 @@ def test_build_registry_schema_and_audit_consistency():
         "unsafe_command",
         "historical_only",
         "superseded",
+        "not_in_approved_execution_scope",
     }
     for e in entries:
         if e["exclusion_reason"] is not None:
@@ -249,6 +250,29 @@ def test_build_registry_schema_and_audit_consistency():
         else:
             assert e["recurrence_eligible"]
             assert e["expected_outputs"], "eligible entries must declare explicit expected outputs"
+
+
+def test_issue_9645_render_is_inventoried_but_outside_approved_execution_scope():
+    registry, audit = reg.build_registry()
+    entry = next(
+        item
+        for item in registry["entries"]
+        if item["source_path"].endswith("pilot_comparison_render_provenance.json")
+    )
+
+    assert audit["eligible_count"] == 9
+    assert entry["inputs"][0]["path"] == "scripts/tools/compare_adversarial_samplers.py"
+    assert entry["expected_outputs"] == [
+        "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/"
+        "payload/pilot_comparison.md",
+        "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/"
+        "payload/pilot_comparison_render_provenance.json",
+    ]
+    assert entry["recurrence_eligible"] is False
+    assert entry["exclusion_reason"] == "not_in_approved_execution_scope"
+    assert any(
+        "approved nine-command execution scope" in note for note in entry["classification_notes"]
+    )
 
 
 def test_duplicate_command_identity_fails_closed(monkeypatch):

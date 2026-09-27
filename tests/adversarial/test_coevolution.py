@@ -1011,11 +1011,45 @@ def test_round_contract_rejects_a_minimum_of_one(tmp_path: Path) -> None:
         load_coevolution_config(config_path)
 
 
+def _write_optimizer_run_config(path: Path, request: RoundRequest) -> None:
+    """Write the canonical #9650 config shape for one frozen round."""
+    payload = {
+        "schema": "planner_optimizer_config.v1",
+        "run_id": request.run_id,
+        "baseline_candidate": "baseline-planner",
+        "candidate_registry": "candidate_registry.yaml",
+        "search": {
+            "trials_per_method": request.optimizer_trials_per_method,
+            "random_seed": request.optimizer_random_seed,
+            "tpe_seed": request.optimizer_tpe_seed,
+            "tpe_startup_trials": 1,
+            "parameters": [{"name": "max_linear_speed", "type": "float", "low": 1.0, "high": 3.0}],
+        },
+        "evaluation": {
+            "horizon": 12,
+            "dt": 0.1,
+            "workers": 1,
+            "benchmark_profile": "experimental",
+        },
+        "suites": {
+            name: {
+                "scenario_matrix": "scenarios.yaml",
+                "scenario_filter": ["fixture-scenario"],
+                "seeds": [101],
+            }
+            for name in ("train", "heldout")
+        },
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+
 def _optimizer_output_fixture(
     request: RoundRequest,
     *,
     planner_id: str,
     base_config: Path,
+    run_config_path: Path | None = None,
 ) -> dict[str, str]:
     """Write the file contract emitted by #9650 without running its evaluator."""
     output_dir = request.round_dir / "optimization"
@@ -1045,11 +1079,20 @@ def _optimizer_output_fixture(
         encoding="utf-8",
     )
     manifest_path = output_dir / "run_manifest.json"
+    optimizer_config_path = run_config_path or request.config.optimizer_config
     manifest_path.write_text(
         json.dumps(
             {
                 "schema": "planner_optimizer_run.v1",
                 "status": "complete",
+                "source_revision": request.source_revision,
+                "config_path": str(optimizer_config_path),
+                "config_sha256": hashlib.sha256(optimizer_config_path.read_bytes()).hexdigest(),
+                "budget": {
+                    "trials_per_method": request.optimizer_trials_per_method,
+                    "random_seed": request.optimizer_random_seed,
+                    "tpe_seed": request.optimizer_tpe_seed,
+                },
                 "selected": {
                     "candidate_name": planner_id,
                     "candidate_config_path": candidate_path.name,
@@ -1087,7 +1130,7 @@ def _search_request_fixture(tmp_path: Path, *, round_number: int) -> RoundReques
         encoding="utf-8",
     )
     round_dir = config.output_dir / f"round_{round_number:03d}"
-    return RoundRequest(
+    request = RoundRequest(
         run_id=config.run_id,
         round_number=round_number,
         round_dir=round_dir,
@@ -1103,6 +1146,8 @@ def _search_request_fixture(tmp_path: Path, *, round_number: int) -> RoundReques
         source_revision="fixture-revision",
         config=config,
     )
+    _write_optimizer_run_config(config.optimizer_config, request)
+    return request
 
 
 def test_prepare_falsification_search_uses_optimizer_candidate_and_preserves_prior_bytes(
@@ -1151,6 +1196,18 @@ def test_prepare_falsification_search_uses_optimizer_candidate_and_preserves_pri
         "config_sha256": hashlib.sha256(previous_bytes).hexdigest(),
     }
     assert provenance["selected_planner"]["planner_id"] == "planner-r2"
+    assert provenance["selected_planner"]["optimizer_run_config"] == {
+        "path": str(request.config.optimizer_config),
+        "sha256": hashlib.sha256(request.config.optimizer_config.read_bytes()).hexdigest(),
+    }
+    assert provenance["selected_planner"]["optimizer_run"] == {
+        "source_revision": request.source_revision,
+        "budget": {
+            "trials_per_method": request.optimizer_trials_per_method,
+            "random_seed": request.optimizer_random_seed,
+            "tpe_seed": request.optimizer_tpe_seed,
+        },
+    }
     assert (
         provenance["runtime_planner_config"]["sha256"]
         == hashlib.sha256(prepared.config.algo_config_path.read_bytes()).hexdigest()
@@ -1165,6 +1222,70 @@ def test_prepare_falsification_search_uses_optimizer_candidate_and_preserves_pri
         assert hashlib.sha256(artifact_path.read_bytes()).hexdigest() == artifact["sha256"]
 
 
+def test_prepare_falsification_search_records_round_derived_optimizer_config(
+    tmp_path: Path,
+) -> None:
+    request = _search_request_fixture(tmp_path, round_number=2)
+    base_config_path = tmp_path / "base-planner.yaml"
+    base_config_path.write_text("max_linear_speed: 1.5\n", encoding="utf-8")
+    round_config_path = request.round_dir / "optimization" / "round_optimizer.yaml"
+    round_config_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_optimizer_run_config(round_config_path, request)
+    selected_planner = _optimizer_output_fixture(
+        request,
+        planner_id="planner-r2",
+        base_config=base_config_path,
+        run_config_path=round_config_path,
+    )
+
+    prepared = prepare_falsification_search(request, selected_planner)
+
+    config_digest = hashlib.sha256(round_config_path.read_bytes()).hexdigest()
+    provenance = json.loads(
+        (request.round_dir / "falsification" / "planner_config_provenance.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert provenance["selected_planner"]["optimizer_run_config"] == {
+        "path": "round_002/optimization/round_optimizer.yaml",
+        "sha256": config_digest,
+    }
+    assert any(item["sha256"] == config_digest for item in prepared.artifacts)
+
+
+def test_prepare_falsification_search_resolves_canonical_repo_relative_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    request = _search_request_fixture(tmp_path, round_number=1)
+    base_config_path = tmp_path / "base-planner.yaml"
+    base_config_path.write_text("max_linear_speed: 1.5\n", encoding="utf-8")
+    relative_config_path = tmp_path / "tracked_optimizer.yaml"
+    _write_optimizer_run_config(relative_config_path, request)
+    optimizer_module = coevolution_module.import_module("scripts.validation.planner_optimizer")
+    monkeypatch.setattr(optimizer_module, "REPO_ROOT", tmp_path)
+    selected_planner = _optimizer_output_fixture(
+        request, planner_id="planner-r1", base_config=base_config_path
+    )
+    manifest_path = request.round_dir / "optimization" / "run_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["config_path"] = relative_config_path.name
+    manifest["config_sha256"] = hashlib.sha256(relative_config_path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
+
+    prepared = prepare_falsification_search(request, selected_planner)
+
+    provenance = json.loads(
+        (request.round_dir / "falsification" / "planner_config_provenance.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert provenance["selected_planner"]["optimizer_run_config"] == {
+        "path": str(relative_config_path),
+        "sha256": hashlib.sha256(relative_config_path.read_bytes()).hexdigest(),
+    }
+    assert prepared.config.algo_config_path.is_file()
+
+
 def test_prepare_falsification_search_rejects_optimizer_candidate_digest_mismatch(
     tmp_path: Path,
 ) -> None:
@@ -1177,6 +1298,52 @@ def test_prepare_falsification_search_rejects_optimizer_candidate_digest_mismatc
     selected_planner["config_sha256"] = "0" * 64
 
     with pytest.raises(ValueError, match="config digest mismatch"):
+        prepare_falsification_search(request, selected_planner)
+
+
+@pytest.mark.parametrize(
+    ("manifest_field", "expected_error"),
+    [
+        ("source_revision", "optimizer source revision differs from frozen round input"),
+        ("trials_per_method", "optimizer manifest budget differs from frozen round input"),
+        ("random_seed", "optimizer manifest budget differs from frozen round input"),
+        ("tpe_seed", "optimizer manifest budget differs from frozen round input"),
+        ("config_sha256", "optimizer config digest differs from the run manifest"),
+        ("config_random_seed", "optimizer run config budget differs from its manifest"),
+        ("config_path_escape", "relative optimizer manifest config_path escapes the repository"),
+    ],
+)
+def test_prepare_falsification_search_rejects_optimizer_manifest_provenance_mismatch(
+    tmp_path: Path, manifest_field: str, expected_error: str
+) -> None:
+    request = _search_request_fixture(tmp_path, round_number=1)
+    base_config_path = tmp_path / "base-planner.yaml"
+    base_config_path.write_text("max_linear_speed: 1.5\n", encoding="utf-8")
+    selected_planner = _optimizer_output_fixture(
+        request, planner_id="planner-r1", base_config=base_config_path
+    )
+    manifest_path = request.round_dir / "optimization" / "run_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest_field == "source_revision":
+        manifest[manifest_field] = "different-old-revision"
+    elif manifest_field == "config_sha256":
+        manifest[manifest_field] = "0" * 64
+    elif manifest_field == "config_random_seed":
+        optimizer_config_path = Path(manifest["config_path"])
+        optimizer_config = yaml.safe_load(optimizer_config_path.read_text(encoding="utf-8"))
+        optimizer_config["search"]["random_seed"] = request.optimizer_random_seed + 1
+        optimizer_config_path.write_text(
+            yaml.safe_dump(optimizer_config, sort_keys=False), encoding="utf-8"
+        )
+        manifest["config_sha256"] = hashlib.sha256(optimizer_config_path.read_bytes()).hexdigest()
+    elif manifest_field == "config_path_escape":
+        manifest["config_path"] = "../../../../etc/passwd"
+    else:
+        manifest["budget"][manifest_field] = 99
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
+
+    error = CoevolutionError if manifest_field == "config_sha256" else ValueError
+    with pytest.raises(error, match=expected_error):
         prepare_falsification_search(request, selected_planner)
 
 

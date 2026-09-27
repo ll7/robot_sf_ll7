@@ -556,6 +556,9 @@ class _OptimizerSearchSource:
     config_path: Path
     registry_path: Path
     manifest_path: Path
+    run_config_path: Path
+    run_config_sha256: str
+    optimizer_budget: Mapping[str, int]
     config_sha256: str
     registry_sha256: str
     manifest_sha256: str
@@ -589,6 +592,9 @@ def _validate_optimizer_search_source(
         raise ValueError("optimizer run manifest schema must be planner_optimizer_run.v1")
     if optimizer_manifest.get("status") != "complete":
         raise ValueError("optimizer run manifest must be complete before search preparation")
+    run_config_path, run_config_digest, optimizer_budget = _validate_optimizer_run_provenance(
+        optimizer_manifest, request
+    )
 
     planner_id = planner["planner_id"]
     selected_record = _mapping(optimizer_manifest.get("selected"), "optimizer.selected")
@@ -603,10 +609,81 @@ def _validate_optimizer_search_source(
         config_path=source_config_path.resolve(),
         registry_path=registry_path.resolve(),
         manifest_path=optimizer_manifest_path.resolve(),
+        run_config_path=run_config_path,
+        run_config_sha256=run_config_digest,
+        optimizer_budget=optimizer_budget,
         config_sha256=source_digest,
         registry_sha256=registry_digest,
         manifest_sha256=optimizer_manifest_digest,
     )
+
+
+def _validate_optimizer_run_provenance(
+    manifest: Mapping[str, Any], request: RoundRequest
+) -> tuple[Path, str, dict[str, int]]:
+    """Bind canonical optimizer revision, budget, and config bytes to this round."""
+    optimizer_revision = _non_empty_string(
+        manifest.get("source_revision"), "optimizer manifest source_revision"
+    )
+    if optimizer_revision != request.source_revision:
+        raise ValueError("optimizer source revision differs from frozen round input")
+
+    raw_budget = _mapping(manifest.get("budget"), "optimizer manifest budget")
+    optimizer_budget = {
+        "trials_per_method": _integer(
+            raw_budget.get("trials_per_method"),
+            "optimizer manifest trials_per_method",
+            minimum=1,
+        ),
+        "random_seed": _integer(raw_budget.get("random_seed"), "optimizer manifest random_seed"),
+        "tpe_seed": _integer(raw_budget.get("tpe_seed"), "optimizer manifest tpe_seed"),
+    }
+    expected_budget = {
+        "trials_per_method": request.optimizer_trials_per_method,
+        "random_seed": request.optimizer_random_seed,
+        "tpe_seed": request.optimizer_tpe_seed,
+    }
+    if optimizer_budget != expected_budget:
+        raise ValueError("optimizer manifest budget differs from frozen round input")
+
+    optimizer_module = import_module("scripts.validation.planner_optimizer")
+    repo_root = Path(optimizer_module.REPO_ROOT).resolve()
+    config_value = Path(
+        _non_empty_string(manifest.get("config_path"), "optimizer manifest config_path")
+    )
+    config_is_relative = not config_value.is_absolute()
+    if config_is_relative:
+        # The canonical optimizer emits repo-relative paths for tracked inputs and absolute
+        # paths for per-round configs outside the repository.
+        config_value = repo_root / config_value
+    config_path = config_value.resolve()
+    if config_is_relative:
+        try:
+            config_path.relative_to(repo_root)
+        except ValueError as exc:
+            raise ValueError(
+                "relative optimizer manifest config_path escapes the repository"
+            ) from exc
+    if not config_path.is_file():
+        raise FileNotFoundError(f"optimizer config from run manifest is missing: {config_path}")
+    config_digest = _non_empty_string(
+        manifest.get("config_sha256"), "optimizer manifest config_sha256"
+    ).lower()
+    if len(config_digest) != 64 or any(
+        character not in "0123456789abcdef" for character in config_digest
+    ):
+        raise ValueError("optimizer manifest config_sha256 must be a SHA-256 hex digest")
+    if _sha256_file(config_path) != config_digest:
+        raise CoevolutionError("optimizer config digest differs from the run manifest")
+    canonical_config = optimizer_module.load_optimizer_config(config_path)
+    config_budget = {
+        "trials_per_method": canonical_config.trials_per_method,
+        "random_seed": canonical_config.random_seed,
+        "tpe_seed": canonical_config.tpe_seed,
+    }
+    if config_budget != optimizer_budget:
+        raise ValueError("optimizer run config budget differs from its manifest")
+    return config_path, config_digest, optimizer_budget
 
 
 def _load_optimizer_runtime_config(
@@ -687,6 +764,14 @@ def _build_search_planner_binding(
                 source.config_path, request.config.output_dir
             ),
             "optimizer_config_sha256": source.config_sha256,
+            "optimizer_run_config": {
+                "path": _provenance_path(source.run_config_path, request.config.output_dir),
+                "sha256": source.run_config_sha256,
+            },
+            "optimizer_run": {
+                "source_revision": request.source_revision,
+                "budget": dict(source.optimizer_budget),
+            },
             "candidate_registry_path": _relative_run_path(
                 source.registry_path, request.config.output_dir
             ),
@@ -718,6 +803,7 @@ def _verify_falsification_inputs_unchanged(
         (source.config_path, source.config_sha256, "selected optimizer config"),
         (source.registry_path, source.registry_sha256, "optimizer candidate registry"),
         (source.manifest_path, source.manifest_sha256, "optimizer run manifest"),
+        (source.run_config_path, source.run_config_sha256, "optimizer run config"),
     ):
         if _sha256_file(path) != expected:
             raise CoevolutionError(f"{label} changed during search preparation: {path}")
@@ -741,6 +827,7 @@ def _falsification_artifact_claims(
         source.config_path,
         source.registry_path,
         source.manifest_path,
+        source.run_config_path,
         runtime_config_path,
         provenance_path,
     ]
@@ -1299,6 +1386,14 @@ def _relative_run_path(path: Path, run_dir: Path) -> str:
         raise ValueError(
             f"round artifact is outside the co-evolution output directory: {path}"
         ) from exc
+
+
+def _provenance_path(path: Path, run_dir: Path) -> str:
+    """Use run-relative paths for owned artifacts and absolute paths for named inputs."""
+    try:
+        return path.resolve().relative_to(run_dir.resolve()).as_posix()
+    except ValueError:
+        return str(path.resolve())
 
 
 def _call_with_selected_planner_integrity(

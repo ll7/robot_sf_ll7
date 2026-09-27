@@ -13,10 +13,15 @@ falsification adapter binds the selected #9650 `best_candidate.yaml` through the
 canonical policy-search loader, writes the merged runtime planner config under
 the round output, and supplies that file through #9645 `SearchConfig`'s
 `algo_config_path`. It records the optimizer wrapper, registry, optimizer
-manifest, previous-round planner identity/config digest, runtime config, search
-config, search manifest, and generated search files as digest-checked round
-artifacts. Its focused test injects evaluator and certifier callables, so it
-exercises the real search plumbing without starting a simulator.
+manifest, and the exact optimizer run-config path/digest, previous-round planner
+identity/config digest, runtime config, search config, search manifest, and
+generated search files as digest-checked round artifacts. Before preparing a
+search it requires the optimizer manifest revision, trial count, and Random/TPE
+seeds to match the frozen round request, then verifies the run-config bytes
+against the manifest digest. This permits an optimizer adapter to use a
+round-specific config only when that exact config file is recorded and verified.
+Its focused test injects evaluator and certifier callables, so it exercises the
+real search plumbing without starting a simulator.
 
 The optimizer and held-out challenge adapters remain explicit callables.
 Replay, feasibility/admissibility, and corpus admission must be connected only

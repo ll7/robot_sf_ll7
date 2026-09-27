@@ -20,6 +20,9 @@ import pytest
 from robot_sf.benchmark.episode_replay_figure import (
     EpisodeRow,
     ProvenanceSidecar,
+    _annotation_lines_for_step,
+    _pedestrian_trajectories,
+    _step_annotations,
     build_replay_from_episode_row,
     check_determinism,
     compute_bytes_sha256,
@@ -383,6 +386,151 @@ class TestFigureGeneration:
                 episode,
                 out_path=output_dir / "trajectory.png",
             )
+
+
+class TestRecordedEventAnnotations:
+    """Tests for source-tied annotations on recorded replay figures."""
+
+    @pytest.fixture
+    def annotated_row(self):
+        return EpisodeRow.from_dict(
+            {
+                "episode_id": "annotated-episode",
+                "scenario_id": "crossing",
+                "seed": 7,
+                "replay_steps": [
+                    {
+                        "t": 0.0,
+                        "x": 0.0,
+                        "y": 0.0,
+                        "heading": 0.0,
+                        "ped_positions": [[1.0, 0.0]],
+                        "pedestrian_ids": ["ped-a"],
+                    },
+                    {
+                        "t": 0.5,
+                        "x": 0.5,
+                        "y": 0.0,
+                        "heading": 0.0,
+                        "ped_positions": [[1.5, 0.0]],
+                        "pedestrian_ids": ["ped-a"],
+                    },
+                    {
+                        "t": 1.0,
+                        "x": 1.0,
+                        "y": 0.0,
+                        "heading": 0.0,
+                        "ped_positions": [[2.0, 0.0]],
+                        "pedestrian_ids": ["ped-a"],
+                    },
+                ],
+            }
+        )
+
+    def test_renderers_label_and_mark_source_annotations(self, annotated_row, tmp_path):
+        annotations = {
+            "minimum_clearance": {
+                "render_step_index": 1,
+                "value_m": 0.125,
+                "time_s": 0.5,
+                "source_path": "steps[1].clearance_m",
+            },
+            "collision_events": [
+                {
+                    "render_step_index": 2,
+                    "event_time_s": 0.91,
+                    "sample_time_s": 1.0,
+                    "source_path": "collision_events[0].time_s",
+                }
+            ],
+        }
+
+        result = replay_episode_and_generate_figures(
+            episode_row=annotated_row,
+            outputs=["still", "filmstrip", "trajectory"],
+            out_dir=tmp_path / "figures",
+            frame_steps=[1, 2],
+            still_step=1,
+            annotations=annotations,
+            no_determinism_check=True,
+        )
+
+        sidecar = json.loads(Path(result["provenance_sidecar"]).read_text(encoding="utf-8"))
+        artifacts = {artifact["type"]: artifact for artifact in sidecar["artifacts"]}
+        assert set(artifacts) == {"still", "filmstrip", "trajectory"}
+        assert artifacts["still"]["step_idx"] == 1
+        assert artifacts["still"]["annotations"] == ["minimum surface clearance: 0.1250 m"]
+        assert artifacts["filmstrip"]["frame_annotations"] == {
+            "1": ["minimum surface clearance: 0.1250 m"],
+            "2": ["collision ledger event: t=0.91s"],
+        }
+        assert all(Path(artifact["path"]).is_file() for artifact in artifacts.values())
+
+    def test_annotation_parser_rejects_malformed_and_out_of_range_samples(self):
+        annotations = {
+            "minimum_clearance": {
+                "render_step_index": True,
+                "value_m": float("nan"),
+                "time_s": 0.0,
+            },
+            "collision_events": [
+                None,
+                {"render_step_index": False, "event_time_s": 0.1, "sample_time_s": 0.1},
+                {"render_step_index": 3, "event_time_s": 0.1, "sample_time_s": 0.1},
+                {"render_step_index": 1, "event_time_s": float("inf"), "sample_time_s": 0.5},
+                {
+                    "render_step_index": 1,
+                    "event_time_s": 0.4,
+                    "sample_time_s": 0.5,
+                    "source_path": "collision_events[1].time_s",
+                },
+            ],
+        }
+
+        parsed = _step_annotations(annotations, step_count=3)
+
+        assert parsed == [
+            {
+                "kind": "collision_event",
+                "render_step_index": 1,
+                "event_time_s": 0.4,
+                "sample_time_s": 0.5,
+                "source_path": "collision_events[1].time_s",
+            }
+        ]
+        assert _step_annotations(None) == []
+        assert _step_annotations({"minimum_clearance": "invalid", "collision_events": ()}) == []
+
+    def test_pedestrian_tracks_use_ids_or_step_local_fallbacks(self, annotated_row):
+        replay = build_replay_from_episode_row(annotated_row)
+        assert replay is not None
+        replay.steps[0].ped_positions.extend([[4.0, 1.0], [5.0, 1.0]])
+        replay.steps[0].pedestrian_ids = ["ped-a", "  ", 9]
+        replay.steps[1].ped_positions.append([6.0, 1.0])
+        replay.steps[1].pedestrian_ids = ["ped-a"]
+
+        tracks = _pedestrian_trajectories(replay)
+
+        assert list(tracks) == [
+            "ped-a",
+            "unknown-step-0-actor-1",
+            "unknown-step-0-actor-2",
+            "unknown-step-1-actor-1",
+        ]
+        assert len(tracks["ped-a"]) == 3
+        assert all(len(points) == 1 for key, points in tracks.items() if key != "ped-a")
+        assert (
+            _annotation_lines_for_step(
+                {
+                    "collision_events": [
+                        {"render_step_index": 2, "event_time_s": 1, "sample_time_s": 1}
+                    ]
+                },
+                0,
+                step_count=3,
+            )
+            == []
+        )
 
 
 class TestProvenanceSidecar:

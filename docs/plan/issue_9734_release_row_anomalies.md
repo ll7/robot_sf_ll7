@@ -9,6 +9,9 @@ Make the published-release row gate reliable and give its BA-03 signals a typed,
   observations by default, block unavailable or conflicting pedestrian counts, and report same-step
   terminal signatures without inferring cause.
 - Add a bounded Benchmark Auditor store handoff for release-row reports; do not build the deferred BA-06 browser workflow.
+- Block configured release-roster omissions even without a pedestrian-free
+  cohort, reject aliased arm directories, and bind scenario annotations and
+  handoff members to the verified source manifest.
 - Preserve the 0.0.7 retro-detection criteria and avoid simulation, spawn, or planner changes.
 
 # Evidence sources
@@ -33,6 +36,10 @@ Make the published-release row gate reliable and give its BA-03 signals a typed,
 - Independent exact-head reviews found execution-status bypass, order-sensitive Auditor commits,
   signal/finding identity drift, and fail-open pedestrian cohort/baseline missingness; the gate
   now fails closed on each case, including conflicting pedestrian counts across paired rows.
+- Follow-up exact-head review found that whole-arm omissions could pass without a pedestrian-free
+  cohort, differential-drive suffix normalization could alias distinct directories, scenario
+  annotations could cross manifests, and BA-03 findings did not validate their source members.
+  Regressions now cover those boundaries.
 - The BA-06 browser/reconnect/provider workflow remains outside this issue; no simulation or planner source is in scope.
 
 # Validation route
@@ -43,5 +50,7 @@ Make the published-release row gate reliable and give its BA-03 signals a typed,
 
 # Recovery / handoff
 
-- Changes live on the issue-9734 review-fix worktree; keep the original PR branch untouched.
+- Changes live on `pr9791-roster-gate-fix-20260927`, branched from the PR head
+  and refreshed with current `origin/main`; publish only after exact-head
+  review.
 - If a detector claim cannot be reproduced, report it as unavailable and do not weaken the gate to obtain a pass.

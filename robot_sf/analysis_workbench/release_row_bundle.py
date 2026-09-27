@@ -13,7 +13,7 @@ import hashlib
 import json
 import re
 import tarfile
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -167,6 +167,18 @@ def _release_arm(arm_directory: str, *, label: str) -> str:
     if not arm or arm in {".", ".."}:
         raise ReleaseRowBundleError(f"{label} has an invalid release arm")
     return arm
+
+
+def _reject_release_arm_aliases(members: Sequence[_EpisodeMember]) -> None:
+    directories_by_arm: dict[str, str] = {}
+    for member in members:
+        arm = _release_arm(member.arm_directory, label=member.relative_path)
+        previous = directories_by_arm.setdefault(arm, member.arm_directory)
+        if previous != member.arm_directory:
+            raise ReleaseRowBundleError(
+                "distinct run directories map to the same release arm: "
+                f"{previous!r} and {member.arm_directory!r} both map to {arm!r}"
+            )
 
 
 def _manifest_entry(entry: object, *, index: int) -> tuple[str, int, str]:
@@ -704,6 +716,7 @@ def load_release_rows(bundle: Path) -> tuple[list[dict[str, Any]], dict[str, Any
 
     try:
         manifest_entries = _episode_members_from_manifest(_manifest_entry_map(source.manifest))
+        _reject_release_arm_aliases(source.episode_members)
         observed_paths = {member.relative_path for member in source.episode_members}
         expected_paths = set(manifest_entries)
         if observed_paths != expected_paths:

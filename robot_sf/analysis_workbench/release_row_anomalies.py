@@ -265,17 +265,31 @@ def _annotation_entries(annotations: object) -> list[dict[str, Any]]:  # noqa: C
                 and (not isinstance(entry[key], str) or not entry[key].strip())
             ):
                 raise ReleaseRowError(f"annotation {index} has invalid {key}")
+        manifest_digest = entry.get("manifest_sha256")
+        if manifest_digest is not None and (
+            not isinstance(manifest_digest, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", manifest_digest)
+        ):
+            raise ReleaseRowError(f"annotation {index} has invalid manifest_sha256")
+        if "finding_id" not in entry and manifest_digest is None:
+            raise ReleaseRowError(
+                f"annotation {index} needs manifest_sha256 for scenario-scoped matching"
+            )
         entries.append(dict(entry))
     return entries
 
 
 def _matching_annotation(
-    finding: Mapping[str, Any], entries: Sequence[Mapping[str, Any]]
+    finding: Mapping[str, Any],
+    entries: Sequence[Mapping[str, Any]],
+    source: Mapping[str, Any],
 ) -> Mapping[str, Any] | None:
     for entry in entries:
         if "finding_id" in entry:
             if entry["finding_id"] == finding["finding_id"]:
                 return entry
+            continue
+        if entry.get("manifest_sha256") != source.get("manifest_sha256"):
             continue
         if all(
             key not in entry or entry[key] == finding.get(key)
@@ -619,6 +633,11 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
     if set(observed_planners) - set(expected_planners):
         raise ReleaseRowError("rows include planner IDs outside source.planner_ids")
     source_info["planner_ids"] = expected_planners
+    configured_roster = set(expected_planners)
+    if settings["pedestrian_aware_planners"]:
+        configured_roster.add(settings["baseline_planner"])
+        configured_roster.update(settings["pedestrian_aware_planners"])
+    coverage_planners = set(configured_roster)
     source_info.setdefault("row_count", len(records))
     annotation_entries = _annotation_entries(annotations)
     preflight_map = _preflight_cells(preflight)
@@ -643,7 +662,7 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
     annotated_universal_cells = 0
 
     def append(finding: dict[str, Any]) -> None:
-        entry = _matching_annotation(finding, annotation_entries)
+        entry = _matching_annotation(finding, annotation_entries, source_info)
         finding["annotated"] = entry is not None
         finding["annotation"] = (
             {"root_cause": entry["root_cause"], "source_ref": entry["source_ref"]}
@@ -655,14 +674,14 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
     for (scenario, seed), all_cell_rows in sorted(grouped.items()):
         cell = [row for row in all_cell_rows if row["_release_execution_status"] == "eligible"]
         planners = {row["_release_arm"] for row in cell}
-        complete = planners == set(expected_planners)
+        complete = planners == coverage_planners
         coverage["complete_cells" if complete else "incomplete_cells"] += 1
         if not complete:
             coverage["incomplete_cell_ids"].append(
                 {
                     "scenario_id": scenario,
                     "seed": seed,
-                    "missing_planners": sorted(set(expected_planners) - planners),
+                    "missing_planners": sorted(coverage_planners - planners),
                 }
             )
         enough = len(planners) >= settings["min_planners_per_cell"]
@@ -697,7 +716,7 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
                 reason="all_planners_failed_without_root_cause",
                 source=source_info,
             )
-            if _matching_annotation(candidate, annotation_entries):
+            if _matching_annotation(candidate, annotation_entries, source_info):
                 annotated_universal_cells += 1
             else:
                 append(candidate)
@@ -858,6 +877,11 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
         if settings["pedestrian_aware_planners"]
         else []
     )
+    missing_configured_aware_planners = sorted(
+        set(settings["pedestrian_aware_planners"]) - set(expected_planners)
+    )
+    if missing_configured_aware_planners:
+        missingness["pedestrian_aware_planner_missing"] += len(missing_configured_aware_planners)
     if automatic_pedestrian_free_discovery:
         discovery_planners = {
             settings["baseline_planner"],
@@ -882,7 +906,6 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
             continue
         for planner in settings["pedestrian_aware_planners"]:
             if planner not in expected_planners:
-                missingness["pedestrian_aware_planner_missing"] += 1
                 continue
             candidate_rows = by_scenario_planner.get((scenario, planner), {})
             shared_seeds = set(baseline_rows) & set(candidate_rows)
@@ -1087,6 +1110,7 @@ def _validated_release_source(report: Mapping[str, Any], registry_digest: str) -
         not isinstance(members, list)
         or not members
         or any(not isinstance(item, str) or not item for item in members)
+        or len(members) != len(set(members))
     ):
         raise ReleaseRowError("release-row Auditor handoff requires verified episode members")
     try:
@@ -1127,6 +1151,19 @@ def _expected_release_signal(index: int, finding: Any, source: Mapping[str, Any]
     if not isinstance(finding, Mapping):
         raise ReleaseRowError(f"release-row finding {index} must be an object")
     try:
+        finding_members = finding.get("source_members")
+        source_members = source.get("episode_members")
+        if (
+            not isinstance(finding_members, list)
+            or not finding_members
+            or any(not isinstance(item, str) or not item for item in finding_members)
+            or finding_members != sorted(set(finding_members))
+            or not isinstance(source_members, list)
+            or not set(finding_members).issubset(source_members)
+        ):
+            raise ReleaseRowError(
+                f"release-row finding {index} source members do not match source identity"
+            )
         scope = {
             "scenario_id": finding["scenario_id"],
             "seed": finding["seed"],
@@ -1243,7 +1280,9 @@ def render_markdown(report: Mapping[str, Any]) -> str:
     lines = [
         "# Release-row anomaly report",
         "",
-        f"- Gate: **{'BLOCKED' if gate['blocked'] else 'PASS'}** ({', '.join(gate['reasons']) or 'no blocking findings'})",
+        "Diagnostic row signals only; they provide neither per-step reconstruction nor proof of planner causation.",
+        "",
+        f"- Detector gate status: **{'BLOCKED' if gate['blocked'] else 'PASS'}** ({', '.join(gate['reasons']) or 'no blocking findings'})",
         f"- Input: {report['counts']['rows']} rows, {report['counts']['cells']} cells, {report['counts']['planners']} planners",
         f"- Findings: {report['counts']['findings']} ({gate['unannotated_findings']} unannotated)",
         f"- Preflight accounting: {report['preflight_accounting']['status']}",
@@ -1251,8 +1290,7 @@ def render_markdown(report: Mapping[str, Any]) -> str:
         f"- Execution rows: {report['execution_admission']['eligible_rows']} eligible, "
         f"{report['execution_admission']['unavailable_rows']} unavailable, "
         f"{report['execution_admission']['error_rows']} malformed",
-        "",
-        "These are diagnostic row signals, not proof of planner causation. Missing summary fields remain unavailable.",
+        "Missing summary fields remain unavailable.",
         "",
         "## Detector counts",
         "",

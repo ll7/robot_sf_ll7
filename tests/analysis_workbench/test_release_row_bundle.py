@@ -172,6 +172,46 @@ def test_load_release_rows_verifies_archive_and_bundle_digest(tmp_path: Path) ->
     assert source["episode_members"] == ["payload/runs/goal__differential_drive/episodes.jsonl"]
 
 
+def test_load_release_rows_rejects_distinct_directories_aliasing_one_arm(tmp_path: Path) -> None:
+    """An unsuffixed and differential-drive path cannot collapse into one planner ID."""
+
+    raw = b'{"episode_id":"goal-1"}\n'
+    root = _write_raw_bundle(
+        tmp_path,
+        raw,
+        relative_episode="payload/runs/goal/episodes.jsonl",
+    )
+    paths = (
+        "runs/goal/episodes.jsonl",
+        "runs/goal__differential_drive/episodes.jsonl",
+    )
+    entries = []
+    for relative in paths:
+        target = root / "payload" / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
+        entries.append(
+            {
+                "path": relative,
+                "size_bytes": len(raw),
+                "sha256": hashlib.sha256(raw).hexdigest(),
+                "kind": "episodes",
+            }
+        )
+    (root / "publication_manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "benchmark-publication-bundle.v2",
+                "files": entries,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ReleaseRowBundleError, match="same release arm"):
+        load_release_rows(root)
+
+
 @pytest.mark.parametrize("mutation", ["digest", "size", "malformed"])
 def test_load_release_rows_rejects_unbound_or_malformed_episode_bytes(
     tmp_path: Path, mutation: str

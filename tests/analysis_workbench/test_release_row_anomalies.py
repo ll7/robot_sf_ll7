@@ -77,8 +77,16 @@ def _source(*planners: str) -> dict[str, object]:
         "release_id": "synthetic-issue-9734",
         "planner_ids": list(planners),
         "manifest_sha256": "f" * 64,
-        "episode_members": ["payload/runs/synthetic__differential_drive/episodes.jsonl"],
+        "episode_members": [
+            f"payload/runs/{planner}__differential_drive/episodes.jsonl" for planner in planners
+        ],
     }
+
+
+def _with_source_members(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    for row in rows:
+        row["_source_member"] = f"payload/runs/{row['algo']}__differential_drive/episodes.jsonl"
+    return rows
 
 
 def _findings(report: Mapping[str, Any], detector_id: str) -> list[Mapping[str, Any]]:
@@ -154,7 +162,14 @@ def test_all_release_row_detector_families_flag_synthetic_anomalies() -> None:
         ),
     ]
     reports = [
-        analyze_release_rows(rows, config=CONFIG, source=source, preflight=preflight)
+        analyze_release_rows(
+            rows,
+            config=(
+                CONFIG if source["planner_ids"] == ["blind_goal", "social_force"] else BASIC_CONFIG
+            ),
+            source=source,
+            preflight=preflight,
+        )
         for rows, source, preflight in cases
     ]
     detector_ids = {finding["detector_id"] for report in reports for finding in report["findings"]}
@@ -497,6 +512,28 @@ def test_missing_configured_pedestrian_aware_planner_blocks_gate() -> None:
     )
 
     assert report["missingness"]["pedestrian_aware_planner_missing"] == 1
+    assert report["coverage"]["incomplete_cells"] == 1
+    assert report["coverage"]["incomplete_cell_ids"][0]["missing_planners"] == ["missing_planner"]
+    assert "pedestrian_aware_planner_missing" in report["gate"]["reasons"]
+    assert report["gate"]["blocked"] is True
+
+
+def test_missing_configured_aware_planner_blocks_without_pedestrian_free_cohort() -> None:
+    """Whole-roster omissions block even when no pedestrian-free pair is discoverable."""
+
+    config = {**CONFIG, "pedestrian_free_scenarios": [], "require_preflight": True}
+    scenario = "pedestrian-occupied-only"
+    rows = [_row(scenario, 115, "blind_goal", observation_ped_count=1)]
+    report = analyze_release_rows(
+        rows,
+        config=config,
+        source=_source("blind_goal"),
+        preflight=[{"scenario_id": scenario, "seed": 115, "invalid_run": False}],
+    )
+
+    assert report["missingness"]["pedestrian_aware_planner_missing"] == 1
+    assert report["coverage"]["incomplete_cells"] == 1
+    assert report["coverage"]["incomplete_cell_ids"][0]["missing_planners"] == ["social_force"]
     assert "pedestrian_aware_planner_missing" in report["gate"]["reasons"]
     assert report["gate"]["blocked"] is True
 
@@ -615,10 +652,12 @@ def test_release_row_signals_commit_to_audit_store_idempotently(tmp_path: Path) 
     """The aggregate detector's typed BA-03 signals have a durable Auditor handoff."""
 
     report = analyze_release_rows(
-        [
-            _row("auditor-handoff", 128, "planner_a", steps=2, collision=True, timeout=False),
-            _row("auditor-handoff", 128, "planner_b", steps=2, collision=True, timeout=False),
-        ],
+        _with_source_members(
+            [
+                _row("auditor-handoff", 128, "planner_a", steps=2, collision=True, timeout=False),
+                _row("auditor-handoff", 128, "planner_b", steps=2, collision=True, timeout=False),
+            ]
+        ),
         config=BASIC_CONFIG,
         source=_source("planner_a", "planner_b"),
     )
@@ -641,7 +680,9 @@ def test_release_row_auditor_handoff_binds_signals_to_findings(tmp_path: Path) -
     """A typed but modified BA-03 payload cannot diverge from its report finding."""
 
     report = analyze_release_rows(
-        [_row("auditor-handoff", 135, "planner_a", steps=2, collision=True, timeout=False)],
+        _with_source_members(
+            [_row("auditor-handoff", 135, "planner_a", steps=2, collision=True, timeout=False)]
+        ),
         config=CONFIG,
         source=_source("planner_a"),
     )
@@ -657,11 +698,43 @@ def test_release_row_auditor_handoff_binds_signals_to_findings(tmp_path: Path) -
         assert store.list_records(record_type="signal") == []
 
 
+def test_release_row_auditor_handoff_rejects_unlisted_finding_source_member(
+    tmp_path: Path,
+) -> None:
+    """A finding cannot project a member outside its verified bundle into BA-03."""
+
+    report = analyze_release_rows(
+        _with_source_members(
+            [_row("auditor-handoff", 135, "planner_a", steps=2, collision=True, timeout=False)]
+        ),
+        config=CONFIG,
+        source=_source("planner_a"),
+    )
+    finding = report["findings"][0]
+    unlisted_member = "payload/runs/unlisted__differential_drive/episodes.jsonl"
+    finding["source_members"] = [unlisted_member]
+    signal = next(item for item in report["signals"] if item["signal_id"] == finding["finding_id"])
+    for evidence in signal["evidence"]:
+        if evidence.get("kind") == "source_identity":
+            evidence["source_members"] = [unlisted_member]
+
+    with AuditStore(tmp_path / "audit-store") as store:
+        try:
+            handoff_release_row_signals(report, store)
+        except ReleaseRowError as error:
+            assert "source members do not match source identity" in str(error)
+        else:
+            raise AssertionError("an unlisted finding source member was accepted")
+        assert store.list_records(record_type="signal") == []
+
+
 def test_release_row_auditor_handoff_binds_finding_ids_to_source_digest(tmp_path: Path) -> None:
     """Changing the claimed manifest identity invalidates source-bound finding IDs."""
 
     report = analyze_release_rows(
-        [_row("auditor-handoff", 136, "planner_a", steps=2, collision=True, timeout=False)],
+        _with_source_members(
+            [_row("auditor-handoff", 136, "planner_a", steps=2, collision=True, timeout=False)]
+        ),
         config=CONFIG,
         source=_source("planner_a"),
     )
@@ -680,7 +753,9 @@ def test_release_row_auditor_handoff_rejects_malformed_signal(tmp_path: Path) ->
     """Only canonical BA-03 Signal records can be handed to the Auditor store."""
 
     report = analyze_release_rows(
-        [_row("auditor-handoff", 129, "planner_a", steps=2, collision=True, timeout=False)],
+        _with_source_members(
+            [_row("auditor-handoff", 129, "planner_a", steps=2, collision=True, timeout=False)]
+        ),
         config=CONFIG,
         source=_source("planner_a"),
     )
@@ -706,6 +781,7 @@ def test_root_cause_annotation_removes_a_universal_failure_finding() -> None:
         {
             "scenario_id": "narrow-doorway",
             "seed": 118,
+            "manifest_sha256": "f" * 64,
             "root_cause": "declared infeasible safe hold",
             "source_ref": "issue-9728",
         }
@@ -721,6 +797,33 @@ def test_root_cause_annotation_removes_a_universal_failure_finding() -> None:
     assert not _findings(report, "universal_failure_unannotated")
     assert report["counts"]["annotated_universal_cells"] == 1
     assert report["gate"]["blocked"] is False
+
+
+def test_scenario_annotation_does_not_cross_manifest_sources() -> None:
+    """A scenario-level annotation only applies to the manifest it names."""
+
+    rows = [
+        _row("narrow-doorway", 118, "planner_a"),
+        _row("narrow-doorway", 118, "planner_b"),
+    ]
+    report = analyze_release_rows(
+        rows,
+        config=BASIC_CONFIG,
+        annotations=[
+            {
+                "scenario_id": "narrow-doorway",
+                "seed": 118,
+                "manifest_sha256": "e" * 64,
+                "root_cause": "annotation belongs to another release",
+                "source_ref": "issue-9728",
+            }
+        ],
+        source=_source("planner_a", "planner_b"),
+    )
+
+    finding = _findings(report, "universal_failure_unannotated")[0]
+    assert finding["annotated"] is False
+    assert report["gate"]["blocked"] is True
 
 
 def test_unannotated_threshold_allows_configured_count() -> None:
@@ -819,6 +922,7 @@ def test_annotated_invalid_run_mismatch_still_blocks_gate() -> None:
             {
                 "scenario_id": "accounting-mismatch",
                 "seed": 124,
+                "manifest_sha256": "f" * 64,
                 "root_cause": "known accounting discrepancy",
                 "source_ref": "issue-9734-test",
             }
@@ -914,7 +1018,10 @@ def test_cli_writes_json_and_markdown_and_returns_gate_status(tmp_path: Path) ->
     cli_report = json.loads(report_json.read_text(encoding="utf-8"))
     assert cli_report["detector_registry_digest"] == api_report["detector_registry_digest"]
     assert cli_report["findings"] == api_report["findings"]
-    assert "Release-row anomaly report" in report_md.read_text(encoding="utf-8")
+    markdown = report_md.read_text(encoding="utf-8")
+    assert "Release-row anomaly report" in markdown
+    assert markdown.index("Diagnostic row signals only") < markdown.index("Detector gate status")
+    assert "## Missing evidence" in markdown
 
     audit_store = tmp_path / "benchmark-auditor"
     assert main(args[:-1] + ["--audit-store", str(audit_store), "--release-gate"]) == 1
@@ -930,6 +1037,7 @@ def test_cli_writes_json_and_markdown_and_returns_gate_status(tmp_path: Path) ->
                 {
                     "scenario_id": "cli-universal",
                     "seed": 123,
+                    "manifest_sha256": source["manifest_sha256"],
                     "root_cause": "synthetic fixture",
                     "source_ref": "test",
                 }

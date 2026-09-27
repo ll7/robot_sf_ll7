@@ -124,10 +124,16 @@ keys are:
 
 `pedestrian_aware_planners` is an explicit release-cohort allowlist. The
 detector compares only those planner IDs against the blind baseline; an
-allowlisted planner absent from a pedestrian-free scenario's release roster is
-reported as unavailable and blocks the gate. Keep this list aligned with the
-planners whose effective observation contract includes pedestrians. The
-checked-in 0.0.7 configuration names the observed non-baseline arms.
+allowlisted planner absent from the release roster is reported as unavailable
+and blocks the gate, even when no pedestrian-free cohort is present. Keep this
+list aligned with planners whose effective observation contract includes
+pedestrians. The checked-in 0.0.7 configuration names the observed non-baseline
+arms.
+When comparisons are enabled, cell coverage requires both the roster observed
+in manifest members and the configured baseline/comparison arms. A missing
+configured arm is therefore visible even when omitted from every bundle
+directory; omissions outside the configured roster cannot be inferred from
+release rows alone.
 `pedestrian_free_scenarios` is an optional scenario filter and is empty by
 default, so the detector discovers applicable scenarios from each release's
 effective-view pedestrian counts on the baseline and configured comparison
@@ -158,7 +164,11 @@ to `true` when missing or incomplete parity evidence must block the gate.
 Annotations are either a list or an object with schema version
 `release-row-annotations.v1` and an `annotations` list. Every entry requires a
 non-empty `root_cause` and `source_ref`, plus `scenario_id` or `finding_id` as
-a selector. Optional selectors are `seed`, `planner_id`, and `detector_id`.
+a selector. Scenario-scoped entries also require the lowercase SHA-256
+`manifest_sha256` of the release bundle they annotate; this prevents an
+annotation for one release from clearing the same scenario in another release.
+Entries selected by `finding_id` are already source-bound and do not require
+that field. Optional selectors are `seed`, `planner_id`, and `detector_id`.
 An annotation sets `finding.annotated` on matching detector findings without
 rewriting the observed row. For `universal_failure_unannotated`, a matching
 annotation removes the missing-root-cause finding and increments
@@ -193,7 +203,8 @@ fabricate a BA-01 campaign scan, BA-02 queue summary, or human finding; those
 remain owned by their respective Auditor contracts. Before committing, it
 verifies that every typed signal exactly matches one report finding, that each
 finding ID still binds to the report's source and registry digests, and that
-signal ordering does not affect the idempotency key.
+each finding's non-empty source-member list belongs to the verified bundle.
+Signal ordering does not affect the idempotency key.
 
 ## Running the report
 

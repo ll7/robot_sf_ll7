@@ -33,6 +33,7 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.dev._gh_rest import gh_api_post as _gh_api_post
+from scripts.dev.github_transport_policy import get_transport_contract
 from scripts.dev.pr_write_guard import (
     DEFAULT_REPO,
     FULL_SHA_RE,
@@ -41,6 +42,7 @@ from scripts.dev.pr_write_guard import (
     pr_write_lock,
 )
 
+TRANSPORT_CONTRACT = get_transport_contract("gh_pr_ready_transition.py")
 PR_READY_MUTATION = """mutation MarkPullRequestReadyForReview($input: MarkPullRequestReadyForReviewInput!) {
   markPullRequestReadyForReview(input: $input) {
     pullRequest { id }

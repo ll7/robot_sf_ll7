@@ -123,6 +123,16 @@ def test_label_helper_contract_covers_reads_and_verified_writes() -> None:
     assert check["status"] == "ok", check["findings"]
 
 
+def test_ready_transition_contract_declares_graphql_write_and_rest_read() -> None:
+    """Ready promotion uses its declared write and verification routes without fallback."""
+    contract = get_transport_contract("gh_pr_ready_transition.py")
+
+    assert contract.allowed_transports == ("graphql_write", "rest_read")
+    assert contract.fallback_markers == ()
+    check = check_helper(contract.helper, root=REPOSITORY_ROOT)
+    assert check["status"] == "ok", check["findings"]
+
+
 def test_all_contracts_declare_help_and_smoke_paths() -> None:
     """The registry keeps discoverability and focused proof mandatory."""
     for name in TRANSPORT_CONTRACTS:

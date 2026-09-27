@@ -138,6 +138,14 @@ TRANSPORT_CONTRACTS: dict[str, TransportContract] = {
         "tests/dev/test_gh_pr_label_rest.py",
         result_validator="validate_result_envelope",
     ),
+    "gh_pr_ready_transition.py": TransportContract(
+        helper="gh_pr_ready_transition.py",
+        purpose="mark an exact-head pull request ready through GraphQL and confirm through REST",
+        allowed_transports=("graphql_write", "rest_read"),
+        fallback_markers=(),
+        fail_closed_markers=FAIL_CLOSED_ERROR_MARKERS,
+        smoke_test="tests/dev/test_gh_pr_ready_transition.py",
+    ),
     "gh_pr_merge.sh": TransportContract(
         helper="gh_pr_merge.sh",
         purpose=("delegate an exact-head merge to the single-account receipt owner"),

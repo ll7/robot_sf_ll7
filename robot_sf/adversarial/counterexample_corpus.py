@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import copy
 import csv
+import errno
 import hashlib
 import json
 import math
@@ -30,6 +31,7 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from robot_sf.adversarial.bundle import compute_effective_scenario_hash
+from robot_sf.adversarial.scenario_admissibility import validate_scenario_admissibility
 from robot_sf.benchmark.algorithm_metadata import canonical_algorithm_name
 from robot_sf.benchmark.episode_input_identity import (
     EPISODE_INPUT_IDENTITY_SCHEMA,
@@ -60,6 +62,9 @@ CASE_INPUT_IDENTITY_SCHEMA_VERSION = "adversarial-case-input-identity.v1"
 CASE_ADMISSION_REPLAY_SCHEMA_VERSION = "adversarial-case-admission-replay.v2"
 LEGACY_CASE_ADMISSION_REPLAY_SCHEMA_VERSION = "adversarial-case-admission-replay.v1"
 CASE_ADMISSIBILITY_EVIDENCE_SCHEMA_VERSION = "adversarial-case-admissibility-evidence.v1"
+CASE_SCENARIO_ADMISSIBILITY_RECEIPT_SCHEMA_VERSION = (
+    "adversarial-case-scenario-admissibility-receipt.v1"
+)
 ISSUE_9645_SUMMARY_SCHEMA = "issue_9645_bounded_pilot_summary.v2"
 ISSUE_9645_SUPPORTED_SUMMARY_SCHEMAS = frozenset(
     {"issue_9645_bounded_pilot_summary.v1", ISSUE_9645_SUMMARY_SCHEMA}
@@ -282,6 +287,7 @@ def validate_corpus(corpus: Mapping[str, Any], *, corpus_root: str | Path | None
         if case["case_id"] != f"case-{case['effective_scenario_sha256']}":
             raise CorpusError("case_id must be the full canonical effective-scenario SHA-256")
         errors = _validate_case_record(case, corpus_root=root)
+        errors.extend(_validate_case_search_run_reference(case, corpus["search_runs"]))
         if errors:
             raise CorpusError(f"case {case['case_id']} is not admissible: " + "; ".join(errors))
     case_id_set = set(case_ids)
@@ -324,6 +330,70 @@ def _validate_search_run_evidence(
     known_artifact_digests: dict[str, str] = {}
     for run in search_runs:
         _validate_one_search_run_evidence(run, root, known_artifact_digests)
+
+
+def _validate_case_search_run_reference(
+    case: Mapping[str, Any], search_runs: Sequence[Mapping[str, Any]]
+) -> list[str]:
+    """Bind search-derived discovery provenance to its persisted run record."""
+    discovery = case.get("discovery")
+    discovery = discovery if isinstance(discovery, Mapping) else {}
+    source = discovery.get("search_source")
+    source = source if isinstance(source, Mapping) else {}
+    run_id = source.get("run_id")
+    if run_id is None:
+        if _valid_historical_search_source(source, discovery):
+            return []
+        return ["discovery source has no persisted search run or explicit unavailable history"]
+    if not isinstance(run_id, str) or not run_id.strip():
+        return ["discovery search run ID is malformed"]
+    matching = [run for run in search_runs if run.get("run_id") == run_id]
+    if len(matching) != 1:
+        return ["discovery search run does not identify exactly one persisted run"]
+    run = matching[0]
+    errors = []
+    if discovery.get("round_id") != run.get("round_id"):
+        errors.append("discovery round ID differs from its persisted search run")
+    source_revision = source.get("source_revision")
+    if source_revision != run.get("source_revision"):
+        errors.append("discovery source revision differs from its persisted search run")
+    return errors
+
+
+def _valid_historical_search_source(
+    source: Mapping[str, Any], discovery: Mapping[str, Any]
+) -> bool:
+    """Allow a missing run only for explicit historical provenance with no manifest."""
+    manifest = source.get("historical_manifest")
+    archive = source.get("archive")
+    report = source.get("source_run_report")
+    return (
+        source.get("kind") == "historical_adversarial_search_archive"
+        and isinstance(discovery.get("round_id"), str)
+        and bool(discovery["round_id"].strip())
+        and isinstance(source.get("origin_issue"), int)
+        and not isinstance(source.get("origin_issue"), bool)
+        and source["origin_issue"] > 0
+        and isinstance(discovery.get("origin_case_id"), str)
+        and bool(discovery["origin_case_id"].strip())
+        and _is_full_git_revision(source.get("historical_source_revision"))
+        and isinstance(source.get("search_settings"), Mapping)
+        and bool(source["search_settings"])
+        and isinstance(manifest, Mapping)
+        and manifest.get("status") == "not_archived"
+        and isinstance(manifest.get("declared_path"), str)
+        and bool(manifest["declared_path"].strip())
+        and manifest.get("sha256") is None
+        and isinstance(archive, Mapping)
+        and isinstance(archive.get("path"), str)
+        and bool(archive["path"].strip())
+        and _is_sha256(archive.get("sha256"))
+        and isinstance(archive.get("archive_id"), str)
+        and bool(archive["archive_id"].strip())
+        and isinstance(report, Mapping)
+        and isinstance(report.get("path"), str)
+        and bool(report["path"].strip())
+    )
 
 
 def _validate_one_search_run_evidence(
@@ -386,6 +456,7 @@ def _validate_issue9645_search_run_record(run: Mapping[str, Any], corpus_root: P
         run.get("schema_version") != "adversarial-counterexample-search-run.v1"
         or run.get("source_issue") != 9645
         or run.get("run_id") != _ISSUE_9645_PILOT_RUN_ID
+        or run.get("round_id") != "issue_9645_bounded_pilot"
         or run.get("evidence_bundle_root") != _ISSUE_9645_PILOT_EVIDENCE_ROOT
     ):
         raise CorpusError("#9645 search-run identity or evidence root differs from its contract")
@@ -2243,13 +2314,14 @@ def admit_case_record(
     validate_corpus(corpus, corpus_root=root)
     if not source_kind.strip() or not source_id.strip():
         raise CorpusError("case admission source kind and ID must be non-empty")
-    incoming = dict(case_record) if isinstance(case_record, Mapping) else {}
+    incoming = copy.deepcopy(dict(case_record)) if isinstance(case_record, Mapping) else {}
     identity = incoming.get("effective_scenario_sha256")
     try:
         artifact_root_path = _resolve_corpus_directory(artifact_root, root)
         errors = _validate_case_record(incoming, corpus_root=root)
         errors.extend(_case_admission_input_binding_errors(incoming))
         errors.extend(_validate_case_current_target_revision(incoming))
+        errors.extend(_validate_case_search_run_reference(incoming, corpus["search_runs"]))
         if errors:
             raise CorpusError("case record rejected: " + "; ".join(errors))
         _case_artifacts_within_root(incoming, root, artifact_root_path)
@@ -2275,7 +2347,25 @@ def admit_case_record(
     )
     near_report = _near_duplicate_report(incoming, corpus["cases"])
     if existing is not None:
-        _merge_source_evidence(existing, incoming["source_evidence"])
+        try:
+            _retain_duplicate_case_evidence(
+                existing,
+                incoming,
+                corpus,
+                corpus_root=root,
+                artifact_root=artifact_root_path,
+            )
+        except (CorpusError, OSError, ValueError, TypeError, yaml.YAMLError) as exc:
+            corpus, receipt = _record_attempt(
+                corpus,
+                source_kind=source_kind,
+                source_id=source_id,
+                decision="rejected",
+                blockers=[f"duplicate_evidence_persistence_failed:{type(exc).__name__}:{exc}"],
+                candidate_identity=incoming["effective_scenario_sha256"],
+                near_duplicate_report=near_report,
+            )
+            return corpus, receipt
         corpus, receipt = _record_attempt(
             corpus,
             source_kind=source_kind,
@@ -2287,7 +2377,6 @@ def admit_case_record(
             near_duplicate_report=near_report,
         )
         receipt["case_id"] = existing["case_id"]
-        validate_corpus(corpus, corpus_root=root)
         return corpus, receipt
 
     case_id = incoming["case_id"]
@@ -2340,6 +2429,261 @@ def admit_case_record(
         shutil.rmtree(final_dir, ignore_errors=True)
         shutil.rmtree(staging, ignore_errors=True)
         raise
+
+
+def _retain_duplicate_case_evidence(
+    existing: dict[str, Any],
+    incoming: dict[str, Any],
+    corpus: dict[str, Any],
+    *,
+    corpus_root: Path,
+    artifact_root: Path,
+) -> None:
+    """Retain each duplicate discovery's replay bytes and planner evaluation."""
+    _validate_duplicate_case_input_identity(existing, incoming)
+    planner_id, config_identity, snapshot, artifact_receipts = _duplicate_case_planner_evidence(
+        incoming
+    )
+    case_dir = corpus_root / "cases" / existing["case_id"]
+    if not case_dir.is_dir():
+        raise CorpusError("duplicate case custody directory is missing")
+    support_relative = _duplicate_support_relative_path(
+        planner_id, config_identity, artifact_root, existing["case_id"]
+    )
+    support_dir = corpus_root / support_relative
+    old_source_evidence = copy.deepcopy(existing["source_evidence"])
+    had_supporting_evidence = "supporting_source_evidence" in existing
+    old_supporting_evidence = copy.deepcopy(existing.get("supporting_source_evidence"))
+    old_evaluations = copy.deepcopy(corpus["planner_evaluations"])
+    staging = None
+    promoted = False
+    try:
+        staging, promoted = _stage_duplicate_supporting_bundle(
+            incoming,
+            artifact_root=artifact_root,
+            corpus_root=corpus_root,
+            support_relative=support_relative,
+            support_dir=support_dir,
+        )
+        _merge_duplicate_source_evidence(
+            existing,
+            incoming,
+            case_dir=case_dir,
+            support_dir=support_dir,
+            support_relative=support_relative,
+            corpus_root=corpus_root,
+        )
+        incoming_errors = _validate_case_record(incoming, corpus_root=corpus_root)
+        if incoming_errors:
+            raise CorpusError(
+                "materialized duplicate case record rejected: " + "; ".join(incoming_errors)
+            )
+        _append_duplicate_case_evaluations(
+            existing,
+            incoming,
+            artifact_receipts=artifact_receipts,
+            configuration_snapshot=snapshot,
+            corpus=corpus,
+            corpus_root=corpus_root,
+        )
+        validate_corpus(corpus, corpus_root=corpus_root)
+    except BaseException:
+        existing["source_evidence"] = old_source_evidence
+        if had_supporting_evidence:
+            existing["supporting_source_evidence"] = old_supporting_evidence
+        else:
+            existing.pop("supporting_source_evidence", None)
+        corpus["planner_evaluations"] = old_evaluations
+        if promoted:
+            shutil.rmtree(support_dir, ignore_errors=True)
+        if staging is not None:
+            shutil.rmtree(staging, ignore_errors=True)
+        raise
+    finally:
+        if staging is not None:
+            shutil.rmtree(staging, ignore_errors=True)
+
+
+def _validate_duplicate_case_input_identity(
+    existing: Mapping[str, Any], incoming: Mapping[str, Any]
+) -> None:
+    if (
+        incoming.get("case_id") != existing.get("case_id")
+        or incoming.get("scenario_id") != existing.get("scenario_id")
+        or incoming.get("scenario_seed") != existing.get("scenario_seed")
+        or incoming.get("effective_scenario_sha256") != existing.get("effective_scenario_sha256")
+        or _case_classifier_input_binding(incoming) != _case_classifier_input_binding(existing)
+    ):
+        raise CorpusError("duplicate scenario hash has conflicting materialized inputs")
+
+
+def _duplicate_case_planner_evidence(
+    incoming: Mapping[str, Any],
+) -> tuple[str, str, dict[str, Any], list[Mapping[str, Any]]]:
+    receipt = incoming.get("replay_receipt")
+    artifacts = receipt.get("artifact_receipts") if isinstance(receipt, Mapping) else None
+    if not isinstance(artifacts, list) or not artifacts:
+        raise CorpusError("duplicate admission has no row-level replay artifacts to preserve")
+    target = incoming.get("target_planner")
+    target = target if isinstance(target, Mapping) else {}
+    planner_id = target.get("planner_id")
+    config_identity = target.get("config_identity")
+    snapshot = target.get("configuration_snapshot")
+    if not isinstance(planner_id, str) or not planner_id:
+        raise CorpusError("duplicate admission target planner ID is missing")
+    if not isinstance(config_identity, str) or not config_identity:
+        raise CorpusError("duplicate admission target config identity is missing")
+    if not isinstance(snapshot, Mapping):
+        raise CorpusError("duplicate admission target configuration snapshot is missing")
+    if any(not isinstance(item, Mapping) for item in artifacts):
+        raise CorpusError("duplicate replay receipt row is malformed")
+    return planner_id, config_identity, dict(snapshot), artifacts
+
+
+def _duplicate_support_relative_path(
+    planner_id: str, config_identity: str, artifact_root: Path, case_id: str
+) -> str:
+    artifacts = [
+        {"path": item.relative_to(artifact_root).as_posix(), "sha256": _sha256_file(item)}
+        for item in sorted(path for path in artifact_root.rglob("*") if path.is_file())
+    ]
+    if not artifacts:
+        raise CorpusError("duplicate admission artifact bundle is empty")
+    identity = hashlib.sha256(
+        _stable_json(
+            {
+                "planner_id": planner_id,
+                "planner_config_identity": config_identity,
+                "artifacts": artifacts,
+            }
+        ).encode("utf-8")
+    ).hexdigest()
+    return f"cases/{case_id}/supporting_replays/{identity}"
+
+
+def _stage_duplicate_supporting_bundle(
+    incoming: dict[str, Any],
+    *,
+    artifact_root: Path,
+    corpus_root: Path,
+    support_relative: str,
+    support_dir: Path,
+) -> tuple[Path, bool]:
+    cases_dir = corpus_root / "cases"
+    staging_parent = cases_dir
+    try:
+        cases_dir.relative_to(artifact_root)
+    except ValueError:
+        pass
+    else:
+        # A broad source root containing the case directory must not contain its own
+        # staging destination, which would make the tree copy recurse into itself.
+        staging_parent = corpus_root.parent
+    staging = Path(tempfile.mkdtemp(prefix=f".{incoming['case_id']}.support-", dir=staging_parent))
+    try:
+        staged_bundle = staging / "source_bundle"
+        _copy_tree_without_symlinks(artifact_root, staged_bundle)
+        _rewrite_case_artifact_paths(
+            incoming,
+            corpus_root=corpus_root,
+            artifact_root=artifact_root,
+            new_root=f"{support_relative}/source_bundle",
+        )
+        if support_dir.exists():
+            if _tree_file_inventory(staged_bundle) != _tree_file_inventory(
+                support_dir / "source_bundle"
+            ):
+                raise CorpusError("duplicate supporting replay destination has conflicting bytes")
+            shutil.rmtree(staging, ignore_errors=True)
+            return staging, False
+        support_dir.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            staging.replace(support_dir)
+        except OSError as exc:
+            if exc.errno != errno.EXDEV:
+                raise
+            local_staging = Path(
+                tempfile.mkdtemp(prefix=f".{incoming['case_id']}.support-", dir=cases_dir)
+            )
+            try:
+                _copy_tree_without_symlinks(staging, local_staging)
+                local_staging.replace(support_dir)
+            except BaseException:
+                shutil.rmtree(local_staging, ignore_errors=True)
+                raise
+            finally:
+                shutil.rmtree(staging, ignore_errors=True)
+        return staging, True
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+
+
+def _tree_file_inventory(root: Path) -> list[tuple[str, str]]:
+    if not root.is_dir():
+        return []
+    return [
+        (item.relative_to(root).as_posix(), _sha256_file(item))
+        for item in sorted(path for path in root.rglob("*") if path.is_file())
+    ]
+
+
+def _merge_duplicate_source_evidence(
+    existing: dict[str, Any],
+    incoming: dict[str, Any],
+    *,
+    case_dir: Path,
+    support_dir: Path,
+    support_relative: str,
+    corpus_root: Path,
+) -> None:
+    support_files = _case_file_inventory(support_dir, corpus_root)
+    evidence = incoming.get("source_evidence")
+    if not isinstance(evidence, dict):
+        raise CorpusError("duplicate admission source evidence is missing")
+    evidence["admission_artifact_root"] = support_relative
+    evidence["corpus_files"] = support_files
+    incoming_evidence = [evidence]
+    incoming_evidence.extend(incoming.get("supporting_source_evidence", []))
+    for source_evidence in incoming_evidence:
+        if not isinstance(source_evidence, Mapping):
+            continue
+        copied = copy.deepcopy(dict(source_evidence))
+        copied["admission_artifact_root"] = support_relative
+        copied["corpus_files"] = support_files
+        _merge_source_evidence(existing, copied)
+    existing["source_evidence"]["corpus_files"] = _case_file_inventory(case_dir, corpus_root)
+
+
+def _append_duplicate_case_evaluations(
+    existing: Mapping[str, Any],
+    incoming: Mapping[str, Any],
+    *,
+    artifact_receipts: Sequence[Mapping[str, Any]],
+    configuration_snapshot: Mapping[str, Any],
+    corpus: dict[str, Any],
+    corpus_root: Path,
+) -> None:
+    for artifact_receipt in artifact_receipts:
+        artifact_path = artifact_receipt.get("artifact_path")
+        observation = _admission_replay_observation(incoming, artifact_receipt)
+        observation["case_id"] = existing["case_id"]
+        observation["effective_scenario_sha256"] = existing["effective_scenario_sha256"]
+        observation["evidence_status"] = "complete"
+        observation["error"] = None
+        replay = create_planner_replay_receipt(
+            observation,
+            existing,
+            artifact_path=artifact_path,
+            corpus_root=corpus_root,
+        )
+        if replay.get("planner_configuration_snapshot") != dict(configuration_snapshot):
+            raise CorpusError(
+                "duplicate replay artifact configuration differs from its target snapshot"
+            )
+        observation["planner_configuration_snapshot"] = dict(configuration_snapshot)
+        observation["replay_receipt"] = replay
+        append_planner_evaluation(corpus, observation, corpus_root=corpus_root)
 
 
 def promote_historical_candidate(
@@ -3877,6 +4221,64 @@ def _promote_issue9656_candidate_artifacts(
         raise
 
 
+def create_case_scenario_admissibility_receipt(
+    case: Mapping[str, Any],
+    classifier_result: Mapping[str, Any],
+    *,
+    corpus_root: str | Path,
+) -> dict[str, Any]:
+    """Bind a canonical #9651 unknown-feasibility result to staged case input bytes."""
+    root = Path(corpus_root).resolve()
+    try:
+        validate_scenario_admissibility(classifier_result)
+    except (ValueError, TypeError) as exc:
+        raise CorpusError(f"#9651 classifier result is invalid: {exc}") from exc
+    if (
+        classifier_result.get("verdict")
+        in {
+            "structurally_invalid",
+            "geometric_or_kinodynamic_impossibility",
+        }
+        or classifier_result.get("search_disposition") == "reject"
+    ):
+        raise CorpusError("#9651 classifier explicitly excludes this scenario")
+    if (
+        classifier_result.get("verdict") != "admissible_feasibility_unknown"
+        or classifier_result.get("search_disposition") != "retain"
+        or classifier_result.get("case_id") != case.get("case_id")
+        or classifier_result.get("scenario_id") != case.get("scenario_id")
+    ):
+        raise CorpusError("#9651 classifier result does not bind this unknown-feasibility case")
+    _case_input_paths(case, root)
+    inputs = _case_classifier_input_binding(case)
+    evidence = classifier_result.get("evidence")
+    evidence = evidence if isinstance(evidence, Mapping) else {}
+    scenario_identity = evidence.get("scenario_artifact_identity")
+    scenario_identity = scenario_identity if isinstance(scenario_identity, Mapping) else {}
+    selected_row = evidence.get("selected_scenario_row_binding")
+    selected_row = selected_row if isinstance(selected_row, Mapping) else {}
+    if (
+        scenario_identity.get("sha256") != inputs["scenario_sha256"]
+        or selected_row.get("status") != "valid"
+        or selected_row.get("scenario_id") != case.get("scenario_id")
+        or selected_row.get("source_artifact_sha256") != inputs["scenario_sha256"]
+    ):
+        raise CorpusError("#9651 classifier result does not bind staged scenario bytes")
+    result = json.loads(_stable_json(classifier_result))
+    receipt = {
+        "schema_version": CASE_SCENARIO_ADMISSIBILITY_RECEIPT_SCHEMA_VERSION,
+        "case_id": case["case_id"],
+        "effective_scenario_sha256": case["effective_scenario_sha256"],
+        "input_binding": inputs,
+        "classifier_result": result,
+        "classifier_result_sha256": hashlib.sha256(
+            _stable_json(result).encode("utf-8")
+        ).hexdigest(),
+    }
+    receipt["binding_sha256"] = hashlib.sha256(_stable_json(receipt).encode("utf-8")).hexdigest()
+    return receipt
+
+
 def create_planner_replay_receipt(
     observation: Mapping[str, Any],
     case: Mapping[str, Any],
@@ -3892,6 +4294,9 @@ def create_planner_replay_receipt(
     if item.get("episode_sha256") is None:
         item["episode_sha256"] = episode_sha256
     record = _read_single_jsonl_record(artifact)
+    metadata = record.get("algorithm_metadata")
+    metadata = metadata if isinstance(metadata, Mapping) else {}
+    configuration_snapshot = metadata.get("config")
     inputs = case.get("inputs")
     inputs = inputs if isinstance(inputs, dict) else {}
     provenance = record.get("provenance")
@@ -3926,6 +4331,9 @@ def create_planner_replay_receipt(
         "map_assets": _map_asset_identity(inputs.get("map_assets")),
         "planner_id": item.get("planner_id"),
         "planner_config_identity": item.get("planner_config_identity"),
+        "planner_configuration_snapshot": (
+            dict(configuration_snapshot) if isinstance(configuration_snapshot, Mapping) else None
+        ),
         "source_revision": item.get("source_revision"),
         "episode_sha256": episode_sha256,
         "outcome": item.get("outcome"),
@@ -5724,6 +6132,7 @@ def _pilot_search_run(
     return {
         "schema_version": "adversarial-counterexample-search-run.v1",
         "run_id": "issue_9645_bounded_pilot",
+        "round_id": "issue_9645_bounded_pilot",
         "source_issue": 9645,
         "source_revision": summary["source_revision"],
         "objective": metadata["objective"],
@@ -7039,7 +7448,21 @@ def _validate_case_admissibility_evidence(
     verdict = admissibility.get("verdict")
     evidence = admissibility.get("evidence_receipt")
     if verdict == "admissible_feasibility_unknown":
-        return _validate_unknown_admissibility_evidence(evidence)
+        return _validate_unknown_admissibility_evidence(
+            case, admissibility.get("classifier_receipt"), corpus_root=corpus_root
+        )
+    classifier_receipt = admissibility.get("classifier_receipt")
+    classifier_result = (
+        classifier_receipt.get("classifier_result")
+        if isinstance(classifier_receipt, Mapping)
+        else None
+    )
+    if isinstance(classifier_result, Mapping) and (
+        classifier_result.get("verdict")
+        in {"structurally_invalid", "geometric_or_kinodynamic_impossibility"}
+        or classifier_result.get("search_disposition") == "reject"
+    ):
+        return ["#9651 classifier explicitly excludes this scenario"]
     if verdict not in {"empirically_feasible", "planner_specific_failure"}:
         return []
     if not isinstance(evidence, Mapping):
@@ -7049,13 +7472,116 @@ def _validate_case_admissibility_evidence(
     )
 
 
-def _validate_unknown_admissibility_evidence(evidence: Any) -> list[str]:
-    if evidence is not None and (
-        not isinstance(evidence, Mapping)
-        or evidence.get("verdict") != "admissible_feasibility_unknown"
+def _validate_unknown_admissibility_evidence(
+    case: Mapping[str, Any], receipt: Any, *, corpus_root: Path | None
+) -> list[str]:
+    if not isinstance(receipt, Mapping):
+        return ["unknown feasibility requires a #9651 classifier receipt"]
+    if corpus_root is None:
+        return ["unknown feasibility classifier receipt requires materialized input custody"]
+    expected_inputs = _case_classifier_input_binding(case)
+    errors = _unknown_classifier_receipt_binding_errors(case, receipt, expected_inputs)
+    result = receipt.get("classifier_result")
+    if not isinstance(result, Mapping):
+        return [*errors, "unknown feasibility classifier result is missing"]
+    try:
+        validate_scenario_admissibility(result)
+    except (OSError, ValueError, TypeError) as exc:
+        errors.append(f"unknown feasibility classifier result is invalid: {exc}")
+        return errors
+    errors.extend(_unknown_classifier_result_case_errors(case, result))
+    errors.extend(_unknown_classifier_result_input_errors(case, result, expected_inputs))
+    errors.extend(_unknown_classifier_receipt_digest_errors(receipt, result))
+    return errors
+
+
+def _unknown_classifier_receipt_binding_errors(
+    case: Mapping[str, Any],
+    receipt: Mapping[str, Any],
+    expected_inputs: Mapping[str, Any],
+) -> list[str]:
+    errors = []
+    expected_fields = {
+        "schema_version": CASE_SCENARIO_ADMISSIBILITY_RECEIPT_SCHEMA_VERSION,
+        "case_id": case.get("case_id"),
+        "effective_scenario_sha256": case.get("effective_scenario_sha256"),
+        "input_binding": expected_inputs,
+    }
+    for field, expected in expected_fields.items():
+        if receipt.get(field) != expected:
+            errors.append(f"unknown feasibility classifier receipt does not bind {field}")
+    return errors
+
+
+def _unknown_classifier_result_case_errors(
+    case: Mapping[str, Any], result: Mapping[str, Any]
+) -> list[str]:
+    errors = []
+    if (
+        result.get("verdict")
+        in {
+            "structurally_invalid",
+            "geometric_or_kinodynamic_impossibility",
+        }
+        or result.get("search_disposition") == "reject"
     ):
-        return ["admissibility evidence receipt conflicts with unknown verdict"]
-    return []
+        errors.append("#9651 classifier explicitly excludes this scenario")
+    if result.get("verdict") != "admissible_feasibility_unknown":
+        errors.append("#9651 classifier result is not feasibility-unknown")
+    if result.get("search_disposition") != "retain":
+        errors.append("#9651 classifier does not retain this scenario")
+    if result.get("case_id") != case.get("case_id"):
+        errors.append("#9651 classifier result does not bind the case ID")
+    if result.get("scenario_id") != case.get("scenario_id"):
+        errors.append("#9651 classifier result does not bind the scenario ID")
+    return errors
+
+
+def _unknown_classifier_result_input_errors(
+    case: Mapping[str, Any],
+    result: Mapping[str, Any],
+    expected_inputs: Mapping[str, Any],
+) -> list[str]:
+    errors = []
+    evidence = result.get("evidence")
+    evidence = evidence if isinstance(evidence, Mapping) else {}
+    scenario_identity = evidence.get("scenario_artifact_identity")
+    scenario_identity = scenario_identity if isinstance(scenario_identity, Mapping) else {}
+    selected_row = evidence.get("selected_scenario_row_binding")
+    selected_row = selected_row if isinstance(selected_row, Mapping) else {}
+    if scenario_identity.get("sha256") != expected_inputs.get("scenario_sha256"):
+        errors.append("#9651 classifier result does not bind materialized scenario bytes")
+    if (
+        selected_row.get("status") != "valid"
+        or selected_row.get("scenario_id") != case.get("scenario_id")
+        or selected_row.get("source_artifact_sha256") != expected_inputs.get("scenario_sha256")
+    ):
+        errors.append("#9651 classifier result does not bind the selected scenario row")
+    return errors
+
+
+def _unknown_classifier_receipt_digest_errors(
+    receipt: Mapping[str, Any], result: Mapping[str, Any]
+) -> list[str]:
+    errors = []
+    digest = hashlib.sha256(_stable_json(result).encode("utf-8")).hexdigest()
+    if receipt.get("classifier_result_sha256") != digest:
+        errors.append("unknown feasibility classifier result digest is invalid")
+    binding = {key: value for key, value in receipt.items() if key != "binding_sha256"}
+    binding_digest = hashlib.sha256(_stable_json(binding).encode("utf-8")).hexdigest()
+    if receipt.get("binding_sha256") != binding_digest:
+        errors.append("unknown feasibility classifier receipt digest is invalid")
+    return errors
+
+
+def _case_classifier_input_binding(case: Mapping[str, Any]) -> dict[str, Any]:
+    inputs = case.get("inputs")
+    inputs = inputs if isinstance(inputs, Mapping) else {}
+    return {
+        "scenario_sha256": inputs.get("scenario_sha256"),
+        "route_overrides_sha256": inputs.get("route_overrides_sha256"),
+        "map_assets": _map_asset_identity(inputs.get("map_assets")),
+    }
 
 
 def _validate_positive_admissibility_evidence(
@@ -7279,6 +7805,8 @@ def _validate_case_discovery(case: Mapping[str, Any]) -> list[str]:
     candidate_parameters = discovery.get("candidate_parameters")
     objective = discovery.get("objective")
     search_source = discovery.get("search_source")
+    if not isinstance(discovery.get("round_id"), str) or not discovery["round_id"].strip():
+        errors.append("discovery round ID is missing")
     if not isinstance(candidate_parameters, dict) or not candidate_parameters:
         errors.append("discovery candidate parameters are missing")
     if (
@@ -7297,8 +7825,13 @@ def _validate_case_discovery(case: Mapping[str, Any]) -> list[str]:
             or _is_full_git_revision(search_source.get("source_revision"))
         )
         or not isinstance(search_source.get("search_settings"), dict)
+        or not search_source.get("search_settings")
     ):
         errors.append("discovery search source revision or settings are incomplete")
+    elif search_source.get("run_id") is not None and (
+        not isinstance(search_source.get("run_id"), str) or not search_source["run_id"].strip()
+    ):
+        errors.append("discovery search run ID is malformed")
     criticality = discovery.get("criticality", discovery.get("failure_attribution"))
     if not isinstance(criticality, dict) and not (
         isinstance(objective, dict)
@@ -7718,6 +8251,9 @@ def _admission_replay_observation(
 def _validate_evaluation(item: Mapping[str, Any]) -> list[str]:
     errors = _validate_evaluation_identity(item)
     errors.extend(_validate_evaluation_execution_metadata(item))
+    configuration_snapshot = item.get("planner_configuration_snapshot")
+    if configuration_snapshot is not None and not isinstance(configuration_snapshot, Mapping):
+        errors.append("planner_configuration_snapshot_invalid")
     evidence_status = item.get("evidence_status")
     if evidence_status not in {"complete", "failed", "partial", "missing", "unknown"}:
         errors.append("evidence_status_invalid")
@@ -7736,6 +8272,7 @@ def _evaluation_digest(item: Mapping[str, Any]) -> str:
             "effective_scenario_sha256",
             "planner_id",
             "planner_config_identity",
+            "planner_configuration_snapshot",
             "source_revision",
             "episode_sha256",
             "outcome",
@@ -7965,6 +8502,7 @@ def _validate_replay_record_projection(
         errors.append("replay_artifact_scenario_seed_mismatch")
     metadata = record.get("algorithm_metadata")
     metadata = metadata if isinstance(metadata, dict) else {}
+    errors.extend(_replay_configuration_snapshot_errors(item, receipt, metadata))
     if record.get("algo") != item.get("planner_id"):
         errors.append("replay_artifact_planner_id_mismatch")
     if metadata.get("config_hash") != item.get("planner_config_identity"):
@@ -7991,6 +8529,21 @@ def _validate_replay_record_projection(
         errors.append("replay_artifact_selected_metrics_mismatch")
     errors.extend(_replay_outcome_metric_consistency_errors(record))
     errors.extend(_validate_replay_event_projection(item, case, receipt, event_identity))
+    return errors
+
+
+def _replay_configuration_snapshot_errors(
+    item: Mapping[str, Any], receipt: Mapping[str, Any], metadata: Mapping[str, Any]
+) -> list[str]:
+    evaluation_snapshot = item.get("planner_configuration_snapshot")
+    receipt_snapshot = receipt.get("planner_configuration_snapshot")
+    errors = []
+    if evaluation_snapshot is not None and metadata.get("config") != evaluation_snapshot:
+        errors.append("replay_artifact_planner_configuration_snapshot_mismatch")
+    if receipt_snapshot is not None and metadata.get("config") != receipt_snapshot:
+        errors.append("replay_receipt_planner_configuration_snapshot_mismatch")
+    if evaluation_snapshot is not None and receipt_snapshot != evaluation_snapshot:
+        errors.append("replay_evaluation_planner_configuration_snapshot_mismatch")
     return errors
 
 
@@ -8215,6 +8768,9 @@ def _validate_replay_receipt_bindings(
     for field, value in expected.items():
         if receipt.get(field) != value:
             errors.append(f"replay_receipt_{field}_mismatch")
+    snapshot = item.get("planner_configuration_snapshot")
+    if snapshot is not None and receipt.get("planner_configuration_snapshot") != snapshot:
+        errors.append("replay_receipt_planner_configuration_snapshot_mismatch")
     return errors
 
 

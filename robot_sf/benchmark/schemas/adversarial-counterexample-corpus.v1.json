@@ -27,6 +27,7 @@
         "required": [
           "schema_version",
           "run_id",
+          "round_id",
           "source_issue",
           "source_revision",
           "objective",
@@ -44,6 +45,7 @@
         "properties": {
           "schema_version": {"const": "adversarial-counterexample-search-run.v1"},
           "run_id": {"type": "string", "minLength": 1},
+          "round_id": {"type": "string", "minLength": 1},
           "source_issue": {"type": "integer", "minimum": 1},
           "source_revision": {"type": "string", "minLength": 1},
           "objective": {"type": "object"},
@@ -170,8 +172,9 @@
           },
           "discovery": {
             "type": "object",
-            "required": ["candidate_parameters", "objective", "search_source"],
+            "required": ["round_id", "candidate_parameters", "objective", "search_source"],
             "properties": {
+              "round_id": {"type": "string", "minLength": 1},
               "candidate_parameters": {"type": "object", "minProperties": 1},
               "objective": {"type": "object", "minProperties": 1},
               "search_source": {"type": "object", "minProperties": 1}
@@ -208,8 +211,100 @@
                   "evaluation_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
                 },
                 "additionalProperties": false
+              },
+              "classifier_receipt": {
+                "type": "object",
+                "required": [
+                  "schema_version",
+                  "case_id",
+                  "effective_scenario_sha256",
+                  "input_binding",
+                  "classifier_result",
+                  "classifier_result_sha256",
+                  "binding_sha256"
+                ],
+                "properties": {
+                  "schema_version": {
+                    "const": "adversarial-case-scenario-admissibility-receipt.v1"
+                  },
+                  "case_id": {"type": "string", "minLength": 1},
+                  "effective_scenario_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "input_binding": {
+                    "type": "object",
+                    "required": ["scenario_sha256", "route_overrides_sha256", "map_assets"],
+                    "properties": {
+                      "scenario_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                      "route_overrides_sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      },
+                      "map_assets": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "type": "object",
+                          "required": ["role", "sha256"],
+                          "properties": {
+                            "role": {"enum": ["map", "map_registry"]},
+                            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+                          },
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "classifier_result": {
+                    "type": "object",
+                    "required": [
+                      "schema_version",
+                      "case_id",
+                      "scenario_id",
+                      "verdict",
+                      "search_disposition",
+                      "evidence"
+                    ],
+                    "properties": {
+                      "schema_version": {"const": "scenario_admissibility.v1"},
+                      "case_id": {"type": "string", "minLength": 1},
+                      "scenario_id": {"type": ["string", "null"]},
+                      "verdict": {
+                        "enum": [
+                          "structurally_invalid",
+                          "geometric_or_kinodynamic_impossibility",
+                          "admissible_feasibility_unknown",
+                          "empirically_feasible",
+                          "planner_specific_failure"
+                        ]
+                      },
+                      "search_disposition": {"enum": ["retain", "reject"]},
+                      "evidence": {"type": "object"}
+                    },
+                    "additionalProperties": true
+                  },
+                  "classifier_result_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "binding_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+                },
+                "additionalProperties": false
               }
             },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "verdict": {"const": "admissible_feasibility_unknown"}
+                  },
+                  "required": ["verdict"]
+                },
+                "then": {"required": ["classifier_receipt"]}
+              }
+            ],
             "additionalProperties": true
           },
           "target_planner": {
@@ -524,6 +619,7 @@
           "effective_scenario_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "planner_id": {"type": "string", "minLength": 1},
           "planner_config_identity": {"type": "string", "minLength": 1},
+          "planner_configuration_snapshot": {"type": "object"},
           "source_revision": {"type": "string", "minLength": 1},
           "episode_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
           "execution_mode": {"type": "string", "minLength": 1},
@@ -645,6 +741,7 @@
               },
               "planner_id": {"type": "string", "minLength": 1},
               "planner_config_identity": {"type": "string", "minLength": 1},
+              "planner_configuration_snapshot": {"type": ["object", "null"]},
               "source_revision": {"type": "string", "minLength": 1},
               "episode_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
               "outcome": {"type": "object"},

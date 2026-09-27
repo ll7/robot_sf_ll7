@@ -6148,11 +6148,33 @@ def _validate_replay_normalization(
     expected_source_hash: str,
 ) -> None:
     replay_actual_hash = _sha256_file(replay_file)
+    recorded_replay_file = replay_file.with_name(f"{replay_file.stem}_recorded.jsonl")
+    recorded_replay_hash = _sha256_file(recorded_replay_file)
     provenance_actual_hash = _sha256_file(provenance_file)
+    normalized_episode = _read_single_jsonl_record(replay_file)
+    recorded_episode = _read_single_jsonl_record(recorded_replay_file)
+    expected_normalized_episode = copy.deepcopy(recorded_episode)
+    recorded_scenario_params = recorded_episode.get("scenario_params")
+    normalized_scenario_params = normalized_episode.get("scenario_params")
+    content_binding_ok = False
+    if (
+        isinstance(recorded_scenario_params, dict)
+        and isinstance(normalized_scenario_params, dict)
+        and isinstance(recorded_scenario_params.get("route_overrides_file"), str)
+        and recorded_scenario_params["route_overrides_file"].strip()
+        and normalized_scenario_params.get("route_overrides_file")
+        == _issue9645_bundle_path("historical_issue_1501_failure_0002/route_overrides.yaml")
+    ):
+        expected_normalized_episode["scenario_params"]["route_overrides_file"] = (
+            normalized_scenario_params["route_overrides_file"]
+        )
+        content_binding_ok = normalized_episode == expected_normalized_episode
     replay_ok = (
         normalized_replay.get("source_sha256_before_path_normalization") == expected_source_hash
+        and recorded_replay_hash == expected_source_hash
         and normalized_replay.get("normalized_sha256") == replay_actual_hash
         and normalized_replay.get("field_rewrites") == {"scenario_params.route_overrides_file": 1}
+        and content_binding_ok
     )
     provenance_ok = (
         _is_sha256(normalized_provenance.get("source_sha256_before_path_normalization"))
@@ -6169,7 +6191,9 @@ def _validate_replay_normalization(
             "replay_path=historical_issue_1501_failure_0002/"
             f"{replay_file.name} declared_source_sha256="
             f"{normalized_replay.get('source_sha256_before_path_normalization')} "
-            f"expected_source_sha256={expected_source_hash} declared_normalized_sha256="
+            f"expected_source_sha256={expected_source_hash} "
+            f"actual_recorded_sha256={recorded_replay_hash} "
+            f"recorded_content_bound={content_binding_ok} declared_normalized_sha256="
             f"{normalized_replay.get('normalized_sha256')} actual_normalized_sha256="
             f"{replay_actual_hash} declared_field_rewrites="
             f"{normalized_replay.get('field_rewrites')}"

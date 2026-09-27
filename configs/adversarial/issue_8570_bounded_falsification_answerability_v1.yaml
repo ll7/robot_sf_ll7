@@ -91,7 +91,7 @@ source:
         - rank_feasible_candidates
       role: four-predicate feasibility and rejection accounting owner
     - path: robot_sf/adversarial/bundle.py
-      sha256: 9d8372b7bb8a6bf2fcf79529ca502d4ce9046e59fa003d542360b6120db5b65e
+      sha256: 7f068d1d5719c46dd75f09ab86148da6cb2dcc4abea1ecfe4373f04438f86482
       symbols:
         - build_candidate_payload
         - validate_template_pedestrian_binding
@@ -450,4 +450,4 @@ compute_authorization:
     binding, preserves the source digest and bounds, supplies native/replay outputs, and passes the same
     research_answerability.v1 evaluator; metadata-only changes remain blocked.
 
-self_digest: b5ac0a929a0b3419866ee7b183c8382977a59d7e14281bb198cf6f45e18c3c2a
+self_digest: 3d080f65e3ac6a6a86255434cd2f250fb725b5feb70ef6b78024872ffd7ff462

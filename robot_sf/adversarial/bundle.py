@@ -573,6 +573,7 @@ def _evaluation_to_json(evaluation: CandidateEvaluation) -> dict[str, Any]:
         "bundle_path": evaluation.bundle_path.as_posix() if evaluation.bundle_path else None,
         "error": evaluation.error,
         "effective_scenario_hash": evaluation.effective_scenario_hash,
+        "evaluation_disposition": evaluation.evaluation_disposition,
         "analysis_eligibility": {
             "schema_version": ELIGIBILITY_SCHEMA_VERSION,
             "eligible": receipt.eligible,

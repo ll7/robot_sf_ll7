@@ -1,0 +1,89 @@
+{
+  "annotations": {
+    "collision_event": {
+      "event_time_s": 1.0,
+      "exact_event_source": "runtime.step.meta.is_pedestrian_collision",
+      "nearest_trace_sample_step_index": 9,
+      "nearest_trace_sample_time_s": 1.0,
+      "sample_offset_s": 0.0,
+      "source_path": "event_ledger.collision_events[0].collision_time"
+    },
+    "interpretation": "Both independently sourced measurements fall on trace step 9 at 1.0 s in this record. Their shared sample time does not make clearance a collision oracle or change the exact event-ledger collision time.",
+    "minimum_clearance": {
+      "render_step_index": 9,
+      "source_path": "algorithm_metadata.simulation_step_trace.steps[9].pedestrians[0].surface_clearance_m",
+      "source_pedestrian_index": 0,
+      "source_trace_step_index": 9,
+      "time_s": 1.0,
+      "value_m": -0.015686402836192603
+    }
+  },
+  "case_limitations": {
+    "dynamic_task_feasibility": "unknown",
+    "new_search_discovery": false,
+    "real_world_safety_claim": false,
+    "source_map_registry_binding": "unknown_source_episode_map_registry_digest_missing"
+  },
+  "claim_boundary": "This is a deterministic visualization of a checksummed stored trace. It is not a new replay, fresh simulation, feasibility proof, new search discovery, planner comparison, or real-world safety result.",
+  "figures": {
+    "artifacts": {
+      "filmstrip.png": {
+        "bundle_relative_path": "cases/case_0000_01595b2ea612/figures/filmstrip.png",
+        "path": "docs/context/evidence/issue_9647_gallery_smoke_2026-09-26/payload/cases/case_0000_01595b2ea612/figures/filmstrip.png",
+        "repeat_render_sha256": "71c7006c987248678c7092f5df404575c95c6709f3216052b3d441b6e39d7992",
+        "sha256": "71c7006c987248678c7092f5df404575c95c6709f3216052b3d441b6e39d7992",
+        "size_bytes": 56809
+      },
+      "still_9.png": {
+        "bundle_relative_path": "cases/case_0000_01595b2ea612/figures/still_9.png",
+        "path": "docs/context/evidence/issue_9647_gallery_smoke_2026-09-26/payload/cases/case_0000_01595b2ea612/figures/still_9.png",
+        "repeat_render_sha256": "85367fab5491af5de2c2ebfcc87bd4d544e3e26802bd45319f2e304d56dfc7ee",
+        "sha256": "85367fab5491af5de2c2ebfcc87bd4d544e3e26802bd45319f2e304d56dfc7ee",
+        "size_bytes": 54761
+      },
+      "trajectory.png": {
+        "bundle_relative_path": "cases/case_0000_01595b2ea612/figures/trajectory.png",
+        "path": "docs/context/evidence/issue_9647_gallery_smoke_2026-09-26/payload/cases/case_0000_01595b2ea612/figures/trajectory.png",
+        "repeat_render_sha256": "e02b7223606b256ca5f708b6d405e381efd27e0de9a925923a05537a457cc55f",
+        "sha256": "e02b7223606b256ca5f708b6d405e381efd27e0de9a925923a05537a457cc55f",
+        "size_bytes": 81127
+      }
+    },
+    "critical_still_step": 9,
+    "determinism_check": "not_performed_render_only",
+    "filmstrip_frame_steps": [
+      0,
+      2,
+      4,
+      7,
+      9
+    ],
+    "map_overlay": "unavailable_no_map_asset_passed_to_renderer",
+    "repeat_render_byte_identity": true,
+    "status": "rendered"
+  },
+  "render_mode": "stored_trace_only",
+  "renderer": {
+    "command": "uv run python scripts/tools/render_recorded_replay_trace.py --trace docs/context/evidence/issue_9647_gallery_smoke_2026-09-26/payload/cases/case_0000_01595b2ea612/replay/simulation_step_trace.json --provenance docs/context/evidence/issue_9647_gallery_smoke_2026-09-26/payload/cases/case_0000_01595b2ea612/replay/trace_provenance.json --out output/adversarial-replay-gallery/issue-9647-render-only-20260926",
+    "entrypoint": "scripts/tools/render_recorded_replay_trace.py",
+    "revision": "d0a8ccf822c48ae7d61dae361440e7335ee43013"
+  },
+  "schema_version": "issue_9647_recorded_trace_render_summary.v1",
+  "simulation_or_replay_dynamics_executed": false,
+  "source": {
+    "original_replay_verification": "outcome_reproduced_revision_changed",
+    "source_episode_record_provenance_sha256": "5d54d9167b49c57e04f7a04ce87e220edac5c32a85eab5cf7db4369b9f28a2e0",
+    "source_episode_record_sha256": "cd5597cec3728b27379c21e10434c9ed17aaa0f65937a98f24fb4bd9d692cdc8",
+    "source_revision_match": false,
+    "source_runner_revision": "4b9617338ecbaf6bd3612b4d8c5269f993581a0a",
+    "trace_path": "cases/case_0000_01595b2ea612/replay/simulation_step_trace.json",
+    "trace_provenance_path": "cases/case_0000_01595b2ea612/replay/trace_provenance.json",
+    "trace_provenance_sha256": "5f2ac197e51e629c023c1ecbbb669d4f2ccc69e6c5bc4ee2b211c21e43407d23",
+    "trace_sha256": "d12df9eb2030a29eae8cea8cc1bc5b042c9865bd9b9afcca8d83ed3da5872788"
+  },
+  "video": {
+    "diagnostic_overlays": "existing_video_renderer_does_not_support_them",
+    "reason": "pygame_missing; MoviePy_unavailable",
+    "status": "unavailable"
+  }
+}

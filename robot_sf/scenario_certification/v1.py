@@ -8,6 +8,7 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from itertools import pairwise
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
@@ -28,8 +29,6 @@ from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from robot_sf.common.types import Vec2D
     from robot_sf.nav.global_route import GlobalRoute
     from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
@@ -151,6 +150,7 @@ def certify_scenario(
             scenario_id=sid,
             source=scenario_path.as_posix(),
             reason=f"scenario_loader_error: {exc}",
+            scenario_path=scenario_path,
         )
 
     map_defs = list(config.map_pool.map_defs.items())
@@ -160,6 +160,7 @@ def certify_scenario(
             scenario_id=sid,
             source=scenario_path.as_posix(),
             reason="map_pool_empty",
+            scenario_path=scenario_path,
         )
 
     route_certs: list[RouteCertificate] = []
@@ -180,6 +181,7 @@ def certify_scenario(
             scenario_id=sid,
             source=scenario_path.as_posix(),
             reason="no_applicable_robot_routes",
+            scenario_path=scenario_path,
         )
     return _aggregate_scenario_certificate(
         scenario,
@@ -187,6 +189,7 @@ def certify_scenario(
         source=scenario_path.as_posix(),
         route_certs=route_certs,
         settings=cert_settings,
+        scenario_path=scenario_path,
     )
 
 
@@ -635,6 +638,7 @@ def _aggregate_scenario_certificate(
     source: str,
     route_certs: list[RouteCertificate],
     settings: CertificationSettings,
+    scenario_path: Path | None = None,
 ) -> ScenarioCertificate:
     """Aggregate per-route certificates into one scenario-level certificate.
 
@@ -650,7 +654,7 @@ def _aggregate_scenario_certificate(
             cert.benchmark_eligibility == "eligible" for cert in route_certs
         ),
     }
-    evidence = _scenario_evidence(scenario)
+    evidence = _scenario_evidence(scenario, scenario_path=scenario_path)
     return ScenarioCertificate(
         schema_version=CERT_SCHEMA_VERSION,
         scenario_id=scenario_id,
@@ -670,6 +674,7 @@ def _invalid_scenario_certificate(
     scenario_id: str,
     source: str,
     reason: str,
+    scenario_path: Path | None = None,
 ) -> ScenarioCertificate:
     """Build an excluded scenario certificate when route certification cannot run.
 
@@ -685,7 +690,7 @@ def _invalid_scenario_certificate(
         reasons=[reason],
         checks={"route_count": 0},
         route_certificates=[],
-        evidence=_scenario_evidence(scenario),
+        evidence=_scenario_evidence(scenario, scenario_path=scenario_path),
     )
 
 
@@ -738,14 +743,22 @@ def _scenario_id(scenario: Mapping[str, Any]) -> str:
     return str(raw or "unknown").strip() or "unknown"
 
 
-def _scenario_evidence(scenario: Mapping[str, Any]) -> dict[str, Any]:
+def _scenario_evidence(
+    scenario: Mapping[str, Any], *, scenario_path: Path | None = None
+) -> dict[str, Any]:
     """Extract reusable provenance and plausibility evidence from a scenario.
 
     Returns:
         dict[str, Any]: JSON-safe evidence block for scenario certificates.
     """
     metadata = scenario.get("metadata")
-    evidence: dict[str, Any] = {"scenario_fingerprint": _fingerprint_mapping(scenario)}
+    evidence: dict[str, Any] = {
+        "scenario_fingerprint": _fingerprint_mapping(
+            scenario,
+            scenario_path=scenario_path,
+            source_root=Path(__file__).resolve().parents[2] if scenario_path is not None else None,
+        )
+    }
     if isinstance(metadata, Mapping):
         plausibility = metadata.get("plausibility")
         if isinstance(plausibility, Mapping):
@@ -760,14 +773,64 @@ def _scenario_evidence(scenario: Mapping[str, Any]) -> dict[str, Any]:
     return evidence
 
 
-def _fingerprint_mapping(payload: Mapping[str, Any]) -> str:
-    """Fingerprint a mapping after JSON-safe normalization.
+def _fingerprint_mapping(
+    payload: Mapping[str, Any],
+    *,
+    scenario_path: Path | None = None,
+    source_root: Path | None = None,
+) -> str:
+    """Fingerprint a mapping with checkout-independent, content-bound file references.
+
+    File references resolved by the scenario loader contain checkout-specific absolute paths.
+    Normalize those locators relative to the source checkout (or scenario directory for an
+    external fixture) and bind the referenced bytes so a path move does not weaken provenance.
 
     Returns:
         str: Short SHA-256 fingerprint for provenance comparisons.
     """
-    encoded = json.dumps(_sanitize_json_value(dict(payload)), sort_keys=True).encode("utf-8")
+    normalized = _sanitize_json_value(dict(payload))
+    if scenario_path is not None:
+        scenario_parent = Path(scenario_path).expanduser().resolve().parent
+        checkout_root = (
+            Path(source_root).expanduser().resolve()
+            if source_root is not None
+            else Path(__file__).resolve().parents[2]
+        )
+        for field_name in ("map_file", "route_overrides_file"):
+            raw_reference = payload.get(field_name)
+            if not isinstance(raw_reference, str):
+                continue
+            candidate = Path(raw_reference).expanduser()
+            if not candidate.is_absolute():
+                candidate = scenario_parent / candidate
+            resolved = candidate.resolve()
+            locator = _portable_reference_locator(
+                resolved, checkout_root=checkout_root, scenario_parent=scenario_parent
+            )
+            try:
+                content_sha256 = hashlib.sha256(resolved.read_bytes()).hexdigest()
+            except OSError:
+                content_sha256 = None
+            normalized[field_name] = {
+                "locator": locator,
+                "content_sha256": content_sha256,
+            }
+    encoded = json.dumps(normalized, sort_keys=True).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()[:16]
+
+
+def _portable_reference_locator(path: Path, *, checkout_root: Path, scenario_parent: Path) -> str:
+    """Render a referenced file path without embedding a checkout's absolute prefix.
+
+    Returns:
+        str: Scenario-relative, repository-relative, or explicit external locator.
+    """
+    for prefix, base in (("scenario:", scenario_parent), ("repo:", checkout_root)):
+        try:
+            return prefix + path.relative_to(base).as_posix()
+        except ValueError:
+            continue
+    return "external:" + path.as_posix()
 
 
 def _applicable_routes(map_def: MapDefinition, scenario: Mapping[str, Any]) -> list[GlobalRoute]:

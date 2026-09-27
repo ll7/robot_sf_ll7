@@ -3261,7 +3261,9 @@ def _validated_scenario_certificate(
         evidence.get("scenario_fingerprint") if isinstance(evidence, dict) else None
     )
     try:
-        expected_fingerprint = _fingerprint_mapping(loaded_scenario)
+        expected_fingerprint = _fingerprint_mapping(
+            loaded_scenario, scenario_path=scenario_path, source_root=source_root
+        )
     except (TypeError, ValueError, OverflowError):
         return None, "certificate_scenario_fingerprint_unavailable"
     if recorded_fingerprint != expected_fingerprint:

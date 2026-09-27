@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -89,7 +90,11 @@ def _bind_certificate_to_scenario(status: dict[str, Any], scenario_path: Path) -
     certificate = certificates[0]
     loaded = replay_gallery.scenario_loader.load_scenarios(scenario_path)
     certificate["source"] = str(scenario_path)
-    certificate["evidence"]["scenario_fingerprint"] = replay_gallery._fingerprint_mapping(loaded[0])
+    certificate["evidence"]["scenario_fingerprint"] = replay_gallery._fingerprint_mapping(
+        loaded[0],
+        scenario_path=scenario_path,
+        source_root=replay_gallery._repository_root(),
+    )
     return status
 
 
@@ -510,6 +515,61 @@ def test_tracked_compatibility_fixture_has_source_bound_canonical_static_certifi
     )
     assert historical_certificate is None
     assert historical_error == "certificate_structurally_invalid"
+
+
+def test_source_bound_certificate_is_portable_across_checkout_roots_and_binds_referenced_bytes(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """Path relocation preserves a certificate while changing referenced bytes invalidates it."""
+    repo_root = Path(__file__).resolve().parents[2]
+    fixture_root = repo_root / "tests/fixtures/adversarial_replay_gallery/issue_1501_compat"
+    manifest = json.loads((fixture_root / "manifest.json").read_text(encoding="utf-8"))
+    certificate_status = manifest["candidates"][0]["certification_status"]
+
+    other_root = tmp_path / "different-checkout-root"
+    other_fixture_root = other_root / "tests/fixtures/adversarial_replay_gallery/issue_1501_compat"
+    other_fixture_root.parent.mkdir(parents=True)
+    shutil.copytree(fixture_root, other_fixture_root)
+    other_maps = other_root / "maps"
+    (other_maps / "svg_maps").mkdir(parents=True)
+    shutil.copy2(repo_root / "maps/registry.yaml", other_maps / "registry.yaml")
+    shutil.copy2(
+        repo_root / "maps/svg_maps/classic_crossing.svg",
+        other_maps / "svg_maps/classic_crossing.svg",
+    )
+    monkeypatch.setenv("ROBOT_SF_MAP_REGISTRY", str(other_maps / "registry.yaml"))
+
+    other_scenario_path = other_fixture_root / "scenario.yaml"
+    replay_gallery.scenario_loader._load_map_registry.cache_clear()
+    try:
+        loaded = replay_gallery.scenario_loader.load_scenarios(other_scenario_path)[0]
+        certificate, error = replay_gallery._validated_scenario_certificate(
+            certificate_status,
+            expected_scenario_id="crossing_ttc_template_adversarial_0008",
+            loaded_scenario=dict(loaded),
+            scenario_path=other_scenario_path,
+            root=other_root,
+            source_root=other_root,
+        )
+        assert error is None
+        assert certificate is not None
+
+        route_overrides = other_fixture_root / "route_overrides.yaml"
+        route_overrides.write_bytes(route_overrides.read_bytes() + b"\n# content changed\n")
+        changed_loaded = replay_gallery.scenario_loader.load_scenarios(other_scenario_path)[0]
+        changed_certificate, changed_error = replay_gallery._validated_scenario_certificate(
+            certificate_status,
+            expected_scenario_id="crossing_ttc_template_adversarial_0008",
+            loaded_scenario=dict(changed_loaded),
+            scenario_path=other_scenario_path,
+            root=other_root,
+            source_root=other_root,
+        )
+    finally:
+        replay_gallery.scenario_loader._load_map_registry.cache_clear()
+
+    assert changed_certificate is None
+    assert changed_error == "certificate_scenario_fingerprint_mismatch"
 
 
 @pytest.mark.parametrize(
@@ -1919,7 +1979,7 @@ def test_gallery_rejects_route_overrides_changed_after_selection_before_replay(
 
 
 def test_gallery_rejects_route_input_drift_before_certificate_selection(tmp_path: Path) -> None:
-    """A valid scenario fingerprint cannot hide route bytes that differ from the search hash."""
+    """A certificate cannot survive changed referenced bytes before candidate selection."""
     manifest = _source_manifest(tmp_path)
     payload = json.loads(manifest.read_text(encoding="utf-8"))
     candidate_row = payload["candidates"][0]
@@ -1948,7 +2008,7 @@ def test_gallery_rejects_route_input_drift_before_certificate_selection(tmp_path
     )
 
     assert result["summary"]["selected_case_count"] == 0
-    assert result["summary"]["dispositions"] == {"effective_scenario_hash_missing_or_mismatch": 1}
+    assert result["summary"]["dispositions"] == {"certificate_scenario_fingerprint_mismatch": 1}
 
 
 def test_gallery_rechecks_route_bytes_against_selection_snapshot(

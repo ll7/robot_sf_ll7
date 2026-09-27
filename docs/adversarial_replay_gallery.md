@@ -108,8 +108,11 @@ resolved map registry and map SVG digests are recorded beside the certificate pr
 The selector requires an analysis-eligible row and a passed `scenario_cert.v1` receipt containing
 exactly one certificate that validates against the canonical schema, matches the candidate
 scenario's name/id, names that exact scenario file in `source`, and has an
-`evidence.scenario_fingerprint` matching the canonical loader-normalized scenario mapping. It also
-has complete route accounting (`checks.route_count` equals the non-empty `route_certificates` list).
+`evidence.scenario_fingerprint` matching the canonical loader-normalized scenario mapping. Its
+`map_file` and `route_overrides_file` references use checkout-independent locators and include
+SHA-256 digests of the referenced bytes, so checkout relocation preserves a certificate while
+referenced-file changes invalidate it. It also has complete route accounting
+(`checks.route_count` equals the non-empty `route_certificates` list).
 Top-level eligibility, route eligibility, and the all-routes check must agree with their
 classifications; a `valid` or `hard_but_solvable` classification is admissible only when every route
 is benchmark-eligible. Missing, failed, malformed, incomplete, ambiguous, source-mismatched, or

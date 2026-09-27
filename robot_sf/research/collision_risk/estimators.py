@@ -107,6 +107,24 @@ class RiskEstimatorConfig:
 
     def __post_init__(self) -> None:
         """Validate configuration invariants, failing closed on bad values."""
+        finite_fields = (
+            "dt_s",
+            "velocity_std_m_s",
+            "cross_actor_correlation",
+            "robot_radius_m",
+            "pedestrian_radius_m",
+            "deadline_ms",
+            "max_pedestrian_speed_m_s",
+            "ci95_abstain_halfwidth",
+        )
+        for name in finite_fields:
+            value = getattr(self, name)
+            try:
+                is_finite = not isinstance(value, (bool, np.bool_)) and math.isfinite(float(value))
+            except (TypeError, ValueError, OverflowError):
+                is_finite = False
+            if not is_finite:
+                raise CollisionRiskInputError(f"{name} must be finite")
         if self.horizon_steps <= 0:
             raise CollisionRiskInputError("horizon_steps must be positive")
         if self.dt_s <= 0.0:

@@ -319,6 +319,8 @@ class TrajectoryModeRiskEstimate:
             raise RiskSchemaError("trajectory mode risk time offsets must be strictly increasing")
         if isinstance(self.actor_id, bool) or not isinstance(self.actor_id, (int, str)):
             raise RiskSchemaError("trajectory mode risk actor_id must be an integer or string")
+        if isinstance(self.actor_id, str) and not self.actor_id.strip():
+            raise RiskSchemaError("trajectory mode risk actor_id must be non-empty")
         if not isinstance(self.mode_id, str) or not self.mode_id.strip():
             raise RiskSchemaError("trajectory mode risk mode_id must be non-empty")
 
@@ -350,6 +352,35 @@ class TrajectoryModeRiskEstimate:
         if not isinstance(self.claim_boundary, str) or not self.claim_boundary.strip():
             raise RiskSchemaError("claim_boundary must be non-empty")
 
+    def _validate_provenance(self) -> None:
+        """Validate the estimator identity and versioned provenance contract."""
+        if not isinstance(self.provenance, TrajectoryModeRiskProvenance):
+            raise RiskSchemaError("provenance must be a TrajectoryModeRiskProvenance")
+        if self.provenance.schema_version != TRAJECTORY_MODE_RISK_SCHEMA_VERSION:
+            raise RiskSchemaError("trajectory mode risk provenance schema_version mismatch")
+        for field_name in (
+            "estimator_id",
+            "forecast_model",
+            "geometry_version",
+            "action_id",
+            "config_hash",
+        ):
+            value = getattr(self.provenance, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise RiskSchemaError(
+                    f"trajectory mode risk provenance {field_name} must be non-empty"
+                )
+        if isinstance(self.provenance.seed, (bool, np.bool_)) or not isinstance(
+            self.provenance.seed, (int, np.integer)
+        ):
+            raise RiskSchemaError("trajectory mode risk provenance seed must be an integer")
+        if isinstance(self.provenance.n_samples, (bool, np.bool_)) or not isinstance(
+            self.provenance.n_samples, (int, np.integer)
+        ):
+            raise RiskSchemaError("trajectory mode risk provenance n_samples must be an integer")
+        if self.provenance.seed < 0 or self.provenance.n_samples <= 0:
+            raise RiskSchemaError("trajectory mode risk provenance seed/sample count is invalid")
+
     def validate(self) -> TrajectoryModeRiskEstimate:
         """Validate result vectors and aggregation semantics.
 
@@ -360,6 +391,7 @@ class TrajectoryModeRiskEstimate:
         self._validate_identity_and_time(count)
         self._validate_probability_vectors()
         self._validate_aggregation()
+        self._validate_provenance()
         return self
 
 

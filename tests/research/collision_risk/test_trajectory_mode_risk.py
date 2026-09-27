@@ -77,6 +77,21 @@ def test_zero_covariance_is_deterministic_and_reports_stable_peak() -> None:
     assert result.claim_boundary.startswith("finite-sample point estimate")
     with pytest.raises(RiskSchemaError, match="first maximum risk"):
         replace(result, peak_risk_time_index=0).validate()
+    with pytest.raises(RiskSchemaError, match="actor_id must be non-empty"):
+        replace(result, actor_id="").validate()
+    with pytest.raises(RiskSchemaError, match="provenance schema_version mismatch"):
+        replace(
+            result,
+            provenance=replace(result.provenance, schema_version="unknown"),
+        ).validate()
+
+
+@pytest.mark.parametrize("radius", [np.nan, np.inf, -np.inf])
+def test_nonfinite_configured_radii_fail_closed(radius: float) -> None:
+    """Robot and default actor radii cannot corrupt contact geometry."""
+    for field in ("robot_radius_m", "pedestrian_radius_m"):
+        with pytest.raises(CollisionRiskInputError, match=f"{field} must be finite"):
+            _config(**{field: radius})
 
 
 def test_nonzero_covariance_is_seed_reproducible_and_has_mc_error() -> None:

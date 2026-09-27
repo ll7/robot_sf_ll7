@@ -31,9 +31,16 @@ Each certificate includes:
   `source_artifact_sha256`, `effective_input_sha256`, and
   `effective_input_identity_stable`. The stable flag is true only when the loaded manifest closure
   and consumed snapshots match the current identity. These are optional fields inside the open
-  `evidence` object; `scenario_cert.v1` and its required fields are unchanged. Direct
-  `certify_scenario(...)` and `certify_map_definition(...)` calls remain programmatic/unbound unless
-  a future API explicitly binds their source inputs. The adapter checks producer digests against
+  `evidence` object; `scenario_cert.v1` and its required fields are unchanged. The producer also
+  records optional `actor_source_census` evidence using `scenario_actor_source_census.v1`. This
+  census reports effective pedestrian source counts per loaded map, configured density, forced
+  population size, and whether the runtime actor scene and planner-visible context are verified
+  empty. Map-authored single pedestrians always count as actors; pedestrian routes and crowded
+  zones count when density is positive; a positive forced population count is an actor source even
+  without those map geometries. Nonempty social groups are tracked as changed planner context.
+  Direct `certify_scenario(...)` and `certify_map_definition(...)` calls produce the census for the
+  config they certify, but remain source-input-unbound unless their caller separately binds those
+  inputs. The adapter checks producer digests against
   the candidate's current source and effective-input digests. Legacy certificates without
   producer-time identity still fail closed for exclusion when external runtime inputs are needed;
   adapter-time identity does not attest which map/route bytes such a certificate used when it was
@@ -218,7 +225,14 @@ to its recorded robot envelope; the envelope and certificate assumptions remain 
 verdict. A
 `dynamically_overconstrained` certificate, a blocked or truncated oracle, missing provenance, or
 conflicting evidence remains `admissible_feasibility_unknown`. A positive actor-free oracle result
-requires a `passed` completion with route completion true, no blocker, explicit
+supports empirical feasibility for the original named case only when a complete, producer-bound
+actor census also verifies that the original runtime case has no active pedestrian sources and
+has equivalent planner-visible context. The diagnostic variant removes effective map-authored
+single pedestrians, generated replay actors, density-backed route/crowded-zone populations, and
+forced population. If the original case is dynamic, has social-group context, or its actor census
+is incomplete, the successful actor-free rollout remains `admissible_feasibility_unknown` for that
+case. When the original case is verified static, the rollout still requires a `passed` completion
+with route completion true, no blocker, explicit
 `fallback_or_degraded: false`, a successful termination reason, positive completion steps within
 the horizon, a matching horizon margin, raw observed completion true, and no rollout blocker or
 fallback marker. The oracle report also records the source manifest digest at report production

@@ -3614,7 +3614,7 @@ def _refresh_bundle_checksum_for_payload(payload: Path, relative: str) -> None:
     (payload.parent / "checksums.sha256").write_text("\n".join(checksum_lines) + "\n")
 
 
-def test_replay_records_with_different_selected_metric_identity_are_rejected(
+def test_normalized_replay_metric_tampering_is_rejected_before_projection_comparison(
     tmp_path: Path,
 ) -> None:
     with _test_only_reconciled_packet() as payload:
@@ -3639,8 +3639,7 @@ def test_replay_records_with_different_selected_metric_identity_are_rejected(
         corpus, receipt, _corpus_root = _import(tmp_path, payload)
         assert receipt["decision"] == "rejected"
         assert any(
-            "current replay records disagree on selected event/metric identity" in blocker
-            for blocker in receipt["blockers"]
+            "normalized artifact binding differs" in blocker for blocker in receipt["blockers"]
         )
         assert corpus["cases"] == []
 

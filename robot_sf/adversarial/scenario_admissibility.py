@@ -1140,7 +1140,7 @@ def _actor_free_source_case_scope(
             scenario_path=Path(scenario_artifact_path),
         )
         census = scenario_actor_source_census(config)
-    except (AttributeError, OSError, RuntimeError, TypeError, ValueError) as exc:
+    except (AttributeError, OSError, RuntimeError, TypeError, ValueError, yaml.YAMLError) as exc:
         result["reason_codes"] = [
             f"original_scenario_actor_inventory_unavailable:{type(exc).__name__}"
         ]

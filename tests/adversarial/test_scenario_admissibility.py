@@ -34,6 +34,7 @@ from robot_sf.adversarial.feasibility_first import (
     SCENARIO_FEASIBILITY_PREDICATE_NAMES,
 )
 from robot_sf.adversarial.scenario_admissibility import (
+    _actor_free_source_case_scope,
     _oracle_excludes,
     _producer_selected_map_binding,
     _same_selected_map_identity,
@@ -1952,6 +1953,19 @@ def test_legacy_single_row_identity_rejects_external_references(
 
     assert identity["status"] == "unavailable"
     assert identity["effective_input_sha256"] is None
+
+
+def test_malformed_route_override_yaml_keeps_actor_free_scope_unknown(tmp_path: Path) -> None:
+    """A YAML parser failure while rebuilding the source scene must fail closed."""
+    scenario_path = _referenced_scenario(tmp_path)
+    route_path = tmp_path / "routes.yaml"
+    route_path.write_text("ped_routes: [\n", encoding="utf-8")
+    scenario_row = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))["scenarios"][0]
+
+    scope = _actor_free_source_case_scope(scenario_row, str(scenario_path))
+
+    assert scope["status"] == "unknown"
+    assert scope["reason_codes"] == ["original_scenario_actor_inventory_unavailable:ParserError"]
 
 
 def test_adapter_identity_rejects_aba_include_replacement(

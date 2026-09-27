@@ -49,7 +49,7 @@
                   "role": "optional_diagnostic_evidence_only",
                   "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
                 },
-                "scenario_fingerprint": "cf2e405db87c807a"
+                "scenario_fingerprint": "500b011f40982f00"
               },
               "reasons": [
                 "low_static_clearance_margin"

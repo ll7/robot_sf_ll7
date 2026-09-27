@@ -1,15 +1,15 @@
 {
   "schema_version": "issue_9647_static_certificate_fixture.v1",
-  "generated_at_utc": "2026-09-25T20:10:21Z",
+  "generated_at_utc": "2026-09-27T03:25:05Z",
   "generator": {
-    "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/certify_scenarios.py tests/fixtures/adversarial_replay_gallery/issue_1501_compat/scenario.yaml --scenario-id crossing_ttc_template_adversarial_0008 --output /tmp/issue9647-current-cert-after-main.json",
-    "repository_revision": "a468f1960278afb0896145221af105648bb3965f",
+    "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/certify_scenarios.py tests/fixtures/adversarial_replay_gallery/issue_1501_compat/scenario.yaml --scenario-id crossing_ttc_template_adversarial_0008 --output /tmp/issue9808-portable-cert-verified.json",
+    "repository_revision": "3e3beebd0d8fe0018491c04d34a0bd66ee1c4856",
     "tool": "scripts/tools/certify_scenarios.py",
-    "output_path_local_only": "/tmp/issue9647-current-cert-after-main.json"
+    "output_path_local_only": "/tmp/issue9808-portable-cert-verified.json"
   },
   "certificate": {
     "manifest_pointer": "manifest.json#/candidates/0/certification_status/details/certificates/0",
-    "sha256_canonical_json": "63e4298bf33a3310a978f6ad2b868eef80ad54478f87a43a242b5869d76828e4",
+    "sha256_canonical_json": "d0fdc168daff5e27e6a4497594d94087012ba423cf11cc524f6edac1e4e85725",
     "schema_version": "scenario_cert.v1",
     "scenario_id": "crossing_ttc_template_adversarial_0008",
     "classification": "hard_but_solvable",
@@ -23,7 +23,7 @@
     "maps/svg_maps/classic_crossing.svg": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
     "robot_sf/benchmark/schemas/scenario_cert.v1.json": "1729b781a2a5079891f854315d34879da9ced728026d571f9105c97a0bd08a61",
     "scripts/tools/certify_scenarios.py": "46f8dedbe90980b515d418b0e655e40b02fbb463a1dbc585243362fed40ebcd6",
-    "robot_sf/scenario_certification/v1.py": "f8f1a24487b9609ed4670d0ef0fe8b71c7983fbfe8e52b11c0a3823971d43941"
+    "robot_sf/scenario_certification/v1.py": "e0bbebaae88850002a67d6eca4599598bce28c90b81482680ac26c16056534e8"
   },
   "claim_boundary": {
     "static_route_classification": "canonical scenario_cert.v1 result",

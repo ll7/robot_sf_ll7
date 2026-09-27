@@ -27,14 +27,16 @@
   },
   "inputs": {
     "schema_path": {
-      "path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
+      "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/inputs/episode.schema.v1.at_58e516.json",
       "sha256": "3c04b755fbab4764a429c034af3897eaf0db30360b81aebb390f83722105e224",
-      "artifact_status": "available"
+      "artifact_status": "available",
+      "producer_path_at_source_revision": "robot_sf/benchmark/schemas/episode.schema.v1.json"
     },
     "scenario_matrix": {
-      "path": "output/issue9645-historical-replay/failure_0002/bundle/scenario.yaml",
+      "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_issue_1501_failure_0002/scenario.yaml",
       "sha256": "bb5bb5010f74d426f0108a43e2b7bcd80e443df3ae8fb7b33b43dc281b0bb04b",
-      "artifact_status": "available"
+      "artifact_status": "available",
+      "producer_output_path": "output/issue9645-historical-replay/failure_0002/bundle/scenario.yaml"
     },
     "algo_config": {
       "path": null,
@@ -54,9 +56,11 @@
   "raw_artifacts": [
     {
       "kind": "episodes_jsonl",
-      "path": "output/issue9645-historical-replay/failure_0002/replay.jsonl",
+      "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_issue_1501_failure_0002/replay_1_recorded.jsonl",
       "sha256": "024ed6c8049019915d991a10dfa8b182f83f068ac397fda1cd1600c1c17f9133",
-      "artifact_status": "available"
+      "artifact_status": "available",
+      "producer_output_path": "output/issue9645-historical-replay/failure_0002/replay.jsonl",
+      "bundle_retention_status": "retained_exact_copy"
     }
   ],
   "rows": [

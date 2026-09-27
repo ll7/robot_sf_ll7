@@ -62,5 +62,13 @@
   },
   "schema_version": "issue_1501_archived_failure_replay.v1",
   "source_archive": "docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/archive.json",
-  "source_archive_sha256": "a7da3bf59cb57cbe8231cbac75e184222950037cf24c184a9eac729223a4b393"
+  "source_archive_sha256": "a7da3bf59cb57cbe8231cbac75e184222950037cf24c184a9eac729223a4b393",
+  "input_binding_status": "unknown_historical",
+  "admission_status": "not_admitted",
+  "regression_status": "pending_exact_historical_input_binding",
+  "source_archive_binding": {
+    "path": "docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/archive.json",
+    "sha256": "a7da3bf59cb57cbe8231cbac75e184222950037cf24c184a9eac729223a4b393",
+    "binding_scope": "archived candidate payload; does not prove exact source execution inputs or raw episode identity"
+  }
 }

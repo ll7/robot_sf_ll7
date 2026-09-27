@@ -514,6 +514,8 @@ def test_cli_writes_machine_readable_summary_table_and_figure(
         in markdown
     )
     assert "analysis_eligibility.eligible=true" in markdown
+    assert "Analysis evidence: eligible / ineligible" in markdown
+    assert "do not indicate detailed simulation-step or planner-decision traces" in markdown
     assert "native: 2, unknown: 2" in markdown
     assert "available: 2, unknown: 2" in markdown
     assert "Not performed; descriptive only" in markdown

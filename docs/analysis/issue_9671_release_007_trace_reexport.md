@@ -208,8 +208,11 @@ or used as evidence.
 2. An opt-in `sys.settrace` observer copies the frozen `PedRobotForce.__call__` return value
    and its already evaluated frame locals (`ped_positions`, `robot_pos`, and `multipliers` if
    present). It must never call a force kernel, position provider or multiplier callback again.
-   At frozen `Simulator.step_once` line 1699 (or `PedSimulator.step_once` line 2087), after
-   `pysf_sim.compute_forces()` and before `_apply_residual_adversary` or pedestrian integration,
+   This observer supports the frozen map-runner's `Simulator.step_once` path at line 1699. It
+   does not support `PedSimulator.step_once`: `PedSimulator.ped_pos` omits ego, but
+   `PedRobotForce.__call__` returns rows including ego, so the force rows cannot be bound to the
+   trace actor roster. At `Simulator.step_once` line 1699, after `pysf_sim.compute_forces()` and
+   before `_apply_residual_adversary` or pedestrian integration,
    select registered objects with `component_type == "pedestrian_robot"` **and**
    `isinstance(PedRobotForce)`; exclude `adversarial` components. Match exactly one fresh
    return capture per selected instance, copy its `last_forces` and configuration, and sum the

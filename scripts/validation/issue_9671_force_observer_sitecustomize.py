@@ -34,10 +34,13 @@ SOURCE_MODULES = {
 }
 TARGET_QUALNAMES = {
     FORCE_FILE: ("PedRobotForce.__call__",),
-    SIM_FILE: ("Simulator.step_once", "PedSimulator.step_once"),
+    # The pinned 0.0.7 map-runner instantiates Simulator. PedSimulator exposes
+    # pedestrian slots that omit ego while PedRobotForce returns rows including
+    # ego, so its force arrays cannot be bound to the trace actor roster.
+    SIM_FILE: ("Simulator.step_once",),
     RUNNER_FILE: ("run_map_episode",),
 }
-FORCE_LINES = {"Simulator": 1699, "PedSimulator": 2087}
+FORCE_LINES = {"Simulator": 1699}
 
 
 class ObserverIdentityError(RuntimeError):

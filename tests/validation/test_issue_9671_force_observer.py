@@ -401,6 +401,42 @@ def test_live_dispatch_rejects_module_swap_with_spoofed_paths(
         sys.settrace(previous)
 
 
+def test_live_dispatch_rejects_unsupported_ped_simulator_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_root = tmp_path / "frozen"
+    simulator_path = source_root / observer.SIM_FILE
+    simulator_path.parent.mkdir(parents=True)
+    simulator_path.write_text(
+        "class Simulator:\n"
+        "    def step_once(self):\n"
+        "        return None\n"
+        "class PedSimulator:\n"
+        "    def step_once(self):\n"
+        "        return None\n"
+    )
+    module_name = observer.SOURCE_MODULES[observer.SIM_FILE]
+    module = ModuleType(module_name)
+    module.__file__ = str(simulator_path)
+    exec(  # noqa: S102 - generate exact-name methods for the observer contract test
+        compile(simulator_path.read_text(), str(simulator_path), "exec"), vars(module)
+    )
+    monkeypatch.setitem(sys.modules, module_name, module)
+    watched = observer.ForceObserver(
+        tmp_path,
+        {},
+        source_root,
+        observer._compiled_target_codes(source_root, observer.SIM_FILE),
+    )
+    previous = sys.gettrace()
+    try:
+        sys.settrace(watched)
+        with pytest.raises(observer.ObserverIdentityError, match="unexpected function"):
+            module.PedSimulator().step_once()
+    finally:
+        sys.settrace(previous)
+
+
 def test_copies_actual_last_forces_without_reinvoking_provider(tmp_path: Path) -> None:
     component = PedRobotForce.__new__(PedRobotForce)
     component.component_type = "pedestrian_robot"

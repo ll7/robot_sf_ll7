@@ -26,6 +26,7 @@ from typing import Any
 
 import numpy as np
 import yaml
+from scipy.ndimage import distance_transform_edt
 from shapely.geometry import LineString, Point, Polygon
 from shapely.ops import unary_union
 
@@ -223,10 +224,6 @@ def _build_occupancy_analysis(
         )[0]
         >= OCCUPANCY_FREE_THRESHOLD
     )
-    try:
-        from scipy.ndimage import distance_transform_edt  # noqa: PLC0415
-    except ImportError as exc:  # pragma: no cover - exercised only without benchmark extra
-        raise ValueError("scipy is required for conservative occupancy-grid inflation") from exc
     distance_to_obstacle = distance_transform_edt(~occupancy, sampling=resolution_m)
     cell_half_diagonal = resolution_m * math.sqrt(2.0) / 2.0
     inflated = occupancy | (distance_to_obstacle <= required_radius + cell_half_diagonal)

@@ -47,14 +47,14 @@ _ISSUE9656_PROMOTED_MANIFEST = (
     _ISSUE9656_PROMOTED_BUNDLE / "payload/current_head_no_replay_manifest.json"
 )
 _ISSUE9656_FIXTURE_RECEIPT = _ISSUE9656_PROMOTED_BUNDLE / "fixture_source_receipt.json"
-_ISSUE9645_PROMOTED_SOURCE_HEAD = "f447479d1ace505c574450bfbd93fcc5ddad7d28"
+_ISSUE9645_PROMOTED_SOURCE_HEAD = "f027f23b0fc4a99f30979a65a78bcb9feae12892"
 _ISSUE9645_BUNDLE_MANIFEST_SHA256 = (
-    "0d0bae9f26a4bcf49d50a1d6ce593ff11447524bc589db4513ff81893d017a59"
+    "5e91c489147233552853fbfec1e0654875b0b375e3aef25a0669f2809b9f2002"
 )
-_ISSUE9645_CHECKSUMS_SHA256 = "0e2c8dfdc0b912247c5bacf1e7c50aa9050c427295f4afff46f7095693114f7c"
-_ISSUE9645_SUMMARY_SHA256 = "51d44f4cf96bb15e23005d84721f2d758195061c76ecd7cad6018aef12708c32"
+_ISSUE9645_CHECKSUMS_SHA256 = "f5f977be32eecdd60bcb3573c55f748bd0ff2820e2c62ae61d4ca154a1afe74b"
+_ISSUE9645_SUMMARY_SHA256 = "9dd20b251a373eb995e0714bfec817d126f8be1537588d699f0b307bcf9af72d"
 _ISSUE9645_REPORT_PROVENANCE_SHA256 = (
-    "e4b013681bb345bf7f16ab087c36a959f4dc3de5c1e7a7aa27a2be8c1127fd53"
+    "c5d330cb23566712c2617af2724b0d013ad227a56db52bdc414b6c69aef27183"
 )
 _ISSUE9656_PROMOTED_SOURCE_HEAD = "58b51c0419e6052e5c75eb3059e2b53205d8276d"
 _ISSUE9656_PROMOTED_MATERIALIZER_REVISION = "dc9e8f6fdebb39da7c4450d2dcc1d5e9b991dfc0"
@@ -699,12 +699,28 @@ def test_issue9645_fixture_binds_the_promoted_v3_packet() -> None:
     report_provenance = json.loads(
         (_SOURCE_PACKET / "report_provenance.json").read_text(encoding="utf-8")
     )
+    artifact_map = json.loads(
+        (_SOURCE_PACKET / "pilot_report_artifact_path_map.v1.json").read_text(encoding="utf-8")
+    )
+    rebase_map = json.loads(
+        (_SOURCE_PACKET / "reproduction_inputs/input_rebase_map.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    recovery = json.loads((_SOURCE_PACKET / "run_metadata.json").read_text(encoding="utf-8"))[
+        "candidate_episode_record_recovery"
+    ]
 
     assert fixture_receipt["source_head"] == _ISSUE9645_PROMOTED_SOURCE_HEAD
     assert fixture_receipt["bundle_manifest_sha256"] == _ISSUE9645_BUNDLE_MANIFEST_SHA256
     assert fixture_receipt["checksums_sha256"] == _ISSUE9645_CHECKSUMS_SHA256
     assert fixture_receipt["summary_sha256"] == _ISSUE9645_SUMMARY_SHA256
     assert fixture_receipt["report_provenance_sha256"] == _ISSUE9645_REPORT_PROVENANCE_SHA256
+    assert fixture_receipt["packet_producer_revision"] == bundle_manifest["commit"]
+    assert fixture_receipt["report_build_execution_checkout_head"] == bundle_manifest["commit"]
+    assert (
+        fixture_receipt["report_generator_commit"] == report_provenance["report_generator_commit"]
+    )
     assert hashlib.sha256(
         (_SOURCE_BUNDLE / "evidence_bundle_manifest.json").read_bytes()
     ).hexdigest() == (_ISSUE9645_BUNDLE_MANIFEST_SHA256)
@@ -745,7 +761,36 @@ def test_issue9645_fixture_binds_the_promoted_v3_packet() -> None:
     }
     assert report_provenance["search_or_simulation_rerun"] is False
     assert report_provenance["report_build_execution_checkout_head"] == bundle_manifest["commit"]
-    assert report_provenance["report_generator_commit"] == bundle_manifest["commit"]
+    assert report_provenance["report_generator_commit"] != bundle_manifest["commit"]
+    artifact_candidates = {
+        binding["producer_output_path"]: binding
+        for binding in artifact_map["bindings"]
+        if binding["artifact_kind"] == "candidate_episode_records"
+    }
+    rebase_candidates = {
+        binding["producer_output_path"]: binding
+        for manifest in rebase_map["manifest_bindings"]
+        for binding in manifest["episode_record_bindings"]
+    }
+    assert len(artifact_candidates) == len(rebase_candidates) == 64
+    assert set(artifact_candidates) == set(rebase_candidates)
+    assert (
+        sum(binding["source_size_bytes"] for binding in artifact_candidates.values())
+        == (recovery["source_total_size_bytes"])
+    )
+    for producer_path, artifact_binding in artifact_candidates.items():
+        rebase_binding = rebase_candidates[producer_path]
+        assert (
+            rebase_binding["source_sha256_before_path_normalization"]
+            == (artifact_binding["source_sha256_before_path_normalization"])
+        )
+        assert rebase_binding["source_size_bytes"] == artifact_binding["source_size_bytes"]
+        assert rebase_binding["normalized_sha256"] == artifact_binding["normalized_sha256"]
+        assert rebase_binding["size_bytes"] == artifact_binding["size_bytes"]
+    run_metadata_digest = hashlib.sha256(
+        (_SOURCE_PACKET / "run_metadata.json").read_bytes()
+    ).hexdigest()
+    assert report_provenance["experiment_source_commit_sha256"] == run_metadata_digest
     assert fixture_receipt["source_experiment_revision"] == summary["source_revision"]
 
 
@@ -844,6 +889,63 @@ def test_issue9645_v3_report_provenance_mutations_fail_closed(
     assert corpus["search_runs"] == []
     assert corpus["cases"] == []
     assert corpus["planner_evaluations"] == []
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["candidate_source_hash", "candidate_source_size", "candidate_normalization_source_hash"],
+)
+def test_issue9645_v3_candidate_normalization_bindings_fail_closed(
+    tmp_path: Path, mutation: str
+) -> None:
+    with _revision_separated_packet() as payload:
+        report_path = payload / "report_provenance.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        _mutate_issue9645_candidate_normalization_binding(payload, report, mutation)
+        report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+        _refresh_bundle_checksum_for_payload(payload, "report_provenance.json")
+        corpus, receipt = import_issue9645_packet(
+            payload, new_corpus(), corpus_root=tmp_path / "corpus"
+        )
+
+    assert receipt["decision"] == "rejected"
+    assert any("pilot_evidence_invalid" in blocker for blocker in receipt["blockers"])
+    assert corpus["search_runs"] == []
+    assert corpus["cases"] == []
+    assert corpus["planner_evaluations"] == []
+
+
+def _mutate_issue9645_candidate_normalization_binding(
+    payload: Path, report: dict[str, object], mutation: str
+) -> None:
+    if mutation in {"candidate_source_hash", "candidate_source_size"}:
+        relative = "reproduction_inputs/input_rebase_map.v1.json"
+        map_path = payload / relative
+        rebase = json.loads(map_path.read_text(encoding="utf-8"))
+        binding = rebase["manifest_bindings"][0]["episode_record_bindings"][0]
+        if mutation == "candidate_source_hash":
+            binding["source_sha256_before_path_normalization"] = "f" * 64
+        else:
+            binding["source_size_bytes"] += 1
+        map_path.write_text(json.dumps(rebase, indent=2, sort_keys=True) + "\n")
+        report["reproduction_input_rebase_map_sha256"] = hashlib.sha256(
+            map_path.read_bytes()
+        ).hexdigest()
+    elif mutation == "candidate_normalization_source_hash":
+        relative = "path_normalization.json"
+        normalization_path = payload / relative
+        normalization = json.loads(normalization_path.read_text(encoding="utf-8"))
+        candidate = next(
+            row
+            for row in normalization["records"]
+            if row["path"].startswith("source_episode_records/")
+        )
+        candidate["source_sha256_before_path_normalization"] = "f" * 64
+        normalization_path.write_text(json.dumps(normalization, indent=2, sort_keys=True) + "\n")
+        relative = "path_normalization.json"
+    else:
+        raise AssertionError(f"unexpected candidate normalization mutation: {mutation}")
+    _refresh_bundle_checksum_for_payload(payload, relative)
 
 
 def test_issue9645_import_rejects_replay_comparison_signature_mismatch(

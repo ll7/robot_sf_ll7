@@ -448,7 +448,7 @@ def _build_config_with_axis(
     if axis != "base":
         try:
             map_definition = reflect_map_definition(map_definition, cast("MirrorAxis", axis))
-        except Exception as exc:
+        except Exception as exc:  # Preserve source-map provenance for every transform failure.
             raise _MapTransformError(
                 f"cannot reflect post-loader map {map_id!r} across {axis}: {exc}",
                 map_id=map_id,
@@ -773,7 +773,7 @@ def _run_episode_job(job: EpisodeJob) -> dict[str, Any]:
             map_digest=actual_map_digest,
             source_map_digest=actual_source_map_digest,
         )
-    except Exception as exc:  # noqa: BLE001 - retain worker errors as rows.
+    except Exception as exc:  # noqa: BLE001 - retain every episode failure as a row.
         return _failure_record(
             job,
             exc,
@@ -1211,7 +1211,7 @@ def _iter_worker_results(jobs: Sequence[EpisodeJob], workers: int) -> Iterator[d
                 job = pending.pop(future)
                 try:
                     yield future.result()
-                except Exception as exc:  # noqa: BLE001  # pragma: no cover - future boundary.
+                except Exception as exc:  # noqa: BLE001 - convert process-future failures into per-job rows.
                     yield _failure_record(job, exc)
                 next_job = next(job_iter, None)
                 if next_job is not None:

@@ -260,13 +260,9 @@ def _sequence(value: object, path: str) -> list[object]:
 def _copy_mapping(value: object, path: str) -> dict[str, str]:
     if not isinstance(value, dict):
         raise ValueError(f"{path} must be a mapping, got {value!r}")
-    try:
-        copied = deepcopy(value)
-    except Exception as exc:  # pragma: no cover - defensive for arbitrary caller metadata
-        raise ValueError(f"{path} could not be copied safely") from exc
-    if not all(isinstance(key, str) and isinstance(item, str) for key, item in copied.items()):
+    if not all(isinstance(key, str) and isinstance(item, str) for key, item in value.items()):
         raise ValueError(f"{path} must contain string keys and values")
-    return copied
+    return dict(value)
 
 
 def _transform_rect(
@@ -451,7 +447,7 @@ def _transform_single_pedestrian(
     try:
         metadata = deepcopy(pedestrian.metadata)
         wait_at = deepcopy(pedestrian.wait_at)
-    except Exception as exc:  # pragma: no cover - defensive for arbitrary caller metadata
+    except Exception as exc:  # Normalize caller-defined metadata deepcopy failures.
         raise ValueError(f"{path} metadata/wait_at could not be copied safely") from exc
     return SinglePedestrianDefinition(
         id=pedestrian.id,
@@ -568,7 +564,7 @@ def _transform_social_groups(
             ]
         try:
             metadata = deepcopy(group.metadata)
-        except Exception as exc:  # pragma: no cover - defensive for arbitrary caller metadata
+        except Exception as exc:  # Normalize caller-defined metadata deepcopy failures.
             raise ValueError(f"{path}.metadata could not be copied safely") from exc
         transformed.append(
             SocialGroupDefinition(

@@ -790,9 +790,9 @@ def _fingerprint_mapping(
     """
     normalized = _sanitize_json_value(dict(payload))
     if scenario_path is not None:
-        scenario_parent = Path(scenario_path).expanduser().resolve().parent
+        scenario_parent = Path(scenario_path).resolve().parent
         checkout_root = (
-            Path(source_root).expanduser().resolve()
+            Path(source_root).resolve()
             if source_root is not None
             else Path(__file__).resolve().parents[2]
         )
@@ -800,7 +800,7 @@ def _fingerprint_mapping(
             raw_reference = payload.get(field_name)
             if not isinstance(raw_reference, str):
                 continue
-            candidate = Path(raw_reference).expanduser()
+            candidate = Path(raw_reference)
             if not candidate.is_absolute():
                 candidate = scenario_parent / candidate
             resolved = candidate.resolve()

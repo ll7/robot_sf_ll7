@@ -260,6 +260,10 @@ def test_candidate_metric_distance_conventions_are_column_bound() -> None:
     assert metadata["schema_version"] == "adversarial_candidate_series_metadata.v1"
     assert metadata["series_path"] == "candidate_evaluations.csv"
     assert metadata["distance_convention"] == "center_center"
+    assert metadata["distance_convention_precedence"] == (
+        "For a listed metric, distance_convention_by_column overrides distance_convention; "
+        "otherwise distance_convention applies."
+    )
     assert metadata["distance_convention_by_column"] == {
         "distance_to_human_min_m": "center_center",
         "min_clearance_m": "surface_clearance",

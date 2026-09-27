@@ -5,6 +5,7 @@
     "distance_to_human_min_m": "center_center",
     "min_clearance_m": "surface_clearance"
   },
+  "distance_convention_precedence": "For a listed metric, distance_convention_by_column overrides distance_convention; otherwise distance_convention applies.",
   "distance_semantics_by_column": {
     "distance_to_human_min_m": "minimum robot-to-pedestrian center-to-center distance",
     "min_clearance_m": "minimum center-to-center separation minus the sum of robot and pedestrian radii"

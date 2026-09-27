@@ -1786,11 +1786,13 @@ def import_issue9645_packet(
     *,
     corpus_root: str | Path,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Import #9645's zero-discovery run and replay-verified #1501 case.
+    """Import #9645's zero-discovery run and assess its historical #1501 case.
 
     ``payload_root`` is the ``payload`` directory from the durable #9645 evidence
     bundle. The pilot's zero discoveries are recorded independently of the historical
-    case, which came from #1501 and remains marked as historical lineage.
+    case, which came from #1501 and remains marked as historical lineage. Historical
+    replay projections without direct scenario, route, and map input binding remain
+    candidates and are not admitted as validated counterexamples.
     """
     root = Path(corpus_root).resolve()
     validate_corpus(corpus, corpus_root=root)
@@ -1854,6 +1856,17 @@ def import_issue9645_packet(
         )
         return updated, receipt
 
+    return _import_issue9645_historical_case(corpus, case, source_files, observations, pilot, root)
+
+
+def _import_issue9645_historical_case(
+    corpus: dict[str, Any],
+    case: dict[str, Any],
+    source_files: Mapping[str, Path],
+    observations: list[dict[str, Any]],
+    pilot: Mapping[str, Any],
+    root: Path,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     existing = next(
         (
             item
@@ -1862,8 +1875,18 @@ def import_issue9645_packet(
         ),
         None,
     )
-    duplicate_case_id = existing["case_id"] if existing else None
     near_report = _near_duplicate_report(case, corpus["cases"])
+    admission_binding_errors = _case_admission_input_binding_errors(case)
+    if admission_binding_errors:
+        return _reject_issue9645_historical_candidate(
+            corpus,
+            case,
+            pilot,
+            near_report,
+            admission_binding_errors,
+        )
+
+    duplicate_case_id = existing["case_id"] if existing else None
     if existing is None:
         try:
             _materialize_case_artifacts(case, source_files, root)
@@ -1913,6 +1936,27 @@ def import_issue9645_packet(
         near_duplicate_report=near_report,
     )
     receipt["case_id"] = stored_case_id
+    receipt["pilot_new_discoveries"] = 0
+    receipt["pilot_run_id"] = pilot["run_id"]
+    return corpus, receipt
+
+
+def _reject_issue9645_historical_candidate(
+    corpus: dict[str, Any],
+    case: Mapping[str, Any],
+    pilot: Mapping[str, Any],
+    near_report: Mapping[str, Any],
+    blockers: list[str],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    corpus, receipt = _record_attempt(
+        corpus,
+        source_kind="issue_9645_historical_replay",
+        source_id="issue_1501/failure_0002",
+        decision="rejected",
+        blockers=blockers,
+        candidate_identity=str(case["effective_scenario_sha256"]),
+        near_duplicate_report=near_report,
+    )
     receipt["pilot_new_discoveries"] = 0
     receipt["pilot_run_id"] = pilot["run_id"]
     return corpus, receipt
@@ -2166,6 +2210,7 @@ def admit_case_record(
     try:
         artifact_root_path = _resolve_corpus_directory(artifact_root, root)
         errors = _validate_case_record(incoming, corpus_root=root)
+        errors.extend(_case_admission_input_binding_errors(incoming))
         errors.extend(_validate_case_current_target_revision(incoming))
         if errors:
             raise CorpusError("case record rejected: " + "; ".join(errors))
@@ -5700,6 +5745,32 @@ def _validate_case_execution_contract(case: Mapping[str, Any]) -> list[str]:
     ):
         errors.append("replay receipt planner/configuration differs from target identity")
     return errors
+
+
+def _case_admission_input_binding_errors(case: Mapping[str, Any]) -> list[str]:
+    """Require direct case-input binding for new corpus admission.
+
+    Historical records with unknown input identity remain readable so their
+    limitations are not erased, but they cannot be promoted as validated
+    counterexamples until every replay artifact binds the exact scenario,
+    route, and map inputs.
+    """
+    receipt = case.get("replay_receipt")
+    if not isinstance(receipt, Mapping):
+        return ["replay_input_binding_receipt_missing"]
+    if receipt.get("input_binding_status") != "bound":
+        return ["replay_input_binding_unknown_historical"]
+    artifact_receipts = receipt.get("artifact_receipts")
+    if not isinstance(artifact_receipts, list) or not artifact_receipts:
+        return ["replay_input_binding_artifact_receipts_missing"]
+    if any(
+        not isinstance(item, Mapping)
+        or not isinstance(item.get("input_binding"), Mapping)
+        or item["input_binding"].get("status") != "bound"
+        for item in artifact_receipts
+    ):
+        return ["replay_input_binding_artifact_receipt_unknown"]
+    return []
 
 
 def _validate_target_planner_replay_failure(receipt: Mapping[str, Any]) -> list[str]:

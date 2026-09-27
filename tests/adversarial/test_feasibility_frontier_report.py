@@ -2627,6 +2627,25 @@ def test_frontier_report_rejects_success_with_collision(tmp_path: Path) -> None:
         build_frontier_report(payload, evidence_root=tmp_path)
 
 
+def test_frontier_report_rejects_unvalidated_raw_episode_outcomes(tmp_path: Path) -> None:
+    """Raw benchmark fields cannot conflict with the normalized report outcomes."""
+    payload = _evidence(tmp_path)
+    row = payload["rounds"][0]["evaluation_sets"]["held_out"]["episodes"][0]
+    row.update(
+        success=True,
+        collision=False,
+        termination_reason="collision",
+        metrics={"success": 1, "total_collision_count": 1},
+    )
+    _refresh_source_artifacts(payload, tmp_path)
+
+    with pytest.raises(
+        FrontierReportError,
+        match=r"episodes\[0\] contains unsupported fields: \['metrics', 'termination_reason'\]",
+    ):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [

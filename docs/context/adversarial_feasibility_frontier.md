@@ -164,7 +164,12 @@ source revision, evaluation-set name, planner/config identity, ordered `expected
 ordered `expected_episode_identities` manifest (`record_id`, `scenario_id`, integer
 `scenario_seed`), and the complete normalized episode rows consumed by the report. The outer
 evaluation set repeats these manifests and rows; they must match the checksummed source exactly,
-and every reported row's scenario/seed pair must match its expected identity. Expected identities
+and every reported row's scenario/seed pair must match its expected identity. Normalized episode
+rows use a closed field set: `record_id`, `scenario_id`, `scenario_seed`, `evidence_status`,
+`execution_mode`, `readiness_status`, `availability_status`, `eligible`, `success`, `collision`,
+`minimum_clearance`, and `ped_force_q95`. Raw outcome fields such as `termination_reason`, `outcome`,
+or nested `metrics` are rejected unless a future schema explicitly validates them against canonical
+benchmark semantics. Expected identities
 are retained when a row is missing. If canonical source artifacts do not expose stable episode and
 scenario/seed identities, accounting is unknown and report generation fails closed. A count match
 alone cannot establish which episodes were evaluated. A scenario/seed pair may appear only once

@@ -1896,12 +1896,16 @@ def _validate_evaluation_set(  # noqa: C901, PLR0912, PLR0915 - report all indep
     if not isinstance(episodes, list):
         errors.append(f"{prefix}.episodes must be an array")
         return
+    accepted_episode_fields = set(_EVALUATION_ROW_SOURCE_FIELDS)
     seen: set[str] = set()
     for idx, episode in enumerate(episodes):
         row_prefix = f"{prefix}.episodes[{idx}]"
         if not isinstance(episode, dict):
             errors.append(f"{row_prefix} must be an object")
             continue
+        unsupported_fields = sorted(episode.keys() - accepted_episode_fields, key=repr)
+        if unsupported_fields:
+            errors.append(f"{row_prefix} contains unsupported fields: {unsupported_fields}")
         _require_text(episode, "record_id", errors, row_prefix)
         record_id = episode.get("record_id")
         if isinstance(record_id, str):

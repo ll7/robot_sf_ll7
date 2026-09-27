@@ -230,6 +230,10 @@ def test_arm_rollup_appears_in_campaign_report(tmp_path: Path) -> None:
     assert "orca" in text
     assert "RuntimeError" in text
     assert "distinct_errors" in text
+    header = next(line for line in text.splitlines() if "written this invocation" in line)
+    failed_row = next(line for line in text.splitlines() if "| orca |" in line)
+    assert header.count("|") == 9
+    assert failed_row.count("|") == 9
 
 
 def test_arm_rollup_report_all_ok_no_error_columns(tmp_path: Path) -> None:

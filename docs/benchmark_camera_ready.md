@@ -538,7 +538,9 @@ invocations. Both values count rows, not necessarily distinct logical episode id
 The campaign arm rollup uses the same distinction: `episodes_written` is this invocation's write
 count and `episodes_total` is the retained-row count. The Markdown report labels these columns
 `written this invocation` and `retained rows`; legacy summaries without the explicit invocation
-field use their available `written` count as a compatibility fallback.
+field use their available `written` count as a compatibility fallback, then the retained total for
+older summaries that have no `written` field. Current campaign paths normalize cached summaries
+with an explicit zero before rollup.
 `throughput_definition` names the numerator, retained-count, and denominator fields, identifies
 the numerator unit as `episode_rows`, and sets its scope to `campaign_all_planner_arms`; the rate
 is not an individual planner-arm throughput value. Its declared unit is `episode_rows/second`.

@@ -99,15 +99,15 @@ array shape in the observation payload.
 
 | Flat key | Source key | Shape | Frame / unit | Contract |
 | --- | --- | --- | --- | --- |
-| `robot_position` | `robot.position` | `(2,)` | world/map XY, m | Robot position, clipped to the declared map extent. |
+| `robot_position` | `robot.position` | `(2,)` | world/map XY, m | Robot position, clipped per axis to `[0, max(50 m, corresponding map dimension)]`. |
 | `robot_heading` | `robot.heading` | `(1,)` | world/map orientation, rad | Robot heading wrapped to `[-pi, pi]`. |
 | `robot_speed` | `robot.speed` | `(2,)` | kinematic-model-specific component units | Pair copied from the selected robot model's `current_speed`; see the model-specific note below. |
 | `robot_velocity_xy` | `robot.velocity_xy` | `(2,)` | world/map XY, m/s | Robot translational velocity in world coordinates; no ego rotation or robot-velocity subtraction is applied. |
 | `robot_angular_velocity` | `robot.angular_velocity` | `(1,)` | rad/s | Robot yaw rate. |
 | `robot_radius` | `robot.radius` | `(1,)` | m | Robot radius. |
-| `goal_current` | `goal.current` | `(2,)` | world/map XY, m | Current goal position, clipped to the declared map extent. |
-| `goal_next` | `goal.next` | `(2,)` | world/map XY, m | Next goal position, or zero when no next goal is available. |
-| `pedestrians_positions` | `pedestrians.positions` | `(max_pedestrians, 2)` | world/map XY, m | Visible pedestrian positions, sorted and padded with zero rows. |
+| `goal_current` | `goal.current` | `(2,)` | world/map XY, m | Current goal position, clipped per axis to `[0, max(50 m, corresponding map dimension)]`. |
+| `goal_next` | `goal.next` | `(2,)` | world/map XY, m | Next goal position clipped to the same per-axis representable bound, or zero when no next goal is available. |
+| `pedestrians_positions` | `pedestrians.positions` | `(max_pedestrians, 2)` | world/map XY, m | Visible pedestrian positions clipped to the same per-axis representable bound, sorted and padded with zero rows. |
 | `pedestrians_velocities` | `pedestrians.velocities` | `(max_pedestrians, 2)` | robot-ego XY, m/s | Source world velocities rotated by negative robot heading only; robot translational velocity is not subtracted. Padded rows are zero. |
 | `pedestrians_radius` | `pedestrians.radius` | `(1,)` | m | Shared pedestrian radius used by the observation contract. |
 | `pedestrians_count` | `pedestrians.count` | `(1,)` | dimensionless count | Number of visible, presented pedestrian rows before padding. |
@@ -119,6 +119,11 @@ array shape in the observation payload.
 `HolonomicDriveRobot.current_speed` returns `(linear_speed, angular_speed)` (m/s, rad/s).
 Use the selected robot model's contract when interpreting these components. The separate
 `robot_velocity_xy` field is the world-frame translational velocity.
+
+The position bound uses `max(SOCNAV_POSITION_CAP_M, map dimension)` independently for each
+axis, with `SOCNAV_POSITION_CAP_M = 50 m`. On maps smaller than that floor, the representable
+position range can therefore extend beyond the declared `map_size`; this is a clipping bound,
+not a claim that those coordinates lie inside the physical map.
 
 The producer may expose additional opt-in leaves (for example, observation-derived
 `pedestrians_track_id` or `route_waypoints`); those are outside this standard field set and

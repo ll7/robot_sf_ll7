@@ -1,11 +1,11 @@
 {
   "schema_version": "issue_9647_static_certificate_fixture.v1",
-  "generated_at_utc": "2026-09-27T03:25:05Z",
+  "generated_at_utc": "2026-09-27T03:27:28Z",
   "generator": {
-    "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/certify_scenarios.py tests/fixtures/adversarial_replay_gallery/issue_1501_compat/scenario.yaml --scenario-id crossing_ttc_template_adversarial_0008 --output /tmp/issue9808-portable-cert-verified.json",
-    "repository_revision": "3e3beebd0d8fe0018491c04d34a0bd66ee1c4856",
+    "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/certify_scenarios.py tests/fixtures/adversarial_replay_gallery/issue_1501_compat/scenario.yaml --scenario-id crossing_ttc_template_adversarial_0008 --output /tmp/issue9808-portable-cert-final.json",
+    "repository_revision": "973c1a0dfa0ed3bbb881ba73f899685bc8f66317",
     "tool": "scripts/tools/certify_scenarios.py",
-    "output_path_local_only": "/tmp/issue9808-portable-cert-verified.json"
+    "output_path_local_only": "/tmp/issue9808-portable-cert-final.json"
   },
   "certificate": {
     "manifest_pointer": "manifest.json#/candidates/0/certification_status/details/certificates/0",
@@ -23,7 +23,7 @@
     "maps/svg_maps/classic_crossing.svg": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
     "robot_sf/benchmark/schemas/scenario_cert.v1.json": "1729b781a2a5079891f854315d34879da9ced728026d571f9105c97a0bd08a61",
     "scripts/tools/certify_scenarios.py": "46f8dedbe90980b515d418b0e655e40b02fbb463a1dbc585243362fed40ebcd6",
-    "robot_sf/scenario_certification/v1.py": "e0bbebaae88850002a67d6eca4599598bce28c90b81482680ac26c16056534e8"
+    "robot_sf/scenario_certification/v1.py": "ab8492b0bf7242c80f6ff561048fef5e8184d2cb5c1bc14b4ba7bf8d1797253e"
   },
   "claim_boundary": {
     "static_route_classification": "canonical scenario_cert.v1 result",

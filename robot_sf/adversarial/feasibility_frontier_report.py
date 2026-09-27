@@ -1068,7 +1068,9 @@ def _validate_discovered_case_observation(
         if (
             observation_admissibility is not None
             or candidate_admissibility is not None
-            or observation.get("admissibility_verdict") in _CONFIRMED_FEASIBILITY_VERDICTS
+            or _is_allowed(
+                observation.get("admissibility_verdict"), _CONFIRMED_FEASIBILITY_VERDICTS
+            )
         ) and not _same_artifact_reference(observation_admissibility, candidate_admissibility):
             errors.append(
                 f"round {current_round} case {case_id!r} admissibility evidence does not "
@@ -2266,7 +2268,10 @@ def _validate_admissibility_evidence_source(  # noqa: C901 - report independent 
         errors.append(f"{prefix}.source_revision does not match the enclosing round")
     expected_disposition = (
         "reject"
-        if context.verdict in {"structurally_invalid", "geometric_or_kinodynamic_impossibility"}
+        if _is_allowed(
+            context.verdict,
+            {"structurally_invalid", "geometric_or_kinodynamic_impossibility"},
+        )
         else "retain"
     )
     if source.get("search_disposition") != expected_disposition:
@@ -2283,7 +2288,7 @@ def _validate_admissibility_evidence_source(  # noqa: C901 - report independent 
         prefix,
         errors,
     )
-    if context.verdict in _CONFIRMED_FEASIBILITY_VERDICTS:
+    if _is_allowed(context.verdict, _CONFIRMED_FEASIBILITY_VERDICTS):
         _validate_confirmed_admissibility_support(
             source,
             evidence,
@@ -2294,10 +2299,9 @@ def _validate_admissibility_evidence_source(  # noqa: C901 - report independent 
     elif context.require_replay_binding:
         _validate_reported_replay_binding(source, evidence, context, prefix, errors)
     target_outcome = source.get("target_planner_outcome")
-    if isinstance(context.target_failure_observed, bool) and target_outcome in {
-        "route_completed",
-        "route_incomplete",
-    }:
+    if isinstance(context.target_failure_observed, bool) and _is_allowed(
+        target_outcome, {"route_completed", "route_incomplete"}
+    ):
         if (target_outcome == "route_incomplete") is not context.target_failure_observed:
             errors.append(
                 f"{prefix}.target_planner_outcome does not match the candidate failure record"
@@ -2336,12 +2340,10 @@ def _validate_admissibility_record_shape(  # noqa: C901 - report independent sch
         errors.append(f"{prefix}.scenario_id must be non-empty text to bind the case")
     if not _is_allowed(source.get("verdict"), _ADMISSIBILITY_VERDICTS):
         errors.append(f"{prefix}.verdict is unsupported")
-    if source.get("target_planner_outcome") not in {
-        "not_evaluated",
-        "unavailable",
-        "route_completed",
-        "route_incomplete",
-    }:
+    if not _is_allowed(
+        source.get("target_planner_outcome"),
+        {"not_evaluated", "unavailable", "route_completed", "route_incomplete"},
+    ):
         errors.append(f"{prefix}.target_planner_outcome is unsupported")
     reason_codes = source.get("reason_codes")
     if (
@@ -2628,11 +2630,7 @@ def _validate_reported_replay_binding(
     if (
         target_valid
         and isinstance(target, dict)
-        and target_outcome
-        in {
-            "route_completed",
-            "route_incomplete",
-        }
+        and _is_allowed(target_outcome, {"route_completed", "route_incomplete"})
     ):
         expected_outcome = "route_completed" if target.get("route_complete") else "route_incomplete"
         if target_outcome != expected_outcome:

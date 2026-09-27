@@ -1739,6 +1739,78 @@ def test_frontier_report_wraps_unhashable_candidate_status_as_report_error(
         build_frontier_report(payload, evidence_root=tmp_path)
 
 
+@pytest.mark.parametrize("malformed_verdict", [[], {}])
+@pytest.mark.parametrize("record_kind", ["candidate", "observation"])
+def test_frontier_report_wraps_unhashable_admissibility_verdict_as_report_error(
+    tmp_path: Path, record_kind: str, malformed_verdict: Any
+) -> None:
+    """Malformed JSON verdicts fail the report contract without leaking TypeError."""
+    payload = _evidence(tmp_path)
+    records = (
+        payload["rounds"][0]["falsification"]["candidates"]
+        if record_kind == "candidate"
+        else payload["rounds"][0]["case_observations"]
+    )
+    records[0]["admissibility_verdict"] = malformed_verdict
+    _refresh_source_artifacts(payload, tmp_path)
+
+    with pytest.raises(FrontierReportError, match="admissibility_verdict is unsupported"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+@pytest.mark.parametrize("malformed_outcome", [[], {}])
+def test_frontier_report_wraps_unhashable_target_planner_outcome_as_report_error(
+    tmp_path: Path, malformed_outcome: Any
+) -> None:
+    """Malformed source categorical values are diagnosed through FrontierReportError."""
+    payload = _evidence(tmp_path)
+    _rewrite_admissibility_artifact(
+        payload,
+        tmp_path,
+        0,
+        lambda source: source.update(target_planner_outcome=malformed_outcome),
+    )
+
+    with pytest.raises(FrontierReportError, match="target_planner_outcome is unsupported"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_cli_returns_structured_diagnostic_for_malformed_verdict(
+    tmp_path: Path,
+) -> None:
+    """JSON-valid malformed categories stay in the CLI's structured error channel."""
+    payload = _evidence(tmp_path)
+    payload["rounds"][0]["falsification"]["candidates"][0]["admissibility_verdict"] = []
+    _refresh_source_artifacts(payload, tmp_path)
+    input_path = tmp_path / "malformed-round-evidence.json"
+    input_path.write_text(json.dumps(payload), encoding="utf-8")
+    output_dir = tmp_path / "malformed-report"
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts/tools/build_adversarial_feasibility_frontier_report.py"
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(script_path),
+            "--input",
+            str(input_path),
+            "--out-dir",
+            str(output_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    diagnostic = json.loads(result.stderr)
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert diagnostic["status"] == "error"
+    assert "invalid frontier evidence" in diagnostic["error"]
+
+
 def test_frontier_report_rejects_malformed_evaluation_record_id(tmp_path: Path) -> None:
     """Malformed row identities must produce a report error, not a Python TypeError."""
     payload = _evidence(tmp_path)

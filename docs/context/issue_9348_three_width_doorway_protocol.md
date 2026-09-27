@@ -124,18 +124,23 @@ complete planner/seed pairs across three distinct map SHA-256 digests, with
 equal actor, external RNG and non-width configuration digests within each pair.
 That smoke predates the current hook implementation and is historical
 diagnostic evidence, not current-head validation. At executable source head
-`eecb8d2f53152a1b1ad781c21ac41dd288d03dfb` on 2026-09-27,
+`af60c0a401000fd59d4e6e4b7d9ed1cd515c7c26` on 2026-09-27,
 `scripts/validation/run_issue_9348_paired_reset_smoke.py` was rerun across all
 18 cells and returned six complete pairs. The compact report and generated
 variants are preserved at
-`/home/luttkule/preservation-campaigns/issue9348_h1_smoke_eecb8d2_20260927/`;
+`/home/luttkule/preservation-campaigns/issue9348_h1_smoke_af60c0a4_20260927/`;
 the report SHA-256 is
-`13cf0e2c703849d8ac618eb8bc0d87929b73b3577622a607749ac56d06340b37` and the
+`2146d9067ba2b147928c27cf447018d0c008d0e39e099ede6ce6cf38c40df2e1` and the
 SHA256SUMS file SHA-256 is
-`cb96acbfe52bdffcf292661e4b17785b9ce3f529fee98c12201feb3681a2f088c`. The
-report retains its AI-generated needs-review marker and has no episode outcome
-fields. This is diagnostic custody only; it is not a comparison result and
-must not be substituted for the H400 campaign.
+`c555c310a97ce690bd5ef1fe27ea240f02e9b09bb9782953285f5e483fafc539`. All
+rows are diagnostic-only, with
+`preflight_admission=diagnostic_only_oracle_readiness_blocked`: positive
+continuous clearance and oracle execution availability were present, but the
+required oracle route classification was unknown/blocked by
+`scenario_manifest_parse_identity_mismatch`, so `go` remained false. The
+current smoke does not claim a width comparison or re-establish the historical
+known A* no-route diagnostic. This is diagnostic custody only and must not be
+substituted for the H400 campaign.
 Later closed-loop pedestrian paths may diverge naturally. The full H400
 campaign must preserve the same receipts, asset hashes and source commit in
 durable storage before a width effect is promoted.

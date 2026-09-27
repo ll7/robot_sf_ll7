@@ -504,6 +504,7 @@ def verify_campaign_bundle(root: Path) -> dict[str, Any]:
         or (root / "inputs/social_force.yaml").exists()
     ):
         raise ValueError("doorway copied scientific input digest mismatch")
+    _require_confirmation_preflight(_json(root / "preflight.json"))
     pair_manifest = _json(root / "pair_manifest.json")
     raw_path = root / "episodes.jsonl"
     if sha256_file(raw_path) != run_manifest.get("episodes_jsonl_sha256"):

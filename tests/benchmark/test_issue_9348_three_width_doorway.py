@@ -849,6 +849,8 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
     write_json(
         tmp_path / "preflight.json",
         {
+            "go": True,
+            "checks": {"oracle_expected_fallbacks": []},
             "variants": [
                 {
                     "variant_id": asset["variant_id"],
@@ -875,6 +877,33 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
             "cells": cells,
         },
     )
+    _write_checksums(tmp_path)
+    assert verify_campaign_bundle(tmp_path)["native_rows"] == 18
+    preflight_path = tmp_path / "preflight.json"
+    preflight = json.loads(preflight_path.read_text(encoding="utf-8"))
+    preflight["checks"].pop("oracle_expected_fallbacks")
+    write_json(preflight_path, preflight)
+    _write_checksums(tmp_path)
+    with pytest.raises(ValueError, match="fallback admission check is unavailable"):
+        verify_campaign_bundle(tmp_path)
+    preflight["checks"]["oracle_expected_fallbacks"] = {"variant_id": "gap_3p60"}
+    write_json(preflight_path, preflight)
+    _write_checksums(tmp_path)
+    with pytest.raises(ValueError, match="fallback admission check is unavailable"):
+        verify_campaign_bundle(tmp_path)
+    preflight["checks"]["oracle_expected_fallbacks"] = [{"variant_id": "gap_3p60"}]
+    write_json(preflight_path, preflight)
+    _write_checksums(tmp_path)
+    with pytest.raises(ValueError, match="refuses oracle_expected_fallbacks"):
+        verify_campaign_bundle(tmp_path)
+    preflight["checks"]["oracle_expected_fallbacks"] = []
+    preflight["go"] = False
+    write_json(preflight_path, preflight)
+    _write_checksums(tmp_path)
+    with pytest.raises(ValueError, match="did not admit policy execution"):
+        verify_campaign_bundle(tmp_path)
+    preflight["go"] = True
+    write_json(preflight_path, preflight)
     _write_checksums(tmp_path)
     assert verify_campaign_bundle(tmp_path)["native_rows"] == 18
     report_payload = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))

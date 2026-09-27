@@ -140,31 +140,34 @@ complete planner/seed pairs across three distinct map SHA-256 digests, with
 equal actor, external RNG and non-width configuration digests within each pair.
 That smoke predates the current hook implementation and is historical
 diagnostic evidence, not current-head validation. At executable source head
-`5adc43caa1842f10ba8b9f2fc1980d1825166f2d` on 2026-09-27,
+`01bfd35216febb68bad0e328bc268d08d5a0f525` on 2026-09-27,
 `scripts/validation/run_issue_9348_paired_reset_smoke.py` was rerun three
 times across all 18 cells; each run returned six complete pairs. The compact
 reports and generated variants are preserved at
-`/home/luttkule/preservation-campaigns/issue9348_h1_smoke_5adc43c_1_20260927/`,
-`/home/luttkule/preservation-campaigns/issue9348_h1_smoke_5adc43c_2_20260927/`,
+`/home/luttkule/preservation-campaigns/issue9348_h1_smoke_01bfd35_1_20260927/`,
+`/home/luttkule/preservation-campaigns/issue9348_h1_smoke_01bfd35_2_20260927/`,
 and
-`/home/luttkule/preservation-campaigns/issue9348_h1_smoke_5adc43c_3_20260927/`.
+`/home/luttkule/preservation-campaigns/issue9348_h1_smoke_01bfd35_3_20260927/`.
 Each `smoke.json` has SHA-256
-`d637f73969f9bfaf7862c5e04202b9e7bcd7790c1d080b2f0f750c43e4b0a8f1`; the
+`1a46bb127527deaa9539d7416c7963ff8401e44646daf4153d52d1130fcb745c`; the
 respective `SHA256SUMS` file hashes are
-`2bb92360c21b44d3665e32425ff0cbaeba8c4dbbcb4fb66d873cc5c46b210d66`,
-`914a5e5b171fd250d6978399c46558770531915d381d50b03126b417ccee44cb`, and
-`d4e8c62e3734aa4e056e7cd050a6144819313c9c22aa256f6a960954a71bc761`.
+`c1a4a78a096c22297ab95ad54f8b3a59e19a2cc79bb5a2c48f9c3b62233d41f7`,
+`bb84f3043da2d992dd2a77bbe40774d604f7948780894cb0070c0e451eb08716`, and
+`e1b2b81c9c2aa4ecce922799441a926c7506b0fb056c9ae4e339629c20d8b384`.
 All rows are diagnostic-only, with
 `preflight_admission=diagnostic_only_preflight_ready_with_expected_fallback`
 (`go=true`). Positive continuous clearance, available execution, known
-geometry, and loader-bound runtime identity were present. The 2.2 m and 2.8 m
-conservative grid no-route results were known diagnostic classifications. The
-3.6 m nominal oracle completed with `termination_reason=success` and stable
-binding, while the expected unavailable `slow_speed_tier` distributional
-metric remained an explicit fallback/degraded diagnostic. `confirmation_ready`
-remained false and no row is success evidence. These smokes do not claim a
-width comparison or H400 result; they are diagnostic custody only and must not
-be substituted for the H400 campaign.
+geometry, stable loader-bound runtime identity, and the canonical empty-mapping
+planner config hash `44136fa355b3678a` for both planners were present. The 2.2
+m and 2.8 m conservative grid no-route results were known diagnostic
+classifications. The 3.6 m nominal oracle completed with
+`termination_reason=success` and stable binding, while the expected unavailable
+`slow_speed_tier` distributional metric remained an explicit fallback/degraded
+diagnostic. H1 readiness was true, but
+`confirmation_oracle_fallbacks_clear=false` and `confirmation_ready` remained
+false; the H400 producer refuses this preflight. No row is success evidence.
+These smokes do not claim a width comparison or H400 result; they are diagnostic
+custody only and must not be substituted for the H400 campaign.
 Later closed-loop pedestrian paths may diverge naturally. The full H400
 campaign must preserve the same receipts, asset hashes and source commit in
 durable storage before a width effect is promoted.

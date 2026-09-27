@@ -348,7 +348,9 @@
       "replay_at_current_pr_head": false,
       "replayed_counterexamples": 1,
       "replays": 2,
-      "replays_identical_at_recorded_revision": true
+      "replay_file_bytes_identical": false,
+      "comparison_signatures_match_at_recorded_revision": true,
+      "comparison_signature_digest": "5b5047919ac185317eeef78268564a3ed1a9667ddab915ecf1e5d4ddf1aeb1f6"
     },
     "initial_bounds_smoke": {
       "attempts": 1,

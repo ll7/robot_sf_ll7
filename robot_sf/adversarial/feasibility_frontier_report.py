@@ -383,8 +383,8 @@ def build_frontier_report(
         "round_count": len(round_reports),
         "claim_boundary": (
             "Summary of declared finite-budget evidence only; evidence_kind is "
-            "caller-declared metadata, and simulator_run is unverified without an "
-            "independently verified producer binding. Synthetic fixtures are "
+            "caller-declared metadata, and simulator_run and historical_artifact labels are "
+            "unverified without an independently verified producer binding. Synthetic fixtures are "
             "implementation-only. Held-out performance is unverified when optimizer tuning "
             "episode identities are missing. "
             "No counterexample found under a budget is not proof of "
@@ -403,7 +403,9 @@ def render_frontier_markdown(
     headline = {
         "synthetic_fixture": "Synthetic fixture (implementation-only) feasibility-frontier report",
         "simulator_run": "Declared simulator-run evidence (unverified) feasibility-frontier report",
-        "historical_artifact": "Historical-artifact feasibility-frontier report",
+        "historical_artifact": (
+            "Declared historical-artifact evidence (unverified) feasibility-frontier report"
+        ),
     }[report["evidence_kind"]]
     lines = [
         f"# {headline}: {report['experiment_id']}",
@@ -824,7 +826,7 @@ def write_frontier_figure(report: dict[str, Any], output_base: Path) -> list[Pat
         figure_evidence_label = {
             "synthetic_fixture": "Synthetic Fixture evidence",
             "simulator_run": "Declared Simulator Run evidence (unverified)",
-            "historical_artifact": "Historical Artifact evidence",
+            "historical_artifact": "Declared Historical Artifact evidence (unverified)",
         }[report["evidence_kind"]]
         figure_title = f"{figure_evidence_label} — Finite-budget planner–falsifier frontier"
         figure.suptitle(figure_title)

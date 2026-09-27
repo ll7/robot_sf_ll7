@@ -26,16 +26,16 @@ The command writes:
   transitions, and checksummed evidence references;
 - `frontier_report.md` — concise round-by-round performance and case tables, including invalid,
   failed, unknown, and replay-unavailable search rows. Its heading is evidence-kind-aware:
-  synthetic fixtures are marked implementation-only, caller-declared simulator runs are marked
-  unverified, and historical artifacts use distinct historical wording;
+  synthetic fixtures are marked implementation-only, while caller-declared simulator runs and
+  historical artifacts are marked declared and unverified;
 - `frontier.png` and `frontier.pdf` — eligible complete success fractions by evaluation set and the
   cumulative known counterexample count, per-round solved/unsolved/mixed/unknown/not-observed case
   status, current unknown-feasibility count, and per-round structurally invalid and
   geometric/kinodynamic-impossibility candidate counts;
 - `frontier.provenance.json` — source-artifact digests, the generating checkout's `repo_commit`,
   the evidence `source_revision`, evidence kind, visible figure title, and claim boundary. The
-  figure and its metadata qualify caller-declared simulator runs as unverified, while detached
-  fixture images remain visibly synthetic.
+  figure and its metadata qualify caller-declared simulator and historical-artifact labels as
+  unverified, while detached fixture images remain visibly synthetic.
 
 Use a new or empty output directory for each generation. The command refuses to overwrite any of
 its expected report files, preserving prior report bundles.
@@ -195,9 +195,10 @@ summary fields independently.
 
 Fixture output is implementation evidence only. The input's `evidence_kind` is caller-declared,
 descriptive metadata; it is not an independent authorization for benchmark or publication claims.
-In particular, a bundle marked `simulator_run` receives a declared/unverified report headline until
-an independently verified producer binding exists. Relabeling fixture rows cannot establish that a
-simulator produced them. A generated report does not establish search-space coverage, global
+In particular, a bundle marked `simulator_run` or `historical_artifact` receives a
+declared/unverified report headline until an independently verified producer binding exists.
+Relabeling fixture rows cannot establish that a simulator or historical source produced them. A
+generated report does not establish search-space coverage, global
 optimality, mathematical feasibility, or real-world safety. A round with zero replay-verified
 counterexamples states its exact candidate and simulator budgets and explicitly says that no
 counterexample found does not mean none exists.
@@ -211,8 +212,9 @@ links.
 
 The figure sidecar distinguishes `repo_commit` (the checkout that generated the figure) from
 `source_revision` (the revision named by the evidence bundle). Neither field authenticates the
-caller-declared `evidence_kind`; simulator-run evidence remains visibly unverified in the figure,
-generated report, and sidecar until independently bound to a trusted producer. Neither revision
+caller-declared `evidence_kind`; simulator-run and historical-artifact evidence remain visibly
+unverified in the figure, generated report, and sidecar until independently bound to a trusted
+producer. Neither revision
 field changes the evidence claim boundary. A fixed report export timestamp is applied to PDF
 creation/modification metadata and the sidecar; repeated exports with the same evidence and
 rendering toolchain produce identical PDF and sidecar bytes. The focused fixture contract is

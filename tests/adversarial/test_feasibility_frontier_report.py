@@ -2251,7 +2251,10 @@ def test_frontier_report_writer_emits_deterministic_json_markdown_and_figure(
             "simulator_run",
             "Declared simulator-run evidence (unverified) feasibility-frontier report",
         ),
-        ("historical_artifact", "Historical-artifact feasibility-frontier report"),
+        (
+            "historical_artifact",
+            "Declared historical-artifact evidence (unverified) feasibility-frontier report",
+        ),
     ],
 )
 def test_frontier_markdown_headline_matches_evidence_kind(
@@ -2266,16 +2269,38 @@ def test_frontier_markdown_headline_matches_evidence_kind(
     assert render_frontier_markdown(report).splitlines()[0] == (f"# {headline}: {_EXPERIMENT_ID}")
 
 
-def test_relabeling_synthetic_fixture_as_simulator_run_does_not_claim_empirical_evidence(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("evidence_kind", "visible_label", "visible_figure_label", "claim_boundary_phrase"),
+    [
+        (
+            "simulator_run",
+            "Declared simulator-run evidence (unverified)",
+            "Declared Simulator Run evidence (unverified)",
+            "simulator_run and historical_artifact labels are unverified",
+        ),
+        (
+            "historical_artifact",
+            "Declared historical-artifact evidence (unverified)",
+            "Declared Historical Artifact evidence (unverified)",
+            "simulator_run and historical_artifact labels are unverified",
+        ),
+    ],
+)
+def test_relabeling_fixture_keeps_declared_provenance_unverified(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    evidence_kind: str,
+    visible_label: str,
+    visible_figure_label: str,
+    claim_boundary_phrase: str,
 ) -> None:
-    """A caller-edited evidence kind cannot claim simulator provenance in any output."""
+    """A caller-edited evidence kind cannot claim authenticated provenance in output."""
     from PIL import Image
 
     evidence = _evidence(tmp_path)
     assert evidence["evidence_kind"] == "synthetic_fixture"
 
-    evidence["evidence_kind"] = "simulator_run"
+    evidence["evidence_kind"] = evidence_kind
     input_path = tmp_path / "relabelled-round-evidence.json"
     input_path.write_text(json.dumps(evidence), encoding="utf-8")
     output_dir = tmp_path / "relabelled-report"
@@ -2294,14 +2319,14 @@ def test_relabeling_synthetic_fixture_as_simulator_run_does_not_claim_empirical_
     with Image.open(output_dir / "frontier.png") as figure_image:
         embedded_provenance = json.loads(figure_image.info["Provenance"])
 
-    assert "Declared simulator-run evidence (unverified)" in markdown.splitlines()[0]
+    assert visible_label.lower() in markdown.splitlines()[0].lower()
     assert "Empirical feasibility frontier" not in markdown.splitlines()[0]
-    assert "simulator_run is unverified" in report["claim_boundary"]
+    assert claim_boundary_phrase in report["claim_boundary"]
     assert persisted_report["claim_boundary"] == report["claim_boundary"]
-    assert captured["figure_title"].startswith("Declared Simulator Run evidence (unverified)")
+    assert captured["figure_title"].startswith(visible_figure_label)
     assert sidecar["figure_title"] == captured["figure_title"]
     assert sidecar["claim_boundary"] == report["claim_boundary"]
-    assert "simulator_run is unverified" in embedded_provenance["claim_boundary"]
+    assert claim_boundary_phrase in embedded_provenance["claim_boundary"]
 
 
 def test_frontier_report_rejects_path_escape_and_noncanonical_admissibility(tmp_path: Path) -> None:

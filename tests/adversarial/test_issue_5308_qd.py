@@ -441,6 +441,92 @@ def test_qd_invalid_verdict_is_preserved_and_does_not_reject(tmp_path: Path) -> 
     )
 
 
+def test_qd_non_mapping_verdict_is_recorded_and_evaluated(tmp_path: Path) -> None:
+    """A non-mapping advisory result remains visible and cannot reject a candidate."""
+    config = QDSearchConfig(
+        search_space=_space(), objective="worst_case_snqi", grid=GridSpec(0, 2.5, 0, 3, 4), budget=1
+    )
+    evaluation = _make_evaluation(
+        candidate=_candidates(1)[0],
+        min_distance=1.0,
+        critical_time=1.0,
+        objective=1.0,
+        temp_root=tmp_path,
+    )
+    result = run_map_elites(
+        config,
+        evaluator=_FakeEvaluator([evaluation]),
+        admissibility_precheck=lambda _config, _candidate: ["not", "a", "mapping"],
+    )
+
+    assert result.num_evaluated == 1
+    assert result.num_admissibility_rejected == 0
+    assert result.admissibility_records[0]["status"] == "invalid"
+    assert result.admissibility_records[0]["reason_code"] == "admissibility_verdict_not_mapping"
+
+
+def test_qd_backfills_missing_objective_from_episode_record(tmp_path: Path) -> None:
+    """An evaluator without a score uses the canonical objective on its episode record."""
+    config = QDSearchConfig(
+        search_space=_space(), objective="worst_case_snqi", grid=GridSpec(0, 2.5, 0, 3, 4), budget=1
+    )
+    evaluation = _make_evaluation(
+        candidate=_candidates(1)[0],
+        min_distance=1.0,
+        critical_time=1.0,
+        objective=None,
+        failure="collision",
+        temp_root=tmp_path,
+    )
+
+    result = run_map_elites(config, evaluator=_FakeEvaluator([evaluation]))
+
+    assert result.num_evaluated == 1
+    assert result.archive.filled_cell_count() == 1
+    archived_evaluation = next(iter(result.archive.cells.values()))
+    assert archived_evaluation.objective_value == 10.0
+
+
+def test_qd_rejects_archive_with_mismatched_search_config() -> None:
+    """A caller-supplied archive must use the current grid and certification policy."""
+    grid = GridSpec(0, 2.5, 0, 3, 4)
+    config = QDSearchConfig(search_space=_space(), objective="worst_case_snqi", grid=grid, budget=1)
+    incompatible = QDArchive(grid=GridSpec(0, 3, 0, 3, 4))
+
+    with pytest.raises(ValueError, match="archive grid and certification policy"):
+        run_map_elites(
+            config,
+            evaluator=lambda *_args: pytest.fail("must reject archive first"),
+            archive=incompatible,
+        )
+
+
+def test_qd_comparison_requires_matching_proposal_budget() -> None:
+    """Comparison validation rejects invalid and mismatched proposal counts."""
+    grid = GridSpec(0, 2.5, 0, 3, 4)
+    qd_result = QDSearchResult(
+        archive=QDArchive(grid=grid),
+        num_evaluated=0,
+        num_admitted=0,
+        num_proposed=1,
+    )
+
+    with pytest.raises(ValueError, match="proposal budget must be a positive integer"):
+        compare_qd_vs_single_objective(
+            qd_result=qd_result,
+            single_objective_evaluations=[],
+            budget=True,
+            grid=grid,
+        )
+    with pytest.raises(ValueError, match="proposal-budget comparison"):
+        compare_qd_vs_single_objective(
+            qd_result=qd_result,
+            single_objective_evaluations=[],
+            budget=1,
+            grid=grid,
+        )
+
+
 def test_archive_keeps_higher_quality_incumbent(tmp_path: Path) -> None:
     """A new elite only replaces the incumbent at its cell when scoring higher."""
     grid = GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4)

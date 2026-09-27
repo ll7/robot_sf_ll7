@@ -126,8 +126,12 @@ def _trace_exclusion_reasons(
         or not trace["steps"]
     ):
         reasons.append("missing_simulation_step_trace")
-    if not isinstance(planner_trace, dict) or not isinstance(planner_trace.get("steps"), list):
-        reasons.append("missing_planner_decision_trace")
+    if (
+        not isinstance(planner_trace, dict)
+        or not isinstance(planner_trace.get("steps"), list)
+        or not planner_trace["steps"]
+    ):
+        reasons.append("missing_or_empty_planner_decision_trace")
     else:
         for step in planner_trace["steps"]:
             if isinstance(step, dict) and (
@@ -144,6 +148,10 @@ def _trace_exclusion_reasons(
         },
         "algorithm_metadata": metadata,
     }
+    if row is not None and row.get("execution_mode") != "native":
+        reasons.append(f"non_native_execution_mode:{row.get('execution_mode')!r}")
+    if row is not None and row.get("readiness_status") != "native":
+        reasons.append(f"non_native_readiness_status:{row.get('readiness_status')!r}")
     if row is not None and "planner_runtime" in row:
         runtime_payload["planner_runtime"] = row["planner_runtime"]
     runtime_marker = runtime_fallback_or_degraded_marker(

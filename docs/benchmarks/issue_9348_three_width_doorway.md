@@ -68,6 +68,8 @@ resamples whole seeds (10,000 draws, seed 9348); three seeds are descriptive,
 not a significance basis. Arrival time uses successful pairs only, with
 failures censored at termination. Pedestrian delay or impairment is explicitly
 unavailable without a matched no-robot control trace. Human review must tie
-each mechanism claim to a recorded trace before promoting the slice. Fallback
-and degraded rows are excluded; no physical doorway or deployment safety
-claim follows from this simulator-only comparison.
+each mechanism claim to a recorded trace before promoting the slice. Only rows
+with native execution and readiness status plus a non-empty planner decision
+trace are native evidence. Fallback, degraded, adapter and incomplete-trace
+rows are excluded; no physical doorway or deployment safety claim follows from
+this simulator-only comparison.

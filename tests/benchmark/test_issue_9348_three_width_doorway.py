@@ -181,7 +181,7 @@ def _complete_synthetic_campaign() -> tuple[
                             "doorway_pair_receipt": receipt,
                             "planner_runtime": {},
                             "simulation_step_trace": {"steps": [{}]},
-                            "planner_decision_trace": {"steps": []},
+                            "planner_decision_trace": {"steps": [{}]},
                         },
                         "integrity": {"contradictions": []},
                     }
@@ -579,13 +579,13 @@ def test_h1_runner_pair_receipt_survives_episode_schema(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("marker", ["execution_mode", "readiness_status", "nested_runtime"])
-def test_h400_report_excludes_canonical_runtime_fallback_rows(marker: str) -> None:
-    """Fallback/degraded runtime markers invalidate the affected paired evidence."""
+def test_h400_report_excludes_non_native_or_fallback_rows(marker: str) -> None:
+    """Non-native and fallback/degraded runtime markers invalidate paired evidence."""
     rows, cells, pairs = _complete_synthetic_campaign()
     if marker == "nested_runtime":
         rows[0]["algorithm_metadata"]["planner_runtime"] = {"fallback_used": True}
     else:
-        rows[0][marker] = "fallback"
+        rows[0][marker] = "adapter"
 
     report = analyze_rows(rows, cells, pairs)
 
@@ -595,7 +595,14 @@ def test_h400_report_excludes_canonical_runtime_fallback_rows(marker: str) -> No
     assert report["excluded_pair_ids"] == ["goal_pair_00225"]
     excluded = report["row_inventory"][0]
     assert excluded["evidence_status"] == "excluded"
-    assert any("fallback_or_degraded_runtime" in reason for reason in excluded["exclusion_reasons"])
+    assert any(
+        (
+            f"non_native_{marker}:" in reason
+            if marker in {"execution_mode", "readiness_status"}
+            else "fallback_or_degraded_runtime" in reason
+        )
+        for reason in excluded["exclusion_reasons"]
+    )
 
 
 def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None:
@@ -638,6 +645,8 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
                         "scenario_id": scenario_id,
                         "horizon": 400,
                         "status": "success" if success else "failure",
+                        "execution_mode": "native",
+                        "readiness_status": "native",
                         "episode_id": f"{planner}-{seed}-{width}",
                         "steps": 100,
                         "outcome": {
@@ -655,7 +664,7 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
                             "status": "ok",
                             "doorway_pair_receipt": receipt,
                             "simulation_step_trace": {"steps": [{}]},
-                            "planner_decision_trace": {"steps": []},
+                            "planner_decision_trace": {"steps": [{}]},
                         },
                         "integrity": {"contradictions": []},
                     }
@@ -693,6 +702,13 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
     assert degraded["native_rows"] == 17
     assert degraded["excluded_pair_ids"] == ["goal_pair_00225"]
     rows[0]["algorithm_metadata"]["planner_decision_trace"]["steps"] = []
+    empty_trace = analyze_rows(rows, cells, pairs)
+    assert empty_trace["native_rows"] == 17
+    assert any(
+        "missing_or_empty_planner_decision_trace" in reason
+        for reason in empty_trace["row_inventory"][0]["exclusion_reasons"]
+    )
+    rows[0]["algorithm_metadata"]["planner_decision_trace"]["steps"] = [{}]
     inputs = tmp_path / "inputs"
     inputs.mkdir()
     for name in ("application_manifest.yaml", "social_force.yaml", "episode.schema.v1.json"):

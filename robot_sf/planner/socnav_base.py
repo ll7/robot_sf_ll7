@@ -467,6 +467,9 @@ class SocNavPlannerConfig:
         if name == "socnav_sampling_version":
             object.__setattr__(self, name, resolve_socnav_sampling_version(value))
             return
+        if name == "social_force_ped_version":
+            object.__setattr__(self, name, resolve_social_force_ped_version(value))
+            return
         if name == "social_force_obstacle_law":
             resolved, mode = resolve_obstacle_force_law_with_mode(value)
             object.__setattr__(self, name, resolved)

@@ -1,6 +1,7 @@
 """Surface-distance pedestrian repulsion v3 for the social-force planner (issue #9758)."""
 
 import numpy as np
+import pytest
 
 from robot_sf.planner import socnav_social_force as sf
 from robot_sf.planner.socnav_base import (
@@ -33,6 +34,20 @@ def test_ped_version_resolution_defaults_to_legacy() -> None:
     assert resolve_social_force_ped_version(None) == SOCIAL_FORCE_PED_LEGACY_KERNEL
     assert resolve_social_force_ped_version("  ") == SOCIAL_FORCE_PED_LEGACY_KERNEL
     assert resolve_social_force_ped_version("surface_v3") == SOCIAL_FORCE_PED_SURFACE_V3
+
+
+@pytest.mark.parametrize("value", ["unsupported", 3, object()])
+def test_config_rejects_invalid_ped_version_at_construction(value) -> None:
+    """Invalid selectors fail before an adapter can run with ambiguous semantics."""
+    with pytest.raises((TypeError, ValueError)):
+        SocNavPlannerConfig(social_force_ped_version=value)
+
+
+@pytest.mark.parametrize("value", [None, "", "  "])
+def test_config_preserves_legacy_ped_version_for_unset_or_blank(value) -> None:
+    """Missing and blank selectors retain the historical kernel."""
+    config = SocNavPlannerConfig(social_force_ped_version=value)
+    assert config.social_force_ped_version == SOCIAL_FORCE_PED_LEGACY_KERNEL
 
 
 def test_standing_pedestrian_ahead_repels_beyond_goal_force() -> None:
@@ -107,14 +122,35 @@ def test_v3_diagnostics_reports_ped_version() -> None:
     assert legacy.diagnostics()["ped_version"] == SOCIAL_FORCE_PED_LEGACY_KERNEL
 
 
-def _head_on_obs(ped_xy: tuple[float, float]) -> dict:
-    """Minimal SocNav observation: robot at origin facing a goal at (5, 0)."""
+def _head_on_obs(
+    ped_xy: tuple[float, float],
+    *,
+    ped_velocity: tuple[float, float] = (0.0, 0.0),
+    robot_xy: tuple[float, float] = (0.0, 0.0),
+    heading: float = 0.0,
+    robot_speed: float = 1.0,
+    robot_radius: float = 0.5,
+    dt: float = 0.1,
+) -> dict:
+    """Build a deterministic world-frame SocNav observation for one pedestrian."""
+    cos_h = float(np.cos(heading))
+    sin_h = float(np.sin(heading))
+    world_velocity = np.asarray(ped_velocity, dtype=float)
+    # SocNav pedestrian velocities are ego-frame; keep the requested crossing
+    # speed constant in world coordinates as the robot turns.
+    ego_velocity = np.array(
+        [
+            cos_h * world_velocity[0] + sin_h * world_velocity[1],
+            -sin_h * world_velocity[0] + cos_h * world_velocity[1],
+        ],
+        dtype=float,
+    )
     return {
         "robot": {
-            "position": np.array([0.0, 0.0]),
-            "heading": np.array([0.0]),
-            "speed": np.array([1.0, 0.0]),
-            "radius": np.array([0.5]),
+            "position": np.asarray(robot_xy, dtype=float),
+            "heading": np.array([heading]),
+            "speed": np.array([robot_speed, 0.0]),
+            "radius": np.array([robot_radius]),
         },
         "goal": {
             "current": np.array([5.0, 0.0]),
@@ -122,12 +158,12 @@ def _head_on_obs(ped_xy: tuple[float, float]) -> dict:
         },
         "pedestrians": {
             "positions": np.array([ped_xy]),
-            "velocities": np.zeros((1, 2)),
+            "velocities": np.array([ego_velocity]),
             "radius": np.array([0.4]),
             "count": np.array([1.0]),
         },
         "map": {"size": np.array([10.0, 10.0])},
-        "sim": {"timestep": np.array([0.1])},
+        "sim": {"timestep": np.array([dt])},
     }
 
 
@@ -141,3 +177,87 @@ def test_v3_brakes_for_close_head_on_pedestrian() -> None:
     assert np.all(np.isfinite(v3_cmd))
     assert 0.0 <= v3_cmd[0] <= 3.0 + 1e-9
     assert v3_cmd[0] < legacy_cmd[0]
+
+
+def _unicycle_step(
+    position: np.ndarray, heading: float, command: tuple[float, float], duration: float
+) -> tuple[np.ndarray, float]:
+    """Integrate one constant unicycle command exactly over ``duration``."""
+    linear, angular = (float(command[0]), float(command[1]))
+    if abs(angular) < 1e-12:
+        return position + duration * linear * np.array([np.cos(heading), np.sin(heading)]), heading
+    next_heading = heading + duration * angular
+    next_position = position + (linear / angular) * np.array(
+        [np.sin(next_heading) - np.sin(heading), -np.cos(next_heading) + np.cos(heading)],
+    )
+    return next_position, next_heading
+
+
+def _rollout_v3(
+    *,
+    ped_start: tuple[float, float],
+    ped_velocity: tuple[float, float],
+    dt: float,
+    horizon_s: float,
+) -> tuple[float, float]:
+    """Roll out the adapter and return swept minimum clearance and final speed."""
+    adapter = sf.SocialForcePlannerAdapter(_v3_config())
+    robot_position = np.zeros(2, dtype=float)
+    heading = 0.0
+    robot_speed = 0.0
+    ped_start_arr = np.asarray(ped_start, dtype=float)
+    ped_velocity_arr = np.asarray(ped_velocity, dtype=float)
+    minimum_clearance = float("inf")
+    steps = round(horizon_s / dt)
+    for step in range(steps):
+        ped_position = ped_start_arr + step * dt * ped_velocity_arr
+        observation = _head_on_obs(
+            tuple(ped_position),
+            ped_velocity=ped_velocity,
+            robot_xy=tuple(robot_position),
+            heading=heading,
+            robot_speed=robot_speed,
+            robot_radius=1.0,
+            dt=dt,
+        )
+        command = adapter.plan(observation)
+        # Check the commanded arc against the pedestrian's linear path, rather
+        # than only checking sampled endpoint states for contact.
+        for fraction in np.linspace(0.0, 1.0, num=21):
+            sample_robot, _ = _unicycle_step(robot_position, heading, command, dt * float(fraction))
+            sample_pedestrian = ped_position + dt * float(fraction) * ped_velocity_arr
+            minimum_clearance = min(
+                minimum_clearance,
+                float(np.linalg.norm(sample_robot - sample_pedestrian) - 1.0 - 0.4),
+            )
+        robot_position, heading = _unicycle_step(robot_position, heading, command, dt)
+        robot_speed = float(command[0])
+    return minimum_clearance, robot_speed
+
+
+@pytest.mark.parametrize("dt", [0.1, 0.05])
+def test_v3_standing_pedestrian_rollout_stops_before_contact(dt: float) -> None:
+    """A standing pedestrian is kept clear by the actual commanded trajectory."""
+    minimum_clearance, final_speed = _rollout_v3(
+        ped_start=(1.8, 0.0), ped_velocity=(0.0, 0.0), dt=dt, horizon_s=4.0
+    )
+    assert minimum_clearance > 0.05
+    assert final_speed < 0.05
+
+
+@pytest.mark.parametrize("dt", [0.1, 0.05])
+def test_v3_crossing_pedestrian_rollout_avoids_contact(dt: float) -> None:
+    """A 1.3 m/s crossing pedestrian completes the encounter without contact."""
+    minimum_clearance, _ = _rollout_v3(
+        ped_start=(2.0, -1.3), ped_velocity=(0.0, 1.3), dt=dt, horizon_s=3.0
+    )
+    assert minimum_clearance > 0.05
+
+
+def test_v3_exact_overlap_fails_closed_without_changing_legacy() -> None:
+    """An exact v3 overlap stops, while the legacy selector remains historical."""
+    overlap = _head_on_obs((0.0, 0.0), robot_speed=0.0)
+    v3_command = sf.SocialForcePlannerAdapter(_v3_config()).plan(overlap)
+    legacy_command = sf.SocialForcePlannerAdapter(SocNavPlannerConfig()).plan(overlap)
+    assert v3_command == (0.0, 0.0)
+    assert legacy_command[0] > 0.0

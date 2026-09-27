@@ -105,6 +105,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         self._blocked_latched = False
         self._target_speed = float("inf")
         self._filtered_target = None
+        self._surface_v3_contact = False
 
     def reset(self, *, seed: int | None = None) -> None:
         """Reset episode-local obstacle-force application diagnostics."""
@@ -118,6 +119,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         self._blocked_latched = False
         self._target_speed = float("inf")
         self._filtered_target = None
+        self._surface_v3_contact = False
 
     def plan_velocity_world(self, observation: dict) -> np.ndarray:
         """Compute a world-frame translational velocity using the social-force model.
@@ -125,6 +127,9 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         Returns:
             np.ndarray: World-frame ``[vx, vy]`` translational velocity.
         """
+        # Contact handling is per observation.  A v3 contact is fail-closed for
+        # the opt-in path only; the historical kernel keeps its prior behavior.
+        self._surface_v3_contact = False
         robot_state, goal_state, ped_state = self._socnav_fields(observation)
         robot_pos = np.asarray(robot_state.get("position", [0.0, 0.0]), dtype=float)[:2]
         robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
@@ -168,6 +173,8 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             robot_heading,
             float(self._as_1d_float(robot_state.get("radius", [0.0]), pad=1)[0]),
         )
+        if self._surface_v3_contact:
+            return np.zeros(2, dtype=float)
         if goal_approach is None:
             obstacle_force = self._compute_obstacle_force(
                 observation, robot_pos, robot_heading, robot_vel, robot_state
@@ -609,6 +616,9 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
                 0.0,
             )
         surface = np.maximum(centre - (radius + ped_radii), 0.0)
+        self._surface_v3_contact = bool(
+            np.any(np.isfinite(centre) & (centre <= radius + ped_radii))
+        )
         magnitudes = strength * np.exp(-surface / length)
         forces = magnitudes[:, np.newaxis] * interaction_dir
         finite_mask = np.isfinite(forces).all(axis=1)

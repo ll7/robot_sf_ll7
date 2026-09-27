@@ -2475,6 +2475,7 @@ def _run_map_episode(  # noqa: PLR0913
     record_simulation_step_trace: bool = False,
     close_policy: bool = True,
     policy_builder: Any | None = None,
+    runtime_input_records: list[dict[str, str]] | None = None,
 ) -> EpisodeRecordDict:
     """Run one scenario/seed episode through the extracted episode executor.
 
@@ -2482,38 +2483,43 @@ def _run_map_episode(  # noqa: PLR0913
         EpisodeRecordDict: Episode record with metrics, provenance, and planner metadata.
     """
     with _scoped_episode_compat_overrides():
-        return _execute_map_episode(
-            scenario,
-            seed,
-            horizon=horizon,
-            dt=dt,
-            record_forces=record_forces,
-            snqi_weights=snqi_weights,
-            snqi_baseline=snqi_baseline,
-            algo=algo,
-            scenario_path=scenario_path,
-            algo_config=algo_config,
-            algo_config_path=algo_config_path,
-            adapter_impact_eval=adapter_impact_eval,
-            experimental_ped_impact=experimental_ped_impact,
-            ped_impact_radius_m=ped_impact_radius_m,
-            ped_impact_window_steps=ped_impact_window_steps,
-            observation_mode=observation_mode,
-            observation_level=observation_level,
-            benchmark_track=benchmark_track,
-            track_schema_version=track_schema_version,
-            observation_noise=observation_noise,
-            tracking_precision=tracking_precision,
-            synthetic_actuation_profile=synthetic_actuation_profile,
-            latency_stress_profile=latency_stress_profile,
-            safety_wrapper=safety_wrapper,
-            paired_wrapper_off_record=paired_wrapper_off_record,
-            cbf_safety_filter=cbf_safety_filter,
-            record_planner_decision_trace=record_planner_decision_trace,
-            record_simulation_step_trace=record_simulation_step_trace,
-            close_policy=close_policy,
-            policy_builder=policy_builder or _build_policy,
-        )
+        consumed_runtime_inputs = runtime_input_records if runtime_input_records is not None else []
+        episode_kwargs: dict[str, Any] = {
+            "horizon": horizon,
+            "dt": dt,
+            "record_forces": record_forces,
+            "snqi_weights": snqi_weights,
+            "snqi_baseline": snqi_baseline,
+            "algo": algo,
+            "scenario_path": scenario_path,
+            "algo_config": algo_config,
+            "algo_config_path": algo_config_path,
+            "adapter_impact_eval": adapter_impact_eval,
+            "experimental_ped_impact": experimental_ped_impact,
+            "ped_impact_radius_m": ped_impact_radius_m,
+            "ped_impact_window_steps": ped_impact_window_steps,
+            "observation_mode": observation_mode,
+            "observation_level": observation_level,
+            "benchmark_track": benchmark_track,
+            "track_schema_version": track_schema_version,
+            "observation_noise": observation_noise,
+            "tracking_precision": tracking_precision,
+            "synthetic_actuation_profile": synthetic_actuation_profile,
+            "latency_stress_profile": latency_stress_profile,
+            "safety_wrapper": safety_wrapper,
+            "paired_wrapper_off_record": paired_wrapper_off_record,
+            "cbf_safety_filter": cbf_safety_filter,
+            "record_planner_decision_trace": record_planner_decision_trace,
+            "record_simulation_step_trace": record_simulation_step_trace,
+            "close_policy": close_policy,
+            "policy_builder": policy_builder or _build_policy,
+            "runtime_input_records": consumed_runtime_inputs,
+        }
+        episode = _execute_map_episode(scenario, seed, **episode_kwargs)
+        # Keep exact parser-consumed map/route input identities in the hashed episode row so
+        # downstream evidence consumers can bind the execution to the same resource closure.
+        episode["runtime_input_records"] = [dict(record) for record in consumed_runtime_inputs]
+        return episode
 
 
 def _write_validated(out_path: Path, schema: dict[str, Any], record: dict[str, Any]) -> None:

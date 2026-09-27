@@ -82,7 +82,7 @@ def test_load_map_definition_unsupported_extension(tmp_path: Path) -> None:
     """Skip unsupported map formats gracefully, including legacy map paths."""
     bad_map = tmp_path / "map.json"
     bad_map.write_text("not a map", encoding="utf-8")
-    scenario_loader._load_map_definition.cache_clear()
+    scenario_loader._load_map_definition_cached.cache_clear()
     assert scenario_loader._load_map_definition(str(bad_map)) is None
 
 

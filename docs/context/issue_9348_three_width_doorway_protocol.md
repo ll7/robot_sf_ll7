@@ -63,6 +63,10 @@ ordinary planner failure. The application preflight reports this check
 separately from source/map/radius validity. Its `go` field permits only
 diagnostic preflight continuation, never confirmation dispatch.
 
+The manifest also records SHA-256 digests for the historical scenario and SVG. Loading the
+manifest fails closed if either byte stream changes, so the generator can only create disposable
+variants from the reviewed baseline.
+
 The distinction is source-backed. The oracle calls
 `robot_sf/scenario_certification/v1.py::_plan_inflated_shortest_path`, which
 uses `ClassicGlobalPlanner` A* at the nominal 1.0 m radius with inflation

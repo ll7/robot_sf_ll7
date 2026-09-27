@@ -12,9 +12,9 @@ scenarios differ from the historical baseline only in explained fields.
 Evidence boundary: diagnostic within-simulator geometry evidence only. No
 physical-footprint validation, realism evidence, sim-to-real evidence,
 deployment safety, frozen-release evidence, or general planner ranking.
-Planner rows stay ``not_run`` until a separately authorized campaign packet
-executes them; the full paired campaign and uncertainty-quantified comparison
-report belong to the successor issue, not this application slice.
+The preflight keeps planner rows ``not_run``; the separately authorized
+campaign producer owns H400 execution and admits only complete, paired native
+rows to its report.
 """
 
 from __future__ import annotations
@@ -64,6 +64,10 @@ DEFAULT_MANIFEST_PATH = Path("configs/benchmarks/issue_9348_three_width_doorway_
 EXPECTED_TIER = "geometrically_feasible_candidate"
 _TOLERANCE_M = 1e-9
 _EXPECTED_WIDTHS = (2.2, 2.8, 3.6)
+_EXPECTED_DEPTH_M = 1.0
+_EXPECTED_ORACLE_SEED = 225
+_EXPECTED_HORIZON_STEPS = 400
+_EXPECTED_SEEDS = (225, 226, 227)
 _AUTHORITATIVE_RADIUS_SOURCE = "robot_sf.common.robot_defaults.DEFAULT_ROBOT_RADIUS"
 
 _ALLOWED_TOP_LEVEL_CHANGES = frozenset(
@@ -197,6 +201,8 @@ def _validate_application_geometry(geometry: Any) -> tuple[tuple[float, ...], ..
         )
     if len(depth_levels) != 1:
         raise ValueError("geometry.constriction_depth_m must fix one application depth")
+    if not math.isclose(depth_levels[0], _EXPECTED_DEPTH_M, abs_tol=_TOLERANCE_M):
+        raise ValueError("geometry.constriction_depth_m must pin the preregistered 1.0 m depth")
     baseline = geometry.get("baseline")
     if not isinstance(baseline, dict):
         raise ValueError("geometry.baseline must be a mapping")
@@ -305,6 +311,14 @@ def _validate_planner_config(planner: Mapping[str, Any]) -> None:
         raise ValueError("planner_protocol.algo_config must retain the frozen planner settings")
 
 
+def _require_frozen_protocol_value(
+    value: Any, expected: Any, *, field: str, expected_label: str
+) -> None:
+    """Reject a manifest value that drifts from the preregistered protocol."""
+    if value != expected:
+        raise ValueError(f"{field} must remain {expected_label}")
+
+
 def _validate_expected_rows(
     planner: Mapping[str, Any], roster: list[str], seeds: list[int]
 ) -> None:
@@ -326,7 +340,19 @@ def _validate_application_protocol(
     if not isinstance(oracle, dict) or not bool(oracle.get("run_before_planners")):
         raise ValueError("oracle.run_before_planners must be true")
     oracle_seed = _positive_int(oracle.get("seed"), field="oracle.seed")
+    _require_frozen_protocol_value(
+        oracle_seed,
+        _EXPECTED_ORACLE_SEED,
+        field="oracle.seed",
+        expected_label="the preregistered seed 225",
+    )
     horizon = _positive_int(oracle.get("horizon_steps"), field="oracle.horizon_steps")
+    _require_frozen_protocol_value(
+        horizon,
+        _EXPECTED_HORIZON_STEPS,
+        field="oracle.horizon_steps",
+        expected_label="the preregistered H400 horizon",
+    )
     if not isinstance(planner, dict):
         raise ValueError("planner_protocol must be a mapping")
     roster = planner.get("roster")
@@ -341,11 +367,23 @@ def _validate_application_protocol(
     if not isinstance(seeds, list) or not seeds:
         raise ValueError("planner_protocol.seeds must be a non-empty list")
     normalized_seeds = [_positive_int(seed, field="planner_protocol.seeds[]") for seed in seeds]
+    _require_frozen_protocol_value(
+        tuple(normalized_seeds),
+        _EXPECTED_SEEDS,
+        field="planner_protocol.seeds",
+        expected_label="[225, 226, 227]",
+    )
     planner_horizon = _positive_int(
         planner.get("horizon_steps"), field="planner_protocol.horizon_steps"
     )
     if planner_horizon != horizon:
         raise ValueError("oracle and planner protocol horizons must match")
+    _require_frozen_protocol_value(
+        planner_horizon,
+        _EXPECTED_HORIZON_STEPS,
+        field="planner_protocol.horizon_steps",
+        expected_label="the preregistered H400 horizon",
+    )
     if str(planner.get("execution_status")) != "not_started":
         raise ValueError("planner_protocol.execution_status must remain not_started")
     _validate_expected_rows(planner, roster, normalized_seeds)
@@ -386,6 +424,18 @@ def load_three_width_manifest(path: Path) -> dict[str, Any]:
         raise ValueError("base_scenario.scenario_id must be non-empty")
     scenario_path = _resolve_reference(source, str(base.get("scenario_path") or ""))
     map_path = _resolve_reference(source, str(base.get("map_path") or ""))
+    expected_scenario_sha = str(base.get("scenario_sha256") or "").strip().lower()
+    expected_map_sha = str(base.get("map_sha256") or "").strip().lower()
+    for field, digest in (
+        ("base_scenario.scenario_sha256", expected_scenario_sha),
+        ("base_scenario.map_sha256", expected_map_sha),
+    ):
+        if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
+            raise ValueError(f"{field} must be a lowercase SHA-256 digest")
+    if _sha256(scenario_path) != expected_scenario_sha:
+        raise ValueError("base scenario SHA-256 does not match the frozen historical input")
+    if _sha256(map_path) != expected_map_sha:
+        raise ValueError("base map SHA-256 does not match the frozen historical input")
 
     gap_levels, depth_levels, baseline_gap, baseline_depth = _validate_application_geometry(
         payload.get("geometry")
@@ -413,6 +463,8 @@ def load_three_width_manifest(path: Path) -> dict[str, Any]:
         "manifest_path": source,
         "scenario_path": scenario_path,
         "map_path": map_path,
+        "scenario_sha256": expected_scenario_sha,
+        "map_sha256": expected_map_sha,
         "gap_levels": gap_levels,
         "depth_levels": depth_levels,
         "baseline_gap_m": baseline_gap,
@@ -500,17 +552,26 @@ def build_pair_receipt(reset: Mapping[str, Any], snapshot: Any) -> dict[str, str
     pedestrians = reset.get("pedestrians")
     if not isinstance(robot, Mapping) or not isinstance(pedestrians, list):
         raise ValueError("reset actor state is unavailable")
-    if robot.get("position") is None or robot.get("velocity") is None:
-        raise ValueError("reset robot pose or velocity is unavailable")
+    if robot.get("position") is None or robot.get("velocity") is None or robot.get("goal") is None:
+        raise ValueError("reset robot pose, velocity, or goal is unavailable")
     routes = reset.get("route_state")
-    if not isinstance(routes, Mapping):
+    if (
+        not isinstance(routes, Mapping)
+        or not isinstance(routes.get("robot_routes"), list)
+        or not routes["robot_routes"]
+        or routes.get("pedestrian_goals") is None
+    ):
         raise ValueError("reset goal and route assignment state is unavailable")
     actors = []
     for actor in pedestrians:
         if not isinstance(actor, Mapping) or actor.get("actor_id") is None:
             raise ValueError("stable reset pedestrian identity is unavailable")
-        if actor.get("position") is None or actor.get("velocity") is None:
-            raise ValueError("reset pedestrian pose or velocity is unavailable")
+        if (
+            actor.get("position") is None
+            or actor.get("velocity") is None
+            or actor.get("goal") is None
+        ):
+            raise ValueError("reset pedestrian pose, velocity, or goal is unavailable")
         actors.append(
             {
                 "id": actor["actor_id"],
@@ -937,6 +998,37 @@ def generate_application_assets(
         violations = check_variant_diff(base_scenario, loaded_variant)
         if violations:
             raise ValueError(f"variant diff check failed for {variant['variant_id']}: {violations}")
+        generated_geometry = derive_doorway_geometry(scenario_output, loaded_variant)
+        geometry_checks = {
+            "gap_width_matches_manifest": math.isclose(
+                generated_geometry.gap_width_m,
+                float(variant["gap_width_m"]),
+                abs_tol=_TOLERANCE_M,
+            ),
+            "constriction_depth_matches_manifest": all(
+                math.isclose(
+                    float(rect["width"]),
+                    float(variant["constriction_depth_m"]),
+                    abs_tol=_TOLERANCE_M,
+                )
+                for rect in generated_geometry.obstacle_rects
+            ),
+            "opening_is_symmetric_about_route": math.isclose(
+                (generated_geometry.gap_lower_edge_m + generated_geometry.gap_upper_edge_m) / 2.0,
+                float(manifest["geometry"]["route_y_m"]),
+                abs_tol=_TOLERANCE_M,
+            ),
+            "route_waypoints_match_manifest": [
+                list(point) for point in generated_geometry.route_waypoints
+            ]
+            == manifest["geometry"]["route_waypoints"],
+            "positive_clearance": float(variant["derived_clearance_margin_m"]) > _TOLERANCE_M,
+        }
+        if not all(geometry_checks.values()):
+            raise ValueError(
+                f"generated map geometry check failed for {variant['variant_id']}: "
+                f"{geometry_checks}"
+            )
         assets.append(
             {
                 "variant_id": str(variant["variant_id"]),
@@ -950,6 +1042,7 @@ def generate_application_assets(
                 "scenario_sha256": _sha256(scenario_output),
                 "map_path": map_output.as_posix(),
                 "map_sha256": _sha256(map_output),
+                "geometry_checks": geometry_checks,
             }
         )
     return assets

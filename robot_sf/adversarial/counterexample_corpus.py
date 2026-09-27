@@ -6,6 +6,8 @@ original failure evidence. Unknown feasibility and incomplete execution evidence
 explicit states.
 """
 
+# evidence-writer-exempt: #9656 normalized candidate matrices have a byte-for-byte canonical YAML contract, and imported source artifacts and replay inputs are checksum-bound. Inline markers would change those required bytes; sidecars are outside the versioned receipt schema. Other generated normalized YAML and JSON controls use shared evidence writers.
+
 from __future__ import annotations
 
 import copy
@@ -40,6 +42,12 @@ from robot_sf.benchmark.termination_reason import (
     status_from_termination_reason,
 )
 from robot_sf.cli_scenarios import validate_scenario_payload, validate_scenario_rows_structure
+from robot_sf.evidence.writers import (
+    review_marker_comment,
+    review_marker_json,
+    write_json,
+    write_text,
+)
 
 CORPUS_SCHEMA_VERSION = "adversarial-counterexample-corpus.v1"
 CASE_SCHEMA_VERSION = "adversarial-counterexample.v1"
@@ -2892,7 +2900,10 @@ def _copy_tree_without_symlinks(source: Path, destination: Path) -> None:
             target.mkdir(parents=True, exist_ok=True)
         elif item.is_file():
             target.parent.mkdir(parents=True, exist_ok=True)
+            expected_sha256 = _sha256_file(item)
             shutil.copyfile(item, target)
+            if _sha256_file(target) != expected_sha256:
+                raise CorpusError(f"case artifact copy changed source bytes: {item}")
         else:
             raise CorpusError("case artifact bundle contains a non-regular file")
 
@@ -4156,12 +4167,14 @@ def export_regression_slice(
             manifest_cases.append(manifest_case)
 
         matrix_path = staging / "replay_matrix.yaml"
-        matrix_path.write_text(
-            yaml.safe_dump({"scenarios": matrix_entries}, sort_keys=True, allow_unicode=True),
-            encoding="utf-8",
+        write_text(
+            matrix_path,
+            f"{review_marker_comment()}\n"
+            + yaml.safe_dump({"scenarios": matrix_entries}, sort_keys=True, allow_unicode=True),
         )
         _validate_exported_slice(matrix_path, manifest_cases, staging)
         manifest = {
+            "review_marker": review_marker_json(),
             "schema_version": SLICE_SCHEMA_VERSION,
             "source_corpus_schema_version": corpus["schema_version"],
             "claim_boundary": (
@@ -4173,10 +4186,9 @@ def export_regression_slice(
             "replay_matrix_sha256": _sha256_file(matrix_path),
             "cases": manifest_cases,
         }
-        (staging / "manifest.json").write_text(
-            json.dumps(manifest, indent=2, sort_keys=True, allow_nan=False) + "\n",
-            encoding="utf-8",
-        )
+        # Keep the prior strict finite-JSON contract before the shared writer adds its marker.
+        _ = json.dumps(manifest, allow_nan=False)
+        write_json(staging / "manifest.json", manifest)
         staging.replace(destination)
         return manifest
     except BaseException:
@@ -4211,7 +4223,10 @@ def _export_case_slice(
         exported_map_relative,
     )
     route_output = staging / route_relative
+    expected_route_sha256 = _sha256_file(route_path)
     shutil.copyfile(route_path, route_output)
+    if _sha256_file(route_output) != expected_route_sha256:
+        raise CorpusError(f"{case['case_id']}: exported route bytes differ from source")
     config_output = _write_slice_planner_config(case, staging, config_relative)
     command_parts = _slice_replay_command(case, case_input, config_relative)
     manifest_case = {
@@ -4244,8 +4259,9 @@ def _export_case_map_assets(
         asset_relative = _slice_map_asset_path(asset)
         destination = staging / Path(*PurePosixPath(asset_relative).parts)
         destination.parent.mkdir(parents=True, exist_ok=True)
+        expected_asset_sha256 = _sha256_file(source_asset)
         shutil.copyfile(source_asset, destination)
-        if _sha256_file(destination) != asset["sha256"]:
+        if expected_asset_sha256 != asset["sha256"] or _sha256_file(destination) != asset["sha256"]:
             raise CorpusError(f"{case['case_id']}: exported map asset checksum differs")
         exported.append({**asset, "path": asset_relative})
     return exported
@@ -4258,8 +4274,10 @@ def _write_slice_planner_config(
     if not isinstance(snapshot, dict):
         raise CorpusError(f"{case['case_id']}: planner configuration snapshot is missing")
     config_path = staging / config_relative
-    config_path.write_text(
-        yaml.safe_dump(snapshot, sort_keys=True, allow_unicode=True), encoding="utf-8"
+    write_text(
+        config_path,
+        f"{review_marker_comment()}\n"
+        + yaml.safe_dump(snapshot, sort_keys=True, allow_unicode=True),
     )
     return config_path
 
@@ -8881,10 +8899,15 @@ def _copy_historical_source_snapshots(
 
 def _copy_artifact(source: Path | bytes, destination: Path, corpus_root: Path) -> str:
     destination.parent.mkdir(parents=True, exist_ok=True)
+    expected_sha256 = (
+        hashlib.sha256(source).hexdigest() if isinstance(source, bytes) else _sha256_file(source)
+    )
     if isinstance(source, bytes):
         destination.write_bytes(source)
     else:
         shutil.copyfile(source, destination)
+    if _sha256_file(destination) != expected_sha256:
+        raise CorpusError(f"corpus artifact copy changed source bytes: {destination}")
     return destination.resolve().relative_to(corpus_root.resolve()).as_posix()
 
 

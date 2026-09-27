@@ -712,15 +712,10 @@ def _config_snapshot(row: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _model_artifact_missing(config: dict[str, Any]) -> bool:
-    for key in ("model_path", "checkpoint_path", "predictive_foresight_checkpoint_path"):
-        value = config.get(key)
-        if isinstance(value, str) and value:
-            model_path = Path(value)
-            if not model_path.is_absolute():
-                model_path = REPO_ROOT / model_path
-            if not model_path.is_file():
-                return True
-    return False
+    return any(
+        _runtime_model_path_components(key, value) is None
+        for key, value in _runtime_model_paths(config)
+    )
 
 
 def _replay_ineligibility(row: dict[str, Any], matrix: Path, matrix_match: bool) -> str | None:

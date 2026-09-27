@@ -555,6 +555,61 @@ def test_replay_timestep_must_be_finite_and_positive(run_dt: Any) -> None:
         )
 
 
+@pytest.mark.parametrize("model_path_key", sorted(materializer.RUNTIME_MODEL_PATH_KEYS))
+def test_replay_ineligibility_rejects_nested_missing_runtime_model_artifact(
+    tmp_path: Path, model_path_key: str
+) -> None:
+    row = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    missing_model = tmp_path / "missing-model.bin"
+    row["algorithm_metadata"]["config"] = {
+        "components": [{"policy": {model_path_key: str(missing_model)}}]
+    }
+
+    assert materializer._model_artifact_missing(row["algorithm_metadata"]["config"]) is True
+    assert _replay_ineligibility(row, REPO_ROOT / MATRIX_RELATIVE, True) == (
+        "unavailable_model_artifact"
+    )
+
+
+@pytest.mark.parametrize("missing_component", ("meta", "index", "data"))
+def test_replay_ineligibility_requires_every_nested_sacadrl_checkpoint_component(
+    tmp_path: Path, missing_component: str
+) -> None:
+    row = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    prefix = tmp_path / "sacadrl"
+    components = {
+        "meta": prefix.with_name(f"{prefix.name}.meta"),
+        "index": prefix.with_name(f"{prefix.name}.index"),
+        "data": prefix.with_name(f"{prefix.name}.data-00000-of-00001"),
+    }
+    for component_name, path in components.items():
+        if component_name != missing_component:
+            path.write_bytes(b"fixture checkpoint component")
+    row["algorithm_metadata"]["config"] = {
+        "components": [{"policy": {"sacadrl_checkpoint_path": str(prefix)}}]
+    }
+
+    assert materializer._model_artifact_missing(row["algorithm_metadata"]["config"]) is True
+    assert _replay_ineligibility(row, REPO_ROOT / MATRIX_RELATIVE, True) == (
+        "unavailable_model_artifact"
+    )
+
+
+def test_replay_ineligibility_accepts_complete_nested_sacadrl_checkpoint_bundle(
+    tmp_path: Path,
+) -> None:
+    row = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    prefix = tmp_path / "sacadrl"
+    for suffix in (".meta", ".index", ".data-00000-of-00001"):
+        prefix.with_name(f"{prefix.name}{suffix}").write_bytes(b"fixture checkpoint component")
+    row["algorithm_metadata"]["config"] = {
+        "components": [{"policy": {"sacadrl_checkpoint_path": str(prefix)}}]
+    }
+
+    assert materializer._model_artifact_missing(row["algorithm_metadata"]["config"]) is False
+    assert _replay_ineligibility(row, REPO_ROOT / MATRIX_RELATIVE, True) is None
+
+
 def test_zero_timestep_preserves_row_accounting_without_replay_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

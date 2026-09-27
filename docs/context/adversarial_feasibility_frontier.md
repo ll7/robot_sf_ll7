@@ -85,7 +85,9 @@ origin search artifact and the `corpus` role for their corpus artifact. A case I
 origin candidate stay unchanged across observations. Case observations link the discovery round and
 candidate to corpus and replay artifacts. For non-historical cases, the search reference must be the
 origin round's exact checksummed search artifact, and the replay reference must be the replay artifact
-in that admitted origin candidate. An artifact from another round or case is not interchangeable.
+in that admitted origin candidate. Every admitted discovery must also have a same-round case
+observation and checksummed corpus status artifact. An artifact from another round or case is not
+interchangeable.
 A same-round observation must agree with its origin candidate's admissibility and replay status; it
 cannot mark a case solved when the search recorded its target failure. Later planner-status changes,
 such as `unsolved` to `solved`, are allowed. Later feasibility updates are limited to
@@ -94,6 +96,9 @@ complete evidence plus a checksummed artifact whose role is `admissibility-evide
 does not infer stronger feasibility from a replay alone. Transitions are checked against the latest
 recorded verdict: an unknown-to-confirmed upgrade counts once, repeated observations at the confirmed
 verdict remain in the corpus without repeated discovery credit, and verdict downgrades fail closed.
+A case marked `solved` while feasibility remains unknown requires a complete, case-bound target
+execution with route completion in its admissibility evidence; a corpus status label alone cannot
+establish that planner outcome.
 A historical case is confirmed as a planner counterexample only from the later of its first confirmed
 feasibility verdict and its first replay-verified unsolved or mixed planner outcome. A later replay
 cannot backdate confirmation or feasibility-upgrade credit into an earlier round. A historical
@@ -124,8 +129,9 @@ not infer dynamic feasibility from a planner failure. `structurally_invalid`,
 replay-verified target failure with `empirically_feasible` or `planner_specific_failure` status is
 counted as a confirmed counterexample. Admitted unknown-feasibility cases are tracked separately. A
 no-discovery statement counts unique newly confirmed cases, reports verified matches to known corpus
-cases only when they were confirmed before the current round, and remains qualified by the finite
-search budget. A duplicate of an unknown-feasibility case is not reported as a verified repeat until
+cases only when they were confirmed before the current round, reports completed candidate evaluations
+and the recorded stop reason, and says budget exhaustion only when the stop reason is
+`budget_exhausted`. A duplicate of an unknown-feasibility case is not reported as a verified repeat until
 persisted follow-up evidence confirms both feasibility and target-planner failure.
 
 Evaluation rows keep three canonical runtime axes separate: `execution_mode` is `native`, `adapter`,
@@ -136,10 +142,17 @@ is `native` or `adapter`, availability is `available`, and execution mode is res
 `adapter`, or `mixed`. Success and collision rates then use separate denominators, each based only on
 eligible rows with that outcome recorded. Fallback/degraded, failed, partial, missing, unknown, and
 ineligible rows remain in status counts and excluded-record lists. Missing expected rows and missing
-outcomes are reported separately; neither is synthesized as a success or failure.
+outcomes are reported separately; neither is synthesized as a success or failure. Under the canonical
+benchmark semantics, `success=true` with `collision=true` is invalid and report generation fails
+closed.
 
 The optimizer artifact content uses `frontier-optimizer-selection.v1` and records its experiment,
-round, source revision, selected planner ID, and selected config SHA-256. The search artifact uses
+round, source revision, selected planner ID, and selected config SHA-256. To establish a held-out split,
+it also records the complete unique `tuning_episode_identities` manifest (`record_id`, `scenario_id`,
+integer `scenario_seed`) for every episode that influenced optimizer selection. The report checks
+held-out identities against the union of tuning identities across all rounds. If any round lacks this
+manifest, held-out performance remains descriptive and `optimization_independence_status` is
+`unknown_optimizer_tuning_identities_missing`; overlapping identities fail closed. The search artifact uses
 `frontier-falsification-source.v3` and records the same round identity, target planner/config, and
 the complete candidate ledger fields consumed by the report, including each admissibility-evidence
 reference. The selected optimizer identity and search

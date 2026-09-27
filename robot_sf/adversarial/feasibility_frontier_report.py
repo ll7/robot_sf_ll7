@@ -171,7 +171,12 @@ def build_frontier_report(
         raise FrontierReportError("evidence root must be a JSON object")
     root = evidence_root.resolve()
     artifacts: dict[str, dict[str, str]] = {}
-    _validate_evidence(evidence, root, artifacts)
+    optimization_tuning_identities = _validate_evidence(evidence, root, artifacts)
+    optimizer_split_status = (
+        "verified_disjoint"
+        if all(identities is not None for identities in optimization_tuning_identities.values())
+        else "unknown_optimizer_tuning_identities_missing"
+    )
 
     round_reports: list[dict[str, Any]] = []
     discovered_counterexamples: dict[str, int] = {}
@@ -197,6 +202,7 @@ def build_frontier_report(
             name: _summarize_evaluation_set(round_data["evaluation_sets"][name])
             for name in _EVALUATION_SETS
         }
+        eval_summary["held_out"]["optimization_independence_status"] = optimizer_split_status
         _add_cohort_comparability(eval_summary, round_data, round_reports)
         candidates = round_data["falsification"]["candidates"]
         (
@@ -272,11 +278,24 @@ def build_frontier_report(
                 if historical_confirmed_this_round
                 else ""
             )
+            budget = falsification["budget"]
+            completed = budget["candidates_completed"]
+            limit = budget["candidate_limit"]
+            stop_reason = falsification["stop_reason"]
+            execution = (
+                f"{completed} of {limit} candidate evaluations and "
+                f"{budget['simulator_invocations']} simulator invocations"
+            )
+            if stop_reason == "budget_exhausted":
+                search_outcome = "The recorded stop reason is `budget_exhausted`. "
+            else:
+                search_outcome = (
+                    f"The search stopped before reporting budget exhaustion "
+                    f"(stop reason: `{stop_reason}`). "
+                )
             no_discovery_statement = (
-                "No new unique replay-verified planner counterexample was recorded by this round's "
-                f"finite search budget ({falsification['budget']['candidate_limit']} candidates, "
-                f"{falsification['budget']['simulator_invocations']} simulator invocations). "
-                f"{repeated_clause}{historical_clause}"
+                "No new unique replay-verified planner counterexample was recorded in "
+                f"{execution}. {search_outcome}{repeated_clause}{historical_clause}"
                 "This does not establish that no counterexample exists."
             )
 
@@ -366,7 +385,9 @@ def build_frontier_report(
             "Summary of declared finite-budget evidence only; evidence_kind is "
             "caller-declared metadata, and simulator_run is unverified without an "
             "independently verified producer binding. Synthetic fixtures are "
-            "implementation-only. No counterexample found under a budget is not proof of "
+            "implementation-only. Held-out performance is unverified when optimizer tuning "
+            "episode identities are missing. "
+            "No counterexample found under a budget is not proof of "
             "absence; unknown feasibility is preserved; simulator success is not a claim "
             "of real-world safety or global optimality."
         ),
@@ -402,8 +423,8 @@ def render_frontier_markdown(
         "Execution mode, runtime readiness, availability, excluded rows, and missing outcomes "
         "remain visible in the accounting below.",
         "",
-        "| Round | Planner/config | Optimization method and budget | Search method and budget | Held-out success | Regression success | Confirmed counterexamples in corpus |",
-        "|---:|---|---|---|---:|---:|---:|",
+        "| Round | Planner/config | Optimization method and budget | Search method and budget | Held-out success (optimizer split) | Regression success | Confirmed counterexamples in corpus |",
+        "|---:|---|---|---|---|---:|---:|",
     ]
     for item in report["rounds"]:
         optimization = item["optimization"]
@@ -428,7 +449,9 @@ def render_frontier_markdown(
                 completed_search=search_budget["candidates_completed"],
                 limit_search=search_budget["candidate_limit"],
                 search_calls=search_budget["simulator_invocations"],
-                held=_format_rate(held_out),
+                held=(
+                    f"{_format_rate(held_out)} (`{held_out['optimization_independence_status']}`)"
+                ),
                 reg=_format_rate(regression),
                 cumulative=item["case_frontier"]["confirmed_counterexamples_in_corpus"],
             )
@@ -455,6 +478,11 @@ def render_frontier_markdown(
         )
         for set_name in _EVALUATION_SETS:
             summary = item["evaluation_sets"][set_name]
+            optimizer_independence = (
+                f"; optimizer/held-out independence `{summary['optimization_independence_status']}`"
+                if set_name == "held_out"
+                else ""
+            )
             lines.append(
                 f"  - `{set_name}`: {summary['eligible_episode_count']}/"
                 f"{summary['expected_episode_count']} expected rows benchmark-eligible; "
@@ -466,6 +494,7 @@ def render_frontier_markdown(
                 f"`{summary['cohort_comparison_status']}`; success-rate comparison "
                 f"`{summary['success_rate_comparison_status']}`; collision-rate comparison "
                 f"`{summary['collision_rate_comparison_status']}`); "
+                f"{optimizer_independence} "
                 f"{summary['missing_record_count']} expected rows missing "
                 f"`{summary['missing_record_ids']}`, "
                 f"{summary['unexpected_record_count']} unexpected; "
@@ -561,7 +590,16 @@ def _plot_evaluation_performance(
     for set_name, label in (
         ("fixed", "Fixed"),
         ("regression", "Regression"),
-        ("held_out", "Held out"),
+        (
+            "held_out",
+            "Held out"
+            if all(
+                item["evaluation_sets"]["held_out"].get("optimization_independence_status")
+                == "verified_disjoint"
+                for item in rounds
+            )
+            else "Held out (optimizer split unknown)",
+        ),
     ):
         values = [item["evaluation_sets"][set_name]["success_rate"] for item in rounds]
         color = planner_color(f"frontier_{set_name}")
@@ -575,12 +613,18 @@ def _plot_evaluation_performance(
         )
         for index in range(1, len(rounds)):
             current_summary = rounds[index]["evaluation_sets"][set_name]
+            previous_summary = rounds[index - 1]["evaluation_sets"][set_name]
             previous_value = values[index - 1]
             current_value = values[index]
+            optimizer_independence_verified = set_name != "held_out" or (
+                previous_summary.get("optimization_independence_status") == "verified_disjoint"
+                and current_summary.get("optimization_independence_status") == "verified_disjoint"
+            )
             if (
                 current_summary["success_rate_comparable_to_previous_round"] is True
                 and previous_value is not None
                 and current_value is not None
+                and optimizer_independence_verified
             ):
                 axis.plot(
                     x_values[index - 1 : index + 1],
@@ -597,6 +641,10 @@ def _plot_evaluation_performance(
                     "*"
                     if summary["success_rate_comparison_status"]
                     in {"non_comparable_cohort", "non_comparable_success_sample"}
+                    or (
+                        set_name == "held_out"
+                        and summary.get("optimization_independence_status") != "verified_disjoint"
+                    )
                     else ""
                 )
                 axis.annotate(
@@ -618,6 +666,19 @@ def _plot_evaluation_performance(
             0.01,
             0.01,
             "* cohort or eligible success sample changed; trend segment omitted",
+            transform=axis.transAxes,
+            fontsize=7,
+            va="bottom",
+        )
+    if any(
+        item["evaluation_sets"]["held_out"].get("optimization_independence_status")
+        != "verified_disjoint"
+        for item in rounds
+    ):
+        axis.text(
+            0.01,
+            0.06,
+            "* held-out point has unknown optimizer independence; trend segment omitted",
             transform=axis.transAxes,
             fontsize=7,
             va="bottom",
@@ -878,7 +939,7 @@ def write_frontier_report(
 
 def _validate_evidence(  # noqa: C901 - preserve independent top-level evidence diagnostics.
     evidence: dict[str, Any], evidence_root: Path, artifacts: dict[str, dict[str, str]]
-) -> None:
+) -> dict[int, list[dict[str, Any]] | None]:
     errors: list[str] = []
     if evidence.get("schema_version") != INPUT_SCHEMA_VERSION:
         errors.append(f"schema_version must be {INPUT_SCHEMA_VERSION!r}")
@@ -905,6 +966,7 @@ def _validate_evidence(  # noqa: C901 - preserve independent top-level evidence 
 
     round_candidates: dict[int, dict[str, dict[str, Any]]] = {}
     round_search_artifacts: dict[int, Any] = {}
+    optimization_tuning_identities: dict[int, list[dict[str, Any]] | None] = {}
     for round_data in rounds:
         if not isinstance(round_data, dict):
             errors.append("each round must be an object")
@@ -913,7 +975,7 @@ def _validate_evidence(  # noqa: C901 - preserve independent top-level evidence 
         if not isinstance(number, int) or isinstance(number, bool) or number < 1:
             errors.append("round_number must be a positive integer")
             continue
-        _validate_round(
+        optimization_tuning_identities[number] = _validate_round(
             round_data,
             number,
             evidence.get("experiment_id"),
@@ -935,10 +997,52 @@ def _validate_evidence(  # noqa: C901 - preserve independent top-level evidence 
 
     _validate_case_dispositions(rounds, errors)
     _validate_case_observation_origins(rounds, round_candidates, round_search_artifacts, errors)
+    _validate_admitted_candidate_observations(rounds, errors)
     _validate_evaluation_cohorts(rounds, errors)
+    _validate_optimization_evaluation_disjointness(rounds, optimization_tuning_identities, errors)
 
     if errors:
         raise FrontierReportError("invalid frontier evidence:\n- " + "\n- ".join(errors))
+    return optimization_tuning_identities
+
+
+def _validate_admitted_candidate_observations(rounds: list[Any], errors: list[str]) -> None:
+    """Require each admitted search discovery to have a same-round corpus snapshot."""
+    for round_data in rounds:
+        if not isinstance(round_data, dict):
+            continue
+        round_number = round_data.get("round_number")
+        falsification = round_data.get("falsification")
+        candidates = falsification.get("candidates") if isinstance(falsification, dict) else None
+        observations = round_data.get("case_observations")
+        if not isinstance(candidates, list) or not isinstance(observations, list):
+            continue
+        for candidate in candidates:
+            if not isinstance(candidate, dict) or candidate.get("corpus_disposition") != "admitted":
+                continue
+            case_id = candidate.get("case_id")
+            candidate_id = candidate.get("candidate_id")
+            observation = next(
+                (
+                    item
+                    for item in observations
+                    if isinstance(item, dict)
+                    and item.get("origin_round") == round_number
+                    and item.get("origin_candidate_id") == candidate_id
+                    and item.get("case_id") == case_id
+                ),
+                None,
+            )
+            if observation is None:
+                errors.append(
+                    f"round {round_number} admitted candidate {candidate_id!r} for case "
+                    f"{case_id!r} has no same-round corpus observation"
+                )
+            elif _case_scenario_identity(observation) != _case_scenario_identity(candidate):
+                errors.append(
+                    f"round {round_number} admitted candidate {candidate_id!r} for case "
+                    f"{case_id!r} has a same-round corpus observation with different scenario identity"
+                )
 
 
 def _validate_case_observation_origins(  # noqa: C901 - history-linked origin checks share ordered state.
@@ -1227,7 +1331,7 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
     evidence_root: Path,
     artifacts: dict[str, dict[str, str]],
     errors: list[str],
-) -> None:
+) -> list[dict[str, Any]] | None:
     prefix = f"rounds[{number - 1}]"
     _require_sha(data.get("source_revision"), f"{prefix}.source_revision", _GIT_SHA, errors)
     planner = data.get("planner")
@@ -1273,6 +1377,12 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
         artifacts,
         errors,
         parse_json=True,
+    )
+    optimization_tuning_identities = _validate_optimizer_tuning_identities(
+        optimization_source,
+        optimization.get("budget"),
+        f"{prefix}.optimization.artifact.tuning_episode_identities",
+        errors,
     )
     _validate_source_identity(
         optimization_source,
@@ -1684,6 +1794,8 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
                 f"{obs_prefix}.admissibility_evidence_artifact is required for every case observation"
             )
 
+    return optimization_tuning_identities
+
 
 def _validate_evaluation_set(  # noqa: C901, PLR0912, PLR0915 - report all independent row-evidence defects.
     value: Any,
@@ -1819,6 +1931,11 @@ def _validate_evaluation_set(  # noqa: C901, PLR0912, PLR0915 - report all indep
         for field in ("success", "collision"):
             if episode.get(field) not in (True, False, None):
                 errors.append(f"{row_prefix}.{field} must be boolean or null")
+        if episode.get("success") is True and episode.get("collision") is True:
+            errors.append(
+                f"{row_prefix}.success cannot be true when collision is true under the canonical "
+                "benchmark success semantics"
+            )
         for field in ("minimum_clearance", "ped_force_q95"):
             metric_value = episode.get(field)
             if metric_value is not None and (
@@ -2014,6 +2131,50 @@ def _validate_evaluation_cohorts(rounds: list[Any], errors: list[str]) -> None:
             previous_fixed = fixed
 
 
+def _validate_optimization_evaluation_disjointness(
+    rounds: list[Any],
+    tuning_identities_by_round: dict[int, list[dict[str, Any]] | None],
+    errors: list[str],
+) -> None:
+    """Reject any held-out episode that influenced optimizer selection in any round."""
+    if not rounds:
+        return
+
+    tuning_record_ids: set[str] = set()
+    tuning_scenario_seeds: set[tuple[str, int]] = set()
+    for identities in tuning_identities_by_round.values():
+        for identity in identities or []:
+            tuning_record_ids.add(identity["record_id"])
+            tuning_scenario_seeds.add((identity["scenario_id"], identity["scenario_seed"]))
+
+    for round_data in rounds:
+        if not isinstance(round_data, dict):
+            continue
+        round_number = round_data.get("round_number")
+        evaluation_sets = round_data.get("evaluation_sets")
+        held_out = evaluation_sets.get("held_out") if isinstance(evaluation_sets, dict) else None
+        identities = (
+            held_out.get("expected_episode_identities") if isinstance(held_out, dict) else None
+        )
+        if not isinstance(identities, list):
+            continue
+        overlaps = [
+            identity.get("record_id")
+            for identity in identities
+            if isinstance(identity, dict)
+            and (
+                identity.get("record_id") in tuning_record_ids
+                or (identity.get("scenario_id"), identity.get("scenario_seed"))
+                in tuning_scenario_seeds
+            )
+        ]
+        if overlaps:
+            errors.append(
+                f"round {round_number} held_out evaluation overlaps optimizer tuning episodes: "
+                f"{overlaps}"
+            )
+
+
 def _scenario_seed_manifest_digest(evaluation: dict[str, Any]) -> str:
     identities = evaluation.get("expected_episode_identities", [])
     pairs = sorted(
@@ -2170,6 +2331,61 @@ def _validate_source_identity(
         errors.append(f"{prefix}.source_revision does not match the enclosing round")
 
 
+def _validate_optimizer_tuning_identities(  # noqa: C901 - report every independent manifest defect.
+    source: Any,
+    budget: Any,
+    prefix: str,
+    errors: list[str],
+) -> list[dict[str, Any]] | None:
+    """Read the optimizer's complete episode identity manifest when available."""
+    if not isinstance(source, dict) or "tuning_episode_identities" not in source:
+        return None
+    identities = source.get("tuning_episode_identities")
+    if not isinstance(identities, list):
+        errors.append(f"{prefix} must be an array when present")
+        return None
+    proposals_completed = budget.get("proposals_completed") if isinstance(budget, dict) else None
+    if not identities and isinstance(proposals_completed, int) and proposals_completed > 0:
+        errors.append(f"{prefix} cannot be empty when optimizer proposals completed")
+    seen_record_ids: set[str] = set()
+    seen_scenario_seeds: set[tuple[str, int]] = set()
+    valid = True
+    for index, identity in enumerate(identities):
+        item_prefix = f"{prefix}[{index}]"
+        if not isinstance(identity, dict):
+            errors.append(f"{item_prefix} must be an object")
+            valid = False
+            continue
+        record_id = identity.get("record_id")
+        scenario_id = identity.get("scenario_id")
+        scenario_seed = identity.get("scenario_seed")
+        if not isinstance(record_id, str) or not record_id.strip():
+            errors.append(f"{item_prefix}.record_id must be non-empty text")
+            valid = False
+        if not isinstance(scenario_id, str) or not scenario_id.strip():
+            errors.append(f"{item_prefix}.scenario_id must be non-empty text")
+            valid = False
+        if not isinstance(scenario_seed, int) or isinstance(scenario_seed, bool):
+            errors.append(f"{item_prefix}.scenario_seed must be an integer")
+            valid = False
+        if isinstance(record_id, str):
+            if record_id in seen_record_ids:
+                errors.append(f"{item_prefix}.record_id is duplicated")
+                valid = False
+            seen_record_ids.add(record_id)
+        if (
+            isinstance(scenario_id, str)
+            and isinstance(scenario_seed, int)
+            and not isinstance(scenario_seed, bool)
+        ):
+            pair = (scenario_id, scenario_seed)
+            if pair in seen_scenario_seeds:
+                errors.append(f"{item_prefix} scenario/seed identity is duplicated")
+                valid = False
+            seen_scenario_seeds.add(pair)
+    return identities if valid else None
+
+
 def _validate_artifact(  # noqa: C901, PLR0912 - preserve path/hash/schema findings in one validation pass.
     value: Any,
     prefix: str,
@@ -2305,8 +2521,36 @@ def _validate_admissibility_evidence_source(  # noqa: C901 - report independent 
             prefix,
             errors,
         )
-    elif context.require_replay_binding:
-        _validate_reported_replay_binding(source, evidence, context, prefix, errors)
+    else:
+        if (
+            context.verdict == "admissible_feasibility_unknown"
+            and context.target_failure_observed is False
+        ):
+            target_execution = evidence.get("target_execution")
+            target_execution_valid = _validate_admissibility_execution(
+                target_execution,
+                role="target",
+                context=context,
+                scenario_identity=scenario_identity,
+                prefix=f"{prefix}.evidence.target_execution",
+                errors=errors,
+            )
+            if (
+                not target_execution_valid
+                or not isinstance(target_execution, dict)
+                or target_execution.get("route_complete") is not True
+            ):
+                errors.append(
+                    f"{prefix} solved unknown-feasibility case requires a complete, case-bound "
+                    "target execution showing route completion"
+                )
+            if source.get("target_planner_outcome") != "route_completed":
+                errors.append(
+                    f"{prefix}.target_planner_outcome must be route_completed when a solved "
+                    "unknown-feasibility case is supported by a completed target execution"
+                )
+        if context.require_replay_binding:
+            _validate_reported_replay_binding(source, evidence, context, prefix, errors)
     target_outcome = source.get("target_planner_outcome")
     if isinstance(context.target_failure_observed, bool) and _is_allowed(
         target_outcome, {"route_completed", "route_incomplete"}
@@ -2490,6 +2734,7 @@ def _validate_confirmed_admissibility_support(  # noqa: C901 - keep verdict proo
             prefix=f"{prefix}.evidence.{role}_execution",
             errors=errors,
         )
+
     if context.require_replay_binding:
         target = runs["target"]
         replay = runs["replay"]

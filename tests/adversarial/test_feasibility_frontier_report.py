@@ -358,6 +358,21 @@ def _write_source_artifact(
     reference["schema_version"] = schema_version
 
 
+def _rewrite_optimizer_artifact(
+    evidence: dict[str, Any], root: Path, round_number: int, mutation: Any
+) -> None:
+    reference = evidence["rounds"][round_number - 1]["optimization"]["artifact"]
+    path = root / reference["path"]
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    mutation(payload)
+    _write_source_artifact(
+        root,
+        reference,
+        payload,
+        schema_version=frontier_module._OPTIMIZER_SELECTION_SCHEMA,
+    )
+
+
 def _rewrite_admissibility_artifact(
     payload: dict[str, Any], root: Path, candidate_index: int, mutation: Any
 ) -> None:
@@ -420,6 +435,13 @@ def _refresh_source_artifacts(evidence: dict[str, Any], root: Path) -> None:
                 "schema_version": frontier_module._OPTIMIZER_SELECTION_SCHEMA,
                 "selected_planner_id": planner["planner_id"],
                 "selected_config_identity_sha256": planner["config_identity_sha256"],
+                "tuning_episode_identities": [
+                    {
+                        "record_id": f"optimizer-{round_number}-episode-1",
+                        "scenario_id": f"optimizer-scenario-{round_number}",
+                        "scenario_seed": 8800 + round_number,
+                    }
+                ],
             },
             schema_version=frontier_module._OPTIMIZER_SELECTION_SCHEMA,
         )
@@ -961,6 +983,10 @@ def test_frontier_report_separates_valid_discoveries_unknowns_and_exclusions(
     assert report["evidence_kind"] == "synthetic_fixture"
     assert first["evaluation_sets"]["held_out"]["success_rate"] == 0.5
     assert first["evaluation_sets"]["held_out"]["identity_accounting_status"] == "verified"
+    assert (
+        first["evaluation_sets"]["held_out"]["optimization_independence_status"]
+        == "verified_disjoint"
+    )
     assert len(first["evaluation_sets"]["held_out"]["expected_episode_ids_sha256"]) == 64
     assert first["evaluation_sets"]["held_out"]["eligible_episode_count"] == 2
     assert first["evaluation_sets"]["held_out"]["readiness_status_counts"]["fallback"] == 1
@@ -1620,6 +1646,79 @@ def test_frontier_report_rejects_held_out_identity_overlap_with_tuning_sets(
         build_frontier_report(payload, evidence_root=tmp_path)
 
 
+def test_frontier_report_rejects_held_out_identity_used_by_optimizer(tmp_path: Path) -> None:
+    payload = _evidence(tmp_path)
+    held_out_identities = payload["rounds"][0]["evaluation_sets"]["held_out"][
+        "expected_episode_identities"
+    ]
+    _rewrite_optimizer_artifact(
+        payload,
+        tmp_path,
+        1,
+        lambda source: source.update(tuning_episode_identities=held_out_identities),
+    )
+
+    with pytest.raises(
+        FrontierReportError, match="held_out evaluation overlaps optimizer tuning episodes"
+    ):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_rejects_held_out_identity_tuned_in_later_round(
+    tmp_path: Path,
+) -> None:
+    """An episode used in a later optimizer round is not a held-out evaluation case."""
+    payload = _evidence(tmp_path)
+    earlier_held_out = payload["rounds"][0]["evaluation_sets"]["held_out"][
+        "expected_episode_identities"
+    ]
+    _rewrite_optimizer_artifact(
+        payload,
+        tmp_path,
+        2,
+        lambda source: source.update(tuning_episode_identities=earlier_held_out),
+    )
+
+    with pytest.raises(
+        FrontierReportError,
+        match="round 1 held_out evaluation overlaps optimizer tuning episodes",
+    ):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_marks_held_out_validity_unknown_without_optimizer_identities(
+    tmp_path: Path,
+) -> None:
+    payload = _evidence(tmp_path)
+    _rewrite_optimizer_artifact(
+        payload,
+        tmp_path,
+        1,
+        lambda source: source.pop("tuning_episode_identities"),
+    )
+
+    report = build_frontier_report(payload, evidence_root=tmp_path)
+    assert all(
+        item["evaluation_sets"]["held_out"]["optimization_independence_status"]
+        == "unknown_optimizer_tuning_identities_missing"
+        for item in report["rounds"]
+    )
+    markdown = render_frontier_markdown(report)
+    assert "Held-out performance is unverified" in markdown
+    assert "optimizer/held-out independence `unknown_optimizer_tuning_identities_missing`" in (
+        markdown
+    )
+    pyplot = pytest.importorskip("matplotlib.pyplot")
+    figure, axis = pyplot.subplots()
+    try:
+        frontier_module._plot_evaluation_performance(axis, report["rounds"], [1, 2])
+        labels = [line.get_label() for line in axis.lines]
+        assert "Held out (optimizer split unknown)" in labels
+        assert labels.count("_nolegend_") == 2
+    finally:
+        pyplot.close(figure)
+
+
 def test_frontier_report_marks_changed_held_out_cohort_non_comparable(
     tmp_path: Path,
 ) -> None:
@@ -1697,6 +1796,7 @@ def test_frontier_report_marks_collision_rates_non_comparable_when_outcome_sampl
     first_rows[1]["collision"] = None
     second_rows[0]["collision"] = None
     second_rows[1]["collision"] = True
+    second_rows[1]["success"] = False
     _refresh_source_artifacts(payload, tmp_path)
 
     report = build_frontier_report(payload, evidence_root=tmp_path)
@@ -2421,6 +2521,20 @@ def test_frontier_report_rejects_case_observation_from_nonadmitted_candidate(
         build_frontier_report(payload, evidence_root=tmp_path)
 
 
+def test_frontier_report_requires_corpus_observation_for_each_admitted_discovery(
+    tmp_path: Path,
+) -> None:
+    payload = _evidence(tmp_path)
+    payload["rounds"][0]["case_observations"].clear()
+    _refresh_source_artifacts(payload, tmp_path)
+
+    with pytest.raises(
+        FrontierReportError,
+        match="admitted candidate 'c1' for case 'case-001' has no same-round corpus observation",
+    ):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
 def test_frontier_report_uses_canonical_execution_readiness_and_availability_axes(
     tmp_path: Path,
 ) -> None:
@@ -2497,6 +2611,20 @@ def test_frontier_report_uses_separate_outcome_denominators(tmp_path: Path) -> N
     assert summary["collision_rate"] == 1.0
     assert summary["missing_success_record_ids"] == ["held_out-1-2"]
     assert summary["missing_collision_record_ids"] == ["held_out-1-1"]
+
+
+def test_frontier_report_rejects_success_with_collision(tmp_path: Path) -> None:
+    payload = _evidence(tmp_path)
+    row = payload["rounds"][0]["evaluation_sets"]["held_out"]["episodes"][0]
+    row["success"] = True
+    row["collision"] = True
+    _refresh_source_artifacts(payload, tmp_path)
+
+    with pytest.raises(
+        FrontierReportError,
+        match="success cannot be true when collision is true under the canonical benchmark success semantics",
+    ):
+        build_frontier_report(payload, evidence_root=tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -2684,6 +2812,64 @@ def test_frontier_report_rejects_feasibility_downgrade_after_confirmation(tmp_pa
         build_frontier_report(payload, evidence_root=tmp_path)
 
 
+def test_frontier_report_requires_target_execution_for_solved_unknown_case(
+    tmp_path: Path,
+) -> None:
+    payload = _evidence(tmp_path)
+    observation = _observation(
+        tmp_path,
+        round_number=1,
+        case_id="historical-unknown-solved",
+        origin_round=0,
+        origin_candidate_id=None,
+        planner_status="solved",
+        verdict="admissible_feasibility_unknown",
+        replay_status="unavailable",
+    )
+    payload["rounds"][0]["case_observations"].append(observation)
+    _refresh_source_artifacts(payload, tmp_path)
+
+    with pytest.raises(
+        FrontierReportError,
+        match="solved unknown-feasibility case requires a complete, case-bound target execution",
+    ):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+    reference = observation["admissibility_evidence_artifact"]
+    artifact_path = tmp_path / reference["path"]
+    admissibility = json.loads(artifact_path.read_text(encoding="utf-8"))
+    admissibility["target_planner_outcome"] = "route_completed"
+    admissibility["evidence"]["target_execution"] = _execution_record(
+        case_id="historical-unknown-solved",
+        scenario_id=_scenario_id("historical-unknown-solved"),
+        planner_id="goal",
+        route_complete=True,
+        planner_config_sha256=_CONFIG,
+        role="target",
+    )
+    content = (json.dumps(admissibility, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    artifact_path.write_bytes(content)
+    reference["sha256"] = hashlib.sha256(content).hexdigest()
+    _refresh_source_artifacts(payload, tmp_path)
+
+    admissibility["target_planner_outcome"] = "unavailable"
+    content = (json.dumps(admissibility, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    artifact_path.write_bytes(content)
+    reference["sha256"] = hashlib.sha256(content).hexdigest()
+    _refresh_source_artifacts(payload, tmp_path)
+    with pytest.raises(FrontierReportError, match="target_planner_outcome must be route_completed"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+    admissibility["target_planner_outcome"] = "route_completed"
+    content = (json.dumps(admissibility, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    artifact_path.write_bytes(content)
+    reference["sha256"] = hashlib.sha256(content).hexdigest()
+    _refresh_source_artifacts(payload, tmp_path)
+
+    report = build_frontier_report(payload, evidence_root=tmp_path)
+    assert report["rounds"][0]["case_frontier"]["planner_status_counts"]["solved"] == 1
+
+
 def test_frontier_report_renders_flat_all_round_no_discovery_as_budget_qualified_null(
     tmp_path: Path,
 ) -> None:
@@ -2721,9 +2907,34 @@ def test_frontier_report_renders_flat_all_round_no_discovery_as_budget_qualified
     write_frontier_report(input_path, output_dir)
     markdown = (output_dir / "frontier_report.md").read_text(encoding="utf-8")
     assert "This does not establish that no counterexample exists." in markdown
-    assert "finite search budget" in markdown
+    assert "candidate evaluations" in markdown
     assert (output_dir / "frontier.png").is_file()
     assert (output_dir / "frontier.pdf").is_file()
+
+
+def test_frontier_report_qualifies_no_discovery_by_completed_budget_and_stop_reason(
+    tmp_path: Path,
+) -> None:
+    payload = _evidence(tmp_path)
+    falsification = payload["rounds"][1]["falsification"]
+    falsification["stop_reason"] = "error"
+    falsification["budget"]["candidate_limit"] = 99
+    partial_report = build_frontier_report(payload, evidence_root=tmp_path)
+    partial_statement = partial_report["rounds"][1]["falsification"][
+        "no_verified_counterexample_statement"
+    ]
+    assert "4 of 99 candidate evaluations" in partial_statement
+    assert "stop reason: `error`" in partial_statement
+    assert "recorded stop reason is `budget_exhausted`" not in partial_statement
+
+    falsification["stop_reason"] = "budget_exhausted"
+    falsification["budget"]["candidate_limit"] = 4
+    exhausted_report = build_frontier_report(payload, evidence_root=tmp_path)
+    exhausted_statement = exhausted_report["rounds"][1]["falsification"][
+        "no_verified_counterexample_statement"
+    ]
+    assert "4 of 4 candidate evaluations" in exhausted_statement
+    assert "recorded stop reason is `budget_exhausted`" in exhausted_statement
 
 
 def test_frontier_figure_labels_planner_and_scenario_dispositions(

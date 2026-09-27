@@ -22,7 +22,7 @@ from scripts.validation import check_issue_9671_trace_reexport as trace_checker
 BASELINE_REPORT_SHA256 = "e1637fa907d87f8a5456ee0f3367524e8e335b480c1d2bd5162215f08a3f7ffd"
 BASELINE_COUNTS = {"match": 2, "mismatch": 0, "no_release_row": 18}
 SCHEMA = "issue-9671-force-observer-bundle.v1"
-SIDECAR_SCHEMA = "issue-9671-robot-force-observer.v1"
+SIDECAR_SCHEMA = "issue-9671-robot-force-observer.v2"
 FROZEN_SOURCE_FILE_SHA256 = {
     "robot_sf/ped_npc/ped_robot_force.py": "73ec0e40987f1a2636e970dcc3640377070af784346b55c08484692fbee1c70e",
     "robot_sf/sim/simulator.py": "d4751f53f973716f55646d8c414335b5bba7381c6b27e124b873820d99535698",
@@ -200,13 +200,14 @@ def _validate_sidecar(  # noqa: C901, PLR0912, PLR0915 - independent custody ass
             or sample.get("actor_ids") != actors
             or [ped.get("actor_id") for ped in raw_step["pedestrians"]] != actors
             or sample.get("step_entry_positions") != prior
-            or sample.get("force_input_positions") != prior
+            or sample.get("force_input_positions") != sample.get("force_time_simulator_positions")
             or sample.get("post_step_positions") != _positions(raw_step["pedestrians"])
             or sample.get("total_forces") != raw_step["planner"]["ammv"]["pedestrian_force_vectors"]
         ):
             raise ValueError(f"observer step/actor/raw-force binding mismatch: {index}")
         _vectors(sample.get("step_entry_positions"), count)
         _vectors(sample.get("force_input_positions"), count)
+        _vectors(sample.get("force_time_simulator_positions"), count)
         _vectors(sample.get("post_step_positions"), count)
         _vectors(sample.get("total_forces"), count)
         robot_forces = _vectors(sample.get("robot_forces"), count)
@@ -229,9 +230,10 @@ def _validate_sidecar(  # noqa: C901, PLR0912, PLR0915 - independent custody ass
             raise ValueError(f"observer component roster changed at step {index}")
         totals = [[0.0, 0.0] for _ in actors]
         configs = []
+        force_time_positions = sample["force_time_simulator_positions"]
         for component in components:
             if (
-                component.get("positions") != prior
+                component.get("positions") != force_time_positions
                 or component.get("robot_position") != prior_robot
             ):
                 raise ValueError(f"observer component inputs misbound at step {index}")

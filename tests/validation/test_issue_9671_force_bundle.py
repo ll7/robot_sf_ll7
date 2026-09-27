@@ -67,6 +67,7 @@ def _capture(row: dict[str, Any]) -> dict[str, Any]:
                 "step": 0,
                 "step_entry_positions": [[0.0, 0.0]],
                 "force_input_positions": [[0.0, 0.0]],
+                "force_time_simulator_positions": [[0.0, 0.0]],
                 "post_step_positions": [[0.1, 0.0]],
                 "total_forces": [[1.0, 0.0]],
                 "robot_forces": [[0.2, 0.0]],
@@ -310,6 +311,20 @@ def test_manifest_binds_exact_sidecar_bytes_and_outcome(
         )
 
 
+def test_manifest_accepts_respawned_force_time_slot_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec, _, sidecar_path = _fixture(tmp_path, monkeypatch)
+    sidecar = json.loads(sidecar_path.read_text())
+    force_time_positions = [[10.0, 0.0]]
+    sidecar["steps"][0]["force_time_simulator_positions"] = force_time_positions
+    sidecar["steps"][0]["force_input_positions"] = force_time_positions
+    sidecar["steps"][0]["component_inputs"][0]["positions"] = force_time_positions
+    sidecar_path.write_text(json.dumps(sidecar))
+
+    assert _build(spec)["admission_status"] == "candidate"
+
+
 def test_manifest_survives_cold_tree_relocation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -341,6 +356,8 @@ def test_manifest_survives_cold_tree_relocation(
         "extra",
         "nested_extra",
         "force_missing",
+        "force_time_missing",
+        "force_time_mismatch",
         "wrong_job",
         "wrong_row_hash",
         "wrong_source_tree",
@@ -363,20 +380,28 @@ def test_rejects_sidecar_inventory_and_identity_mutations(
         (nested / sidecar.name).write_text(sidecar.read_text())
     else:
         data = json.loads(sidecar.read_text())
-        if mutation == "force_missing":
-            del data["steps"][0]["robot_forces"]
-        elif mutation == "wrong_job":
-            data["observer_provenance"]["job_id"] = "999"
-        elif mutation == "wrong_row_hash":
-            data["episode_record_canonical_sha256"] = "0" * 64
-        elif mutation == "wrong_source_tree":
-            data["observer_provenance"]["frozen_source_tree_oid"] = "0" * 40
-        elif mutation == "dirty_source":
-            data["observer_provenance"]["frozen_source_worktree_clean"] = False
-        elif mutation == "missing_source_state":
-            del data["observer_provenance"]["frozen_source_worktree_clean"]
-        else:
-            data["observer_provenance"]["frozen_source_worktree_status_sha256"] = "0" * 64
+        mutators = {
+            "force_missing": lambda: data["steps"][0].pop("robot_forces"),
+            "force_time_missing": lambda: data["steps"][0].pop("force_time_simulator_positions"),
+            "force_time_mismatch": lambda: data["steps"][0].__setitem__(
+                "force_time_simulator_positions", [[9.0, 0.0]]
+            ),
+            "wrong_job": lambda: data["observer_provenance"].__setitem__("job_id", "999"),
+            "wrong_row_hash": lambda: data.__setitem__("episode_record_canonical_sha256", "0" * 64),
+            "wrong_source_tree": lambda: data["observer_provenance"].__setitem__(
+                "frozen_source_tree_oid", "0" * 40
+            ),
+            "dirty_source": lambda: data["observer_provenance"].__setitem__(
+                "frozen_source_worktree_clean", False
+            ),
+            "missing_source_state": lambda: data["observer_provenance"].pop(
+                "frozen_source_worktree_clean"
+            ),
+            "wrong_status_digest": lambda: data["observer_provenance"].__setitem__(
+                "frozen_source_worktree_status_sha256", "0" * 64
+            ),
+        }
+        mutators[mutation]()
         sidecar.write_text(json.dumps(data))
     with pytest.raises(ValueError):
         _build(spec)

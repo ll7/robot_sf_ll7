@@ -461,7 +461,8 @@ def test_respawn_window_validates_ledger_stationarity_and_episode_state(
         assert result["status"] == "invalid"
 
 
-def test_release_scenario_emits_stable_valid_rows_and_reuses_map_analysis(monkeypatch) -> None:
+@pytest.mark.parametrize("analysis_error", [False, True])
+def test_release_scenario_keeps_rows_and_reuses_map_analysis(monkeypatch, analysis_error) -> None:
     class FakeEnv:
         def __init__(self):
             self.simulator = SimpleNamespace(
@@ -503,11 +504,14 @@ def test_release_scenario_emits_stable_valid_rows_and_reuses_map_analysis(monkey
     )
     monkeypatch.setattr(spawn_preflight, "_static_map_warnings", lambda _sim: [])
     analysis_calls = []
-    monkeypatch.setattr(
-        spawn_preflight,
-        "_build_occupancy_analysis",
-        lambda *_a, **_kw: analysis_calls.append(1) or {"fixture": True},
-    )
+
+    def build_analysis(*_args, **_kwargs):
+        analysis_calls.append(1)
+        if analysis_error:
+            raise ValueError("fixture geometry unavailable")
+        return {"fixture": True}
+
+    monkeypatch.setattr(spawn_preflight, "_build_occupancy_analysis", build_analysis)
     monkeypatch.setattr(
         spawn_preflight,
         "_check_footprint_path",
@@ -527,8 +531,14 @@ def test_release_scenario_emits_stable_valid_rows_and_reuses_map_analysis(monkey
     )
 
     assert [row["seed"] for row in result["rows"]] == [111, 112]
-    assert all(row["overall_status"] == "valid" for row in result["rows"])
+    expected_status = "blocked" if analysis_error else "valid"
+    assert all(row["overall_status"] == expected_status for row in result["rows"])
     assert all(row["robot_radius_m"] == pytest.approx(0.3) for row in result["rows"])
+    if analysis_error:
+        assert all(row["footprint_reachability"]["status"] == "invalid" for row in result["rows"])
+        assert "fixture geometry unavailable" in result["rows"][0]["passage_width"]["reason"]
+    else:
+        assert all(row["footprint_reachability"]["status"] == "pass" for row in result["rows"])
     assert len(analysis_calls) == 1
     assert all(env.closed for env in envs)
 

@@ -18,8 +18,8 @@ latest_reconciliation_issue: 9431
 latest_reviewed_date: 2026-09-27
 latest_review_actor: Codex autonomous lead engineer, independently reviewed by a read-only Codex subagent under the user-directed task
 latest_evidence_tree_refresh_issue: 9645
-latest_evidence_tree_refresh_files_added: 136
-latest_evidence_tree_refresh_sha256: 35f8de8cc9bf539eecc54fd0315470b1d35c340be8aa07e38efcc682d69582e7
+latest_evidence_tree_refresh_files_added: 200
+latest_evidence_tree_refresh_sha256: 4f82e09b343a4bf303217d25ce478ebe7d7932f9b7777258cf152efe1c2df700
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
@@ -180,6 +180,11 @@ latest_refresh_review_addendum: >-
   98 files are unchanged from the prior baseline, and no new provenance finding is admitted.
   This baseline refresh makes no planner-safety or feasibility claim. This addendum was reviewed by the Codex autonomous lead engineer and an independent read-only
   Codex subagent under the current user-directed task; it is not a maintainer approval.
+  Follow-up packet-retention addendum (Issue #9645; 2026-09-27): exact producer bytes for all 64 candidate episode JSONLs were recovered from retained commit
+  7588b785a607680400adcc6398d8c983c160e4bd and stored separately from the 64 route-path-normalized report inputs. The normalized files resolve the report path references, while
+  the exact copies verify producer hashes and sizes; the normalized records differ only in scenario_params.route_overrides_file. The corrected bundle includes and checksums both sets.
+  Regenerating the machine baseline records the 2,627-file evidence tree at SHA-256 4f82e09b343a4bf303217d25ce478ebe7d7932f9b7777258cf152efe1c2df700. Findings remain 438 across 98 files, with no #9645 finding and no new finding admitted.
+  This report rebuild used no search or simulator rerun; all finite-budget, unknown-criticality, and non-portable-replay limitations remain.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the

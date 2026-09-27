@@ -289,7 +289,78 @@
                     "type": "string",
                     "pattern": "^[0-9a-f]{64}$"
                   },
-                  "binding_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+                  "declared_evidence_artifacts": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "declared_at",
+                        "source_reference",
+                        "expected_sha256",
+                        "status"
+                      ],
+                      "properties": {
+                        "declared_at": {"type": "string", "minLength": 1},
+                        "source_reference": {"type": "string", "minLength": 1},
+                        "expected_sha256": {
+                          "type": ["string", "null"],
+                          "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "status": {
+                          "enum": [
+                            "custodied",
+                            "matched_case_input",
+                            "matched_staged_artifact",
+                            "unavailable"
+                          ]
+                        },
+                        "path": {"type": "string", "minLength": 1},
+                        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+                      },
+                      "allOf": [
+                        {
+                          "if": {
+                            "properties": {
+                              "status": {
+                                "enum": [
+                                  "custodied",
+                                  "matched_case_input",
+                                  "matched_staged_artifact"
+                                ]
+                              }
+                            },
+                            "required": ["status"]
+                          },
+                          "then": {"required": ["path", "sha256"]}
+                        },
+                        {
+                          "if": {
+                            "properties": {"status": {"const": "unavailable"}},
+                            "required": ["status"]
+                          },
+                          "then": {
+                            "not": {
+                              "anyOf": [{"required": ["path"]}, {"required": ["sha256"]}]
+                            }
+                          }
+                        }
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "binding_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                  "raw_classifier_artifact": {
+                    "type": "object",
+                    "required": ["path", "sha256", "source_revision", "role", "schema_version"],
+                    "properties": {
+                      "path": {"type": "string", "minLength": 1},
+                      "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                      "source_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+                      "role": {"const": "admissibility-evidence"},
+                      "schema_version": {"const": "scenario_admissibility.v1"}
+                    },
+                    "additionalProperties": false
+                  }
                 },
                 "additionalProperties": false
               }

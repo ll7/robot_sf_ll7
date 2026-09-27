@@ -95,6 +95,23 @@ omit that run link only when the record explicitly declares the manifest as
 unavailable and preserves its historical revision, source archive, origin case,
 and report reference.
 
+New search runs should be registered with `register_search_run`. Its
+`candidate_evaluation_source` points to one SHA-256-pinned JSONL file under
+corpus custody, with one source row for every attempted candidate. The API
+derives candidate and evaluation identities from those rows and validates the
+run's disjoint accounting: completed is discovered plus not discovered, while
+failed and invalid are counted separately. Missing attempts, altered rows,
+relabelled discoveries, and count mismatches fail validation. The pinned #9645
+pilot keeps its separate packet importer.
+
+When a #9651 classifier records raw output or file-backed execution evidence,
+the corpus receipt preserves those exact bytes or records the reference as
+unavailable. Digest-bound references are checked against the immutable case
+inventory. Re-admitting a duplicate may retain references to already-custodied
+classifier evidence without relocating or dropping those bytes. These records
+remain evidence about an `admissible_feasibility_unknown` result; they do not
+upgrade its feasibility verdict.
+
 ## Import historical #9656 candidates
 
 The promoted #9656 artifact at source head

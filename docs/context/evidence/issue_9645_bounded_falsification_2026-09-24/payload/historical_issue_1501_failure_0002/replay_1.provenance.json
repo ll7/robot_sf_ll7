@@ -57,10 +57,10 @@
     {
       "kind": "episodes_jsonl",
       "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_issue_1501_failure_0002/replay_1_recorded.jsonl",
-      "sha256": "024ed6c8049019915d991a10dfa8b182f83f068ac397fda1cd1600c1c17f9133",
+      "sha256": "e62d2ae01e301c89349d1afb880a178fee64a0eb87e0c35389ea020373eaf520",
       "artifact_status": "available",
       "producer_output_path": "output/issue9645-historical-replay/failure_0002/replay.jsonl",
-      "bundle_retention_status": "retained_exact_copy"
+      "bundle_retention_status": "retained_path_normalized_copy"
     }
   ],
   "rows": [

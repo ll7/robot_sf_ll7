@@ -57,10 +57,10 @@
     {
       "kind": "episodes_jsonl",
       "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/representative_success/episode_records_replay_recorded.jsonl",
-      "sha256": "cdbd8db6c1efe51da96fc1aaef148c25b94c881514394ed71a715883591ac43b",
+      "sha256": "cb7906486ff8c43a9cd71605337d011bff3bc16d904f8e22620fd1d06226c6bf",
       "artifact_status": "available",
       "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0010/episode_records_replay.jsonl",
-      "bundle_retention_status": "retained_exact_copy"
+      "bundle_retention_status": "retained_path_normalized_copy"
     }
   ],
   "rows": [

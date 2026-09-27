@@ -350,7 +350,8 @@
       "replays": 2,
       "replay_file_bytes_identical": false,
       "comparison_signatures_match_at_recorded_revision": true,
-      "comparison_signature_digest": "5b5047919ac185317eeef78268564a3ed1a9667ddab915ecf1e5d4ddf1aeb1f6"
+      "comparison_signature_digest": "8fe60a2d9bb0c80ab969151fa098e18beb697485c41a964c8f58eb7044c05899",
+      "comparison_signature_projected_bytes": 23877
     },
     "initial_bounds_smoke": {
       "attempts": 1,

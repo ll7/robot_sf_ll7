@@ -14,13 +14,13 @@
       "total_collision_count": 0
     },
     "replay_seed": 123,
-    "replay_sha256": "cdbd8db6c1efe51da96fc1aaef148c25b94c881514394ed71a715883591ac43b",
+    "replay_sha256": "cb7906486ff8c43a9cd71605337d011bff3bc16d904f8e22620fd1d06226c6bf",
     "replay_status": "success",
     "replay_steps": 25,
     "replay_termination": "success",
     "route_overrides_sha256": "99638cb936aa17f91eb6a7b6b6d1a830d20b356077df74bb41f1aa204e44f5c5",
     "scenario_sha256": "aa462c23d2f38c42477cdf2ed6fc6e3a797acbd6abbfc2e8044c60ccd48442e4",
-    "source_episode_sha256": "d58af050a3b43e187ab6437af2733164f62bb3efce572f56bc987b2ccd2b94ed",
+    "source_episode_sha256": "46ec91da5f5defb73c9effc54c3965f3df2d93ee92f2c90d830312481d7d66c6",
     "source_replay_signature_match": true,
     "source_seed": 123,
     "source_status": "success",
@@ -30,12 +30,12 @@
       {
         "role": "source_episode",
         "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/representative_success/episode_records_original_recorded.jsonl",
-        "sha256": "d58af050a3b43e187ab6437af2733164f62bb3efce572f56bc987b2ccd2b94ed"
+        "sha256": "46ec91da5f5defb73c9effc54c3965f3df2d93ee92f2c90d830312481d7d66c6"
       },
       {
         "role": "replayed_episode",
         "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/representative_success/episode_records_replay_recorded.jsonl",
-        "sha256": "cdbd8db6c1efe51da96fc1aaef148c25b94c881514394ed71a715883591ac43b"
+        "sha256": "cb7906486ff8c43a9cd71605337d011bff3bc16d904f8e22620fd1d06226c6bf"
       },
       {
         "role": "scenario",
@@ -99,8 +99,8 @@
     "regression_status": "pending_exact_historical_input_binding",
     "replay_count": 2,
     "replay_files_sha256": [
-      "024ed6c8049019915d991a10dfa8b182f83f068ac397fda1cd1600c1c17f9133",
-      "f84a03e8e42702256f28d319ed8b20ab27d395f9735576ea57e037d52a9d0592"
+      "e62d2ae01e301c89349d1afb880a178fee64a0eb87e0c35389ea020373eaf520",
+      "45dafd1521cb427e8f406881e1ae6aba5ac269cf3e68fa68c9894d097314f686"
     ],
     "replay_revision_scope": "Both replay files describe runs at regeneration_commit 58e516aa4f69ff3098bf518199f483006589758c; no replay was executed at the current PR head. Their files differ in the four runtime fields recorded by comparison_signature.",
     "replay_file_bytes_identical": false,
@@ -115,8 +115,8 @@
         "wall_time_sec"
       ],
       "canonicalization": "UTF-8 JSON with ensure_ascii=false, sort_keys=true, separators=(',', ':')",
-      "digest": "5b5047919ac185317eeef78268564a3ed1a9667ddab915ecf1e5d4ddf1aeb1f6",
-      "projected_bytes": 23907,
+      "digest": "8fe60a2d9bb0c80ab969151fa098e18beb697485c41a964c8f58eb7044c05899",
+      "projected_bytes": 23877,
       "legacy_recorded_signature_sha256": "6e34dc5d810fecaea9921934fd6b386e4c21319a3e59d225538fb8b0cb818c00",
       "legacy_recorded_signature_status": "not_independently_reconstructed"
     },
@@ -131,12 +131,12 @@
       {
         "role": "replay_1",
         "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_issue_1501_failure_0002/replay_1_recorded.jsonl",
-        "sha256": "024ed6c8049019915d991a10dfa8b182f83f068ac397fda1cd1600c1c17f9133"
+        "sha256": "e62d2ae01e301c89349d1afb880a178fee64a0eb87e0c35389ea020373eaf520"
       },
       {
         "role": "replay_2",
         "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_issue_1501_failure_0002/replay_2_recorded.jsonl",
-        "sha256": "f84a03e8e42702256f28d319ed8b20ab27d395f9735576ea57e037d52a9d0592"
+        "sha256": "45dafd1521cb427e8f406881e1ae6aba5ac269cf3e68fa68c9894d097314f686"
       }
     ],
     "materialized_input_bindings": [

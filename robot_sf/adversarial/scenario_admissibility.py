@@ -32,7 +32,14 @@ from robot_sf.scenario_certification.input_identity import (
     runtime_input_records_match,
     scenario_input_identity,
 )
-from robot_sf.training.scenario_loader import load_scenarios_for_validation
+from robot_sf.scenario_certification.v1 import (
+    ACTOR_SOURCE_CENSUS_SCHEMA,
+    scenario_actor_source_census,
+)
+from robot_sf.training.scenario_loader import (
+    build_robot_config_from_scenario,
+    load_scenarios_for_validation,
+)
 
 SCENARIO_ADMISSIBILITY_SCHEMA = "scenario_admissibility.v1"
 FEASIBILITY_ORACLE_SCHEMA = "scenario_feasibility_oracle.v1"
@@ -262,6 +269,8 @@ def classify_scenario_admissibility(  # noqa: PLR0913 - explicit evidence bindin
         requires_effective_input_binding,
         cert,
         cert_valid,
+        selected_scenario_row if selected_scenario_row_status == "valid" else None,
+        artifact_identity.get("path"),
         reasons,
     )
     execution_artifact_bindings: dict[str, Any] = {}
@@ -1027,6 +1036,8 @@ def _oracle(  # noqa: PLR0913 - oracle classification needs its bound source and
     requires_effective_input_binding: bool,
     cert: Any,
     cert_valid: bool,
+    scenario_row: Mapping[str, Any] | None,
+    scenario_artifact_path: Any,
     reasons: list[str],
 ) -> tuple[str | None, dict[str, Any]]:
     report = _select_oracle_cell(
@@ -1076,22 +1087,82 @@ def _oracle(  # noqa: PLR0913 - oracle classification needs its bound source and
         "source_artifact_sha256": report.get("source_artifact_sha256"),
         "claim_boundary": report.get("claim_boundary"),
     }
+    actor_free_scope = _actor_free_source_case_scope(scenario_row, scenario_artifact_path)
+    assumptions["original_case_actor_sources"] = actor_free_scope
     if nominal.get("claim_boundary") != DIAGNOSTIC_CLAIM_BOUNDARY:
         reasons.append("feasibility_oracle_claim_boundary_missing_or_unsupported")
         return None, assumptions
     if _oracle_excludes(nominal):
         return _classify_oracle_exclusion(cert, cert_valid, reasons), assumptions
-    if _oracle_proves_actor_free_rollout(nominal, report, geo, completion, cert, cert_valid):
+    if actor_free_scope.get("status") == "static" and _oracle_proves_actor_free_rollout(
+        nominal, report, geo, completion, cert, cert_valid
+    ):
         assumptions["empirical_scope"] = "named_actor_free_rollout_of_original_static_case"
         reasons.append("actor_free_reference_completed_original_static_case")
         return EMPIRICALLY_FEASIBLE, assumptions
     status = nominal.get("status")
+    if status == "feasible" and actor_free_scope.get("status") != "static":
+        reasons.append("oracle_actor_free_success_not_bound_to_static_original_case")
+        return None, assumptions
     reasons.append(
         f"oracle_{status}_does_not_prove_impossibility"
         if status in {"blocked", "time_truncated"}
         else "oracle_success_not_bound_to_static_case_and_provenance"
     )
     return None, assumptions
+
+
+def _actor_free_source_case_scope(
+    scenario_row: Mapping[str, Any] | None,
+    scenario_artifact_path: Any,
+) -> dict[str, Any]:
+    """Require the named source case to have no active pedestrian actor sources.
+
+    Successful feasibility-oracle rollouts use a variant with pedestrian dynamics removed.
+    That result can establish empirical feasibility for the named source case only when the
+    original case has no active pedestrian population. Rebuild the source through the
+    canonical loader so map-authored actors and route overrides are included. Incomplete or
+    unsupported actor inventories remain unknown.
+    """
+    result: dict[str, Any] = {
+        "status": "unknown",
+        "reason_codes": [],
+        "ped_density_per_m2": None,
+        "forced_population_size": None,
+        "map_actor_sources": [],
+    }
+    if not isinstance(scenario_row, Mapping) or not isinstance(scenario_artifact_path, str):
+        result["reason_codes"] = ["original_scenario_row_unavailable"]
+        return result
+    try:
+        config = build_robot_config_from_scenario(
+            scenario_row,
+            scenario_path=Path(scenario_artifact_path),
+        )
+        census = scenario_actor_source_census(config)
+    except (AttributeError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        result["reason_codes"] = [
+            f"original_scenario_actor_inventory_unavailable:{type(exc).__name__}"
+        ]
+        return result
+    result.update(census)
+    dynamic_reasons = census.get("dynamic_actor_source_reasons")
+    if census.get("status") == "complete" and census.get("verified_empty") is True:
+        result["status"] = "static"
+        result["reason_codes"] = ["no_active_pedestrian_actor_sources"]
+    elif (
+        census.get("status") == "complete" and isinstance(dynamic_reasons, list) and dynamic_reasons
+    ):
+        result["status"] = "dynamic"
+        result["reason_codes"] = list(dynamic_reasons)
+    else:
+        result["status"] = "unknown"
+        result["reason_codes"] = list(
+            dynamic_reasons or ["original_scenario_actor_inventory_incomplete"]
+        )
+    result["ped_density_per_m2"] = census.get("density_per_m2")
+    result["map_actor_sources"] = census.get("maps", [])
+    return result
 
 
 def _classify_oracle_exclusion(cert: Any, cert_valid: bool, reasons: list[str]) -> str | None:
@@ -1418,6 +1489,22 @@ def _certificate_global_impossibility_unresolved(cert: Any) -> bool:
 
 
 def _static_certificate(cert: Any) -> bool:
+    evidence = cert.get("evidence") if isinstance(cert, Mapping) else None
+    census = evidence.get("actor_source_census") if isinstance(evidence, Mapping) else None
+    if (
+        not isinstance(census, Mapping)
+        or census.get("schema_version") != ACTOR_SOURCE_CENSUS_SCHEMA
+        or census.get("status") != "complete"
+        or census.get("verified_empty") is not True
+        or census.get("planner_context_equivalent") is not True
+        or not isinstance(census.get("maps"), list)
+        or not census["maps"]
+        or any(
+            not isinstance(map_row, Mapping) or map_row.get("verified_empty") is not True
+            for map_row in census["maps"]
+        )
+    ):
+        return False
     routes = cert.get("route_certificates") if isinstance(cert, Mapping) else None
     if not isinstance(routes, Sequence) or isinstance(routes, (str, bytes)) or not routes:
         return False

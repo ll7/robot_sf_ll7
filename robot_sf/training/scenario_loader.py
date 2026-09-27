@@ -1735,9 +1735,53 @@ def build_robot_config_from_scenario(
         default_hold_ref_point=_scenario_conflict_point(scenario),
     )
     _apply_social_group_overrides(config, scenario.get("social_groups"))
+    if "_diagnostic_remove_pedestrian_actors" in scenario:
+        if scenario.get("_diagnostic_remove_pedestrian_actors") is not True:
+            raise ValueError("_diagnostic_remove_pedestrian_actors must be true when provided")
+        _remove_pedestrian_actors_for_diagnostic_variant(config)
     if runtime_input_records is not None and consumed_inputs is not None:
         runtime_input_records.extend(consumed_inputs)
     return config
+
+
+def _remove_pedestrian_actors_for_diagnostic_variant(
+    config: RobotSimulationConfig,
+) -> None:
+    """Remove effective pedestrian actors from a transient diagnostic config.
+
+    Scenario-level empty overrides cannot remove actors authored by a map or generated
+    replay, and a forced population can synthesize actors even at zero density. Clone the
+    loaded maps before clearing explicit actors and planner-visible groups so cached map
+    definitions remain unchanged.
+    """
+    map_pool = getattr(config, "map_pool", None)
+    map_defs = getattr(map_pool, "map_defs", None)
+    if not isinstance(map_defs, dict) or not map_defs:
+        raise ValueError("actor-free diagnostic variant requires a loaded map pool")
+    config.map_pool.map_defs = {
+        map_id: _remove_map_pedestrian_actors(map_def) for map_id, map_def in map_defs.items()
+    }
+    difficulty = config.sim_config.difficulty
+    if (
+        not isinstance(difficulty, int)
+        or isinstance(difficulty, bool)
+        or not 0 <= difficulty < len(config.sim_config.ped_density_by_difficulty)
+    ):
+        raise ValueError("actor-free diagnostic variant has an unresolved difficulty index")
+    config.sim_config.ped_density_by_difficulty[difficulty] = 0.0
+    config.sim_config.population_size = None
+
+
+def _remove_map_pedestrian_actors(map_def: MapDefinition) -> MapDefinition:
+    """Clone one effective map and clear its explicit pedestrians and group context.
+
+    Returns:
+        A cloned map with no explicit pedestrian actors or social-group context.
+    """
+    clone = deepcopy(map_def)
+    clone.single_pedestrians = []
+    clone.social_groups = []
+    return clone
 
 
 def _scenario_runtime_identity(scenario: Mapping[str, Any]) -> str:

@@ -170,11 +170,14 @@ def _oracle(
     status: str = "feasible",
     geometric: bool = True,
     complete: bool = True,
+    scenario_artifact_path: Path = _SCENARIO_ARTIFACT,
 ) -> dict[str, Any]:
+    artifact_sha256 = hashlib.sha256(scenario_artifact_path.read_bytes()).hexdigest()
+    input_identity = scenario_input_identity(scenario_artifact_path, scenario_id=scenario_id)
     return {
         "schema_version": FEASIBILITY_ORACLE_SCHEMA,
         "scenario_id": scenario_id,
-        "scenario_manifest": _SCENARIO_ARTIFACT.as_posix(),
+        "scenario_manifest": scenario_artifact_path.as_posix(),
         "envelope_radius_m": 0.4,
         "feasible": status == "feasible",
         "status": status,
@@ -209,9 +212,9 @@ def _oracle(
             "observed_route_completion_feasible": True if complete else None,
             "rollout_blocker": None,
         },
-        "source_artifact_sha256": _SCENARIO_ARTIFACT_SHA256,
+        "source_artifact_sha256": artifact_sha256,
         "source_artifact_identity_stable": True,
-        "effective_input_sha256": _SCENARIO_EFFECTIVE_INPUT_SHA256,
+        "effective_input_sha256": input_identity.get("effective_input_sha256"),
         "effective_input_identity_stable": True,
         "runtime_input_identity_stable": True,
     }
@@ -221,10 +224,10 @@ def _oracle_report(oracle: dict[str, Any], *, scenario_id: str = "case-static") 
     return {
         "schema_version": ISSUE_5574_REPORT_SCHEMA,
         "scenario_ids": [scenario_id],
-        "scenario_manifest": _SCENARIO_ARTIFACT.as_posix(),
-        "source_artifact_sha256": _SCENARIO_ARTIFACT_SHA256,
+        "scenario_manifest": oracle["scenario_manifest"],
+        "source_artifact_sha256": oracle["source_artifact_sha256"],
         "source_artifact_identity_stable": True,
-        "effective_input_sha256": _SCENARIO_EFFECTIVE_INPUT_SHA256,
+        "effective_input_sha256": oracle["effective_input_sha256"],
         "effective_input_identity_stable": True,
         "rollout_algo": "goal",
         "cells": [
@@ -235,10 +238,10 @@ def _oracle_report(oracle: dict[str, Any], *, scenario_id: str = "case-static") 
                 "nominal_envelope_radius_m": oracle["envelope_radius_m"],
                 "nominal_verdict": oracle,
                 "reduced_verdicts": [],
-                "scenario_manifest": _SCENARIO_ARTIFACT.as_posix(),
-                "source_artifact_sha256": _SCENARIO_ARTIFACT_SHA256,
+                "scenario_manifest": oracle["scenario_manifest"],
+                "source_artifact_sha256": oracle["source_artifact_sha256"],
                 "source_artifact_identity_stable": True,
-                "effective_input_sha256": _SCENARIO_EFFECTIVE_INPUT_SHA256,
+                "effective_input_sha256": oracle["effective_input_sha256"],
                 "effective_input_identity_stable": True,
                 "runtime_input_identity_stable": True,
                 "rollout_algo": "goal",
@@ -508,6 +511,60 @@ def _referenced_scenario(tmp_path: Path, *, route_override: bool = True) -> Path
         yaml.safe_dump({"scenarios": [scenario]}, sort_keys=False), encoding="utf-8"
     )
     return scenario_path
+
+
+def _static_actor_free_case(tmp_path: Path) -> tuple[Path, dict[str, Any]]:
+    """Create a named, explicit no-pedestrian case and its producer certificate."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    scenario_path = tmp_path / "static-scenario.yaml"
+    map_path = tmp_path / "static-map.yaml"
+    map_path.write_text(
+        yaml.safe_dump(
+            {
+                "x_margin": [0, 12],
+                "y_margin": [0, 8],
+                "obstacles": [],
+                "robot_spawn_zones": [
+                    [[1.8, 1.8], [2.2, 1.8], [2.2, 2.2]],
+                    [[6.8, 5.8], [7.2, 5.8], [7.2, 6.2]],
+                ],
+                "robot_goal_zones": [
+                    [[1.8, 1.8], [2.2, 1.8], [2.2, 2.2]],
+                    [[6.8, 5.8], [7.2, 5.8], [7.2, 6.2]],
+                ],
+                "ped_spawn_zones": [],
+                "ped_goal_zones": [],
+                "ped_crowded_zones": [],
+                "robot_routes": [{"spawn_id": 0, "goal_id": 1, "waypoints": [[2, 2], [7, 6]]}],
+                "ped_routes": [],
+                "single_pedestrians": [],
+                "social_groups": [],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    scenario_path.write_text(
+        yaml.safe_dump(
+            {
+                "scenarios": [
+                    {
+                        "name": "case-static",
+                        "map_file": map_path.name,
+                        "simulation_config": {"max_episode_steps": 100, "ped_density": 0.0},
+                        "robot_config": {},
+                        "seeds": [19],
+                    }
+                ]
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    certificate = certificate_to_dict(
+        certify_scenario_file(scenario_path, scenario_id="case-static")[0]
+    )
+    return scenario_path, certificate
 
 
 def test_runtime_input_identity_is_stable_across_checkouts(tmp_path: Path) -> None:
@@ -1062,10 +1119,12 @@ def test_declared_route_count_must_match_before_certificate_can_reject() -> None
 
 @pytest.mark.parametrize("duplicate_identity", ["route_id", "spawn_goal_pair"])
 def test_duplicate_route_identities_cannot_exclude_or_prove_actor_free_rollout(
-    duplicate_identity: str,
+    duplicate_identity: str, tmp_path: Path
 ) -> None:
     excluded_certificate = _certificate("geometrically_infeasible", eligibility="excluded")
-    positive_certificate = _certificate()
+    static_path, positive_certificate = _static_actor_free_case(tmp_path / "static")
+    positive_certificate["route_certificates"] = positive_certificate["route_certificates"][:1]
+    positive_certificate["checks"]["route_count"] = 1
     for certificate in (excluded_certificate, positive_certificate):
         existing = certificate["route_certificates"][0]
         duplicate = {
@@ -1092,8 +1151,10 @@ def test_duplicate_route_identities_cannot_exclude_or_prove_actor_free_rollout(
     )
     empirical = classify_scenario_admissibility(
         "case-static",
+        scenario_artifact_path=static_path,
+        scenario_id="case-static",
         scenario_certificate=positive_certificate,
-        feasibility_evidence=_oracle_report(_oracle()),
+        feasibility_evidence=_oracle_report(_oracle(scenario_artifact_path=static_path)),
     )
 
     for verdict in (excluded, empirical):
@@ -1223,13 +1284,15 @@ def test_missing_no_traversal_fallback_marker_cannot_exclude_case() -> None:
     assert _oracle_excludes(oracle) is False
 
 
-def test_incomplete_route_inventory_cannot_bind_oracle_success() -> None:
-    certificate = _certificate()
-    certificate["checks"]["route_count"] = 2
+def test_incomplete_route_inventory_cannot_bind_oracle_success(tmp_path: Path) -> None:
+    static_path, certificate = _static_actor_free_case(tmp_path / "static")
+    certificate["checks"]["route_count"] = 3
     verdict = classify_scenario_admissibility(
         "case-static",
+        scenario_artifact_path=static_path,
+        scenario_id="case-static",
         scenario_certificate=certificate,
-        feasibility_evidence=_oracle_report(_oracle()),
+        feasibility_evidence=_oracle_report(_oracle(scenario_artifact_path=static_path)),
     )
 
     assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
@@ -1308,25 +1371,58 @@ def test_committed_issue_5574_report_maps_excluded_and_unresolved_cells() -> Non
     assert unresolved.search_disposition == "retain"
 
 
-def test_actor_free_oracle_success_requires_a_static_named_report() -> None:
-    report = _oracle_report(_oracle())
-    static = classify_scenario_admissibility(
-        "case-static", scenario_certificate=_certificate(), feasibility_evidence=report
-    )
-    dynamic = classify_scenario_admissibility(
+def test_actor_free_oracle_success_requires_a_static_named_report(tmp_path: Path) -> None:
+    static_path, static_certificate = _static_actor_free_case(tmp_path / "static")
+    static_report = _oracle_report(_oracle(scenario_artifact_path=static_path))
+    static = _classify_scenario_admissibility(
         "case-static",
-        scenario_certificate=_certificate(pedestrian_count=1),
-        feasibility_evidence=report,
+        scenario_artifact_path=static_path,
+        scenario_id="case-static",
+        scenario_certificate=static_certificate,
+        feasibility_evidence=static_report,
     )
-    unbound = classify_scenario_admissibility(
-        "case-static", scenario_certificate=_certificate(), feasibility_evidence=_oracle()
+
+    dynamic_path = Path("configs/scenarios/archetypes/classic_t_intersection.yaml").resolve()
+    dynamic_scenario_id = "classic_t_intersection_low"
+    dynamic_certificate = certificate_to_dict(
+        certify_scenario_file(dynamic_path, scenario_id=dynamic_scenario_id)[0]
+    )
+    dynamic_report = _oracle_report(
+        _oracle(
+            scenario_id=dynamic_scenario_id,
+            scenario_artifact_path=dynamic_path,
+        ),
+        scenario_id=dynamic_scenario_id,
+    )
+    dynamic = _classify_scenario_admissibility(
+        dynamic_scenario_id,
+        scenario_artifact_path=dynamic_path,
+        scenario_id=dynamic_scenario_id,
+        scenario_certificate=dynamic_certificate,
+        feasibility_evidence=dynamic_report,
+    )
+    unbound = _classify_scenario_admissibility(
+        "case-static",
+        scenario_artifact_path=static_path,
+        scenario_id="case-static",
+        scenario_certificate=static_certificate,
+        feasibility_evidence=_oracle(scenario_artifact_path=static_path),
     )
 
     assert static.verdict == EMPIRICALLY_FEASIBLE
     assert static.assumptions["feasibility_oracle"]["empirical_scope"] == (
         "named_actor_free_rollout_of_original_static_case"
     )
+    assert (
+        static.assumptions["feasibility_oracle"]["original_case_actor_sources"]["verified_empty"]
+        is True
+    )
     assert dynamic.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
+    dynamic_scope = dynamic.assumptions["feasibility_oracle"]["original_case_actor_sources"]
+    assert dynamic_scope["status"] == "dynamic"
+    assert dynamic_scope["ped_density_per_m2"] == 0.02
+    assert dynamic_scope["map_actor_sources"][0]["pedestrian_route_count"] > 0
+    assert "oracle_actor_free_success_not_bound_to_static_original_case" in dynamic.reason_codes
     assert unbound.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
 
 
@@ -1345,15 +1441,20 @@ def test_actor_free_oracle_success_requires_a_static_named_report() -> None:
     ],
 )
 def test_contradictory_actor_free_completion_cannot_prove_feasibility(
-    mutation: str, value: Any
+    mutation: str, value: Any, tmp_path: Path
 ) -> None:
     """Blocked, fallback, termination, and horizon conflicts retain the candidate as unknown."""
-    report = _oracle_report(_oracle())
+    static_path, certificate = _static_actor_free_case(tmp_path / "static")
+    report = _oracle_report(_oracle(scenario_artifact_path=static_path))
     completion = report["cells"][0]["nominal_verdict"]["completion"]
     completion[mutation] = value
 
     verdict = classify_scenario_admissibility(
-        "case-static", scenario_certificate=_certificate(), feasibility_evidence=report
+        "case-static",
+        scenario_artifact_path=static_path,
+        scenario_id="case-static",
+        scenario_certificate=certificate,
+        feasibility_evidence=report,
     )
 
     assert verdict.verdict == ADMISSIBLE_FEASIBILITY_UNKNOWN
@@ -2108,12 +2209,18 @@ def test_actor_free_oracle_success_does_not_resolve_unknown_invalid_certificate(
     assert "scenario_certificate_invalidity_unresolved" in verdict.reason_codes
 
 
-def test_actor_free_oracle_uses_explicit_scenario_binding_for_stable_case_id() -> None:
-    verdict = classify_scenario_admissibility(
+def test_actor_free_oracle_uses_explicit_scenario_binding_for_stable_case_id(
+    tmp_path: Path,
+) -> None:
+    scenario_path, certificate = _static_actor_free_case(tmp_path)
+    verdict = _classify_scenario_admissibility(
         "counterexample-0001",
+        scenario_artifact_path=scenario_path,
         scenario_id="case-static",
-        scenario_certificate=_certificate(),
-        feasibility_evidence=_oracle_report(_oracle()),
+        scenario_certificate=certificate,
+        feasibility_evidence=_oracle_report(
+            _oracle(scenario_artifact_path=scenario_path),
+        ),
     )
 
     assert verdict.verdict == EMPIRICALLY_FEASIBLE

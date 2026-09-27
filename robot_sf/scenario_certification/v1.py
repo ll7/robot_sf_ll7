@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
 
 CERT_SCHEMA_VERSION = "scenario_cert.v1"
+ACTOR_SOURCE_CENSUS_SCHEMA = "scenario_actor_source_census.v1"
 
 VALID = "valid"
 INVALID = "invalid"
@@ -262,12 +263,19 @@ def certify_scenario(
             source=scenario_path.as_posix(),
             reason="no_applicable_robot_routes",
         )
-    return _aggregate_scenario_certificate(
+    certificate = _aggregate_scenario_certificate(
         scenario,
         scenario_id=sid,
         source=scenario_path.as_posix(),
         route_certs=route_certs,
         settings=cert_settings,
+    )
+    return replace(
+        certificate,
+        evidence={
+            **certificate.evidence,
+            "actor_source_census": scenario_actor_source_census(config),
+        },
     )
 
 
@@ -309,13 +317,128 @@ def certify_map_definition(
             source=source,
             reason="no_applicable_robot_routes",
         )
-    return _aggregate_scenario_certificate(
+    certificate = _aggregate_scenario_certificate(
         scenario_payload,
         scenario_id=_scenario_id(scenario_payload),
         source=source,
         route_certs=route_certs,
         settings=settings or CertificationSettings(),
     )
+    return replace(
+        certificate,
+        evidence={
+            **certificate.evidence,
+            "actor_source_census": scenario_actor_source_census(config),
+        },
+    )
+
+
+def scenario_actor_source_census(config: RobotSimulationConfig) -> dict[str, Any]:
+    """Inventory effective pedestrian actors and actor-context changes after loading.
+
+    Returns:
+        A versioned census over every effective map, including scenario overlays already
+        applied by ``build_robot_config_from_scenario``. The empty-scene assertion is
+        deliberately conservative: a forced population, map-authored pedestrian, or
+        density-backed route/crowded zone means the case is not verified empty. Social
+        groups are tracked separately because they alter planner-visible context without
+        spawning actors themselves.
+    """
+    density = getattr(config.sim_config, "peds_per_area_m2", None)
+    forced_population_size = getattr(config.sim_config, "population_size", None)
+    map_defs = getattr(getattr(config, "map_pool", None), "map_defs", None)
+    result: dict[str, Any] = {
+        "schema_version": ACTOR_SOURCE_CENSUS_SCHEMA,
+        "status": "unknown",
+        "verified_empty": False,
+        "density_per_m2": density,
+        "forced_population_size": forced_population_size,
+        "effective_map_count": 0,
+        "maps": [],
+        "dynamic_actor_source_reasons": [],
+        "planner_context_equivalent": False,
+    }
+    if (
+        not isinstance(density, (int, float))
+        or isinstance(density, bool)
+        or not math.isfinite(density)
+        or density < 0
+        or (
+            forced_population_size is not None
+            and (
+                not isinstance(forced_population_size, int)
+                or isinstance(forced_population_size, bool)
+                or forced_population_size < 0
+            )
+        )
+        or not isinstance(map_defs, Mapping)
+        or not map_defs
+    ):
+        result["dynamic_actor_source_reasons"] = ["effective_actor_inventory_incomplete"]
+        return result
+
+    map_rows: list[dict[str, Any]] = []
+    dynamic_reasons: list[str] = []
+    context_equivalent = True
+    complete = True
+    for map_id, map_def in sorted(map_defs.items(), key=lambda item: str(item[0])):
+        single_pedestrians = getattr(map_def, "single_pedestrians", None)
+        ped_routes = getattr(map_def, "ped_routes", None)
+        crowded_zones = getattr(map_def, "ped_crowded_zones", None)
+        social_groups = getattr(map_def, "social_groups", None)
+        if not all(
+            isinstance(value, list)
+            for value in (single_pedestrians, ped_routes, crowded_zones, social_groups)
+        ):
+            complete = False
+            continue
+
+        reasons: list[str] = []
+        if single_pedestrians:
+            reasons.append("map_single_pedestrians")
+        if forced_population_size is not None and forced_population_size > 0:
+            reasons.append("forced_population_size")
+        if density > 0 and ped_routes:
+            reasons.append("density_backed_pedestrian_routes")
+        if density > 0 and crowded_zones:
+            reasons.append("density_backed_crowded_zones")
+        if social_groups:
+            context_equivalent = False
+        dynamic_reasons.extend(f"{map_id}:{reason}" for reason in reasons)
+        map_rows.append(
+            {
+                "map_id": str(map_id),
+                "single_pedestrian_count": len(single_pedestrians),
+                "pedestrian_route_count": len(ped_routes),
+                "crowded_zone_count": len(crowded_zones),
+                "social_group_count": len(social_groups),
+                "dynamic_actor_source_reasons": reasons,
+                "verified_empty": not reasons and not social_groups,
+            }
+        )
+
+    result.update(
+        {
+            "status": "complete" if complete and len(map_rows) == len(map_defs) else "unknown",
+            "verified_empty": (
+                complete
+                and len(map_rows) == len(map_defs)
+                and context_equivalent
+                and not dynamic_reasons
+            ),
+            "effective_map_count": len(map_rows),
+            "maps": map_rows,
+            "dynamic_actor_source_reasons": list(dict.fromkeys(dynamic_reasons)),
+            "planner_context_equivalent": context_equivalent,
+        }
+    )
+    if not complete or len(map_rows) != len(map_defs):
+        result["dynamic_actor_source_reasons"] = list(
+            dict.fromkeys(
+                [*result["dynamic_actor_source_reasons"], "map_actor_inventory_incomplete"]
+            )
+        )
+    return result
 
 
 def certificate_to_dict(certificate: ScenarioCertificate) -> dict[str, Any]:

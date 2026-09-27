@@ -5,7 +5,7 @@
   "source_manifest_path_map": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_report_manifest_path_map.v1.json",
   "source_manifest_path_map_sha256": "692db3b44f12b1fd4d0d7ff506b8924e4009710b5062e71c30840ce74e4a8b28",
   "source_episode_artifact_map": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_report_artifact_path_map.v1.json",
-  "source_episode_artifact_map_sha256": "c4a051073cb8be83b08c277e9c8f7b1ac935288e45e4a798eba0d3ebce491b8f",
+  "source_episode_artifact_map_sha256": "4d37bebe8da4b095185a6e1284c9997daab0811f55b107a007104ddce2d58e8d",
   "manifest_bindings": [
     {
       "declared_manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/manifest.json",

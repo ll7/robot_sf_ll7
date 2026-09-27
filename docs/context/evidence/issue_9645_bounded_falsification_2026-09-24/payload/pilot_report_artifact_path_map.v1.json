@@ -825,7 +825,7 @@
     "artifact_count": 69,
     "path_normalized_candidate_episode_record_count": 64
   },
-  "claim_boundary": "Exact producer artifact copies; no feasibility or planner safety claim.",
+  "claim_boundary": "Mixed retention: bindings labeled retained_exact_copy preserve producer bytes; bindings labeled retained_path_normalized_copy are path-rewritten copies with source_sha256_before_path_normalization and normalized_sha256 bindings. Totals report 5 exact artifacts and 64 path-normalized candidate episode records. No feasibility or planner safety claim.",
   "producer_revision_evidence_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/run_metadata.json",
   "config_path": "configs/adversarial/issue_9645_pilot_space.v1.yaml",
   "config_sha256": "2d82db0265111a42b4936a958bea2f08c8b03ca1e02c8c4996452f85926b3392",

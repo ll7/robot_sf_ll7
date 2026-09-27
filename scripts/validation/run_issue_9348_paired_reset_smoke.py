@@ -49,13 +49,14 @@ def main() -> int:
     )
     if any(preflight["checks"].get(key) is not True for key in diagnostic_required_checks):
         raise ValueError("doorway diagnostic smoke lacks required geometry or custody checks")
-    # ``go`` remains the H400 dispatch gate. An unavailable/unknown oracle keeps
-    # it false, but a one-step reset smoke may still record diagnostic custody.
-    diagnostic_admission = (
-        "diagnostic_only_oracle_readiness_blocked"
-        if not preflight["go"]
-        else "diagnostic_only_preflight_ready"
-    )
+    # ``go`` covers H1 executability/binding readiness. The expected missing
+    # distributional metric remains diagnostic and never makes a row evidence.
+    if not preflight["go"]:
+        diagnostic_admission = "diagnostic_only_oracle_readiness_blocked"
+    elif preflight["checks"].get("oracle_expected_fallbacks"):
+        diagnostic_admission = "diagnostic_only_preflight_ready_with_expected_fallback"
+    else:
+        diagnostic_admission = "diagnostic_only_preflight_ready"
     assets = [
         record["assets"]
         | {"variant_id": record["variant_id"], "gap_width_m": record["geometry"]["gap_width_m"]}

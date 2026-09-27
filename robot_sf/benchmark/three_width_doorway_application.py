@@ -69,6 +69,12 @@ _EXPECTED_ORACLE_SEED = 225
 _EXPECTED_HORIZON_STEPS = 400
 _EXPECTED_SEEDS = (225, 226, 227)
 _AUTHORITATIVE_RADIUS_SOURCE = "robot_sf.common.robot_defaults.DEFAULT_ROBOT_RADIUS"
+_EXPECTED_H1_DISTRIBUTIONAL_FALLBACK_MARKER = (
+    "metrics.distributional_disruption.missing_data.slow_speed_tier.status=unavailable"
+)
+_SUCCESS_TERMINATIONS = frozenset(
+    {"success", "goal_reached", "route_complete", "completed", "route_follow_reached_destination"}
+)
 # The goal policy is constructed directly by the runner, which records the
 # absence of a config file as the literal ``na``.  The social-force baseline
 # receives the resolved empty mapping and therefore uses its canonical empty
@@ -314,18 +320,66 @@ def _check_width_tiers(gap_levels: tuple[float, ...], nominal_radius: float) -> 
         raise ValueError("all comparison widths must have positive collision-envelope clearance")
 
 
+def _expected_h1_distributional_fallback(
+    oracle: Mapping[str, Any], nominal: Mapping[str, Any], geometric: Mapping[str, Any]
+) -> bool:
+    """Recognize the preregistered H1-only missing distributional metric.
+
+    This status is a diagnostic on an otherwise successful, identity-stable
+    route execution. It is accepted for H1 executability/binding readiness and
+    remains excluded from H400 evidence by the campaign row validator.
+
+    Returns:
+        Whether the expected H1 fallback marker is fully bounded by stable
+        geometry, execution and runtime input identity.
+    """
+    completion = nominal.get("completion")
+    return (
+        nominal.get("status") == "blocked"
+        and isinstance(completion, Mapping)
+        and completion.get("status") == "blocked"
+        and completion.get("blocker") == "rollout_fallback_or_degraded"
+        and completion.get("fallback_or_degraded") is True
+        and completion.get("fallback_marker") == _EXPECTED_H1_DISTRIBUTIONAL_FALLBACK_MARKER
+        and completion.get("observed_route_completion_feasible") is True
+        and completion.get("termination_reason") in _SUCCESS_TERMINATIONS
+        and completion.get("rollout_blocker") is None
+        and completion.get("runtime_input_identity_stable") is True
+        and geometric.get("route_geometrically_feasible") is True
+        and geometric.get("runtime_input_identity_stable") is True
+        and oracle.get("runtime_input_identity_stable") is True
+    )
+
+
+def _oracle_h1_readiness_diagnostic(oracle: Mapping[str, Any]) -> str | None:
+    """Return an accepted H1 diagnostic without promoting it to evidence."""
+    nominal = oracle.get("nominal_verdict")
+    geometric = nominal.get("geometric") if isinstance(nominal, Mapping) else None
+    if (
+        isinstance(nominal, Mapping)
+        and isinstance(geometric, Mapping)
+        and _expected_h1_distributional_fallback(oracle, nominal, geometric)
+    ):
+        return "expected_distributional_metric_unavailable"
+    return None
+
+
 def _oracle_required_checks(oracle: Mapping[str, Any]) -> tuple[bool, str | None]:
-    """Require known oracle execution and classification before readiness can pass.
+    """Require known execution, geometry and binding before H1 readiness can pass.
 
     The conservative grid route result is a diagnostic and may be ``False``.
-    A missing result or unavailable execution is different: it cannot authorize
-    the campaign preflight.
+    A missing result, unavailable execution, or unstable runtime identity is
+    different: it cannot authorize the campaign preflight. The one
+    preregistered missing distributional metric is retained as an H1 diagnostic
+    when the route completed successfully with stable geometry and binding.
 
     Returns:
         Tuple of (required checks known, blocker when not known).
     """
     if oracle.get("execution_status") != "available":
         return False, f"oracle_execution_{oracle.get('execution_status', 'unknown')}"
+    if oracle.get("runtime_input_identity_stable") is not True:
+        return False, "oracle_runtime_input_identity_unstable"
     nominal = oracle.get("nominal_verdict")
     geometric = nominal.get("geometric") if isinstance(nominal, Mapping) else None
     route_status = (
@@ -333,12 +387,16 @@ def _oracle_required_checks(oracle: Mapping[str, Any]) -> tuple[bool, str | None
     )
     if not isinstance(route_status, bool):
         return False, "oracle_route_classification_unknown"
+    if geometric.get("runtime_input_identity_stable") is not True:
+        return False, "oracle_geometric_input_identity_unstable"
     nominal_status = nominal.get("status") if isinstance(nominal, Mapping) else None
     if nominal_status not in {
         "feasible",
         "infeasible_by_construction",
         "time_truncated",
     }:
+        if isinstance(geometric, Mapping) and _oracle_h1_readiness_diagnostic(oracle) is not None:
+            return True, None
         return False, f"oracle_nominal_status_{nominal_status or 'unknown'}"
     return True, None
 
@@ -1153,7 +1211,16 @@ def run_three_width_preflight(
                 }
             required_checks_known, readiness_blocker = _oracle_required_checks(oracle)
             oracle["required_checks_known"] = required_checks_known
-            oracle["readiness_status"] = "ready" if required_checks_known else "blocked"
+            readiness_diagnostic = _oracle_h1_readiness_diagnostic(oracle)
+            oracle["readiness_status"] = (
+                "ready_with_expected_fallback"
+                if required_checks_known and readiness_diagnostic is not None
+                else "ready"
+                if required_checks_known
+                else "blocked"
+            )
+            if readiness_diagnostic is not None:
+                oracle["readiness_diagnostic"] = readiness_diagnostic
             if readiness_blocker is not None:
                 oracle["readiness_blocker"] = readiness_blocker
             records.append(
@@ -1202,6 +1269,18 @@ def run_three_width_preflight(
         }
         for item in records
         if item["oracle"].get("required_checks_known") is not True
+    ]
+    oracle_expected_fallbacks = [
+        {
+            "variant_id": item["variant_id"],
+            "reason": item["oracle"].get("readiness_diagnostic"),
+            "marker": item["oracle"]
+            .get("nominal_verdict", {})
+            .get("completion", {})
+            .get("fallback_marker"),
+        }
+        for item in records
+        if item["oracle"].get("readiness_diagnostic") is not None
     ]
     geometry_feasible = all(
         item["oracle"]
@@ -1255,6 +1334,7 @@ def run_three_width_preflight(
             "oracle_available_for_every_variant": oracle_available,
             "oracle_required_checks_known": oracle_required_checks_known,
             "oracle_readiness_blockers": oracle_readiness_blockers,
+            "oracle_expected_fallbacks": oracle_expected_fallbacks,
             "nominal_grid_route_feasible_for_every_variant": geometry_feasible,
             "planner_records_are_not_run": all(
                 item["planner"]["status"] == "not_run" for item in records
@@ -1269,6 +1349,9 @@ def run_three_width_preflight(
             "confirmation_blockers": [
                 "portable_initial_and_external_rng_pair_receipts_not_recorded",
                 *[f"{item['variant_id']}:{item['reason']}" for item in oracle_readiness_blockers],
+            ],
+            "diagnostics": [
+                f"{item['variant_id']}:{item['reason']}" for item in oracle_expected_fallbacks
             ],
             "evidence_admission": "not_started",
             "missingness_policy": "blocked or degraded oracle/planner rows remain explicit and are not promoted",

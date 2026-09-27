@@ -34,6 +34,7 @@ from robot_sf.benchmark.three_width_doorway_application import (
 )
 from robot_sf.evidence.writers import write_json
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.scenario_certification.input_identity import scenario_input_identity
 from robot_sf.scenario_certification.v1 import RouteCertificate, ScenarioCertificate
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.validation import run_issue_9348_three_width_campaign as doorway_campaign
@@ -116,8 +117,10 @@ def _fake_certifier(scenario: dict[str, Any], scenario_path: Path) -> ScenarioCe
                 benchmark_eligibility="eligible" if feasible else "excluded",
                 reasons=[],
                 checks=checks,
+                evidence={"runtime_input_identity_stable": True},
             )
         ],
+        evidence={"runtime_input_identity_stable": True},
     )
 
 
@@ -131,6 +134,32 @@ def _fake_episode_runner(
         "termination_reason": "success",
         "fallback_or_degraded": False,
     }
+
+
+def _fake_bound_episode_runner(variants_dir: Path):
+    """Return a deterministic runner with explicit source input receipts."""
+
+    def run(scenario: dict[str, Any], seed: int, horizon: int | None, algo: str) -> dict[str, Any]:
+        del seed, algo
+        scenario_path = next(
+            path
+            for path in variants_dir.glob("*/scenario.yaml")
+            if load_scenarios(path)[0]["name"] == scenario["name"]
+        )
+        identity = scenario_input_identity(scenario_path, scenario_id=str(scenario["name"]))
+        records = [
+            record for record in identity["files"] if record.get("role") != "scenario_manifest"
+        ]
+        return {
+            "route_complete": True,
+            "steps": 100,
+            "horizon_steps": horizon,
+            "termination_reason": "success",
+            "fallback_or_degraded": False,
+            "_scenario_runtime_input_records": records,
+        }
+
+    return run
 
 
 def _complete_synthetic_campaign() -> tuple[
@@ -748,6 +777,17 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
     )
     assert social_force_22_28["endpoints"]["success"]["estimate"]["ci95"] is None
     assert report["pedestrian_delay_or_impairment"]["value"] is None
+    rows[0]["algorithm_metadata"]["distributional_disruption"] = {
+        "missing_data": {"slow_speed_tier": {"status": "unavailable"}}
+    }
+    unavailable_metric = analyze_rows(rows, cells, pairs)
+    assert unavailable_metric["native_rows"] == 17
+    assert any(
+        "fallback_or_degraded_runtime:algorithm_metadata.distributional_disruption."
+        "missing_data.slow_speed_tier.status=unavailable" in reason
+        for reason in unavailable_metric["row_inventory"][0]["exclusion_reasons"]
+    )
+    rows[0]["algorithm_metadata"].pop("distributional_disruption")
     rows[0]["algorithm_metadata"]["planner_decision_trace"]["steps"] = [{"fallback_used": True}]
     degraded = analyze_rows(rows, cells, pairs)
     assert degraded["native_rows"] == 17
@@ -830,7 +870,7 @@ def test_preflight_records_oracle_before_not_run_planner_lane(tmp_path: Path) ->
     report = run_three_width_preflight(
         _MANIFEST,
         output_dir=tmp_path / "variants",
-        episode_runner=_fake_episode_runner,
+        episode_runner=_fake_bound_episode_runner(tmp_path / "variants"),
         certifier=_fake_certifier,
     )
 
@@ -875,6 +915,20 @@ def test_preflight_preserves_real_loader_identity(tmp_path: Path) -> None:
         oracle.get("readiness_blocker") != "oracle_route_classification_unknown"
         for oracle in by_width.values()
     )
+    fallback_oracle = by_width[3.6]
+    assert fallback_oracle["required_checks_known"] is True
+    assert fallback_oracle["readiness_status"] == "ready_with_expected_fallback"
+    assert fallback_oracle["readiness_diagnostic"] == ("expected_distributional_metric_unavailable")
+    assert report["checks"]["oracle_expected_fallbacks"] == [
+        {
+            "variant_id": "gap_3p60__depth_1p00",
+            "reason": "expected_distributional_metric_unavailable",
+            "marker": (
+                "metrics.distributional_disruption.missing_data.slow_speed_tier.status=unavailable"
+            ),
+        }
+    ]
+    assert report["go"] is True
 
 
 def test_conservative_grid_result_is_reported_without_changing_frozen_widths(
@@ -915,14 +969,69 @@ def test_known_oracle_no_route_remains_a_diagnostic() -> None:
     known, blocker = doorway_application._oracle_required_checks(
         {
             "execution_status": "available",
+            "runtime_input_identity_stable": True,
             "nominal_verdict": {
                 "status": "infeasible_by_construction",
-                "geometric": {"route_geometrically_feasible": False},
+                "geometric": {
+                    "route_geometrically_feasible": False,
+                    "runtime_input_identity_stable": True,
+                },
             },
         }
     )
     assert known is True
     assert blocker is None
+
+
+def test_expected_h1_distributional_fallback_does_not_block_binding() -> None:
+    """The preregistered missing metric remains diagnostic during H1 binding."""
+    oracle = {
+        "execution_status": "available",
+        "runtime_input_identity_stable": True,
+        "nominal_verdict": {
+            "status": "blocked",
+            "geometric": {
+                "route_geometrically_feasible": True,
+                "runtime_input_identity_stable": True,
+            },
+            "completion": {
+                "status": "blocked",
+                "blocker": "rollout_fallback_or_degraded",
+                "fallback_or_degraded": True,
+                "fallback_marker": (
+                    "metrics.distributional_disruption.missing_data."
+                    "slow_speed_tier.status=unavailable"
+                ),
+                "observed_route_completion_feasible": True,
+                "termination_reason": "success",
+                "rollout_blocker": None,
+                "runtime_input_identity_stable": True,
+            },
+        },
+    }
+    known, blocker = doorway_application._oracle_required_checks(oracle)
+    assert known is True
+    assert blocker is None
+    assert (
+        doorway_application._oracle_h1_readiness_diagnostic(oracle)
+        == "expected_distributional_metric_unavailable"
+    )
+
+    for field, value, expected_blocker in (
+        ("runtime_input_identity_stable", False, "oracle_runtime_input_identity_unstable"),
+        ("route_geometrically_feasible", None, "oracle_route_classification_unknown"),
+        ("termination_reason", "collision", "oracle_nominal_status_blocked"),
+    ):
+        invalid = json.loads(json.dumps(oracle))
+        if field == "runtime_input_identity_stable":
+            invalid[field] = value
+        elif field == "route_geometrically_feasible":
+            invalid["nominal_verdict"]["geometric"][field] = value
+        else:
+            invalid["nominal_verdict"]["completion"][field] = value
+        known, blocker = doorway_application._oracle_required_checks(invalid)
+        assert known is False
+        assert blocker == expected_blocker
 
 
 def test_preflight_blocks_unknown_oracle_readiness(

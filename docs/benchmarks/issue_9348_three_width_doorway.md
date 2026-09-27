@@ -17,8 +17,12 @@ The planner-free oracle runs first. Its conservative grid search reports no
 route at 2.2 and 2.8 m despite positive continuous clearance; the executed
 policies do not use that route search. This remains an explicit diagnostic
 finding, not a width effect or an ordinary planner failure. Readiness requires
-positive continuous clearance and a known, available oracle result; unknown or
-blocked required checks keep the preflight `go` field false.
+positive continuous clearance, available execution, known geometry, and stable
+runtime input identity. The preregistered unavailable `slow_speed_tier`
+distributional metric may leave the completed H1 oracle rollout explicitly
+fallback/degraded; it is diagnostic only and does not block H1
+executability/binding readiness or become comparison evidence. Unknown geometry,
+execution failure, or unstable binding keeps the preflight `go` field false.
 
 ## Diagnostic commands
 

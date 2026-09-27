@@ -13,7 +13,10 @@ pairs. A report must retain per-cell outcomes, failure and exclusion reasons,
 per-cell metric denominators, raw paired differences, paired seed bootstrap
 intervals, explicit degenerate binary-pair handling, and trace references.
 Any missing or unequal reset receipt, changed source/config/asset digest, or
-failed or unknown required preflight check stops the run. Raw rows, source/config/asset hashes, the report
+failed or unknown required preflight check stops the run. An expected unavailable
+`slow_speed_tier` distributional metric may remain an explicit H1
+fallback/degraded diagnostic after a successful, identity-stable rollout; it is
+outside the confirmation matrix and never success evidence. Raw rows, source/config/asset hashes, the report
 and checksums go to an explicit durable result root; the private operations
 queue owns Slurm submission, retrieval and preservation. No H1 smoke is a
 confirmation result. Validate with focused synthetic report tests and a
@@ -62,10 +65,13 @@ visible as a planner/grid feasibility layer; it does not change the frozen
 continuous-geometry width labels or authorize counting a grid failure as an
 ordinary planner failure. The application preflight reports this check
 separately from source/map/radius validity. Its `go` field requires positive
-continuous clearance and available, known oracle execution; a known no-route
-remains a diagnostic and does not make the width geometrically invalid, while
-an unknown or blocked oracle state keeps `go` false and cannot authorize
-confirmation dispatch.
+continuous clearance, available execution, known geometry, and stable runtime
+input identity. A known no-route remains a diagnostic and does not make the
+width geometrically invalid. A completed 3.6 m rollout with the expected
+unavailable `slow_speed_tier` distributional metric is marked fallback/degraded
+for H1 diagnostics while remaining executable and identity bound; it does not
+authorize confirmation evidence. Unknown geometry, execution failure, or
+unstable binding keeps `go` false.
 
 The manifest also records SHA-256 digests for the historical scenario and SVG. Loading the
 manifest fails closed if either byte stream changes, so the generator can only create disposable

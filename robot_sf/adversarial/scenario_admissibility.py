@@ -2233,11 +2233,22 @@ def _producer_selected_map_binding(  # noqa: C901 - each provenance guard is exp
         expected_role = record.get("role")
         expected_map_id = record.get("map_id")
         expected_path = record.get("path")
+        map_id_matches = expected_map_id == map_id
+        if "map_id" not in record:
+            # An explicit map_file without map_id gets a realized id from its filename in
+            # scenario_loader. Infer that id only when the candidate closure has one map
+            # resource and its content identity and filename agree with the episode row.
+            map_id_matches = (
+                len(candidate_records) == 1
+                and expected_role == "map_file"
+                and isinstance(expected_path, str)
+                and Path(expected_path).stem == map_id
+            )
         if (
             not isinstance(expected_sha256, str)
             or expected_sha256.lower() != selected_sha256.lower()
             or expected_role != selected_role
-            or expected_map_id != map_id
+            or not map_id_matches
             or not isinstance(expected_path, str)
             or not expected_path.strip()
         ):

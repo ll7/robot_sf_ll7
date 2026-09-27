@@ -636,6 +636,84 @@ def test_selected_map_binding_uses_content_identity_across_checkouts(tmp_path: P
     assert binding["path"] == str(selected_map_path)
 
 
+def _explicit_map_binding_fixture(
+    tmp_path: Path,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Build a candidate with one explicit map_file and its replay-side identity."""
+    candidate_root = tmp_path / "candidate"
+    candidate_root.mkdir()
+    scenario_path = _referenced_scenario(candidate_root, route_override=False)
+    identity = scenario_input_identity(scenario_path, scenario_id="case-static")
+    map_records = [
+        record
+        for record in identity["files"]
+        if record.get("role") == "map_file" and record.get("scenario_id") == "case-static"
+    ]
+    assert len(map_records) == 1
+    map_record = map_records[0]
+    assert "map_id" not in map_record
+    selected_map_path = tmp_path / "replay-checkout" / Path(map_record["path"]).name
+    selected_map_path.parent.mkdir()
+    shutil.copyfile(candidate_root / map_record["path"], selected_map_path)
+    selected_identity = {
+        "status": "available",
+        "map_id": Path(map_record["path"]).stem,
+        "path": str(selected_map_path),
+        "sha256": map_record["sha256"],
+        "source_role": "map_file",
+    }
+    return identity, selected_identity, map_record
+
+
+def test_selected_map_binding_infers_only_unique_explicit_map_file_id(
+    tmp_path: Path,
+) -> None:
+    identity, selected_identity, _ = _explicit_map_binding_fixture(tmp_path)
+
+    status, binding = _producer_selected_map_binding(
+        {"_candidate_runtime_input_identity": identity},
+        {"scenario_id": "case-static", "selected_map_identity": selected_identity},
+    )
+
+    assert status == "valid"
+    assert binding is not None
+    assert binding["map_id"] == selected_identity["map_id"]
+    assert binding["sha256"] == selected_identity["sha256"]
+
+
+def test_selected_map_binding_keeps_ambiguous_explicit_map_file_unknown(
+    tmp_path: Path,
+) -> None:
+    identity, selected_identity, map_record = _explicit_map_binding_fixture(tmp_path)
+    ambiguous_identity = {
+        **identity,
+        "files": [*identity["files"], {**map_record, "path": "/other/map.svg", "sha256": "f" * 64}],
+    }
+
+    status, binding = _producer_selected_map_binding(
+        {"_candidate_runtime_input_identity": ambiguous_identity},
+        {"scenario_id": "case-static", "selected_map_identity": selected_identity},
+    )
+
+    assert status != "valid"
+    assert binding is None
+
+
+def test_selected_map_binding_rejects_explicit_map_file_id_mismatch(
+    tmp_path: Path,
+) -> None:
+    identity, selected_identity, _ = _explicit_map_binding_fixture(tmp_path)
+    mismatched_identity = {**selected_identity, "map_id": "different-realized-map"}
+
+    status, binding = _producer_selected_map_binding(
+        {"_candidate_runtime_input_identity": identity},
+        {"scenario_id": "case-static", "selected_map_identity": mismatched_identity},
+    )
+
+    assert status == "mismatch"
+    assert binding is None
+
+
 def _bind_certificate_to_scenario(path: Path) -> dict[str, Any]:
     """Attach raw and runtime-input identities to a schema-valid fixture certificate."""
     identity = scenario_input_identity(path, scenario_id="case-static")

@@ -359,8 +359,14 @@ def register_search_run(
     run = copy.deepcopy(dict(search_run_record))
     if run.get("schema_version") != "adversarial-counterexample-search-run.v1":
         raise CorpusError("unsupported search-run registration schema")
+    if not _is_full_git_revision(run.get("source_revision")):
+        raise CorpusError("generic search-run source_revision must be a full 40-character Git SHA")
     if run.get("source_issue") == 9645 or _search_run_references_issue9645_packet(run):
         raise CorpusError("the pinned #9645 pilot can only be registered by its evidence importer")
+    if "new_counterexamples_admitted" in run:
+        raise CorpusError(
+            "generic search runs must omit new_counterexamples_admitted; admission is represented by case links"
+        )
     if "candidate_evaluations" in run:
         raise CorpusError("candidate evaluations must be derived from the named source-row file")
     run["candidate_evaluations"] = _derive_search_run_candidate_evaluations(run, root)
@@ -611,6 +617,12 @@ def _validate_one_search_run_evidence(
 
 def _validate_search_run_candidate_evaluations(run: Mapping[str, Any], root: Path) -> None:
     """Recompute structured candidate bindings from their digest-pinned source rows."""
+    if not _is_full_git_revision(run.get("source_revision")):
+        raise CorpusError("generic search-run source_revision must be a full 40-character Git SHA")
+    if "new_counterexamples_admitted" in run:
+        raise CorpusError(
+            "generic search runs must omit new_counterexamples_admitted; admission is represented by case links"
+        )
     evaluations = run.get("candidate_evaluations")
     if not isinstance(evaluations, list):
         raise CorpusError("search-run candidate evaluation evidence is missing or malformed")

@@ -37,7 +37,6 @@
           "failed_candidates",
           "invalid_candidates",
           "new_counterexamples_discovered",
-          "new_counterexamples_admitted",
           "evidence_tier",
           "source_files",
           "manifest_files"
@@ -47,7 +46,7 @@
           "run_id": {"type": "string", "minLength": 1},
           "round_id": {"type": "string", "minLength": 1},
           "source_issue": {"type": "integer", "minimum": 1},
-          "source_revision": {"type": "string", "minLength": 1},
+          "source_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
           "objective": {"type": "object"},
           "search_space": {"type": "object"},
           "attempted_candidates": {"type": "integer", "minimum": 0},

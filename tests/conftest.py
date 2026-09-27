@@ -416,6 +416,9 @@ _FAST_FILES = {
     # Scenario-admissibility tests exercise deterministic candidate, manifest,
     # materialization, and provenance contracts used by the adversarial search.
     "test_scenario_admissibility.py",
+    # Scenario-cache profiler tests use synthetic data and patched loaders; keep
+    # the changed cache instrumentation covered in the fast lane.
+    "test_perf_scenario_cache.py",
     # Social-force v2 planner contracts (issue #9724) are deterministic adapter
     # checks on synthetic grids; the four episode tests stay marked slow.
     "test_issue_9724_social_force_resolution_independent.py",

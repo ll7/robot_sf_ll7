@@ -11,6 +11,8 @@ base_scenario:
   scenario_id: francis2023_narrow_doorway
   scenario_path: configs/scenarios/single/francis2023_narrow_doorway.yaml
   map_path: maps/svg_maps/francis2023/francis2023_narrow_doorway.svg
+  scenario_sha256: d7b52f76128f366a74801c2441cb47e3f4af588c64566fb044eb3e2c54e43671
+  map_sha256: 7538ed173d462a5107afc1a1e43b5b2e6d2bc5c9604035cdec9a551e20a8b15e
 
 geometry:
   units: m

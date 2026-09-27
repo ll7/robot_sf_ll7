@@ -216,6 +216,10 @@ def test_manifest_pins_three_width_tiers() -> None:
     assert tuple(resolved["planner_roster"]) == ("goal", "social_force")
     assert tuple(resolved["planner_seeds"]) == (225, 226, 227)
     assert manifest["planner_protocol"]["expected_rows"] == 18
+    assert manifest["base_scenario"]["scenario_sha256"] == _sha256(
+        _REPO_ROOT / "configs/scenarios/single/francis2023_narrow_doorway.yaml"
+    )
+    assert manifest["base_scenario"]["map_sha256"] == _sha256(_BASE_MAP)
     assert manifest["execution"] == {
         "production_campaign_authorized": True,
         "slurm_submission_authorized": True,
@@ -244,6 +248,7 @@ def test_matrix_has_three_positive_clearance_widths(tmp_path: Path) -> None:
         asset["expected_geometry_tier"] == "geometrically_feasible_candidate" for asset in assets
     )
     assert all(asset["constriction_depth_m"] == 1.0 for asset in assets)
+    assert all(all(asset["geometry_checks"].values()) for asset in assets)
 
 
 def test_variant_assets_change_only_explained_fields(tmp_path: Path) -> None:
@@ -322,6 +327,40 @@ def test_manifest_rejects_non_authoritative_nominal_radius(tmp_path: Path) -> No
 
 
 @pytest.mark.parametrize(
+    ("section", "field", "value", "message"),
+    [
+        ("geometry", "constriction_depth_m", [1.2], "depth"),
+        ("oracle", "horizon_steps", 399, "H400"),
+        ("planner_protocol", "seeds", [225, 226, 228], "seeds"),
+    ],
+)
+def test_manifest_rejects_protocol_drift(
+    tmp_path: Path,
+    section: str,
+    field: str,
+    value: Any,
+    message: str,
+) -> None:
+    """The readiness manifest cannot silently drift from the preregistration."""
+    raw = yaml.safe_load(_MANIFEST.read_text(encoding="utf-8"))
+    raw[section][field] = value
+    if section == "oracle":
+        raw["planner_protocol"][field] = value
+    candidate = _write_manifest_candidate(raw, tmp_path, f"bad-{section}-{field}.yaml")
+    with pytest.raises(ValueError, match=message):
+        load_three_width_manifest(candidate)
+
+
+def test_manifest_rejects_mutated_historical_input_digest(tmp_path: Path) -> None:
+    """Historical scenario and map bytes are part of the frozen readiness identity."""
+    raw = yaml.safe_load(_MANIFEST.read_text(encoding="utf-8"))
+    raw["base_scenario"]["map_sha256"] = "0" * 64
+    candidate = _write_manifest_candidate(raw, tmp_path, "bad-map-digest.yaml")
+    with pytest.raises(ValueError, match="historical input"):
+        load_three_width_manifest(candidate)
+
+
+@pytest.mark.parametrize(
     ("field", "index", "value"),
     [
         ("envelope_diameter_m", None, 1.8),
@@ -396,11 +435,29 @@ def test_pair_manifest_shares_seeds_across_widths() -> None:
 def test_pair_receipt_canonicalizes_actor_order_and_requires_rng() -> None:
     """Identical reset states hash equally; missing RNG state blocks admission."""
     reset = {
-        "robot": {"position": [4.0, 5.0], "velocity": [0.0, 0.0], "heading": 0.0},
-        "route_state": {"robot_routes": [[7.0, 5.0], [25.5, 5.0]]},
+        "robot": {
+            "position": [4.0, 5.0],
+            "velocity": [0.0, 0.0],
+            "heading": 0.0,
+            "goal": [25.5, 5.0],
+        },
+        "route_state": {
+            "robot_routes": [[7.0, 5.0], [25.5, 5.0]],
+            "pedestrian_goals": [[3.0, 5.0], [3.0, 5.0]],
+        },
         "pedestrians": [
-            {"actor_id": "h1", "position": [27.0, 5.0], "velocity": [0.0, 0.0]},
-            {"actor_id": "h2", "position": [25.0, 5.0], "velocity": [0.0, 0.0]},
+            {
+                "actor_id": "h1",
+                "position": [27.0, 5.0],
+                "velocity": [0.0, 0.0],
+                "goal": [3.0, 5.0],
+            },
+            {
+                "actor_id": "h2",
+                "position": [25.0, 5.0],
+                "velocity": [0.0, 0.0],
+                "goal": [3.0, 5.0],
+            },
         ],
     }
     snapshot = SimpleNamespace(
@@ -414,6 +471,42 @@ def test_pair_receipt_canonicalizes_actor_order_and_requires_rng() -> None:
     assert build_pair_receipt(reversed_reset, snapshot) == first
     snapshot.python_random_state = None
     with pytest.raises(ValueError, match="RNG snapshot is incomplete"):
+        build_pair_receipt(reset, snapshot)
+
+
+@pytest.mark.parametrize("field", ["goal", "route_state"])
+def test_pair_receipt_requires_goal_and_route_state(field: str) -> None:
+    """Pair custody must include the reset goal and assigned route state."""
+    reset = {
+        "robot": {
+            "position": [4.0, 5.0],
+            "velocity": [0.0, 0.0],
+            "goal": [25.5, 5.0],
+        },
+        "route_state": {
+            "robot_routes": [[7.0, 5.0], [25.5, 5.0]],
+            "pedestrian_goals": [[3.0, 5.0]],
+        },
+        "pedestrians": [
+            {
+                "actor_id": "h1",
+                "position": [27.0, 5.0],
+                "velocity": [0.0, 0.0],
+                "goal": [3.0, 5.0],
+            }
+        ],
+    }
+    snapshot = SimpleNamespace(
+        global_rng_state=("MT19937", np.asarray([1, 2], dtype=np.uint32), 0, 0, 0.0),
+        python_random_state=(3, (1, 2), None),
+        behavior_rng_states={"h1": {"state": 7}},
+        residual_adversary_state=None,
+    )
+    if field == "goal":
+        reset["robot"].pop("goal")
+    else:
+        reset["route_state"] = {}
+    with pytest.raises(ValueError, match="goal and route|pose, velocity, or goal"):
         build_pair_receipt(reset, snapshot)
 
 

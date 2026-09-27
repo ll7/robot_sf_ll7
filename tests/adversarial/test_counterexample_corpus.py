@@ -170,6 +170,26 @@ def _issue9656_candidate_fixture(
     return summary_path, materialized, campaign_root, bundle_root
 
 
+def test_corpus_artifact_copy_preserves_exact_bytes_and_digest(tmp_path: Path) -> None:
+    source_bytes = bytes(range(256)) + b"\x00\r\nsource evidence\n"
+    source = tmp_path / "source.bin"
+    source.write_bytes(source_bytes)
+    corpus_root = tmp_path / "corpus"
+    corpus_root.mkdir()
+
+    copied_from_path = corpus_root / "source" / "copy.bin"
+    relative_path = counterexample_corpus._copy_artifact(source, copied_from_path, corpus_root)
+    copied_from_bytes = corpus_root / "historical" / "copy.bin"
+    counterexample_corpus._copy_artifact(source_bytes, copied_from_bytes, corpus_root)
+
+    expected_sha256 = hashlib.sha256(source_bytes).hexdigest()
+    assert relative_path == "source/copy.bin"
+    assert copied_from_path.read_bytes() == source_bytes
+    assert copied_from_bytes.read_bytes() == source_bytes
+    assert hashlib.sha256(copied_from_path.read_bytes()).hexdigest() == expected_sha256
+    assert hashlib.sha256(copied_from_bytes.read_bytes()).hexdigest() == expected_sha256
+
+
 def _rekey_issue9656_import_as_legacy_v1(
     corpus: dict[str, object],
     corpus_root: Path,
@@ -4308,6 +4328,10 @@ def test_regression_slice_export_is_stable_and_binds_scenario_route_and_config(
     assert (tmp_path / "slice-a/replay_matrix.yaml").read_bytes() == (
         tmp_path / "slice-b/replay_matrix.yaml"
     ).read_bytes()
+    assert first["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    assert json.loads((tmp_path / "slice-a/manifest.json").read_text(encoding="utf-8")) == first
+    replay_matrix_text = (tmp_path / "slice-a/replay_matrix.yaml").read_text(encoding="utf-8")
+    assert replay_matrix_text.startswith("# AI-GENERATED NEEDS-REVIEW\n")
     case = first["cases"][0]
     slice_root = tmp_path / "slice-a"
     assert case["planner_config_path"] == (f"planner_configs/{case['case_id']}.yaml")

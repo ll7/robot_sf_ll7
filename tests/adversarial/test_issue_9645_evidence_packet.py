@@ -111,6 +111,9 @@ def test_route_path_normalization_is_hash_bound_for_candidates_and_recorded_repl
     rebase = _read_json(PAYLOAD / "reproduction_inputs/input_rebase_map.v1.json")
     artifact_map_sha256 = _sha256(PAYLOAD / "pilot_report_artifact_path_map.v1.json")
     assert rebase["source_episode_artifact_map_sha256"] == artifact_map_sha256
+    source_sizes_by_bundle_path = {
+        row["bundle_path"]: row["source_size_bytes"] for row in candidates
+    }
     recovery = _read_json(PAYLOAD / "run_metadata.json")["candidate_episode_record_recovery"]
     assert recovery["count"] == 64
     assert recovery["artifact_path_map_sha256"] == artifact_map_sha256
@@ -121,6 +124,7 @@ def test_route_path_normalization_is_hash_bound_for_candidates_and_recorded_repl
         for manifest in rebase["manifest_bindings"]
         for row in manifest["episode_record_bindings"]
     }
+    assert len(rebased_candidates) == len(candidates) == 64
 
     payload_relative = PAYLOAD.relative_to(REPO_ROOT)
     for binding in candidates:
@@ -148,6 +152,7 @@ def test_route_path_normalization_is_hash_bound_for_candidates_and_recorded_repl
         assert binding["source_size_bytes"] >= binding["size_bytes"]
         rebased = rebased_candidates[binding["bundle_path"]]
         assert rebased["sha256"] == digest
+        assert rebased["source_size_bytes"] == source_sizes_by_bundle_path[binding["bundle_path"]]
         assert (
             rebased["source_sha256_before_path_normalization"]
             == binding["source_sha256_before_path_normalization"]

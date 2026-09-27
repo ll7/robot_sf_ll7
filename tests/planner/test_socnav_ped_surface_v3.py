@@ -1,5 +1,7 @@
 """Surface-distance pedestrian repulsion v3 for the social-force planner (issue #9758)."""
 
+import inspect
+
 import numpy as np
 import pytest
 
@@ -48,6 +50,22 @@ def test_config_preserves_legacy_ped_version_for_unset_or_blank(value) -> None:
     """Missing and blank selectors retain the historical kernel."""
     config = SocNavPlannerConfig(social_force_ped_version=value)
     assert config.social_force_ped_version == SOCIAL_FORCE_PED_LEGACY_KERNEL
+
+
+def test_ped_v3_config_fields_preserve_existing_positional_parameters() -> None:
+    """New options stay keyword-only so existing public positional calls keep mapping."""
+    signature = inspect.signature(SocNavPlannerConfig)
+    assert (
+        signature.parameters["socnav_sampling_version"].kind
+        is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    )
+    for name in (
+        "social_force_ped_version",
+        "social_force_ped_v3_strength",
+        "social_force_ped_v3_length",
+        "social_force_ped_v3_default_ped_radius",
+    ):
+        assert signature.parameters[name].kind is inspect.Parameter.KEYWORD_ONLY
 
 
 def test_standing_pedestrian_ahead_repels_beyond_goal_force() -> None:

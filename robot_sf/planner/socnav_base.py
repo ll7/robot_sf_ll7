@@ -10,7 +10,7 @@ import os
 import sys
 import threading
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import atan2, pi
 from pathlib import Path
 from typing import Any
@@ -420,10 +420,10 @@ class SocNavPlannerConfig:
     # Issue #9758: opt-in surface-distance pedestrian term.  The fields below
     # are read only when ``social_force_ped_version == "surface_v3"``; see
     # ``socnav_social_force`` for the derivation of the defaults.
-    social_force_ped_version: Any = None
-    social_force_ped_v3_strength: float = 6.0
-    social_force_ped_v3_length: float = 0.5
-    social_force_ped_v3_default_ped_radius: float = 0.4
+    social_force_ped_version: Any = field(default=None, kw_only=True)
+    social_force_ped_v3_strength: float = field(default=6.0, kw_only=True)
+    social_force_ped_v3_length: float = field(default=0.5, kw_only=True)
+    social_force_ped_v3_default_ped_radius: float = field(default=0.4, kw_only=True)
     # Issues #9727/#9746: opt-in bounded sampling heuristic.  The fields below are
     # read only when ``socnav_sampling_version == "bounded_v2"``.
     socnav_sampling_version: Any = None

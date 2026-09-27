@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+import robot_sf.benchmark.episode_replay_figure as replay_figure
 from robot_sf.benchmark.episode_replay_figure import (
     EpisodeRow,
     ProvenanceSidecar,
@@ -427,7 +428,9 @@ class TestRecordedEventAnnotations:
             }
         )
 
-    def test_renderers_label_and_mark_source_annotations(self, annotated_row, tmp_path):
+    def test_renderers_label_and_mark_source_annotations(
+        self, annotated_row, tmp_path, monkeypatch
+    ):
         annotations = {
             "minimum_clearance": {
                 "render_step_index": 1,
@@ -444,6 +447,15 @@ class TestRecordedEventAnnotations:
                 }
             ],
         }
+        plotted_markers = []
+        original_plot = replay_figure.plt.Axes.plot
+
+        def record_plot(axis, *args, **kwargs):
+            if kwargs.get("marker") in {"*", "X"}:
+                plotted_markers.append(kwargs.copy())
+            return original_plot(axis, *args, **kwargs)
+
+        monkeypatch.setattr(replay_figure.plt.Axes, "plot", record_plot)
 
         result = replay_episode_and_generate_figures(
             episode_row=annotated_row,
@@ -464,6 +476,15 @@ class TestRecordedEventAnnotations:
             "1": ["minimum surface clearance: 0.1250 m"],
             "2": ["collision ledger event: t=0.91s"],
         }
+        assert any(
+            marker.get("label") == "Minimum-clearance sample" and marker.get("marker") == "*"
+            for marker in plotted_markers
+        )
+        assert any(
+            marker.get("label", "").startswith("Collision event (ledger t=")
+            and marker.get("marker") == "X"
+            for marker in plotted_markers
+        )
         assert all(Path(artifact["path"]).is_file() for artifact in artifacts.values())
 
     def test_annotation_parser_rejects_malformed_and_out_of_range_samples(self):

@@ -595,6 +595,29 @@ def test_replay_ineligibility_requires_every_nested_sacadrl_checkpoint_component
     )
 
 
+def test_replay_ineligibility_rejects_incomplete_nested_sacadrl_shards(
+    tmp_path: Path,
+) -> None:
+    row = _source_row(scenario_id="scenario_a", episode_id="episode-a")
+    prefix = tmp_path / "sacadrl"
+    for suffix in (".meta", ".index", ".data-00000-of-00002"):
+        prefix.with_name(f"{prefix.name}{suffix}").write_bytes(b"fixture checkpoint component")
+    row["algorithm_metadata"]["config"] = {
+        "components": [{"policy": {"sacadrl_checkpoint_path": str(prefix)}}]
+    }
+
+    assert materializer._model_artifact_missing(row["algorithm_metadata"]["config"]) is True
+    assert _replay_ineligibility(row, REPO_ROOT / MATRIX_RELATIVE, True) == (
+        "unavailable_model_artifact"
+    )
+
+    prefix.with_name(f"{prefix.name}.data-00001-of-00002").write_bytes(
+        b"fixture checkpoint component"
+    )
+    assert materializer._model_artifact_missing(row["algorithm_metadata"]["config"]) is False
+    assert _replay_ineligibility(row, REPO_ROOT / MATRIX_RELATIVE, True) is None
+
+
 def test_replay_ineligibility_accepts_complete_nested_sacadrl_checkpoint_bundle(
     tmp_path: Path,
 ) -> None:
@@ -1926,6 +1949,76 @@ def test_resume_reuses_matching_attempt_without_reexecution(tmp_path: Path) -> N
     assert resumed_case["replay"]["replay_checkout_stability_status"] == "unavailable"
     assert resumed_case["replay"]["replay_checkout_clean"] is None
     assert resumed_case["replay"]["status"] == "replay_checkout_cleanliness_unavailable"
+
+
+@pytest.mark.parametrize(
+    ("inventory_corruption", "expected_error"),
+    [
+        ("empty", "resume manifest has no case inventory"),
+        ("malformed_row", "case inventory contains a malformed row"),
+        ("malformed_id", "case inventory contains an invalid case ID"),
+        ("duplicate", "case inventory contains duplicate case IDs"),
+        (
+            "missing_selected_case",
+            "case inventory does not match the current showcase selection",
+        ),
+        (
+            "selection_mismatch",
+            "selection inventory does not match the current showcase selection",
+        ),
+    ],
+)
+def test_resume_rejects_invalid_inventory_before_counting_prior_attempts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    inventory_corruption: str,
+    expected_error: str,
+) -> None:
+    summary_path, campaign_root, matrix = _build_inputs(tmp_path)
+    previous_dir = tmp_path / "previous"
+    materialize(_args(summary_path, campaign_root, matrix, previous_dir))
+    manifest_path = previous_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    first_case = manifest["cases"][0]
+    prior_replay = {"attempted": True, "status": "runner_failed", "returncode": 1}
+    first_case["replay"] = prior_replay
+    case_path = previous_dir / first_case["case_file"]
+    case_record = json.loads(case_path.read_text(encoding="utf-8"))
+    case_record["replay"] = prior_replay
+    case_path.write_text(json.dumps(case_record), encoding="utf-8")
+    manifest["replay"]["attempted"] = 1
+    manifest["replay"]["cumulative_attempted"] = 1
+
+    if inventory_corruption == "empty":
+        manifest["cases"] = []
+    elif inventory_corruption == "malformed_row":
+        manifest["cases"][1] = None
+    elif inventory_corruption == "malformed_id":
+        manifest["cases"][1]["case_id"] = "not-a-stable-case-id"
+    elif inventory_corruption == "duplicate":
+        manifest["cases"][1]["case_id"] = first_case["case_id"]
+    elif inventory_corruption == "missing_selected_case":
+        manifest["cases"].pop()
+    elif inventory_corruption == "selection_mismatch":
+        manifest["selection"]["case_ids"] = [first_case["case_id"]]
+        manifest["selection"]["case_count"] = 1
+    else:
+        raise AssertionError(f"unhandled inventory corruption: {inventory_corruption}")
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    def fail_if_attempts_are_counted(*_args: Any, **_kwargs: Any) -> int:
+        pytest.fail("invalid resume inventory reached prior-attempt counting")
+
+    monkeypatch.setattr(
+        materializer,
+        "_prior_resume_attempt_count",
+        fail_if_attempts_are_counted,
+    )
+    args = _args(summary_path, campaign_root, matrix, tmp_path / "resumed")
+    args.resume_from = previous_dir
+
+    with pytest.raises(MaterializationError, match=expected_error):
+        materialize(args)
 
 
 def test_resume_does_not_reuse_attempt_for_currently_ineligible_row(

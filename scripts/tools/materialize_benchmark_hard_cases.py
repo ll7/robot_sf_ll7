@@ -858,10 +858,31 @@ def _runtime_model_path_components(key: str, value: str) -> list[Path] | None:
         meta_path = prefix.with_name(f"{prefix.name}.meta")
         index_path = prefix.with_name(f"{prefix.name}.index")
         data_paths = sorted(prefix.parent.glob(f"{prefix.name}.data*"))
-        components = [meta_path, index_path, *data_paths]
-        if not meta_path.is_file() or not index_path.is_file() or not data_paths:
+        shard_pattern = re.compile(rf"{re.escape(prefix.name)}\.data-(\d+)-of-(\d+)\Z")
+        shards: list[tuple[int, int, Path]] = []
+        for data_path in data_paths:
+            match = shard_pattern.fullmatch(data_path.name)
+            if match is None:
+                continue
+            if not data_path.is_file():
+                return None
+            shard_index, shard_count = (int(part) for part in match.groups())
+            if shard_count < 1 or shard_index >= shard_count:
+                return None
+            shards.append((shard_index, shard_count, data_path))
+        shard_counts = {shard_count for _index, shard_count, _path in shards}
+        shard_indices = [shard_index for shard_index, _count, _path in shards]
+        if (
+            not meta_path.is_file()
+            or not index_path.is_file()
+            or not shards
+            or len(shard_counts) != 1
+        ):
             return None
-        return components
+        shard_count = next(iter(shard_counts))
+        if len(shard_indices) != shard_count or set(shard_indices) != set(range(shard_count)):
+            return None
+        return [meta_path, index_path, *(path for _index, _count, path in shards)]
     except (OSError, RuntimeError):
         return None
 
@@ -2201,7 +2222,10 @@ def _selected_cases(summary: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _load_resume_records(
-    resume_from: Path | None, *, source: dict[str, Any]
+    resume_from: Path | None,
+    *,
+    source: dict[str, Any],
+    selected_case_ids: list[str],
 ) -> tuple[Path | None, dict[str, dict[str, Any]]]:
     if resume_from is None:
         return None, {}
@@ -2220,13 +2244,41 @@ def _load_resume_records(
             "resume slice does not match the exact summary and source identity"
         )
     rows = manifest.get("cases")
-    if not isinstance(rows, list):
+    if not isinstance(rows, list) or not rows:
         raise MaterializationError("resume manifest has no case inventory")
-    records = {
-        row["case_id"]: row
-        for row in rows
-        if isinstance(row, dict) and isinstance(row.get("case_id"), str)
-    }
+    row_case_ids = []
+    for row in rows:
+        if not isinstance(row, dict):
+            raise MaterializationError("resume manifest case inventory contains a malformed row")
+        case_id = row.get("case_id")
+        if not isinstance(case_id, str) or CASE_ID_RE.fullmatch(case_id) is None:
+            raise MaterializationError("resume manifest case inventory contains an invalid case ID")
+        row_case_ids.append(case_id)
+    if len(set(row_case_ids)) != len(row_case_ids):
+        raise MaterializationError("resume manifest case inventory contains duplicate case IDs")
+
+    selection = manifest.get("selection")
+    selection_case_ids = selection.get("case_ids") if isinstance(selection, dict) else None
+    selection_case_count = selection.get("case_count") if isinstance(selection, dict) else None
+    if (
+        not isinstance(selection_case_ids, list)
+        or any(
+            not isinstance(case_id, str) or CASE_ID_RE.fullmatch(case_id) is None
+            for case_id in selection_case_ids
+        )
+        or len(set(selection_case_ids)) != len(selection_case_ids)
+        or type(selection_case_count) is not int
+        or selection_case_count != len(selection_case_ids)
+        or set(selection_case_ids) != set(selected_case_ids)
+    ):
+        raise MaterializationError(
+            "resume selection inventory does not match the current showcase selection"
+        )
+    if set(row_case_ids) != set(selected_case_ids):
+        raise MaterializationError(
+            "resume case inventory does not match the current showcase selection"
+        )
+    records = {row["case_id"]: row for row in rows}
     return manifest_path.parent.resolve(), records
 
 
@@ -2591,7 +2643,13 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
     summary = _read_object(summary_path)
     source_provenance = _verify_inputs(summary, campaign_root, args.bundle, matrix)
     summary_sha256 = _sha256(summary_path)
-    resume_root, resume_records = _load_resume_records(args.resume_from, source=source_provenance)
+    cases = _selected_cases(summary)
+    selected_case_ids = [case["case_id"] for case in cases]
+    resume_root, resume_records = _load_resume_records(
+        args.resume_from,
+        source=source_provenance,
+        selected_case_ids=selected_case_ids,
+    )
     resume_manifest_sha256 = None
     resume_summary_sha256 = None
     resume_source_snapshot_revision = None
@@ -2608,7 +2666,6 @@ def materialize(  # noqa: C901, PLR0915 - provenance, reuse, and budget gates sh
             resume_summary_sha256 = resume_manifest_source.get("summary_sha256")
         resume_source_snapshot_revision = _resume_showcase_snapshot_revision(resume_manifest)
     campaign = _read_object(campaign_root / "campaign_manifest.json")
-    cases = _selected_cases(summary)
     replay_revision = replay_checkout["revision"]
     case_records = []
     replay_candidates = []

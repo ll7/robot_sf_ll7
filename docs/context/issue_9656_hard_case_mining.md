@@ -112,6 +112,9 @@ The five-case replay ceiling is cumulative across `--resume-from`: prior attempt
 unpromoted attempt lineage consume budget before any new candidate is run. The manifest records
 the requested limit, prior attempts, effective new limit, and cumulative total; resuming cannot
 restart the issue's replay allowance.
+Resume also fails closed unless its case receipts and recorded selection form a complete, unique
+inventory matching the current selected case IDs; an empty, malformed, duplicate, or truncated
+inventory cannot hide prior attempts from the cumulative count.
 If the case receipt itself is missing, the prior manifest attempt is retained only when its source
 row hash still matches the current row. Eligible rows retain it as
 `replay_artifact_missing_on_resume`; currently ineligible rows keep their current unattempted

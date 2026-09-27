@@ -103,12 +103,11 @@ def _write_json_atomic(path: Path, record: dict[str, Any]) -> None:
             os.fsync(directory_fd)
         finally:
             os.close(directory_fd)
-    except BaseException:
+    finally:
         try:
-            temporary.unlink()
+            temporary.unlink(missing_ok=True)
         except OSError:
             pass
-        raise
 
 
 def _append_event(path: Path, record: dict[str, Any]) -> None:
@@ -311,7 +310,7 @@ def _acquire(args: argparse.Namespace) -> int:
                     worktree=worktree,
                     head=args.head,
                 )
-            except Exception:
+            except OSError:
                 released = dict(held)
                 released.update({"status": "released", "timestamp_utc": _timestamp()})
                 try:

@@ -75,6 +75,7 @@ OUTPUT_FLAGS = {
     "--out-md",
     "--out-csv",
     "--out-dir-json",
+    "--render-provenance-json",
 }
 
 ALLOWED_EXCLUSION_REASONS = frozenset(

@@ -153,6 +153,30 @@ def test_classify_eligible_committed_input_and_output():
     assert any(i["path"].startswith("scripts/") for i in e.inputs)
 
 
+def test_render_provenance_sidecar_is_classified_as_an_output():
+    e = _classify(
+        "uv run python scripts/tools/compare_adversarial_samplers.py "
+        "--render-existing-json "
+        "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/"
+        "payload/pilot_comparison.json "
+        "--repo-root . --render-execution-mode empirical "
+        "--out-md "
+        "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/"
+        "payload/pilot_comparison.md "
+        "--render-provenance-json "
+        "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/"
+        "payload/pilot_comparison_render_provenance.json"
+    )
+    assert e.recurrence_eligible
+    assert e.expected_outputs == [
+        "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/"
+        "payload/pilot_comparison.md",
+        "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/"
+        "payload/pilot_comparison_render_provenance.json",
+    ]
+    assert not any("pilot_comparison_render_provenance.json" in item["path"] for item in e.inputs)
+
+
 # ---------------------------------------------------------------------------
 # Discovery against the real committed evidence tree.
 # ---------------------------------------------------------------------------
@@ -168,10 +192,13 @@ def test_discover_build_command_txt_finds_known_file():
 
 
 def test_discover_manifest_fields_respects_exact_field_boundary():
-    # No committed manifest under docs/context/evidence uses an exact render_command/build_command
-    # field (near-misses like render_command_shape / rebuild_command must NOT count).
+    # The #9645 renderer provenance is the sole manifest field; near-misses such as
+    # render_command_shape / rebuild_command must NOT count.
     sources = reg.discover_manifest_fields()
-    assert sources == []
+    assert len(sources) == 1
+    assert sources[0].source_path.endswith("payload/pilot_comparison_render_provenance.json")
+    assert len(sources[0].raw_commands) == 1
+    assert "--render-existing-json" in sources[0].raw_commands[0]
 
 
 def test_discover_readme_reproduction_only_catalog_linked():

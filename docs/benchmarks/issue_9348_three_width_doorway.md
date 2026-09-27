@@ -9,10 +9,10 @@ records the source-backed geometry and planner-grid distinction.
 The intended campaign has `goal` and `social_force`, seeds 225–227, and a
 native horizon of 400 steps at 0.1 s per step: 18 rows. The generated
 scenarios differ only in their explained geometry identity and map path.
-Both planners use `algo_config_path: null` and resolve to `{}`. The direct
-`goal` policy records the null path as `config_hash: na`; the `social_force`
-baseline records the resolved empty mapping as `44136fa355b3678a`. No planner
-config file is part of this slice.
+Both planners use `algo_config_path: null` and resolve to `{}`. The current
+map-runner policy builders record the canonical empty-mapping runtime identity
+`44136fa355b3678a` for both rows; no planner config file is part of this slice.
+The producer and row validator reject any other planner config identity.
 The planner-free oracle runs first. Its conservative grid search reports no
 route at 2.2 and 2.8 m despite positive continuous clearance; the executed
 policies do not use that route search. This remains an explicit diagnostic

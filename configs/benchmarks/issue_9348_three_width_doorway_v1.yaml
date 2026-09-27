@@ -64,7 +64,7 @@ planner_protocol:
     goal: {}
     social_force: {}
   algo_config_hash:
-    goal: na
+    goal: 44136fa355b3678a
     social_force: 44136fa355b3678a
   seeds: [225, 226, 227]
   horizon_steps: 400

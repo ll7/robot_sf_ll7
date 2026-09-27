@@ -73,6 +73,22 @@ def test_campaign_failure_keeps_error_and_seals_receipt(
     assert "run_failure.json" in (output_root / "SHA256SUMS").read_text(encoding="utf-8")
 
 
+def test_h400_confirmation_rejects_h1_oracle_fallback() -> None:
+    """H1 readiness cannot authorize confirmation with an expected fallback."""
+    with pytest.raises(ValueError, match="refuses oracle_expected_fallbacks"):
+        doorway_campaign._require_confirmation_preflight(
+            {
+                "go": True,
+                "checks": {"oracle_expected_fallbacks": [{"variant_id": "gap_3p60"}]},
+            }
+        )
+    doorway_campaign._require_confirmation_preflight(
+        {"go": True, "checks": {"oracle_expected_fallbacks": []}}
+    )
+    with pytest.raises(ValueError, match="fallback admission check is unavailable"):
+        doorway_campaign._require_confirmation_preflight({"go": True, "checks": {}})
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -208,6 +224,11 @@ def _complete_synthetic_campaign() -> tuple[
                         },
                         "algorithm_metadata": {
                             "status": "ok",
+                            "config_hash": (
+                                doorway_application.GOAL_PLANNER_CONFIG_HASH
+                                if planner == "goal"
+                                else doorway_application.EMPTY_PLANNER_CONFIG_HASH
+                            ),
                             "doorway_pair_receipt": receipt,
                             "planner_runtime": {},
                             "simulation_step_trace": {"steps": [{}]},
@@ -268,6 +289,11 @@ def test_manifest_pins_three_width_tiers() -> None:
         "goal": doorway_application.GOAL_PLANNER_CONFIG_HASH,
         "social_force": doorway_application.EMPTY_PLANNER_CONFIG_HASH,
     }
+    assert doorway_application.GOAL_PLANNER_CONFIG_HASH == "44136fa355b3678a"
+    assert (
+        doorway_application.GOAL_PLANNER_CONFIG_HASH
+        == doorway_application.EMPTY_PLANNER_CONFIG_HASH
+    )
     assert manifest["base_scenario"]["scenario_sha256"] == _sha256(
         _REPO_ROOT / "configs/scenarios/single/francis2023_narrow_doorway.yaml"
     )
@@ -632,6 +658,7 @@ def test_h1_runner_pair_receipt_survives_episode_schema(tmp_path: Path) -> None:
             non_width_config_sha256=non_width_config_sha256(scenario, planner="goal"),
         ),
     )
+    assert row["algorithm_metadata"]["config_hash"] == "44136fa355b3678a"
     stream = io.StringIO()
     schema = load_schema(_REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json")
     write_validated_to_handle(stream, schema, row)
@@ -722,6 +749,11 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
                         },
                         "algorithm_metadata": {
                             "status": "ok",
+                            "config_hash": (
+                                doorway_application.GOAL_PLANNER_CONFIG_HASH
+                                if planner == "goal"
+                                else doorway_application.EMPTY_PLANNER_CONFIG_HASH
+                            ),
                             "doorway_pair_receipt": receipt,
                             "simulation_step_trace": {"steps": [{}]},
                             "planner_decision_trace": {"steps": [{}]},
@@ -777,6 +809,10 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
     )
     assert social_force_22_28["endpoints"]["success"]["estimate"]["ci95"] is None
     assert report["pedestrian_delay_or_impairment"]["value"] is None
+    rows[0]["algorithm_metadata"]["config_hash"] = "mismatched"
+    with pytest.raises(ValueError, match="planner config identity mismatch"):
+        analyze_rows(rows, cells, pairs)
+    rows[0]["algorithm_metadata"]["config_hash"] = doorway_application.GOAL_PLANNER_CONFIG_HASH
     rows[0]["algorithm_metadata"]["distributional_disruption"] = {
         "missing_data": {"slow_speed_tier": {"status": "unavailable"}}
     }
@@ -880,6 +916,8 @@ def test_preflight_records_oracle_before_not_run_planner_lane(tmp_path: Path) ->
     assert report["checks"]["all_widths_positive_clearance"] is True
     assert report["checks"]["oracle_available_for_every_variant"] is True
     assert report["checks"]["oracle_required_checks_known"] is True
+    assert report["checks"]["h1_execution_binding_ready"] is True
+    assert report["checks"]["confirmation_oracle_fallbacks_clear"] is True
     assert report["checks"]["nominal_grid_route_feasible_for_every_variant"] is True
     assert report["checks"]["planner_records_are_not_run"] is True
     assert report["checks"]["no_campaign_evidence"] is True
@@ -928,6 +966,11 @@ def test_preflight_preserves_real_loader_identity(tmp_path: Path) -> None:
             ),
         }
     ]
+    assert report["checks"]["h1_execution_binding_ready"] is True
+    assert report["checks"]["confirmation_oracle_fallbacks_clear"] is False
+    assert report["execution"]["h1_execution_binding_ready"] is True
+    assert report["execution"]["confirmation_ready"] is False
+    assert "oracle_expected_fallbacks_present" in report["execution"]["confirmation_blockers"]
     assert report["go"] is True
 
 

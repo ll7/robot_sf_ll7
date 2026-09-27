@@ -75,12 +75,11 @@ _EXPECTED_H1_DISTRIBUTIONAL_FALLBACK_MARKER = (
 _SUCCESS_TERMINATIONS = frozenset(
     {"success", "goal_reached", "route_complete", "completed", "route_follow_reached_destination"}
 )
-# The goal policy is constructed directly by the runner, which records the
-# absence of a config file as the literal ``na``.  The social-force baseline
-# receives the resolved empty mapping and therefore uses its canonical empty
-# mapping digest.  Keep these identities separate in the protocol manifest.
-GOAL_PLANNER_CONFIG_HASH = "na"
+# Both current map-runner policy builders receive the preregistered empty
+# mapping and emit its canonical runtime digest. Keep the null config paths
+# while binding both row identities to the executable producer hash.
 EMPTY_PLANNER_CONFIG_HASH = "44136fa355b3678a"
+GOAL_PLANNER_CONFIG_HASH = EMPTY_PLANNER_CONFIG_HASH
 _EXPECTED_PLANNER_CONFIG_PATHS = {"goal": None, "social_force": None}
 _EXPECTED_PLANNER_CONFIGS = {"goal": {}, "social_force": {}}
 _EXPECTED_PLANNER_CONFIG_HASHES = {
@@ -1295,6 +1294,16 @@ def run_three_width_preflight(
         and item["geometry"]["expected_geometry_tier"] == EXPECTED_TIER
         for item in records
     )
+    h1_execution_binding_ready = all(
+        (
+            all(baseline_checks.values()),
+            bool(records),
+            all_widths_positive_clearance,
+            oracle_available,
+            oracle_required_checks_known,
+            all(item["planner"]["status"] == "not_run" for item in records),
+        )
+    )
     return {
         "schema_version": PREFLIGHT_SCHEMA,
         "issue": 9348,
@@ -1335,6 +1344,8 @@ def run_three_width_preflight(
             "oracle_required_checks_known": oracle_required_checks_known,
             "oracle_readiness_blockers": oracle_readiness_blockers,
             "oracle_expected_fallbacks": oracle_expected_fallbacks,
+            "h1_execution_binding_ready": h1_execution_binding_ready,
+            "confirmation_oracle_fallbacks_clear": not oracle_expected_fallbacks,
             "nominal_grid_route_feasible_for_every_variant": geometry_feasible,
             "planner_records_are_not_run": all(
                 item["planner"]["status"] == "not_run" for item in records
@@ -1344,10 +1355,12 @@ def run_three_width_preflight(
         "variants": records,
         "execution": {
             "campaign_submitted": False,
+            "h1_execution_binding_ready": h1_execution_binding_ready,
             "confirmation_ready": False,
             "confirmation_blocker": "portable_initial_and_external_rng_pair_receipts_not_recorded",
             "confirmation_blockers": [
                 "portable_initial_and_external_rng_pair_receipts_not_recorded",
+                *(["oracle_expected_fallbacks_present"] if oracle_expected_fallbacks else []),
                 *[f"{item['variant_id']}:{item['reason']}" for item in oracle_readiness_blockers],
             ],
             "diagnostics": [
@@ -1359,16 +1372,9 @@ def run_three_width_preflight(
         # Diagnostic preflight completion only. A conservative grid no-route
         # finding remains visible above, while confirmation admission requires
         # portable pairing and planner-specific clearance interpretation.
-        "go": all(
-            (
-                all(baseline_checks.values()),
-                bool(records),
-                all_widths_positive_clearance,
-                oracle_available,
-                oracle_required_checks_known,
-                all(item["planner"]["status"] == "not_run" for item in records),
-            )
-        ),
+        # ``go`` is the H1 execution/binding gate. The H400 producer applies
+        # the separate confirmation fallback gate before dispatch.
+        "go": h1_execution_binding_ready,
     }
 
 

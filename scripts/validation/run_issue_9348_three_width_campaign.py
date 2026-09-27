@@ -196,6 +196,15 @@ def _row_inventory_item(
     metadata = row.get("algorithm_metadata")
     if not isinstance(metadata, dict):
         raise ValueError(f"algorithm metadata missing: {identity}")
+    expected_config_hash = {
+        "goal": GOAL_PLANNER_CONFIG_HASH,
+        "social_force": EMPTY_PLANNER_CONFIG_HASH,
+    }[planner]
+    if metadata.get("config_hash") != expected_config_hash:
+        raise ValueError(
+            f"planner config identity mismatch: {identity}; "
+            f"expected {expected_config_hash}, observed {metadata.get('config_hash')!r}"
+        )
     observed = metadata.get("doorway_pair_receipt")
     if not isinstance(observed, dict) or any(
         observed.get(field) != expected_receipt.get(field)
@@ -239,6 +248,22 @@ def _row_inventory_item(
         "trace_path": f"episodes.jsonl:line:{cell['line_number']}:algorithm_metadata.simulation_step_trace.steps",
         "trace_steps": len(trace.get("steps", [])) if isinstance(trace, dict) else 0,
     }
+
+
+def _require_confirmation_preflight(preflight: dict[str, Any]) -> None:
+    """Admit H400 only after H1 diagnostics are clear for confirmation."""
+    checks = preflight.get("checks")
+    if not isinstance(checks, dict):
+        raise ValueError("doorway confirmation preflight checks are unavailable")
+    expected_fallbacks = checks.get("oracle_expected_fallbacks")
+    if not isinstance(expected_fallbacks, list):
+        raise ValueError("doorway confirmation fallback admission check is unavailable")
+    if expected_fallbacks:
+        raise ValueError(
+            "doorway H400 confirmation refuses oracle_expected_fallbacks from H1 preflight"
+        )
+    if preflight.get("go") is not True:
+        raise ValueError("doorway geometry/oracle preflight did not admit policy execution")
 
 
 def _contrast_endpoint(
@@ -522,8 +547,7 @@ def run_campaign(manifest_path: Path, output_root: Path) -> Path:
         shutil.copy2(manifest_path, output_root / "inputs/application_manifest.yaml")
         preflight = run_three_width_preflight(manifest_path, output_dir=output_root / "assets")
         write_json(output_root / "preflight.json", preflight)
-        if not preflight["go"]:
-            raise ValueError("doorway geometry/oracle preflight did not admit policy execution")
+        _require_confirmation_preflight(preflight)
         assets = [
             record["assets"]
             | {"variant_id": record["variant_id"], "gap_width_m": record["geometry"]["gap_width_m"]}

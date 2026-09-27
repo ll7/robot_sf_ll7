@@ -20,6 +20,7 @@ from robot_sf.benchmark.episode_replay_figure import (
     build_replay_from_episode_row,
 )
 from robot_sf.benchmark.fallback_policy import availability_payload
+from robot_sf.scenario_certification import v1 as scenario_certification_v1
 
 
 def _candidate() -> dict[str, Any]:
@@ -95,6 +96,14 @@ def _bind_certificate_to_scenario(status: dict[str, Any], scenario_path: Path) -
         scenario_path=scenario_path,
         source_root=replay_gallery._repository_root(),
     )
+    if loaded[0].get("map_id") is not None:
+        map_binding, map_binding_error = scenario_certification_v1._capture_map_id_input_binding(
+            loaded[0],
+            scenario_path=scenario_path,
+            source_root=replay_gallery._repository_root(),
+        )
+        assert map_binding_error is None and map_binding is not None
+        certificate["evidence"]["map_id_input_binding"] = map_binding
     return status
 
 
@@ -463,40 +472,56 @@ def test_historical_compatibility_subset_is_explicitly_partial_in_gallery_readme
     assert "1 of 32 declared slots" in readme
 
 
-def test_tracked_compatibility_fixture_has_source_bound_canonical_static_certificate() -> None:
-    """The smoke fixture passes current certificate checks without claiming dynamic feasibility."""
+def test_tracked_compatibility_fixture_without_registry_binding_remains_unknown() -> None:
+    """A legacy map-id certificate cannot claim static admissibility without registry provenance."""
     repo_root = Path(__file__).resolve().parents[2]
     fixture_root = repo_root / "tests/fixtures/adversarial_replay_gallery/issue_1501_compat"
     scenario_path = fixture_root / "scenario.yaml"
     manifest = json.loads((fixture_root / "manifest.json").read_text(encoding="utf-8"))
     candidate = manifest["candidates"][0]
     certificate_status = candidate["certification_status"]
+    loaded_scenario = replay_gallery.scenario_loader.load_scenarios(scenario_path)[0]
+    current_map_binding, map_binding_error = (
+        scenario_certification_v1._capture_map_id_input_binding(
+            loaded_scenario, scenario_path=scenario_path, source_root=repo_root
+        )
+    )
+    assert map_binding_error is None and current_map_binding is not None
     certificate, error = replay_gallery._validated_scenario_certificate(
         certificate_status,
         expected_scenario_id="crossing_ttc_template_adversarial_0008",
-        loaded_scenario=replay_gallery.scenario_loader.load_scenarios(scenario_path)[0],
+        loaded_scenario=loaded_scenario,
         scenario_path=scenario_path,
         root=repo_root,
         source_root=repo_root,
+        map_id_input_binding=current_map_binding,
     )
     provenance = json.loads(
         (fixture_root / "scenario_certification_provenance.json").read_text(encoding="utf-8")
     )
 
-    assert error is None
-    assert certificate is not None
-    assert certificate["classification"] == "hard_but_solvable"
-    assert certificate["benchmark_eligibility"] == "eligible"
-    assert provenance["certificate"]["scenario_id"] == certificate["scenario_id"]
+    assert certificate is None
+    assert error == "certificate_map_id_input_binding_unknown"
+    raw_certificate = certificate_status["details"]["certificates"][0]
+    assert raw_certificate["classification"] == "hard_but_solvable"
+    assert raw_certificate["benchmark_eligibility"] == "eligible"
+    assert provenance["certificate"]["scenario_id"] == raw_certificate["scenario_id"]
     assert (
         provenance["certificate"]["sha256_canonical_json"]
         == hashlib.sha256(
-            json.dumps(certificate, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(raw_certificate, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
     )
     assert provenance["claim_boundary"]["dynamic_task_feasibility"] == "unknown"
     assert "post-hoc" in provenance["claim_boundary"]["note"]
+    historical_certifier_path = "robot_sf/scenario_certification/v1.py"
     for relative_path, expected_digest in provenance["input_sha256"].items():
+        if relative_path == historical_certifier_path:
+            assert (
+                expected_digest
+                != hashlib.sha256((repo_root / relative_path).read_bytes()).hexdigest()
+            )
+            continue
         assert (
             hashlib.sha256((repo_root / relative_path).read_bytes()).hexdigest() == expected_digest
         )
@@ -508,13 +533,48 @@ def test_tracked_compatibility_fixture_has_source_bound_canonical_static_certifi
     historical_certificate, historical_error = replay_gallery._validated_scenario_certificate(
         historical_status,
         expected_scenario_id="crossing_ttc_template_adversarial_0008",
-        loaded_scenario=replay_gallery.scenario_loader.load_scenarios(scenario_path)[0],
+        loaded_scenario=loaded_scenario,
         scenario_path=scenario_path,
         root=repo_root,
         source_root=repo_root,
+        map_id_input_binding=current_map_binding,
     )
     assert historical_certificate is None
     assert historical_error == "certificate_structurally_invalid"
+
+
+def test_canonical_certifier_records_portable_map_id_registry_and_map_digests() -> None:
+    """New map-id certificates bind the exact registry and selected map inputs."""
+    repo_root = Path(__file__).resolve().parents[2]
+    fixture_root = repo_root / "tests/fixtures/adversarial_replay_gallery/issue_1501_compat"
+    scenario_path = fixture_root / "scenario.yaml"
+    replay_gallery.scenario_loader._load_map_registry.cache_clear()
+    try:
+        certificate = scenario_certification_v1.certify_scenario_file(scenario_path)[0]
+    finally:
+        replay_gallery.scenario_loader._load_map_registry.cache_clear()
+
+    binding = certificate.evidence["map_id_input_binding"]
+    registry_path = replay_gallery.scenario_loader._resolve_map_registry_path()
+    assert registry_path is not None
+    loaded = replay_gallery.scenario_loader.load_scenarios(scenario_path)[0]
+    map_path = (scenario_path.parent / loaded["map_file"]).resolve()
+    assert binding["schema_version"] == "scenario_map_id_input_binding.v1"
+    assert binding["map_id"] == "classic_cross_trap"
+    assert binding["registry_locator"] == "repo:maps/registry.yaml"
+    registry_payload = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    selected_row = next(
+        row for row in registry_payload["maps"] if row.get("map_id") == "classic_cross_trap"
+    )
+    assert binding["selected_registry_entry"] == dict(selected_row)
+    assert (
+        binding["selected_registry_entry_sha256"]
+        == hashlib.sha256(
+            json.dumps(dict(selected_row), sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+    )
+    assert binding["resolved_map_locator"] == "repo:maps/svg_maps/classic_crossing.svg"
+    assert binding["resolved_map_sha256"] == replay_gallery._sha256_file(map_path)
 
 
 def test_source_bound_certificate_is_portable_across_checkout_roots_and_binds_referenced_bytes(
@@ -543,13 +603,23 @@ def test_source_bound_certificate_is_portable_across_checkout_roots_and_binds_re
     replay_gallery.scenario_loader._load_map_registry.cache_clear()
     try:
         loaded = replay_gallery.scenario_loader.load_scenarios(other_scenario_path)[0]
+        copied_certificate_status = json.loads(json.dumps(certificate_status))
+        copied_certificate = copied_certificate_status["details"]["certificates"][0]
+        copied_map_binding, copied_map_binding_error = (
+            scenario_certification_v1._capture_map_id_input_binding(
+                loaded, scenario_path=other_scenario_path, source_root=other_root
+            )
+        )
+        assert copied_map_binding_error is None and copied_map_binding is not None
+        copied_certificate["evidence"]["map_id_input_binding"] = copied_map_binding
         certificate, error = replay_gallery._validated_scenario_certificate(
-            certificate_status,
+            copied_certificate_status,
             expected_scenario_id="crossing_ttc_template_adversarial_0008",
             loaded_scenario=dict(loaded),
             scenario_path=other_scenario_path,
             root=other_root,
             source_root=other_root,
+            map_id_input_binding=copied_map_binding,
         )
         assert error is None
         assert certificate is not None
@@ -558,18 +628,154 @@ def test_source_bound_certificate_is_portable_across_checkout_roots_and_binds_re
         route_overrides.write_bytes(route_overrides.read_bytes() + b"\n# content changed\n")
         changed_loaded = replay_gallery.scenario_loader.load_scenarios(other_scenario_path)[0]
         changed_certificate, changed_error = replay_gallery._validated_scenario_certificate(
-            certificate_status,
+            copied_certificate_status,
             expected_scenario_id="crossing_ttc_template_adversarial_0008",
             loaded_scenario=dict(changed_loaded),
             scenario_path=other_scenario_path,
             root=other_root,
             source_root=other_root,
+            map_id_input_binding=copied_map_binding,
         )
     finally:
         replay_gallery.scenario_loader._load_map_registry.cache_clear()
 
     assert changed_certificate is None
     assert changed_error == "certificate_scenario_fingerprint_mismatch"
+
+
+@pytest.mark.parametrize("change", ["unrelated_registry_row", "registry_target", "map_bytes"])
+def test_map_id_certificate_rejects_changed_registry_or_resolved_map_inputs(  # noqa: PLR0915 - explicit drift cases
+    tmp_path: Path, monkeypatch: Any, change: str
+) -> None:
+    """Unchanged scenario YAML cannot retain a certificate after map-id inputs drift."""
+    repo_root = Path(__file__).resolve().parents[2]
+    fixture_root = repo_root / "tests/fixtures/adversarial_replay_gallery/issue_1501_compat"
+    input_root = tmp_path / "map-id-binding"
+    case_root = input_root / "case"
+    shutil.copytree(fixture_root, case_root)
+    scenario_path = case_root / "scenario.yaml"
+    original_scenario_bytes = scenario_path.read_bytes()
+
+    source_registry = replay_gallery.scenario_loader._resolve_map_registry_path()
+    assert source_registry is not None
+    registry_payload = yaml.safe_load(source_registry.read_text(encoding="utf-8"))
+    selected_row = next(
+        row for row in registry_payload["maps"] if row.get("map_id") == "classic_cross_trap"
+    )
+    source_map_ref = Path(selected_row["path"])
+    source_map = (
+        source_map_ref if source_map_ref.is_absolute() else source_registry.parent / source_map_ref
+    )
+    registry_path = input_root / "maps" / "registry.yaml"
+    map_target = registry_path.parent / source_map_ref
+    map_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_map, map_target)
+
+    # Removing this optional catalog attestation lets the map-bytes mutation
+    # exercise the certificate binding instead of the registry's own stale-hash gate.
+    selected_row.pop("source_sha256", None)
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    registry_path.write_text(yaml.safe_dump(registry_payload, sort_keys=False), encoding="utf-8")
+    monkeypatch.setenv("ROBOT_SF_MAP_REGISTRY", str(registry_path))
+    replay_gallery.scenario_loader._load_map_registry.cache_clear()
+    try:
+        loaded = dict(replay_gallery.scenario_loader.load_scenarios(scenario_path)[0])
+        status = _bind_certificate_to_scenario(
+            _certification_status(
+                _scenario_certificate(
+                    classification="hard_but_solvable",
+                    scenario_id="crossing_ttc_template_adversarial_0008",
+                )
+            ),
+            scenario_path,
+        )
+        scenario_identity = yaml.safe_load(original_scenario_bytes)["scenarios"][0]
+        original_snapshot, original_snapshot_error = replay_gallery._snapshot_map_id_input(
+            scenario_identity,
+            scenario_path=scenario_path,
+            episode_path=case_root / "unused-episode.jsonl",
+            source_record={},
+            root=tmp_path,
+            source_root=tmp_path,
+        )
+        assert original_snapshot_error is None and original_snapshot is not None
+        original_binding = status["details"]["certificates"][0]["evidence"]["map_id_input_binding"]
+        certificate, error = replay_gallery._validated_scenario_certificate(
+            status,
+            expected_scenario_id="crossing_ttc_template_adversarial_0008",
+            loaded_scenario=loaded,
+            scenario_path=scenario_path,
+            root=tmp_path,
+            source_root=tmp_path,
+            map_id_input_binding=original_binding,
+        )
+        assert error is None and certificate is not None
+
+        if change == "unrelated_registry_row":
+            changed_registry = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+            unrelated_row = next(
+                row for row in changed_registry["maps"] if row.get("map_id") != "classic_cross_trap"
+            )
+            unrelated_row["limitations"] = ["unrelated registry row changed"]
+            registry_path.write_text(
+                yaml.safe_dump(changed_registry, sort_keys=False), encoding="utf-8"
+            )
+        elif change == "registry_target":
+            alternate_ref = source_map_ref.with_name("certificate-binding-copy.svg")
+            alternate_target = registry_path.parent / alternate_ref
+            alternate_target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(map_target, alternate_target)
+            changed_registry = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+            changed_row = next(
+                row for row in changed_registry["maps"] if row.get("map_id") == "classic_cross_trap"
+            )
+            changed_row["path"] = alternate_ref.as_posix()
+            registry_path.write_text(
+                yaml.safe_dump(changed_registry, sort_keys=False), encoding="utf-8"
+            )
+        else:
+            map_target.write_bytes(map_target.read_bytes() + b"\n<!-- map bytes changed -->\n")
+
+        assert scenario_path.read_bytes() == original_scenario_bytes
+        current_snapshot, snapshot_error = replay_gallery._snapshot_map_id_input(
+            scenario_identity,
+            scenario_path=scenario_path,
+            episode_path=case_root / "unused-episode.jsonl",
+            source_record={},
+            root=tmp_path,
+            source_root=tmp_path,
+        )
+        assert snapshot_error is None and current_snapshot is not None
+        current_binding = replay_gallery._map_id_input_binding_from_paths(
+            map_id=current_snapshot["map_id"],
+            required_profile=current_snapshot["required_profile"],
+            registry_path=current_snapshot["registry_path"],
+            registry_row=current_snapshot["registry_row"],
+            map_path=current_snapshot["map_path"],
+            map_sha256=current_snapshot["map_sha256"],
+            scenario_path=scenario_path,
+            source_root=tmp_path,
+        )
+        changed_certificate, changed_error = replay_gallery._validated_scenario_certificate(
+            status,
+            expected_scenario_id="crossing_ttc_template_adversarial_0008",
+            loaded_scenario=loaded,
+            scenario_path=scenario_path,
+            root=tmp_path,
+            source_root=tmp_path,
+            map_id_input_binding=current_binding,
+        )
+    finally:
+        replay_gallery.scenario_loader._load_map_registry.cache_clear()
+
+    if change == "unrelated_registry_row":
+        assert changed_certificate is not None
+        assert changed_error is None
+        assert current_binding == original_binding
+        assert current_snapshot["registry_sha256"] != original_snapshot["registry_sha256"]
+    else:
+        assert changed_certificate is None
+        assert changed_error == "certificate_map_id_input_binding_mismatch"
 
 
 @pytest.mark.parametrize(

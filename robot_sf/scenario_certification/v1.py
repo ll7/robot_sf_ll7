@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from itertools import pairwise
@@ -12,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
+import yaml
 from shapely.geometry import GeometryCollection, LineString, Point, Polygon, box
 from shapely.ops import unary_union
 
@@ -31,6 +33,7 @@ from robot_sf.scenario_certification.input_identity import (
     scenario_input_identity,
     scenario_manifest_records_match,
 )
+from robot_sf.training import scenario_loader
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
 if TYPE_CHECKING:
@@ -217,6 +220,9 @@ def certify_scenario(
 
     cert_settings = settings or CertificationSettings()
     sid = _scenario_id(scenario)
+    map_id_binding, map_id_binding_error = _capture_map_id_input_binding(
+        scenario, scenario_path=scenario_path
+    )
     try:
         if runtime_input_records is None:
             config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
@@ -233,7 +239,28 @@ def certify_scenario(
             source=scenario_path.as_posix(),
             reason=f"scenario_loader_error: {exc}",
             scenario_path=scenario_path,
+            map_id_input_binding=(
+                map_id_binding
+                if map_id_binding_error is None
+                else _unknown_map_id_input_binding(map_id_binding_error)
+            ),
         )
+
+    if scenario.get("map_id") is not None:
+        after_binding, after_error = _capture_map_id_input_binding(
+            scenario, scenario_path=scenario_path
+        )
+        if (
+            map_id_binding_error is not None
+            or after_error is not None
+            or map_id_binding is None
+            or after_binding != map_id_binding
+        ):
+            map_id_binding = _unknown_map_id_input_binding(
+                map_id_binding_error
+                or after_error
+                or "scenario_map_id_input_changed_during_certification"
+            )
 
     map_defs = list(config.map_pool.map_defs.items())
     if not map_defs:
@@ -243,6 +270,7 @@ def certify_scenario(
             source=scenario_path.as_posix(),
             reason="map_pool_empty",
             scenario_path=scenario_path,
+            map_id_input_binding=map_id_binding,
         )
 
     route_certs: list[RouteCertificate] = []
@@ -264,6 +292,7 @@ def certify_scenario(
             source=scenario_path.as_posix(),
             reason="no_applicable_robot_routes",
             scenario_path=scenario_path,
+            map_id_input_binding=map_id_binding,
         )
     certificate = _aggregate_scenario_certificate(
         scenario,
@@ -272,6 +301,7 @@ def certify_scenario(
         route_certs=route_certs,
         settings=cert_settings,
         scenario_path=scenario_path,
+        map_id_input_binding=map_id_binding,
     )
     return replace(
         certificate,
@@ -843,6 +873,7 @@ def _aggregate_scenario_certificate(
     route_certs: list[RouteCertificate],
     settings: CertificationSettings,
     scenario_path: Path | None = None,
+    map_id_input_binding: dict[str, Any] | None = None,
 ) -> ScenarioCertificate:
     """Aggregate per-route certificates into one scenario-level certificate.
 
@@ -858,7 +889,11 @@ def _aggregate_scenario_certificate(
             cert.benchmark_eligibility == "eligible" for cert in route_certs
         ),
     }
-    evidence = _scenario_evidence(scenario, scenario_path=scenario_path)
+    evidence = _scenario_evidence(
+        scenario,
+        scenario_path=scenario_path,
+        map_id_input_binding=map_id_input_binding,
+    )
     return ScenarioCertificate(
         schema_version=CERT_SCHEMA_VERSION,
         scenario_id=scenario_id,
@@ -879,6 +914,7 @@ def _invalid_scenario_certificate(
     source: str,
     reason: str,
     scenario_path: Path | None = None,
+    map_id_input_binding: dict[str, Any] | None = None,
 ) -> ScenarioCertificate:
     """Build an excluded scenario certificate when route certification cannot run.
 
@@ -894,7 +930,11 @@ def _invalid_scenario_certificate(
         reasons=[reason],
         checks={"route_count": 0},
         route_certificates=[],
-        evidence=_scenario_evidence(scenario, scenario_path=scenario_path),
+        evidence=_scenario_evidence(
+            scenario,
+            scenario_path=scenario_path,
+            map_id_input_binding=map_id_input_binding,
+        ),
     )
 
 
@@ -948,7 +988,10 @@ def _scenario_id(scenario: Mapping[str, Any]) -> str:
 
 
 def _scenario_evidence(
-    scenario: Mapping[str, Any], *, scenario_path: Path | None = None
+    scenario: Mapping[str, Any],
+    *,
+    scenario_path: Path | None = None,
+    map_id_input_binding: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Extract reusable provenance and plausibility evidence from a scenario.
 
@@ -963,6 +1006,10 @@ def _scenario_evidence(
             source_root=Path(__file__).resolve().parents[2] if scenario_path is not None else None,
         )
     }
+    if scenario.get("map_id") is not None:
+        evidence["map_id_input_binding"] = map_id_input_binding or _unknown_map_id_input_binding(
+            "map_id_input_binding_not_available"
+        )
     if isinstance(metadata, Mapping):
         plausibility = metadata.get("plausibility")
         if isinstance(plausibility, Mapping):
@@ -975,6 +1022,146 @@ def _scenario_evidence(
         "role": "optional_diagnostic_evidence_only",
     }
     return evidence
+
+
+def _unknown_map_id_input_binding(reason: str) -> dict[str, str]:
+    """Represent unavailable map-id provenance without implying that it was checked.
+
+    Returns:
+        dict[str, str]: Explicit unknown status and reason.
+    """
+    return {"status": "unknown", "reason": reason}
+
+
+def _map_id_input_binding_from_paths(
+    *,
+    map_id: str,
+    required_profile: str,
+    registry_path: Path,
+    registry_row: Mapping[str, Any],
+    map_path: Path,
+    map_sha256: str,
+    scenario_path: Path,
+    source_root: Path,
+) -> dict[str, Any]:
+    """Bind the selected registry entry and resolved map without hashing unrelated rows.
+
+    Returns:
+        dict[str, Any]: Portable map-id binding with selected-entry and map digests.
+    """
+    checkout_root = Path(source_root).resolve()
+    scenario_parent = Path(scenario_path).resolve().parent
+    selected_entry = _sanitize_json_value(dict(registry_row))
+    selected_entry_sha256 = hashlib.sha256(
+        json.dumps(selected_entry, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return {
+        "schema_version": "scenario_map_id_input_binding.v1",
+        "map_id": map_id,
+        "required_profile": required_profile,
+        "registry_locator": _portable_reference_locator(
+            Path(registry_path).resolve(),
+            checkout_root=checkout_root,
+            scenario_parent=scenario_parent,
+        ),
+        "selected_registry_entry": selected_entry,
+        "selected_registry_entry_sha256": selected_entry_sha256,
+        "resolved_map_locator": _portable_reference_locator(
+            Path(map_path).resolve(),
+            checkout_root=checkout_root,
+            scenario_parent=scenario_parent,
+        ),
+        "resolved_map_sha256": map_sha256,
+    }
+
+
+def _capture_map_id_input_binding(  # noqa: C901 - explicit fail-closed gates
+    scenario: Mapping[str, Any],
+    *,
+    scenario_path: Path,
+    source_root: Path | None = None,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Resolve and digest current registry/map inputs with a stable-read check.
+
+    Returns:
+        tuple[dict[str, Any] | None, str | None]: Portable binding and error, if any.
+    """
+    raw_map_id = scenario.get("map_id")
+    if raw_map_id is None:
+        return None, None
+    if not isinstance(raw_map_id, str) or not raw_map_id.strip():
+        return None, "scenario_map_id_invalid"
+    registry_override = os.environ.get("ROBOT_SF_MAP_REGISTRY")
+    registry_path = scenario_loader._resolve_map_registry_path()
+    if registry_path is None:
+        return None, "scenario_map_registry_unavailable"
+    registry_path = registry_path.expanduser().resolve()
+    try:
+        required_profile = scenario_loader._resolve_required_map_profile(
+            scenario, source=scenario_path
+        )
+        registry_bytes = registry_path.read_bytes()
+        registry_payload = yaml.safe_load(registry_bytes.decode("utf-8"))
+        if not isinstance(registry_payload, Mapping):
+            return None, "scenario_map_registry_invalid_shape"
+        scenario_loader._validate_catalog_header(registry_payload, registry_path=registry_path)
+        map_registry: dict[str, Any] = {}
+        selected_registry_row: dict[str, Any] | None = None
+        for resolved_map_id, row in scenario_loader._iter_map_registry_entries(
+            registry_payload, registry_path=registry_path
+        ):
+            scenario_loader._register_map_entry(
+                map_registry,
+                map_id=resolved_map_id,
+                row=row,
+                registry_path=registry_path,
+            )
+            if resolved_map_id == raw_map_id.strip():
+                selected_registry_row = dict(row)
+        if selected_registry_row is None:
+            return None, "scenario_map_registry_entry_unavailable"
+        map_path = scenario_loader._resolve_map_id(
+            raw_map_id.strip(),
+            map_registry=map_registry,
+            source=scenario_path,
+            required_profile=required_profile,
+        ).resolve()
+        map_bytes = map_path.read_bytes()
+        registry_bytes_after = registry_path.read_bytes()
+        map_bytes_after = map_path.read_bytes()
+    except (OSError, ValueError, TypeError, yaml.YAMLError, UnicodeDecodeError) as exc:
+        return None, f"scenario_map_id_resolution_failed:{type(exc).__name__}"
+    if registry_bytes != registry_bytes_after or map_bytes != map_bytes_after:
+        return None, "scenario_map_registry_or_map_changed_during_certification"
+    if os.environ.get("ROBOT_SF_MAP_REGISTRY") != registry_override:
+        return None, "scenario_map_registry_environment_changed_during_certification"
+
+    raw_map_file = scenario.get("map_file")
+    if not isinstance(raw_map_file, str) or not raw_map_file.strip():
+        return None, "scenario_map_id_resolved_map_file_missing"
+    scenario_map_path = Path(raw_map_file).expanduser()
+    if not scenario_map_path.is_absolute():
+        scenario_map_path = Path(scenario_path).resolve().parent / scenario_map_path
+    try:
+        if scenario_map_path.resolve() != map_path:
+            return None, "scenario_map_id_resolved_map_path_mismatch"
+    except (OSError, RuntimeError):
+        return None, "scenario_map_id_resolved_map_path_unavailable"
+
+    checkout_root = source_root or Path(__file__).resolve().parents[2]
+    return (
+        _map_id_input_binding_from_paths(
+            map_id=raw_map_id.strip(),
+            required_profile=required_profile,
+            registry_path=registry_path,
+            registry_row=selected_registry_row,
+            map_path=map_path,
+            map_sha256=hashlib.sha256(map_bytes).hexdigest(),
+            scenario_path=scenario_path,
+            source_root=checkout_root,
+        ),
+        None,
+    )
 
 
 def _fingerprint_mapping(

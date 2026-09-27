@@ -40,7 +40,11 @@ from robot_sf.benchmark.fallback_policy import (
     runtime_fallback_or_degraded_marker,
 )
 from robot_sf.benchmark.runner import run_batch
-from robot_sf.scenario_certification.v1 import _STATUS_SEVERITY, _fingerprint_mapping
+from robot_sf.scenario_certification.v1 import (
+    _STATUS_SEVERITY,
+    _fingerprint_mapping,
+    _map_id_input_binding_from_paths,
+)
 from robot_sf.training import scenario_loader
 
 GALLERY_SCHEMA_VERSION = "adversarial-replay-gallery.v1"
@@ -511,23 +515,6 @@ def _prepare_candidate(  # noqa: C901, PLR0912, PLR0915 - keep ordered validatio
     loaded_scenario = dict(loaded_scenarios[0])
     if _scenario_certificate_id(loaded_scenario) != scenario_id:
         return None, _accounting_row(index, candidate_payload, "certificate_scenario_id_mismatch")
-    certificate, certificate_error = _validated_scenario_certificate(
-        candidate_payload.get("certification_status"),
-        expected_scenario_id=scenario_id,
-        loaded_scenario=loaded_scenario,
-        scenario_path=scenario_path,
-        root=root,
-        source_root=source_root,
-    )
-    if certificate_error is not None or certificate is None:
-        return None, _accounting_row(
-            index,
-            candidate_payload,
-            certificate_error or "certificate_unknown",
-        )
-    classification = str(certificate.get("classification", "")).strip().lower()
-    if classification not in _ADMISSIBLE_CLASSIFICATIONS:
-        return None, _accounting_row(index, candidate_payload, f"certificate_{classification}")
     map_id_snapshot, map_id_error = _snapshot_map_id_input(
         scenario_identity,
         scenario_path=scenario_path,
@@ -538,6 +525,41 @@ def _prepare_candidate(  # noqa: C901, PLR0912, PLR0915 - keep ordered validatio
     )
     if map_id_error is not None:
         return None, _accounting_row(index, candidate_payload, map_id_error)
+    map_id_input_binding = None
+    if map_id_snapshot is not None:
+        try:
+            map_id_input_binding = _map_id_input_binding_from_paths(
+                map_id=map_id_snapshot["map_id"],
+                required_profile=map_id_snapshot["required_profile"],
+                registry_path=map_id_snapshot["registry_path"],
+                registry_row=map_id_snapshot["registry_row"],
+                map_path=map_id_snapshot["map_path"],
+                map_sha256=map_id_snapshot["map_sha256"],
+                scenario_path=scenario_path,
+                source_root=source_root,
+            )
+        except (KeyError, TypeError, ValueError, OSError):
+            return None, _accounting_row(
+                index, candidate_payload, "certificate_map_id_input_binding_unavailable"
+            )
+    certificate, certificate_error = _validated_scenario_certificate(
+        candidate_payload.get("certification_status"),
+        expected_scenario_id=scenario_id,
+        loaded_scenario=loaded_scenario,
+        scenario_path=scenario_path,
+        root=root,
+        source_root=source_root,
+        map_id_input_binding=map_id_input_binding,
+    )
+    if certificate_error is not None or certificate is None:
+        return None, _accounting_row(
+            index,
+            candidate_payload,
+            certificate_error or "certificate_unknown",
+        )
+    classification = str(certificate.get("classification", "")).strip().lower()
+    if classification not in _ADMISSIBLE_CLASSIFICATIONS:
+        return None, _accounting_row(index, candidate_payload, f"certificate_{classification}")
     map_file_declared, map_file_sha256, map_file_error = _scenario_file_binding(
         scenario_identity,
         "map_file",
@@ -3233,7 +3255,7 @@ def _scenario_certificate_id(scenario: dict[str, Any]) -> str | None:
     return scenario_id or None
 
 
-def _validated_scenario_certificate(
+def _validated_scenario_certificate(  # noqa: C901 - keep fail-closed gates explicit
     payload: Any,
     *,
     expected_scenario_id: str | None,
@@ -3241,6 +3263,7 @@ def _validated_scenario_certificate(
     scenario_path: Path | None = None,
     root: Path | None = None,
     source_root: Path | None = None,
+    map_id_input_binding: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Return one complete certificate only when its source and loaded mapping are bound."""
     certificate, error = _canonical_scenario_certificate(payload)
@@ -3257,6 +3280,19 @@ def _validated_scenario_certificate(
     ):
         return None, "certificate_source_mismatch"
     evidence = certificate.get("evidence")
+    if loaded_scenario.get("map_id") is not None:
+        recorded_map_binding = (
+            evidence.get("map_id_input_binding") if isinstance(evidence, dict) else None
+        )
+        if (
+            not isinstance(recorded_map_binding, dict)
+            or recorded_map_binding.get("schema_version") != "scenario_map_id_input_binding.v1"
+        ):
+            return None, "certificate_map_id_input_binding_unknown"
+        if map_id_input_binding is None:
+            return None, "certificate_map_id_input_binding_unavailable"
+        if recorded_map_binding != map_id_input_binding:
+            return None, "certificate_map_id_input_binding_mismatch"
     recorded_fingerprint = (
         evidence.get("scenario_fingerprint") if isinstance(evidence, dict) else None
     )

@@ -1457,7 +1457,7 @@ def _write_arm_rollup(lines: list[str], arm_rollup: list[dict[str, Any]]) -> Non
         lines.append(
             "| planner | kinematics | status | written this invocation | retained rows | failed | first_error | distinct_errors |"
         )
-        lines.append("|---|---|---|---:|---:|---|---:|")
+        lines.append("|---|---|---|---:|---:|---:|---|---:|")
         for arm in arm_rollup:
             lines.append(
                 "| "

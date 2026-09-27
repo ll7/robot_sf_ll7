@@ -215,6 +215,10 @@ from robot_sf.sim.spawn_validation import reset_spawn_clearance
 # legacy plain-dict metadata to ``AlgoMeta`` after enrichment.
 PolicyBuilder = Callable[..., tuple[Any, AlgoMeta | dict[str, Any]]]
 PedestrianControlTraceLabelBuilder = Callable[[int], list[dict[str, Any]]]
+# The runner deliberately treats paired-reset custody as an opaque callback boundary:
+# the callback owns the environment and observation representations, while the runner
+# only persists its mapping payload in algorithm metadata.
+_PairResetHook = Callable[[object, object], Mapping[str, str]]
 _OBSTACLE_FORCE_LAW_RUNTIME_RECORD_SCHEMA = "obstacle_force_law_runtime_record.v1"
 _PAIRED_EFFECT_NATIVE_TRACE_SCHEMA = "paired_effect_native_trace.v1"
 
@@ -2123,6 +2127,7 @@ class _StepLoopSetupArgs:
     pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None
     expected_population_size: int | None
     hybrid_source_field: str | None
+    pair_reset_hook: _PairResetHook | None = None
 
 
 @dataclass(slots=True)
@@ -3524,6 +3529,10 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
             expected_population_size=args.expected_population_size,
             pedestrian_control_trace_label_builder=args.pedestrian_control_trace_label_builder,
         )
+        if args.pair_reset_hook is not None:
+            # Opt-in doorway custody: restore and verify the paired reset before the
+            # first planner command. Ordinary benchmark episodes never enter this path.
+            args.algo_meta["doorway_pair_receipt"] = dict(args.pair_reset_hook(env, obs))
         state = _init_step_loop_state(
             obs=obs,
             env=env,
@@ -3602,6 +3611,7 @@ def _run_episode_step_loop(  # noqa: PLR0913
     single_pedestrian_vru_metadata: list[dict[str, object] | None],
     pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None = None,
     expected_population_size: int | None = None,
+    pair_reset_hook: _PairResetHook | None = None,
 ) -> _EpisodeStepLoopResult:
     """Run the env reset, the per-step episode loop, and planner/env teardown.
 
@@ -3640,6 +3650,7 @@ def _run_episode_step_loop(  # noqa: PLR0913
             pedestrian_control_trace_label_builder=pedestrian_control_trace_label_builder,
             expected_population_size=expected_population_size,
             hybrid_source_field=hybrid_source_field,
+            pair_reset_hook=pair_reset_hook,
         )
     )
 
@@ -5280,6 +5291,7 @@ def run_map_episode(  # noqa: PLR0913
     cbf_safety_filter: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
+    pair_reset_hook: _PairResetHook | None = None,
     pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None = None,
     close_policy: bool = True,
     policy_builder: PolicyBuilder,
@@ -5406,6 +5418,7 @@ def run_map_episode(  # noqa: PLR0913
         single_pedestrian_vru_metadata=policy_contract.single_pedestrian_vru_metadata,
         pedestrian_control_trace_label_builder=pedestrian_control_trace_label_builder,
         expected_population_size=expected_population_size,
+        pair_reset_hook=pair_reset_hook,
     )
     post_loop = _compute_post_loop_metrics(
         robot_positions=loop_result.robot_positions,

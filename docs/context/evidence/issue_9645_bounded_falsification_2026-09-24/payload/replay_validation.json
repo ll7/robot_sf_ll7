@@ -25,7 +25,29 @@
     "source_seed": 123,
     "source_status": "success",
     "source_steps": 25,
-    "source_termination": "success"
+    "source_termination": "success",
+    "artifact_bindings": [
+      {
+        "role": "source_episode",
+        "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/representative_success/episode_records_original_recorded.jsonl",
+        "sha256": "d58af050a3b43e187ab6437af2733164f62bb3efce572f56bc987b2ccd2b94ed"
+      },
+      {
+        "role": "replayed_episode",
+        "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/representative_success/episode_records_replay_recorded.jsonl",
+        "sha256": "cdbd8db6c1efe51da96fc1aaef148c25b94c881514394ed71a715883591ac43b"
+      },
+      {
+        "role": "scenario",
+        "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/representative_success/scenario.yaml",
+        "sha256": "aa462c23d2f38c42477cdf2ed6fc6e3a797acbd6abbfc2e8044c60ccd48442e4"
+      },
+      {
+        "role": "route_overrides",
+        "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/representative_success/route_overrides.yaml",
+        "sha256": "99638cb936aa17f91eb6a7b6b6d1a830d20b356077df74bb41f1aa204e44f5c5"
+      }
+    ]
   },
   "historical_issue_1501_case": {
     "archived_failure_type": "collision",
@@ -74,7 +96,7 @@
     "planner_execution_mode": "native",
     "regenerated_with": "robot_sf.adversarial.bundle.write_candidate_inputs",
     "regeneration_commit": "58e516aa4f69ff3098bf518199f483006589758c",
-    "regression_status": "not yet admitted to versioned counterexample corpus; candidate is available to #9652",
+    "regression_status": "pending_exact_historical_input_binding",
     "replay_count": 2,
     "replay_files_sha256": [
       "024ed6c8049019915d991a10dfa8b182f83f068ac397fda1cd1600c1c17f9133",
@@ -87,7 +109,38 @@
     "schema_version": "issue_9645_replay_validation.v1",
     "source_archive": "docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/archive.json",
     "source_archive_sha256": "a7da3bf59cb57cbe8231cbac75e184222950037cf24c184a9eac729223a4b393",
-    "source_commit_for_archive": "4bd5fb412d2bf023d26f674833dd379aedf8c17e"
+    "source_commit_for_archive": "4bd5fb412d2bf023d26f674833dd379aedf8c17e",
+    "input_binding_status": "unknown_historical",
+    "admission_status": "not_admitted",
+    "replay_artifact_bindings": [
+      {
+        "role": "replay_1",
+        "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_issue_1501_failure_0002/replay_1_recorded.jsonl",
+        "sha256": "024ed6c8049019915d991a10dfa8b182f83f068ac397fda1cd1600c1c17f9133"
+      },
+      {
+        "role": "replay_2",
+        "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_issue_1501_failure_0002/replay_2_recorded.jsonl",
+        "sha256": "f84a03e8e42702256f28d319ed8b20ab27d395f9735576ea57e037d52a9d0592"
+      }
+    ],
+    "materialized_input_bindings": [
+      {
+        "role": "scenario_at_recorded_regeneration_revision",
+        "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_issue_1501_failure_0002/scenario.yaml",
+        "sha256": "bb5bb5010f74d426f0108a43e2b7bcd80e443df3ae8fb7b33b43dc281b0bb04b"
+      },
+      {
+        "role": "route_overrides",
+        "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/historical_issue_1501_failure_0002/route_overrides.yaml",
+        "sha256": "0e8bb9e6242098a33087ca12916d7096b98e90100e79db829a1675b6c8c89cd7"
+      },
+      {
+        "role": "episode_schema_at_recorded_regeneration_revision",
+        "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/inputs/episode.schema.v1.at_58e516.json",
+        "sha256": "3c04b755fbab4764a429c034af3897eaf0db30360b81aebb390f83722105e224"
+      }
+    ]
   },
   "schema_version": "issue_9645_replay_validation_collection.v1"
 }

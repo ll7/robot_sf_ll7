@@ -1,19 +1,19 @@
 {
   "schema_version": "evidence_bundle.v1",
-  "created_at_utc": "2026-09-27T00:40:50.137792Z",
+  "created_at_utc": "2026-09-27T04:07:07.310500Z",
   "bundle_name": "issue_9645_bounded_falsification_2026-09-24",
   "source_root": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload",
-  "command": "Clean-root reproduction of the schema-v3 falsification report from the checksum-bound comparison and four archived manifests; no search or simulation rerun.",
-  "commit": "8619769f7f083e2a44c79726163271f3ec7d0b67",
-  "claim_boundary": "diagnostic_only_not_benchmark_evidence",
+  "command": "uv run python scripts/tools/report_falsification_search.py --comparison docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_comparison.json --output-dir output/issue9645-report-v3-episode-record-rebuild-20260927 --repo-root . --manifest-path-map docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/pilot_report_manifest_path_map.v1.json",
+  "commit": "499ac172d50c2fdc979950d7138daf66d3606715",
+  "claim_boundary": "diagnostic_only_finite_search_budget_no_planner_safety_or_search_coverage_claim; report rebuilt from retained exact inputs; search_or_simulation_rerun=false",
   "policy": {
     "large_raw_artifacts": "excluded",
     "output_tree_mirroring": "forbidden",
     "paper_or_benchmark_claim": "not_established_by_bundle_alone"
   },
   "totals": {
-    "file_count": 57,
-    "total_bytes": 1416187
+    "file_count": 134,
+    "total_bytes": 3940164
   },
   "files": [
     {
@@ -30,8 +30,8 @@
     },
     {
       "path": "archive/report_schema_v1/convergence_report.json",
-      "size_bytes": 133101,
-      "sha256": "3bc5b4f56f8161b395ceec01b635b66ee56b44c8409f2bc6fe8e605185eb7818",
+      "size_bytes": 134999,
+      "sha256": "e4455e6d6344ad2eee83efff052fd6541b2d791e6fa5ef425dadb5660d340439",
       "kind": "reports"
     },
     {
@@ -42,8 +42,8 @@
     },
     {
       "path": "archive/report_schema_v1/report_provenance.json",
-      "size_bytes": 1519,
-      "sha256": "3a03a1bd23eaa2e3d85476a2fb105828a3885ea1da5e7cad820e9d829986429c",
+      "size_bytes": 2359,
+      "sha256": "48539b3d98f6143fefd4157f8d4cadcdcc212d7af7c780f24190daefde2ccf76",
       "kind": "reports"
     },
     {
@@ -60,8 +60,8 @@
     },
     {
       "path": "convergence_constraints_first_lexicographic_v1.png",
-      "size_bytes": 68442,
-      "sha256": "ff02f0984a4a34b848451d4e6310b52b82f5237a0e4c5c117b1ab623013461f5",
+      "size_bytes": 67720,
+      "sha256": "9c90cde66ccd990e28b68711ed70137ff3d96fb32d568226c04def35d25d070d",
       "kind": "plots"
     },
     {
@@ -72,26 +72,26 @@
     },
     {
       "path": "convergence_report.json",
-      "size_bytes": 199926,
-      "sha256": "8a438c02e0a7352d79e093f74fc804eee3fcee1fd985259031592f1e5c8243ce",
+      "size_bytes": 211808,
+      "sha256": "d1f711e152a5bee0cb66f92fc78b5c71f74a71fb0639b6ac5ee19151a9505e43",
       "kind": "reports"
     },
     {
       "path": "convergence_report.md",
-      "size_bytes": 8838,
-      "sha256": "19627fb173a3d0dd518875a538fd1f7692b510700c40555e55e7a6a749bed115",
+      "size_bytes": 9082,
+      "sha256": "5879d99bffc154989c9f57cb67898c039223222acba654deea18733bbc016388",
       "kind": "reports"
     },
     {
       "path": "evidence_synthesis.json",
-      "size_bytes": 4593,
-      "sha256": "c1d62e48cb68f83d91f2632bb968d395a6ec46a27e5fc34438fd883508a298ec",
+      "size_bytes": 5656,
+      "sha256": "a4134a6b151e23ca356e447f57103d1ef3aa7339a76959b807332b62ac518378",
       "kind": "misc"
     },
     {
       "path": "historical_issue_1501_failure_0002.json",
-      "size_bytes": 2524,
-      "sha256": "453c6f7c1d6f6659bf63f7c197e2313fd5cbd8dd7df7b0165f3452c37caf9c01",
+      "size_bytes": 3002,
+      "sha256": "8e8b858eac33ef79e74a98933201cc8effd2ce77371d42c381693ac18c1de2bc",
       "kind": "misc"
     },
     {
@@ -102,8 +102,14 @@
     },
     {
       "path": "historical_issue_1501_failure_0002/replay_1.provenance.json",
-      "size_bytes": 3955,
-      "sha256": "65af70aa2739da46e90d75f2e7c4ed44bf444608219a884420870821c701e241",
+      "size_bytes": 4492,
+      "sha256": "bdd3769bd1ecd1d3fa1e7bad4dc7de9d4d5fc34d142204548ca35e10b59ca3c0",
+      "kind": "misc"
+    },
+    {
+      "path": "historical_issue_1501_failure_0002/replay_1_recorded.jsonl",
+      "size_bytes": 25410,
+      "sha256": "024ed6c8049019915d991a10dfa8b182f83f068ac397fda1cd1600c1c17f9133",
       "kind": "misc"
     },
     {
@@ -114,8 +120,14 @@
     },
     {
       "path": "historical_issue_1501_failure_0002/replay_2.provenance.json",
-      "size_bytes": 3959,
-      "sha256": "b1b4cead87af7e66f96329192fc0bd406952223b9717d19fe433b15c95c38a8c",
+      "size_bytes": 4496,
+      "sha256": "cc8837fb21751f2ef94a2692c03d520151afc7427201679733432f11ba94f28b",
+      "kind": "misc"
+    },
+    {
+      "path": "historical_issue_1501_failure_0002/replay_2_recorded.jsonl",
+      "size_bytes": 25410,
+      "sha256": "f84a03e8e42702256f28d319ed8b20ab27d395f9735576ea57e037d52a9d0592",
       "kind": "misc"
     },
     {
@@ -137,6 +149,12 @@
       "kind": "misc"
     },
     {
+      "path": "inputs/episode.schema.v1.at_58e516.json",
+      "size_bytes": 49521,
+      "sha256": "3c04b755fbab4764a429c034af3897eaf0db30360b81aebb390f83722105e224",
+      "kind": "misc"
+    },
+    {
       "path": "inputs/historical_crossing_ttc_space.yaml",
       "size_bytes": 515,
       "sha256": "e90353f9653173cc351117bfc874c1e7d5933d32f1f892f1b264d8148c767f34",
@@ -150,8 +168,8 @@
     },
     {
       "path": "path_normalization.json",
-      "size_bytes": 4523,
-      "sha256": "480885e590a332c54ab730affd94d409a79cbdb7d75f98c708bce6a3a488037a",
+      "size_bytes": 5598,
+      "sha256": "dea2f2e17bfe15a430ef146adf750fc3b924784f0aeff1aafdb0554d9cb71b4f",
       "kind": "misc"
     },
     {
@@ -173,6 +191,12 @@
       "kind": "misc"
     },
     {
+      "path": "pilot_report_artifact_path_map.v1.json",
+      "size_bytes": 50810,
+      "sha256": "c68f2dd100670cbc4504980ea3ddd42565c18e62829d693149bb74f1183211aa",
+      "kind": "reports"
+    },
+    {
       "path": "pilot_report_manifest_path_map.v1.json",
       "size_bytes": 1797,
       "sha256": "692db3b44f12b1fd4d0d7ff506b8924e4009710b5062e71c30840ce74e4a8b28",
@@ -180,20 +204,20 @@
     },
     {
       "path": "replay_validation.json",
-      "size_bytes": 4181,
-      "sha256": "5a1117636869bf18692dd6bef2eabdfe2816e1c19d17bc317c7e90a782e8731a",
+      "size_bytes": 6918,
+      "sha256": "6625e9f5be76f9063d741af096bd49da1c6d79c48a69c0b8ebb379b7d52799c5",
       "kind": "misc"
     },
     {
       "path": "report.md",
-      "size_bytes": 8855,
-      "sha256": "efe23f0ce6d8f0b29eb6e20ba3f6dd58167b8799c929b9a7b20370e3cf71494d",
+      "size_bytes": 10476,
+      "sha256": "ed023da217308df33b4653eb29301390a099ae388948b41f6e9476e2a2612a0c",
       "kind": "reports"
     },
     {
       "path": "report_provenance.json",
-      "size_bytes": 3444,
-      "sha256": "c01667fb6f1aadb1835c5ed435e662669a8808785160825f36bdbdde3fd2826a",
+      "size_bytes": 6340,
+      "sha256": "e4b013681bb345bf7f16ab087c36a959f4dc3de5c1e7a7aa27a2be8c1127fd53",
       "kind": "reports"
     },
     {
@@ -204,8 +228,14 @@
     },
     {
       "path": "representative_success/episode_records_original.provenance.json",
-      "size_bytes": 4383,
-      "sha256": "2fb08e7a4a02e0b53fba42e4518f4dcbd67f5654121d5c37f8340e9d69843e1b",
+      "size_bytes": 4912,
+      "sha256": "55e80fcc08fae4427ad42d61ed5756a115da266e4d327e9bdfd326ddbd58033f",
+      "kind": "misc"
+    },
+    {
+      "path": "representative_success/episode_records_original_recorded.jsonl",
+      "size_bytes": 25430,
+      "sha256": "d58af050a3b43e187ab6437af2733164f62bb3efce572f56bc987b2ccd2b94ed",
       "kind": "misc"
     },
     {
@@ -216,8 +246,14 @@
     },
     {
       "path": "representative_success/episode_records_replay.provenance.json",
-      "size_bytes": 4221,
-      "sha256": "2822161e58cc724e2eaee4e570b0d48a212ef57093d0d49c6b7c3a0e8d176def",
+      "size_bytes": 4748,
+      "sha256": "f658f722e9e62e5c250bedb0965ce1421567385424e82e4ee656db22e3370db8",
+      "kind": "misc"
+    },
+    {
+      "path": "representative_success/episode_records_replay_recorded.jsonl",
+      "size_bytes": 25429,
+      "sha256": "cdbd8db6c1efe51da96fc1aaef148c25b94c881514394ed71a715883591ac43b",
       "kind": "misc"
     },
     {
@@ -239,6 +275,42 @@
       "kind": "misc"
     },
     {
+      "path": "reproduction_inputs/input_rebase_map.v1.json",
+      "size_bytes": 48478,
+      "sha256": "5c0fde03bada3142d79804bd38794b6a32ff79e2689a8343e722110919a94f85",
+      "kind": "misc"
+    },
+    {
+      "path": "reproduction_inputs/manifests/random_seed_1101.json",
+      "size_bytes": 148803,
+      "sha256": "2b40ddabdc64dc7f6d35974a96b36db15e6894e1e5e582796c9e1fd17bf4b92e",
+      "kind": "misc"
+    },
+    {
+      "path": "reproduction_inputs/manifests/random_seed_2202.json",
+      "size_bytes": 147575,
+      "sha256": "8d0d0cac1644befdf6726555e2547359bf43b832cc95d754becf9dd2acc656ac",
+      "kind": "misc"
+    },
+    {
+      "path": "reproduction_inputs/manifests/tpe_seed_1101.json",
+      "size_bytes": 146187,
+      "sha256": "51f7dcf82d9e75a7156356d4465820cfe962a1208dd0c0ec38372031170c3aa5",
+      "kind": "misc"
+    },
+    {
+      "path": "reproduction_inputs/manifests/tpe_seed_2202.json",
+      "size_bytes": 144423,
+      "sha256": "7b4af9ea0efbc2dc5ee7f58f27ecae10ab0af285644c70ddc4ff17817b07d1bf",
+      "kind": "misc"
+    },
+    {
+      "path": "reproduction_inputs/pilot_report_manifest_path_map.v1.json",
+      "size_bytes": 1849,
+      "sha256": "1a8cf3b763e562a8febe0d946c2db34cdcc9cbe8a183117c50d3f1c91da45ae7",
+      "kind": "reports"
+    },
+    {
       "path": "row_status.json",
       "size_bytes": 34631,
       "sha256": "d43a3cf8f39aeaf4c1ec564fe874f0675f7e46c6e1f3f5e2b7738ec9a3d3fa9d",
@@ -246,8 +318,8 @@
     },
     {
       "path": "run_metadata.json",
-      "size_bytes": 11856,
-      "sha256": "2df58cac6a4ef7e3bf44cb0eb1a9c44ae65629671857a5069e9db756470793e3",
+      "size_bytes": 15281,
+      "sha256": "a1cf19be4df94dc1e9252c2e1632ffb08fbf556334d1279310db62026cf25c6f",
       "kind": "misc"
     },
     {
@@ -258,8 +330,14 @@
     },
     {
       "path": "smoke/corrected_success_smoke/episode_records.provenance.json",
-      "size_bytes": 4307,
-      "sha256": "e20601a3e9cba6ed0da234ecf6857a94fd07d08acc7e72963b71782d08b5fc6e",
+      "size_bytes": 4841,
+      "sha256": "8461838d4cb43391fa4e1abcbc1dd3aad046da7b9964ada3b937e9ed857aa7b8",
+      "kind": "misc"
+    },
+    {
+      "path": "smoke/corrected_success_smoke/episode_records_recorded.jsonl",
+      "size_bytes": 25489,
+      "sha256": "6dee284ba8c9b41441bd93ada3973da8a9a855a1501afef886c74f012aa15b2b",
       "kind": "misc"
     },
     {
@@ -320,6 +398,390 @@
       "path": "smoke_attempts.csv",
       "size_bytes": 1628,
       "sha256": "0ee5d2f26352fa0c487b7b5c5dd2a96443a9238072fb5f12c3e140568a454a6b",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_optuna/candidate_0000/episode_records.jsonl",
+      "size_bytes": 25439,
+      "sha256": "34f84b7c414f963a1af78ee0c8db0a69c142119c4d1ebb8fb0be915c0170d847",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_optuna/candidate_0001/episode_records.jsonl",
+      "size_bytes": 25434,
+      "sha256": "0f9ad563110a2e7e941606ce2a4b7507a4c34ef24887ba3561de1a095612a37b",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_optuna/candidate_0002/episode_records.jsonl",
+      "size_bytes": 25487,
+      "sha256": "d7d8d1b0b43c97ac6d2e9e5c51f793d524a0f06ad0d2adecc2f1312d1052ad21",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_optuna/candidate_0003/episode_records.jsonl",
+      "size_bytes": 25480,
+      "sha256": "6611858cd492dd56a5cd146d6da6159991fca3e519c19bed00de4db8ebab3688",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_optuna/candidate_0004/episode_records.jsonl",
+      "size_bytes": 25440,
+      "sha256": "679d218d404a35eee5372e33e3ed193dbee397c42a5af00a21b88efc755a5494",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_optuna/candidate_0005/episode_records.jsonl",
+      "size_bytes": 25451,
+      "sha256": "129f88933ba632bebb134ddf4edf85babc8ef75d4a0a2f3f72c6139516d6f78a",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_optuna/candidate_0006/episode_records.jsonl",
+      "size_bytes": 25420,
+      "sha256": "19608886d21a45b10ad776ad33f7ca0a5dea7143b2fde0cc77efd56c63552ac9",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_optuna/candidate_0007/episode_records.jsonl",
+      "size_bytes": 25488,
+      "sha256": "36509fe895aed6b77c5072cad3df4a0735d1f5fb1f92baca2d13df18df0959b8",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_optuna/candidate_0008/episode_records.jsonl",
+      "size_bytes": 25488,
+      "sha256": "3d05b55ed21e3c2237360e0b4df4d21aae3cca4910de043fe967c154c4d21812",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_optuna/candidate_0009/episode_records.jsonl",
+      "size_bytes": 25486,
+      "sha256": "bfc441ff29d1ea5e4d7ac5790d49e9acbee4d3f3f2d82c45e5a56783028a8711",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_optuna/candidate_0010/episode_records.jsonl",
+      "size_bytes": 25430,
+      "sha256": "d58af050a3b43e187ab6437af2733164f62bb3efce572f56bc987b2ccd2b94ed",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_optuna/candidate_0011/episode_records.jsonl",
+      "size_bytes": 25445,
+      "sha256": "c48d75e4a850de8d73499ef8c8d13d96d87d982c45bcff0a194f3b4947ab00b8",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_optuna/candidate_0012/episode_records.jsonl",
+      "size_bytes": 25434,
+      "sha256": "bbf8cee9675afbfb539ed108d689381316b628ed10da4b1fcd985bc51a6dc632",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_optuna/candidate_0013/episode_records.jsonl",
+      "size_bytes": 25442,
+      "sha256": "4fbdc7f47876c2c7c59e093bd04429f553cf678cdb1fd31a650141b1f4e6685c",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_optuna/candidate_0014/episode_records.jsonl",
+      "size_bytes": 25445,
+      "sha256": "7e597221cb9a56a2a3c9fab6a57e4837ed154c28a0a848b4176690b0fe9bb762",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_optuna/candidate_0015/episode_records.jsonl",
+      "size_bytes": 25440,
+      "sha256": "65d8be5acb6889b55463e457dd25e5ca422022c7ef50063726993002d138e56d",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_random/candidate_0000/episode_records.jsonl",
+      "size_bytes": 25436,
+      "sha256": "5a5608b8819dafc3766fd4a66ea5a4b77edffdaec247c052b2f22a1824ae8dc3",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_random/candidate_0001/episode_records.jsonl",
+      "size_bytes": 25485,
+      "sha256": "fd757ec1066bd2a2a8b80c8f3bc4c4ae09349e8ccd46c5dfd8894e4557f30d3b",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_random/candidate_0002/episode_records.jsonl",
+      "size_bytes": 25498,
+      "sha256": "8b7fd6b6f365610dcb0ce9cccf61dd3e01faff1df941fd2868296f01c44bd130",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_random/candidate_0003/episode_records.jsonl",
+      "size_bytes": 25427,
+      "sha256": "d0f163d18de7603818fcb8d0cfb1871185c2c85db2adc2f01a12ec3351f04e72",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_random/candidate_0004/episode_records.jsonl",
+      "size_bytes": 25445,
+      "sha256": "a6ef9029d4b7208f7053e8e197a8ff618a4360cb2be654e87f1dc5480e5675e3",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_random/candidate_0005/episode_records.jsonl",
+      "size_bytes": 25403,
+      "sha256": "53584c4b586f2aa031524bd84d814930445f8ea9233bd0b3ce6e486f2282cb23",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_random/candidate_0006/episode_records.jsonl",
+      "size_bytes": 25481,
+      "sha256": "9796c9f89f512f57d4c101d4b600a1c0befc10ed7ceefa1113e1a3f8d81cbaf2",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_random/candidate_0007/episode_records.jsonl",
+      "size_bytes": 25439,
+      "sha256": "e8922b2cf62dbc462fb16a36a2485666a5209915a5bb3e5dbcd269d4ac80e789",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_random/candidate_0008/episode_records.jsonl",
+      "size_bytes": 25444,
+      "sha256": "037e992b241b745c4482ba6b8ca4f757f897d978017fb33879c0ca9b8d1ad9cb",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_random/candidate_0009/episode_records.jsonl",
+      "size_bytes": 25443,
+      "sha256": "28b2efe2e283ffebce3886be133b35be343614092d6b5629740c32e1720884dd",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_random/candidate_0010/episode_records.jsonl",
+      "size_bytes": 25442,
+      "sha256": "a1c422c2a553017598731bd8669873e5ec72d7150eff457304f4129c10f424bf",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_random/candidate_0011/episode_records.jsonl",
+      "size_bytes": 25437,
+      "sha256": "224eda922a6b3329ee085631a8cc8c649321492f6dd81f3103aa18df56419ebc",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_random/candidate_0012/episode_records.jsonl",
+      "size_bytes": 25434,
+      "sha256": "5af855ee80ce54f402610b2b8e786a6fc0e9206a85cd4d6bf27f0a89eb8af834",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_random/candidate_0013/episode_records.jsonl",
+      "size_bytes": 25482,
+      "sha256": "1fae12e439e1e66ebdb3327b93d0cc05674956144c2cc15a2895166169f90c30",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_random/candidate_0014/episode_records.jsonl",
+      "size_bytes": 25431,
+      "sha256": "357ee6eb67c576c65306c7cd3ffd999bd41394d4fb2828c6cead8c02571c2f62",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_1101_random/candidate_0015/episode_records.jsonl",
+      "size_bytes": 25438,
+      "sha256": "c5e7ecfffdfd3a4eed8a70e4c5f8a0bd107d79bc07fe1cbcdc96f7dd3f62280c",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_optuna/candidate_0000/episode_records.jsonl",
+      "size_bytes": 25440,
+      "sha256": "e6f46057e25fb908ca006eef30fbbe72a88c40850c9f20a035ac7f171b9c45f3",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_optuna/candidate_0001/episode_records.jsonl",
+      "size_bytes": 25443,
+      "sha256": "79db78d67bb8a44e4fb82338e15d965feb9aecee13042e3f71330966963f9882",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_optuna/candidate_0002/episode_records.jsonl",
+      "size_bytes": 25425,
+      "sha256": "28d2c178ac86c2286aa943d5b316dcff1de1fe9b48bdeebb3f8a851efcb22c8c",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_optuna/candidate_0003/episode_records.jsonl",
+      "size_bytes": 25453,
+      "sha256": "6325b82cab5d9dfee988fb272992c70dfd2522d49a13357e5b56bfe6ba4f57e4",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_optuna/candidate_0004/episode_records.jsonl",
+      "size_bytes": 25484,
+      "sha256": "a6043c6aaa6d01cd4a1600a6c832d21f17802e6ab7425ba0967553636dce223c",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_optuna/candidate_0005/episode_records.jsonl",
+      "size_bytes": 25483,
+      "sha256": "3a95f10cd82718f2a750564f9f4aaac4ae0c92cef958bf69c5057640c6cb22b7",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_optuna/candidate_0006/episode_records.jsonl",
+      "size_bytes": 25485,
+      "sha256": "8a88d4b73976b970fc66b5ec5efbf4eb1830fcdbb13f8c5c941e06e17cee8a0e",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_optuna/candidate_0007/episode_records.jsonl",
+      "size_bytes": 25493,
+      "sha256": "859baf6772cb9261b631120a86a9a1cb7fd98d6cec35e148b113de14f61ac153",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_optuna/candidate_0008/episode_records.jsonl",
+      "size_bytes": 25439,
+      "sha256": "ef9ceaa604a8f5aeb29218849ea3e5d061a716703b621815a782606d723aef2d",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_optuna/candidate_0009/episode_records.jsonl",
+      "size_bytes": 25486,
+      "sha256": "dbad9f6f87687bf0f6c0c808aa6734b0376b80e43a198ab317a30d5de622912b",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_optuna/candidate_0010/episode_records.jsonl",
+      "size_bytes": 25485,
+      "sha256": "292e9a10bb4d306ddd08e92891fcfc9be4efd3423f18ae613999c866e3e4e45f",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_optuna/candidate_0011/episode_records.jsonl",
+      "size_bytes": 25449,
+      "sha256": "e8bb366f21f6f74338d6d6a07db891c9f288d117d5a9dab4071bd06670f2797e",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_optuna/candidate_0012/episode_records.jsonl",
+      "size_bytes": 25489,
+      "sha256": "1dff92c2518384f0183c202dff4939a5b8c270fea05c0527fb4ef901c6c24b85",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_optuna/candidate_0013/episode_records.jsonl",
+      "size_bytes": 25442,
+      "sha256": "4e3f0fc1e28fb5d63fc17a95bf5e06c9eb1e25edf6288fbfb8b97ea8a8a70550",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_optuna/candidate_0014/episode_records.jsonl",
+      "size_bytes": 25491,
+      "sha256": "b3716b987c7ea4327a3ea4847b26275dd17b57e66ce7965528d8e01e611ef3fb",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_optuna/candidate_0015/episode_records.jsonl",
+      "size_bytes": 25441,
+      "sha256": "24b163e7e0f001d261041615801c8a7e4f2497c8e765cd7abd166c6c28fa36a8",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_random/candidate_0000/episode_records.jsonl",
+      "size_bytes": 25434,
+      "sha256": "df0731a655d9de85a636c759df5cd490ddf8e457ebbda5837dd535949e4a8374",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_random/candidate_0001/episode_records.jsonl",
+      "size_bytes": 25414,
+      "sha256": "e9e81b95d073c3afc7a8afb6001036f0ce47fe1de90b6a4a6a7b058cd0aff4d6",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_random/candidate_0002/episode_records.jsonl",
+      "size_bytes": 25488,
+      "sha256": "3ccd6464d292593f5fb064256cdcb5b7c842305fd14d5ea8e66d29b23d17ea51",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_random/candidate_0003/episode_records.jsonl",
+      "size_bytes": 25441,
+      "sha256": "a7812c2b475b1604ea3cda796c977285e101ae52114d418b3f4eb08d67c4a7c9",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_random/candidate_0004/episode_records.jsonl",
+      "size_bytes": 25440,
+      "sha256": "0663cd167c642c0dc2efffdb24c5bb38a979a85b12b1a45ebb84ea1c642d2b82",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_random/candidate_0005/episode_records.jsonl",
+      "size_bytes": 25440,
+      "sha256": "98204c97094d8cab790757a5ab9935a89d53a825ffb2e5a5962956a2a9ad483a",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_random/candidate_0006/episode_records.jsonl",
+      "size_bytes": 25430,
+      "sha256": "2c7e47bf69dc0dc2d23eb575cb5ed1c0187ed76d3dc77b4eaaf052f27e6858b5",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_random/candidate_0007/episode_records.jsonl",
+      "size_bytes": 25485,
+      "sha256": "d7de2c1b579db51ef83cf221cda6e082cab3aeddfacf472b306b902513cbbba6",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_random/candidate_0008/episode_records.jsonl",
+      "size_bytes": 25427,
+      "sha256": "6f65a616b0b242501de15ee866bd77f08bb31e3ed946dcf9dff84c2d39a5fb05",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_random/candidate_0009/episode_records.jsonl",
+      "size_bytes": 25445,
+      "sha256": "83b1a4a93d380731df944ddc3d4131c673962f9d2237d270b630804b89335142",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_random/candidate_0010/episode_records.jsonl",
+      "size_bytes": 25418,
+      "sha256": "19a64982c299e9bb82ac754247f3162b89f64329e6e4ea28e0151b4c668bf2b3",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_random/candidate_0011/episode_records.jsonl",
+      "size_bytes": 25489,
+      "sha256": "190df56bad20987c62f464c3f9e40226e61253dcdcb0b4982d7cf474f0ff47cb",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_random/candidate_0012/episode_records.jsonl",
+      "size_bytes": 25491,
+      "sha256": "303be888223403f50f8cf500382577a9cecbf83bab02286041ccc4ff42f2587e",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_random/candidate_0013/episode_records.jsonl",
+      "size_bytes": 25495,
+      "sha256": "3a0345e1696363d8c924beca7b290146bb3c398f69c993b60976b63af47a397f",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_random/candidate_0014/episode_records.jsonl",
+      "size_bytes": 25434,
+      "sha256": "d1ffa6e9b7137e8d6615153544a58dc165460e542df03f237f93e2ca43c93b52",
+      "kind": "misc"
+    },
+    {
+      "path": "source_episode_records/seed_2202_random/candidate_0015/episode_records.jsonl",
+      "size_bytes": 25449,
+      "sha256": "1884640ac39e95fcda3558c02f50ef8068088b6f84b49d5f66bf290185ee0758",
       "kind": "misc"
     },
     {

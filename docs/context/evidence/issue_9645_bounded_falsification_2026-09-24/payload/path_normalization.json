@@ -88,5 +88,35 @@
     "jsonl_source_record_comparison": "all 5 normalized records equal their captured source records after excluding only the documented scenario_params.route_overrides_file field",
     "provenance_source_record_comparison": "all 5 normalized provenance records equal their captured source records after excluding only the documented run.invocation and/or inputs.schema_path.path fields",
     "candidate_parameters_metrics_events_and_outcomes_changed": false
+  },
+  "unmodified_candidate_episode_record_retention": {
+    "count": 64,
+    "total_size_bytes": 1629062,
+    "source_sha256_and_size_bindings": "payload/pilot_report_artifact_path_map.v1.json and payload/reproduction_inputs/input_rebase_map.v1.json",
+    "bytes_rewritten": false,
+    "absolute_path_fields": {
+      "scenario_params.route_overrides_file": 64
+    },
+    "reason": "Preserve exact producer bytes. The report rebuild does not dereference route_overrides_file; candidate-specific route override inputs are not all retained, so these files are not by themselves portable replay bundles.",
+    "capture_flag_counts": {
+      "scenario_params.record_simulation_step_trace": {
+        "enabled": 0,
+        "disabled": 64
+      },
+      "scenario_params.record_planner_decision_trace": {
+        "enabled": 0,
+        "disabled": 64
+      }
+    },
+    "embedded_digest_counts": {
+      "provenance.scenario_digest": {
+        "present": 0,
+        "missing": 64
+      },
+      "provenance.map_digest": {
+        "present": 0,
+        "missing": 64
+      }
+    }
   }
 }

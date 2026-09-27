@@ -41,3 +41,8 @@ severe-intrusion evidence is absent, and unknown criticality is separate from kn
 known non-critical counts. The experiment commit is recorded separately in
 `payload/run_metadata.json`. This report does not reinterpret the historical v1 objective score or
 claim safety from objective eligibility.
+
+The mixed distance columns in `payload/candidate_evaluations.csv` are defined in its sibling
+`payload/metadata.json`: `distance_to_human_min_m` is center-to-center distance, and
+`min_clearance_m` is surface clearance after subtracting both agents' radii. Both values are
+simulation-derived diagnostics, not physical measurements.

@@ -182,6 +182,9 @@ for retention classes, preservation proof, and cleanup-eligibility workflows.
   revision, while severe-intrusion evidence is still absent and all pilot criticality remains
   unknown. Explicit unknown-feasibility and claim-boundary caveats remain. This is not a planner
   ranking, paper-facing benchmark result, or safety result.
+  `payload/metadata.json` declares the mixed conventions in `candidate_evaluations.csv`:
+  `distance_to_human_min_m` is center-to-center distance, while `min_clearance_m` is
+  surface clearance after subtracting the robot and pedestrian radii.
 
 - `issue_6151_simulator_dependence_synthesis_2026-09-13/`: bounded negative synthesis for the
   #3207 validity-boundary parent. The only defensible verdict is `invalid_missing_evidence`:

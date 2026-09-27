@@ -1723,6 +1723,12 @@ def test_docs_proof_fails_before_uv_on_incomplete_dependency_profile(tmp_path: P
     """Docs proof must reject a partial current-worktree environment before invoking uv."""
     repo, fake_bin, capture = _docs_proof_fixture(tmp_path)
     env = _env_with_fake_bin(fake_bin)
+    for name in (
+        "VIRTUAL_ENV",
+        "UV_PROJECT_ENVIRONMENT",
+        "ROBOT_SF_EXPLICIT_VENV_OVERRIDE",
+    ):
+        env.pop(name, None)
     env["BASE_REF"] = "HEAD"
 
     result = subprocess.run(

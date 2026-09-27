@@ -43,8 +43,21 @@ def main() -> int:
     manifest_path = args.manifest.resolve()
     manifest = load_three_width_manifest(manifest_path)
     preflight = run_three_width_preflight(manifest_path, output_dir=args.variants_dir)
-    if not preflight["go"]:
-        raise ValueError("doorway geometry/oracle preflight did not admit diagnostic continuation")
+    diagnostic_required_checks = (
+        "baseline_passes",
+        "all_widths_positive_clearance",
+        "planner_records_are_not_run",
+        "no_campaign_evidence",
+    )
+    if any(preflight["checks"].get(key) is not True for key in diagnostic_required_checks):
+        raise ValueError("doorway diagnostic smoke lacks required geometry or custody checks")
+    # ``go`` remains the H400 dispatch gate. An unavailable/unknown oracle keeps
+    # it false, but a one-step reset smoke may still record diagnostic custody.
+    diagnostic_admission = (
+        "diagnostic_only_oracle_readiness_blocked"
+        if not preflight["go"]
+        else "diagnostic_only_preflight_ready"
+    )
     assets = [
         record["assets"]
         | {"variant_id": record["variant_id"], "gap_width_m": record["geometry"]["gap_width_m"]}
@@ -111,6 +124,7 @@ def main() -> int:
         {
             "schema_version": "issue_9348_paired_reset_smoke.v1",
             "claim_boundary": "H1 diagnostic custody only; no width-comparison outcomes",
+            "preflight_admission": diagnostic_admission,
             "source_commit": subprocess.check_output(
                 ["git", "rev-parse", "HEAD"], cwd=_REPO_ROOT, text=True
             ).strip(),

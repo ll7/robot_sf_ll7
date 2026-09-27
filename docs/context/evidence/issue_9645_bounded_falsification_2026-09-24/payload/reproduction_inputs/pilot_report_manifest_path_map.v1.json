@@ -1,0 +1,26 @@
+{
+  "schema_version": "falsification_manifest_path_map.v1",
+  "source_comparison_sha256": "7c8e7d0f6c74cef38bc776d24d19737176eb9eaebcac99ff1a91faeda302e02d",
+  "bindings": [
+    {
+      "declared_manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/manifest.json",
+      "archived_manifest_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/manifests/tpe_seed_1101.json",
+      "archived_manifest_sha256": "51f7dcf82d9e75a7156356d4465820cfe962a1208dd0c0ec38372031170c3aa5"
+    },
+    {
+      "declared_manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/manifest.json",
+      "archived_manifest_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/manifests/random_seed_1101.json",
+      "archived_manifest_sha256": "2b40ddabdc64dc7f6d35974a96b36db15e6894e1e5e582796c9e1fd17bf4b92e"
+    },
+    {
+      "declared_manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/manifest.json",
+      "archived_manifest_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/manifests/tpe_seed_2202.json",
+      "archived_manifest_sha256": "7b4af9ea0efbc2dc5ee7f58f27ecae10ab0af285644c70ddc4ff17817b07d1bf"
+    },
+    {
+      "declared_manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/manifest.json",
+      "archived_manifest_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/manifests/random_seed_2202.json",
+      "archived_manifest_sha256": "8d0d0cac1644befdf6726555e2547359bf43b832cc95d754becf9dd2acc656ac"
+    }
+  ]
+}

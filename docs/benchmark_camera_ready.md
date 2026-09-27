@@ -535,6 +535,10 @@ added by this invocation, and a fully cached `skip-complete` arm contributes zer
 stored `summary.written` is nonzero from an earlier invocation. `total_episodes` separately counts
 all serialized episode rows retained in the arm JSONL artifacts, including rows from prior
 invocations. Both values count rows, not necessarily distinct logical episode identities.
+The campaign arm rollup uses the same distinction: `episodes_written` is this invocation's write
+count and `episodes_total` is the retained-row count. The Markdown report labels these columns
+`written this invocation` and `retained rows`; legacy summaries without the explicit invocation
+field use their available `written` count as a compatibility fallback.
 `throughput_definition` names the numerator, retained-count, and denominator fields, identifies
 the numerator unit as `episode_rows`, and sets its scope to `campaign_all_planner_arms`; the rate
 is not an individual planner-arm throughput value. Its declared unit is `episode_rows/second`.

@@ -454,6 +454,7 @@ class TestBuildArmRollup:
                 "kinematics": "diff",
                 "status": "ok",
                 "episodes_written": 10,
+                "episodes_total": 10,
                 "episodes_failed": 0,
             }
         ]

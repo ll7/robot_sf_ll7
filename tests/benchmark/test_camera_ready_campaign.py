@@ -4079,6 +4079,8 @@ def test_run_campaign_resume_throughput_counts_only_rows_written_this_invocation
     assert campaign_summary["campaign"]["total_episodes"] == 2
     assert campaign_summary["campaign"]["episodes_written_this_invocation"] == 0
     assert campaign_summary["campaign"]["episodes_per_second"] == 0.0
+    assert campaign_summary["arm_rollup"][0]["episodes_written"] == 0
+    assert campaign_summary["arm_rollup"][0]["episodes_total"] == 2
 
 
 def test_run_campaign_counts_existing_records_when_resumed_attempt_fails(

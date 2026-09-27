@@ -381,6 +381,25 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
 _MAX_FIRST_ERROR_LEN = 200
 
 
+def _arm_episode_counts(summary: Mapping[str, Any]) -> tuple[int, int]:
+    """Return invocation-written and retained row counts for one arm."""
+    legacy_written_value = summary.get("written")
+    invocation_written_value = summary.get("episodes_written_this_invocation")
+    if invocation_written_value is None:
+        invocation_written_value = legacy_written_value
+    if invocation_written_value is None:
+        invocation_written_value = summary.get("episodes_total")
+    episodes_written = int(invocation_written_value) if invocation_written_value is not None else 0
+
+    retained_value = summary.get("episodes_total")
+    if retained_value is None:
+        retained_value = legacy_written_value
+    if retained_value is None:
+        retained_value = episodes_written
+    episodes_total = int(retained_value) if retained_value is not None else 0
+    return episodes_written, episodes_total
+
+
 def _build_arm_rollup(run_entries: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """Build per-arm rollup for the top-level campaign summary.
 
@@ -397,10 +416,7 @@ def _build_arm_rollup(run_entries: Sequence[Mapping[str, Any]]) -> list[dict[str
         summary = entry.get("summary") or {}
         failures = summary.get("failures") or []
         status = str(entry.get("status", "unknown"))
-        written_value = summary.get("written")
-        if written_value is None:
-            written_value = summary.get("episodes_total")
-        episodes_written = int(written_value) if written_value is not None else 0
+        episodes_written, episodes_total = _arm_episode_counts(summary)
         failed_jobs_value = summary.get("failed_jobs")
         episodes_failed = int(failed_jobs_value) if failed_jobs_value is not None else 0
 
@@ -430,6 +446,7 @@ def _build_arm_rollup(run_entries: Sequence[Mapping[str, Any]]) -> list[dict[str
             "kinematics": str(planner_info.get("kinematics", "unknown")),
             "status": status,
             "episodes_written": episodes_written,
+            "episodes_total": episodes_total,
             "episodes_failed": episodes_failed,
         }
         if first_error is not None:

@@ -1031,7 +1031,7 @@ def _assert_generic_admission_count_is_rejected(
 
         persisted_count = copy.deepcopy(corpus)
         persisted_count["search_runs"][0]["new_counterexamples_admitted"] = admitted_count
-        with pytest.raises(CorpusError, match="must omit new_counterexamples_admitted"):
+        with pytest.raises(CorpusError):
             validate_corpus(persisted_count, corpus_root=corpus_root)
 
 

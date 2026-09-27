@@ -1,0 +1,65 @@
+{
+  "claim_boundary": "This compact trace was extracted from an exact checksummed 4b96173 runner row for render-only diagnostics. It preserves the observed collision time and per-sample surface clearance but does not establish exact-source replay, dynamic feasibility, planner comparison, a new search discovery, or real-world safety.",
+  "episode": {
+    "case_id": "case_0000_01595b2ea612",
+    "collision_events": [
+      {
+        "collision_partner_id": "0",
+        "collision_partner_type": "pedestrian",
+        "event_index": 0,
+        "event_time_s": 1.0,
+        "exact_event_source": "runtime.step.meta.is_pedestrian_collision",
+        "source_path": "event_ledger.collision_events[0].collision_time"
+      }
+    ],
+    "episode_id": "crossing_ttc_template_adversarial_0008--320--42152ae7882a846e",
+    "exact_collision": true,
+    "planner": "goal",
+    "runner_revision": "4b9617338ecbaf6bd3612b4d8c5269f993581a0a",
+    "scenario_id": "crossing_ttc_template_adversarial_0008",
+    "seed": 320,
+    "source_episode_revision_for_verification": "58e516aa4f69ff3098bf518199f483006589758c",
+    "source_revision_match": false
+  },
+  "extraction": {
+    "extracted_at_utc": "2026-09-26T19:08:55.555653+00:00",
+    "full_episode_row_promoted": false,
+    "full_ignored_output_tree_promoted": false,
+    "method": "load exact single JSONL row, select algorithm_metadata.simulation_step_trace, serialize the extracted JSON value with sorted keys",
+    "source_extraction_pointer": "algorithm_metadata.simulation_step_trace"
+  },
+  "schema_version": "issue_9647_recorded_trace_provenance.v1",
+  "source": {
+    "algorithm_config_artifact_status": "not_provided",
+    "command": "scripts/tools/materialize_adversarial_replay_gallery.py tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json --out output/adversarial-replay-gallery/issue-9647-smoke-4b96173 --top-k 1",
+    "episode_record_availability": "original_local_ignored_output_not_promoted",
+    "episode_record_line_index": 0,
+    "episode_record_path": "output/adversarial-replay-gallery/issue-9647-smoke-4b96173/cases/case_0000_01595b2ea612/replay/episode_records.jsonl",
+    "episode_record_provenance_path": "output/adversarial-replay-gallery/issue-9647-smoke-4b96173/cases/case_0000_01595b2ea612/replay/episode_records.jsonl.provenance.json",
+    "episode_record_provenance_sha256": "5d54d9167b49c57e04f7a04ce87e220edac5c32a85eab5cf7db4369b9f28a2e0",
+    "episode_record_sha256": "cd5597cec3728b27379c21e10434c9ed17aaa0f65937a98f24fb4bd9d692cdc8",
+    "execution_context_sha256": "6dc34a26c637cb84a21fd1414db605253bb550465504b5d3da40cf90de4ae244",
+    "input_bundle_sha256": "445c501546f3a896885433b30a7781160b38eae1079d67f8b906294a3ca0e2c1",
+    "run_id": "121bb7f7fa2a4db4b2ef457d381064e1",
+    "runner_revision": "4b9617338ecbaf6bd3612b4d8c5269f993581a0a",
+    "scenario_matrix_sha256": "285984548bff8259bc5010da70fd2c53ef59eaad4a9aeb103fd945b8220b2a19"
+  },
+  "source_classification": {
+    "dynamic_task_feasibility": "unknown",
+    "new_search_discovery": false,
+    "outcome_reproduced_at_changed_revision": true,
+    "source_map_registry_binding": "unknown_source_episode_map_registry_digest_missing",
+    "static_route_certificate": "passed_hard_but_solvable_post_hoc"
+  },
+  "trace": {
+    "bundle_relative_path": "cases/case_0000_01595b2ea612/replay/simulation_step_trace.json",
+    "canonical_json_sha256": "2abc4ddb19e3e4de76219bb10866b617b4db5ba06f6b5b889e3e78ce8b6365c9",
+    "dt_s": 0.1,
+    "first_sample_time_s": 0.1,
+    "last_sample_time_s": 1.0,
+    "path": "docs/context/evidence/issue_9647_gallery_smoke_2026-09-26/payload/cases/case_0000_01595b2ea612/replay/simulation_step_trace.json",
+    "sample_count": 10,
+    "schema_version": "simulation-step-trace.v1",
+    "sha256": "d12df9eb2030a29eae8cea8cc1bc5b042c9865bd9b9afcca8d83ed3da5872788"
+  }
+}

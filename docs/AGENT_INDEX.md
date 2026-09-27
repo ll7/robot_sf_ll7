@@ -32,6 +32,7 @@ entry points, contracts, and where to change behavior.
 - `scripts/tools/paper_results_handoff.py` - export interval-inclusive paper Results rows with bootstrap CIs from a frozen campaign bundle.
 - `robot_sf/benchmark/seed_variance.py` - per-scenario/per-planner seed-variability analysis module (used by paper issue #74 pilot).
 - `scripts/tools/benchmark_publication_bundle.py` - package a campaign into a DOI-ready publication bundle.
+- `scripts/tools/materialize_adversarial_replay_gallery.py` - replay-check and render a bounded set of cases from an adversarial-search manifest; see `docs/adversarial_replay_gallery.md`.
 
 ## Observation Modes
 - `ObservationMode.DEFAULT_GYM` - stacked `drive_state` + `rays` observation dict.

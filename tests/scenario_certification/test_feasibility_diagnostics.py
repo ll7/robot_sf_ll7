@@ -90,9 +90,11 @@ def test_actor_free_scenario_mutation_removes_pedestrians_preserves_route_fields
         "simulation_config": {
             "max_episode_steps": 600,
             "ped_density": 0.08,
+            "population_size": 12,
             "single_pedestrians": [{"spawn": [0, 0], "goal": [1, 1]}],
             "pedestrian_flows": [{"spawn_zone": 0}],
         },
+        "generated_replay": {"pedestrians": [{"id": "replay-ped"}]},
         "metadata": {"archetype": "cross_trap"},
         "seeds": [101, 102],
     }
@@ -102,10 +104,13 @@ def test_actor_free_scenario_mutation_removes_pedestrians_preserves_route_fields
     assert mutated["name"] == "classic_cross_trap_high"
     assert mutated["map_id"] == "classic_cross_trap"
     assert mutated["simulation_config"]["ped_density"] == 0.0
+    assert "population_size" not in mutated["simulation_config"]
     assert "single_pedestrians" not in mutated["simulation_config"]
     assert "pedestrian_flows" not in mutated["simulation_config"]
+    assert "generated_replay" not in mutated
     assert mutated["single_pedestrians"] == []
     assert mutated["social_groups"] == []
+    assert mutated["_diagnostic_remove_pedestrian_actors"] is True
     assert mutated["metadata"]["diagnostic_variant"] == "actor_free"
     assert mutated["metadata"]["diagnostic_claim_boundary"] == DIAGNOSTIC_CLAIM_BOUNDARY
 
@@ -126,6 +131,59 @@ def test_extended_time_mutation_changes_only_horizon_and_metadata() -> None:
     assert mutated["simulation_config"]["ped_density"] == 0.02
     assert mutated["metadata"]["diagnostic_variant"] == "extended_time"
     assert scenario["simulation_config"]["max_episode_steps"] == 500
+
+
+def test_actor_free_variant_removes_effective_map_and_forced_pedestrians(tmp_path: Path) -> None:
+    """The diagnostic variant removes actors from the loaded config, not just its YAML row."""
+    from robot_sf.scenario_certification.v1 import scenario_actor_source_census
+    from robot_sf.training.scenario_loader import build_robot_config_from_scenario
+
+    scenario_path = tmp_path / "scenario.yaml"
+    source_map = (
+        Path(__file__).resolve().parents[2] / "maps/svg_maps/classic_realworld_bottleneck.svg"
+    )
+    scenario = {
+        "name": "actor-free-loader-fixture",
+        "map_file": source_map.as_posix(),
+        "simulation_config": {
+            "max_episode_steps": 200,
+            "ped_density": 0.08,
+            "population_size": 3,
+        },
+        "generated_replay": {
+            "schema_version": "robot_sf.generated_replay_runtime.v1",
+            "robot": {
+                "start": [2.0, 2.0],
+                "goal": [8.0, 2.0],
+                "trajectory": [[2.0, 2.0], [8.0, 2.0]],
+            },
+            "pedestrians": [
+                {
+                    "id": "generated-ped",
+                    "start": [4.0, 3.0],
+                    "trajectory": [[4.0, 3.0], [5.0, 3.0]],
+                }
+            ],
+        },
+    }
+    original = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+    original_census = scenario_actor_source_census(original)
+    assert original_census["verified_empty"] is False
+    assert original_census["forced_population_size"] == 3
+
+    actor_free = make_actor_free_scenario(scenario)
+    transformed = build_robot_config_from_scenario(actor_free, scenario_path=scenario_path)
+    transformed_census = scenario_actor_source_census(transformed)
+
+    assert transformed.sim_config.peds_per_area_m2 == 0.0
+    assert transformed.sim_config.population_size is None
+    assert transformed_census["status"] == "complete"
+    assert transformed_census["verified_empty"] is True
+    assert transformed_census["planner_context_equivalent"] is True
+    assert all(
+        actor_map["single_pedestrian_count"] == 0 and actor_map["social_group_count"] == 0
+        for actor_map in transformed_census["maps"]
+    )
 
 
 def test_report_aggregates_three_diagnostic_lanes_and_keeps_verdict_fail_closed(

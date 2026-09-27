@@ -1073,11 +1073,15 @@ def _add_label_once(number: int, label: str, *, repo: str) -> dict[str, Any]:
     try:
         json.loads(result.stdout)
     except json.JSONDecodeError as exc:
-        snippet = result.stdout.strip()[:200]
-        return {
-            "status": "error",
-            "error": f"label add returned invalid JSON: {exc}; stdout snippet: {snippet!r}",
-        }
+        # The POST succeeded (returncode 0) but the response body is unusable.
+        # Do not report a failed mutation before checking the authoritative
+        # inventory (issue #9556): an applied write with an empty response
+        # must resolve through the readback below, not this parse error.
+        response_note = (
+            f"unparsable add response: {exc}; stdout snippet: {result.stdout.strip()[:200]!r}"
+        )
+    else:
+        response_note = None
 
     current = get_label_names(number, repo=repo)
     if current["status"] == "error":
@@ -1086,15 +1090,18 @@ def _add_label_once(number: int, label: str, *, repo: str) -> dict[str, Any]:
         return {
             "status": "error",
             "error": f"label '{label}' was not found in labels after add; "
-            "the write may not have taken effect",
+            "the write may not have taken effect" + (f"; {response_note}" if response_note else ""),
         }
-    return {
+    response = {
         "status": "ok",
         "number": number,
         "label": label,
         "action": "add",
         "repo": repo,
     }
+    if response_note is not None:
+        response["response_note"] = response_note
+    return response
 
 
 def _establish_terminal_pr_expectations(

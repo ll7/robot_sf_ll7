@@ -19,6 +19,16 @@ def normalize_map_observation(obs: dict[str, Any]) -> dict[str, Any]:
     is present. Planner bridges should see the same robot/goal/pedestrian fields in
     either mode so that adding a grid does not silently turn the state into zeros.
 
+    Flat-observation frame contract (issue #9752; the single place it is
+    documented — producer: ``SocNavObservationFusion.next_obs``):
+    ``robot_position``/``pedestrians_positions``/``goal_current`` are world-frame
+    meters; ``robot_heading`` is the world-frame CCW yaw in radians;
+    ``pedestrians_velocities`` are **robot-ego-frame** meters per second
+    (world velocities rotated by ``-heading``). Radii, speeds, counts, and
+    timesteps are frame-free scalars. This bridge copies values unchanged and
+    performs no frame conversion: every consumer must convert ego velocities
+    to its working frame (see ``_ego_velocity_to_world`` in the hybrid planner).
+
     Returns:
         dict[str, Any]: Original payload with flattened fields mirrored into nested blocks.
     """

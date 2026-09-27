@@ -1945,3 +1945,48 @@ def test_hybrid_rule_reset_clears_episode_diagnostics() -> None:
     diagnostics = planner.diagnostics()
     assert diagnostics["steps"] == 0
     assert diagnostics["last_decision"] is None
+
+
+def test_hybrid_v3_flat_observation_keeps_historical_velocity_frame() -> None:
+    """Ruled v3 behavior (issue #9752): flat ego velocities pass through unconverted.
+
+    The nested path converts ego velocities to world via
+    ``_ego_velocity_to_world``; the v3 flat path deliberately keeps its
+    historical pass-through for comparison. This characterization pins both so
+    any future behavior change fails loudly and deliberately.
+    """
+    planner = HybridRuleLocalPlannerAdapter(HybridRuleLocalPlannerConfig())
+    heading = float(np.pi)
+    ego_vel = [[-0.65, -0.04]]
+    flat_obs = {
+        "robot_position": [0.0, 0.0],
+        "robot_heading": [heading],
+        "robot_speed": [0.0],
+        "robot_radius": [0.25],
+        "goal_current": [-4.0, 0.0],
+        "goal_next": [-4.0, 0.0],
+        "pedestrians_positions": [[-2.0, 0.0]],
+        "pedestrians_velocities": ego_vel,
+        "pedestrians_count": [1],
+        "pedestrians_radius": [0.25],
+        "sim_timestep": 0.1,
+    }
+    flat_state = planner._extract_state(flat_obs)
+    np.testing.assert_allclose(np.asarray(flat_state["ped_vel"]), np.asarray(ego_vel))
+
+    nested_obs = _obs(
+        robot=(0.0, 0.0),
+        heading=heading,
+        goal=(-4.0, 0.0),
+        ped_positions=[(-2.0, 0.0)],
+        ped_velocities=[(-0.65, -0.04)],
+    )
+    nested_state = planner._extract_state(nested_obs)
+    cos_h, sin_h = float(np.cos(heading)), float(np.sin(heading))
+    expected_world = [
+        [
+            cos_h * ego_vel[0][0] - sin_h * ego_vel[0][1],
+            sin_h * ego_vel[0][0] + cos_h * ego_vel[0][1],
+        ]
+    ]
+    np.testing.assert_allclose(np.asarray(nested_state["ped_vel"]), np.asarray(expected_world))

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -364,3 +366,47 @@ def test_review_registry_discovery_requires_installed_metadata(
     monkeypatch.setattr(importlib.metadata, "entry_points", lambda **kwargs: ())
     empty_components, _empty_rows = discover_components()
     assert not {"srev29-example-analyzer", "srev29-example-renderer"}.intersection(empty_components)
+
+
+def test_viz_probe_includes_imageio_ffmpeg() -> None:
+    """The viz probe must cover imageio_ffmpeg (issue #9560)."""
+    from scripts.dev.check_worktree_optional_deps import EXTRA_MODULES
+
+    assert "imageio_ffmpeg" in EXTRA_MODULES["viz"]
+
+
+def _viz_requirement_probes() -> tuple[set[str], list[str]]:
+    """Map pyproject viz requirements to import probes; return (probes, missing)."""
+    from scripts.dev.check_worktree_optional_deps import EXTRA_MODULES
+
+    # Distribution names whose import name differs from the normalized package name.
+    aliases = {
+        "pillow": "PIL",
+        "imageio-ffmpeg": "imageio_ffmpeg",
+        "scikit-learn": "sklearn",
+    }
+    pyproject = REPO_ROOT / "pyproject.toml"
+    with open(pyproject, "rb") as stream:
+        requirements = tomllib.load(stream)["project"]["optional-dependencies"]["viz"]
+    probes = {module.lower() for module in EXTRA_MODULES["viz"]}
+    missing = []
+    for requirement in requirements:
+        name = re.split(r"[<>=!;\s\[]", requirement.strip(), maxsplit=1)[0].lower()
+        candidates = {
+            candidate.lower()
+            for candidate in (
+                name,
+                name.replace("-", "_"),
+                name.replace("_", "-"),
+                aliases.get(name, name),
+            )
+        }
+        if not (candidates & probes):
+            missing.append(requirement)
+    return probes, missing
+
+
+def test_every_viz_extra_requirement_has_a_probe() -> None:
+    """Every pyproject viz requirement must be represented by an import probe (issue #9560)."""
+    _, missing = _viz_requirement_probes()
+    assert not missing, f"viz requirements without import probe: {missing}"

@@ -2822,7 +2822,7 @@ class AuditQueue:
             self._load_state_from_disk()
         elif self._pending_path is not None and self._pending_path.exists():
             self._recover_pending_without_state()
-            self._ensure_candidate_first_seen()
+            self._ensure_candidate_first_seen(default_index=0)
         else:
             self._ensure_candidate_first_seen()
 
@@ -2895,26 +2895,30 @@ class AuditQueue:
                     return episode_id
         return packet_id
 
+    def _load_state_from_disk_locked(self) -> QueueState:
+        if self.state_path is None:
+            raise QueueStateError("queue state path is unavailable")
+        if self.state_path.is_symlink():
+            raise QueueStateError(f"queue state path must not be a symlink: {self.state_path}")
+        try:
+            payload = _read_json(self.state_path)
+            state = QueueState.from_mapping(payload)
+            if state.rng_state:
+                self._rng.setstate(_decode_rng(state.rng_state))
+        except (OSError, QueueInputError, QueueStateError, TypeError, ValueError) as exc:
+            raise QueueStateError(f"cannot resume queue state {self.state_path}: {exc}") from exc
+        self.state = state
+        self._reconcile_pending_locked(state.state_revision)
+        self._persisted_revision = state.state_revision
+        self._stale_inputs = self._compare_input_identity(state)
+        return state
+
     def _load_state_from_disk(self) -> None:
         if self.state_path is None:
             raise QueueStateError("queue state path is unavailable")
         with _state_lock(self.state_path):
-            if self.state_path.is_symlink():
-                raise QueueStateError(f"queue state path must not be a symlink: {self.state_path}")
-            try:
-                payload = _read_json(self.state_path)
-                state = QueueState.from_mapping(payload)
-                if state.rng_state:
-                    self._rng.setstate(_decode_rng(state.rng_state))
-            except (OSError, QueueInputError, QueueStateError, TypeError, ValueError) as exc:
-                raise QueueStateError(
-                    f"cannot resume queue state {self.state_path}: {exc}"
-                ) from exc
-            self.state = state
-            self._reconcile_pending_locked(state.state_revision)
+            self._load_state_from_disk_locked()
         self._ensure_candidate_first_seen(default_index=0)
-        self._persisted_revision = state.state_revision
-        self._stale_inputs = self._compare_input_identity(state)
 
     def _ensure_candidate_first_seen(self, *, default_index: int | None = None) -> None:
         first_seen = dict(self.state.candidate_first_seen)
@@ -4132,6 +4136,11 @@ class AuditQueue:
         if self.state_path is None or self._pending_path is None:
             raise QueueStateError("queue state or pending mutation path is unavailable")
         with _state_lock(self.state_path):
+            if self.state_path.exists():
+                self._load_state_from_disk_locked()
+                return
+            if not self._pending_path.exists():
+                return
             if self._pending_path.is_symlink():
                 raise QueueStateError(
                     f"queue pending mutation path must not be a symlink: {self._pending_path}"

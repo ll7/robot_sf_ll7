@@ -11,13 +11,15 @@ base_scenario:
   scenario_id: francis2023_narrow_doorway
   scenario_path: configs/scenarios/single/francis2023_narrow_doorway.yaml
   map_path: maps/svg_maps/francis2023/francis2023_narrow_doorway.svg
+  scenario_sha256: d7b52f76128f366a74801c2441cb47e3f4af588c64566fb044eb3e2c54e43671
+  map_sha256: 7538ed173d462a5107afc1a1e43b5b2e6d2bc5c9604035cdec9a551e20a8b15e
 
 geometry:
   units: m
   gap_width_m:
-    - 0.8
-    - 2.0
     - 2.2
+    - 2.8
+    - 3.6
   constriction_depth_m:
     - 1.0
   baseline:
@@ -31,12 +33,10 @@ geometry:
 
 width_selection_rationale:
   envelope_diameter_m: 2.0
-  narrow_m: 0.8
-  narrow_tier: infeasible_by_construction
-  middle_m: 2.0
-  middle_tier: boundary_tangent
-  wide_m: 2.2
-  wide_tier: geometrically_feasible_candidate
+  source: ll7/diss#2669 merged preregistration freezes these three positive-continuous-clearance widths; conservative grid/oracle classification is recorded separately and never changes the preregistered width labels
+  ratios: [1.1, 1.4, 1.8]
+  clearance_m: [0.2, 0.8, 1.6]
+  baseline_2m_role: historical reference only; zero-clearance map excluded from comparison
 
 envelope:
   nominal_radius_m: 1.0
@@ -57,14 +57,26 @@ planner_protocol:
   roster:
     - goal
     - social_force
-  seeds: [225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254]
+  algo_config_path:
+    goal: null
+    social_force: null
+  algo_config:
+    goal: {}
+    social_force: {}
+  algo_config_hash:
+    goal: 44136fa355b3678a
+    social_force: 44136fa355b3678a
+  seeds: [225, 226, 227]
   horizon_steps: 400
   execution_status: not_started
-  pairing: same seed shared across the three widths forms one pair_id; a matching seed alone is insufficient when geometry changes random draws, so pair records carry configuration and realization hashes
+  pairing: pair_id is shared across widths; admission requires matching recorded initial actor states and external RNG states before any width comparison; matching seed alone is insufficient
+  expected_rows: 18
+  pair_admission: fail_closed_until_initial_state_and_external_rng_hashes_match
   fallback_policy: record_unavailable_or_degraded; never silently coerce a cell into valid planner evidence
 
 execution:
-  production_campaign_authorized: false
-  slurm_submission_authorized: false
+  production_campaign_authorized: true
+  slurm_submission_authorized: true
+  authorization_source: https://github.com/ll7/diss/issues/2669#issuecomment-5811968439
   evidence_admission: not_started
   baseline_map_must_remain_unchanged: true

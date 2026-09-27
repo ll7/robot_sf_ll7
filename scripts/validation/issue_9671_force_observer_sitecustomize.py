@@ -22,6 +22,7 @@ import numpy as np
 FROZEN_SOURCE = "07f7e8d43084de748915e1b1eb8b2a1603357c6e"
 FROZEN_SOURCE_TREE_OID = "3771a78a019823b816cca27a625ec6f29fe93d22"
 SOURCE_STATE_SCHEMA = "issue-9671-frozen-source-state.v1"
+SIDECAR_SCHEMA = "issue-9671-robot-force-observer.v2"
 EMPTY_STATUS_SHA256 = hashlib.sha256(b"").hexdigest()
 FORCE_FILE = "robot_sf/ped_npc/ped_robot_force.py"
 SIM_FILE = "robot_sf/sim/simulator.py"
@@ -124,10 +125,13 @@ def _same(actual: Any, expected: Any, label: str) -> None:
 
 
 def bind_episode(capture: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]:
-    """Bind pre-step force slots to reset IDs and every later trace state.
+    """Bind simulator slots to reset IDs and every later trace state.
 
-    Equality is intentional: an approximate position match could accept two
-    nearby actors in a permutation. Unobservable population changes fail closed.
+    The force kernel runs after behavior updates. Its input positions therefore
+    bind to the simulator's force-time slot state, not the pre-behavior step
+    entry or the prior trace row. Equality is intentional: an approximate match
+    could accept two nearby actors in a permutation. Unobservable population
+    changes fail closed.
     """
     trace = row["algorithm_metadata"]["simulation_step_trace"]
     reset = trace["reset"]["pedestrians"]
@@ -150,8 +154,11 @@ def bind_episode(capture: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]
         _same(sample["step"], index, "capture step index")
         _same([ped["actor_id"] for ped in step["pedestrians"]], actors, "actor IDs")
         _same(sample["step_entry_positions"], prior, "pre-step positions")
-        _same(sample["force_input_positions"], prior, "force input positions")
-        _require_distinct(sample["force_input_positions"])
+        _same(
+            sample["force_input_positions"],
+            sample["force_time_simulator_positions"],
+            "force input positions",
+        )
         _same(sample["post_step_positions"], _positions(step["pedestrians"]), "post-step positions")
         _same(
             sample["total_forces"],
@@ -168,7 +175,7 @@ def bind_episode(capture: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]
         bound_steps.append({"step": index, "actor_ids": actors, **sample})
         prior = _positions(step["pedestrians"])
     return {
-        "schema_version": "issue-9671-robot-force-observer.v1",
+        "schema_version": SIDECAR_SCHEMA,
         "episode_id": row["episode_id"],
         "scenario_id": row["scenario_id"],
         "seed": row["seed"],
@@ -328,6 +335,7 @@ class ForceObserver:
             if len(self.force_returns) != len(components):
                 raise ObserverIdentityError("robot force call count differs from roster")
             count = len(self.step["step_entry_positions"])
+            force_time_positions = _vectors(simulator.ped_pos, count)
             values = np.zeros((count, 2), dtype=float)
             input_positions = None
             component_ids = []
@@ -339,6 +347,11 @@ class ForceObserver:
                 if input_positions is None:
                     input_positions = sample["positions"]
                 _same(sample["positions"], input_positions, "force component slot positions")
+                _same(
+                    sample["positions"],
+                    force_time_positions,
+                    "force input positions",
+                )
                 values += np.asarray(sample["forces"], dtype=float)
                 component_ids.append(getattr(component, "component_id", None))
                 component_inputs.append(sample)
@@ -348,6 +361,7 @@ class ForceObserver:
             if self.component_object_ids is None:
                 self.component_object_ids = object_ids
             _same(object_ids, self.component_object_ids, "robot force component object roster")
+            self.step["force_time_simulator_positions"] = force_time_positions
             self.step["force_input_positions"] = input_positions
             self.step["robot_forces"] = _vectors(values, count)
             self.step["component_ids"] = component_ids

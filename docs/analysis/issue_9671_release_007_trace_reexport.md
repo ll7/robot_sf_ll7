@@ -169,7 +169,7 @@ therefore need a new reading or a different explicitly selected episode before t
 labels can be removed. This is a cross-run worked-example change, separate from the **zero**
 paired release-row outcome mismatches. The source of the cross-run change has not been established.
 
-## Implemented passive robot-force observer — not yet executed
+## Implemented passive robot-force observer — corrected identity binding, not yet admitted
 
 The frozen `PedRobotForce` already retains each component's `last_forces`, but the frozen
 benchmark writer records only `last_ped_forces`. A frozen-code JSONL record cannot acquire a new
@@ -180,6 +180,14 @@ The implemented but unexecuted path is a separately SHA-pinned, opt-in **observe
 at commit `07f7e8d43084de748915e1b1eb8b2a1603357c6e` and both scientific config bytes
 unchanged, but the executed Python process includes observer code. Its sidecar is a new
 diagnostic artifact, not an original 0.0.7 release field.
+
+The first observer re-export attempt, Slurm job **15773**, failed before producing an
+admissible force-enriched bundle. Its stdout reported at line 153 that the force input
+positions differed from the trace slot order or state. This exposed an identity-validator
+assumption: frozen `Simulator.step_once` runs pedestrian behaviors before force evaluation,
+and `FollowRouteBehavior.step()` can respawn positions in place while simulator slot IDs and
+order remain stable. Job 15773 remains a failed diagnostic attempt; its output is not relabelled
+or used as evidence.
 
 1. Stage the observer from a reviewed commit under ignored `output/`, verify its SHA-256, and
    load it through an explicitly named `sitecustomize` path in the private Slurm packet. Require
@@ -209,23 +217,25 @@ diagnostic artifact, not an original 0.0.7 release field.
    shape mismatch, missing active component or changed component ID/object roster across steps
    fails closed. The
    observer does not infer a zero vector when no `PedRobotForce` instance executes.
-3. On each `step_once` call, copy the pre-behavior pedestrian positions. At the force-return
-   event, copy the already evaluated force-input positions. Both must exactly equal reset
-   positions on step zero and the prior post-step trace positions thereafter. Require distinct
-   positions, so coincident actors cannot be silently assigned by row order. On each step
+3. On each `step_once` call, copy the pre-behavior pedestrian positions. At the pinned
+   force-evaluation line, copy `simulator.ped_pos` as the force-time simulator slot state and
+   require every already evaluated `PedRobotForce` input position array to equal it exactly.
+   The force-time state may differ from the step-entry or prior trace positions because behavior
+   updates run first. Bind these ordered rows to the reset `trace_actor_ids` by stable simulator
+   slot; do not use approximate position matching. Keep the step-entry state bound to reset
+   positions on step zero and the prior post-step trace positions thereafter. On each step
    return, copy `last_ped_forces` and post-step positions. Observe `run_map_episode` call/return
    at frozen line 5075 to bind the ordered samples to its returned `episode_id`, input scenario,
    seed, planner and step count; the row's canonical SHA-256 binds the observer receipt to
-   exact episode content. Require contiguous step indices and the same ordered
-   `trace_actor_ids` on reset and every step; compare post-step positions and total vectors to
-   the recorded trace. A failed or ambiguous episode is not admitted. This deliberately rejects
-   an episode if behavior changes positions before force evaluation, or if two actors occupy
-   identical positions; such a row needs a new identity method before force attribution.
+   exact episode content. Require contiguous step indices, the same ordered actor IDs on reset
+   and every step, finite shapes, exact force-time/component input parity and the component
+   roster. A failed or ambiguous episode is not admitted.
 4. Keep the runner's raw JSONL and producer manifest unchanged. Emit separate per-episode
    sidecars with observer SHA, frozen source commit/tree and clean-worktree receipt, frozen
    source-file SHAs, diagnostic config SHA, campaign and
    Slurm job IDs, PID,
-   episode ID, per-step arrays and canonical episode-row SHA-256. The later producer/retrieval
+   episode ID, per-step arrays (including the v2 force-time simulator slot state) and canonical
+   episode-row SHA-256. The later producer/retrieval
    manifest must bind these row digests to the raw JSONL SHA and include checksums for every
    sidecar and the staged observer input. `check_issue_9671_force_bundle.py` implements a
    deterministic manifest writer and cold validator, requiring the independently pinned

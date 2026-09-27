@@ -32,6 +32,15 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _assert_exact_byte_review_sidecar(artifact: Path) -> None:
+    sidecar = _read_json(Path(f"{artifact}.review.json"))
+    assert sidecar["schema_version"] == "evidence-review-marker.v1"
+    assert sidecar["artifact_path"] == artifact.relative_to(REPO_ROOT).as_posix()
+    assert sidecar["artifact_sha256"] == _sha256(artifact)
+    assert sidecar["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    assert sidecar["preserved_exact_bytes"] is True
+
+
 def _repo_file(provenance_path: str) -> Path:
     path = REPO_ROOT / provenance_path
     assert path.is_file(), provenance_path
@@ -221,7 +230,7 @@ def test_evidence_bundle_checksums_cover_exact_and_normalized_candidate_records(
     evidence_root = PAYLOAD.parent
     manifest = _read_json(evidence_root / "evidence_bundle_manifest.json")
     entries = {row["path"]: row for row in manifest["files"]}
-    assert manifest["totals"]["file_count"] == len(entries) == 198
+    assert manifest["totals"]["file_count"] == len(entries) == 392
     assert manifest["totals"]["total_bytes"] == sum(row["size_bytes"] for row in manifest["files"])
 
     expected_payload_files = {
@@ -239,6 +248,23 @@ def test_evidence_bundle_checksums_cover_exact_and_normalized_candidate_records(
         path = PAYLOAD / relative
         assert row["sha256"] == checksums[relative] == _sha256(path)
         assert row["size_bytes"] == path.stat().st_size
+
+    _assert_exact_byte_review_sidecar(evidence_root / "evidence_bundle_manifest.json")
+    _assert_exact_byte_review_sidecar(evidence_root / "checksums.sha256")
+
+
+def test_markerless_payload_artifacts_have_digest_bound_review_sidecars() -> None:
+    unmarked_artifacts = []
+    for artifact in PAYLOAD.rglob("*"):
+        if not artifact.is_file() or artifact.name.endswith(".review.json"):
+            continue
+        content = artifact.read_bytes()
+        if b"AI-GENERATED" in content and b"NEEDS-REVIEW" in content:
+            continue
+        _assert_exact_byte_review_sidecar(artifact)
+        unmarked_artifacts.append(artifact)
+
+    assert len(unmarked_artifacts) == 196
 
 
 def test_rebuilt_report_provenance_binds_inputs_and_generated_outputs() -> None:

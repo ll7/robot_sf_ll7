@@ -543,6 +543,38 @@ def test_tracked_compatibility_fixture_without_registry_binding_remains_unknown(
     assert historical_error == "certificate_structurally_invalid"
 
 
+def test_explicit_unknown_map_id_binding_remains_unknown() -> None:
+    """An explicit producer-side unknown binding cannot certify a map-id scenario."""
+    repo_root = Path(__file__).resolve().parents[2]
+    fixture_root = repo_root / "tests/fixtures/adversarial_replay_gallery/issue_1501_compat"
+    scenario_path = fixture_root / "scenario.yaml"
+    manifest = json.loads((fixture_root / "manifest.json").read_text(encoding="utf-8"))
+    certificate_status = manifest["candidates"][0]["certification_status"]
+    loaded_scenario = replay_gallery.scenario_loader.load_scenarios(scenario_path)[0]
+    current_binding, binding_error = scenario_certification_v1._capture_map_id_input_binding(
+        loaded_scenario, scenario_path=scenario_path, source_root=repo_root
+    )
+    assert binding_error is None and current_binding is not None
+    certificate_payload = certificate_status["details"]["certificates"][0]
+    certificate_payload["evidence"]["map_id_input_binding"] = {
+        "status": "unknown",
+        "reason": "test_binding_unavailable",
+    }
+
+    certificate, error = replay_gallery._validated_scenario_certificate(
+        certificate_status,
+        expected_scenario_id="crossing_ttc_template_adversarial_0008",
+        loaded_scenario=loaded_scenario,
+        scenario_path=scenario_path,
+        root=repo_root,
+        source_root=repo_root,
+        map_id_input_binding=current_binding,
+    )
+
+    assert certificate is None
+    assert error == "certificate_map_id_input_binding_unknown"
+
+
 def test_canonical_certifier_records_portable_map_id_registry_and_map_digests() -> None:
     """New map-id certificates bind the exact registry and selected map inputs."""
     repo_root = Path(__file__).resolve().parents[2]
@@ -643,7 +675,10 @@ def test_source_bound_certificate_is_portable_across_checkout_roots_and_binds_re
     assert changed_error == "certificate_scenario_fingerprint_mismatch"
 
 
-@pytest.mark.parametrize("change", ["unrelated_registry_row", "registry_target", "map_bytes"])
+@pytest.mark.parametrize(
+    "change",
+    ["unrelated_registry_row", "selected_registry_metadata", "registry_target", "map_bytes"],
+)
 def test_map_id_certificate_rejects_changed_registry_or_resolved_map_inputs(  # noqa: PLR0915 - explicit drift cases
     tmp_path: Path, monkeypatch: Any, change: str
 ) -> None:
@@ -720,6 +755,19 @@ def test_map_id_certificate_rejects_changed_registry_or_resolved_map_inputs(  # 
             registry_path.write_text(
                 yaml.safe_dump(changed_registry, sort_keys=False), encoding="utf-8"
             )
+        elif change == "selected_registry_metadata":
+            changed_registry = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+            changed_row = next(
+                row for row in changed_registry["maps"] if row.get("map_id") == "classic_cross_trap"
+            )
+            existing_limitations = changed_row.get("limitations")
+            changed_row["limitations"] = [
+                *(existing_limitations if isinstance(existing_limitations, list) else []),
+                "certificate-binding metadata drift",
+            ]
+            registry_path.write_text(
+                yaml.safe_dump(changed_registry, sort_keys=False), encoding="utf-8"
+            )
         elif change == "registry_target":
             alternate_ref = source_map_ref.with_name("certificate-binding-copy.svg")
             alternate_target = registry_path.parent / alternate_ref
@@ -776,6 +824,12 @@ def test_map_id_certificate_rejects_changed_registry_or_resolved_map_inputs(  # 
     else:
         assert changed_certificate is None
         assert changed_error == "certificate_map_id_input_binding_mismatch"
+        if change == "selected_registry_metadata":
+            assert current_snapshot["map_id"] == original_snapshot["map_id"]
+            assert current_snapshot["map_path"] == original_snapshot["map_path"]
+            assert current_snapshot["map_sha256"] == original_snapshot["map_sha256"]
+            assert current_snapshot["registry_row"] != original_snapshot["registry_row"]
+            assert current_binding != original_binding
 
 
 @pytest.mark.parametrize(

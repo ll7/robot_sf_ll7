@@ -8,6 +8,7 @@ import inspect
 import io
 import json
 import math
+import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -3030,9 +3031,11 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     throughput_definition = run_meta["throughput_definition"]
     assert throughput_definition == {
         "scope": "campaign_all_planner_arms",
-        "numerator_field": "total_episodes",
+        "numerator_field": "episodes_written_this_invocation",
         "numerator_unit": "episode_rows",
-        "numerator_semantics": "serialized_episode_rows",
+        "numerator_semantics": "episode_rows_newly_written_during_this_campaign_invocation",
+        "retained_count_field": "total_episodes",
+        "retained_count_semantics": "complete_serialized_episode_rows_retained_across_resume",
         "denominator_field": "runtime_sec",
         "denominator_unit": "seconds",
         "denominator_semantics": "campaign_elapsed_through_outcome_snapshot",
@@ -3042,7 +3045,11 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     numerator = run_meta[throughput_definition["numerator_field"]]
     denominator = run_meta[throughput_definition["denominator_field"]]
     assert numerator == result["total_episodes"]
+    assert numerator == result["episodes_written_this_invocation"]
+    assert run_meta["total_episodes"] == result["total_episodes"]
+    assert run_meta["episodes_written_this_invocation"] == numerator
     assert numerator == summary_payload["campaign"]["total_episodes"]
+    assert summary_payload["campaign"]["episodes_written_this_invocation"] == numerator
     assert denominator == run_meta["runtime_sec"]
     assert denominator == result["runtime_sec"]
     assert denominator == summary_payload["campaign"]["runtime_sec"]
@@ -3050,8 +3057,12 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     arm_episode_row_counts = [
         int(run["summary"]["episodes_total"]) for run in summary_payload["runs"]
     ]
+    arm_invocation_row_counts = [
+        int(run["summary"]["episodes_written_this_invocation"]) for run in summary_payload["runs"]
+    ]
     assert len(arm_episode_row_counts) == 2
-    assert numerator == sum(arm_episode_row_counts)
+    assert numerator == sum(arm_invocation_row_counts)
+    assert result["total_episodes"] == sum(arm_episode_row_counts)
     assert numerator > max(arm_episode_row_counts)
     assert len(summary_payload["arm_rollup"]) == len(summary_payload["runs"])
     assert [arm["planner_key"] for arm in summary_payload["arm_rollup"]] == [
@@ -3865,6 +3876,209 @@ def test_run_campaign_continues_after_failure_when_stop_disabled(
     assert any(
         "most_likely_reason='worker crash'" in warning for warning in summary_payload["warnings"]
     )
+
+
+@pytest.mark.parametrize("arm_isolation", ["in_process", "subprocess"])
+def test_run_campaign_resume_throughput_counts_only_rows_written_this_invocation(  # noqa: PLR0915
+    tmp_path: Path,
+    monkeypatch,
+    arm_isolation: str,
+) -> None:
+    """Partial resumes count new rows; cached arms retain rows but write none."""
+    scenario_rel = Path("configs/scenarios/single/resume_throughput.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke_a\n"
+        "  id: smoke_a\n"
+        "  map_file: maps/svg_maps/classic_crossing.svg\n"
+        "  seeds: [111]\n"
+        "- name: smoke_b\n"
+        "  id: smoke_b\n"
+        "  map_file: maps/svg_maps/classic_crossing.svg\n"
+        "  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_resume_throughput.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: test_campaign_resume_throughput",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "resume: true",
+                f"arm_isolation: {arm_isolation}",
+                "export_publication_bundle: false",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    benchmark_profile: baseline-safe",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+    calls: list[int] = []
+
+    def _fake_run_batch(
+        scenarios_or_path,
+        out_path,
+        schema_path,
+        *,
+        algo,
+        benchmark_profile,
+        **kwargs,
+    ):
+        """Append only missing scenario/seed rows and report this call's writes."""
+        del schema_path, kwargs
+        calls.append(len(calls) + 1)
+        scenarios = list(scenarios_or_path)
+        out_file = Path(out_path)
+        out_file.parent.mkdir(parents=True, exist_ok=True)
+        existing = []
+        if out_file.is_file():
+            existing = [
+                json.loads(line)
+                for line in out_file.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+        existing_ids = {(row["scenario_id"], int(row["seed"])) for row in existing}
+        jobs = [
+            (str(scenario.get("id") or scenario.get("name")), int(seed))
+            for scenario in scenarios
+            for seed in scenario.get("seeds", [111])
+        ]
+        missing = [job for job in jobs if job not in existing_ids]
+        to_write = missing[:1] if len(calls) == 1 else missing
+        records = [
+            {
+                "episode_id": f"{scenario_id}-{seed}",
+                "scenario_id": scenario_id,
+                "seed": seed,
+                "scenario_params": {
+                    "algo": algo,
+                    "metadata": {"archetype": "crossing"},
+                },
+                "metrics": {
+                    "success": 1.0,
+                    "collisions": 0.0,
+                    "near_misses": 0.0,
+                    "snqi": 0.5,
+                },
+                "algorithm_metadata": {"algorithm": algo, "status": "ok"},
+            }
+            for scenario_id, seed in to_write
+        ]
+        with out_file.open("a", encoding="utf-8") as handle:
+            for record in records:
+                handle.write(json.dumps(record) + "\n")
+        failed_jobs = len(missing) - len(records)
+        unwritten = missing[len(records) :]
+        return {
+            "status": "partial-failure" if failed_jobs else "ok",
+            "total_jobs": len(jobs),
+            "written": len(records),
+            "failed_jobs": failed_jobs,
+            "failures": (
+                [
+                    {"scenario_id": job[0], "seed": job[1], "error": "interrupted"}
+                    for job in unwritten
+                ]
+            ),
+            "out_path": str(out_file),
+            "algorithm_readiness": {
+                "name": algo,
+                "tier": "baseline-ready",
+                "profile": benchmark_profile,
+            },
+            "preflight": {
+                "status": "ok",
+                "learned_policy_contract": {"status": "not_applicable"},
+            },
+        }
+
+    def _fake_aggregates(
+        records,
+        *,
+        group_by,
+        bootstrap_samples,
+        bootstrap_confidence,
+        bootstrap_seed,
+    ):
+        """Return stable report metrics without running bootstrap analysis."""
+        del records, group_by, bootstrap_samples, bootstrap_confidence, bootstrap_seed
+        return {
+            "mock_group": {
+                "success": {"mean": 1.0, "mean_ci": [1.0, 1.0]},
+                "collisions": {"mean": 0.0, "mean_ci": [0.0, 0.0]},
+                "near_misses": {"mean": 0.0, "mean_ci": [0.0, 0.0]},
+                "time_to_goal_norm": {"mean": 0.5, "mean_ci": [0.4, 0.6]},
+                "path_efficiency": {"mean": 0.9, "mean_ci": [0.8, 0.95]},
+                "comfort_exposure": {"mean": 0.2, "mean_ci": [0.1, 0.3]},
+                "jerk_mean": {"mean": 0.1, "mean_ci": [0.08, 0.12]},
+                "snqi": {"mean": 0.7, "mean_ci": [0.65, 0.75]},
+            },
+            "_meta": {"warnings": [], "missing_algorithms": []},
+        }
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.camera_ready_campaign.compute_aggregates_with_ci", _fake_aggregates
+    )
+    if arm_isolation == "subprocess":
+        from robot_sf.benchmark.camera_ready import resource_lifecycle
+
+        monkeypatch.setattr("robot_sf.benchmark.runner.run_batch", _fake_run_batch)
+
+        def _run_worker(args, **subprocess_kwargs):
+            """Exercise the actual subprocess worker body without a second Python process."""
+            params_dict = json.loads(subprocess_kwargs["input"])
+            for field_name in resource_lifecycle._SUBPROCESS_ARM_PATH_FIELDS:
+                field_value = params_dict.get(field_name)
+                if field_value:
+                    params_dict[field_name] = Path(field_value)
+            params = resource_lifecycle._SubprocessArmParams(**params_dict)
+            result = resource_lifecycle._run_single_arm_subprocess(params)
+            return subprocess.CompletedProcess(args, 0, json.dumps(result), "")
+
+        monkeypatch.setattr(
+            camera_ready_campaign_impl_module,
+            "subprocess",
+            SimpleNamespace(run=_run_worker),
+        )
+
+    output_root = tmp_path / "campaign_out"
+    first = run_campaign(cfg, output_root=output_root, campaign_id="resume-throughput")
+    assert first["episodes_written_this_invocation"] == 1
+    assert first["total_episodes"] == 1
+
+    second = run_campaign(cfg, output_root=output_root, campaign_id="resume-throughput")
+    assert second["episodes_written_this_invocation"] == 1
+    assert second["total_episodes"] == 2
+    summary_path = next(Path(second["campaign_root"]).glob("runs/*/summary.json"))
+    persisted_summary_after_resume = summary_path.read_bytes()
+    persisted_summary_payload = json.loads(persisted_summary_after_resume)
+    assert persisted_summary_payload["written"] == 1
+    assert persisted_summary_payload["episodes_written_this_invocation"] == 1
+    assert persisted_summary_payload["episodes_total"] == 2
+
+    third = run_campaign(cfg, output_root=output_root, campaign_id="resume-throughput")
+    assert len(calls) == 2
+    assert third["episodes_written_this_invocation"] == 0
+    assert third["total_episodes"] == 2
+    assert summary_path.read_bytes() == persisted_summary_after_resume
+
+    campaign_summary = json.loads(Path(third["summary_json"]).read_text(encoding="utf-8"))
+    run_entry = campaign_summary["runs"][0]
+    assert run_entry["summary"]["written"] == 1
+    assert run_entry["summary"]["episodes_written_this_invocation"] == 0
+    assert run_entry["summary"]["episodes_total"] == 2
+    assert campaign_summary["campaign"]["total_episodes"] == 2
+    assert campaign_summary["campaign"]["episodes_written_this_invocation"] == 0
+    assert campaign_summary["campaign"]["episodes_per_second"] == 0.0
 
 
 def test_run_campaign_counts_existing_records_when_resumed_attempt_fails(

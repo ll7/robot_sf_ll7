@@ -1,7 +1,6 @@
 {
-  "eligible_count": 10,
+  "eligible_count": 9,
   "eligible_ids": [
-    "docs_context_evidence_issue_9645_bounded_falsification_2026-09-24_payload_pilot_comparison_render_provenance_json__cmd1_211953a1",
     "docs_context_evidence_issue_2837_horizon_timestep_ablation_2026-06-15_README_md__cmd1_7fa1f21a",
     "docs_context_evidence_issue_2865_forecast_calibration_report_2026-06-15_README_md__cmd1_ae6ca2f2",
     "docs_context_evidence_issue_2868_semantic_metadata_fixtures_2026-06-15_README_md__cmd1_447840f3",
@@ -15,10 +14,11 @@
   "exclusion_reason_counts": {
     "missing_committed_fixture": 10,
     "non_deterministic_contract": 10,
+    "not_in_approved_execution_scope": 1,
     "unsafe_command": 4
   },
-  "generated_at": "2026-09-27T04:25:36+00:00",
-  "ineligible_count": 24,
+  "generated_at": "2026-09-27T04:55:56+00:00",
+  "ineligible_count": 25,
   "issue": 6769,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "route_evidence_only": true,
@@ -28,6 +28,6 @@
     "manifest_field": 1,
     "readme_reproduction": 31
   },
-  "source_commit": "5c66177d4727c46e734789d8084f269821d571b5",
+  "source_commit": "4bb3a5f9a429a63a64411f8374062be5128bf5a8",
   "total_entries": 34
 }

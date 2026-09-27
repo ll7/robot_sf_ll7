@@ -176,6 +176,13 @@ def test_registered_contracts_are_not_reported() -> None:
     assert all(not item.needs_attention for item in observations)
 
 
+def test_trajectory_mode_risk_contract_tests_are_registered_in_fast_lane() -> None:
+    """Changed risk estimator lines need their deterministic tests in PR coverage shards."""
+    policy = load_fast_lane_policy(Path("tests/conftest.py").read_text(encoding="utf-8"))
+
+    assert policy.is_fast("tests/research/collision_risk/test_trajectory_mode_risk.py")
+
+
 def test_release_checkpoint_producer_tests_are_registered_in_fast_lane() -> None:
     """Release-smoke producer coverage must reach the hosted changed-line combiner."""
     policy = load_fast_lane_policy(Path("tests/conftest.py").read_text(encoding="utf-8"))

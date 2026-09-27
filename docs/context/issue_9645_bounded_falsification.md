@@ -36,8 +36,12 @@ embedded scenario/map digests are null for all 64. The packet retains exact prod
 `payload/path_normalized_episode_records/`, with SHA-256 and byte-count bindings for both. The exact
 source bytes retain absolute producer route-override paths, which the convergence report does not
 dereference. Candidate-specific route-override inputs are not all retained, so these records are not
-portable replay bundles by themselves. Collision/severe-intrusion status remains `unknown` for every candidate because
-severe-intrusion evidence is absent, and unknown criticality is separate from known critical and
+portable replay bundles by themselves. The repository absolute-path guard admits only these 64
+source files by exact path and SHA-256, bound to recovery commit
+`7588b785a607680400adcc6398d8c983c160e4bd`; changing a byte restores the ordinary path scan. The
+normalized copies remain portable analysis inputs. Collision/severe-intrusion status remains
+`unknown` for every candidate because severe-intrusion evidence is absent, and unknown criticality is
+separate from known critical and
 known non-critical counts. The experiment commit is recorded separately in
 `payload/run_metadata.json`. This report does not reinterpret the historical v1 objective score or
 claim safety from objective eligibility.

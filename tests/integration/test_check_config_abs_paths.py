@@ -180,6 +180,36 @@ class TestCheckConfigAbsPaths:
         assert result["status"] == "fail"
         assert len(result["violations"]) == 1
 
+    def test_issue_9645_producer_records_are_exactly_pinned(self) -> None:
+        """Only the 64 recovered producer records keep their source route paths.
+
+        Each retained file is bound to its exact producer digest; portable analysis
+        uses the separate path-normalized copies in the same evidence packet.
+        """
+        repo_root = Path(__file__).resolve().parents[2]
+        source_root = (
+            repo_root
+            / "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records"
+        )
+        source_files = sorted(source_root.rglob("episode_records.jsonl"))
+        prefix = source_root.relative_to(repo_root).as_posix() + "/"
+        pinned_paths = {
+            path
+            for path in abs_path_hook.PINNED_VERBATIM_EVIDENCE_SHA256
+            if path.startswith(prefix)
+        }
+        expected_paths = {path.relative_to(repo_root).as_posix() for path in source_files}
+
+        assert len(source_files) == 64
+        assert pinned_paths == expected_paths
+        for path in source_files:
+            rel = path.relative_to(repo_root).as_posix()
+            assert (
+                hashlib.sha256(path.read_bytes()).hexdigest()
+                == (abs_path_hook.PINNED_VERBATIM_EVIDENCE_SHA256[rel])
+            )
+        assert find_abs_path_violations([str(path) for path in source_files])["status"] == "pass"
+
     def test_ignores_docs_outside_evidence(self, tmp_path, monkeypatch):
         """Docs files outside docs/context/evidence/ are not scanned."""
         monkeypatch.chdir(tmp_path)

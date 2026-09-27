@@ -12,14 +12,14 @@
     "The finite pilot result cannot establish counterexample absence or real-world safety.",
     "The execution-context label said Python 3.12.3, but machine-generated runner provenance records Python 3.13.14; the latter is treated as authoritative.",
     "Per-run driver wall times were not emitted. Candidate timestamp spans are partial run intervals; the entire driver wall time was captured as 39.10 seconds.",
-    "All 64 candidate episode-record JSONLs are retained as path-normalized copies with producer and normalized hashes. Each record differs only at scenario_params.route_overrides_file; the original producer bytes are not included separately. The rebuilt v3 report binds them consistently to source revision 58e516aa4f69ff3098bf518199f483006589758c; scenario YAMLs and trajectories remain worktree-local.",
+    "All 64 exact producer episode-record JSONLs and 64 separate path-normalized report-input copies are retained with SHA-256 and byte-count bindings. The original bytes were recovered from commit 7588b785a607680400adcc6398d8c983c160e4bd; the normalized records differ only at scenario_params.route_overrides_file. The rebuilt v3 report uses the normalized copies and binds them consistently to source revision 58e516aa4f69ff3098bf518199f483006589758c; scenario YAMLs, candidate-specific route overrides, and trajectories are not all bundled.",
     "The regenerated #1501 candidate is not admitted to the counterexample corpus: its exact historical input binding remains unknown despite identical outcomes across two replays at the recorded regeneration revision."
   ],
   "next_action": "Do not launch #9648. Keep the regenerated #1501 candidate pending in #9652 until exact historical input binding is established. Define a separate bounded pilot that includes varied environment seeds and does not exclude known admissible cases, then re-review the gate before any larger campaign.",
   "observed_evidence": [
     "64/64 candidates completed under native baseline-safe goal-planner execution with required certification.",
     "All best-so-far values were 0.0 across 16 evaluations for both samplers and both sampler seeds.",
-    "Pilot min-clearance range was 9.717535–11.169427 m; minimum human distance range was 11.117535–12.569427 m; no near miss or collision was observed.",
+    "Pilot min-clearance range was 9.717535\u201311.169427 m; minimum human distance range was 11.117535\u201312.569427 m; no near miss or collision was observed.",
     "The tracked #1501 archive contains 15 collision failures from a different search contract; one archived goal case was regenerated and replayed twice at recorded revision 58e516aa4f69ff3098bf518199f483006589758c with identical collision outcomes.",
     "Schema-v3 report: 0 candidates are known critical, 0 known non-critical, and all 64 have unknown criticality because severe-intrusion evidence is absent.",
     "All 64 candidate episode records have producer and normalized digest bindings after a single route-path-only rewrite; their embedded provenance consistently identifies source revision 58e516aa4f69ff3098bf518199f483006589758c.",
@@ -33,7 +33,7 @@
       "config": "issue_9645_pilot_space.v1.yaml; fixed scenario seed 123",
       "evidence_tier": "diagnostic-only",
       "mechanism": "#9645 fixed-seed Random vs TPE bounded search",
-      "metrics": "64 valid/successful; 0 failures; all scores 0.0; all 64 path-normalized episode-record copies have producer and normalized digest bindings with consistent source revision; detailed simulation-step and planner-decision traces were not captured; min clearance 9.7175–11.1694 m; criticality unknown for all 64",
+      "metrics": "64 valid/successful; 0 failures; all scores 0.0; all 64 path-normalized episode-record copies have producer and normalized digest bindings with consistent source revision; detailed simulation-step and planner-decision traces were not captured; min clearance 9.7175\u201311.1694 m; criticality unknown for all 64",
       "seeds": "sampler seeds 1101 and 2202",
       "source_issue": 9645,
       "verdict": "NO-GO for #9648 scale under unchanged domain"

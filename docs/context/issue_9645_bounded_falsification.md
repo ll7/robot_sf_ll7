@@ -31,10 +31,12 @@ producer `analysis_eligibility.trace_present` field means an episode-record path
 not mean detailed traces were captured. Both detailed trace-capture flags are false for all 64
 episodes, and the two matched Random/TPE seed pairs qualify for descriptive comparison. The records' embedded source revision is consistently `58e516aa4f69ff3098bf518199f483006589758c`.
 Detailed step-level and planner-decision trace capture is disabled for all 64 records, and their
-embedded scenario/map digests are null for all 64. Absolute producer route-override paths remain in
-the exact source bytes; the convergence report does not dereference them, and candidate-specific
-route-override inputs are not all retained. These records therefore are not portable replay bundles
-by themselves. Collision/severe-intrusion status remains `unknown` for every candidate because
+embedded scenario/map digests are null for all 64. The packet retains exact producer bytes under
+`payload/source_episode_records/` and separate path-normalized report inputs under
+`payload/path_normalized_episode_records/`, with SHA-256 and byte-count bindings for both. The exact
+source bytes retain absolute producer route-override paths, which the convergence report does not
+dereference. Candidate-specific route-override inputs are not all retained, so these records are not
+portable replay bundles by themselves. Collision/severe-intrusion status remains `unknown` for every candidate because
 severe-intrusion evidence is absent, and unknown criticality is separate from known critical and
 known non-critical counts. The experiment commit is recorded separately in
 `payload/run_metadata.json`. This report does not reinterpret the historical v1 objective score or

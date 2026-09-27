@@ -2944,9 +2944,9 @@ def _validate_admissibility_execution(  # noqa: C901, PLR0912 - report producer-
         "environment_sha256",
         "source_commit",
         "evidence_ref",
+        "episode_id",
+        "source_episodes_jsonl_sha256",
     }
-    if role in {"target", "replay"}:
-        required.update({"episode_id", "source_episodes_jsonl_sha256"})
     missing = sorted(required - run.keys())
     if missing:
         errors.append(f"{prefix} is missing producer fields: {missing}")
@@ -2996,14 +2996,13 @@ def _validate_admissibility_execution(  # noqa: C901, PLR0912 - report producer-
         errors.append(f"{prefix}.horizon_steps must be a positive integer")
     if not isinstance(run.get("route_complete"), bool):
         errors.append(f"{prefix}.route_complete must be boolean")
-    if role in {"target", "replay"}:
-        if not isinstance(run.get("episode_id"), str) or not run["episode_id"].strip():
-            errors.append(f"{prefix}.episode_id must be non-empty text")
-        if (
-            not isinstance(run.get("source_episodes_jsonl_sha256"), str)
-            or _SHA256.fullmatch(run["source_episodes_jsonl_sha256"]) is None
-        ):
-            errors.append(f"{prefix}.source_episodes_jsonl_sha256 must be a SHA-256 digest")
+    if not isinstance(run.get("episode_id"), str) or not run["episode_id"].strip():
+        errors.append(f"{prefix}.episode_id must be non-empty text")
+    if (
+        not isinstance(run.get("source_episodes_jsonl_sha256"), str)
+        or _SHA256.fullmatch(run["source_episodes_jsonl_sha256"]) is None
+    ):
+        errors.append(f"{prefix}.source_episodes_jsonl_sha256 must be a SHA-256 digest")
     identity = scenario_identity if isinstance(scenario_identity, dict) else {}
     if identity.get("requires_effective_input_binding") is True:
         expected_effective = identity.get("effective_input_sha256")

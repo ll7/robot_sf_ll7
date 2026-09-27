@@ -189,11 +189,12 @@ def _execution_record(
         "source_commit": _REVISION,
         "evidence_ref": evidence_ref or f"fixture/{role}/{case_id}",
     }
-    if role in {"target", "replay"}:
-        record.update(
-            episode_id=f"episode-{case_id}-target",
-            source_episodes_jsonl_sha256="a" * 64,
-        )
+    record.update(
+        episode_id=(
+            f"episode-{case_id}-reference" if role == "reference" else f"episode-{case_id}-target"
+        ),
+        source_episodes_jsonl_sha256="a" * 64,
+    )
     if role == "replay":
         record.update(determinism_check_status="pass", resimulated=True)
     return record
@@ -2432,6 +2433,63 @@ def test_frontier_report_rejects_unbound_confirmed_execution_evidence(
     _rewrite_admissibility_artifact(payload, tmp_path, 0, mutate)
     with pytest.raises(FrontierReportError, match=message):
         build_frontier_report(payload, evidence_root=tmp_path)
+
+
+@pytest.mark.parametrize("field", ["episode_id", "source_episodes_jsonl_sha256"])
+def test_frontier_report_requires_episode_binding_for_reference_execution(
+    tmp_path: Path, field: str
+) -> None:
+    """Reference feasibility evidence must carry the producer's source-episode binding."""
+    payload = _evidence(tmp_path)
+
+    def remove_reference_binding(record: dict[str, Any]) -> None:
+        record["evidence"]["reference_execution"].pop(field)
+
+    _rewrite_admissibility_artifact(payload, tmp_path, 0, remove_reference_binding)
+    with pytest.raises(FrontierReportError, match="reference_execution is missing producer fields"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("episode_id", " ", "reference_execution.episode_id must be non-empty text"),
+        (
+            "source_episodes_jsonl_sha256",
+            "not-a-digest",
+            "reference_execution.source_episodes_jsonl_sha256 must be a SHA-256 digest",
+        ),
+    ],
+)
+def test_frontier_report_validates_reference_episode_binding_fields(
+    tmp_path: Path, field: str, value: str, message: str
+) -> None:
+    """Present but malformed reference episode bindings cannot support feasibility."""
+    payload = _evidence(tmp_path)
+
+    def corrupt_reference_binding(record: dict[str, Any]) -> None:
+        record["evidence"]["reference_execution"][field] = value
+
+    _rewrite_admissibility_artifact(payload, tmp_path, 0, corrupt_reference_binding)
+    with pytest.raises(FrontierReportError, match=message):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_accepts_producer_bound_reference_execution(tmp_path: Path) -> None:
+    """An empirically feasible claim accepts a reference row bound to exact episode evidence."""
+    payload = _evidence(tmp_path)
+    candidate = payload["rounds"][0]["falsification"]["candidates"][0]
+    artifact = json.loads(
+        (tmp_path / candidate["admissibility_evidence_artifact"]["path"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    reference = artifact["evidence"]["reference_execution"]
+
+    assert reference["episode_id"] == "episode-case-001-reference"
+    assert reference["source_episodes_jsonl_sha256"] == "a" * 64
+    report = build_frontier_report(payload, evidence_root=tmp_path)
+    assert report["rounds"][0]["falsification"]["verified_counterexample_case_ids"] == ["case-001"]
 
 
 def test_frontier_report_rejects_route_boolean_without_producer_execution_provenance(

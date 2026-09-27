@@ -429,6 +429,11 @@ _FAST_FILES = {
     # Bounded robot-force contracts cover capture, post-hoc reconstruction, and
     # legacy compatibility; include them in PR changed-line coverage shards.
     "test_robot_attributable_force.py",
+    # Grid-time trajectory-mode risk tests are deterministic estimator/schema
+    # contracts and provide exact-head changed-line coverage for #9813.
+    "test_trajectory_mode_risk.py",
+    # The changed-test routing audit is itself fast, deterministic CI policy coverage.
+    "test_check_fast_lane_routing.py",
     # Force-residual predictor tests are deterministic synthetic contracts and
     # must cover the changed planner-visible prediction module in PR shards.
     "test_force_residual_intent_predictor.py",

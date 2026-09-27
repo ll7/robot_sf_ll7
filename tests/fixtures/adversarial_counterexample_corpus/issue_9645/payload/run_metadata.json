@@ -1,15 +1,22 @@
 {
   "actual_driver_command": "time -p env LOGURU_LEVEL=ERROR uv run python scripts/tools/compare_adversarial_samplers.py --scenario-template configs/scenarios/templates/crossing_ttc.yaml --search-space configs/adversarial/issue_9645_pilot_space.v1.yaml --policy goal --objective constraints_first_lexicographic_v1 --budget 16 --seed 1101 --seed 2202 --sampler random --sampler optuna --require-certification --empirical --execution-context-label issue-9645-local-cpu-python3.12.3 --output-dir output/issue9645-pilot/results --out-json output/issue9645-pilot/comparison.json --out-md output/issue9645-pilot/comparison.md",
-  "artifact_retrieval_boundary": "Compact results, all 64 candidate rows, source/replay examples, and checksums are included in this tracked evidence bundle; full candidate directories remain worktree-local.",
+  "artifact_retrieval_boundary": "The compact packet retains all 64 candidate rows, all 64 exact producer episode-record JSONLs, selected replay episode records, and source manifests. Each episode record is SHA-256-bound to its producer output path. In the producer's search_analysis_eligibility.v1 receipt, `trace_present` means an episode_record_path exists; it is distinct from the detailed capture flags. Their embedded step-trace and planner-decision-trace flags are false; their absolute route-overrides paths and null scenario/map digests are preserved as source metadata. The convergence report does not dereference those paths. Candidate-specific scenario YAMLs, route overrides, and trajectories are not all retained, so the 64 records alone do not form portable replay bundles.",
   "benchmark_profile": "baseline-safe",
   "certification_required": true,
   "comparison_json": {
-    "path": "output/issue9645-pilot/comparison.json",
-    "sha256": "7c8e7d0f6c74cef38bc776d24d19737176eb9eaebcac99ff1a91faeda302e02d"
+    "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_comparison.json",
+    "sha256": "7c8e7d0f6c74cef38bc776d24d19737176eb9eaebcac99ff1a91faeda302e02d",
+    "producer_output_path": "output/issue9645-pilot/comparison.json",
+    "bundle_retention_status": "retained_exact_copy"
   },
   "comparison_markdown": {
     "path": "output/issue9645-pilot/comparison.md",
-    "sha256": "b92217b4eb625a5e70cfadc0de555b84dacb6eca4c1f971ca34c6ea58ded3d2a"
+    "sha256": "b92217b4eb625a5e70cfadc0de555b84dacb6eca4c1f971ca34c6ea58ded3d2a",
+    "producer_output_path": "output/issue9645-pilot/comparison.md",
+    "bundle_retention_status": "producer_bytes_not_recovered",
+    "artifact_location": "Producer comparison Markdown bytes matching the declared digest were not present in the worktree or payload; only the separately curated Markdown copy is retained and its digest differs.",
+    "observed_current_worktree_sha256": "49d58b5956cf2e79caad89c58f92580ffdc5e781b7bd3cd286c053f5048782ab",
+    "available_curated_copy_sha256": "babd386a061e36cb6326b3f2d58b19b4e83c538fdfb6017a9956080a3a368a12"
   },
   "effective_search_space_path": "configs/adversarial/issue_9645_pilot_space.v1.yaml",
   "effective_search_space_sha256": "2d82db0265111a42b4936a958bea2f08c8b03ca1e02c8c4996452f85926b3392",
@@ -38,24 +45,32 @@
   "issue": 9645,
   "manifest_files": [
     {
-      "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/manifest.json",
+      "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_manifests/tpe_seed_1101.json",
       "run_id": "optuna_1101",
-      "sha256": "00244a3d158079ef36de6e301fa6348b50d879a4a6f48492389776b8b411e9a0"
+      "sha256": "00244a3d158079ef36de6e301fa6348b50d879a4a6f48492389776b8b411e9a0",
+      "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/manifest.json",
+      "bundle_retention_status": "retained_exact_copy"
     },
     {
-      "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/manifest.json",
+      "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_manifests/random_seed_1101.json",
       "run_id": "random_1101",
-      "sha256": "fad937010131d1d12ed97260966383f9c19a41cceefe099f2d76a2c2cce17c13"
+      "sha256": "fad937010131d1d12ed97260966383f9c19a41cceefe099f2d76a2c2cce17c13",
+      "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/manifest.json",
+      "bundle_retention_status": "retained_exact_copy"
     },
     {
-      "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/manifest.json",
+      "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_manifests/tpe_seed_2202.json",
       "run_id": "optuna_2202",
-      "sha256": "1ace494078f174c1e9cd454ca97c60e2408343e192bc2c3d4f1408128917b00b"
+      "sha256": "1ace494078f174c1e9cd454ca97c60e2408343e192bc2c3d4f1408128917b00b",
+      "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/manifest.json",
+      "bundle_retention_status": "retained_exact_copy"
     },
     {
-      "path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/manifest.json",
+      "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_manifests/random_seed_2202.json",
       "run_id": "random_2202",
-      "sha256": "d15846cae0423334604b39efa65a15ec8842622edb992b397bf29f973a71fd0c"
+      "sha256": "d15846cae0423334604b39efa65a15ec8842622edb992b397bf29f973a71fd0c",
+      "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/manifest.json",
+      "bundle_retention_status": "retained_exact_copy"
     }
   ],
   "objective": {
@@ -262,5 +277,38 @@
     "robot_sf/scenario_certification/v1.py": "f8f1a24487b9609ed4670d0ef0fe8b71c7983fbfe8e52b11c0a3823971d43941",
     "scripts/tools/compare_adversarial_samplers.py": "e06e27c9cd2811797e6f96dc9c9e9a2273dcc72a2398f22bcb054deda7b0d0cd",
     "uv.lock": "20f53b5e117938b62ead7276f5d97bebdce5e1f1df6c8639937a64477df63cb8"
+  },
+  "candidate_episode_record_recovery": {
+    "schema_version": "issue_9645_candidate_episode_record_recovery.v1",
+    "count": 64,
+    "total_size_bytes": 1629062,
+    "artifact_path_map": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_report_artifact_path_map.v1.json",
+    "artifact_path_map_sha256": "c68f2dd100670cbc4504980ea3ddd42565c18e62829d693149bb74f1183211aa",
+    "binding_status": "all retained files exactly match the existing producer SHA-256 and byte count",
+    "search_or_simulation_rerun": false,
+    "trace_capture_flag_counts": {
+      "scenario_params.record_simulation_step_trace": {
+        "enabled": 0,
+        "disabled": 64
+      },
+      "scenario_params.record_planner_decision_trace": {
+        "enabled": 0,
+        "disabled": 64
+      }
+    },
+    "embedded_digest_counts": {
+      "provenance.scenario_digest": {
+        "present": 0,
+        "missing": 64
+      },
+      "provenance.map_digest": {
+        "present": 0,
+        "missing": 64
+      }
+    },
+    "absolute_path_fields": {
+      "scenario_params.route_overrides_file": 64
+    },
+    "portable_replay_status": "not_portable_from_episode_records_alone; candidate-specific route override files are not all retained and absolute producer paths are preserved verbatim"
   }
 }

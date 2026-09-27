@@ -47,14 +47,14 @@ _ISSUE9656_PROMOTED_MANIFEST = (
     _ISSUE9656_PROMOTED_BUNDLE / "payload/current_head_no_replay_manifest.json"
 )
 _ISSUE9656_FIXTURE_RECEIPT = _ISSUE9656_PROMOTED_BUNDLE / "fixture_source_receipt.json"
-_ISSUE9645_PROMOTED_SOURCE_HEAD = "1795ace308dbe83f89d604306d9430152e65e17e"
+_ISSUE9645_PROMOTED_SOURCE_HEAD = "f447479d1ace505c574450bfbd93fcc5ddad7d28"
 _ISSUE9645_BUNDLE_MANIFEST_SHA256 = (
-    "d2f3cfa3eee0b0d0b71c2347ab7bbd0d70466d51c7b9f35af207fc997b19915c"
+    "0d0bae9f26a4bcf49d50a1d6ce593ff11447524bc589db4513ff81893d017a59"
 )
-_ISSUE9645_CHECKSUMS_SHA256 = "dfdf247a212c86d992b83f49f7937a9fbb028a4e2ff0c9f0d40887622b43fd01"
-_ISSUE9645_SUMMARY_SHA256 = "8ec5762b72ac30d25e7cfb3d402749e3166bc7b248d458f16f8682fbfbaa50b0"
+_ISSUE9645_CHECKSUMS_SHA256 = "0e2c8dfdc0b912247c5bacf1e7c50aa9050c427295f4afff46f7095693114f7c"
+_ISSUE9645_SUMMARY_SHA256 = "51d44f4cf96bb15e23005d84721f2d758195061c76ecd7cad6018aef12708c32"
 _ISSUE9645_REPORT_PROVENANCE_SHA256 = (
-    "c01667fb6f1aadb1835c5ed435e662669a8808785160825f36bdbdde3fd2826a"
+    "e4b013681bb345bf7f16ab087c36a959f4dc3de5c1e7a7aa27a2be8c1127fd53"
 )
 _ISSUE9656_PROMOTED_SOURCE_HEAD = "58b51c0419e6052e5c75eb3059e2b53205d8276d"
 _ISSUE9656_PROMOTED_MATERIALIZER_REVISION = "dc9e8f6fdebb39da7c4450d2dcc1d5e9b991dfc0"
@@ -577,12 +577,40 @@ def _packet_copy() -> Iterator[Path]:
         yield destination / "payload"
 
 
+@contextmanager
+def _test_only_reconciled_packet() -> Iterator[Path]:
+    """Build a hypothetical hash-consistent packet only for downstream mechanics tests.
+
+    The tracked source packet is never modified. Its #1501 replay-provenance hash
+    conflicts remain covered by the production importer rejection regression.
+    """
+    with _packet_copy() as payload:
+        normalization_path = payload / "path_normalization.json"
+        normalization = json.loads(normalization_path.read_text(encoding="utf-8"))
+        for index in (1, 2):
+            relative = f"historical_issue_1501_failure_0002/replay_{index}.provenance.json"
+            artifact = payload / relative
+            row = next(item for item in normalization["records"] if item["path"] == relative)
+            row["normalized_sha256"] = hashlib.sha256(artifact.read_bytes()).hexdigest()
+        normalization_path.write_text(
+            json.dumps(normalization, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        _refresh_bundle_checksum_for_payload(payload, "path_normalization.json")
+        yield payload
+
+
 def _import(tmp_path: Path, payload: Path | None = None):
     corpus_root = tmp_path / "corpus"
     corpus, receipt = import_issue9645_packet(
         payload or _SOURCE_PACKET, new_corpus(), corpus_root=corpus_root
     )
-    if payload is None and "replay_input_binding_unknown_historical" in receipt["blockers"]:
+    if payload is None and any(
+        blocker.startswith(
+            "historical_case_invalid:CorpusError:#1501 replay 1 normalized artifact binding differs:"
+        )
+        or "replay_input_binding_unknown_historical" in blocker
+        for blocker in receipt["blockers"]
+    ):
         _seed_bound_test_case(corpus, corpus_root)
     return corpus, receipt, corpus_root
 
@@ -595,10 +623,11 @@ def _seed_bound_test_case(corpus: dict[str, object], corpus_root: Path) -> None:
     #1501 records because their recorded replay bytes lack direct input binding.
     No simulator is run.
     """
-    case, source_files, _observations = counterexample_corpus._build_issue9645_historical_case(
-        _SOURCE_PACKET
-    )
-    counterexample_corpus._materialize_case_artifacts(case, source_files, corpus_root)
+    with _test_only_reconciled_packet() as payload:
+        case, source_files, _observations = counterexample_corpus._build_issue9645_historical_case(
+            payload
+        )
+        counterexample_corpus._materialize_case_artifacts(case, source_files, corpus_root)
     case_id = case["case_id"]
     case["replay_receipt"]["artifact_receipts"] = [
         {"artifact_path": f"cases/{case_id}/source_evidence/replay_{index}.jsonl"}
@@ -643,7 +672,7 @@ def _seed_bound_test_case(corpus: dict[str, object], corpus_root: Path) -> None:
     validate_corpus(corpus, corpus_root=corpus_root)
 
 
-def test_issue9645_fixture_binds_the_promoted_v2_packet() -> None:
+def test_issue9645_fixture_binds_the_promoted_v3_packet() -> None:
     fixture_receipt = json.loads(_ISSUE9645_FIXTURE_RECEIPT.read_text(encoding="utf-8"))
     bundle_manifest = json.loads(
         (_SOURCE_BUNDLE / "evidence_bundle_manifest.json").read_text(encoding="utf-8")
@@ -678,13 +707,118 @@ def test_issue9645_fixture_binds_the_promoted_v2_packet() -> None:
     assert summary["feasibility"]["historical_replayed_case_dynamic_task_feasibility"] == (
         "unknown_without_reference_planner_success"
     )
-    assert report_provenance["schema_version"] == "issue_9645_report_build_provenance.v2"
-    assert report_provenance["trace_evidence_eligibility_counts"] == {
-        "eligible": 0,
-        "ineligible": 64,
+    assert report_provenance["schema_version"] == "issue_9645_report_build_provenance.v3"
+    assert report_provenance["episode_record_artifact_counts"] == {
+        "tracked": 64,
+        "digest_verified": 64,
+        "missing": 0,
     }
+    assert report_provenance["analysis_evidence_eligibility_counts"] == {
+        "eligible": 64,
+        "ineligible": 0,
+    }
+    assert report_provenance["trace_capture_flag_counts"] == {
+        "scenario_params.record_simulation_step_trace": {"enabled": 0, "disabled": 64},
+        "scenario_params.record_planner_decision_trace": {"enabled": 0, "disabled": 64},
+    }
+    assert report_provenance["embedded_digest_counts"] == {
+        "provenance.scenario_digest": {"present": 0, "missing": 64},
+        "provenance.map_digest": {"present": 0, "missing": 64},
+    }
+    assert report_provenance["search_or_simulation_rerun"] is False
     assert report_provenance["report_generator_commit"] == bundle_manifest["commit"]
+    assert report_provenance["report_build_execution_checkout_head"] == bundle_manifest["commit"]
     assert fixture_receipt["source_experiment_revision"] == summary["source_revision"]
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "source_hash",
+        "output_hash",
+        "manifest_map",
+        "rebase_map",
+        "rerun",
+        "analysis_eligibility",
+        "detailed_trace_flags",
+    ],
+)
+def test_issue9645_v3_report_provenance_mutations_fail_closed(
+    tmp_path: Path, mutation: str
+) -> None:
+    with _packet_copy() as payload:
+        report_path = payload / "report_provenance.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        if mutation == "source_hash":
+            report["experiment_source_commit_sha256"] = "f" * 64
+        elif mutation == "output_hash":
+            report["outputs"][0]["sha256"] = "f" * 64
+        elif mutation == "manifest_map":
+            relative = "reproduction_inputs/pilot_report_manifest_path_map.v1.json"
+            map_path = payload / relative
+            manifest_map = json.loads(map_path.read_text(encoding="utf-8"))
+            manifest_map["schema_version"] = "unsupported"
+            map_path.write_text(json.dumps(manifest_map))
+            report["manifest_path_map_sha256"] = hashlib.sha256(map_path.read_bytes()).hexdigest()
+            _refresh_bundle_checksum_for_payload(payload, relative)
+        elif mutation == "rebase_map":
+            relative = "reproduction_inputs/input_rebase_map.v1.json"
+            map_path = payload / relative
+            rebase = json.loads(map_path.read_text(encoding="utf-8"))
+            rebase["schema_version"] = "unsupported"
+            map_path.write_text(json.dumps(rebase))
+            report["reproduction_input_rebase_map_sha256"] = hashlib.sha256(
+                map_path.read_bytes()
+            ).hexdigest()
+            _refresh_bundle_checksum_for_payload(payload, relative)
+        elif mutation == "rerun":
+            report["search_or_simulation_rerun"] = True
+        elif mutation == "analysis_eligibility":
+            report["analysis_evidence_eligibility_counts"] = {
+                "eligible": 63,
+                "ineligible": 1,
+            }
+        elif mutation == "detailed_trace_flags":
+            report["trace_capture_flag_counts"]["scenario_params.record_planner_decision_trace"] = {
+                "enabled": 1,
+                "disabled": 63,
+            }
+        report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+        _refresh_bundle_checksum_for_payload(payload, "report_provenance.json")
+
+        corpus, receipt = import_issue9645_packet(
+            payload, new_corpus(), corpus_root=tmp_path / "corpus"
+        )
+
+    assert receipt["decision"] == "rejected"
+    assert any("pilot_evidence_invalid" in blocker for blocker in receipt["blockers"])
+    assert corpus["search_runs"] == []
+    assert corpus["cases"] == []
+    assert corpus["planner_evaluations"] == []
+
+
+def test_issue9645_import_rejects_replay_comparison_signature_mismatch(
+    tmp_path: Path,
+) -> None:
+    with _packet_copy() as payload:
+        path = payload / "replay_validation.json"
+        validation = json.loads(path.read_text(encoding="utf-8"))
+        validation["historical_issue_1501_case"]["comparison_signature"]["digest"] = "0" * 64
+        path.write_text(json.dumps(validation, indent=2, sort_keys=True) + "\n")
+        _refresh_bundle_checksum_for_payload(payload, "replay_validation.json")
+
+        corpus, receipt = import_issue9645_packet(
+            payload, new_corpus(), corpus_root=tmp_path / "corpus"
+        )
+
+    assert receipt["decision"] == "rejected"
+    assert any(
+        "#1501 recorded replay comparison signature differs" in blocker
+        for blocker in receipt["blockers"]
+    )
+    assert corpus["search_runs"][0]["new_counterexamples_discovered"] == 0
+    assert corpus["cases"] == []
+    assert corpus["planner_evaluations"] == []
 
 
 def _stage_case_under_candidate(case: dict[str, object], corpus_root: Path, candidate_id: str):
@@ -906,15 +1040,41 @@ def _refresh_evaluation_id(evaluation: dict[str, object]) -> None:
     ).hexdigest()
 
 
-def test_issue9645_packet_import_preserves_zero_discovery_and_unknown_feasibility(
+def test_issue9645_packet_rejects_replay_provenance_hash_conflicts_without_admission(
     tmp_path: Path,
 ) -> None:
     corpus_root = tmp_path / "corpus"
-    corpus, receipt = import_issue9645_packet(_SOURCE_PACKET, new_corpus(), corpus_root=corpus_root)
+    expected_conflicts = {}
+    with _packet_copy() as payload:
+        path = payload / "path_normalization.json"
+        path_normalization = json.loads(path.read_text(encoding="utf-8"))
+        for index in (1, 2):
+            relative = f"historical_issue_1501_failure_0002/replay_{index}.provenance.json"
+            row = next(item for item in path_normalization["records"] if item["path"] == relative)
+            row["normalized_sha256"] = hashlib.sha256(
+                f"deliberately-stale-replay-provenance-{index}".encode()
+            ).hexdigest()
+            expected_conflicts[relative] = (
+                row["normalized_sha256"],
+                hashlib.sha256((payload / relative).read_bytes()).hexdigest(),
+            )
+        path.write_text(json.dumps(path_normalization, indent=2, sort_keys=True) + "\n")
+        _refresh_bundle_checksum_for_payload(payload, "path_normalization.json")
+        corpus, receipt = import_issue9645_packet(payload, new_corpus(), corpus_root=corpus_root)
 
     assert receipt["decision"] == "rejected"
-    assert receipt["blockers"] == ["replay_input_binding_unknown_historical"]
+    assert len(receipt["blockers"]) == 1
+    blocker = receipt["blockers"][0]
+    assert blocker.startswith(
+        "historical_case_invalid:CorpusError:#1501 replay 1 normalized artifact binding differs:"
+    )
+    for relative, (declared_hash, actual_hash) in expected_conflicts.items():
+        assert f"provenance_path={relative}" in blocker
+        assert f"declared_normalized_sha256={declared_hash}" in blocker
+        assert f"actual_normalized_sha256={actual_hash}" in blocker
+        assert declared_hash != actual_hash
     assert receipt["pilot_new_discoveries"] == 0
+    assert receipt["candidate_identity"] is None
     assert len(corpus["search_runs"]) == 1
     pilot = corpus["search_runs"][0]
     assert pilot["attempted_candidates"] == 64
@@ -927,15 +1087,42 @@ def test_issue9645_packet_import_preserves_zero_discovery_and_unknown_feasibilit
         "unknown": 64,
     }
     assert pilot["safety_criticality_unknown_candidates"] == 64
-    assert pilot["trace_evidence_eligibility_counts"] == {"eligible": 0, "ineligible": 64}
-    assert pilot["tracked_episode_record_count"] == 0
-    assert pilot["report_generator_revision"] == "8619769f7f083e2a44c79726163271f3ec7d0b67"
+    assert pilot["analysis_evidence_eligibility_counts"] == {"eligible": 64, "ineligible": 0}
+    assert pilot["episode_record_artifact_counts"] == {
+        "tracked": 64,
+        "digest_verified": 64,
+        "missing": 0,
+    }
+    assert pilot["trace_capture_flag_counts"] == {
+        "scenario_params.record_simulation_step_trace": {"enabled": 0, "disabled": 64},
+        "scenario_params.record_planner_decision_trace": {"enabled": 0, "disabled": 64},
+    }
+    assert pilot["embedded_digest_counts"] == {
+        "provenance.scenario_digest": {"present": 0, "missing": 64},
+        "provenance.map_digest": {"present": 0, "missing": 64},
+    }
+    assert pilot["search_or_simulation_rerun"] is False
+    assert pilot["report_generator_revision"] == "499ac172d50c2fdc979950d7138daf66d3606715"
     assert pilot["historical_replay"] == {
         "at_recorded_revision": 1,
         "at_current_code": 0,
         "recorded_revision": "58e516aa4f69ff3098bf518199f483006589758c",
         "dynamic_task_feasibility": "unknown_without_reference_planner_success",
     }
+
+    historical = json.loads(
+        (_SOURCE_PACKET / "historical_issue_1501_failure_0002.json").read_text(encoding="utf-8")
+    )
+    replay_validation = json.loads(
+        (_SOURCE_PACKET / "replay_validation.json").read_text(encoding="utf-8")
+    )
+    for record in (
+        historical,
+        replay_validation["historical_issue_1501_case"],
+    ):
+        assert record["input_binding_status"] == "unknown_historical"
+        assert record["admission_status"] == "not_admitted"
+        assert record["regression_status"] == "pending_exact_historical_input_binding"
 
     assert corpus["cases"] == []
     assert corpus["planner_evaluations"] == []
@@ -947,7 +1134,7 @@ def test_issue9645_packet_import_preserves_zero_discovery_and_unknown_feasibilit
     validate_corpus(corpus, corpus_root=corpus_root)
 
 
-def test_issue9645_v2_packet_rejects_relabeling_unknown_criticality() -> None:
+def test_issue9645_v3_packet_rejects_relabeling_unknown_criticality() -> None:
     summary = json.loads((_SOURCE_PACKET / "summary.json").read_text(encoding="utf-8"))
     metadata = json.loads((_SOURCE_PACKET / "run_metadata.json").read_text(encoding="utf-8"))
     summary["candidate_outcomes"]["pilot_safety_criticality_unknown_rows"] = 63
@@ -961,10 +1148,11 @@ def test_generic_case_admission_rejects_historical_unknown_input_binding(
 ) -> None:
     corpus_root = tmp_path / "corpus"
     corpus = new_corpus()
-    case, source_files, _observations = counterexample_corpus._build_issue9645_historical_case(
-        _SOURCE_PACKET
-    )
-    counterexample_corpus._materialize_case_artifacts(case, source_files, corpus_root)
+    with _test_only_reconciled_packet() as payload:
+        case, source_files, _observations = counterexample_corpus._build_issue9645_historical_case(
+            payload
+        )
+        counterexample_corpus._materialize_case_artifacts(case, source_files, corpus_root)
     monkeypatch.setattr(
         counterexample_corpus,
         "_current_target_revision",
@@ -1002,9 +1190,10 @@ def test_issue9645_import_rejects_stale_target_revision_after_input_binding(
         lambda: "a" * 40,
     )
 
-    corpus, receipt = import_issue9645_packet(
-        _SOURCE_PACKET, new_corpus(), corpus_root=tmp_path / "corpus"
-    )
+    with _test_only_reconciled_packet() as payload:
+        corpus, receipt = import_issue9645_packet(
+            payload, new_corpus(), corpus_root=tmp_path / "corpus"
+        )
 
     assert receipt["decision"] == "rejected"
     assert any(
@@ -3066,28 +3255,34 @@ def test_issue9656_candidate_import_cli_persists_receipt_and_candidates(tmp_path
 
 
 @pytest.mark.parametrize(
-    ("tamper", "expected_fragment"),
+    ("tamper", "expected_fragment", "pilot_accounting_persists"),
     [
-        ("missing_scenario", "historical_case_invalid"),
-        ("missing_provenance", "historical_case_invalid"),
-        ("normalization_hash", "historical_case_invalid"),
-        ("replay_count", "historical_case_invalid"),
-        ("feasibility_verdict", "historical_case_invalid"),
+        ("missing_scenario", "pilot_evidence_invalid", False),
+        ("missing_provenance", "pilot_evidence_invalid", False),
+        ("normalization_hash", "historical_case_invalid", True),
+        ("replay_count", "historical_case_invalid", True),
+        ("feasibility_verdict", "historical_case_invalid", True),
     ],
 )
 def test_historical_case_admission_fails_closed_and_retains_zero_pilot(
-    tmp_path: Path, tamper: str, expected_fragment: str
+    tmp_path: Path, tamper: str, expected_fragment: str, pilot_accounting_persists: bool
 ) -> None:
-    with _packet_copy() as payload:
+    with _test_only_reconciled_packet() as payload:
         replay_dir = payload / "historical_issue_1501_failure_0002"
         if tamper == "missing_scenario":
             (replay_dir / "scenario.yaml").unlink()
         elif tamper == "missing_provenance":
             (replay_dir / "replay_1.provenance.json").unlink()
         elif tamper == "normalization_hash":
-            receipt = json.loads((payload / "path_normalization.json").read_text())
-            receipt["records"][0]["normalized_sha256"] = "0" * 64
-            (payload / "path_normalization.json").write_text(json.dumps(receipt))
+            path = payload / "path_normalization.json"
+            normalization = json.loads(path.read_text())
+            replay_provenance = "historical_issue_1501_failure_0002/replay_1.provenance.json"
+            row = next(
+                item for item in normalization["records"] if item["path"] == replay_provenance
+            )
+            row["normalized_sha256"] = "0" * 64
+            path.write_text(json.dumps(normalization))
+            _refresh_bundle_checksum_for_payload(payload, "path_normalization.json")
         else:
             receipt_path = payload / "replay_validation.json"
             receipt = json.loads(receipt_path.read_text())
@@ -3097,12 +3292,15 @@ def test_historical_case_admission_fails_closed_and_retains_zero_pilot(
             elif tamper == "feasibility_verdict":
                 case["dynamic_task_feasibility"] = "feasible"
             receipt_path.write_text(json.dumps(receipt))
+            _refresh_bundle_checksum_for_payload(payload, "replay_validation.json")
 
         corpus, receipt, corpus_root = _import(tmp_path, payload)
         assert receipt["decision"] == "rejected"
         assert any(expected_fragment in blocker for blocker in receipt["blockers"])
-        assert len(corpus["search_runs"]) == 1
-        assert corpus["search_runs"][0]["new_counterexamples_discovered"] == 0
+        assert bool(corpus["search_runs"]) is pilot_accounting_persists
+        if pilot_accounting_persists:
+            assert len(corpus["search_runs"]) == 1
+            assert corpus["search_runs"][0]["new_counterexamples_discovered"] == 0
         assert corpus["cases"] == []
         assert corpus["admission_attempts"][-1]["decision"] == "rejected"
         validate_corpus(corpus, corpus_root=corpus_root)
@@ -3380,7 +3578,7 @@ def _refresh_bundle_checksum_for_payload(payload: Path, relative: str) -> None:
 def test_replay_records_with_different_selected_metric_identity_are_rejected(
     tmp_path: Path,
 ) -> None:
-    with _packet_copy() as payload:
+    with _test_only_reconciled_packet() as payload:
         replay_path = payload / "historical_issue_1501_failure_0002/replay_2.jsonl"
         episode = json.loads(replay_path.read_text())
         episode["metrics"]["min_clearance"] += 0.25
@@ -3412,10 +3610,11 @@ def test_replayed_historical_origin_is_not_mislabeled_as_raw_historical_match(
     tmp_path: Path,
 ) -> None:
     corpus_root = tmp_path / "corpus"
-    corpus, receipt = import_issue9645_packet(_SOURCE_PACKET, new_corpus(), corpus_root=corpus_root)
-    case, _source_files, _observations = counterexample_corpus._build_issue9645_historical_case(
-        _SOURCE_PACKET
-    )
+    with _test_only_reconciled_packet() as payload:
+        corpus, receipt = import_issue9645_packet(payload, new_corpus(), corpus_root=corpus_root)
+        case, _source_files, _observations = counterexample_corpus._build_issue9645_historical_case(
+            payload
+        )
     assert receipt["decision"] == "rejected"
     assert receipt["blockers"] == ["replay_input_binding_unknown_historical"]
     assert corpus["cases"] == []
@@ -3434,15 +3633,14 @@ def test_replayed_historical_origin_is_not_mislabeled_as_raw_historical_match(
 def test_duplicate_import_is_deterministic_and_later_planner_solve_keeps_case(
     tmp_path: Path,
 ) -> None:
-    payload = _SOURCE_PACKET
     corpus_root = tmp_path / "corpus"
-    corpus, first = import_issue9645_packet(payload, new_corpus(), corpus_root=corpus_root)
-    case, _source_files, _observations = counterexample_corpus._build_issue9645_historical_case(
-        payload
-    )
-    case_hash = case["effective_scenario_sha256"]
-
-    corpus, second = import_issue9645_packet(payload, corpus, corpus_root=corpus_root)
+    with _test_only_reconciled_packet() as payload:
+        corpus, first = import_issue9645_packet(payload, new_corpus(), corpus_root=corpus_root)
+        case, _source_files, _observations = counterexample_corpus._build_issue9645_historical_case(
+            payload
+        )
+        case_hash = case["effective_scenario_sha256"]
+        corpus, second = import_issue9645_packet(payload, corpus, corpus_root=corpus_root)
     assert first["decision"] == "rejected"
     assert second["decision"] == "rejected"
     assert first["blockers"] == ["replay_input_binding_unknown_historical"]
@@ -4063,22 +4261,23 @@ def test_corpus_cli_import_status_and_slice_work_without_simulator_run(tmp_path:
     corpus_path = corpus_root / "corpus.json"
     receipt_path = tmp_path / "admission.json"
     corpus_root.mkdir()
-    assert (
-        corpus_cli_main(
-            [
-                "import-9645",
-                "--payload",
-                str(_SOURCE_PACKET),
-                "--corpus",
-                str(corpus_path),
-                "--corpus-root",
-                str(corpus_root),
-                "--output",
-                str(receipt_path),
-            ]
+    with _test_only_reconciled_packet() as payload:
+        assert (
+            corpus_cli_main(
+                [
+                    "import-9645",
+                    "--payload",
+                    str(payload),
+                    "--corpus",
+                    str(corpus_path),
+                    "--corpus-root",
+                    str(corpus_root),
+                    "--output",
+                    str(receipt_path),
+                ]
+            )
+            == 2
         )
-        == 2
-    )
     receipt = json.loads(receipt_path.read_text())
     assert receipt["decision"] == "rejected"
     assert receipt["blockers"] == ["replay_input_binding_unknown_historical"]

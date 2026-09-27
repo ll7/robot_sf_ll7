@@ -27,14 +27,16 @@
   },
   "inputs": {
     "schema_path": {
-      "path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
+      "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/inputs/episode.schema.v1.at_58e516.json",
       "sha256": "3c04b755fbab4764a429c034af3897eaf0db30360b81aebb390f83722105e224",
-      "artifact_status": "available"
+      "artifact_status": "available",
+      "producer_path_at_source_revision": "robot_sf/benchmark/schemas/episode.schema.v1.json"
     },
     "scenario_matrix": {
-      "path": "output/issue9645-smoke-v2/results/constraints_first_lexicographic_v1/budget_0001/seed_910/random/candidate_0000/scenario.yaml",
+      "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/smoke/corrected_success_smoke/scenario.yaml",
       "sha256": "8a1dc0727d05ee5d283b03e870c757e28751083be296b8963ed12dd4d88c512f",
-      "artifact_status": "available"
+      "artifact_status": "available",
+      "producer_output_path": "output/issue9645-smoke-v2/results/constraints_first_lexicographic_v1/budget_0001/seed_910/random/candidate_0000/scenario.yaml"
     },
     "algo_config": {
       "path": null,
@@ -54,9 +56,11 @@
   "raw_artifacts": [
     {
       "kind": "episodes_jsonl",
-      "path": "output/issue9645-smoke-v2/results/constraints_first_lexicographic_v1/budget_0001/seed_910/random/candidate_0000/episode_records.jsonl",
+      "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/smoke/corrected_success_smoke/episode_records_recorded.jsonl",
       "sha256": "6dee284ba8c9b41441bd93ada3973da8a9a855a1501afef886c74f012aa15b2b",
-      "artifact_status": "available"
+      "artifact_status": "available",
+      "producer_output_path": "output/issue9645-smoke-v2/results/constraints_first_lexicographic_v1/budget_0001/seed_910/random/candidate_0000/episode_records.jsonl",
+      "bundle_retention_status": "retained_exact_copy"
     }
   ],
   "rows": [

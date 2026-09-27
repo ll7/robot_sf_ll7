@@ -41,15 +41,14 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Protocol
 
-try:
-    import fcntl
-except ImportError:  # pragma: no cover - Windows has no POSIX flock implementation.
-    fcntl = None  # type: ignore[assignment]
-
 import yaml
 
 from robot_sf.adversarial.config import SearchConfig
 from robot_sf.adversarial.samplers import CandidateSampler, build_sampler
+from robot_sf.common.optional_import import try_import
+
+# POSIX-only; _run_lock fails closed when file locking is unavailable.
+fcntl = try_import("fcntl")
 
 CONFIG_SCHEMA = "adversarial_coevolution_config.v1"
 RUN_SCHEMA = "adversarial_coevolution_run.v2"

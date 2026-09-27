@@ -38,6 +38,9 @@ _ROW_STATUS_VALUES = {
     "blocked",
 }
 _ADMISSIBLE_CERTIFICATION_CLASSIFICATIONS = frozenset({"valid", "hard_but_solvable"})
+_PILOT_SUMMARY_SCHEMA_V1 = "issue_9645_bounded_pilot_summary.v1"
+_PILOT_SUMMARY_SCHEMA_V2 = "issue_9645_bounded_pilot_summary.v2"
+_PILOT_SUMMARY_SCHEMAS = frozenset({_PILOT_SUMMARY_SCHEMA_V1, _PILOT_SUMMARY_SCHEMA_V2})
 _CONVERGENCE_REPORT_SCHEMAS = frozenset(
     {
         "adversarial-search-convergence-report.v1",
@@ -525,7 +528,7 @@ def _check_source_metadata(payload: dict[str, Any]) -> None:
     run_metadata = payload["run_metadata"]
     row_status = payload["row_status"]
     convergence = payload["convergence_report"]
-    if summary.get("schema_version") != "issue_9645_bounded_pilot_summary.v1":
+    if summary.get("schema_version") not in _PILOT_SUMMARY_SCHEMAS:
         raise ValueError("unsupported #9645 pilot summary schema")
     if summary.get("issue") != 9645:
         raise ValueError("directory packet mode accepts the #9645 compact evidence packet only")
@@ -630,6 +633,7 @@ def _check_manifest_inventory(
     observed = _index_manifest_inventory(
         manifest_files,
         expected,
+        summary_schema_version=summary.get("schema_version"),
         artifact_paths_declared=artifact_paths_declared,
         packet_dir=packet_dir,
         source_root=source_root,
@@ -647,6 +651,7 @@ def _index_manifest_inventory(
     manifest_files: list[Any],
     expected: dict[str, dict[str, str]],
     *,
+    summary_schema_version: Any,
     artifact_paths_declared: bool,
     packet_dir: Path,
     source_root: Path,
@@ -670,9 +675,30 @@ def _index_manifest_inventory(
             or run_id in observed
         ):
             raise ValueError("run metadata manifest inventory has duplicate or invalid entries")
+        identity = expected.get(run_id, {})
+        if summary_schema_version == _PILOT_SUMMARY_SCHEMA_V2:
+            try:
+                packet_relative = packet_dir.relative_to(source_root)
+            except ValueError as exc:
+                raise ValueError(
+                    "v2 packet directory is outside its source repository root"
+                ) from exc
+            expected_bundle_path = (
+                packet_relative / identity.get("source_manifest_path", "")
+            ).as_posix()
+            if (
+                _safe_bundle_relative_path(path) != expected_bundle_path
+                or item.get("producer_output_path") != identity.get("path")
+                or item.get("bundle_retention_status") != "retained_exact_copy"
+            ):
+                raise ValueError(
+                    f"run metadata source manifest inventory conflicts for run {run_id}"
+                )
+            observed_path = item["producer_output_path"]
+        else:
+            observed_path = path
         if artifact_paths_declared:
             artifact_path = item.get("artifact_path")
-            identity = expected.get(run_id, {})
             if not isinstance(artifact_path, str) or not _source_manifest_artifact_matches(
                 artifact_path,
                 packet_dir=packet_dir,
@@ -683,7 +709,7 @@ def _index_manifest_inventory(
                 raise ValueError(
                     f"run metadata source manifest artifact path conflicts for run {run_id}"
                 )
-        observed[run_id] = {"path": path, "sha256": digest.lower()}
+        observed[run_id] = {"path": observed_path, "sha256": digest.lower()}
     return observed
 
 
@@ -1577,16 +1603,28 @@ def _check_v3_criticality(
         expected_budgeted_tier_by_sampler[key[0]].extend(run_tiers)
 
     for sampler, aggregate in aggregate_by_sampler.items():
-        _check_reported_status_counts(
-            aggregate.get("criticality_status_counts"),
-            _status_counts(expected_budgeted_by_sampler[sampler]),
-            label="aggregate criticality counts",
+        criticality_counts = _status_counts(expected_budgeted_by_sampler[sampler])
+        tier_counts = _status_counts(expected_budgeted_tier_by_sampler[sampler])
+        observed_critical = sum(
+            _ledger_criticality_status(row) == "critical"
+            for (run_sampler, _seed), rows in expected_runs.items()
+            if run_sampler == sampler
+            for row in rows
         )
-        _check_reported_status_counts(
-            aggregate.get("collision_intrusion_tier_status_counts"),
-            _status_counts(expected_budgeted_tier_by_sampler[sampler]),
-            label="aggregate safety-tier counts",
-        )
+        for field, expected in (
+            ("observed_critical", observed_critical),
+            ("criticality_unknown", criticality_counts["unknown"]),
+            ("collision_intrusion_tier_unknown", tier_counts["unknown"]),
+        ):
+            if (
+                _nonnegative_integer(
+                    aggregate.get(field), f"convergence aggregate {sampler} {field}"
+                )
+                != expected
+            ):
+                raise ValueError(
+                    f"convergence report aggregate {field} conflicts with candidate ledger"
+                )
 
 
 def _index_v3_report_runs(

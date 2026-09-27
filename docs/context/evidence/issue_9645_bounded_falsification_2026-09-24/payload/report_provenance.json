@@ -9,7 +9,7 @@
   "manifest_path_map_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/pilot_report_manifest_path_map.v1.json",
   "manifest_path_map_sha256": "1a8cf3b763e562a8febe0d946c2db34cdcc9cbe8a183117c50d3f1c91da45ae7",
   "reproduction_input_rebase_map_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/input_rebase_map.v1.json",
-  "reproduction_input_rebase_map_sha256": "c6941ce261bc71febb6c9631036cbe4f506c5d44c6d827a2280ba1b0d5c5ec32",
+  "reproduction_input_rebase_map_sha256": "1855d099115f3c0f818524953c5544a6c0f06ebfc9f0e6baf4d73928e7dfffab",
   "outputs": [
     {
       "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/convergence_report.json",

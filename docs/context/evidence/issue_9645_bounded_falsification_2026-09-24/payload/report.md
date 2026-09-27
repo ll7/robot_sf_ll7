@@ -60,7 +60,7 @@ The run command included an execution-context label naming Python 3.12.3. The ru
 - `source_hashes.sha256` — hashes for the tracked source/config/runtime inputs.
 - `convergence_report.json` / `.md` and `convergence_constraints_first_lexicographic_v1.png` — the corrected #9646 schema-v3 report, table, and convergence figure; unknown safety criticality is preserved.
 - `pilot_report_manifest_path_map.v1.json` — preserves the original producer manifest-path bindings.
-- `pilot_report_artifact_path_map.v1.json` — binds retained comparison, manifests, and all 64 episode records to the producer paths and exact digests.
+- `pilot_report_artifact_path_map.v1.json` — binds retained comparison, manifests, and all 64 episode records to producer paths, producer/normalized digests, and their retention status.
 - `reproduction_inputs/` — derived manifests that rebind only episode-record paths to tracked exact copies, plus the exact comparison-bound manifest map and transformation provenance.
 - `source_episode_records/` — all 64 candidate episode-record JSONLs, each matching its producer SHA-256 and byte count; retained to verify per-candidate episode-record summaries and source revision; detailed simulation-step and planner-decision trace capture is disabled for all 64 records.
 - `report_provenance.json` — exact schema-v3 report command, input and path-map digests, generator commit, output checksums, and no-rerun declaration.

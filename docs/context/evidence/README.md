@@ -183,8 +183,10 @@ for retention classes, preservation proof, and cleanup-eligibility workflows.
   parameters and replayed twice at its recorded regeneration revision; exact binding to the
   historical execution remains unknown, so the candidate is not admitted to the corpus. It also
   preserves the #9646 convergence report, candidate accounting, provenance, selected replay
-  traces, and all 64 exact pilot candidate episode records (1.63 MB total) needed to verify the
-  candidate-level source evidence. The rebuilt convergence report verifies a consistent source
+  traces, and all 64 path-normalized, producer-hash-bound pilot candidate episode-record copies
+  (1.63 MB total); only five bundle artifacts are exact producer-byte copies. The retained
+  candidate copies are sufficient to verify the candidate-level source evidence, with route-path
+  rewrites explicitly recorded. The rebuilt convergence report verifies a consistent source
   revision, while severe-intrusion evidence is still absent and all pilot criticality remains
   unknown. Explicit unknown-feasibility and claim-boundary caveats remain. This is not a planner
   ranking, paper-facing benchmark result, or safety result.

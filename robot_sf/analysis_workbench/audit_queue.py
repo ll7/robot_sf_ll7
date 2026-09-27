@@ -2822,7 +2822,7 @@ class AuditQueue:
             self._load_state_from_disk()
         elif self._pending_path is not None and self._pending_path.exists():
             self._recover_pending_without_state()
-            self._ensure_candidate_first_seen()
+            self._ensure_candidate_first_seen(default_index=0)
         else:
             self._ensure_candidate_first_seen()
 

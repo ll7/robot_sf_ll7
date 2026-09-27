@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -900,6 +901,29 @@ def test_two_services_serialize_next_and_stale_context_cas(tmp_path: Path) -> No
     assert AuditQueue(dataset, state_path=queue_path).state_revision == 1
     first.close()
     second.close()
+
+
+def test_pending_recovery_uses_canonical_candidate_first_seen_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dataset = _dataset("a" * 64)
+    queue_path = tmp_path / "queue.json"
+    queue_path.with_name(f"{queue_path.name}.pending").write_text("{}", encoding="utf-8")
+
+    def recover_older_state(queue: AuditQueue) -> None:
+        queue.state = replace(
+            queue.state,
+            selection_index=1,
+            candidate_first_seen={dataset.candidates[0].episode_id: 0},
+        )
+
+    monkeypatch.setattr(AuditQueue, "_recover_pending_without_state", recover_older_state)
+
+    queue = AuditQueue(dataset, state_path=queue_path)
+
+    assert queue.state.candidate_first_seen == {
+        candidate.episode_id: 0 for candidate in dataset.candidates
+    }
 
 
 def test_pending_recovery_after_writer_cleanup_preserves_stale_context_conflict(  # noqa: PLR0915

@@ -24,8 +24,11 @@ unknown for all 64 candidates because that evidence is absent. This remains a fi
 for scaling this fixed design in issue #9648; it does not establish that the scenario space has no
 counterexample.
 
-The #9646 report now uses schema v3 and is regenerated from the archived comparison and four source
-manifests. It preserves collision/severe-intrusion status as `unknown` when evidence is missing,
-malformed, or contradictory, and reports unknown criticality separately from known critical and
-known non-critical counts. It does not reinterpret the historical v1 objective score or reconstruct
-missing episode records.
+The #9646 report now uses schema v3 and is regenerated from the archived comparison and four
+checksum-pinned manifests in a clean evidence root. It preserves collision/severe-intrusion status as
+`unknown` when evidence is missing, malformed, or contradictory, and reports unknown criticality
+separately from known critical and known non-critical counts. All 64 raw episode records remain
+outside the tracked packet: byte-verified trace eligibility is 0/64, neither seed pair qualifies for
+an eligible paired summary, and trace-derived source revision is unknown. The experiment commit is
+recorded separately in `payload/run_metadata.json`. This report does not reinterpret the historical
+v1 objective score or reconstruct missing episode records.

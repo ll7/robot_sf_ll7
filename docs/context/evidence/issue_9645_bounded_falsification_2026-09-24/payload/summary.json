@@ -71,19 +71,24 @@
     "distinct_effective_scenarios": 64,
     "duplicate_candidate_specs": 0,
     "historical_counterexamples_in_archive": 15,
-    "historical_counterexamples_replayed_current_code": 1,
+    "historical_counterexamples_replayed_at_recorded_revision": 1,
+    "historical_counterexamples_replayed_current_code": 0,
     "historical_counterexamples_solved_after_optimization": 0,
+    "historical_replay_revision": "58e516aa4f69ff3098bf518199f483006589758c",
     "new_counterexamples_admitted_to_regression_corpus": 0,
-    "new_counterexamples_discovered": 0
+    "new_counterexamples_discovered": 0,
+    "pilot_known_critical_rows": 0,
+    "pilot_known_noncritical_rows": 0,
+    "pilot_safety_criticality_unknown_rows": 64
   },
   "candidate_rows_file": "candidate_evaluations.csv",
   "claim_boundary": "diagnostic_only_finite_search_budget_not_paper_facing_benchmark_evidence_and_not_real_world_safety",
   "decision_reasons": [
     "The complete evaluator chain ran without repair after a separate one-candidate smoke.",
-    "All 64 pilot candidates were statically cert-valid and dynamically completed successfully; no candidate produced collision, timeout, route failure, or near-miss.",
+    "The 64 recorded outcomes show task completion with no collision, timeout, route failure, or near-miss event; severe-intrusion evidence is absent, so safety criticality remains unknown for every candidate.",
     "All four run scores remained 0.0 at every evaluation; Random and TPE were tied under the tested budget.",
-    "Observed closest human-distance metric was >11 m and no near misses were recorded, indicating the tested fixed-seed domain did not challenge the goal planner.",
-    "A tracked #1501 failure at scenario seed 320, start_x≈2.312, lies outside this pilot’s clipped start_x≥2.5 domain; it reproduces as a native goal-planner collision under current source."
+    "Observed closest human-distance metric was >11 m and no near misses were recorded; tied zero scores indicate this fixed-seed domain did not challenge the configured objective, while criticality remains unknown.",
+    "A tracked #1501 failure at scenario seed 320, start_x≈2.312, lies outside this pilot’s clipped start_x≥2.5 domain; it was replayed twice with identical collisions at recorded revision 58e516aa4f69ff3098bf518199f483006589758c, not at the current PR head."
   ],
   "evaluation_budget_consumed": {
     "corrected_smoke_candidate": 1,
@@ -98,6 +103,7 @@
     "historical_replayed_case_dynamic_task_feasibility": "unknown_without_reference_planner_success",
     "historical_replayed_case_static_classification": "hard_but_solvable",
     "pilot_empirical_goal_successes": 64,
+    "pilot_safety_criticality_unknown_rows": 64,
     "pilot_scenario_certification": {
       "passed:hard_but_solvable": 5,
       "passed:valid": 59
@@ -115,6 +121,11 @@
   },
   "pilot_metrics": {
     "collision_events": 0,
+    "collision_intrusion_tier_status_counts": {
+      "critical": 0,
+      "not_critical": 0,
+      "unknown": 64
+    },
     "distance_to_human_min_m_range": [
       11.11753529396692,
       12.569427156764498
@@ -127,6 +138,12 @@
     "objective": "constraints_first_lexicographic_v1",
     "objective_direction": "maximize",
     "route_completions": 64,
+    "safety_criticality_status_counts": {
+      "critical": 0,
+      "not_critical": 0,
+      "unknown": 64
+    },
+    "safety_criticality_unknown_reason": "severe-intrusion evidence is absent from all four search manifests and the candidate table",
     "score_set": [
       0.0
     ],
@@ -306,7 +323,7 @@
       "random_2202": 0.0
     },
     "budget_per_run": 16,
-    "inference": "descriptive only; two proposal seeds and one fixed environment seed do not support broad comparison claims",
+    "inference": "Stored objective scores are tied at 0.0, but the schema-v3 report finds 0 eligible paired seeds because byte-verified traces are unavailable; no paired or inferential comparison is claimed.",
     "methods": [
       "random",
       "optuna_tpe"
@@ -316,7 +333,7 @@
       2202
     ]
   },
-  "schema_version": "issue_9645_bounded_pilot_summary.v1",
+  "schema_version": "issue_9645_bounded_pilot_summary.v2",
   "separate_attempts": {
     "corrected_bounds_smoke": {
       "attempts": 1,
@@ -327,9 +344,11 @@
       "seed": 910
     },
     "historical_failure_replay": {
-      "current_replays_identical": true,
+      "recorded_revision": "58e516aa4f69ff3098bf518199f483006589758c",
+      "replay_at_current_pr_head": false,
       "replayed_counterexamples": 1,
-      "replays": 2
+      "replays": 2,
+      "replays_identical_at_recorded_revision": true
     },
     "initial_bounds_smoke": {
       "attempts": 1,

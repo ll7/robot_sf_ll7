@@ -7,6 +7,11 @@ For broad context lookup, start with [INDEX.md](INDEX.md). It is the retrieval-f
 current entry points, status rules, and curated context-pack scopes. This README remains the note
 maintenance workflow and full discoverability surface.
 
+The versioned adversarial challenge corpus, fail-closed replay admission, planner-status
+recomputation, and replay-slice workflow are documented in
+[adversarial_counterexample_corpus.md](adversarial_counterexample_corpus.md); it is the current
+implementation guide for issue #9652 and the downstream #9653 integration.
+
 The repository-wide explicit issue-relationship contract and bounded migration audit are documented
 in [issue_relationships.md](issue_relationships.md).
 

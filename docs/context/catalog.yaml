@@ -40,6 +40,10 @@ entries:
   status: current
   freshness: maintained
   area: agent_workflow
+- path: docs/context/adversarial_counterexample_corpus.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
 - path: docs/context/issue_8829_compute_window_capacity_planner.md
   status: current
   freshness: maintained

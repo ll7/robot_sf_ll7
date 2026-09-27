@@ -2937,7 +2937,7 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
-        lambda scenario, scenario_path: dummy_config,
+        lambda scenario, scenario_path, **_kwargs: dummy_config,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
@@ -3077,7 +3077,7 @@ def test_run_map_episode_excludes_live_foresight_fallback_from_evidence(
     dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
-        lambda scenario, scenario_path: dummy_config,
+        lambda scenario, scenario_path, **_kwargs: dummy_config,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
@@ -3205,7 +3205,7 @@ def test_run_map_episode_tracking_precision_clamps_and_records(
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner_episode._build_env_config",
-        lambda scenario, scenario_path: dummy_config,
+        lambda scenario, scenario_path, **_kwargs: dummy_config,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner_episode.make_robot_env",
@@ -3288,7 +3288,7 @@ def test_run_map_episode_closes_env_when_reset_fails(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
-        lambda scenario, scenario_path: dummy_config,
+        lambda scenario, scenario_path, **_kwargs: dummy_config,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
@@ -3365,7 +3365,7 @@ def test_run_map_episode_records_synthetic_actuation_metrics(
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
-        lambda scenario, scenario_path: dummy_config,
+        lambda scenario, scenario_path, **_kwargs: dummy_config,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
@@ -3512,7 +3512,7 @@ def test_run_map_episode_calls_planner_reset_hook(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
-        lambda scenario, scenario_path: dummy_config,
+        lambda scenario, scenario_path, **_kwargs: dummy_config,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
@@ -3631,7 +3631,7 @@ def test_run_map_episode_merges_planner_runtime_stats(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
-        lambda scenario, scenario_path: dummy_config,
+        lambda scenario, scenario_path, **_kwargs: dummy_config,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
@@ -3754,7 +3754,7 @@ def test_run_map_episode_snapshots_planner_runtime_before_close(
 
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
-        lambda scenario, scenario_path: dummy_config,
+        lambda scenario, scenario_path, **_kwargs: dummy_config,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
@@ -3849,7 +3849,7 @@ def test_run_map_episode_does_not_stop_on_waypoint_only_success(
 
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
-        lambda scenario, scenario_path: dummy_config,
+        lambda scenario, scenario_path, **_kwargs: dummy_config,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
@@ -3957,7 +3957,7 @@ def test_run_map_episode_stops_immediately_on_route_complete(
 
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
-        lambda scenario, scenario_path: dummy_config,
+        lambda scenario, scenario_path, **_kwargs: dummy_config,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
@@ -4053,7 +4053,7 @@ def test_run_map_episode_collision_wins_over_route_complete(
 
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
-        lambda scenario, scenario_path: dummy_config,
+        lambda scenario, scenario_path, **_kwargs: dummy_config,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
@@ -4143,7 +4143,7 @@ def test_run_map_episode_floors_exact_obstacle_collision_metrics(
 
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
-        lambda scenario, scenario_path: dummy_config,
+        lambda scenario, scenario_path, **_kwargs: dummy_config,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
@@ -5604,7 +5604,7 @@ def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(
 
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
-        lambda scenario, scenario_path: dummy_config,
+        lambda scenario, scenario_path, **_kwargs: dummy_config,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
@@ -5732,7 +5732,7 @@ def test_run_map_episode_skips_force_buffer_reads_when_not_recording(
 
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
-        lambda scenario, scenario_path: dummy_config,
+        lambda scenario, scenario_path, **_kwargs: dummy_config,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
@@ -6027,7 +6027,7 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
     schema_path.write_text('{"type":"object"}', encoding="utf-8")
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
-        lambda scenario, scenario_path: dummy_config,
+        lambda scenario, scenario_path, **_kwargs: dummy_config,
     )
     action_sequences = [[], []]
     env_call_index = {"value": 0}
@@ -6296,7 +6296,7 @@ def test_map_episode_visibility_trace_feeds_occlusion_near_miss_predicate(monkey
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner._build_env_config",
-        lambda scenario, scenario_path: dummy_config,
+        lambda scenario, scenario_path, **_kwargs: dummy_config,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.map_runner.make_robot_env",

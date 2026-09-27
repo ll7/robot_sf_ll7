@@ -2025,7 +2025,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "## Per-run accounting",
         "",
-        "| Objective | Method | Seed | Budget | Search runtime (s) | Best observed ≤B | Best eligible ≤B | Trace evidence: eligible / ineligible (≤B) | Criticality: critical / not-critical / unknown (≤B) | Collision/intrusion tier: critical / not-critical / unknown (≤B) | Known critical (all rows) | Eligible critical ≤B | First eligible critical eval | Over-budget rows | Valid / invalid / failed / scoreless / missing ≤B / all expected | Duplicates ≤B | Execution modes | Availability | Run input status | Artifact |",
+        "| Objective | Method | Seed | Budget | Search runtime (s) | Best observed ≤B | Best eligible ≤B | Analysis evidence: eligible / ineligible (≤B) | Criticality: critical / not-critical / unknown (≤B) | Collision/intrusion tier: critical / not-critical / unknown (≤B) | Known critical (all rows) | Eligible critical ≤B | First eligible critical eval | Over-budget rows | Valid / invalid / failed / scoreless / missing ≤B / all expected | Duplicates ≤B | Execution modes | Availability | Run input status | Artifact |",
         "|---|---:|---:|---:|---:|---:|---:|---|---|---|---:|---:|---:|---:|---:|---:|---|---|---|---|",
     ]
     for run in report["runs"]:
@@ -2073,7 +2073,7 @@ def render_markdown(report: dict[str, Any]) -> str:
             "",
             "Budget-limited summaries use only the first B comparison-indexed candidate rows. Extra rows remain in JSON audit history and cannot alter best-so-far values or paired deltas.",
             "",
-            "Trace evidence counts use the report's byte-verified artifact eligibility check; the producer's `analysis_eligibility` receipt is retained separately in JSON. Criticality columns report known critical, known non-critical, and unknown candidate counts separately. Collision/severe-intrusion tier counts require explicit evidence for both components to report `not_critical`; a missing, malformed, or contradictory component remains `unknown`. Execution eligibility does not establish safety-tier completeness.",
+            "Analysis-evidence counts apply the report's canonical eligibility checks to each parseable, byte-verified episode-record artifact and retain the producer's `analysis_eligibility` receipt separately in JSON. These counts do not indicate detailed simulation-step or planner-decision traces, and they do not establish safety-tier completeness. Criticality columns report known critical, known non-critical, and unknown candidate counts separately. Collision/severe-intrusion tier counts require explicit evidence for both components to report `not_critical`; a missing, malformed, or contradictory component remains `unknown`.",
             "",
             "Eligible best/critical summaries require a scored objective, `execution_mode=native`, `readiness_status=native`, `availability_status=available`, a parseable episode-record artifact, an effective-scenario hash, and an explicit `analysis_eligibility.eligible=true` receipt; contradictory or incomplete evidence stays ineligible. Per-evaluation reason codes identify failed checks.",
             "",

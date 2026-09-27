@@ -8,6 +8,11 @@ and the boundary against human-comfort or deployment claims:
 Issue relationship contract and migration audit:
 [issue_relationships.md](issue_relationships.md).
 
+Issue #9652 versioned adversarial challenge corpus: fail-closed admission from the persisted #9645
+packet, explicit feasibility uncertainty and replay provenance, append-only planner observations,
+recomputed solved status, and deterministic regression-slice export:
+[adversarial_counterexample_corpus.md](adversarial_counterexample_corpus.md).
+
 Issue #9656 historical benchmark hard-case mining: 36 source-linked cases from the checksum-pinned
 Release 0.0.2 bundle, one-seed scenario/config snapshots, a 241-row collision-event/count
 inconsistency, and four revision-divergent replay comparisons. Diagnostic-only; no real-world

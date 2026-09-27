@@ -1,0 +1,51 @@
+{
+  "schema_version": "evidence_bundle.v1",
+  "created_at_utc": "2026-09-27T01:34:15Z",
+  "bundle_name": "issue_9656_hard_case_mining_2026-09-24",
+  "source_root": "issue-9656-evidence-stage",
+  "command": "uv run python scripts/tools/materialize_benchmark_hard_cases.py --summary \"${ISSUE9656_LOCAL_ROOT}/showcase_topk15_latest9662/showcase_summary.json\" --campaign-root \"${ISSUE9656_LOCAL_ROOT}/showcase_topk15_latest9662/input/extracted-64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle/payload\" --bundle \"${ISSUE9656_LOCAL_ROOT}/showcase_topk15_latest9662/input/cache/bundle-64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90.tar.gz\" --matrix configs/scenarios/classic_interactions_francis2023.yaml --out-dir \"${ISSUE9656_LOCAL_ROOT}/materialized_resume_original_showcase_at_dc9\" --resume-from \"${ISSUE9656_LOCAL_ROOT}/materialized_final_provenance_fix/manifest.json\" --replay-limit 0",
+  "commit": "dc9e8f6fdebb39da7c4450d2dcc1d5e9b991dfc0",
+  "claim_boundary": "diagnostic_only: historical simulator records and four finite replays; no planner safety, benchmark generalization, or real-world safety claim",
+  "policy": {
+    "large_raw_artifacts": "excluded",
+    "output_tree_mirroring": "forbidden",
+    "paper_or_benchmark_claim": "not_established_by_bundle_alone"
+  },
+  "totals": {
+    "file_count": 3,
+    "total_bytes": 258475
+  },
+  "files": [
+    {
+      "path": "current_head_no_replay_manifest.json",
+      "size_bytes": 124512,
+      "sha256": "c5f2d799d0b645ce13f2ab592263da85f55db922c1b54ff300a36e53b7f1418c",
+      "kind": "misc",
+      "location": "payload/current_head_no_replay_manifest.json"
+    },
+    {
+      "path": "report.md",
+      "size_bytes": 10092,
+      "sha256": "9e49a4657f42819f13426895737fc9e1febc311ac042bdc7d569e26018605964",
+      "kind": "reports",
+      "location": "payload/report.md"
+    },
+    {
+      "path": "summary.json",
+      "size_bytes": 123871,
+      "sha256": "bc0ea6bb6ebbd9259611bffa9e3cf11a17861eb4e4a1ab93a837edf1d8f0be59",
+      "kind": "aggregates",
+      "location": "payload/summary.json"
+    }
+  ],
+  "packaging_normalization": {
+    "recorded_at_utc": "2026-09-27T01:34:15Z",
+    "reason": "Promote the exact-head no-replay resume manifest and normalize ignored local cache paths for a relocatable tracked receipt.",
+    "replacement_prefix": "${ISSUE9656_LOCAL_ROOT}/",
+    "replacement_count": 28,
+    "before_sha256": "4447f52a62af1e69550de55ab1719accb6496143404d3c365d8ce268a053bfdf",
+    "after_sha256": "c5f2d799d0b645ce13f2ab592263da85f55db922c1b54ff300a36e53b7f1418c",
+    "data_effect": "Only local output path strings were normalized; portable artifact-availability annotations were carried forward for the unchanged case IDs. No case identity, source row, replay receipt/result, metric, or checksum value changed.",
+    "source_prefix_description": "ignored output cache root for issue 9656"
+  }
+}

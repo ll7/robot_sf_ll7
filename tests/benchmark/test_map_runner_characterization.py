@@ -299,7 +299,7 @@ class TestRunMapEpisodeCharacterization:
 
         monkeypatch.setattr(
             "robot_sf.benchmark.map_runner.map_runner_episode._build_env_config",
-            lambda scenario, scenario_path: dummy_config,
+            lambda scenario, scenario_path, **_kwargs: dummy_config,
         )
         monkeypatch.setattr(
             "robot_sf.benchmark.map_runner.map_runner_episode.make_robot_env",
@@ -455,7 +455,7 @@ class TestErrorPathCharacterization:
 
         monkeypatch.setattr(
             "robot_sf.benchmark.map_runner.map_runner_episode._build_env_config",
-            lambda scenario, scenario_path: dummy_config,
+            lambda scenario, scenario_path, **_kwargs: dummy_config,
         )
 
         policy, _ = _build_policy(

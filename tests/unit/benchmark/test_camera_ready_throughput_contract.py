@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from robot_sf.benchmark.camera_ready._reporting import _write_arm_rollup
+from robot_sf.benchmark.camera_ready._run_state import _arm_episode_counts
 from robot_sf.benchmark.camera_ready.campaign import (
     _campaign_episode_counts,
     _run_meta_throughput_definition,
@@ -46,3 +48,35 @@ def test_campaign_episode_counts_preserve_fresh_full_campaign_shape() -> None:
         }
     }
     assert _campaign_episode_counts([resumed_cached_run]) == (1_440, 0)
+
+
+def test_arm_episode_counts_preserve_legacy_and_invocation_shapes() -> None:
+    """Legacy and invocation-specific summaries keep distinct count semantics."""
+    assert _arm_episode_counts({"written": 7}) == (7, 7)
+    assert _arm_episode_counts({"episodes_total": 9}) == (9, 9)
+    assert _arm_episode_counts({"episodes_written_this_invocation": 2}) == (2, 2)
+    assert _arm_episode_counts({}) == (0, 0)
+
+
+def test_arm_rollup_report_renders_error_columns_with_retained_rows() -> None:
+    """An errored arm uses the expanded table header and keeps both row counts."""
+    lines: list[str] = []
+    _write_arm_rollup(
+        lines,
+        [
+            {
+                "planner_key": "goal",
+                "kinematics": "diff",
+                "status": "partial-failure",
+                "episodes_written": 2,
+                "episodes_total": 5,
+                "episodes_failed": 1,
+                "first_error": "worker failed",
+                "distinct_error_count": 1,
+            }
+        ],
+    )
+
+    assert "written this invocation | retained rows" in lines[3]
+    assert lines[4] == "|---|---|---|---:|---:|---:|---|---:|"
+    assert lines[5] == "| goal | diff | partial-failure | 2 | 5 | 1 | worker failed | 1 |"

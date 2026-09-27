@@ -1,6 +1,6 @@
 {
   "actual_driver_command": "time -p env LOGURU_LEVEL=ERROR uv run python scripts/tools/compare_adversarial_samplers.py --scenario-template configs/scenarios/templates/crossing_ttc.yaml --search-space configs/adversarial/issue_9645_pilot_space.v1.yaml --policy goal --objective constraints_first_lexicographic_v1 --budget 16 --seed 1101 --seed 2202 --sampler random --sampler optuna --require-certification --empirical --execution-context-label issue-9645-local-cpu-python3.12.3 --output-dir output/issue9645-pilot/results --out-json output/issue9645-pilot/comparison.json --out-md output/issue9645-pilot/comparison.md",
-  "artifact_retrieval_boundary": "The compact packet retains all 64 candidate rows, all 64 candidate episode-record JSONLs as path-normalized copies, selected replay episode records, and source manifests. Each candidate record is bound by its producer SHA-256, normalized SHA-256, and sizes in the artifact map. In the producer's search_analysis_eligibility.v1 receipt, `trace_present` means an episode_record_path exists; it is distinct from the detailed capture flags. Their embedded step-trace and planner-decision-trace flags are false; absolute route-overrides paths were normalized to repo-relative producer paths, and scenario/map digests remain null. The convergence report does not dereference those paths. Candidate-specific scenario YAMLs, route overrides, and trajectories are not all retained, so the 64 records alone do not form portable replay bundles.",
+  "artifact_retrieval_boundary": "The compact packet retains all 64 candidate episode records as exact producer-byte copies under source_episode_records/ and as separate path-normalized report-input copies under path_normalized_episode_records/. The artifact map binds producer and normalized SHA-256 digests and byte counts; the exact copies were recovered from retained pre-normalization commit 7588b785a607680400adcc6398d8c983c160e4bd. In search_analysis_eligibility.v1, trace_present means an episode_record_path exists; it is distinct from detailed capture flags. Step-trace and planner-decision-trace flags are false, embedded scenario/map digests are null, and candidate-specific scenario YAMLs, route overrides, and trajectories are not all retained. Neither record set alone is a portable replay bundle.",
   "benchmark_profile": "baseline-safe",
   "certification_required": true,
   "comparison_json": {
@@ -283,8 +283,8 @@
     "count": 64,
     "total_size_bytes": 1623686,
     "artifact_path_map": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_report_artifact_path_map.v1.json",
-    "artifact_path_map_sha256": "4d37bebe8da4b095185a6e1284c9997daab0811f55b107a007104ddce2d58e8d",
-    "binding_status": "all 64 normalized files are bound to producer and normalized SHA-256 values and byte counts; each differs from its producer record only at scenario_params.route_overrides_file",
+    "artifact_path_map_sha256": "97bc8efb1eab9bfe8f5e1b782738fc787b6ae7ee72b0f19df24b2d9a9e922f67",
+    "binding_status": "All 64 exact producer episode-record files and 64 path-normalized analysis copies are retained and bound to producer/normalized SHA-256 values and byte counts; each normalized copy differs from its producer record only at scenario_params.route_overrides_file.",
     "search_or_simulation_rerun": false,
     "trace_capture_flag_counts": {
       "scenario_params.record_simulation_step_trace": {
@@ -316,6 +316,12 @@
     },
     "normalized_path_fields": {
       "scenario_params.route_overrides_file": 64
-    }
+    },
+    "producer_bytes_retained_exactly": true,
+    "producer_exact_copy_count": 64,
+    "producer_exact_copy_total_size_bytes": 1629062,
+    "producer_exact_copy_root": "payload/source_episode_records/",
+    "path_normalized_copy_root": "payload/path_normalized_episode_records/",
+    "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
   }
 }

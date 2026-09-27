@@ -535,7 +535,7 @@
       "binding_count": 4,
       "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/pilot_report_manifest_path_map.v1.json",
       "schema_version": "falsification_manifest_path_map.v1",
-      "sha256": "1a8cf3b763e562a8febe0d946c2db34cdcc9cbe8a183117c50d3f1c91da45ae7",
+      "sha256": "a07850e8bd9aff2932a31bf06bc847f00fa6f526e1a128e0c726bf7ab4f1c235",
       "source_comparison_sha256": "7c8e7d0f6c74cef38bc776d24d19737176eb9eaebcac99ff1a91faeda302e02d"
     },
     "search_manifest_count": 4,
@@ -545,20 +545,20 @@
         "declared_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/manifest.json",
         "mapping": {
           "archived_manifest_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/manifests/random_seed_1101.json",
-          "archived_manifest_sha256": "2b40ddabdc64dc7f6d35974a96b36db15e6894e1e5e582796c9e1fd17bf4b92e",
+          "archived_manifest_sha256": "b2bf5b6b0d5885a208f05cf4765023efaf8d173128054d885ad1dfc1b8b50dc9",
           "declared_manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/manifest.json",
           "method": "archived_manifest_path_map",
           "path_map": {
             "binding_count": 4,
             "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/pilot_report_manifest_path_map.v1.json",
             "schema_version": "falsification_manifest_path_map.v1",
-            "sha256": "1a8cf3b763e562a8febe0d946c2db34cdcc9cbe8a183117c50d3f1c91da45ae7",
+            "sha256": "a07850e8bd9aff2932a31bf06bc847f00fa6f526e1a128e0c726bf7ab4f1c235",
             "source_comparison_sha256": "7c8e7d0f6c74cef38bc776d24d19737176eb9eaebcac99ff1a91faeda302e02d"
           }
         },
         "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/manifests/random_seed_1101.json",
         "run_id": "random:1101:16:constraints_first_lexicographic_v1:row1",
-        "sha256": "2b40ddabdc64dc7f6d35974a96b36db15e6894e1e5e582796c9e1fd17bf4b92e",
+        "sha256": "b2bf5b6b0d5885a208f05cf4765023efaf8d173128054d885ad1dfc1b8b50dc9",
         "status": "available"
       },
       {
@@ -566,20 +566,20 @@
         "declared_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/manifest.json",
         "mapping": {
           "archived_manifest_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/manifests/tpe_seed_1101.json",
-          "archived_manifest_sha256": "51f7dcf82d9e75a7156356d4465820cfe962a1208dd0c0ec38372031170c3aa5",
+          "archived_manifest_sha256": "dc8bcd8b5ce2b013d31ac2ba4166cbf7e4dbeb4cfa8e112baeb9f956b8f002c4",
           "declared_manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/manifest.json",
           "method": "archived_manifest_path_map",
           "path_map": {
             "binding_count": 4,
             "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/pilot_report_manifest_path_map.v1.json",
             "schema_version": "falsification_manifest_path_map.v1",
-            "sha256": "1a8cf3b763e562a8febe0d946c2db34cdcc9cbe8a183117c50d3f1c91da45ae7",
+            "sha256": "a07850e8bd9aff2932a31bf06bc847f00fa6f526e1a128e0c726bf7ab4f1c235",
             "source_comparison_sha256": "7c8e7d0f6c74cef38bc776d24d19737176eb9eaebcac99ff1a91faeda302e02d"
           }
         },
         "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/manifests/tpe_seed_1101.json",
         "run_id": "optuna:1101:16:constraints_first_lexicographic_v1:row2",
-        "sha256": "51f7dcf82d9e75a7156356d4465820cfe962a1208dd0c0ec38372031170c3aa5",
+        "sha256": "dc8bcd8b5ce2b013d31ac2ba4166cbf7e4dbeb4cfa8e112baeb9f956b8f002c4",
         "status": "available"
       },
       {
@@ -587,20 +587,20 @@
         "declared_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/manifest.json",
         "mapping": {
           "archived_manifest_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/manifests/random_seed_2202.json",
-          "archived_manifest_sha256": "8d0d0cac1644befdf6726555e2547359bf43b832cc95d754becf9dd2acc656ac",
+          "archived_manifest_sha256": "2c56663bf9385781a0a38e1338ec0ebb4ffa2146e55044066d0cc0a94bc7e9c8",
           "declared_manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/manifest.json",
           "method": "archived_manifest_path_map",
           "path_map": {
             "binding_count": 4,
             "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/pilot_report_manifest_path_map.v1.json",
             "schema_version": "falsification_manifest_path_map.v1",
-            "sha256": "1a8cf3b763e562a8febe0d946c2db34cdcc9cbe8a183117c50d3f1c91da45ae7",
+            "sha256": "a07850e8bd9aff2932a31bf06bc847f00fa6f526e1a128e0c726bf7ab4f1c235",
             "source_comparison_sha256": "7c8e7d0f6c74cef38bc776d24d19737176eb9eaebcac99ff1a91faeda302e02d"
           }
         },
         "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/manifests/random_seed_2202.json",
         "run_id": "random:2202:16:constraints_first_lexicographic_v1:row3",
-        "sha256": "8d0d0cac1644befdf6726555e2547359bf43b832cc95d754becf9dd2acc656ac",
+        "sha256": "2c56663bf9385781a0a38e1338ec0ebb4ffa2146e55044066d0cc0a94bc7e9c8",
         "status": "available"
       },
       {
@@ -608,20 +608,20 @@
         "declared_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/manifest.json",
         "mapping": {
           "archived_manifest_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/manifests/tpe_seed_2202.json",
-          "archived_manifest_sha256": "7b4af9ea0efbc2dc5ee7f58f27ecae10ab0af285644c70ddc4ff17817b07d1bf",
+          "archived_manifest_sha256": "1881c019a07b5f27a47722b5037e591067a12fe3da05b9426332eb6d58b3c3ab",
           "declared_manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/manifest.json",
           "method": "archived_manifest_path_map",
           "path_map": {
             "binding_count": 4,
             "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/pilot_report_manifest_path_map.v1.json",
             "schema_version": "falsification_manifest_path_map.v1",
-            "sha256": "1a8cf3b763e562a8febe0d946c2db34cdcc9cbe8a183117c50d3f1c91da45ae7",
+            "sha256": "a07850e8bd9aff2932a31bf06bc847f00fa6f526e1a128e0c726bf7ab4f1c235",
             "source_comparison_sha256": "7c8e7d0f6c74cef38bc776d24d19737176eb9eaebcac99ff1a91faeda302e02d"
           }
         },
         "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/manifests/tpe_seed_2202.json",
         "run_id": "optuna:2202:16:constraints_first_lexicographic_v1:row4",
-        "sha256": "7b4af9ea0efbc2dc5ee7f58f27ecae10ab0af285644c70ddc4ff17817b07d1bf",
+        "sha256": "1881c019a07b5f27a47722b5037e591067a12fe3da05b9426332eb6d58b3c3ab",
         "status": "available"
       }
     ],
@@ -1566,19 +1566,19 @@
       "manifest_budget": 16,
       "manifest_mapping": {
         "archived_manifest_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/manifests/random_seed_1101.json",
-        "archived_manifest_sha256": "2b40ddabdc64dc7f6d35974a96b36db15e6894e1e5e582796c9e1fd17bf4b92e",
+        "archived_manifest_sha256": "b2bf5b6b0d5885a208f05cf4765023efaf8d173128054d885ad1dfc1b8b50dc9",
         "declared_manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/manifest.json",
         "method": "archived_manifest_path_map",
         "path_map": {
           "binding_count": 4,
           "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/pilot_report_manifest_path_map.v1.json",
           "schema_version": "falsification_manifest_path_map.v1",
-          "sha256": "1a8cf3b763e562a8febe0d946c2db34cdcc9cbe8a183117c50d3f1c91da45ae7",
+          "sha256": "a07850e8bd9aff2932a31bf06bc847f00fa6f526e1a128e0c726bf7ab4f1c235",
           "source_comparison_sha256": "7c8e7d0f6c74cef38bc776d24d19737176eb9eaebcac99ff1a91faeda302e02d"
         }
       },
       "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/manifest.json",
-      "manifest_sha256": "2b40ddabdc64dc7f6d35974a96b36db15e6894e1e5e582796c9e1fd17bf4b92e",
+      "manifest_sha256": "b2bf5b6b0d5885a208f05cf4765023efaf8d173128054d885ad1dfc1b8b50dc9",
       "method": "Random",
       "num_budgeted_candidates": 16,
       "num_budgeted_observed_critical_candidates": 0,
@@ -1634,7 +1634,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 1,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0000/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0000/episode_records.jsonl",
             "sha256": "8285f88532d9bff9287f6752b3317f98bc400c824687b26f47b96badcb76392f",
             "status": "available"
           },
@@ -1643,7 +1643,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 2,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0001/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0001/episode_records.jsonl",
             "sha256": "5e33886c24bb0e1a3336e0435ca1d53459e2c283cf10b69d801a36ab217fc24c",
             "status": "available"
           },
@@ -1652,7 +1652,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 3,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0002/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0002/episode_records.jsonl",
             "sha256": "847d3618e3c255a79dbb2015356548ae15b83542dd869d06728f21172d4019c5",
             "status": "available"
           },
@@ -1661,7 +1661,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 4,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0003/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0003/episode_records.jsonl",
             "sha256": "5ab7665b96c2a4db203ea1df533701f41ce97f091ccf9c4873a44de173948a71",
             "status": "available"
           },
@@ -1670,7 +1670,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 5,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0004/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0004/episode_records.jsonl",
             "sha256": "3ae00c279a68c549a5ac0ff3b45dd96f11ef9726dd0764f0955d58218bd2c4e3",
             "status": "available"
           },
@@ -1679,7 +1679,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 6,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0005/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0005/episode_records.jsonl",
             "sha256": "531b11f663c2e2e4119c0692ff4fa250f20cbf0285f35c3bfd569c7d27e6a040",
             "status": "available"
           },
@@ -1688,7 +1688,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 7,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0006/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0006/episode_records.jsonl",
             "sha256": "85f9dfab6bb926a8a2dc1d19eb14ab6e0874fb06ad6783f5dbd2a063bf642e05",
             "status": "available"
           },
@@ -1697,7 +1697,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 8,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0007/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0007/episode_records.jsonl",
             "sha256": "3ba37fccf563386b1bdce7ae69733d5a35875f40ec275ef33ab5dd18c53cb8bd",
             "status": "available"
           },
@@ -1706,7 +1706,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 9,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0008/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0008/episode_records.jsonl",
             "sha256": "e858870d9639caad4ed590c04964dd736cfd301fd73874898a06f72fea02db8a",
             "status": "available"
           },
@@ -1715,7 +1715,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 10,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0009/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0009/episode_records.jsonl",
             "sha256": "2db4cb93a9e58f159e820d2c7895b6eb3f433302c819830ccdb25c49af320272",
             "status": "available"
           },
@@ -1724,7 +1724,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 11,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0010/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0010/episode_records.jsonl",
             "sha256": "e5a59637ccbd2fb5fbc8c411f1d9a9c8c378a3093175da8c355777697cccca9b",
             "status": "available"
           },
@@ -1733,7 +1733,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 12,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0011/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0011/episode_records.jsonl",
             "sha256": "c251ae61a13b3b2e09b6c7ea3837a320aa175e68b674815f2eb7d7aeb854b83c",
             "status": "available"
           },
@@ -1742,7 +1742,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 13,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0012/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0012/episode_records.jsonl",
             "sha256": "270f05ec5b6ac3e882f944eb5f8d4caba503e0e0ad0ec9afb635d8631500e10e",
             "status": "available"
           },
@@ -1751,7 +1751,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 14,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0013/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0013/episode_records.jsonl",
             "sha256": "9f7190571b762eb1c0a1ac34518f897d4596c6e270991a9d6949fb748c349210",
             "status": "available"
           },
@@ -1760,7 +1760,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 15,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0014/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0014/episode_records.jsonl",
             "sha256": "71ef77b7ff32e101e8a26b782d6203ad9f5a9e130810586de86e9c614e477623",
             "status": "available"
           },
@@ -1769,7 +1769,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 16,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0015/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0015/episode_records.jsonl",
             "sha256": "cfb349abbe52dbdc01f2d9cc1ad3a61647d19170e1c2cf4297035e379539437d",
             "status": "available"
           }
@@ -2680,19 +2680,19 @@
       "manifest_budget": 16,
       "manifest_mapping": {
         "archived_manifest_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/manifests/tpe_seed_1101.json",
-        "archived_manifest_sha256": "51f7dcf82d9e75a7156356d4465820cfe962a1208dd0c0ec38372031170c3aa5",
+        "archived_manifest_sha256": "dc8bcd8b5ce2b013d31ac2ba4166cbf7e4dbeb4cfa8e112baeb9f956b8f002c4",
         "declared_manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/manifest.json",
         "method": "archived_manifest_path_map",
         "path_map": {
           "binding_count": 4,
           "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/pilot_report_manifest_path_map.v1.json",
           "schema_version": "falsification_manifest_path_map.v1",
-          "sha256": "1a8cf3b763e562a8febe0d946c2db34cdcc9cbe8a183117c50d3f1c91da45ae7",
+          "sha256": "a07850e8bd9aff2932a31bf06bc847f00fa6f526e1a128e0c726bf7ab4f1c235",
           "source_comparison_sha256": "7c8e7d0f6c74cef38bc776d24d19737176eb9eaebcac99ff1a91faeda302e02d"
         }
       },
       "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/manifest.json",
-      "manifest_sha256": "51f7dcf82d9e75a7156356d4465820cfe962a1208dd0c0ec38372031170c3aa5",
+      "manifest_sha256": "dc8bcd8b5ce2b013d31ac2ba4166cbf7e4dbeb4cfa8e112baeb9f956b8f002c4",
       "method": "TPE",
       "num_budgeted_candidates": 16,
       "num_budgeted_observed_critical_candidates": 0,
@@ -2748,7 +2748,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 1,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0000/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_optuna/candidate_0000/episode_records.jsonl",
             "sha256": "3d5360fe890cf1ef54da104de6573be79f9d5534601315b3ebc50c2539c5d89f",
             "status": "available"
           },
@@ -2757,7 +2757,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 2,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0001/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_optuna/candidate_0001/episode_records.jsonl",
             "sha256": "dfd4e5ffa8595c541489244dc542133ca29b9b0918832c817e95a541c868f262",
             "status": "available"
           },
@@ -2766,7 +2766,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 3,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0002/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_optuna/candidate_0002/episode_records.jsonl",
             "sha256": "44aae2ee8141013d99b46367044a8500456d8280d8627158359fe2f67874c714",
             "status": "available"
           },
@@ -2775,7 +2775,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 4,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0003/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_optuna/candidate_0003/episode_records.jsonl",
             "sha256": "a9dfd438de78cacb1831d1af52ac14249b3436e51db2a71977ca2050cf16d4c2",
             "status": "available"
           },
@@ -2784,7 +2784,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 5,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0004/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_optuna/candidate_0004/episode_records.jsonl",
             "sha256": "83e847a3884e38eefa8949a67924f48299a6037d705731e5db0a209e352fef57",
             "status": "available"
           },
@@ -2793,7 +2793,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 6,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0005/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_optuna/candidate_0005/episode_records.jsonl",
             "sha256": "9a6764763f328682d014ee6e492a532a1b3ebdf668ea840cc8ba8e5f36b751f2",
             "status": "available"
           },
@@ -2802,7 +2802,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 7,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0006/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_optuna/candidate_0006/episode_records.jsonl",
             "sha256": "6f20b1116c2be42ecf97b51a3e43f011c5dfe459b7d4b6c6982784a879d95313",
             "status": "available"
           },
@@ -2811,7 +2811,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 8,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0007/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_optuna/candidate_0007/episode_records.jsonl",
             "sha256": "ea59802f3f9e153de00b49ed02f8c5f7a9498b07aa962fe09e9222f1b6781560",
             "status": "available"
           },
@@ -2820,7 +2820,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 9,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0008/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_optuna/candidate_0008/episode_records.jsonl",
             "sha256": "c75612e00196043ce8e1a1ad808304bb3e1a5aca616914652a48b633b3613d73",
             "status": "available"
           },
@@ -2829,7 +2829,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 10,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0009/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_optuna/candidate_0009/episode_records.jsonl",
             "sha256": "5e393ea65e76a9f064c0fc69d6f3bc602d85e2f04fe6b20ea4040c2d5dec8a1d",
             "status": "available"
           },
@@ -2838,7 +2838,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 11,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0010/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_optuna/candidate_0010/episode_records.jsonl",
             "sha256": "2b9079cbf408261a7a2986b270948f7d286b91b32cf98f567f5640efd7973c85",
             "status": "available"
           },
@@ -2847,7 +2847,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 12,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0011/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_optuna/candidate_0011/episode_records.jsonl",
             "sha256": "d8ca18010d931b98693f9920f99e62f9f58fdff6978f2f4fb7f9d2d183e34f57",
             "status": "available"
           },
@@ -2856,7 +2856,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 13,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0012/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_optuna/candidate_0012/episode_records.jsonl",
             "sha256": "0e2ebb6ceccad781e5b6b6cecd03bf1d6e720d3a9d1648801b04764b3c9cb87f",
             "status": "available"
           },
@@ -2865,7 +2865,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 14,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0013/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_optuna/candidate_0013/episode_records.jsonl",
             "sha256": "7323b98402033f1ebf5f3d9463b443467af46c76a11c6e7c58bba549f5e464e0",
             "status": "available"
           },
@@ -2874,7 +2874,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 15,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0014/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_optuna/candidate_0014/episode_records.jsonl",
             "sha256": "ce4d5b3eaaa0fc818348fadec6a9f74ded2dc7230c2c270aaac86bb7677a7d88",
             "status": "available"
           },
@@ -2883,7 +2883,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 16,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0015/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_optuna/candidate_0015/episode_records.jsonl",
             "sha256": "8cc2ec6537262d131b94d2f3fd591d0d738f1bf274042818c5764d1281ec3425",
             "status": "available"
           }
@@ -3794,19 +3794,19 @@
       "manifest_budget": 16,
       "manifest_mapping": {
         "archived_manifest_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/manifests/random_seed_2202.json",
-        "archived_manifest_sha256": "8d0d0cac1644befdf6726555e2547359bf43b832cc95d754becf9dd2acc656ac",
+        "archived_manifest_sha256": "2c56663bf9385781a0a38e1338ec0ebb4ffa2146e55044066d0cc0a94bc7e9c8",
         "declared_manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/manifest.json",
         "method": "archived_manifest_path_map",
         "path_map": {
           "binding_count": 4,
           "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/pilot_report_manifest_path_map.v1.json",
           "schema_version": "falsification_manifest_path_map.v1",
-          "sha256": "1a8cf3b763e562a8febe0d946c2db34cdcc9cbe8a183117c50d3f1c91da45ae7",
+          "sha256": "a07850e8bd9aff2932a31bf06bc847f00fa6f526e1a128e0c726bf7ab4f1c235",
           "source_comparison_sha256": "7c8e7d0f6c74cef38bc776d24d19737176eb9eaebcac99ff1a91faeda302e02d"
         }
       },
       "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/manifest.json",
-      "manifest_sha256": "8d0d0cac1644befdf6726555e2547359bf43b832cc95d754becf9dd2acc656ac",
+      "manifest_sha256": "2c56663bf9385781a0a38e1338ec0ebb4ffa2146e55044066d0cc0a94bc7e9c8",
       "method": "Random",
       "num_budgeted_candidates": 16,
       "num_budgeted_observed_critical_candidates": 0,
@@ -3862,7 +3862,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 1,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0000/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_random/candidate_0000/episode_records.jsonl",
             "sha256": "7df85b4e5a6ccd6d3e43f0f22afe9678cd8975812b6afff609113dd611435b7f",
             "status": "available"
           },
@@ -3871,7 +3871,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 2,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0001/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_random/candidate_0001/episode_records.jsonl",
             "sha256": "0c58fa563e3132754b00460240979564ea0ae6658695b6f2cbf231c40e1d04a4",
             "status": "available"
           },
@@ -3880,7 +3880,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 3,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0002/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_random/candidate_0002/episode_records.jsonl",
             "sha256": "8d56303aab873fc130ce9b87eed20356374c1701178d80c1fb6de7a84c592add",
             "status": "available"
           },
@@ -3889,7 +3889,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 4,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0003/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_random/candidate_0003/episode_records.jsonl",
             "sha256": "4683503019527b424a895dd81ac315d6f9a94ef09a9d466ae9d56fe2430339f4",
             "status": "available"
           },
@@ -3898,7 +3898,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 5,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0004/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_random/candidate_0004/episode_records.jsonl",
             "sha256": "f46a200c4bef9728a41c9df93808f29e31942c10b8903e6ab62355909f9e8196",
             "status": "available"
           },
@@ -3907,7 +3907,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 6,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0005/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_random/candidate_0005/episode_records.jsonl",
             "sha256": "a6752dfb0e480b3f95ee52b6a58a54d40ba222f145b1bcedd428128c52dc4ee9",
             "status": "available"
           },
@@ -3916,7 +3916,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 7,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0006/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_random/candidate_0006/episode_records.jsonl",
             "sha256": "b51fddd4b3b1bef2b7f472bf47f61af74f7a2a77b1734415cb733a97ace8b111",
             "status": "available"
           },
@@ -3925,7 +3925,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 8,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0007/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_random/candidate_0007/episode_records.jsonl",
             "sha256": "d9f2d2f2a0c6b03d6b16d1201108c78337cdacc1faba9d42367ae2e086f48607",
             "status": "available"
           },
@@ -3934,7 +3934,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 9,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0008/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_random/candidate_0008/episode_records.jsonl",
             "sha256": "e9f505089048b135c9164a3490b54ff6a5a8d82b1ea767727e90f8004b46a2f5",
             "status": "available"
           },
@@ -3943,7 +3943,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 10,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0009/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_random/candidate_0009/episode_records.jsonl",
             "sha256": "51dd66fef56a43cfe94dca4e7dd8ea77c800794cf2415ad7af2343e23fee60dc",
             "status": "available"
           },
@@ -3952,7 +3952,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 11,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0010/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_random/candidate_0010/episode_records.jsonl",
             "sha256": "6da3f0932d3aa2ece2b0f701eaf3372028f8fcb4817dd95527922595f395d279",
             "status": "available"
           },
@@ -3961,7 +3961,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 12,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0011/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_random/candidate_0011/episode_records.jsonl",
             "sha256": "48ee191fd082b338a2d6a7e03d7e29cabc289673ecdf051ce9526935563ce5d7",
             "status": "available"
           },
@@ -3970,7 +3970,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 13,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0012/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_random/candidate_0012/episode_records.jsonl",
             "sha256": "272b3e39a57d5c81cb7b6e5ad98b7760cc8cb0210f9a828231c4b1894a93a81a",
             "status": "available"
           },
@@ -3979,7 +3979,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 14,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0013/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_random/candidate_0013/episode_records.jsonl",
             "sha256": "5969666c044c1195afb7532821866878065592269e3bae6cf91a80a36ec33c81",
             "status": "available"
           },
@@ -3988,7 +3988,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 15,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0014/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_random/candidate_0014/episode_records.jsonl",
             "sha256": "daadba6394ff4be42d84ea7a1e77b4519babda0255fa82bee62986033f00c058",
             "status": "available"
           },
@@ -3997,7 +3997,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 16,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0015/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_random/candidate_0015/episode_records.jsonl",
             "sha256": "0a114e80cd707da9d53e08e08391fee5e649045af2499804d92eb5d489b729ce",
             "status": "available"
           }
@@ -4908,19 +4908,19 @@
       "manifest_budget": 16,
       "manifest_mapping": {
         "archived_manifest_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/manifests/tpe_seed_2202.json",
-        "archived_manifest_sha256": "7b4af9ea0efbc2dc5ee7f58f27ecae10ab0af285644c70ddc4ff17817b07d1bf",
+        "archived_manifest_sha256": "1881c019a07b5f27a47722b5037e591067a12fe3da05b9426332eb6d58b3c3ab",
         "declared_manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/manifest.json",
         "method": "archived_manifest_path_map",
         "path_map": {
           "binding_count": 4,
           "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/pilot_report_manifest_path_map.v1.json",
           "schema_version": "falsification_manifest_path_map.v1",
-          "sha256": "1a8cf3b763e562a8febe0d946c2db34cdcc9cbe8a183117c50d3f1c91da45ae7",
+          "sha256": "a07850e8bd9aff2932a31bf06bc847f00fa6f526e1a128e0c726bf7ab4f1c235",
           "source_comparison_sha256": "7c8e7d0f6c74cef38bc776d24d19737176eb9eaebcac99ff1a91faeda302e02d"
         }
       },
       "manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/manifest.json",
-      "manifest_sha256": "7b4af9ea0efbc2dc5ee7f58f27ecae10ab0af285644c70ddc4ff17817b07d1bf",
+      "manifest_sha256": "1881c019a07b5f27a47722b5037e591067a12fe3da05b9426332eb6d58b3c3ab",
       "method": "TPE",
       "num_budgeted_candidates": 16,
       "num_budgeted_observed_critical_candidates": 0,
@@ -4976,7 +4976,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 1,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0000/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_optuna/candidate_0000/episode_records.jsonl",
             "sha256": "e4cf661e0ab3770fa07ed41403ed333a930be377626aa0a85285da698a03823f",
             "status": "available"
           },
@@ -4985,7 +4985,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 2,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0001/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_optuna/candidate_0001/episode_records.jsonl",
             "sha256": "e173efc7229b2ad81f808fee271405d09c0405adcdec58b60b8dd20407c3c38e",
             "status": "available"
           },
@@ -4994,7 +4994,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 3,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0002/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_optuna/candidate_0002/episode_records.jsonl",
             "sha256": "7675fb7dd9e692da3bf99ceb6e1291c6066f6b7047d2887fd2259f2533b1439e",
             "status": "available"
           },
@@ -5003,7 +5003,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 4,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0003/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_optuna/candidate_0003/episode_records.jsonl",
             "sha256": "f0dc53987c7b670717730848a57ecee48ea528239de6be0eef12c018a9fbc56a",
             "status": "available"
           },
@@ -5012,7 +5012,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 5,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0004/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_optuna/candidate_0004/episode_records.jsonl",
             "sha256": "f270a9278ec938c7eed4a50757f3a44ad40f63852862e7190b1cbe5b75949530",
             "status": "available"
           },
@@ -5021,7 +5021,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 6,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0005/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_optuna/candidate_0005/episode_records.jsonl",
             "sha256": "2212644633216a03c362e6c6840c71347d0ee71c40c8225d20380033b9afa091",
             "status": "available"
           },
@@ -5030,7 +5030,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 7,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0006/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_optuna/candidate_0006/episode_records.jsonl",
             "sha256": "0e32adabb4e43e1ca1fd7c10dcc3db008432c3db8f2dc414269165c26d4b8c7b",
             "status": "available"
           },
@@ -5039,7 +5039,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 8,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0007/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_optuna/candidate_0007/episode_records.jsonl",
             "sha256": "3193f100c7389a6a033b03fb5eacecab29b5b0f195ef5cb737d34fd8f626f735",
             "status": "available"
           },
@@ -5048,7 +5048,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 9,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0008/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_optuna/candidate_0008/episode_records.jsonl",
             "sha256": "4d1c4636f13aea230cb2ce5ed54adc98a0776cd92a53120336c72f80f44e1301",
             "status": "available"
           },
@@ -5057,7 +5057,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 10,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0009/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_optuna/candidate_0009/episode_records.jsonl",
             "sha256": "58c5dd1bf6c9fa1ef2e019215390753ac53956c49cd6d1ada82f3f3207c1e2eb",
             "status": "available"
           },
@@ -5066,7 +5066,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 11,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0010/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_optuna/candidate_0010/episode_records.jsonl",
             "sha256": "4c8dc28e5725eabaafecd412d34816ae618c4f45466e212510ff1f34d7b0df7d",
             "status": "available"
           },
@@ -5075,7 +5075,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 12,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0011/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_optuna/candidate_0011/episode_records.jsonl",
             "sha256": "88ca40ba641ad5aa7bab0f410327b18b70ce4472b57ba69604f2f643dd2349d9",
             "status": "available"
           },
@@ -5084,7 +5084,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 13,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0012/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_optuna/candidate_0012/episode_records.jsonl",
             "sha256": "a5c58d695e3240a9a01d05dbd6c1d68fa1ca52e2135f1a8c82e3941fe90ad5fa",
             "status": "available"
           },
@@ -5093,7 +5093,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 14,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0013/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_optuna/candidate_0013/episode_records.jsonl",
             "sha256": "8e6034e28a004319408f3200ee791d56d5f3cc8844df5987d1df06641a0f9353",
             "status": "available"
           },
@@ -5102,7 +5102,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 15,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0014/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_optuna/candidate_0014/episode_records.jsonl",
             "sha256": "66f22fc95b217a7502a8dcd3dd41bad44e09e781db0515a4e529804b2be62a35",
             "status": "available"
           },
@@ -5111,7 +5111,7 @@
             "commit_identifier": "58e516aa4f69ff3098bf518199f483006589758c",
             "commit_sha": "58e516aa4f69ff3098bf518199f483006589758c",
             "evaluation_index": 16,
-            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0015/episode_records.jsonl",
+            "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_2202_optuna/candidate_0015/episode_records.jsonl",
             "sha256": "b7e2ebd3adb6222ed3987ed8384856436c3729518f134fb9be2577d6308bd2ef",
             "status": "available"
           }

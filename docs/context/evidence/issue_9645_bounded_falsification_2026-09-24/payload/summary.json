@@ -88,7 +88,7 @@
     "The 64 recorded outcomes show task completion with no collision, timeout, route failure, or near-miss event; severe-intrusion evidence is absent, so safety criticality remains unknown for every candidate.",
     "All four run scores remained 0.0 at every evaluation; Random and TPE were tied under the tested budget.",
     "Observed closest human-distance metric was >11 m and no near misses were recorded; tied zero scores indicate this fixed-seed domain did not challenge the configured objective, while criticality remains unknown.",
-    "A tracked #1501 failure at scenario seed 320, start_x≈2.312, lies outside this pilot’s clipped start_x≥2.5 domain; it was replayed twice with identical collisions at recorded revision 58e516aa4f69ff3098bf518199f483006589758c, not at the current PR head."
+    "A tracked #1501 failure at scenario seed 320, start_x\u22482.312, lies outside this pilot\u2019s clipped start_x\u22652.5 domain; it was replayed twice with identical collisions at recorded revision 58e516aa4f69ff3098bf518199f483006589758c, not at the current PR head."
   ],
   "evaluation_budget_consumed": {
     "corrected_smoke_candidate": 1,
@@ -323,7 +323,7 @@
       "random_2202": 0.0
     },
     "budget_per_run": 16,
-    "inference": "Stored objective scores are tied at 0.0, but the schema-v3 report finds 0 eligible paired seeds because byte-verified traces are unavailable; no paired or inferential comparison is claimed.",
+    "inference": "The stored objective scores tie at 0.0. Both matched Random/TPE seed pairs (1101 and 2202) are eligible for descriptive comparison from the byte-verified episode records. No inferential test or generalizable comparison is claimed; detailed simulation-step and planner-decision traces were not captured.",
     "methods": [
       "random",
       "optuna_tpe"

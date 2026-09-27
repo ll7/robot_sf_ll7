@@ -69,11 +69,16 @@ _EXPECTED_ORACLE_SEED = 225
 _EXPECTED_HORIZON_STEPS = 400
 _EXPECTED_SEEDS = (225, 226, 227)
 _AUTHORITATIVE_RADIUS_SOURCE = "robot_sf.common.robot_defaults.DEFAULT_ROBOT_RADIUS"
+# The goal policy is constructed directly by the runner, which records the
+# absence of a config file as the literal ``na``.  The social-force baseline
+# receives the resolved empty mapping and therefore uses its canonical empty
+# mapping digest.  Keep these identities separate in the protocol manifest.
+GOAL_PLANNER_CONFIG_HASH = "na"
 EMPTY_PLANNER_CONFIG_HASH = "44136fa355b3678a"
 _EXPECTED_PLANNER_CONFIG_PATHS = {"goal": None, "social_force": None}
 _EXPECTED_PLANNER_CONFIGS = {"goal": {}, "social_force": {}}
 _EXPECTED_PLANNER_CONFIG_HASHES = {
-    "goal": EMPTY_PLANNER_CONFIG_HASH,
+    "goal": GOAL_PLANNER_CONFIG_HASH,
     "social_force": EMPTY_PLANNER_CONFIG_HASH,
 }
 

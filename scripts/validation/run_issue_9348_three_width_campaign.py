@@ -28,6 +28,7 @@ from robot_sf.benchmark.schema_validator import load_schema
 from robot_sf.benchmark.three_width_doorway_application import (
     DEFAULT_MANIFEST_PATH,
     EMPTY_PLANNER_CONFIG_HASH,
+    GOAL_PLANNER_CONFIG_HASH,
     DoorwayPairingSession,
     build_pair_manifest,
     check_pair_receipts,
@@ -35,7 +36,7 @@ from robot_sf.benchmark.three_width_doorway_application import (
     non_width_config_sha256,
     run_three_width_preflight,
 )
-from robot_sf.evidence.writers import sha256_file, write_json
+from robot_sf.evidence.writers import review_marker_json, sha256_file, write_json
 from robot_sf.training.scenario_loader import load_scenarios
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -474,7 +475,7 @@ def verify_campaign_bundle(root: Path) -> dict[str, Any]:
         or sha256_file(root / "inputs/episode.schema.v1.json")
         != run_manifest.get("episode_schema_sha256")
         or run_manifest.get("planner_config_hash")
-        != {"goal": EMPTY_PLANNER_CONFIG_HASH, "social_force": EMPTY_PLANNER_CONFIG_HASH}
+        != {"goal": GOAL_PLANNER_CONFIG_HASH, "social_force": EMPTY_PLANNER_CONFIG_HASH}
         or (root / "inputs/social_force.yaml").exists()
     ):
         raise ValueError("doorway copied scientific input digest mismatch")
@@ -498,18 +499,9 @@ def verify_campaign_bundle(root: Path) -> dict[str, Any]:
     rows = [json.loads(line) for line in lines]
     rebuilt = analyze_rows(rows, cells, pair_manifest, source_sha=run_manifest["source_commit"])
     report = _json(root / "report.json")
-    if any(
-        report.get(key) != rebuilt.get(key)
-        for key in (
-            "row_inventory",
-            "cell_denominators",
-            "contrasts",
-            "native_rows",
-            "excluded_rows",
-        )
-    ):
+    if report != {"review_marker": review_marker_json(), **rebuilt}:
         raise ValueError("doorway report differs from sealed raw episodes")
-    return report
+    return rebuilt
 
 
 def run_campaign(manifest_path: Path, output_root: Path) -> Path:

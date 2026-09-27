@@ -104,9 +104,11 @@ scenario horizon remains 400 steps. `robot_sf/sim/sim_config.py` defaults to
 0.1 s per step, so the intended limit is 40 s; the campaign must record and
 verify the effective step duration and all planner/checkpoint/config hashes.
 The preregistered planner construction supplies `algo_config_path: null` for
-both planners and resolves each configuration to `{}`; the recorded empty
-configuration hash is `44136fa355b3678a`. No planner configuration file may be
-copied into the campaign inputs or supplied to the episode runner.
+both planners and resolves each configuration to `{}`. The direct `goal`
+policy records the null path as `config_hash: na`; the `social_force` baseline
+records the resolved empty mapping as `44136fa355b3678a`. No planner
+configuration file may be copied into the campaign inputs or supplied to the
+episode runner.
 No planner is retrained or tuned by width. The primary comparison is within
 planner across width; success and typed collisions are separate endpoints.
 Secondary measures are clearance, contact/near-miss exposure, time and

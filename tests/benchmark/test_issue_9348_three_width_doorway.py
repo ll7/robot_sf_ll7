@@ -236,7 +236,7 @@ def test_manifest_pins_three_width_tiers() -> None:
         "social_force": {},
     }
     assert manifest["planner_protocol"]["algo_config_hash"] == {
-        "goal": doorway_application.EMPTY_PLANNER_CONFIG_HASH,
+        "goal": doorway_application.GOAL_PLANNER_CONFIG_HASH,
         "social_force": doorway_application.EMPTY_PLANNER_CONFIG_HASH,
     }
     assert manifest["base_scenario"]["scenario_sha256"] == _sha256(
@@ -791,7 +791,7 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
             "source_commit": "d" * 40,
             "application_manifest_sha256": _sha256(inputs / "application_manifest.yaml"),
             "planner_config_hash": {
-                "goal": doorway_application.EMPTY_PLANNER_CONFIG_HASH,
+                "goal": doorway_application.GOAL_PLANNER_CONFIG_HASH,
                 "social_force": doorway_application.EMPTY_PLANNER_CONFIG_HASH,
             },
             "episode_schema_sha256": _sha256(inputs / "episode.schema.v1.json"),
@@ -803,6 +803,14 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
     assert verify_campaign_bundle(tmp_path)["native_rows"] == 18
     report_payload = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
     report_payload["contrasts"][0]["endpoints"]["success"]["raw_paired_differences"][0] = 99.0
+    write_json(tmp_path / "report.json", report_payload)
+    _write_checksums(tmp_path)
+    with pytest.raises(ValueError, match="differs from sealed raw episodes"):
+        verify_campaign_bundle(tmp_path)
+    write_json(tmp_path / "report.json", report)
+    _write_checksums(tmp_path)
+    report_payload = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
+    report_payload["claim_boundary"] = "tampered"
     write_json(tmp_path / "report.json", report_payload)
     _write_checksums(tmp_path)
     with pytest.raises(ValueError, match="differs from sealed raw episodes"):

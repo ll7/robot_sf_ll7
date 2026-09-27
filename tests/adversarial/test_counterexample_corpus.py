@@ -666,6 +666,18 @@ def _seed_bound_test_case(corpus: dict[str, object], corpus_root: Path) -> None:
             payload
         )
         counterexample_corpus._materialize_case_artifacts(case, source_files, corpus_root)
+    from robot_sf.adversarial.scenario_admissibility import classify_scenario_admissibility
+
+    classifier_result = classify_scenario_admissibility(
+        case["case_id"],
+        scenario_artifact_path=corpus_root / case["inputs"]["scenario_path"],
+        scenario_id=case["scenario_id"],
+    ).to_dict()
+    case["admissibility"]["classifier_receipt"] = (
+        counterexample_corpus.create_case_scenario_admissibility_receipt(
+            case, classifier_result, corpus_root=corpus_root
+        )
+    )
     case_id = case["case_id"]
     case["replay_receipt"]["artifact_receipts"] = [
         {"artifact_path": f"cases/{case_id}/source_evidence/replay_{index}.jsonl"}
@@ -1192,6 +1204,7 @@ def _refresh_evaluation_id(evaluation: dict[str, object]) -> None:
             "effective_scenario_sha256",
             "planner_id",
             "planner_config_identity",
+            "planner_configuration_snapshot",
             "source_revision",
             "episode_sha256",
             "outcome",
@@ -1523,6 +1536,22 @@ def test_unknown_feasibility_cannot_be_promoted_without_successful_replay_eviden
     }
     validate_corpus(corpus, corpus_root=corpus_root)
 
+    explicit_exclusion = copy.deepcopy(corpus)
+    classifier_receipt = explicit_exclusion["cases"][0]["admissibility"]["classifier_receipt"]
+    classifier_result = classifier_receipt["classifier_result"]
+    classifier_result["verdict"] = "structurally_invalid"
+    classifier_result["search_disposition"] = "reject"
+    classifier_result["reason_codes"].append("structural_exclusion")
+    classifier_receipt["classifier_result_sha256"] = hashlib.sha256(
+        counterexample_corpus._stable_json(classifier_result).encode("utf-8")
+    ).hexdigest()
+    binding = {key: value for key, value in classifier_receipt.items() if key != "binding_sha256"}
+    classifier_receipt["binding_sha256"] = hashlib.sha256(
+        counterexample_corpus._stable_json(binding).encode("utf-8")
+    ).hexdigest()
+    with pytest.raises(CorpusError, match="explicitly excludes"):
+        validate_corpus(explicit_exclusion, corpus_root=corpus_root)
+
     stored_evaluation["outcome"] = {
         "collision_event": True,
         "route_complete": False,
@@ -1530,6 +1559,190 @@ def test_unknown_feasibility_cannot_be_promoted_without_successful_replay_eviden
     }
     with pytest.raises(CorpusError, match="evaluation digest is invalid"):
         validate_corpus(corpus, corpus_root=corpus_root)
+
+
+def test_unknown_feasibility_requires_digest_bound_classifier_receipt(tmp_path: Path) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+
+    missing_receipt = copy.deepcopy(corpus)
+    missing_receipt["cases"][0]["admissibility"].pop("classifier_receipt")
+    with pytest.raises(CorpusError, match="classifier_receipt"):
+        validate_corpus(missing_receipt, corpus_root=corpus_root)
+
+    tampered_result = copy.deepcopy(corpus)
+    classifier_receipt = tampered_result["cases"][0]["admissibility"]["classifier_receipt"]
+    classifier_receipt["classifier_result"]["reason_codes"].append("forged_reason")
+    with pytest.raises(CorpusError, match="classifier result digest is invalid"):
+        validate_corpus(tampered_result, corpus_root=corpus_root)
+
+    tampered_map_binding = copy.deepcopy(corpus)
+    classifier_receipt = tampered_map_binding["cases"][0]["admissibility"]["classifier_receipt"]
+    classifier_receipt["input_binding"]["map_assets"][0]["sha256"] = "0" * 64
+    binding = {key: value for key, value in classifier_receipt.items() if key != "binding_sha256"}
+    classifier_receipt["binding_sha256"] = hashlib.sha256(
+        counterexample_corpus._stable_json(binding).encode("utf-8")
+    ).hexdigest()
+    with pytest.raises(CorpusError, match="does not bind input_binding"):
+        validate_corpus(tampered_map_binding, corpus_root=corpus_root)
+
+    excluded = copy.deepcopy(corpus)
+    classifier_receipt = excluded["cases"][0]["admissibility"]["classifier_receipt"]
+    result = classifier_receipt["classifier_result"]
+    result["verdict"] = "geometric_or_kinodynamic_impossibility"
+    result["search_disposition"] = "reject"
+    result["reason_codes"].append("geometric_exclusion")
+    classifier_receipt["classifier_result_sha256"] = hashlib.sha256(
+        counterexample_corpus._stable_json(result).encode("utf-8")
+    ).hexdigest()
+    binding = {key: value for key, value in classifier_receipt.items() if key != "binding_sha256"}
+    classifier_receipt["binding_sha256"] = hashlib.sha256(
+        counterexample_corpus._stable_json(binding).encode("utf-8")
+    ).hexdigest()
+    with pytest.raises(CorpusError, match="explicitly excludes"):
+        validate_corpus(excluded, corpus_root=corpus_root)
+
+
+def test_discovery_requires_round_and_persisted_search_run_or_explicit_history(
+    tmp_path: Path,
+) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    missing_round = copy.deepcopy(corpus)
+    missing_round["cases"][0]["discovery"].pop("round_id")
+    with pytest.raises(CorpusError, match="round_id"):
+        validate_corpus(missing_round, corpus_root=corpus_root)
+
+    missing_historical_manifest = copy.deepcopy(corpus)
+    source = missing_historical_manifest["cases"][0]["discovery"]["search_source"]
+    source["kind"] = "random_search"
+    source.pop("historical_manifest")
+    with pytest.raises(CorpusError, match="no persisted search run"):
+        validate_corpus(missing_historical_manifest, corpus_root=corpus_root)
+
+    run_linked = copy.deepcopy(corpus)
+    run = run_linked["search_runs"][0]
+    source = run_linked["cases"][0]["discovery"]["search_source"]
+    source["kind"] = "bounded_search"
+    source["run_id"] = run["run_id"]
+    source["source_revision"] = run["source_revision"]
+    source.pop("historical_source_revision")
+    run_linked["cases"][0]["discovery"]["round_id"] = run["round_id"]
+    validate_corpus(run_linked, corpus_root=corpus_root)
+
+    orphaned = copy.deepcopy(run_linked)
+    orphaned["cases"][0]["discovery"]["search_source"]["run_id"] = "missing-run"
+    with pytest.raises(CorpusError, match="exactly one persisted run"):
+        validate_corpus(orphaned, corpus_root=corpus_root)
+
+    mismatched_round = copy.deepcopy(run_linked)
+    mismatched_round["cases"][0]["discovery"]["round_id"] = "another-round"
+    with pytest.raises(CorpusError, match="round ID differs"):
+        validate_corpus(mismatched_round, corpus_root=corpus_root)
+
+
+def test_duplicate_case_admission_preserves_second_planner_replay_and_configuration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    existing = corpus["cases"][0]
+    original_replay_receipt = copy.deepcopy(existing["replay_receipt"])
+    prior_receipt = existing["replay_receipt"]["artifact_receipts"][0]
+    source_artifact = corpus_root / prior_receipt["artifact_path"]
+    episode = json.loads(source_artifact.read_text(encoding="utf-8"))
+
+    planner_id = "goal_optimized"
+    config_identity = "goal_optimized_config_v2"
+    configuration_snapshot = {"max_speed_m_s": 1.25, "variant": "duplicate-test"}
+    run_id = "duplicate-planner-b-replay"
+    episode["algo"] = planner_id
+    episode["algorithm_metadata"]["algorithm"] = planner_id
+    episode["algorithm_metadata"]["canonical_algorithm"] = planner_id
+    episode["algorithm_metadata"]["config_hash"] = config_identity
+    episode["algorithm_metadata"]["config"] = configuration_snapshot
+    episode["event_ledger"]["planner"] = planner_id
+    episode["event_ledger"]["software_commit"] = episode["git_hash"]
+    episode["provenance"]["case_input_identity"] = {
+        **counterexample_corpus._case_runtime_input_binding(existing, corpus_root),
+        "run_id": run_id,
+        "reason_codes": [],
+    }
+    artifact_relative = f"cases/{existing['case_id']}/replay_artifacts/{run_id}.jsonl"
+    artifact = corpus_root / artifact_relative
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text(json.dumps(episode, sort_keys=True) + "\n", encoding="utf-8")
+
+    duplicate = copy.deepcopy(existing)
+    duplicate["target_planner"].update(
+        {
+            "planner_id": planner_id,
+            "config_identity": config_identity,
+            "configuration_snapshot": configuration_snapshot,
+        }
+    )
+    observation = counterexample_corpus._admission_replay_observation(existing, prior_receipt)
+    observation.update(
+        {
+            "planner_id": planner_id,
+            "planner_config_identity": config_identity,
+            "episode_sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
+            "outcome": episode["outcome"],
+            "termination_reason": episode["termination_reason"],
+            "metrics": prior_receipt["metrics"],
+        }
+    )
+    target_revision = episode["git_hash"]
+    monkeypatch.setattr(counterexample_corpus, "_current_target_revision", lambda: target_revision)
+    duplicate["replay_receipt"] = create_case_admission_replay_receipt(
+        observation,
+        duplicate,
+        artifact_path=artifact_relative,
+        corpus_root=corpus_root,
+        target_revision=target_revision,
+    )
+    duplicate["source_evidence"]["corpus_files"].append(
+        {
+            "path": artifact_relative,
+            "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
+        }
+    )
+
+    corpus, admission = counterexample_corpus.admit_case_record(
+        duplicate,
+        corpus,
+        corpus_root=corpus_root,
+        artifact_root=f"cases/{existing['case_id']}",
+        source_kind="test_second_planner_discovery",
+        source_id=run_id,
+    )
+
+    assert admission["decision"] == "duplicate", admission["blockers"]
+    assert admission["case_id"] == existing["case_id"]
+    assert len(corpus["cases"]) == 1
+    stored = corpus["cases"][0]
+    assert stored["replay_receipt"] == original_replay_receipt
+    supporting_evaluation = next(
+        evaluation
+        for evaluation in corpus["planner_evaluations"]
+        if evaluation["planner_id"] == planner_id
+        and evaluation["planner_config_identity"] == config_identity
+    )
+    assert supporting_evaluation["planner_configuration_snapshot"] == configuration_snapshot
+    replay = supporting_evaluation["replay_receipt"]
+    assert replay["planner_configuration_snapshot"] == configuration_snapshot
+    assert replay["artifact_path"].startswith(f"cases/{existing['case_id']}/supporting_replays/")
+    stored_artifact = corpus_root / replay["artifact_path"]
+    assert hashlib.sha256(stored_artifact.read_bytes()).hexdigest() == replay["artifact_sha256"]
+    assert any(
+        row["path"] == replay["artifact_path"] and row["sha256"] == replay["artifact_sha256"]
+        for row in stored["source_evidence"]["corpus_files"]
+    )
+    status = recompute_planner_status(
+        corpus,
+        planner_id=planner_id,
+        planner_config_identity=config_identity,
+        corpus_root=corpus_root,
+    )
+    assert status["status_counts"]["unsolved"] == 1
+    validate_corpus(corpus, corpus_root=corpus_root)
 
 
 def test_selected_projection_must_match_every_verified_replay_artifact(tmp_path: Path) -> None:

@@ -78,6 +78,23 @@ dynamic feasibility. The case's selected replay projection must also match each
 verified replay artifact, and the target planner's configuration snapshot must
 match the configuration recorded in its replay episode.
 
+An `admissible_feasibility_unknown` case also requires a digest-bound
+`scenario_admissibility.v1` result from the #9651 classifier. The corpus receipt
+binds that result to the case ID, effective scenario digest, scenario and route
+bytes, and resolved map asset digests. The result must retain the scenario as
+unknown; `structurally_invalid` and
+`geometric_or_kinodynamic_impossibility` results fail admission. Unknown remains
+a valid outcome when the classifier cannot demonstrate feasibility, but an
+unverified caller label is not sufficient.
+
+Discovery records require a nonempty `round_id`, candidate parameters,
+objective, and nonempty search settings. Search-derived cases name a `run_id`
+that resolves to exactly one persisted search-run record with the same round and
+source revision. Historical archives whose source manifest was not retained may
+omit that run link only when the record explicitly declares the manifest as
+unavailable and preserves its historical revision, source archive, origin case,
+and report reference.
+
 ## Import historical #9656 candidates
 
 The promoted #9656 artifact at source head
@@ -251,6 +268,10 @@ policy. Admission rereads the digest-pinned scenario bytes and reruns the canoni
 manifest-metadata, and strict unknown-field checks; a caller-supplied `structural_validation`
 receipt is not sufficient by itself. Case manifests must be self-contained: includes, selection,
 overrides, and map search paths are rejected so the runtime row stays within the pinned inputs.
+When the same effective scenario is rediscovered for another planner or configuration, the case
+identity remains singular while the new admission replay is copied into a supporting-replay bundle
+under that case's custody. A separate hashed planner evaluation retains its replay receipt and exact
+configuration snapshot, so deduplication does not discard planner-specific failures or later solves.
 The supported v1 admission criticality predicate requires the exact target-planner replay to show
 noncompletion with a canonical collision or timeout outcome, consistent termination reason, and
 non-contradictory selected metrics. Discovery criticality metadata alone and successful replay rows

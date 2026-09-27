@@ -204,9 +204,12 @@ def test_risk_dwa_progress_escape_breaks_stall() -> None:
         safe_distance=0.2,
     )
     planner = RiskDWAPlannerAdapter(cfg)
-    v, w = planner.plan(_obs(goal=(3.0, 0.0)))
+    (v, w), diagnostics = planner.plan_with_diagnostics(_obs(goal=(3.0, 0.0)))
     assert v >= 0.59
     assert abs(w) <= cfg.max_angular_speed
+    assert diagnostics["status"] == "selected"
+    assert diagnostics["reason"] == "candidate_score_better"
+    assert diagnostics["candidate_command"] == [v, w]
 
 
 def test_risk_dwa_progress_escape_keeps_scored_best_command(monkeypatch) -> None:
@@ -224,8 +227,38 @@ def test_risk_dwa_progress_escape_keeps_scored_best_command(monkeypatch) -> None
         "_rollout_score",
         lambda **kwargs: 10.0 if kwargs["command"] == (0.2, 0.0) else -5.0,
     )
-    v, w = planner.plan(_obs(goal=(3.0, 0.0)))
+    (v, w), diagnostics = planner.plan_with_diagnostics(_obs(goal=(3.0, 0.0)))
     assert (v, w) == (0.2, 0.0)
+    assert diagnostics["status"] == "evaluated_but_not_selected"
+    assert diagnostics["reason"] == "candidate_score_not_better"
+
+
+def test_risk_dwa_progress_escape_call_status_and_legacy_plan_output() -> None:
+    """Disabled and unconsidered escape calls retain the legacy command interface."""
+    observation = _obs(goal=(3.0, 0.0))
+    disabled = RiskDWAPlannerAdapter(
+        RiskDWAPlannerConfig(
+            linear_candidates=(0.2,),
+            angular_candidates=(0.0,),
+            progress_escape_enabled=False,
+        )
+    )
+    disabled_command, disabled_diagnostics = disabled.plan_with_diagnostics(observation)
+    assert disabled_command == disabled.plan(observation)
+    assert disabled_diagnostics["status"] == "disabled"
+    assert disabled_diagnostics["reason"] == "disabled_by_config"
+    assert disabled.diagnostics() == {"planner_type": "RiskDWAPlannerAdapter"}
+
+    not_considered = RiskDWAPlannerAdapter(
+        RiskDWAPlannerConfig(
+            linear_candidates=(0.8,),
+            angular_candidates=(0.0,),
+            progress_escape_enabled=True,
+        )
+    )
+    _command, diagnostics = not_considered.plan_with_diagnostics(observation)
+    assert diagnostics["status"] == "not_evaluated"
+    assert diagnostics["reason"] == "escape_conditions_not_met"
 
 
 def test_mppi_is_deterministic_for_fixed_seed() -> None:

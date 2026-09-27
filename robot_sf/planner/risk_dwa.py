@@ -358,11 +358,35 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return best unicycle command `(v, omega)` for the current observation."""
+        command, _diagnostics = self.plan_with_diagnostics(observation)
+        return command
+
+    def plan_with_diagnostics(
+        self, observation: dict[str, Any]
+    ) -> tuple[tuple[float, float], dict[str, Any]]:
+        """Return the command with call-scoped progress-escape diagnostics.
+
+        The diagnostics distinguish a disabled feature, a call where the escape
+        candidate was not considered, a scored candidate that lost, and a
+        selected escape command. They are returned rather than stored on the
+        planner so repeated calls cannot leak stale status into a later trace.
+        """
+        progress_escape: dict[str, Any] = {
+            "schema_version": "risk-dwa-progress-escape.v1",
+            "status": "not_evaluated",
+            "reason": "escape_conditions_not_met",
+        }
+        if not bool(self.config.progress_escape_enabled):
+            progress_escape["status"] = "disabled"
+            progress_escape["reason"] = "disabled_by_config"
+
         robot_pos, heading, goal, ped_pos, ped_vel = self._extract_robot_goal_ped(observation)
         grid_payload = self._cache_grid_payload(observation)
         to_goal = float(np.linalg.norm(goal - robot_pos))
         if to_goal <= float(self.config.goal_tolerance):
-            return 0.0, 0.0
+            if bool(self.config.progress_escape_enabled):
+                progress_escape["reason"] = "goal_reached"
+            return (0.0, 0.0), progress_escape
 
         current_speed = float(
             self._as_1d_float(self._socnav_fields(observation)[0].get("speed", [0.0]), pad=1)[0]
@@ -423,10 +447,16 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
                     current_speed=current_speed,
                     grid_payload=grid_payload,
                 )
+                progress_escape["status"] = "evaluated_but_not_selected"
+                progress_escape["reason"] = "candidate_score_not_better"
+                progress_escape["candidate_command"] = [escape_v, escape_w]
+                progress_escape["candidate_score"] = float(escape_score)
                 if escape_score > best_score:
                     best_score = escape_score
                     best_cmd = (escape_v, escape_w)
-        return best_cmd
+                    progress_escape["status"] = "selected"
+                    progress_escape["reason"] = "candidate_score_better"
+        return best_cmd, progress_escape
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""

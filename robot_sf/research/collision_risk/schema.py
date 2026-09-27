@@ -9,6 +9,9 @@ most common way an online risk surface becomes misleading:
   contact probability and its first-passage / hazard decomposition. These are
   estimates from an explicit, declared stochastic forecast model and are only as
   good as that model;
+- **supplied mode marginals** -- per-timestamp Monte Carlo contact estimates
+  for one actor mode, with a separately labeled clipped sum that makes no
+  temporal-independence assumption and is not a certified bound;
 - **deterministic warnings** -- time-to-collision (TTC), velocity-obstacle (VO)
   membership, and reachable-set flags. These are *not* probabilities and are
   labelled non-probabilistic;
@@ -30,10 +33,24 @@ import math
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
 RISK_SCHEMA_VERSION = "action_conditioned_collision_risk.v1"
+
+# This schema deliberately describes a different event boundary from the
+# legacy action-conditioned estimator.  The latter scores swept, piecewise
+# linear constant-velocity paths; this contract scores contact at the supplied
+# discrete grid timestamps only.
+TRAJECTORY_MODE_RISK_SCHEMA_VERSION = "trajectory_mode_marginal_risk.v1"
+TRAJECTORY_MODE_RISK_CLAIM_BOUNDARY = (
+    "finite-sample point estimate over discrete grid-time contact events; "
+    "the clipped time sum is an estimated union-bound measure, not a certified "
+    "upper bound, calibrated probability, continuous-time/swept-contact "
+    "estimate, or safety verdict; the sum makes no temporal-independence assumption"
+)
 
 # Label attached to the deterministic block so downstream consumers can never
 # mistake a TTC/VO/reachability field for a probability.
@@ -52,6 +69,10 @@ _PROB_TOL = 1e-6
 
 class RiskSchemaError(ValueError):
     """Raised when a risk estimate violates its versioned schema contract."""
+
+
+class CollisionRiskInputError(ValueError):
+    """Raised when a collision-risk input violates a fail-closed contract."""
 
 
 def _finite(value: float) -> bool:
@@ -76,6 +97,270 @@ def _json_safe(value: object) -> object:
     if isinstance(value, (list, tuple)):
         return [_json_safe(item) for item in value]
     return value
+
+
+_COVARIANCE_SYMMETRY_ATOL = 1.0e-10
+_COVARIANCE_PSD_ATOL = 1.0e-10
+
+
+def _readonly_float_array(value: object, *, shape: tuple[int, ...], label: str) -> np.ndarray:
+    """Copy and validate one finite floating-point array for a risk contract.
+
+    Returns:
+        An owned, read-only floating-point array with the requested shape.
+    """
+    try:
+        array = np.asarray(value, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise CollisionRiskInputError(f"{label} must be a numeric array") from exc
+    if array.shape != shape:
+        raise CollisionRiskInputError(f"{label} must have shape {shape}, got {array.shape}")
+    if not np.all(np.isfinite(array)):
+        raise CollisionRiskInputError(f"{label} must contain only finite values")
+    owned = np.array(array, dtype=float, copy=True)
+    owned.setflags(write=False)
+    return owned
+
+
+def _validated_mode_identity(actor_id: object, mode_id: object) -> tuple[int | str, str]:
+    """Normalize one actor/mode identity pair or fail closed.
+
+    Returns:
+        Normalized actor and mode identifiers.
+    """
+    if isinstance(actor_id, (bool, np.bool_)) or not isinstance(actor_id, (int, str, np.integer)):
+        raise CollisionRiskInputError("actor_id must be an integer or non-empty string")
+    normalized_actor_id = int(actor_id) if isinstance(actor_id, (int, np.integer)) else actor_id
+    if isinstance(normalized_actor_id, str) and not normalized_actor_id.strip():
+        raise CollisionRiskInputError("actor_id must be non-empty")
+    if not isinstance(mode_id, str) or not mode_id.strip():
+        raise CollisionRiskInputError("mode_id must be a non-empty string")
+    return normalized_actor_id, mode_id.strip()
+
+
+def _validated_mode_radius(value: object) -> float:
+    """Return a finite nonnegative actor radius or fail closed."""
+    if isinstance(value, (bool, np.bool_)):
+        raise CollisionRiskInputError("actor_radius_m must be finite and non-negative")
+    try:
+        radius = float(value)
+    except (TypeError, ValueError) as exc:
+        raise CollisionRiskInputError("actor_radius_m must be finite and non-negative") from exc
+    if not math.isfinite(radius) or radius < 0.0:
+        raise CollisionRiskInputError("actor_radius_m must be finite and non-negative")
+    return radius
+
+
+def _validated_mode_marginals(
+    time_offsets_s: object, mean_positions: object, covariances: object
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Own and validate a time grid and its Gaussian position marginals.
+
+    Returns:
+        Read-only times, mean positions, and covariance matrices.
+    """
+    try:
+        times = np.asarray(time_offsets_s, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise CollisionRiskInputError("time_offsets_s must be a numeric array") from exc
+    if times.ndim != 1 or times.shape[0] == 0:
+        raise CollisionRiskInputError("time_offsets_s must be a non-empty 1D array")
+    if not np.all(np.isfinite(times)):
+        raise CollisionRiskInputError("time_offsets_s must contain only finite values")
+    if times.shape[0] > 1 and not np.all(np.diff(times) > 0.0):
+        raise CollisionRiskInputError("time_offsets_s must be strictly increasing")
+
+    steps = int(times.shape[0])
+    means = _readonly_float_array(mean_positions, shape=(steps, 2), label="mean_positions")
+    covariance = _readonly_float_array(covariances, shape=(steps, 2, 2), label="covariances")
+    transposed = np.swapaxes(covariance, -1, -2)
+    if not np.allclose(covariance, transposed, atol=_COVARIANCE_SYMMETRY_ATOL, rtol=0.0):
+        raise CollisionRiskInputError("covariances must be symmetric")
+    # Remove only round-off-scale asymmetry accepted by the check above.
+    covariance = np.array(0.5 * (covariance + transposed), dtype=float, copy=True)
+    try:
+        eigenvalues = np.linalg.eigvalsh(covariance)
+    except np.linalg.LinAlgError as exc:
+        raise CollisionRiskInputError("covariances must be finite symmetric matrices") from exc
+    if not np.all(np.isfinite(eigenvalues)) or np.any(eigenvalues < -_COVARIANCE_PSD_ATOL):
+        raise CollisionRiskInputError("covariances must be positive semidefinite")
+    covariance.setflags(write=False)
+
+    owned_times = np.array(times, dtype=float, copy=True)
+    owned_times.setflags(write=False)
+    return owned_times, means, covariance
+
+
+@dataclass(frozen=True)
+class TrajectoryModeRiskInput:
+    """One actor's one Gaussian forecast mode on a discrete time grid.
+
+    The risk package owns this small contract so it does not import navigation-
+    layer forecast classes. Arrays are copied and made read-only. ``covariances``
+    contains position marginals at each timestamp, not a joint trajectory
+    covariance; it carries no temporal-correlation or mode/existence/confidence
+    semantics.
+    """
+
+    actor_id: int | str
+    mode_id: str
+    actor_radius_m: float
+    time_offsets_s: np.ndarray
+    mean_positions: np.ndarray
+    covariances: np.ndarray
+
+    def __post_init__(self) -> None:
+        """Validate identities, geometry, time offsets, and Gaussian marginals."""
+        actor_id, mode_id = _validated_mode_identity(self.actor_id, self.mode_id)
+        radius = _validated_mode_radius(self.actor_radius_m)
+        times, means, covariances = _validated_mode_marginals(
+            self.time_offsets_s, self.mean_positions, self.covariances
+        )
+        object.__setattr__(self, "actor_id", actor_id)
+        object.__setattr__(self, "mode_id", mode_id)
+        object.__setattr__(self, "actor_radius_m", radius)
+        object.__setattr__(self, "time_offsets_s", times)
+        object.__setattr__(self, "mean_positions", means)
+        object.__setattr__(self, "covariances", covariances)
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-safe representation without mode weights or existence."""
+        return {
+            "actor_id": self.actor_id,
+            "mode_id": self.mode_id,
+            "actor_radius_m": self.actor_radius_m,
+            "time_offsets_s": self.time_offsets_s.tolist(),
+            "mean_positions": self.mean_positions.tolist(),
+            "covariances": self.covariances.tolist(),
+        }
+
+
+@dataclass(frozen=True)
+class TrajectoryModeRiskProvenance:
+    """Provenance for a discrete supplied-marginal mode-risk estimate."""
+
+    estimator_id: str
+    forecast_model: str
+    geometry_version: str
+    action_id: str
+    config_hash: str
+    seed: int
+    n_samples: int
+    schema_version: str = TRAJECTORY_MODE_RISK_SCHEMA_VERSION
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-safe provenance mapping."""
+        return _json_safe(asdict(self))  # type: ignore[return-value]
+
+
+@dataclass(frozen=True)
+class TrajectoryModeRiskEstimate:
+    """Finite-sample contact estimates for one supplied forecast mode.
+
+    Each probability is the contact event at one discrete grid timestamp.  The
+    ``estimated_time_union_bound`` field is the clipped sum of those marginal
+    point estimates.  It does not estimate a joint temporal event and makes no
+    temporal-independence assumption.
+    """
+
+    actor_id: int | str
+    mode_id: str
+    time_offsets_s: tuple[float, ...]
+    per_time_probability: tuple[float, ...]
+    per_time_mc_standard_error: tuple[float, ...]
+    peak_risk_time_index: int
+    estimated_time_union_bound: float
+    provenance: TrajectoryModeRiskProvenance
+    claim_boundary: str = TRAJECTORY_MODE_RISK_CLAIM_BOUNDARY
+    schema_version: str = TRAJECTORY_MODE_RISK_SCHEMA_VERSION
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-safe result mapping with explicit claim boundary."""
+        return {
+            "schema_version": self.schema_version,
+            "actor_id": self.actor_id,
+            "mode_id": self.mode_id,
+            "time_offsets_s": list(self.time_offsets_s),
+            "per_time_probability": list(self.per_time_probability),
+            "per_time_mc_standard_error": list(self.per_time_mc_standard_error),
+            "peak_risk_time_index": self.peak_risk_time_index,
+            "estimated_time_union_bound": self.estimated_time_union_bound,
+            "provenance": self.provenance.to_dict(),
+            "claim_boundary": self.claim_boundary,
+        }
+
+    def _validate_schema_and_lengths(self) -> int:
+        """Validate schema identity and parallel result-vector lengths.
+
+        Returns:
+            Number of timestamps in the result.
+        """
+        if self.schema_version != TRAJECTORY_MODE_RISK_SCHEMA_VERSION:
+            raise RiskSchemaError(
+                f"trajectory mode risk schema_version mismatch: {self.schema_version!r}"
+            )
+        count = len(self.time_offsets_s)
+        if count == 0 or len(self.per_time_probability) != count:
+            raise RiskSchemaError("trajectory mode risk time/probability lengths must match")
+        if len(self.per_time_mc_standard_error) != count:
+            raise RiskSchemaError("trajectory mode risk standard-error length must match time grid")
+        return count
+
+    def _validate_identity_and_time(self, count: int) -> None:
+        """Validate actor/mode identity and increasing finite timestamps."""
+        if not all(_finite(value) for value in self.time_offsets_s):
+            raise RiskSchemaError("trajectory mode risk time offsets must be finite")
+        if count > 1 and not all(
+            later > earlier
+            for earlier, later in zip(
+                self.time_offsets_s[:-1], self.time_offsets_s[1:], strict=True
+            )
+        ):
+            raise RiskSchemaError("trajectory mode risk time offsets must be strictly increasing")
+        if isinstance(self.actor_id, bool) or not isinstance(self.actor_id, (int, str)):
+            raise RiskSchemaError("trajectory mode risk actor_id must be an integer or string")
+        if not isinstance(self.mode_id, str) or not self.mode_id.strip():
+            raise RiskSchemaError("trajectory mode risk mode_id must be non-empty")
+
+    def _validate_probability_vectors(self) -> None:
+        """Validate finite probability and Monte Carlo standard-error values."""
+        for index, (probability, standard_error) in enumerate(
+            zip(self.per_time_probability, self.per_time_mc_standard_error, strict=True)
+        ):
+            if not _finite(probability) or not 0.0 <= probability <= 1.0 + _PROB_TOL:
+                raise RiskSchemaError(f"per_time_probability[{index}] is outside [0, 1]")
+            if not _finite(standard_error) or standard_error < -_PROB_TOL:
+                raise RiskSchemaError(f"per_time_mc_standard_error[{index}] is invalid")
+
+    def _validate_aggregation(self) -> None:
+        """Validate peak index, clipped sum, and explicit claim boundary."""
+        expected_peak = max(
+            range(len(self.per_time_probability)),
+            key=lambda index: self.per_time_probability[index],
+        )
+        if self.peak_risk_time_index != expected_peak:
+            raise RiskSchemaError("peak_risk_time_index must identify the first maximum risk")
+        expected_union = min(1.0, sum(self.per_time_probability))
+        if not _finite(self.estimated_time_union_bound) or not math.isclose(
+            self.estimated_time_union_bound, expected_union, abs_tol=1.0e-9, rel_tol=0.0
+        ):
+            raise RiskSchemaError(
+                "estimated_time_union_bound must equal min(1, sum(per_time_probability))"
+            )
+        if not isinstance(self.claim_boundary, str) or not self.claim_boundary.strip():
+            raise RiskSchemaError("claim_boundary must be non-empty")
+
+    def validate(self) -> TrajectoryModeRiskEstimate:
+        """Validate result vectors and aggregation semantics.
+
+        Returns:
+            The validated estimate for fluent use.
+        """
+        count = self._validate_schema_and_lengths()
+        self._validate_identity_and_time(count)
+        self._validate_probability_vectors()
+        self._validate_aggregation()
+        return self
 
 
 @dataclass(frozen=True)
@@ -464,12 +749,18 @@ __all__ = [
     "DETERMINISTIC_FIELD_LABEL",
     "GUARD_AUTHORITY_NOTE",
     "RISK_SCHEMA_VERSION",
+    "TRAJECTORY_MODE_RISK_CLAIM_BOUNDARY",
+    "TRAJECTORY_MODE_RISK_SCHEMA_VERSION",
     "ActionConditionedRiskEstimate",
+    "CollisionRiskInputError",
     "DeterministicRiskFields",
     "LatencySummary",
     "PerActorContribution",
     "RiskProvenance",
     "RiskSchemaError",
+    "TrajectoryModeRiskEstimate",
+    "TrajectoryModeRiskInput",
+    "TrajectoryModeRiskProvenance",
     "UncertaintyState",
     "latency_summary_from_samples",
 ]

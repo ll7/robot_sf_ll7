@@ -1,4 +1,4 @@
-"""Constant-velocity baselines for the action-conditioned collision-risk API (issue #5444).
+"""Action-conditioned collision-risk baselines (issue #5444).
 
 The public entry point is :func:`estimate_action_conditioned_risk`. It scores a
 single candidate robot action (a deterministic robot trajectory over the horizon)
@@ -45,10 +45,14 @@ import numpy as np
 
 from robot_sf.research.collision_risk.schema import (
     ActionConditionedRiskEstimate,
+    CollisionRiskInputError,
     DeterministicRiskFields,
     LatencySummary,
     PerActorContribution,
     RiskProvenance,
+    TrajectoryModeRiskEstimate,
+    TrajectoryModeRiskInput,
+    TrajectoryModeRiskProvenance,
     UncertaintyState,
 )
 
@@ -60,10 +64,9 @@ if TYPE_CHECKING:
 ESTIMATOR_ID = "constant_velocity_mc.v1"
 FORECAST_MODEL_ID = "constant_velocity_gaussian.v1"
 GEOMETRY_VERSION = "disc_footprint_segment.v1"
-
-
-class CollisionRiskInputError(ValueError):
-    """Raised, fail-closed, when risk-estimation inputs are malformed."""
+TRAJECTORY_MODE_ESTIMATOR_ID = "trajectory_mode_marginal_mc.v1"
+TRAJECTORY_MODE_FORECAST_MODEL_ID = "supplied_gaussian_marginals.v1"
+TRAJECTORY_MODE_GEOMETRY_VERSION = "disc_footprint_point_grid.v1"
 
 
 @dataclass(frozen=True)
@@ -280,6 +283,123 @@ def pedestrian_arrays(
         )
     empty2 = np.zeros((0, 2), dtype=float)
     return empty2, empty2, np.zeros((0,), dtype=float), np.zeros((0,), dtype=int)
+
+
+def _validate_trajectory_mode_grid(
+    mode: TrajectoryModeRiskInput,
+    action: CandidateAction,
+    config: RiskEstimatorConfig,
+) -> np.ndarray:
+    """Validate a mode against the candidate's exact configured grid.
+
+    Returns:
+        The expected configured grid as a floating-point array.
+    """
+    expected = np.arange(config.horizon_steps + 1, dtype=float) * config.dt_s
+    supplied = np.asarray(mode.time_offsets_s, dtype=float)
+    if supplied.shape != expected.shape or not np.allclose(
+        supplied, expected, atol=1.0e-9, rtol=0.0
+    ):
+        raise CollisionRiskInputError(
+            "trajectory mode time_offsets_s must match the configured action grid"
+        )
+    action.as_array(horizon_steps=config.horizon_steps)
+    if mode.mean_positions.shape != (config.horizon_steps + 1, 2):
+        raise CollisionRiskInputError(
+            f"trajectory mode mean_positions must have shape ({config.horizon_steps + 1}, 2)"
+        )
+    if mode.covariances.shape != (config.horizon_steps + 1, 2, 2):
+        raise CollisionRiskInputError(
+            f"trajectory mode covariances must have shape ({config.horizon_steps + 1}, 2, 2)"
+        )
+    return expected
+
+
+def estimate_trajectory_mode_risk(
+    action: CandidateAction,
+    mode: TrajectoryModeRiskInput,
+    config: RiskEstimatorConfig | None = None,
+) -> TrajectoryModeRiskEstimate:
+    """Estimate grid-time contact risk for one supplied Gaussian forecast mode.
+
+    At each configured timestamp this function samples only the supplied 2-D
+    marginal ``N(mean_positions[t], covariances[t])`` and compares it with the
+    candidate robot waypoint using disc-footprint contact geometry.  Marginal
+    event probabilities are estimated separately and combined through the
+    union-bound sum; no temporal joint distribution or temporal-independence
+    assumption is inferred.  The returned clipped sum is an estimated discrete
+    time-union measure, not a swept-contact probability or safety verdict.
+
+    The mode input intentionally carries no probability, existence, confidence,
+    or other-pedestrian fields.  Those aggregations belong to the planner-level
+    consumer.
+
+    Returns:
+        A validated per-grid-time estimate with marginal Monte Carlo errors and
+        an explicitly named clipped time-union estimate.
+    """
+    if not isinstance(mode, TrajectoryModeRiskInput):
+        raise CollisionRiskInputError(
+            "mode must be a TrajectoryModeRiskInput owned by the collision-risk package"
+        )
+    config = config or RiskEstimatorConfig()
+    grid = _validate_trajectory_mode_grid(mode, action, config)
+    robot_xy = action.as_array(horizon_steps=config.horizon_steps)
+    radii_sum = config.robot_radius_m + mode.actor_radius_m
+    rng = np.random.default_rng(config.seed)
+    probabilities: list[float] = []
+    standard_errors: list[float] = []
+
+    for robot_position, mean_position, covariance in zip(
+        robot_xy, mode.mean_positions, mode.covariances, strict=True
+    ):
+        # Preserve the exact zero-covariance fixture as a deterministic event
+        # and avoid consuming RNG state for a distribution with no randomness.
+        if not np.any(covariance):
+            contact = bool(np.linalg.norm(mean_position - robot_position) <= radii_sum)
+            probability = float(contact)
+            standard_error = 0.0
+        else:
+            try:
+                samples = rng.multivariate_normal(
+                    mean_position,
+                    covariance,
+                    size=config.n_samples,
+                    check_valid="raise",
+                    tol=1.0e-10,
+                )
+            except (TypeError, ValueError) as exc:
+                raise CollisionRiskInputError(
+                    "trajectory mode covariance could not be sampled as PSD"
+                ) from exc
+            contacts = np.linalg.norm(samples - robot_position[None, :], axis=1) <= radii_sum
+            probability = float(np.mean(contacts))
+            standard_error = math.sqrt(
+                max(probability * (1.0 - probability), 0.0) / config.n_samples
+            )
+        probabilities.append(probability)
+        standard_errors.append(standard_error)
+
+    probability_array = np.asarray(probabilities, dtype=float)
+    result = TrajectoryModeRiskEstimate(
+        actor_id=mode.actor_id,
+        mode_id=mode.mode_id,
+        time_offsets_s=tuple(float(value) for value in grid),
+        per_time_probability=tuple(probabilities),
+        per_time_mc_standard_error=tuple(standard_errors),
+        peak_risk_time_index=int(np.argmax(probability_array)),
+        estimated_time_union_bound=float(min(1.0, probability_array.sum())),
+        provenance=TrajectoryModeRiskProvenance(
+            estimator_id=TRAJECTORY_MODE_ESTIMATOR_ID,
+            forecast_model=TRAJECTORY_MODE_FORECAST_MODEL_ID,
+            geometry_version=TRAJECTORY_MODE_GEOMETRY_VERSION,
+            action_id=action.action_id,
+            config_hash=config.config_hash(),
+            seed=config.seed,
+            n_samples=config.n_samples,
+        ),
+    )
+    return result.validate()
 
 
 def _nominal_positions(
@@ -596,11 +716,15 @@ __all__ = [
     "ESTIMATOR_ID",
     "FORECAST_MODEL_ID",
     "GEOMETRY_VERSION",
+    "TRAJECTORY_MODE_ESTIMATOR_ID",
+    "TRAJECTORY_MODE_FORECAST_MODEL_ID",
+    "TRAJECTORY_MODE_GEOMETRY_VERSION",
     "CandidateAction",
     "CollisionRiskInputError",
     "RiskEstimatorConfig",
     "action_from_constant_velocity",
     "estimate_action_conditioned_risk",
+    "estimate_trajectory_mode_risk",
     "pedestrian_arrays",
     "segment_min_distance",
 ]

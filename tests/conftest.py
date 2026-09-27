@@ -423,6 +423,16 @@ _FAST_FILES = {
     "test_pedestrian_removal.py",
     "test_planner_unit_consistency.py",
     "test_replay_determinism.py",
+    # Adversarial evidence packet and gallery tests are deterministic fixture
+    # contracts for replay provenance, materialization, and report schemas.
+    "test_replay_gallery.py",
+    "test_search_evidence_packet.py",
+    # Recorded episode figure tests use pinned fixture traces and deterministic
+    # render inputs; keep changed replay materialization coverage in PR shards.
+    "test_episode_replay_figure.py",
+    # Telemetry replay alignment and export checks use synthetic samples and
+    # arrays, so they provide deterministic coverage for replay consumers.
+    "test_replay.py",
     # socnav_sampling bounded_v2 contracts (issues #9727, #9746) are deterministic
     # planner checks on synthetic grids; the two episode replays stay marked slow.
     "test_issue_9727_socnav_sampling.py",

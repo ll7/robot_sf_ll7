@@ -38,6 +38,7 @@ from scripts.dev.gh_pr_label_rest import (
     validate_result_envelope,
     validate_terminal_pr_receipt,
 )
+from scripts.dev.pr_write_guard import PRWriteGuardOptions
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _ENTRYPOINT = _REPO_ROOT / "scripts/dev/gh_pr_label_rest.py"
@@ -195,7 +196,13 @@ def test_isolated_merge_ready_missing_body_prevents_post(
     read_args = ["api", "repos/ll7/robot_sf_ll7/pulls/5220"]
     env["LABEL_FAKE_EXPECTED_ARGS"] = json.dumps(read_args)
     env["LABEL_FAKE_RESPONSE"] = json.dumps(
-        {"state": "open", "head": {"sha": head}, "base": {"sha": base}, "merged_at": None}
+        {
+            "state": "open",
+            "head": {"sha": head},
+            "base": {"sha": base},
+            "merged_at": None,
+            "draft": False,
+        }
     )
     env["ROBOT_SF_PR_WRITE_LOCK_DIR"] = str(tmp_path / "write-locks")
     result = _run_cli(
@@ -571,6 +578,7 @@ class TestAddLabel:
             expected_head_sha=head_sha,
             expected_base_sha=base_sha,
             operation="merge_ready_label",
+            options=PRWriteGuardOptions(require_non_draft=True),
         )
         mock_carriers.assert_called_once_with(
             5220,
@@ -578,6 +586,44 @@ class TestAddLabel:
             live_head=head_sha,
             live_base=base_sha,
         )
+
+    @pytest.mark.parametrize("label", ["merge-ready", "merge-if-ci-green"])
+    def test_readiness_labels_refuse_draft_prs(self, label: str) -> None:
+        """Neither readiness label may be added while the exact PR is a draft."""
+        head_sha = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
+        base_sha = "b1c2d3e4f5061728394a5b6c7d8e9f0011121314"
+        draft_skip = {
+            "status": "review_skipped_stale_state",
+            "reason": "pr_is_draft",
+            "observed_draft": True,
+        }
+        with (
+            patch(
+                "scripts.dev.gh_pr_label_rest.guard_pr_write",
+                return_value=draft_skip,
+            ) as mock_guard,
+            patch("scripts.dev.gh_pr_label_rest.check_merge_ready_carriers") as carriers,
+            patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post,
+        ):
+            result = add_label(
+                5220,
+                label,
+                target="pr",
+                expected_head_sha=head_sha,
+                expected_base_sha=base_sha,
+            )
+
+        assert result == draft_skip
+        mock_guard.assert_called_once_with(
+            5220,
+            repo="ll7/robot_sf_ll7",
+            expected_head_sha=head_sha,
+            expected_base_sha=base_sha,
+            operation="merge_ready_label",
+            options=PRWriteGuardOptions(require_non_draft=True),
+        )
+        carriers.assert_not_called()
+        mock_post.assert_not_called()
 
     def test_merge_ready_withholds_write_when_carrier_gate_fails(self) -> None:
         """A carrier blocker, including an active review worker, blocks the label write."""

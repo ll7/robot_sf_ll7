@@ -6,7 +6,9 @@ import json
 import subprocess
 from unittest.mock import patch
 
-from scripts.dev.pr_write_guard import guard_pr_write
+import pytest
+
+from scripts.dev.pr_write_guard import PRWriteGuardOptions, guard_pr_write
 
 HEAD_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
 BASE_SHA = "b1c2d3e4f5061728394a5b6c7d8e9f0011121314"
@@ -27,9 +29,15 @@ def _pr_payload(
     base_sha: str | None = BASE_SHA,
     merged_at: object = None,
     author_login: str | None = None,
+    node_id: str | None = "PR_kwDO_test",
+    draft: object = False,
 ) -> str:
     """Build a compact pull-request REST payload."""
     payload: dict[str, object] = {"state": state, "head": {"sha": head_sha}, "merged_at": merged_at}
+    if node_id is not None:
+        payload["node_id"] = node_id
+    if draft is not None:
+        payload["draft"] = draft
     if base_sha is not None:
         payload["base"] = {"sha": base_sha}
     if author_login is not None:
@@ -113,6 +121,71 @@ def test_include_author_requires_live_pr_author() -> None:
         )
 
     assert result == {"status": "error", "error": "PR write-state payload has no author login"}
+
+
+def test_guard_can_return_node_id_and_draft_state() -> None:
+    """Ready-transition callers need the GraphQL node ID and exact draft flag."""
+    with patch(
+        "scripts.dev.pr_write_guard._gh_api_get",
+        return_value=_proc(stdout=_pr_payload(draft=True)),
+    ):
+        result = guard_pr_write(
+            7571,
+            expected_head_sha=HEAD_SHA,
+            operation="mark_ready",
+            options=PRWriteGuardOptions(include_node_id=True, include_draft=True),
+        )
+
+    assert result["status"] == "ok"
+    assert result["observed_node_id"] == "PR_kwDO_test"
+    assert result["observed_draft"] is True
+
+
+def test_require_non_draft_skips_matching_draft_pr() -> None:
+    """Readiness-label writes refuse a matching PR while it is still a draft."""
+    with patch(
+        "scripts.dev.pr_write_guard._gh_api_get",
+        return_value=_proc(stdout=_pr_payload(draft=True)),
+    ):
+        result = guard_pr_write(
+            7571,
+            expected_head_sha=HEAD_SHA,
+            expected_base_sha=BASE_SHA,
+            operation="merge_ready_label",
+            options=PRWriteGuardOptions(require_non_draft=True),
+        )
+
+    assert result["status"] == "review_skipped_stale_state"
+    assert result["reason"] == "pr_is_draft"
+    assert result["observed_draft"] is True
+
+
+@pytest.mark.parametrize(
+    ("payload_kwargs", "expected_error"),
+    (
+        ({"draft": None}, "PR write-state payload has no valid draft flag"),
+        ({"draft": "false"}, "PR write-state payload has no valid draft flag"),
+        ({"node_id": None}, "PR write-state payload has no valid node ID"),
+        ({"node_id": "  "}, "PR write-state payload has no valid node ID"),
+        ({"node_id": "PR invalid"}, "PR write-state payload has no valid node ID"),
+    ),
+)
+def test_requested_node_id_and_draft_fields_are_required(
+    payload_kwargs: dict[str, object], expected_error: str
+) -> None:
+    """Requested PR metadata fields fail closed when missing or malformed."""
+    with patch(
+        "scripts.dev.pr_write_guard._gh_api_get",
+        return_value=_proc(stdout=_pr_payload(**payload_kwargs)),
+    ):
+        result = guard_pr_write(
+            7571,
+            expected_head_sha=HEAD_SHA,
+            operation="mark_ready",
+            options=PRWriteGuardOptions(include_node_id=True, include_draft=True),
+        )
+
+    assert result == {"status": "error", "error": expected_error}
 
 
 def test_base_movement_skips_write() -> None:

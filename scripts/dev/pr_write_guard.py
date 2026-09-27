@@ -9,6 +9,7 @@ import os
 import re
 import tempfile
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -146,6 +147,80 @@ def _attach_author_login(base: dict[str, Any], login: str | None) -> None:
         base["observed_author_login"] = login
 
 
+@dataclass(frozen=True, slots=True)
+class PRWriteGuardOptions:
+    """Optional REST metadata required by a guarded PR write."""
+
+    include_node_id: bool = False
+    include_draft: bool = False
+    require_non_draft: bool = False
+
+
+def _requested_guard_details(
+    payload: dict[str, Any], options: PRWriteGuardOptions
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Validate and return optional node-ID/draft evidence for this guard."""
+    details: dict[str, Any] = {}
+    if options.include_node_id:
+        node_id = payload.get("node_id")
+        if (
+            not isinstance(node_id, str)
+            or not node_id.strip()
+            or not node_id.isprintable()
+            or any(character.isspace() for character in node_id)
+        ):
+            return None, "PR write-state payload has no valid node ID"
+        details["observed_node_id"] = node_id.strip()
+    if options.include_draft or options.require_non_draft:
+        draft = payload.get("draft")
+        if not isinstance(draft, bool):
+            return None, "PR write-state payload has no valid draft flag"
+        details["observed_draft"] = draft
+    return details, None
+
+
+def _normalize_guard_payload(
+    payload: Any,
+    *,
+    expected_base_sha: str | None,
+    include_author: bool,
+    options: PRWriteGuardOptions,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Validate the REST payload and return normalized write-state fields."""
+    if not isinstance(payload, dict):
+        return None, "PR write-state payload was not an object"
+    raw_state = payload.get("state")
+    raw_head = payload.get("head")
+    raw_base = payload.get("base")
+    merged_at = payload.get("merged_at")
+    if not isinstance(raw_state, str) or not raw_state:
+        return None, "PR write-state payload has no state"
+    if not isinstance(raw_head, dict) or not isinstance(raw_head.get("sha"), str):
+        return None, "PR write-state payload has no head SHA"
+    if merged_at is not None and not isinstance(merged_at, str):
+        return None, "PR write-state payload has malformed merged_at"
+    if expected_base_sha is not None and (
+        not isinstance(raw_base, dict) or not isinstance(raw_base.get("sha"), str)
+    ):
+        return None, "PR write-state payload has no base SHA"
+    details, details_error = _requested_guard_details(payload, options)
+    if details_error is not None:
+        return None, details_error
+    author_login, author_error = _read_author_login(payload, required=include_author)
+    if author_error is not None:
+        return None, author_error["error"]
+    observed_base_sha = raw_base.get("sha") if isinstance(raw_base, dict) else None
+    normalized: dict[str, Any] = {
+        "observed_state": raw_state.upper(),
+        "observed_head_sha": raw_head["sha"],
+        "observed_base_sha": observed_base_sha,
+        "merged_at": merged_at,
+        "details": details or {},
+        "author_login": author_login,
+    }
+    return normalized, None
+
+
 def guard_pr_write(
     number: int,
     *,
@@ -154,6 +229,7 @@ def guard_pr_write(
     expected_base_sha: str | None = None,
     operation: str,
     include_author: bool = False,
+    options: PRWriteGuardOptions | None = None,
 ) -> dict[str, Any]:
     """Read PR state/head/base immediately before a review or merge-ready write.
 
@@ -163,7 +239,8 @@ def guard_pr_write(
     return ``error`` so callers fail closed rather than treating uncertainty as
     a safe skip. When ``include_author`` is true, the live PR author's login is
     required and returned as ``observed_author_login`` for caller-side policy
-    checks.
+    checks. ``options`` can require and return node-ID/draft REST fields, or
+    require a non-draft PR for readiness-label writes.
     """
     validation_error = _validate_expected_shas(
         number=number,
@@ -180,33 +257,20 @@ def guard_pr_write(
     payload, error = _parse_json(result, what=f"PR {number} write-state read")
     if error:
         return {"status": "error", "error": error}
-    if not isinstance(payload, dict):
-        return {"status": "error", "error": "PR write-state payload was not an object"}
-
-    raw_state = payload.get("state")
-    raw_head = payload.get("head")
-    raw_base = payload.get("base")
-    merged_at = payload.get("merged_at")
-    if not isinstance(raw_state, str) or not raw_state:
-        return {"status": "error", "error": "PR write-state payload has no state"}
-    if not isinstance(raw_head, dict) or not isinstance(raw_head.get("sha"), str):
-        return {"status": "error", "error": "PR write-state payload has no head SHA"}
-    if merged_at is not None and not isinstance(merged_at, str):
-        return {"status": "error", "error": "PR write-state payload has malformed merged_at"}
-    if expected_base_sha is not None and (
-        not isinstance(raw_base, dict) or not isinstance(raw_base.get("sha"), str)
-    ):
-        return {"status": "error", "error": "PR write-state payload has no base SHA"}
-
-    observed_author_login, author_error = _read_author_login(payload, required=include_author)
-    if author_error is not None:
-        return author_error
-
-    observed_state = raw_state.upper()
-    observed_head_sha = raw_head["sha"]
-    observed_base_sha: str | None = None
-    if isinstance(raw_base, dict) and isinstance(raw_base.get("sha"), str):
-        observed_base_sha = raw_base["sha"]
+    guard_options = options or PRWriteGuardOptions()
+    fields, field_error = _normalize_guard_payload(
+        payload,
+        expected_base_sha=expected_base_sha,
+        include_author=include_author,
+        options=guard_options,
+    )
+    if field_error is not None:
+        return {"status": "error", "error": field_error}
+    assert fields is not None
+    observed_state = fields["observed_state"]
+    observed_head_sha = fields["observed_head_sha"]
+    observed_base_sha = fields["observed_base_sha"]
+    merged_at = fields["merged_at"]
     base = _base_result(
         number,
         repo=repo,
@@ -217,8 +281,9 @@ def guard_pr_write(
         observed_base_sha=observed_base_sha,
         merged_at=merged_at,
     )
-    _attach_author_login(base, observed_author_login)
-    return _write_verdict(
+    _attach_author_login(base, fields["author_login"])
+    base.update(fields["details"])
+    verdict = _write_verdict(
         observed_state=observed_state,
         merged_at=merged_at,
         observed_head_sha=observed_head_sha,
@@ -227,3 +292,10 @@ def guard_pr_write(
         expected_base_sha=expected_base_sha,
         base=base,
     )
+    if (
+        verdict["status"] == "ok"
+        and guard_options.require_non_draft
+        and fields["details"].get("observed_draft") is True
+    ):
+        return {"status": STALE_WRITE_STATUS, "reason": "pr_is_draft", **base}
+    return verdict

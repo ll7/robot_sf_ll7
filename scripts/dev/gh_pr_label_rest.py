@@ -71,6 +71,7 @@ from scripts.dev.github_transport_policy import get_transport_contract
 from scripts.dev.pr_write_guard import (
     FULL_SHA_RE,
     STALE_WRITE_STATUS,
+    PRWriteGuardOptions,
     guard_pr_write,
     pr_write_lock,
 )
@@ -623,7 +624,7 @@ def _guarded_merge_ready_write(
     expected_base_sha: str | None,
     write: Callable[[], dict[str, Any]],
 ) -> dict[str, Any]:
-    """Run a merge-ready label write only after the exact-head/base preflight.
+    """Run a readiness-label add only after exact-head/base and non-draft checks.
 
     The write additionally requires the PR body and its exact-head review
     comments to be bound to the live head/base: a stale body or a
@@ -647,6 +648,7 @@ def _guarded_merge_ready_write(
                     expected_head_sha=expected_head_sha,
                     expected_base_sha=expected_base_sha,
                     operation="merge_ready_label",
+                    options=PRWriteGuardOptions(require_non_draft=True),
                 )
                 if guard["status"] != "ok":
                     return guard

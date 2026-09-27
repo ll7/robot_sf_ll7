@@ -143,7 +143,22 @@ exit `0` while emitting the error and no usable content (issue #6496). Neither
 operation needs Projects Classic data, so perform them through the REST-only
 helpers instead of the broad `gh pr` commands:
 
+Draft promotion is an explicit, separate decision. When review scope includes a draft and its
+review and validation proof is complete, use `gh_pr_ready_transition.py` with the captured full head
+SHA. The helper REST-reads the PR, checks that the same open head is still current, sends one
+`markPullRequestReadyForReview` mutation, then REST-reads the state again. It returns
+`ready_confirmed` only when that exact head is open and `draft == false`; `already_ready` is an
+explicit no-op. Do not add `merge-if-ci-green` or `merge-ready` before one of those statuses is
+confirmed. A timeout, rate limit, malformed response, or mismatched readback keeps both labels
+withheld. The helper prints a manual resume command and PR link for an ambiguous or rate-limited
+attempt; respect its reported cooldown, inspect the PR, and invoke another attempt only explicitly.
+It never sleeps or retries automatically.
+
 ```bash
+# Explicitly promote a reviewed draft; continue only after ready_confirmed/already_ready.
+scripts/dev/gh_pr_ready_transition.py <number> \
+    --expected-head-sha <head_sha> --repo ll7/robot_sf_ll7
+
 # merge-ready label add/remove (verify-on-write, pure REST issues-labels endpoint)
 uv run python scripts/dev/gh_pr_label_rest.py add <number> \
     --target pr --label merge-ready --expected-head-sha <head_sha> \
@@ -408,8 +423,8 @@ stops after advancing the child until fresh CI and exact-head evidence are curre
    `pr-metadata: reconciled @ <digest>` alongside `gate-verdict: accepted @ <head_sha>`. Then update
    `merge-ready` if CI is green, or `merge-if-ci-green` if CI is pending, through
    `gh_pr_label_rest.py` with `--target pr` and the same expected head/base SHA pair. Both writes
-   return `review_skipped_stale_state` without mutating a PR if it is no longer open or its
-   head moved. The review event refreshes the source-head queue gate after the
+   return `review_skipped_stale_state` without mutating a PR if it is no longer open, its head
+   moved, or it is still a draft. The review event refreshes the source-head queue gate after the
    verdict. Release the bounded
    `review-claim` for this head with `gh_comment.sh` and re-read the PR before the label write; an
    active claim must never coexist with a new readiness label. If review submission is

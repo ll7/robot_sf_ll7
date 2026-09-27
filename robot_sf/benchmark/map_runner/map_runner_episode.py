@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import math
 import time
+import uuid
 from collections import Counter
 from collections.abc import Callable, Mapping
 from copy import deepcopy
@@ -27,6 +28,11 @@ from robot_sf.benchmark.analysis_trace import (
     telemetry_from_scenario,
 )
 from robot_sf.benchmark.constants import NEAR_MISS_DIST
+from robot_sf.benchmark.episode_input_identity import (
+    capture_episode_input_identity,
+    reconcile_consumed_map_identity,
+    reconcile_consumed_route_identity,
+)
 from robot_sf.benchmark.event_ledger import build_event_ledger
 from robot_sf.benchmark.failure_mechanism_taxonomy import unknown_failure_mechanism_record
 from robot_sf.benchmark.group_space_metrics import group_specs_from_map
@@ -210,6 +216,7 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: TC001
 from robot_sf.planner.safety_shield import shield_metrics_from_stats
 from robot_sf.robot.safety_wrapper import DeadlockRecoveryMonitor  # noqa: TC001
 from robot_sf.sim.spawn_validation import reset_spawn_clearance
+from robot_sf.training.scenario_loader import capture_route_override_snapshot
 
 # Policy builders are migrated incrementally; the episode boundary narrows the
 # legacy plain-dict metadata to ``AlgoMeta`` after enrichment.
@@ -1312,6 +1319,7 @@ class _EpisodeRunContext:
     latency_profile: LatencyStressProfile | None
     algo: str
     policy_cfg: dict[str, Any]
+    case_input_identity: dict[str, Any]
 
 
 def _accepts_runtime_input_records(builder: Callable[..., Any]) -> bool:
@@ -1327,6 +1335,22 @@ def _accepts_runtime_input_records(builder: Callable[..., Any]) -> bool:
     return any(
         (
             parameter.name == "runtime_input_records"
+            and parameter.kind is not inspect.Parameter.POSITIONAL_ONLY
+        )
+        or parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters
+    )
+
+
+def _accepts_route_override_snapshot(builder: Callable[..., Any]) -> bool:
+    """Return whether an environment builder accepts the captured route bytes."""
+    try:
+        parameters = inspect.signature(builder).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(
+        (
+            parameter.name == "route_override_snapshot"
             and parameter.kind is not inspect.Parameter.POSITIONAL_ONLY
         )
         or parameter.kind is inspect.Parameter.VAR_KEYWORD
@@ -1403,17 +1427,54 @@ def _resolve_episode_run_context(  # noqa: PLR0913
             "safety_wrapper and cbf_safety_filter cannot both be enabled in #3948 first slice"
         )
     safety_wrapper_deadlock_monitor = make_deadlock_recovery_monitor(safety_wrapper_runtime)
+    case_input_run_id = uuid.uuid4().hex
+    route_override_snapshot = capture_route_override_snapshot(scenario, scenario_path=scenario_path)
+    input_identity_before_config = capture_episode_input_identity(
+        scenario,
+        scenario_path=scenario_path,
+        seed=int(seed),
+        run_id=case_input_run_id,
+        route_override_snapshot=route_override_snapshot,
+    )
+    builder_kwargs: dict[str, Any] = {}
     if runtime_input_records is not None and _accepts_runtime_input_records(_build_env_config):
-        config = _build_env_config(
-            scenario,
-            scenario_path=scenario_path,
-            runtime_input_records=runtime_input_records,
+        builder_kwargs["runtime_input_records"] = runtime_input_records
+    if _accepts_route_override_snapshot(_build_env_config):
+        builder_kwargs["route_override_snapshot"] = route_override_snapshot
+    # Legacy monkeypatched builders remain usable. Missing capture support leaves
+    # consumed-input identity unavailable and downstream evidence fails closed.
+    config = _build_env_config(scenario, scenario_path=scenario_path, **builder_kwargs)
+    case_input_identity = capture_episode_input_identity(
+        scenario,
+        scenario_path=scenario_path,
+        seed=int(seed),
+        run_id=case_input_run_id,
+        route_override_snapshot=route_override_snapshot,
+    )
+    identity_fields = (
+        "scenario_semantic_sha256",
+        "route_overrides_sha256",
+        "map_assets",
+    )
+    if any(
+        input_identity_before_config.get(field) != case_input_identity.get(field)
+        for field in identity_fields
+    ):
+        case_input_identity["status"] = "unavailable"
+        case_input_identity["reason_codes"] = sorted(
+            set(case_input_identity.get("reason_codes", []))
+            | {"inputs_changed_during_environment_resolution"}
         )
-    else:
-        # Keep legacy monkeypatched builders usable. Their missing capture support
-        # leaves the row's input identity unavailable, which downstream evidence
-        # consumers already treat as unknown.
-        config = _build_env_config(scenario, scenario_path=scenario_path)
+    map_definitions = getattr(getattr(config, "map_pool", None), "map_defs", {})
+    map_definition = next(iter(map_definitions.values()), None) if map_definitions else None
+    consumed_map_sha256 = getattr(map_definition, "_consumed_map_sha256", None)
+    case_input_identity = reconcile_consumed_map_identity(
+        case_input_identity, consumed_map_sha256=consumed_map_sha256
+    )
+    case_input_identity = reconcile_consumed_route_identity(
+        case_input_identity,
+        consumed_route_overrides_sha256=getattr(config, "_consumed_route_overrides_sha256", None),
+    )
     max_steps = int(scenario.get("simulation_config", {}).get("max_episode_steps", 0) or 0)
     horizon_val = int(horizon) if horizon and horizon > 0 else max_steps
     if horizon_val <= 0:
@@ -1483,6 +1544,7 @@ def _resolve_episode_run_context(  # noqa: PLR0913
         latency_profile=latency_profile,
         algo=algo,
         policy_cfg=policy_cfg,
+        case_input_identity=case_input_identity,
     )
 
 
@@ -5009,6 +5071,11 @@ def _assemble_episode_record(  # noqa: PLR0913
         contradictions=contradictions,
         view_integrity=loop_result.view_integrity,
     )
+    provenance = record.get("provenance")
+    if not isinstance(provenance, dict):
+        provenance = {}
+        record["provenance"] = provenance
+    provenance["case_input_identity"] = dict(ctx.case_input_identity)
     runtime_law = record.get("algorithm_metadata", {}).get("obstacle_force_law")
     if isinstance(runtime_law, dict) and isinstance(runtime_law.get("sites"), dict):
         for site_metadata in runtime_law["sites"].values():

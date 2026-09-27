@@ -10,7 +10,10 @@ from loguru import logger
 from robot_sf.benchmark.run_config_provenance import metric_affecting_run_config
 from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
-from robot_sf.training.scenario_loader import build_robot_config_from_scenario
+from robot_sf.training.scenario_loader import (
+    RouteOverrideSnapshot,
+    build_robot_config_from_scenario,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -23,6 +26,7 @@ def build_env_config(
     *,
     scenario_path: Path,
     runtime_input_records: list[dict[str, str]] | None = None,
+    route_override_snapshot: RouteOverrideSnapshot | None = None,
 ) -> RobotSimulationConfig:
     """Build the benchmark environment config for one scenario.
 
@@ -33,6 +37,7 @@ def build_env_config(
         scenario,
         scenario_path=scenario_path,
         runtime_input_records=runtime_input_records,
+        route_override_snapshot=route_override_snapshot,
     )
     config.observation_mode = ObservationMode.SOCNAV_STRUCT
     config.use_occupancy_grid = True

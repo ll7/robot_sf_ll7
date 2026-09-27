@@ -117,6 +117,41 @@ def test_v4_continuous_static_acceptance_still_checks_pedestrian_collision(
     assert evaluation["reason"] == "dynamic_collision"
 
 
+def test_v4_route_guide_candidate_hits_static_collision_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A direct route-guide command cannot bypass v4 rollout collision checks."""
+    planner = _v4_planner(
+        continuous_static_clearance_enabled=True,
+        rollout_horizon=0.4,
+        v4_braking_check_enabled=False,
+    )
+    planner._continuous_static_context = SimpleNamespace()
+    monkeypatch.setattr(
+        planner,
+        "_continuous_static_collision",
+        lambda position, _radius: bool(position[0] > 0.0),
+    )
+    monkeypatch.setattr(planner, "_obstacle_grid_payload", lambda _observation: None)
+    monkeypatch.setattr(planner, "_min_obstacle_clearance", lambda *_args: 2.0)
+    observation: dict[str, object] = {}
+    state = _state(clearance=10.0)
+    candidate = HybridRuleCandidate(0.2, 0.0, "route_guide")
+
+    evaluation = planner._evaluate_candidate(
+        candidate=candidate,
+        observation=observation,
+        state=state,
+        speed_cap=0.2,
+        nearest_ped=10.0,
+    )
+
+    assert evaluation["accepted"] is False
+    assert evaluation["reason"] == "static_collision"
+    assert evaluation["candidate"].source == "route_guide"
+    assert evaluation["continuous_static_collision"] is True
+
+
 def test_v4_oscillation_threshold_is_stable_at_float_boundary() -> None:
     """Treat mirrored v4 turns at the 0.15 boundary identically; retain v3 strictness."""
     v4 = _v4_planner()

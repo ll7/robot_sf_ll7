@@ -104,7 +104,11 @@ failed and invalid are counted separately. Missing attempts, altered rows,
 relabelled discoveries, and count mismatches fail validation. The pinned #9645
 pilot keeps its separate packet importer. Generic runs omit
 `new_counterexamples_admitted`; later admission is represented by the retained
-case links. Generic run revisions must be exact 40-character Git SHAs.
+case links. Generic run revisions must be exact 40-character Git SHAs. A generic
+run must declare a non-empty objective, and every declared objective field must
+match every candidate row; candidate rows may add their measured result without
+changing that declaration. The schema requires the pinned #9645 packet to retain
+its explicit zero-admission count and disallows admission counts on generic runs.
 
 When a #9651 classifier records raw output or file-backed execution evidence,
 the corpus receipt preserves those exact bytes or records the reference as

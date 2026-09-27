@@ -57,7 +57,11 @@ ISSUE_9645_SUPPORTED_SUMMARY_SCHEMAS = frozenset(
     {"issue_9645_bounded_pilot_summary.v1", ISSUE_9645_SUMMARY_SCHEMA}
 )
 ISSUE_9645_SUPPORTED_REPORT_PROVENANCE_SCHEMAS = frozenset(
-    {"issue_9645_report_build_provenance.v1", "issue_9645_report_build_provenance.v2"}
+    {
+        "issue_9645_report_build_provenance.v1",
+        "issue_9645_report_build_provenance.v2",
+        "issue_9645_report_build_provenance.v3",
+    }
 )
 ISSUE_9645_REPLAY_SCHEMA = "issue_9645_replay_validation_collection.v1"
 ISSUE_9645_BUNDLE_SCHEMA = "evidence_bundle.v1"
@@ -69,6 +73,27 @@ HISTORICAL_CANDIDATE_SCHEMA_VERSION = "adversarial-historical-candidate.v2"
 LEGACY_HISTORICAL_CANDIDATE_SCHEMA_VERSION = "adversarial-historical-candidate.v1"
 LEGACY_UNPINNED_SOURCE_EVIDENCE_SCHEMA = "adversarial-legacy-source-evidence.v1"
 SEARCH_MANIFEST_SCHEMA = "adversarial-search-manifest.v1"
+_ISSUE_1501_REPLAY_SIGNATURE_EXCLUDED_FIELDS = (
+    "timestamps.start",
+    "timestamps.end",
+    "timing.steps_per_second",
+    "wall_time_sec",
+)
+_ISSUE_1501_REPLAY_SIGNATURE_CANONICALIZATION = (
+    "UTF-8 JSON with ensure_ascii=false, sort_keys=true, separators=(',', ':')"
+)
+_ISSUE_1501_PROVENANCE_PATH_REWRITES = {
+    "inputs.scenario_matrix.path": 1,
+    "inputs.schema_path.path": 1,
+    "raw_artifacts[0].path": 1,
+    "run.invocation": 1,
+}
+_ISSUE_1501_PROVENANCE_FIELD_ADDITIONS = {
+    "inputs.scenario_matrix.producer_output_path": 1,
+    "inputs.schema_path.producer_path_at_source_revision": 1,
+    "raw_artifacts[0].bundle_retention_status": 1,
+    "raw_artifacts[0].producer_output_path": 1,
+}
 _ROOT = Path(__file__).resolve().parents[2]
 _CORPUS_SCHEMA_PATH = _ROOT / "robot_sf/benchmark/schemas/adversarial-counterexample-corpus.v1.json"
 _CASE_SCENARIO_MANIFEST_TRANSFORMS = frozenset(
@@ -1854,6 +1879,8 @@ def import_issue9645_packet(
             candidate_identity=None,
             near_duplicate_report=_unassessed_near_duplicates(),
         )
+        receipt["pilot_new_discoveries"] = pilot["new_counterexamples_discovered"]
+        receipt["pilot_run_id"] = pilot["run_id"]
         return updated, receipt
 
     return _import_issue9645_historical_case(corpus, case, source_files, observations, pilot, root)
@@ -4367,7 +4394,7 @@ def _verify_issue9645_pilot(payload: Path) -> dict[str, Any]:
 
 def _pilot_accounting_paths(payload: Path) -> list[str]:
     source_manifests = sorted((payload / "source_manifests").glob("*.json"))
-    return [
+    paths = [
         "summary.json",
         "run_metadata.json",
         "row_status.json",
@@ -4378,6 +4405,23 @@ def _pilot_accounting_paths(payload: Path) -> list[str]:
         "inputs/issue_9645_pilot_space.v1.yaml",
         *[path.relative_to(payload).as_posix() for path in source_manifests],
     ]
+    report_provenance = _read_json_object(payload / "report_provenance.json")
+    if report_provenance.get("schema_version") == "issue_9645_report_build_provenance.v3":
+        packet_root = (
+            payload / "packet_receipts"
+            if (payload / "packet_receipts/evidence_bundle_manifest.json").is_file()
+            else payload.parent
+        )
+        bundle_manifest = _read_json_object(packet_root / "evidence_bundle_manifest.json")
+        entries = bundle_manifest.get("files")
+        if not isinstance(entries, list):
+            raise CorpusError("#9645 v3 evidence manifest has no complete payload inventory")
+        paths.extend(
+            entry["path"]
+            for entry in entries
+            if isinstance(entry, Mapping) and _safe_bundle_relative_path(entry.get("path"))
+        )
+    return sorted(set(paths))
 
 
 def _verify_issue9645_bundle(
@@ -4392,10 +4436,13 @@ def _verify_issue9645_bundle(
     bundle_root = bundle_root or payload.parent
     report_provenance = _read_json_object(payload / "report_provenance.json")
     report_schema = report_provenance.get("schema_version")
-    if report_schema == "issue_9645_report_build_provenance.v2":
+    if report_schema in {
+        "issue_9645_report_build_provenance.v2",
+        "issue_9645_report_build_provenance.v3",
+    }:
         bundle_revision = report_provenance.get("report_generator_commit")
         if not _is_full_git_revision(bundle_revision):
-            raise CorpusError("#9645 v2 report provenance lacks its generator revision")
+            raise CorpusError("#9645 report provenance lacks its generator revision")
     elif report_schema == "issue_9645_report_build_provenance.v1":
         # Older packets used the experiment revision as the bundle's commit field.
         bundle_revision = source_revision
@@ -4467,17 +4514,29 @@ def _verify_issue9645_payload_receipts(
     files_by_path: Mapping[str, Mapping[str, Any]],
 ) -> None:
     source_hashes = _parse_sha256_receipt(payload / "source_hashes.sha256", label="source hashes")
+    report = _read_json_object(payload / "report_provenance.json")
     if not isinstance(source_file_hashes, dict) or source_hashes != source_file_hashes:
         raise CorpusError("#9645 source hashes disagree with run metadata")
-    for relative in required_payload_paths:
+    # The v3 packet is a self-contained reconstruction bundle. Verify every payload
+    # byte, including report outputs and all 64 episode records, before interpreting
+    # the path maps or eligibility counts.
+    paths_to_verify = (
+        list(files_by_path)
+        if report.get("schema_version") == "issue_9645_report_build_provenance.v3"
+        else list(required_payload_paths)
+    )
+    for relative in paths_to_verify:
         record = files_by_path.get(relative)
         if record is None:
             raise CorpusError(f"#9645 consumed file is absent from the bundle manifest: {relative}")
         _verify_bundle_payload_file(payload, relative, record)
 
-    report = _read_json_object(payload / "report_provenance.json")
     _validate_issue9645_report_provenance(
-        report, source_revision=source_revision, bundle_revision=bundle_revision
+        report,
+        source_revision=source_revision,
+        bundle_revision=bundle_revision,
+        payload=payload,
+        files_by_path=files_by_path,
     )
     comparison_record = files_by_path.get("pilot_comparison.json")
     if comparison_record is None:
@@ -4488,30 +4547,692 @@ def _verify_issue9645_payload_receipts(
 
 
 def _validate_issue9645_report_provenance(
-    report: Mapping[str, Any], *, source_revision: str, bundle_revision: str
+    report: Mapping[str, Any],
+    *,
+    source_revision: str,
+    bundle_revision: str,
+    payload: Path,
+    files_by_path: Mapping[str, Mapping[str, Any]],
 ) -> None:
+    schema = report.get("schema_version")
     if (
-        report.get("schema_version") not in ISSUE_9645_SUPPORTED_REPORT_PROVENANCE_SCHEMAS
+        schema not in ISSUE_9645_SUPPORTED_REPORT_PROVENANCE_SCHEMAS
         or report.get("source_search_commit") != source_revision
     ):
         raise CorpusError("#9645 report provenance does not bind the source search revision")
-    if report.get("schema_version") != "issue_9645_report_build_provenance.v2":
+    if schema == "issue_9645_report_build_provenance.v1":
         return
     if report.get("report_generator_commit") != bundle_revision:
         raise CorpusError("#9645 report provenance does not bind the bundle producer revision")
+    if schema == "issue_9645_report_build_provenance.v2":
+        if (
+            report.get("trace_evidence_eligibility_counts") != {"eligible": 0, "ineligible": 64}
+            or report.get("tracked_episode_record_count") != 0
+        ):
+            raise CorpusError("#9645 v2 trace eligibility differs from persisted report evidence")
+        if report.get("search_or_simulation_rerun") is not False:
+            raise CorpusError(
+                "#9645 report provenance must identify the existing evidence as rerun-free"
+            )
+        return
+    if schema != "issue_9645_report_build_provenance.v3":
+        raise CorpusError("unsupported #9645 report provenance schema")
+    _validate_issue9645_v3_report_provenance(
+        report,
+        source_revision=source_revision,
+        bundle_revision=bundle_revision,
+        payload=payload,
+        files_by_path=files_by_path,
+    )
+
+
+def _validate_issue9645_v3_report_provenance(
+    report: Mapping[str, Any],
+    *,
+    source_revision: str,
+    bundle_revision: str,
+    payload: Path,
+    files_by_path: Mapping[str, Mapping[str, Any]],
+) -> None:
+    """Fail closed on the v3 report source, output, and reconstruction bindings."""
+    metadata = _read_json_object(payload / "run_metadata.json")
+    _validate_issue9645_v3_report_identity(report, metadata, source_revision, bundle_revision)
+    _validate_issue9645_v3_report_source_hash(report, payload, bundle_revision)
+    _validate_issue9645_v3_report_comparison(report, files_by_path)
+    _validate_issue9645_v3_report_outputs(report, files_by_path)
+    _validate_issue9645_v3_reproduction_bindings(report, metadata, payload, files_by_path)
+
+
+def _validate_issue9645_v3_report_identity(
+    report: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+    source_revision: str,
+    bundle_revision: str,
+) -> None:
     if (
-        report.get("trace_evidence_eligibility_counts")
-        != {
-            "eligible": 0,
-            "ineligible": 64,
-        }
-        or report.get("tracked_episode_record_count") != 0
+        report.get("report_build_execution_checkout_head") != bundle_revision
+        or report.get("experiment_source_commit") != source_revision
+        or report.get("exact_episode_source_revision") != source_revision
+        or report.get("report_schema_version") != "adversarial-search-convergence-report.v3"
+        or report.get("report_source_revision_status") != "consistent"
+        or report.get("report_rebuild") is not True
     ):
-        raise CorpusError("#9645 trace eligibility differs from the persisted report evidence")
+        raise CorpusError("#9645 v3 report provenance revision or report schema binding differs")
     if report.get("search_or_simulation_rerun") is not False:
-        raise CorpusError(
-            "#9645 report provenance must identify the existing evidence as rerun-free"
+        raise CorpusError("#9645 v3 report provenance must bind rerun=false")
+    if (
+        metadata.get("experiment_source_commit") != source_revision
+        or report.get("source_search_commit") != source_revision
+    ):
+        raise CorpusError("#9645 v3 report provenance source metadata hash differs")
+
+
+def _validate_issue9645_v3_report_source_hash(
+    report: Mapping[str, Any], payload: Path, bundle_revision: str
+) -> None:
+    if report.get("experiment_source_commit_sha256") != _sha256_file(payload / "run_metadata.json"):
+        raise CorpusError("#9645 v3 run metadata source hash differs")
+    generator_digest = report.get("report_generator_source_sha256")
+    if not _is_sha256(generator_digest):
+        raise CorpusError("#9645 v3 report generator source digest is invalid")
+    generator_bytes = _read_git_blob(
+        bundle_revision,
+        "robot_sf/adversarial/falsification_report.py",
+        "#9645 v3 report generator source revision is unavailable",
+    )
+    if hashlib.sha256(generator_bytes).hexdigest() != generator_digest:
+        raise CorpusError("#9645 v3 report generator source digest differs from its Git revision")
+
+
+def _validate_issue9645_v3_report_comparison(
+    report: Mapping[str, Any], files_by_path: Mapping[str, Mapping[str, Any]]
+) -> None:
+    comparison_path = "pilot_comparison.json"
+    comparison_record = files_by_path.get(comparison_path)
+    if (
+        comparison_record is None
+        or report.get("comparison_path") != _issue9645_bundle_path(comparison_path)
+        or report.get("comparison_sha256") != comparison_record.get("sha256")
+    ):
+        raise CorpusError("#9645 v3 report provenance comparison binding differs")
+
+
+def _validate_issue9645_v3_report_outputs(
+    report: Mapping[str, Any], files_by_path: Mapping[str, Mapping[str, Any]]
+) -> None:
+    expected_outputs = {
+        "falsification_report.json": "convergence_report.json",
+        "falsification_report.md": "convergence_report.md",
+        "convergence_constraints_first_lexicographic_v1.png": (
+            "convergence_constraints_first_lexicographic_v1.png"
+        ),
+    }
+    outputs = report.get("outputs")
+    if not isinstance(outputs, list) or len(outputs) != len(expected_outputs):
+        raise CorpusError("#9645 v3 report output inventory is incomplete")
+    seen_outputs: set[str] = set()
+    for output in outputs:
+        if not isinstance(output, Mapping):
+            raise CorpusError("#9645 v3 report output receipt is malformed")
+        producer_path = output.get("producer_relative_path")
+        relative = expected_outputs.get(producer_path)
+        path = output.get("path")
+        size = output.get("size_bytes")
+        digest = output.get("sha256")
+        record = files_by_path.get(relative) if relative else None
+        if (
+            relative is None
+            or relative in seen_outputs
+            or path != _issue9645_bundle_path(relative)
+            or not isinstance(size, int)
+            or isinstance(size, bool)
+            or not _is_sha256(digest)
+            or record is None
+            or size != record.get("size_bytes")
+            or digest != record.get("sha256")
+        ):
+            raise CorpusError("#9645 v3 report output hash/path differs from the bundle")
+        seen_outputs.add(relative)
+    if seen_outputs != set(expected_outputs.values()):
+        raise CorpusError("#9645 v3 report output inventory omits a required output")
+
+
+def _issue9645_bundle_path(relative: str) -> str:
+    return "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/" + relative
+
+
+def _issue9645_payload_relative_path(value: Any) -> str:
+    prefix = _issue9645_bundle_path("")
+    if not isinstance(value, str) or not value.startswith(prefix):
+        raise CorpusError("#9645 v3 provenance path is outside its evidence payload")
+    relative = value[len(prefix) :]
+    if not _safe_bundle_relative_path(relative):
+        raise CorpusError("#9645 v3 provenance path is unsafe")
+    return relative
+
+
+def _v3_bound_payload_json(
+    payload: Path,
+    files_by_path: Mapping[str, Mapping[str, Any]],
+    *,
+    path: Any,
+    digest: Any,
+    label: str,
+) -> tuple[str, dict[str, Any]]:
+    relative = _issue9645_payload_relative_path(path)
+    record = files_by_path.get(relative)
+    if (
+        record is None
+        or not _is_sha256(digest)
+        or record.get("sha256") != digest
+        or _sha256_file(payload / Path(*PurePosixPath(relative).parts)) != digest
+    ):
+        raise CorpusError(f"#9645 v3 {label} hash/path binding differs")
+    return relative, _read_json_object(payload / Path(*PurePosixPath(relative).parts))
+
+
+def _validate_issue9645_v3_reproduction_bindings(
+    report: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+    payload: Path,
+    files_by_path: Mapping[str, Mapping[str, Any]],
+) -> None:
+    maps = _load_issue9645_v3_reproduction_maps(report, metadata, payload, files_by_path)
+    artifact_by_producer = _validate_issue9645_v3_artifact_map(
+        maps["artifact_map"], payload, files_by_path
+    )
+    metadata_manifest_hashes = _issue9645_v3_metadata_manifest_hashes(metadata)
+    episode_flags: Counter[tuple[str, str]] = Counter()
+    episode_digests: Counter[tuple[str, str]] = Counter()
+    seen_source_manifests: set[str] = set()
+    seen_derived_paths: set[str] = set()
+    seen_episode_records: set[str] = set()
+    for source_binding in maps["original_manifest_map"]["bindings"]:
+        source_path, derived_path, flags, digests, episode_paths = (
+            _validate_issue9645_v3_source_manifest_chain(
+                source_binding,
+                maps,
+                metadata_manifest_hashes,
+                artifact_by_producer,
+                payload,
+                files_by_path,
+            )
         )
+        seen_source_manifests.add(source_path)
+        seen_derived_paths.add(derived_path)
+        seen_episode_records.update(episode_paths)
+        episode_flags.update(flags)
+        episode_digests.update(digests)
+    if (
+        len(seen_source_manifests) != 4
+        or len(seen_derived_paths) != 4
+        or len(seen_episode_records) != 64
+    ):
+        raise CorpusError("#9645 v3 input maps do not cover four manifests and 64 episodes")
+    _validate_issue9645_v3_episode_counts(report, episode_flags, episode_digests)
+
+
+def _load_issue9645_v3_reproduction_maps(
+    report: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+    payload: Path,
+    files_by_path: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    comparison_record = files_by_path.get("pilot_comparison.json")
+    if comparison_record is None:
+        raise CorpusError("#9645 v3 comparison is absent from the bundle manifest")
+    _rebase_path, rebase = _v3_bound_payload_json(
+        payload,
+        files_by_path,
+        path=report.get("reproduction_input_rebase_map_path"),
+        digest=report.get("reproduction_input_rebase_map_sha256"),
+        label="input rebase map",
+    )
+    _manifest_map_path, manifest_map = _v3_bound_payload_json(
+        payload,
+        files_by_path,
+        path=report.get("manifest_path_map_path"),
+        digest=report.get("manifest_path_map_sha256"),
+        label="manifest path map",
+    )
+    if (
+        rebase.get("schema_version") != "falsification_report_input_rebase.v1"
+        or rebase.get("search_or_simulation_rerun") is not False
+        or rebase.get("source_comparison_path") != _issue9645_bundle_path("pilot_comparison.json")
+        or rebase.get("source_comparison_sha256") != comparison_record.get("sha256")
+        or manifest_map.get("schema_version") != "falsification_manifest_path_map.v1"
+        or manifest_map.get("source_comparison_sha256") != comparison_record.get("sha256")
+    ):
+        raise CorpusError("#9645 v3 input rebase or manifest path map binding differs")
+    _original_manifest_map_path, original_manifest_map = _v3_bound_payload_json(
+        payload,
+        files_by_path,
+        path=rebase.get("source_manifest_path_map"),
+        digest=rebase.get("source_manifest_path_map_sha256"),
+        label="source manifest path map",
+    )
+    _artifact_map_path, artifact_map = _v3_bound_payload_json(
+        payload,
+        files_by_path,
+        path=rebase.get("source_episode_artifact_map"),
+        digest=rebase.get("source_episode_artifact_map_sha256"),
+        label="episode artifact path map",
+    )
+    recovery = metadata.get("candidate_episode_record_recovery")
+    if (
+        original_manifest_map.get("schema_version") != "falsification_manifest_path_map.v1"
+        or original_manifest_map.get("source_comparison_sha256") != comparison_record.get("sha256")
+        or not isinstance(recovery, Mapping)
+        or recovery.get("artifact_path_map") != _issue9645_bundle_path(_artifact_map_path)
+        or recovery.get("artifact_path_map_sha256") != _sha256_file(payload / _artifact_map_path)
+        or recovery.get("count") != 64
+        or recovery.get("binding_status")
+        != "all retained files exactly match the existing producer SHA-256 and byte count"
+    ):
+        raise CorpusError("#9645 v3 source maps or episode recovery receipt differ")
+    derived_bindings = manifest_map.get("bindings")
+    source_bindings = original_manifest_map.get("bindings")
+    rebase_bindings = rebase.get("manifest_bindings")
+    if any(
+        not isinstance(value, list) or len(value) != 4
+        for value in (derived_bindings, source_bindings, rebase_bindings)
+    ):
+        raise CorpusError("#9645 v3 manifest rebase inventory must bind four runs")
+    return {
+        "rebase": rebase,
+        "manifest_map": manifest_map,
+        "original_manifest_map": original_manifest_map,
+        "artifact_map": artifact_map,
+        "rebase_bindings": rebase_bindings,
+        "derived_bindings": derived_bindings,
+    }
+
+
+def _validate_issue9645_v3_artifact_map(
+    artifact_map: Mapping[str, Any],
+    payload: Path,
+    files_by_path: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Mapping[str, Any]]:
+    artifact_bindings = artifact_map.get("bindings")
+    if not isinstance(artifact_bindings, list):
+        raise CorpusError("#9645 v3 artifact map bindings are missing")
+    artifact_by_producer: dict[str, Mapping[str, Any]] = {}
+    artifact_kind_counts: Counter[str] = Counter()
+    candidate_record_bytes = 0
+    for binding in artifact_bindings:
+        if not isinstance(binding, Mapping):
+            raise CorpusError("#9645 v3 artifact binding is malformed")
+        producer = binding.get("producer_output_path")
+        bundle_path = binding.get("bundle_path")
+        relative = _issue9645_payload_relative_path(binding.get("path"))
+        digest = binding.get("sha256")
+        size = binding.get("size_bytes")
+        kind = binding.get("artifact_kind")
+        record = files_by_path.get(relative)
+        if (
+            not isinstance(producer, str)
+            or producer in artifact_by_producer
+            or bundle_path != _issue9645_bundle_path(relative)
+            or binding.get("retention_status") != "retained_exact_copy"
+            or not isinstance(size, int)
+            or isinstance(size, bool)
+            or not _is_sha256(digest)
+            or record is None
+            or record.get("sha256") != digest
+            or record.get("size_bytes") != size
+            or _sha256_file(payload / Path(*PurePosixPath(relative).parts)) != digest
+        ):
+            raise CorpusError("#9645 v3 artifact map binding differs from retained bytes")
+        artifact_by_producer[producer] = binding
+        artifact_kind_counts[str(kind)] += 1
+        if kind == "candidate_episode_records":
+            candidate_record_bytes += size
+    if (
+        len(artifact_bindings) != 69
+        or artifact_kind_counts
+        != Counter({"candidate_episode_records": 64, "run_manifest": 4, "comparison": 1})
+        or artifact_map.get("totals")
+        != {
+            "exact_artifact_count": 69,
+            "candidate_episode_record_count": 64,
+            "candidate_episode_record_bytes": candidate_record_bytes,
+        }
+        or artifact_map.get("producer_output_root") != "output/issue9645-pilot"
+        or candidate_record_bytes != 1629062
+    ):
+        raise CorpusError("#9645 v3 artifact map totals or kinds differ")
+    return artifact_by_producer
+
+
+def _issue9645_v3_metadata_manifest_hashes(metadata: Mapping[str, Any]) -> dict[str, str]:
+    metadata_manifests = metadata.get("manifest_files")
+    metadata_manifest_hashes = (
+        {
+            _issue9645_payload_relative_path(item.get("path")): item.get("sha256")
+            for item in metadata_manifests
+            if isinstance(item, Mapping)
+        }
+        if isinstance(metadata_manifests, list)
+        else {}
+    )
+    if len(metadata_manifest_hashes) != 4:
+        raise CorpusError("#9645 v3 run metadata does not bind four source manifests")
+    if any(not _is_sha256(digest) for digest in metadata_manifest_hashes.values()):
+        raise CorpusError("#9645 v3 source manifest hash is malformed")
+    return metadata_manifest_hashes
+
+
+def _validate_issue9645_v3_source_manifest_chain(
+    source_binding: Any,
+    maps: Mapping[str, Any],
+    metadata_manifest_hashes: Mapping[str, str],
+    artifact_by_producer: Mapping[str, Mapping[str, Any]],
+    payload: Path,
+    files_by_path: Mapping[str, Mapping[str, Any]],
+) -> tuple[str, str, Counter[tuple[str, str]], Counter[tuple[str, str]], set[str]]:
+    source_path, derived_path, rebase_binding = _issue9645_v3_source_manifest_identity(
+        source_binding,
+        maps,
+        metadata_manifest_hashes,
+        artifact_by_producer,
+        files_by_path,
+    )
+    source_manifest = _read_json_object(payload / Path(*PurePosixPath(source_path).parts))
+    derived_manifest = _read_json_object(payload / Path(*PurePosixPath(derived_path).parts))
+    if not _issue9645_manifests_differ_only_by_episode_paths(source_manifest, derived_manifest):
+        raise CorpusError("#9645 v3 derived manifest changes fields beyond episode paths")
+    episode_bindings = rebase_binding.get("episode_record_bindings")
+    source_candidates = source_manifest.get("candidates")
+    derived_candidates = derived_manifest.get("candidates")
+    if any(
+        not isinstance(value, list) or len(value) != 16
+        for value in (episode_bindings, source_candidates, derived_candidates)
+    ):
+        raise CorpusError("#9645 v3 episode record binding count differs")
+    flags: Counter[tuple[str, str]] = Counter()
+    digests: Counter[tuple[str, str]] = Counter()
+    episode_paths: set[str] = set()
+    for index, (binding, source_candidate, derived_candidate) in enumerate(
+        zip(episode_bindings, source_candidates, derived_candidates, strict=True)
+    ):
+        if not isinstance(source_candidate, Mapping) or not isinstance(derived_candidate, Mapping):
+            raise CorpusError("#9645 v3 manifest candidate row is malformed")
+        episode_path, record_flags, record_digests = _validate_issue9645_v3_episode_binding(
+            binding,
+            source_candidate,
+            derived_candidate,
+            index,
+            artifact_by_producer,
+            payload,
+            files_by_path,
+        )
+        episode_paths.add(episode_path)
+        flags.update(record_flags)
+        digests.update(record_digests)
+    if len(episode_paths) != 16:
+        raise CorpusError("#9645 v3 run manifest reuses an episode artifact")
+    return source_path, derived_path, flags, digests, episode_paths
+
+
+def _issue9645_v3_source_manifest_identity(
+    source_binding: Any,
+    maps: Mapping[str, Any],
+    metadata_manifest_hashes: Mapping[str, str],
+    artifact_by_producer: Mapping[str, Mapping[str, Any]],
+    files_by_path: Mapping[str, Mapping[str, Any]],
+) -> tuple[str, str, Mapping[str, Any]]:
+    if not isinstance(source_binding, Mapping):
+        raise CorpusError("#9645 v3 source manifest path map entry is malformed")
+    source_path = _issue9645_payload_relative_path(source_binding.get("archived_manifest_path"))
+    source_hash = source_binding.get("archived_manifest_sha256")
+    declared_path = source_binding.get("declared_manifest_path")
+    source_record = files_by_path.get(source_path)
+    if (
+        source_path not in metadata_manifest_hashes
+        or source_hash != metadata_manifest_hashes.get(source_path)
+        or source_record is None
+        or source_record.get("sha256") != source_hash
+        or not isinstance(declared_path, str)
+    ):
+        raise CorpusError("#9645 v3 original source manifest binding differs")
+    artifact_manifest = artifact_by_producer.get(declared_path)
+    if (
+        artifact_manifest is None
+        or artifact_manifest.get("artifact_kind") != "run_manifest"
+        or artifact_manifest.get("sha256") != source_hash
+    ):
+        raise CorpusError("#9645 v3 source manifest artifact binding differs")
+    rebase_binding = _unique_v3_map_match(
+        maps["rebase_bindings"],
+        lambda item: (
+            _issue9645_payload_relative_path(item.get("source_manifest_path")) == source_path
+        ),
+        "rebase manifest",
+    )
+    path_map_binding = _unique_v3_map_match(
+        maps["derived_bindings"],
+        lambda item: item.get("declared_manifest_path") == declared_path,
+        "derived manifest path map",
+    )
+    derived_path = _issue9645_payload_relative_path(rebase_binding.get("derived_manifest_path"))
+    derived_hash = rebase_binding.get("derived_manifest_sha256")
+    if (
+        rebase_binding.get("declared_manifest_path") != declared_path
+        or rebase_binding.get("source_manifest_sha256") != source_hash
+        or rebase_binding.get("changed_field") != "candidates[].episode_record_path"
+        or rebase_binding.get("candidate_count") != 16
+        or path_map_binding.get("archived_manifest_path") != _issue9645_bundle_path(derived_path)
+        or path_map_binding.get("archived_manifest_sha256") != derived_hash
+    ):
+        raise CorpusError("#9645 v3 derived manifest path/hash binding differs")
+    if files_by_path.get(derived_path, {}).get("sha256") != derived_hash:
+        raise CorpusError("#9645 v3 derived manifest checksum differs")
+    return source_path, derived_path, rebase_binding
+
+
+def _unique_v3_map_match(rows: Sequence[Any], predicate: Any, label: str) -> Mapping[str, Any]:
+    matches = [row for row in rows if isinstance(row, Mapping) and predicate(row)]
+    if len(matches) != 1:
+        raise CorpusError(f"#9645 v3 {label} map binding is missing or duplicated")
+    return matches[0]
+
+
+def _validate_issue9645_v3_episode_binding(
+    binding: Any,
+    source_candidate: Mapping[str, Any],
+    derived_candidate: Mapping[str, Any],
+    index: int,
+    artifact_by_producer: Mapping[str, Mapping[str, Any]],
+    payload: Path,
+    files_by_path: Mapping[str, Mapping[str, Any]],
+) -> tuple[str, Counter[tuple[str, str]], Counter[tuple[str, str]]]:
+    if not isinstance(binding, Mapping):
+        raise CorpusError("#9645 v3 episode record binding is malformed")
+    episode_relative = _issue9645_payload_relative_path(binding.get("path"))
+    producer_path = binding.get("producer_output_path")
+    episode_digest = binding.get("sha256")
+    episode_size = binding.get("size_bytes")
+    episode_record = files_by_path.get(episode_relative)
+    artifact = artifact_by_producer.get(producer_path)
+    if (
+        binding.get("candidate_index") != index
+        or binding.get("bundle_path") != _issue9645_bundle_path(episode_relative)
+        or source_candidate.get("episode_record_path") != producer_path
+        or derived_candidate.get("episode_record_path") != _issue9645_bundle_path(episode_relative)
+        or artifact is None
+        or artifact.get("artifact_kind") != "candidate_episode_records"
+        or artifact.get("path") != _issue9645_bundle_path(episode_relative)
+        or artifact.get("sha256") != episode_digest
+        or artifact.get("size_bytes") != episode_size
+        or episode_record is None
+        or episode_record.get("sha256") != episode_digest
+        or episode_record.get("size_bytes") != episode_size
+    ):
+        raise CorpusError("#9645 v3 episode input binding differs from manifests")
+    if not _issue9645_v3_candidate_is_analysis_eligible(derived_candidate):
+        raise CorpusError("#9645 v3 candidate is not analysis-eligible in its manifest")
+    episode_path = payload / Path(*PurePosixPath(episode_relative).parts)
+    rows = _read_issue9645_episode_records(episode_path)
+    if len(rows) != 1:
+        raise CorpusError("#9645 v3 candidate episode record must contain one row")
+    episode = rows[0]
+    scenario_params = episode.get("scenario_params")
+    provenance = episode.get("provenance")
+    if not isinstance(scenario_params, Mapping) or not isinstance(provenance, Mapping):
+        raise CorpusError("#9645 v3 episode record lacks scenario/provenance fields")
+    flags = Counter(
+        {
+            (
+                f"scenario_params.{field}",
+                "enabled" if scenario_params[field] else "disabled",
+            ): 1
+            for field in (
+                "record_simulation_step_trace",
+                "record_planner_decision_trace",
+            )
+            if type(scenario_params.get(field)) is bool
+        }
+    )
+    if len(flags) != 2:
+        raise CorpusError("#9645 v3 episode record trace capture flags are missing")
+    digests = Counter(
+        {
+            (
+                f"provenance.{field}",
+                "present" if provenance.get(field) is not None else "missing",
+            ): 1
+            for field in ("scenario_digest", "map_digest")
+        }
+    )
+    route_path = scenario_params.get("route_overrides_file")
+    if (
+        episode.get("status") != "success"
+        or episode.get("termination_reason") != "success"
+        or not isinstance(episode.get("metrics"), Mapping)
+        or not isinstance(episode.get("outcome"), Mapping)
+        or not isinstance(route_path, str)
+        or not Path(route_path).is_absolute()
+    ):
+        raise CorpusError("#9645 v3 episode record is not analysis-eligible evidence")
+    return episode_relative, flags, digests
+
+
+def _issue9645_v3_candidate_is_analysis_eligible(candidate: Mapping[str, Any]) -> bool:
+    eligibility = candidate.get("analysis_eligibility")
+    failure = candidate.get("failure_attribution")
+    details = failure.get("details") if isinstance(failure, Mapping) else None
+    return (
+        isinstance(eligibility, Mapping)
+        and eligibility.get("eligible") is True
+        and eligibility.get("reason_codes") == []
+        and eligibility.get("certificate_ok") is True
+        and eligibility.get("objective_scored") is True
+        and eligibility.get("execution_mode") == "native"
+        and isinstance(details, Mapping)
+        and details.get("execution_mode") == "native"
+        and details.get("readiness_status") == "native"
+        and details.get("availability_status") == "available"
+        and details.get("status") == "success"
+        and _is_sha256(candidate.get("effective_scenario_hash"))
+    )
+
+
+def _validate_issue9645_v3_episode_counts(
+    report: Mapping[str, Any],
+    episode_flags: Counter[tuple[str, str]],
+    episode_digests: Counter[tuple[str, str]],
+) -> None:
+    expected_flags = Counter(
+        {
+            ("scenario_params.record_simulation_step_trace", "disabled"): 64,
+            ("scenario_params.record_planner_decision_trace", "disabled"): 64,
+        }
+    )
+    expected_digests = Counter(
+        {
+            ("provenance.scenario_digest", "missing"): 64,
+            ("provenance.map_digest", "missing"): 64,
+        }
+    )
+    if (
+        report.get("tracked_episode_record_count") != 64
+        or report.get("expected_episode_record_count") != 64
+        or report.get("episode_record_artifact_counts")
+        != {"tracked": 64, "digest_verified": 64, "missing": 0}
+        or report.get("analysis_evidence_eligibility_counts") != {"eligible": 64, "ineligible": 0}
+        or report.get("trace_capture_flag_counts") != _counter_to_flag_counts(expected_flags)
+        or report.get("embedded_digest_counts") != _counter_to_digest_counts(expected_digests)
+        or episode_flags != expected_flags
+        or episode_digests != expected_digests
+        or report.get("episode_record_scenario_map_binding")
+        != "unknown_for_all_64; provenance.scenario_digest and provenance.map_digest are null in every retained episode record"
+    ):
+        raise CorpusError("#9645 v3 episode eligibility and trace/digest accounting differs")
+    path_disposition = report.get("episode_record_path_field_disposition")
+    if (
+        not isinstance(path_disposition, Mapping)
+        or path_disposition.get("field") != "scenario_params.route_overrides_file"
+        or path_disposition.get("absolute_producer_paths_preserved") != 64
+        or path_disposition.get("rewritten") is not False
+        or path_disposition.get("report_rebuild_dereferenced_field") is not False
+        or path_disposition.get("portable_replay_inputs_retained_for_all_candidates") is not False
+    ):
+        raise CorpusError("#9645 v3 episode path disposition differs from retained evidence")
+
+
+def _counter_to_flag_counts(counter: Counter[tuple[str, str]]) -> dict[str, dict[str, int]]:
+    return {
+        field: {status: counter[(field, status)] for status in ("enabled", "disabled")}
+        for field in (
+            "scenario_params.record_simulation_step_trace",
+            "scenario_params.record_planner_decision_trace",
+        )
+    }
+
+
+def _counter_to_digest_counts(counter: Counter[tuple[str, str]]) -> dict[str, dict[str, int]]:
+    return {
+        field: {status: counter[(field, status)] for status in ("present", "missing")}
+        for field in ("provenance.scenario_digest", "provenance.map_digest")
+    }
+
+
+def _read_issue9645_episode_records(path: Path) -> list[dict[str, Any]]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+        rows = [json.loads(line) for line in lines if line.strip()]
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise CorpusError(f"could not parse #9645 episode record {path.name}: {exc}") from exc
+    if any(not isinstance(row, dict) for row in rows):
+        raise CorpusError("#9645 episode record contains a non-object row")
+    return rows
+
+
+def _issue9645_manifests_differ_only_by_episode_paths(
+    source: Mapping[str, Any], derived: Mapping[str, Any]
+) -> bool:
+    source_copy = copy.deepcopy(dict(source))
+    derived_copy = copy.deepcopy(dict(derived))
+    source_candidates = source_copy.get("candidates")
+    derived_candidates = derived_copy.get("candidates")
+    if (
+        not isinstance(source_candidates, list)
+        or not isinstance(derived_candidates, list)
+        or len(source_candidates) != len(derived_candidates)
+    ):
+        return False
+    for source_candidate, derived_candidate in zip(
+        source_candidates, derived_candidates, strict=True
+    ):
+        if not isinstance(source_candidate, dict) or not isinstance(derived_candidate, dict):
+            return False
+        if not isinstance(source_candidate.get("episode_record_path"), str):
+            return False
+        if not isinstance(derived_candidate.get("episode_record_path"), str):
+            return False
+        source_candidate["episode_record_path"] = "__episode_record_path__"
+        derived_candidate["episode_record_path"] = "__episode_record_path__"
+    return source_copy == derived_copy
 
 
 def _validated_bundle_file_map(entries: list[Any]) -> dict[str, dict[str, Any]]:
@@ -4781,10 +5502,6 @@ def _pilot_search_run(
             "safety_criticality_unknown_candidates": outcomes[
                 "pilot_safety_criticality_unknown_rows"
             ],
-            "trace_evidence_eligibility_counts": report_provenance[
-                "trace_evidence_eligibility_counts"
-            ],
-            "tracked_episode_record_count": report_provenance["tracked_episode_record_count"],
             "report_generator_revision": report_provenance["report_generator_commit"],
             "historical_replay": {
                 "at_recorded_revision": outcomes[
@@ -4797,6 +5514,40 @@ def _pilot_search_run(
                 ],
             },
         }
+        if report_provenance.get("schema_version") == "issue_9645_report_build_provenance.v2":
+            v2_accounting.update(
+                {
+                    "trace_evidence_eligibility_counts": report_provenance[
+                        "trace_evidence_eligibility_counts"
+                    ],
+                    "tracked_episode_record_count": report_provenance[
+                        "tracked_episode_record_count"
+                    ],
+                }
+            )
+        elif report_provenance.get("schema_version") == "issue_9645_report_build_provenance.v3":
+            v2_accounting.update(
+                {
+                    "report_build_execution_checkout_head": report_provenance[
+                        "report_build_execution_checkout_head"
+                    ],
+                    "report_generator_source_sha256": report_provenance[
+                        "report_generator_source_sha256"
+                    ],
+                    "episode_record_artifact_counts": report_provenance[
+                        "episode_record_artifact_counts"
+                    ],
+                    "analysis_evidence_eligibility_counts": report_provenance[
+                        "analysis_evidence_eligibility_counts"
+                    ],
+                    "trace_capture_flag_counts": report_provenance["trace_capture_flag_counts"],
+                    "embedded_digest_counts": report_provenance["embedded_digest_counts"],
+                    "episode_record_scenario_map_binding": report_provenance[
+                        "episode_record_scenario_map_binding"
+                    ],
+                    "search_or_simulation_rerun": report_provenance["search_or_simulation_rerun"],
+                }
+            )
     return {
         "schema_version": "adversarial-counterexample-search-run.v1",
         "run_id": "issue_9645_bounded_pilot",
@@ -4833,6 +5584,26 @@ def _pilot_search_run(
 
 def _copy_pilot_evidence(payload: Path) -> list[dict[str, str]]:
     """Return exact checksums for the minimal #9645 pilot accounting packet."""
+    report_provenance = _read_json_object(payload / "report_provenance.json")
+    if report_provenance.get("schema_version") == "issue_9645_report_build_provenance.v3":
+        packet_root = (
+            payload / "packet_receipts"
+            if (payload / "packet_receipts/evidence_bundle_manifest.json").is_file()
+            else payload.parent
+        )
+        bundle_manifest = _read_json_object(packet_root / "evidence_bundle_manifest.json")
+        entries = bundle_manifest.get("files")
+        if not isinstance(entries, list):
+            raise CorpusError("#9645 v3 evidence manifest has no complete payload inventory")
+        relative_paths = [
+            entry["path"]
+            for entry in entries
+            if isinstance(entry, Mapping) and _safe_bundle_relative_path(entry.get("path"))
+        ]
+        return [
+            {"path": name, "sha256": _sha256_file(payload / Path(*PurePosixPath(name).parts))}
+            for name in sorted(relative_paths)
+        ]
     relative_paths = [
         "summary.json",
         "run_metadata.json",
@@ -5001,6 +5772,17 @@ def _validated_historical_packet(
     result = replay_validation.get("historical_issue_1501_case")
     if not all(isinstance(value, dict) for value in (archived, run_context, result)):
         raise CorpusError("#1501 archived case, run context, or replay receipt is missing")
+    expected_statuses = {
+        "input_binding_status": "unknown_historical",
+        "admission_status": "not_admitted",
+        "regression_status": "pending_exact_historical_input_binding",
+    }
+    for record in (historical, result):
+        for field, expected in expected_statuses.items():
+            if record.get(field) != expected:
+                raise CorpusError(
+                    f"#1501 {field} must remain {expected!r} until historical inputs are bound"
+                )
     _validate_historical_replay_claim(result)
     _validate_historical_search_identity(archived, run_context)
     candidate = archived.get("candidate")
@@ -5014,10 +5796,40 @@ def _validate_historical_replay_claim(result: Mapping[str, Any]) -> None:
         raise CorpusError("#1501 case identity differs from the requested historical failure")
     if result.get("archived_failure_type") != "collision" or result.get("planner") != "goal":
         raise CorpusError("#1501 archive does not identify a goal-planner collision")
-    if result.get("replay_count") != 2 or result.get("replays_identical") is not True:
-        raise CorpusError("#1501 case does not contain two matching current replays")
-    if result.get("dynamic_task_feasibility", "").split("_")[0] != "unknown":
+    if (
+        result.get("replay_count") != 2
+        or result.get("replay_file_bytes_identical") is not False
+        or result.get("comparison_signatures_match") is not True
+        or "replays_identical" in result
+    ):
+        raise CorpusError("#1501 case lacks explicit byte-vs-comparison-signature replay status")
+    signature = result.get("comparison_signature")
+    if (
+        not isinstance(signature, Mapping)
+        or signature.get("schema") != "issue_9645_replay_comparison.v1"
+        or signature.get("projection")
+        != "one episode record with timestamps.start, timestamps.end, timing.steps_per_second, and wall_time_sec removed"
+        or signature.get("excluded_fields") != list(_ISSUE_1501_REPLAY_SIGNATURE_EXCLUDED_FIELDS)
+        or signature.get("canonicalization") != _ISSUE_1501_REPLAY_SIGNATURE_CANONICALIZATION
+        or not _is_sha256(signature.get("digest"))
+        or not isinstance(signature.get("projected_bytes"), int)
+        or isinstance(signature.get("projected_bytes"), bool)
+        or signature.get("projected_bytes", 0) <= 0
+        or signature.get("legacy_recorded_signature_status") != "not_independently_reconstructed"
+        or not _is_sha256(signature.get("legacy_recorded_signature_sha256"))
+    ):
+        raise CorpusError("#1501 replay comparison signature specification is incomplete")
+    feasibility = result.get("dynamic_task_feasibility")
+    if not isinstance(feasibility, str) or not feasibility.startswith("unknown"):
         raise CorpusError("#1501 dynamic feasibility must remain unknown")
+    replay_revision = result.get("regeneration_commit")
+    if (
+        not _is_full_git_revision(replay_revision)
+        or replay_revision not in str(result.get("replay_revision_scope") or "")
+        or "no replay was executed at the current PR head"
+        not in str(result.get("replay_revision_scope") or "")
+    ):
+        raise CorpusError("#1501 replay receipt must remain pinned to its recorded revision")
     if (
         result.get("current_scenario_certification", {}).get("classification")
         != "hard_but_solvable"
@@ -5129,6 +5941,8 @@ def _verify_historical_replay_pair(payload: Path, context: Mapping[str, Any]) ->
     expected_hashes = result.get("replay_files_sha256")
     if not isinstance(expected_hashes, list) or len(expected_hashes) != 2:
         raise CorpusError("#1501 replay receipt must bind both replay artifact hashes")
+    _validate_historical_replay_comparison_signature(payload, result, expected_hashes)
+    _validate_historical_replay_normalizations(context, normalization_rows, expected_hashes)
     source_files: dict[str, Any] = {
         "scenario": context["scenario_path"],
         "route": context["route_path"],
@@ -5169,6 +5983,113 @@ def _verify_historical_replay_pair(payload: Path, context: Mapping[str, Any]) ->
         "target_config": target.get("config", {}),
         "identity_hash": context["identity_hash"],
     }
+
+
+def _validate_historical_replay_comparison_signature(
+    payload: Path,
+    result: Mapping[str, Any],
+    expected_hashes: Sequence[Any],
+) -> None:
+    signature = result.get("comparison_signature")
+    bindings = result.get("replay_artifact_bindings")
+    if not isinstance(signature, Mapping) or not isinstance(bindings, list) or len(bindings) != 2:
+        raise CorpusError(
+            "#1501 replay comparison signature or recorded artifact bindings are missing"
+        )
+    binding_by_role = {item.get("role"): item for item in bindings if isinstance(item, Mapping)}
+    if set(binding_by_role) != {"replay_1", "replay_2"} or len(binding_by_role) != 2:
+        raise CorpusError("#1501 recorded replay artifact roles are missing or duplicated")
+
+    projections: list[dict[str, Any]] = []
+    canonical_records: list[bytes] = []
+    recorded_paths: list[Path] = []
+    for index in (1, 2):
+        relative = f"historical_issue_1501_failure_0002/replay_{index}_recorded.jsonl"
+        binding = binding_by_role[f"replay_{index}"]
+        binding_relative = _issue9645_payload_relative_path(binding.get("path"))
+        expected_hash = expected_hashes[index - 1]
+        recorded_path = payload / Path(*PurePosixPath(relative).parts)
+        actual_hash = _sha256_file(recorded_path)
+        if (
+            binding_relative != relative
+            or binding.get("sha256") != expected_hash
+            or actual_hash != expected_hash
+        ):
+            raise CorpusError(
+                f"#1501 recorded replay artifact binding differs: path={relative} "
+                f"declared_sha256={binding.get('sha256')} expected_sha256={expected_hash} "
+                f"actual_sha256={actual_hash}"
+            )
+        projection, canonical = _historical_replay_comparison_projection(recorded_path)
+        projections.append(projection)
+        canonical_records.append(canonical)
+        recorded_paths.append(recorded_path)
+
+    signature_digest = signature.get("digest")
+    actual_digest = hashlib.sha256(canonical_records[0]).hexdigest()
+    if (
+        projections[0] != projections[1]
+        or canonical_records[0] != canonical_records[1]
+        or recorded_paths[0].read_bytes() == recorded_paths[1].read_bytes()
+        or signature.get("projected_bytes") != len(canonical_records[0])
+        or signature_digest != actual_digest
+    ):
+        raise CorpusError(
+            "#1501 recorded replay comparison signature differs: "
+            f"declared_sha256={signature_digest} actual_sha256={actual_digest} "
+            f"declared_projected_bytes={signature.get('projected_bytes')} "
+            f"actual_projected_bytes={len(canonical_records[0])}"
+        )
+
+
+def _historical_replay_comparison_projection(path: Path) -> tuple[dict[str, Any], bytes]:
+    record = copy.deepcopy(_read_single_jsonl_record(path))
+    for dotted_path in _ISSUE_1501_REPLAY_SIGNATURE_EXCLUDED_FIELDS:
+        keys = dotted_path.split(".")
+        parent: Any = record
+        for key in keys[:-1]:
+            if not isinstance(parent, dict) or key not in parent:
+                raise CorpusError(f"#1501 replay comparison field is missing: {dotted_path}")
+            parent = parent[key]
+        if not isinstance(parent, dict) or keys[-1] not in parent:
+            raise CorpusError(f"#1501 replay comparison field is missing: {dotted_path}")
+        del parent[keys[-1]]
+    canonical = json.dumps(
+        record,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return record, canonical
+
+
+def _validate_historical_replay_normalizations(
+    context: Mapping[str, Any],
+    normalization_rows: Mapping[str, Any],
+    expected_hashes: Sequence[Any],
+) -> None:
+    errors = []
+    for index in (1, 2):
+        relative = f"historical_issue_1501_failure_0002/replay_{index}"
+        replay_file = context["historical_dir"] / f"replay_{index}.jsonl"
+        provenance_file = context["historical_dir"] / f"replay_{index}.provenance.json"
+        normalized_replay = normalization_rows.get(f"{relative}.jsonl")
+        normalized_provenance = normalization_rows.get(f"{relative}.provenance.json")
+        if not isinstance(normalized_replay, dict) or not isinstance(normalized_provenance, dict):
+            raise CorpusError(f"#1501 replay {index} normalization is not recorded")
+        try:
+            _validate_replay_normalization(
+                index,
+                normalized_replay,
+                normalized_provenance,
+                replay_file,
+                provenance_file,
+                expected_hashes[index - 1],
+            )
+        except CorpusError as exc:
+            errors.append(str(exc))
+    if errors:
+        raise CorpusError("; ".join(errors))
 
 
 def _verify_one_historical_replay(
@@ -5226,18 +6147,46 @@ def _validate_replay_normalization(
     provenance_file: Path,
     expected_source_hash: str,
 ) -> None:
+    replay_actual_hash = _sha256_file(replay_file)
+    provenance_actual_hash = _sha256_file(provenance_file)
     replay_ok = (
         normalized_replay.get("source_sha256_before_path_normalization") == expected_source_hash
-        and normalized_replay.get("normalized_sha256") == _sha256_file(replay_file)
+        and normalized_replay.get("normalized_sha256") == replay_actual_hash
         and normalized_replay.get("field_rewrites") == {"scenario_params.route_overrides_file": 1}
     )
     provenance_ok = (
         _is_sha256(normalized_provenance.get("source_sha256_before_path_normalization"))
-        and normalized_provenance.get("normalized_sha256") == _sha256_file(provenance_file)
-        and normalized_provenance.get("field_rewrites") == {"run.invocation": 1}
+        and normalized_provenance.get("normalized_sha256") == provenance_actual_hash
+        and normalized_provenance.get("field_rewrites") == _ISSUE_1501_PROVENANCE_PATH_REWRITES
+        and normalized_provenance.get("field_additions") == _ISSUE_1501_PROVENANCE_FIELD_ADDITIONS
     )
-    if not replay_ok or not provenance_ok:
-        raise CorpusError(f"#1501 replay {index} normalized artifact binding differs")
+    if replay_ok and provenance_ok:
+        return
+
+    details = []
+    if not replay_ok:
+        details.append(
+            "replay_path=historical_issue_1501_failure_0002/"
+            f"{replay_file.name} declared_source_sha256="
+            f"{normalized_replay.get('source_sha256_before_path_normalization')} "
+            f"expected_source_sha256={expected_source_hash} declared_normalized_sha256="
+            f"{normalized_replay.get('normalized_sha256')} actual_normalized_sha256="
+            f"{replay_actual_hash} declared_field_rewrites="
+            f"{normalized_replay.get('field_rewrites')}"
+        )
+    if not provenance_ok:
+        details.append(
+            "provenance_path=historical_issue_1501_failure_0002/"
+            f"{provenance_file.name} declared_source_sha256="
+            f"{normalized_provenance.get('source_sha256_before_path_normalization')} "
+            "expected_source_sha256=any_sha256 declared_normalized_sha256="
+            f"{normalized_provenance.get('normalized_sha256')} actual_normalized_sha256="
+            f"{provenance_actual_hash} declared_field_rewrites={normalized_provenance.get('field_rewrites')} "
+            f"declared_field_additions={normalized_provenance.get('field_additions')}"
+        )
+    raise CorpusError(
+        f"#1501 replay {index} normalized artifact binding differs: " + "; ".join(details)
+    )
 
 
 def _validate_historical_summary(result: Mapping[str, Any], projection: Mapping[str, Any]) -> None:

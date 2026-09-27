@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import yaml
 
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
@@ -28,6 +27,7 @@ from robot_sf.benchmark.map_runner.map_runner_jsonl import write_validated_to_ha
 from robot_sf.benchmark.schema_validator import load_schema
 from robot_sf.benchmark.three_width_doorway_application import (
     DEFAULT_MANIFEST_PATH,
+    EMPTY_PLANNER_CONFIG_HASH,
     DoorwayPairingSession,
     build_pair_manifest,
     check_pair_receipts,
@@ -471,10 +471,11 @@ def verify_campaign_bundle(root: Path) -> dict[str, Any]:
     if (
         sha256_file(root / "inputs/application_manifest.yaml")
         != run_manifest.get("application_manifest_sha256")
-        or sha256_file(root / "inputs/social_force.yaml")
-        != run_manifest.get("planner_config_sha256", {}).get("social_force")
         or sha256_file(root / "inputs/episode.schema.v1.json")
         != run_manifest.get("episode_schema_sha256")
+        or run_manifest.get("planner_config_hash")
+        != {"goal": EMPTY_PLANNER_CONFIG_HASH, "social_force": EMPTY_PLANNER_CONFIG_HASH}
+        or (root / "inputs/social_force.yaml").exists()
     ):
         raise ValueError("doorway copied scientific input digest mismatch")
     pair_manifest = _json(root / "pair_manifest.json")
@@ -537,9 +538,8 @@ def run_campaign(manifest_path: Path, output_root: Path) -> Path:
             for record in preflight["variants"]
         ]
         session = DoorwayPairingSession()
-        sf_path = Path(manifest["_resolved"]["social_force_config_path"])
-        sf_config = yaml.safe_load(sf_path.read_text(encoding="utf-8"))
-        shutil.copy2(sf_path, output_root / "inputs/social_force.yaml")
+        planner_configs = manifest["_resolved"]["planner_configs"]
+        planner_config_hashes = manifest["_resolved"]["planner_config_hashes"]
         shutil.copy2(_SCHEMA, output_root / "inputs/episode.schema.v1.json")
         schema = load_schema(_SCHEMA)
         rows: list[dict[str, Any]] = []
@@ -547,17 +547,18 @@ def run_campaign(manifest_path: Path, output_root: Path) -> Path:
         raw_path = output_root / "episodes.jsonl"
         with raw_path.open("x", encoding="utf-8") as handle:
             for planner in _PLANNERS:
-                config_sha = sha256_file(sf_path) if planner == "social_force" else None
+                planner_config = dict(planner_configs[planner])
+                planner_config_hash = planner_config_hashes[planner]
                 for seed in _SEEDS:
                     for asset in assets:
                         scenario_path = Path(asset["scenario_path"])
-                        scenario = dict(load_scenarios(scenario_path)[0])
+                        scenario = load_scenarios(scenario_path)[0]
                         receipt_hook = session.hook(
                             planner=planner,
                             seed=seed,
                             map_sha256=asset["map_sha256"],
                             non_width_config_sha256=non_width_config_sha256(
-                                scenario, planner=planner, planner_config_sha256=config_sha
+                                scenario, planner=planner, planner_config_hash=planner_config_hash
                             ),
                         )
                         row = _run_map_episode(
@@ -570,10 +571,8 @@ def run_campaign(manifest_path: Path, output_root: Path) -> Path:
                             snqi_baseline=None,
                             algo=planner,
                             scenario_path=scenario_path,
-                            algo_config=sf_config if planner == "social_force" else None,
-                            algo_config_path=sf_path.as_posix()
-                            if planner == "social_force"
-                            else None,
+                            algo_config=planner_config,
+                            algo_config_path=None,
                             record_planner_decision_trace=True,
                             record_simulation_step_trace=True,
                             pair_reset_hook=receipt_hook,
@@ -610,7 +609,7 @@ def run_campaign(manifest_path: Path, output_root: Path) -> Path:
                 "source_commit": source_sha,
                 "application_manifest_path": manifest_path.as_posix(),
                 "application_manifest_sha256": sha256_file(manifest_path),
-                "planner_config_sha256": {"social_force": sha256_file(sf_path)},
+                "planner_config_hash": dict(planner_config_hashes),
                 "episode_schema_sha256": sha256_file(_SCHEMA),
                 "horizon_steps": _HORIZON,
                 "dt_s": _DT,

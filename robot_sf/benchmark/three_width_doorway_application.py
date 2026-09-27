@@ -69,6 +69,13 @@ _EXPECTED_ORACLE_SEED = 225
 _EXPECTED_HORIZON_STEPS = 400
 _EXPECTED_SEEDS = (225, 226, 227)
 _AUTHORITATIVE_RADIUS_SOURCE = "robot_sf.common.robot_defaults.DEFAULT_ROBOT_RADIUS"
+EMPTY_PLANNER_CONFIG_HASH = "44136fa355b3678a"
+_EXPECTED_PLANNER_CONFIG_PATHS = {"goal": None, "social_force": None}
+_EXPECTED_PLANNER_CONFIGS = {"goal": {}, "social_force": {}}
+_EXPECTED_PLANNER_CONFIG_HASHES = {
+    "goal": EMPTY_PLANNER_CONFIG_HASH,
+    "social_force": EMPTY_PLANNER_CONFIG_HASH,
+}
 
 _ALLOWED_TOP_LEVEL_CHANGES = frozenset(
     {"name", "map_file", "seeds", "simulation_config", "robot_config", "metadata"}
@@ -332,12 +339,13 @@ def _oracle_required_checks(oracle: Mapping[str, Any]) -> tuple[bool, str | None
 
 
 def _validate_planner_config(planner: Mapping[str, Any]) -> None:
-    """Require the frozen planner configuration paths and content digest."""
-    if planner.get("algo_config") != {
-        "goal": None,
-        "social_force": "configs/algos/social_force_terminal_goal_v1.yaml",
-    }:
-        raise ValueError("planner_protocol.algo_config must retain the frozen planner settings")
+    """Require the preregistered empty baseline configurations and null paths."""
+    if planner.get("algo_config_path") != _EXPECTED_PLANNER_CONFIG_PATHS:
+        raise ValueError("planner_protocol.algo_config_path must remain null for both planners")
+    if planner.get("algo_config") != _EXPECTED_PLANNER_CONFIGS:
+        raise ValueError("planner_protocol.algo_config must resolve to {} for both planners")
+    if planner.get("algo_config_hash") != _EXPECTED_PLANNER_CONFIG_HASHES:
+        raise ValueError("planner_protocol.algo_config_hash must identify the empty configs")
 
 
 def _require_frozen_protocol_value(
@@ -479,14 +487,6 @@ def load_three_width_manifest(path: Path) -> dict[str, Any]:
     )
     _validate_application_execution(payload.get("execution"))
 
-    social_force_config = _resolve_reference(
-        source, payload["planner_protocol"]["algo_config"]["social_force"]
-    )
-    if payload["planner_protocol"].get("algo_config_sha256") != {
-        "social_force": _sha256(social_force_config)
-    }:
-        raise ValueError("social-force planner config SHA-256 mismatch")
-
     normalized = copy.deepcopy(payload)
     normalized["_resolved"] = {
         "manifest_path": source,
@@ -504,7 +504,9 @@ def load_three_width_manifest(path: Path) -> dict[str, Any]:
         "horizon_steps": horizon,
         "planner_roster": tuple(str(item) for item in roster),
         "planner_seeds": tuple(normalized_seeds),
-        "social_force_config_path": social_force_config,
+        "planner_config_paths": copy.deepcopy(_EXPECTED_PLANNER_CONFIG_PATHS),
+        "planner_configs": copy.deepcopy(_EXPECTED_PLANNER_CONFIGS),
+        "planner_config_hashes": copy.deepcopy(_EXPECTED_PLANNER_CONFIG_HASHES),
     }
     return normalized
 
@@ -547,7 +549,7 @@ def _receipt_digest(payload: Any) -> str:
 
 
 def non_width_config_sha256(
-    scenario: Mapping[str, Any], *, planner: str, planner_config_sha256: str | None = None
+    scenario: Mapping[str, Any], *, planner: str, planner_config_hash: str | None = None
 ) -> str:
     """Hash all scenario/planner settings except the preregistered map width identity.
 
@@ -562,7 +564,7 @@ def non_width_config_sha256(
         for key in ("geometry_variant_id", "gap_width_m"):
             metadata.pop(key, None)
     return _receipt_digest(
-        {"scenario": normalized, "planner": planner, "planner_config_sha256": planner_config_sha256}
+        {"scenario": normalized, "planner": planner, "planner_config_hash": planner_config_hash}
     )
 
 
@@ -837,7 +839,7 @@ def _write_variant_scenario(path: Path, scenario: Mapping[str, Any]) -> Path:
     return target
 
 
-def _load_base_scenario(manifest: Mapping[str, Any]) -> tuple[Path, Path, dict[str, Any]]:
+def _load_base_scenario(manifest: Mapping[str, Any]) -> tuple[Path, Path, Mapping[str, Any]]:
     """Load the historical base scenario without modifying it.
 
     Returns:
@@ -847,7 +849,7 @@ def _load_base_scenario(manifest: Mapping[str, Any]) -> tuple[Path, Path, dict[s
     scenario_path = Path(resolved["scenario_path"])
     map_path = Path(resolved["map_path"])
     scenario_id = str(manifest["base_scenario"]["scenario_id"])
-    scenarios = [dict(item) for item in load_scenarios(scenario_path)]
+    scenarios = list(load_scenarios(scenario_path))
     matches = [item for item in scenarios if str(item.get("name")) == scenario_id]
     if len(matches) != 1:
         raise ValueError(f"expected one baseline scenario {scenario_id!r}, found {len(matches)}")
@@ -1023,7 +1025,7 @@ def generate_application_assets(
             family_id=str(manifest["family_id"]),
         )
         _write_variant_scenario(scenario_output, scenario_payload)
-        loaded_variant = dict(load_scenarios(scenario_output)[0])
+        loaded_variant = load_scenarios(scenario_output)[0]
         violations = check_variant_diff(base_scenario, loaded_variant)
         if violations:
             raise ValueError(f"variant diff check failed for {variant['variant_id']}: {violations}")
@@ -1120,7 +1122,7 @@ def run_three_width_preflight(
         records: list[dict[str, Any]] = []
         for asset in assets:
             scenario_output = Path(asset["scenario_path"])
-            loaded_variant = dict(load_scenarios(scenario_output)[0])
+            loaded_variant = load_scenarios(scenario_output)[0]
             oracle_config = FeasibilityOracleConfig(
                 scenario_path=scenario_output,
                 envelope_radii_m=(
@@ -1298,6 +1300,7 @@ __all__ = [
     "APPLICATION_SCHEMA",
     "CLAIM_BOUNDARY",
     "DEFAULT_MANIFEST_PATH",
+    "EMPTY_PLANNER_CONFIG_HASH",
     "EXPECTED_TIER",
     "PAIR_MANIFEST_SCHEMA",
     "PREFLIGHT_SCHEMA",

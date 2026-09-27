@@ -227,13 +227,17 @@ def test_manifest_pins_three_width_tiers() -> None:
     assert tuple(resolved["planner_roster"]) == ("goal", "social_force")
     assert tuple(resolved["planner_seeds"]) == (225, 226, 227)
     assert manifest["planner_protocol"]["expected_rows"] == 18
-    assert manifest["planner_protocol"]["algo_config"] == {
+    assert manifest["planner_protocol"]["algo_config_path"] == {
         "goal": None,
-        "social_force": "configs/algos/social_force_terminal_goal_v1.yaml",
+        "social_force": None,
     }
-    social_force_config = Path(resolved["social_force_config_path"])
-    assert manifest["planner_protocol"]["algo_config_sha256"] == {
-        "social_force": _sha256(social_force_config)
+    assert manifest["planner_protocol"]["algo_config"] == {
+        "goal": {},
+        "social_force": {},
+    }
+    assert manifest["planner_protocol"]["algo_config_hash"] == {
+        "goal": doorway_application.EMPTY_PLANNER_CONFIG_HASH,
+        "social_force": doorway_application.EMPTY_PLANNER_CONFIG_HASH,
     }
     assert manifest["base_scenario"]["scenario_sha256"] == _sha256(
         _REPO_ROOT / "configs/scenarios/single/francis2023_narrow_doorway.yaml"
@@ -540,16 +544,18 @@ def test_portable_reset_matches_three_widths_and_distinct_maps(tmp_path: Path) -
     manifest = load_three_width_manifest(_MANIFEST)
     assets = generate_application_assets(manifest, tmp_path / "variants")
     session = DoorwayPairingSession()
-    sf_config = Path(manifest["_resolved"]["social_force_config_path"])
+    planner_configs = manifest["_resolved"]["planner_configs"]
+    planner_config_hashes = manifest["_resolved"]["planner_config_hashes"]
     for planner in ("goal", "social_force"):
-        planner_config_sha = _sha256(sf_config) if planner == "social_force" else None
+        assert planner_configs[planner] == {}
+        planner_config_hash = planner_config_hashes[planner]
         for seed in (225, 226, 227):
             for asset in assets:
                 scenario_path = Path(asset["scenario_path"])
-                scenario = dict(load_scenarios(scenario_path)[0])
+                scenario = load_scenarios(scenario_path)[0]
                 config = build_env_config(scenario, scenario_path=scenario_path)
                 common = non_width_config_sha256(
-                    scenario, planner=planner, planner_config_sha256=planner_config_sha
+                    scenario, planner=planner, planner_config_hash=planner_config_hash
                 )
                 env = make_robot_env(config=config, seed=seed, debug=False)
                 try:
@@ -756,7 +762,7 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
     rows[0]["algorithm_metadata"]["planner_decision_trace"]["steps"] = [{}]
     inputs = tmp_path / "inputs"
     inputs.mkdir()
-    for name in ("application_manifest.yaml", "social_force.yaml", "episode.schema.v1.json"):
+    for name in ("application_manifest.yaml", "episode.schema.v1.json"):
         (inputs / name).write_text("frozen input\n", encoding="utf-8")
     lines = [json.dumps(row, sort_keys=True) + "\n" for row in rows]
     (tmp_path / "episodes.jsonl").write_text("".join(lines), encoding="utf-8")
@@ -784,7 +790,10 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
         {
             "source_commit": "d" * 40,
             "application_manifest_sha256": _sha256(inputs / "application_manifest.yaml"),
-            "planner_config_sha256": {"social_force": _sha256(inputs / "social_force.yaml")},
+            "planner_config_hash": {
+                "goal": doorway_application.EMPTY_PLANNER_CONFIG_HASH,
+                "social_force": doorway_application.EMPTY_PLANNER_CONFIG_HASH,
+            },
             "episode_schema_sha256": _sha256(inputs / "episode.schema.v1.json"),
             "episodes_jsonl_sha256": _sha256(tmp_path / "episodes.jsonl"),
             "cells": cells,
@@ -835,6 +844,29 @@ def test_preflight_records_oracle_before_not_run_planner_lane(tmp_path: Path) ->
     write_preflight_report(report, report_path)
     payload = report_path.read_text(encoding="utf-8")
     assert '"review_marker": "AI-GENERATED NEEDS-REVIEW"' in payload
+
+
+def test_preflight_preserves_real_loader_identity(tmp_path: Path) -> None:
+    """The default oracle sees loader-bound rows and keeps no-route diagnostic-only."""
+    report = run_three_width_preflight(_MANIFEST, output_dir=tmp_path / "variants")
+
+    assert report["checks"]["all_widths_positive_clearance"] is True
+    assert report["checks"]["oracle_available_for_every_variant"] is True
+    by_width = {item["geometry"]["gap_width_m"]: item["oracle"] for item in report["variants"]}
+    for width in (2.2, 2.8):
+        oracle = by_width[width]
+        assert oracle["required_checks_known"] is True
+        assert oracle["nominal_verdict"]["status"] == "infeasible_by_construction"
+        assert oracle["nominal_verdict"]["geometric"]["route_geometrically_feasible"] is False
+        assert oracle["nominal_verdict"]["geometric"]["runtime_input_identity_stable"] is True
+    assert all(
+        oracle["nominal_verdict"]["geometric"]["runtime_input_identity_stable"] is True
+        for oracle in by_width.values()
+    )
+    assert all(
+        oracle.get("readiness_blocker") != "oracle_route_classification_unknown"
+        for oracle in by_width.values()
+    )
 
 
 def test_conservative_grid_result_is_reported_without_changing_frozen_widths(

@@ -11,8 +11,6 @@ import hashlib
 import subprocess
 from pathlib import Path
 
-import yaml
-
 from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
 from robot_sf.benchmark.three_width_doorway_application import (
     DEFAULT_MANIFEST_PATH,
@@ -65,16 +63,17 @@ def main() -> int:
     ]
     session = DoorwayPairingSession()
     rows = []
-    sf_path = Path(manifest["_resolved"]["social_force_config_path"])
-    sf_config = yaml.safe_load(sf_path.read_text(encoding="utf-8"))
+    planner_configs = manifest["_resolved"]["planner_configs"]
+    planner_config_hashes = manifest["_resolved"]["planner_config_hashes"]
     for planner in manifest["_resolved"]["planner_roster"]:
-        config_sha = _sha256(sf_path) if planner == "social_force" else None
+        planner_config = dict(planner_configs[planner])
+        planner_config_hash = planner_config_hashes[planner]
         for seed in manifest["_resolved"]["planner_seeds"]:
             for asset in assets:
                 scenario_path = Path(asset["scenario_path"])
-                scenario = dict(load_scenarios(scenario_path)[0])
+                scenario = load_scenarios(scenario_path)[0]
                 common_sha = non_width_config_sha256(
-                    scenario, planner=planner, planner_config_sha256=config_sha
+                    scenario, planner=planner, planner_config_hash=planner_config_hash
                 )
                 receipt_hook = session.hook(
                     planner=planner,
@@ -92,8 +91,8 @@ def main() -> int:
                     snqi_baseline=None,
                     algo=planner,
                     scenario_path=scenario_path,
-                    algo_config=sf_config if planner == "social_force" else None,
-                    algo_config_path=sf_path.as_posix() if planner == "social_force" else None,
+                    algo_config=planner_config,
+                    algo_config_path=None,
                     pair_reset_hook=receipt_hook,
                 )
                 receipt = row.get("algorithm_metadata", {}).get("doorway_pair_receipt")

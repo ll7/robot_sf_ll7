@@ -183,16 +183,45 @@ def _is_grandfathered_evidence(path: Path) -> bool:
     return False
 
 
+def _repo_relative_path(path: Path) -> str | None:
+    """Resolve a path relative to its repository root, or the test cwd.
+
+    Git supplies repo-relative paths to ``--all``; tests and direct callers may supply
+    absolute paths. Looking for the nearest ``.git`` marker keeps both forms tied to the
+    actual repository path instead of accepting a matching suffix from a nested alias.
+    Temporary test roots without Git metadata use their current working directory.
+    """
+    try:
+        resolved = path.resolve()
+    except (OSError, RuntimeError):
+        return None
+
+    anchor = resolved if resolved.is_dir() else resolved.parent
+    for parent in (anchor, *anchor.parents):
+        if (parent / ".git").exists():
+            try:
+                return resolved.relative_to(parent).as_posix()
+            except ValueError:
+                return None
+
+    try:
+        return resolved.relative_to(Path.cwd().resolve()).as_posix()
+    except (OSError, ValueError, RuntimeError):
+        return None
+
+
 def _is_pinned_verbatim_evidence(path: Path) -> bool:
     """Return whether ``path`` is an exact pinned recovery artifact.
 
-    The path match accepts repository-relative and absolute caller paths. The digest match makes
-    the exception fail closed if a recovered artifact is edited or replaced.
+    The path must resolve to the exact repository-relative key. The digest match makes the
+    exception fail closed if a recovered artifact is edited or replaced.
     """
 
-    normalized = path.as_posix()
+    normalized = _repo_relative_path(path)
+    if normalized is None:
+        return False
     for repo_path, expected_sha256 in PINNED_VERBATIM_EVIDENCE_SHA256.items():
-        if normalized != repo_path and not normalized.endswith(f"/{repo_path}"):
+        if normalized != repo_path:
             continue
         try:
             hasher = hashlib.sha256()

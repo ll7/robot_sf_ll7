@@ -49,7 +49,7 @@ except ImportError:  # pragma: no cover - Windows has no POSIX flock implementat
 import yaml
 
 from robot_sf.adversarial.config import SearchConfig
-from robot_sf.adversarial.samplers import SUPPORTED_SAMPLERS, CandidateSampler, build_sampler
+from robot_sf.adversarial.samplers import CandidateSampler, build_sampler
 
 CONFIG_SCHEMA = "adversarial_coevolution_config.v1"
 RUN_SCHEMA = "adversarial_coevolution_run.v2"
@@ -74,6 +74,10 @@ _REGRESSION_STATUSES = {
     "unavailable",
 }
 _PHASES = ("optimization", "challenge_evaluation", "falsification", "discovery_admission")
+# Keep config loading independent of optional sampler dependencies. The canonical
+# builder remains the runtime authority and rejects a stale/unknown key before
+# any candidate is evaluated.
+_FALSIFICATION_SAMPLERS = ("random", "coordinate", "optuna", "cmaes")
 
 
 class CoevolutionError(RuntimeError):
@@ -225,8 +229,10 @@ def _parse_search_runtime(search: Mapping[str, Any]) -> dict[str, Any]:
     sampler = _non_empty_string(search.get("sampler"), "falsification.sampler").lower()
     if not isinstance(record_forces, bool) or not isinstance(require_certification, bool):
         raise TypeError("falsification record_forces and require_certification must be booleans")
-    if sampler not in SUPPORTED_SAMPLERS:
-        raise ValueError(f"falsification.sampler must be one of: {', '.join(SUPPORTED_SAMPLERS)}")
+    if sampler not in _FALSIFICATION_SAMPLERS:
+        raise ValueError(
+            f"falsification.sampler must be one of: {', '.join(_FALSIFICATION_SAMPLERS)}"
+        )
     return {
         "sampler": sampler,
         "horizon": horizon,

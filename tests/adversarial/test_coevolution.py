@@ -755,6 +755,15 @@ def test_falsification_sampler_is_required_and_must_match_frozen_round_input(
     with pytest.raises(ValueError, match="falsification.sampler must be a non-empty string"):
         load_coevolution_config(config_path)
 
+    unsupported_dir = tmp_path / "unsupported"
+    unsupported_dir.mkdir()
+    config_path = _write_config(unsupported_dir)
+    config_payload = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config_payload["falsification"]["sampler"] = "unsupported"
+    config_path.write_text(yaml.safe_dump(config_payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="falsification.sampler must be one of"):
+        load_coevolution_config(config_path)
+
     mismatch_dir = tmp_path / "mismatch"
     mismatch_dir.mkdir()
     config_path = _write_config(mismatch_dir)

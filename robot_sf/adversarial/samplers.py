@@ -18,8 +18,6 @@ from robot_sf.common.optional_import import try_import
 if TYPE_CHECKING:
     from robot_sf.adversarial.config import CandidateEvaluation
 
-SUPPORTED_SAMPLERS = ("random", "coordinate", "optuna", "cmaes")
-
 
 class CandidateSampler(Protocol):
     """Protocol for optimizer-backed candidate samplers."""
@@ -58,7 +56,7 @@ def build_sampler(
         return OptunaCandidateSampler(search_space, seed=seed, warm_start=warm_start)
     if key == "cmaes":
         return CmaEsCandidateSampler(search_space, seed=seed, warm_start=warm_start)
-    raise ValueError(f"sampler must be one of: {', '.join(SUPPORTED_SAMPLERS)}")
+    raise ValueError("sampler must be one of: random, coordinate, optuna, cmaes")
 
 
 class RandomCandidateSampler:

@@ -4440,9 +4440,13 @@ def _verify_issue9645_bundle(
         "issue_9645_report_build_provenance.v2",
         "issue_9645_report_build_provenance.v3",
     }:
-        bundle_revision = report_provenance.get("report_generator_commit")
+        bundle_revision = (
+            report_provenance.get("report_build_execution_checkout_head")
+            if report_schema == "issue_9645_report_build_provenance.v3"
+            else report_provenance.get("report_generator_commit")
+        )
         if not _is_full_git_revision(bundle_revision):
-            raise CorpusError("#9645 report provenance lacks its generator revision")
+            raise CorpusError("#9645 report provenance lacks its bundle producer revision")
     elif report_schema == "issue_9645_report_build_provenance.v1":
         # Older packets used the experiment revision as the bundle's commit field.
         bundle_revision = source_revision
@@ -4562,9 +4566,11 @@ def _validate_issue9645_report_provenance(
         raise CorpusError("#9645 report provenance does not bind the source search revision")
     if schema == "issue_9645_report_build_provenance.v1":
         return
-    if report.get("report_generator_commit") != bundle_revision:
-        raise CorpusError("#9645 report provenance does not bind the bundle producer revision")
     if schema == "issue_9645_report_build_provenance.v2":
+        if report.get("report_generator_commit") != bundle_revision:
+            raise CorpusError(
+                "#9645 v2 report provenance does not bind the bundle producer revision"
+            )
         if (
             report.get("trace_evidence_eligibility_counts") != {"eligible": 0, "ineligible": 64}
             or report.get("tracked_episode_record_count") != 0
@@ -4597,7 +4603,7 @@ def _validate_issue9645_v3_report_provenance(
     """Fail closed on the v3 report source, output, and reconstruction bindings."""
     metadata = _read_json_object(payload / "run_metadata.json")
     _validate_issue9645_v3_report_identity(report, metadata, source_revision, bundle_revision)
-    _validate_issue9645_v3_report_source_hash(report, payload, bundle_revision)
+    _validate_issue9645_v3_report_source_hash(report, payload)
     _validate_issue9645_v3_report_comparison(report, files_by_path)
     _validate_issue9645_v3_report_outputs(report, files_by_path)
     _validate_issue9645_v3_reproduction_bindings(report, metadata, payload, files_by_path)
@@ -4627,16 +4633,17 @@ def _validate_issue9645_v3_report_identity(
         raise CorpusError("#9645 v3 report provenance source metadata hash differs")
 
 
-def _validate_issue9645_v3_report_source_hash(
-    report: Mapping[str, Any], payload: Path, bundle_revision: str
-) -> None:
+def _validate_issue9645_v3_report_source_hash(report: Mapping[str, Any], payload: Path) -> None:
     if report.get("experiment_source_commit_sha256") != _sha256_file(payload / "run_metadata.json"):
         raise CorpusError("#9645 v3 run metadata source hash differs")
     generator_digest = report.get("report_generator_source_sha256")
     if not _is_sha256(generator_digest):
         raise CorpusError("#9645 v3 report generator source digest is invalid")
+    generator_revision = report.get("report_generator_commit")
+    if not _is_full_git_revision(generator_revision):
+        raise CorpusError("#9645 v3 report generator revision is invalid")
     generator_bytes = _read_git_blob(
-        bundle_revision,
+        generator_revision,
         "robot_sf/adversarial/falsification_report.py",
         "#9645 v3 report generator source revision is unavailable",
     )

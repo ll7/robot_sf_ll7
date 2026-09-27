@@ -578,6 +578,24 @@ def _packet_copy() -> Iterator[Path]:
 
 
 @contextmanager
+def _revision_separated_packet() -> Iterator[Path]:
+    """Build a hash-consistent v3 packet with separate build and generator revisions."""
+    with _packet_copy() as payload:
+        bundle_root = payload.parent
+        report_path = payload / "report_provenance.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        manifest_path = bundle_root / "evidence_bundle_manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        build_revision = "dd703565459fe5431519d71b58f6a819f313db77"
+        report["report_build_execution_checkout_head"] = build_revision
+        manifest["commit"] = build_revision
+        report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+        _refresh_bundle_checksum_for_payload(payload, "report_provenance.json")
+        yield payload
+
+
+@contextmanager
 def _test_only_reconciled_packet() -> Iterator[Path]:
     """Build a hypothetical hash-consistent packet only for downstream mechanics tests.
 
@@ -726,9 +744,32 @@ def test_issue9645_fixture_binds_the_promoted_v3_packet() -> None:
         "provenance.map_digest": {"present": 0, "missing": 64},
     }
     assert report_provenance["search_or_simulation_rerun"] is False
-    assert report_provenance["report_generator_commit"] == bundle_manifest["commit"]
     assert report_provenance["report_build_execution_checkout_head"] == bundle_manifest["commit"]
+    assert report_provenance["report_generator_commit"] == bundle_manifest["commit"]
     assert fixture_receipt["source_experiment_revision"] == summary["source_revision"]
+
+
+def test_issue9645_v3_bundle_and_generator_revisions_are_separate(tmp_path: Path) -> None:
+    with _revision_separated_packet() as payload:
+        manifest = json.loads(
+            (payload.parent / "evidence_bundle_manifest.json").read_text(encoding="utf-8")
+        )
+        report = json.loads((payload / "report_provenance.json").read_text(encoding="utf-8"))
+        corpus, _receipt = import_issue9645_packet(
+            payload, new_corpus(), corpus_root=tmp_path / "corpus"
+        )
+
+    run = corpus["search_runs"][0]
+    assert report["report_build_execution_checkout_head"] == manifest["commit"]
+    assert report["report_generator_commit"] != manifest["commit"]
+    assert run["report_build_execution_checkout_head"] == manifest["commit"]
+    assert run["report_generator_revision"] == report["report_generator_commit"]
+    assert run["new_counterexamples_discovered"] == 0
+    assert run["new_counterexamples_admitted"] == 0
+    assert run["historical_replay"]["dynamic_task_feasibility"] == (
+        "unknown_without_reference_planner_success"
+    )
+    assert corpus["cases"] == []
 
 
 @pytest.mark.parametrize(
@@ -741,12 +782,14 @@ def test_issue9645_fixture_binds_the_promoted_v3_packet() -> None:
         "rerun",
         "analysis_eligibility",
         "detailed_trace_flags",
+        "bundle_checkout_head",
+        "generator_commit",
     ],
 )
 def test_issue9645_v3_report_provenance_mutations_fail_closed(
     tmp_path: Path, mutation: str
 ) -> None:
-    with _packet_copy() as payload:
+    with _revision_separated_packet() as payload:
         report_path = payload / "report_provenance.json"
         report = json.loads(report_path.read_text(encoding="utf-8"))
         if mutation == "source_hash":
@@ -783,6 +826,12 @@ def test_issue9645_v3_report_provenance_mutations_fail_closed(
                 "enabled": 1,
                 "disabled": 63,
             }
+        elif mutation == "bundle_checkout_head":
+            report["report_build_execution_checkout_head"] = (
+                "58e516aa4f69ff3098bf518199f483006589758c"
+            )
+        elif mutation == "generator_commit":
+            report["report_generator_commit"] = "0" * 40
         report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
         _refresh_bundle_checksum_for_payload(payload, "report_provenance.json")
 

@@ -230,7 +230,7 @@ def test_evidence_bundle_checksums_cover_exact_and_normalized_candidate_records(
     evidence_root = PAYLOAD.parent
     manifest = _read_json(evidence_root / "evidence_bundle_manifest.json")
     entries = {row["path"]: row for row in manifest["files"]}
-    assert manifest["totals"]["file_count"] == len(entries) == 392
+    assert manifest["totals"]["file_count"] == len(entries) == 394
     assert manifest["totals"]["total_bytes"] == sum(row["size_bytes"] for row in manifest["files"])
 
     expected_payload_files = {
@@ -251,6 +251,20 @@ def test_evidence_bundle_checksums_cover_exact_and_normalized_candidate_records(
 
     _assert_exact_byte_review_sidecar(evidence_root / "evidence_bundle_manifest.json")
     _assert_exact_byte_review_sidecar(evidence_root / "checksums.sha256")
+
+
+def test_candidate_metric_distance_conventions_are_column_bound() -> None:
+    metadata_path = PAYLOAD / "metadata.json"
+    metadata = _read_json(metadata_path)
+
+    assert metadata["schema_version"] == "adversarial_candidate_series_metadata.v1"
+    assert metadata["series_path"] == "candidate_evaluations.csv"
+    assert metadata["distance_convention"] == "center_center"
+    assert metadata["distance_convention_by_column"] == {
+        "distance_to_human_min_m": "center_center",
+        "min_clearance_m": "surface_clearance",
+    }
+    _assert_exact_byte_review_sidecar(metadata_path)
 
 
 def test_markerless_payload_artifacts_have_digest_bound_review_sidecars() -> None:

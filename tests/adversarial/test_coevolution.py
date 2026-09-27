@@ -1319,3 +1319,38 @@ def test_search_adapter_preserves_evaluation_when_objective_is_unscored(
     assert row["execution_status"] == "ok"
     assert row["planner_outcome"] == "no_failure"
     assert row["objective_value"] is None
+
+
+def test_search_adapter_does_not_confirm_failure_from_unevaluated_attribution(
+    tmp_path: Path,
+) -> None:
+    request = _search_request_fixture(tmp_path, round_number=1)
+    raw_row = {
+        "candidate": {"scenario_seed": 17},
+        "certification_status": {"status": "passed"},
+        "objective_value": 1.0,
+        "error": None,
+        "failure_attribution": {
+            "status": "not_evaluated",
+            "primary_failure": "collision",
+            "details": {
+                "execution_mode": "native",
+                "readiness_status": "native",
+                "availability_status": "available",
+            },
+        },
+        "scenario_yaml_path": None,
+        "bundle_path": None,
+    }
+    row = coevolution_module._normalize_search_manifest_row(
+        raw_row,
+        index=0,
+        request=request,
+        search_output_dir=request.round_dir / "falsification" / "search",
+        manifest_digest="f" * 64,
+    )
+
+    assert row["search_status"] == "evaluated"
+    assert row["execution_status"] == "unknown"
+    assert row["planner_outcome"] == "unknown"
+    assert coevolution_module._search_planner_outcome(raw_row, execution_status="ok") == "unknown"

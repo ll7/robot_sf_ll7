@@ -897,7 +897,7 @@ def _search_execution_status(row: Mapping[str, Any], search_status: str) -> str:
     if search_status == "failed":
         return "failed"
     attribution = row.get("failure_attribution")
-    if not isinstance(attribution, Mapping):
+    if not isinstance(attribution, Mapping) or attribution.get("status") != "attributed":
         return "unknown"
     details = attribution.get("details")
     if not isinstance(details, Mapping):
@@ -921,7 +921,7 @@ def _search_planner_outcome(row: Mapping[str, Any], *, execution_status: str) ->
     if execution_status != "ok":
         return "unknown"
     attribution = row.get("failure_attribution")
-    if not isinstance(attribution, Mapping):
+    if not isinstance(attribution, Mapping) or attribution.get("status") != "attributed":
         return "unknown"
     primary = attribution.get("primary_failure")
     if primary == "success":

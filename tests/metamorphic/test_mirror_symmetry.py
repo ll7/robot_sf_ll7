@@ -25,6 +25,7 @@ from robot_sf.planner.visibility_planner import PlannerConfig, VisibilityPlanner
 from robot_sf.sim.pedestrian_model_variants import _pairwise_social_force_kernel
 from tests.metamorphic.planner_arms import (
     HYBRID_V3_ARM,
+    HYBRID_V4_DIAGNOSTIC_ARM,
     ArmEpisode,
     interaction_scene,
     mirror_x,
@@ -327,6 +328,23 @@ def test_release_hybrid_v3_outcome_is_mirror_and_rotation_invariant() -> None:
         assert episode.status == "ok"
         outcomes[name] = (episode.success, episode.collision, episode.step_limit_reached)
     assert set(outcomes.values()) == {(True, False, False)}, outcomes
+
+
+def test_diagnostic_hybrid_v4_trace_is_mirror_equivariant() -> None:
+    """The explicitly bound v4 diagnostic arm preserves reflected traces."""
+    base = run_arm_episode(
+        HYBRID_V4_DIAGNOSTIC_ARM, interaction_scene(), seed=_SEED, max_steps=_ARM_STEPS
+    )
+    assert base.status == "ok"
+    for name in ("mirror_y", "mirror_x"):
+        point_map = _TRANSFORMS[name][0]
+        transformed = run_arm_episode(
+            HYBRID_V4_DIAGNOSTIC_ARM,
+            interaction_scene(point_map),
+            seed=_SEED,
+            max_steps=_ARM_STEPS,
+        )
+        _assert_arm_equivariant(base, transformed, name)
 
 
 @pytest.mark.xfail(strict=True, raises=AssertionError, reason=_BRANCH_CUT_REASON)

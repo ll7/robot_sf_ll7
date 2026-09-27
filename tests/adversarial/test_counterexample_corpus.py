@@ -3306,6 +3306,45 @@ def test_historical_case_admission_fails_closed_and_retains_zero_pilot(
         validate_corpus(corpus, corpus_root=corpus_root)
 
 
+def test_historical_normalized_replay_must_match_hash_bound_recorded_payload(
+    tmp_path: Path,
+) -> None:
+    with _test_only_reconciled_packet() as payload:
+        replay_path = payload / "historical_issue_1501_failure_0002/replay_1.jsonl"
+        episode = json.loads(replay_path.read_text(encoding="utf-8"))
+        episode["algorithm_metadata"]["config_hash"] = "review-mutated-config-hash"
+        replay_path.write_text(
+            json.dumps(episode, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
+            encoding="utf-8",
+        )
+
+        normalization_path = payload / "path_normalization.json"
+        normalization = json.loads(normalization_path.read_text(encoding="utf-8"))
+        replay_row = next(
+            row
+            for row in normalization["records"]
+            if row["path"] == "historical_issue_1501_failure_0002/replay_1.jsonl"
+        )
+        replay_row["normalized_sha256"] = hashlib.sha256(replay_path.read_bytes()).hexdigest()
+        normalization_path.write_text(
+            json.dumps(normalization, ensure_ascii=False, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        _refresh_bundle_checksum_for_payload(
+            payload, "historical_issue_1501_failure_0002/replay_1.jsonl"
+        )
+        _refresh_bundle_checksum_for_payload(payload, "path_normalization.json")
+
+        corpus, receipt, corpus_root = _import(tmp_path, payload)
+
+    assert receipt["decision"] == "rejected"
+    assert any("normalized artifact binding differs" in blocker for blocker in receipt["blockers"])
+    assert len(corpus["search_runs"]) == 1
+    assert corpus["search_runs"][0]["new_counterexamples_discovered"] == 0
+    assert corpus["cases"] == []
+    validate_corpus(corpus, corpus_root=corpus_root)
+
+
 def test_pilot_candidate_table_is_bound_to_the_outer_bundle_checksums(tmp_path: Path) -> None:
     with _packet_copy() as payload:
         table_path = payload / "candidate_evaluations.csv"

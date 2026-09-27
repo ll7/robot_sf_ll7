@@ -14,6 +14,7 @@ import signal
 import subprocess
 import sys
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -267,7 +268,7 @@ def _write_evidence_preflight_transport(repo: Path, *, ratchet_exit: int = 0) ->
         '    printf "fixture ratchet diagnostic\\n" >&2\n'
         f"    exit {ratchet_exit} ;;\n"
         "  pr_ready_freshness.py)\n"
-        '    printf "stamp\\n" >> "$PWD/lane.log" ;;\n'
+        '    if [[ "${2:-}" == "write" ]]; then printf "stamp\\n" >> "$PWD/lane.log"; fi ;;\n'
         "esac\n" + fallback,
         encoding="utf-8",
     )
@@ -2313,6 +2314,40 @@ def _wire_real_base_drift(repo: Path) -> None:
     )
 
 
+def _wire_real_worktree_identity_check(repo: Path) -> None:
+    """Use the real freshness and lease readers in an otherwise stubbed fake repo."""
+    scripts_dir = repo / "scripts" / "dev"
+    for name in ("pr_ready_freshness.py", "pr_gate_lease.py"):
+        shutil.copy2(SCRIPTS_DEV / name, scripts_dir / name)
+    contract_dir = repo / "scripts" / "ci"
+    contract_dir.mkdir(parents=True, exist_ok=True)
+    (contract_dir / "pr_contract_check.py").write_text(
+        "import sys\nsys.exit(0)\n", encoding="utf-8"
+    )
+
+
+def _install_test_worktree_lease(repo: Path, *, branch: str, head_sha: str) -> None:
+    """Write a valid designated-owner lease for a synthetic readiness worktree."""
+    canonical_path = str(repo.resolve())
+    digest = hashlib.sha256(os.fsencode(canonical_path)).hexdigest()
+    now = datetime.now(UTC)
+    lease = {
+        "schema": "pr_gate_lease.v1",
+        "created_at": now.isoformat(),
+        "expires_at": (now + timedelta(hours=1)).isoformat(),
+        "pr_number": None,
+        "gate_id": "issue-9712",
+        "owner": "issue-9712-test-owner",
+        "last_heartbeat": now.isoformat(),
+        "worktree_path": canonical_path,
+        "head_ref": branch,
+        "head_sha": head_sha,
+    }
+    (repo / ".git" / f".pr-gate-lease-{digest}.json").write_text(
+        json.dumps(lease, indent=2) + "\n", encoding="utf-8"
+    )
+
+
 def _commit(repo: Path, message: str) -> None:
     """Stage and commit all changes in *repo* with a test identity."""
     _git(repo, "add", "-A")
@@ -2446,6 +2481,142 @@ def test_pr_ready_check_surfaces_reuse_path_on_unrelated_base_drift(tmp_path: Pa
     assert result.returncode == 0, f"expected reuse success, got: {result.stderr}"
     # The reuse decision must be visible (reviewable), not silently swallowed.
     assert "reuse" in result.stderr.lower()
+
+
+def _prepare_worktree_identity_fixture(
+    repo: Path, tmp_path: Path, *, drift_kind: str
+) -> tuple[str, str]:
+    """Commit real identity readers and return branch/head for a final-gate fixture."""
+    _make_real_python_bin(repo)
+    _wire_real_worktree_identity_check(repo)
+    _write_blocking_lane_stub(repo)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "identity readiness fixture")
+
+    branch = subprocess.run(
+        ["git", "branch", "--show-current"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    admitted_head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    if drift_kind == "remote_upstream":
+        remote_repo = tmp_path / "readiness-origin.git"
+        subprocess.run(["git", "init", "--bare", "-q", str(remote_repo)], check=True)
+        _git(repo, "remote", "add", "origin", str(remote_repo))
+        _git(repo, "push", "-q", "origin", "HEAD:refs/heads/main")
+        _git(repo, "push", "-q", "origin", "HEAD:refs/heads/readiness-probe")
+        _git(repo, "fetch", "-q", "origin")
+        _git(repo, "branch", "--set-upstream-to=origin/readiness-probe", branch)
+    _install_test_worktree_lease(repo, branch=branch, head_sha=admitted_head)
+    return branch, admitted_head
+
+
+def _move_identity_during_final_gate(repo: Path, *, drift_kind: str) -> None:
+    """Apply exactly one controlled local, remote, or designated-owner identity move."""
+    if drift_kind == "local_head":
+        _git(repo, "commit", "--allow-empty", "-m", "concurrent writer moved HEAD")
+    elif drift_kind == "remote_upstream":
+        current_head = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
+        ).stdout.strip()
+        tree_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD^{tree}"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        remote_only_commit = subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=test",
+                "-c",
+                "user.email=test@test",
+                "commit-tree",
+                tree_sha,
+                "-p",
+                current_head,
+                "-m",
+                "remote-only readiness move",
+            ],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        _git(
+            repo,
+            "push",
+            "-q",
+            "origin",
+            f"{remote_only_commit}:refs/heads/readiness-probe",
+        )
+    elif drift_kind == "lease_owner":
+        digest = hashlib.sha256(os.fsencode(str(repo.resolve()))).hexdigest()
+        lease_path = repo / ".git" / f".pr-gate-lease-{digest}.json"
+        lease = json.loads(lease_path.read_text(encoding="utf-8"))
+        lease["owner"] = "replacement-test-owner"
+        lease_path.write_text(json.dumps(lease) + "\n", encoding="utf-8")
+
+
+@pytest.mark.parametrize("drift_kind", ["stable", "local_head", "remote_upstream", "lease_owner"])
+def test_final_pr_ready_checks_worktree_identity_at_stamp_boundary(
+    preflight_repo: Path, tmp_path: Path, drift_kind: str
+) -> None:
+    """Issue #9712: final readiness stamps only while its admitted identity remains stable."""
+    repo = preflight_repo
+    branch, admitted_head = _prepare_worktree_identity_fixture(
+        repo, tmp_path, drift_kind=drift_kind
+    )
+
+    lane_ready = tmp_path / "identity-lane-ready"
+    lane_release = tmp_path / "identity-lane-release"
+    lane_log = tmp_path / "identity-lane.log"
+    process = _start_pr_ready(
+        repo,
+        env_overrides={
+            "PR_READY_MODE": "final",
+            "PR_READY_SKIP_PREFLIGHT": "1",
+            "PR_READY_LOCK_TEST_READY": str(lane_ready),
+            "PR_READY_LOCK_TEST_RELEASE": str(lane_release),
+            "PR_READY_LOCK_TEST_LOG": str(lane_log),
+        },
+    )
+    try:
+        _wait_for_marker(lane_ready, process)
+        _move_identity_during_final_gate(repo, drift_kind=drift_kind)
+        lane_release.touch()
+        stdout, stderr = _collect_process(process, timeout=20)
+    finally:
+        if process.poll() is None:
+            lane_release.touch()
+            _stop_process_group(process, signal.SIGTERM)
+
+    output = stdout + stderr
+    stamp_path = repo / "output" / "validation" / "pr_ready" / f"{branch}.json"
+    if drift_kind == "stable":
+        assert process.returncode == 0, f"stable identity unexpectedly failed:\n{output}"
+        stamp = json.loads(stamp_path.read_text(encoding="utf-8"))
+        assert stamp["status"] == "passed"
+        assert stamp["branch"] == branch
+        assert stamp["head_sha"] == admitted_head
+        return
+
+    assert process.returncode != 0, f"identity drift unexpectedly passed:\n{output}"
+    assert "worktree_identity_changed" in output
+    assert "issue-9712-test-owner" in output
+    assert "actual_writer" in output and "unknown" in output
+    assert not stamp_path.exists(), f"drifted readiness wrote success stamp: {stamp_path}"
+    if drift_kind == "local_head":
+        assert '"head_sha"' in output
+        assert admitted_head in output
+    elif drift_kind == "remote_upstream":
+        assert '"upstream"' in output
+        assert "readiness-probe" in output
+    else:
+        assert '"active_lease"' in output
+        assert "replacement-test-owner" in output
 
 
 def test_publication_preflight_lane_coverage_routing(preflight_repo: Path) -> None:

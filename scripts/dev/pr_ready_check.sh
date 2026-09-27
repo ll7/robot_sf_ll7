@@ -78,6 +78,7 @@ pr_ready_parent_pgid=""
 pr_ready_cleanup_status="no_child_active"
 pr_ready_evidence_scope_file=""
 pr_ready_termination_receipt="${PR_READY_TERMINATION_RECEIPT:-}"
+pr_ready_worktree_identity_file=""
 if [[ -z "$pr_ready_termination_receipt" ]]; then
   pr_ready_termination_stamp="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || printf 'unknown')"
   pr_ready_termination_receipt="${REPO_ROOT}/output/validation/pr_ready/"
@@ -326,6 +327,9 @@ pr_ready_exit_without_coverage() {
   fi
   if [[ -n "$pr_ready_evidence_scope_file" ]]; then
     rm -f -- "$pr_ready_evidence_scope_file" || true
+  fi
+  if [[ -n "$pr_ready_worktree_identity_file" ]]; then
+    rm -f -- "$pr_ready_worktree_identity_file" || true
   fi
   release_pr_ready_lock || true
   return "$exit_code"
@@ -1022,6 +1026,9 @@ cleanup_pr_ready_exit() {
     handle_pr_ready_signal "$pr_ready_pending_signal_name" "$pr_ready_pending_signal_number"
   fi
   cleanup_pr_ready_coverage || true
+  if [[ -n "$pr_ready_worktree_identity_file" ]]; then
+    rm -f -- "$pr_ready_worktree_identity_file" || true
+  fi
   release_pr_ready_lock || true
   return "$exit_code"
 }
@@ -1036,6 +1043,18 @@ export COVERAGE_FILE="$pr_ready_coverage_dir/.coverage"
 trap cleanup_pr_ready_exit EXIT
 printf 'Using readiness-owned coverage database: %s\n' "$COVERAGE_FILE" >&2
 
+if [[ "$pr_ready_final" == "1" ]]; then
+  identity_tmp_parent="${TMPDIR:-/tmp}"
+  if [[ ! -d "$identity_tmp_parent" ]]; then
+    printf 'Final PR readiness cannot capture worktree identity: temporary directory is missing: %s\n' \
+      "$identity_tmp_parent" >&2
+    exit 2
+  fi
+  pr_ready_worktree_identity_file="$(mktemp "$identity_tmp_parent/robot-sf-pr-ready-identity.XXXXXX")"
+  uv run python "$SCRIPT_DIR/pr_ready_freshness.py" capture-worktree-identity \
+    --output-file "$pr_ready_worktree_identity_file"
+  printf 'Captured final-readiness worktree identity before validation lanes.\n' >&2
+fi
 printf 'Running core readiness lane.\n' >&2
 # PR_READY_ADVISORY is a body-contract escape hatch used to carry a pending
 # domain gate through this diagnostic readiness run. Do not leak it into pytest:
@@ -1206,6 +1225,7 @@ if [[ -n "$VALIDATED_BASE_SHA" ]]; then
 fi
 if [[ "$pr_ready_final" == "1" ]]; then
   freshness_args+=(--require-clean-tree)
+  freshness_args+=(--expected-worktree-identity-file "$pr_ready_worktree_identity_file")
 elif [[ "$(worktree_state)" != "clean" ]]; then
   printf 'Warning: recording interim PR readiness from a dirty non-ignored worktree.\n' >&2
   printf 'Interim readiness is not changed-file proof for the dirty paths listed above.\n' >&2

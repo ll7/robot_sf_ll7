@@ -235,6 +235,18 @@ uv run python scripts/dev/pr_gate_lease.py heartbeat \
   --extend-hours 2
 ```
 
+Final PR readiness records the worktree path, branch, HEAD, configured upstream tip (when present),
+and active lease identity before validation lanes start. It checks the same identity again before
+writing a success freshness stamp. If any part moved, readiness fails and reports the before/after
+state plus the designated lease owner. The lease names the responsible task; it does not identify
+which process ran a Git command, so diagnostics never infer the actual writer from commit author
+metadata.
+
+Only one task should write to a leased worktree while readiness is queued or running. To hand work to
+another task, stop and join the active readiness process, record the handoff, release the old lease,
+then acquire a lease for the new owner and rerun readiness from the resulting branch/HEAD. A failed
+identity check requires a fresh readiness run after the worktree and remote branch are stable.
+
 Run heartbeat/release commands from any surviving checkout of the same repository. Do not depend on
 the leased worktree as the command's current directory: the recovery path exists specifically for a
 missing worktree directory. When the task has completed or emitted a durable handoff, release its

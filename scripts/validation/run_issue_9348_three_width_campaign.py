@@ -94,10 +94,26 @@ def _row_value(row: dict[str, Any], endpoint: str) -> float | None:
     return value * _HORIZON * _DT if value is not None and endpoint.endswith("_s") else value
 
 
-def _paired_interval(differences: list[float]) -> dict[str, Any]:
-    """Bootstrap complete seed blocks; time steps never become independent units."""
+def _paired_interval(differences: list[float], *, binary: bool) -> dict[str, Any]:
+    """Bootstrap complete seed blocks with explicit binary degeneracy handling."""
     if not differences:
-        return {"mean_difference": None, "ci95": None, "paired_seed_count": 0}
+        return {
+            "mean_difference": None,
+            "ci95": None,
+            "paired_seed_count": 0,
+            "status": "no_complete_pairs",
+        }
+    if binary:
+        allowed = {-1.0, 0.0, 1.0}
+        if not set(differences).issubset(allowed):
+            raise ValueError("binary paired differences must be in {-1, 0, 1}")
+        if len(set(differences)) == 1:
+            return {
+                "mean_difference": float(differences[0]),
+                "ci95": None,
+                "paired_seed_count": len(differences),
+                "status": "degenerate_binary_pair",
+            }
     values = np.asarray(differences, dtype=float)
     rng = np.random.default_rng(_BOOTSTRAP_SEED)
     draws = np.mean(
@@ -107,6 +123,7 @@ def _paired_interval(differences: list[float]) -> dict[str, Any]:
         "mean_difference": float(np.mean(values)),
         "ci95": [float(value) for value in np.quantile(draws, [0.025, 0.975])],
         "paired_seed_count": len(differences),
+        "status": "bootstrap",
     }
 
 
@@ -233,6 +250,7 @@ def _contrast_endpoint(
 ) -> dict[str, Any]:
     """Use only complete valid seed pairs for one endpoint."""
     differences = []
+    paired_seed_ids = []
     excluded = []
     for seed in _SEEDS:
         low_key, high_key = (planner, seed, low), (planner, seed, high)
@@ -242,15 +260,56 @@ def _contrast_endpoint(
             excluded.append(seed)
         else:
             differences.append(right - left)
+            paired_seed_ids.append(seed)
+    binary = endpoint == "success"
+    estimate = _paired_interval(differences, binary=binary)
     return {
         "unit": _ENDPOINTS[endpoint][1],
+        "planned_pair_count": len(_SEEDS),
         "denominator_pairs": len(differences),
+        "paired_seed_ids": paired_seed_ids,
         "excluded_seed_ids": excluded,
-        "estimate": _paired_interval(differences),
+        "raw_paired_differences": differences,
+        "binary_pair_status": estimate["status"] if binary else "not_binary",
+        "estimate": estimate,
         "arrival_time_condition": "both_widths_successful"
         if endpoint.startswith("arrival")
         else None,
     }
+
+
+def _cell_denominators(
+    by_identity: dict[tuple[str, int, float], tuple[dict[str, Any], dict[str, Any]]],
+    valid: set[tuple[str, int, float]],
+) -> list[dict[str, Any]]:
+    """Report planned, native and endpoint-specific counts for each cell."""
+    cells = []
+    for planner in _PLANNERS:
+        for width in _WIDTHS:
+            native_seed_ids = [seed for seed in _SEEDS if (planner, seed, width) in valid]
+            endpoint_seed_ids = {
+                endpoint: [
+                    seed
+                    for seed in _SEEDS
+                    if (planner, seed, width) in valid
+                    and _row_value(by_identity[(planner, seed, width)][0], endpoint) is not None
+                ]
+                for endpoint in _ENDPOINTS
+            }
+            cells.append(
+                {
+                    "planner": planner,
+                    "gap_width_m": width,
+                    "planned_seed_count": len(_SEEDS),
+                    "native_row_count": len(native_seed_ids),
+                    "native_seed_ids": native_seed_ids,
+                    "endpoint_denominators": {
+                        endpoint: len(seed_ids) for endpoint, seed_ids in endpoint_seed_ids.items()
+                    },
+                    "endpoint_seed_ids": endpoint_seed_ids,
+                }
+            )
+    return cells
 
 
 def analyze_rows(
@@ -311,6 +370,7 @@ def analyze_rows(
         for planner in _PLANNERS
         for low, high in ((2.2, 2.8), (2.8, 3.6), (2.2, 3.6))
     ]
+    cell_denominators = _cell_denominators(by_identity, valid)
     return {
         "schema_version": "issue_9348_three_width_report.v1",
         "claim_boundary": "simulator-internal paired width contrasts; three seeds per planner",
@@ -328,6 +388,7 @@ def analyze_rows(
             "interval": "percentile_95",
         },
         "row_inventory": row_inventory,
+        "cell_denominators": cell_denominators,
         "contrasts": contrasts,
         "pedestrian_delay_or_impairment": {
             "status": "unavailable_without_matched_no_robot_control_trace",
@@ -438,7 +499,13 @@ def verify_campaign_bundle(root: Path) -> dict[str, Any]:
     report = _json(root / "report.json")
     if any(
         report.get(key) != rebuilt.get(key)
-        for key in ("row_inventory", "contrasts", "native_rows", "excluded_rows")
+        for key in (
+            "row_inventory",
+            "cell_denominators",
+            "contrasts",
+            "native_rows",
+            "excluded_rows",
+        )
     ):
         raise ValueError("doorway report differs from sealed raw episodes")
     return report

@@ -10,9 +10,10 @@ Build a serial, fresh-root launcher over the frozen 18 cells, reusing the
 existing geometry preflight, episode runner and one `DoorwayPairingSession`.
 The within-planner width contrast uses only complete, native planner/seed
 pairs. A report must retain per-cell outcomes, failure and exclusion reasons,
-metric denominators, paired seed bootstrap intervals, and trace references.
+per-cell metric denominators, raw paired differences, paired seed bootstrap
+intervals, explicit degenerate binary-pair handling, and trace references.
 Any missing or unequal reset receipt, changed source/config/asset digest, or
-failed preflight stops the run. Raw rows, source/config/asset hashes, the report
+failed or unknown required preflight check stops the run. Raw rows, source/config/asset hashes, the report
 and checksums go to an explicit durable result root; the private operations
 queue owns Slurm submission, retrieval and preservation. No H1 smoke is a
 confirmation result. Validate with focused synthetic report tests and a
@@ -60,8 +61,11 @@ preflight findings, not confirmation results. The grid result must stay
 visible as a planner/grid feasibility layer; it does not change the frozen
 continuous-geometry width labels or authorize counting a grid failure as an
 ordinary planner failure. The application preflight reports this check
-separately from source/map/radius validity. Its `go` field permits only
-diagnostic preflight continuation, never confirmation dispatch.
+separately from source/map/radius validity. Its `go` field requires positive
+continuous clearance and available, known oracle execution; a known no-route
+remains a diagnostic and does not make the width geometrically invalid, while
+an unknown or blocked oracle state keeps `go` false and cannot authorize
+confirmation dispatch.
 
 The manifest also records SHA-256 digests for the historical scenario and SVG. Loading the
 manifest fails closed if either byte stream changes, so the generator can only create disposable

@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 import yaml
 
+import robot_sf.benchmark.three_width_doorway_application as doorway_application
 from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
 from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
 from robot_sf.benchmark.map_runner.map_runner_jsonl import write_validated_to_handle
@@ -206,6 +207,16 @@ def _complete_synthetic_campaign() -> tuple[
     return rows, cells, pairs
 
 
+def _assert_paired_report_fields(report: dict[str, Any]) -> None:
+    """Check raw pair differences, cell denominators and binary degeneracy."""
+    _assert_paired_report_fields(report)
+
+
+def _assert_report_verifier_checks_raw_differences(tmp_path: Path, report: dict[str, Any]) -> None:
+    """Verify that sealed report raw differences cannot be edited independently."""
+    _assert_report_verifier_checks_raw_differences(tmp_path, report)
+
+
 def test_manifest_pins_three_width_tiers() -> None:
     """The application manifest must pin narrow/middle/wide tiers at fixed depth."""
     manifest = load_three_width_manifest(_MANIFEST)
@@ -216,6 +227,14 @@ def test_manifest_pins_three_width_tiers() -> None:
     assert tuple(resolved["planner_roster"]) == ("goal", "social_force")
     assert tuple(resolved["planner_seeds"]) == (225, 226, 227)
     assert manifest["planner_protocol"]["expected_rows"] == 18
+    assert manifest["planner_protocol"]["algo_config"] == {
+        "goal": None,
+        "social_force": "configs/algos/social_force_terminal_goal_v1.yaml",
+    }
+    social_force_config = Path(resolved["social_force_config_path"])
+    assert manifest["planner_protocol"]["algo_config_sha256"] == {
+        "social_force": _sha256(social_force_config)
+    }
     assert manifest["base_scenario"]["scenario_sha256"] == _sha256(
         _REPO_ROOT / "configs/scenarios/single/francis2023_narrow_doorway.yaml"
     )
@@ -260,6 +279,12 @@ def test_variant_assets_change_only_explained_fields(tmp_path: Path) -> None:
     for asset in assets:
         variant_scenario = dict(load_scenarios(asset["scenario_path"])[0])
         assert check_variant_diff(base_scenario, variant_scenario) == []
+        planner_config_mutation = dict(variant_scenario)
+        planner_config_mutation["planner_config"] = {"social_force": "changed"}
+        assert any(
+            "planner_config" in violation
+            for violation in check_variant_diff(base_scenario, planner_config_mutation)
+        )
         assert Path(asset["map_path"]).is_file()
 
 
@@ -605,7 +630,7 @@ def test_h400_report_excludes_non_native_or_fallback_rows(marker: str) -> None:
     )
 
 
-def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None:
+def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None:  # noqa: PLR0915
     """Paired intervals use whole seeds and censor failure arrival times."""
     assets = []
     for i, width in enumerate((2.2, 2.8, 3.6)):
@@ -694,8 +719,28 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
     )
     assert report["native_rows"] == 18
     assert goal_22_28["endpoints"]["success"]["denominator_pairs"] == 3
+    assert goal_22_28["endpoints"]["success"]["raw_paired_differences"] == [1.0, 0.0, 0.0]
+    assert goal_22_28["endpoints"]["success"]["binary_pair_status"] == "bootstrap"
     assert goal_22_28["endpoints"]["arrival_time_success_only_s"]["denominator_pairs"] == 2
     assert goal_22_28["endpoints"]["arrival_time_success_only_s"]["excluded_seed_ids"] == [225]
+    goal_22_cell = next(
+        cell
+        for cell in report["cell_denominators"]
+        if cell["planner"] == "goal" and cell["gap_width_m"] == 2.2
+    )
+    assert goal_22_cell["planned_seed_count"] == 3
+    assert goal_22_cell["native_row_count"] == 3
+    assert goal_22_cell["endpoint_denominators"]["arrival_time_success_only_s"] == 2
+    social_force_22_28 = next(
+        c
+        for c in report["contrasts"]
+        if c["planner"] == "social_force" and c["low_width_m"] == 2.2 and c["high_width_m"] == 2.8
+    )
+    assert social_force_22_28["endpoints"]["success"]["raw_paired_differences"] == [0.0, 0.0, 0.0]
+    assert (
+        social_force_22_28["endpoints"]["success"]["binary_pair_status"] == "degenerate_binary_pair"
+    )
+    assert social_force_22_28["endpoints"]["success"]["estimate"]["ci95"] is None
     assert report["pedestrian_delay_or_impairment"]["value"] is None
     rows[0]["algorithm_metadata"]["planner_decision_trace"]["steps"] = [{"fallback_used": True}]
     degraded = analyze_rows(rows, cells, pairs)
@@ -747,6 +792,14 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
     )
     _write_checksums(tmp_path)
     assert verify_campaign_bundle(tmp_path)["native_rows"] == 18
+    report_payload = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
+    report_payload["contrasts"][0]["endpoints"]["success"]["raw_paired_differences"][0] = 99.0
+    write_json(tmp_path / "report.json", report_payload)
+    _write_checksums(tmp_path)
+    with pytest.raises(ValueError, match="differs from sealed raw episodes"):
+        verify_campaign_bundle(tmp_path)
+    write_json(tmp_path / "report.json", report)
+    _write_checksums(tmp_path)
     (tmp_path / "episodes.jsonl").write_text("tampered\n", encoding="utf-8")
     with pytest.raises(ValueError, match="checksum"):
         verify_campaign_bundle(tmp_path)
@@ -769,6 +822,7 @@ def test_preflight_records_oracle_before_not_run_planner_lane(tmp_path: Path) ->
     assert report["checks"]["variant_count"] == 3
     assert report["checks"]["all_widths_positive_clearance"] is True
     assert report["checks"]["oracle_available_for_every_variant"] is True
+    assert report["checks"]["oracle_required_checks_known"] is True
     assert report["checks"]["nominal_grid_route_feasible_for_every_variant"] is True
     assert report["checks"]["planner_records_are_not_run"] is True
     assert report["checks"]["no_campaign_evidence"] is True
@@ -812,4 +866,41 @@ def test_conservative_grid_result_is_reported_without_changing_frozen_widths(
         "https://github.com/ll7/diss/issues/2669#issuecomment-5811968439"
     )
     assert report["execution"]["confirmation_ready"] is False
-    assert report["go"] is True  # The diagnostic geometry preflight ran, not the campaign.
+    assert report["checks"]["oracle_required_checks_known"] is False
+    assert report["go"] is False  # Unknown oracle state cannot authorize dispatch.
+
+
+def test_known_oracle_no_route_remains_a_diagnostic() -> None:
+    """A known grid no-route is diagnostic and does not masquerade as clearance."""
+    known, blocker = doorway_application._oracle_required_checks(
+        {
+            "execution_status": "available",
+            "nominal_verdict": {
+                "status": "infeasible_by_construction",
+                "geometric": {"route_geometrically_feasible": False},
+            },
+        }
+    )
+    assert known is True
+    assert blocker is None
+
+
+def test_preflight_blocks_unknown_oracle_readiness(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An available oracle with an unknown required classification cannot set go."""
+    monkeypatch.setattr(
+        doorway_application,
+        "envelope_sensitivity_verdict_to_dict",
+        lambda *_args, **_kwargs: {},
+    )
+    report = run_three_width_preflight(
+        _MANIFEST,
+        output_dir=tmp_path / "variants",
+        episode_runner=_fake_episode_runner,
+        certifier=_fake_certifier,
+    )
+    assert report["checks"]["oracle_available_for_every_variant"] is True
+    assert report["checks"]["oracle_required_checks_known"] is False
+    assert report["checks"]["oracle_readiness_blockers"]
+    assert report["go"] is False

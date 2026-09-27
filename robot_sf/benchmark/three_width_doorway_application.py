@@ -302,6 +302,35 @@ def _check_width_tiers(gap_levels: tuple[float, ...], nominal_radius: float) -> 
         raise ValueError("all comparison widths must have positive collision-envelope clearance")
 
 
+def _oracle_required_checks(oracle: Mapping[str, Any]) -> tuple[bool, str | None]:
+    """Require known oracle execution and classification before readiness can pass.
+
+    The conservative grid route result is a diagnostic and may be ``False``.
+    A missing result or unavailable execution is different: it cannot authorize
+    the campaign preflight.
+
+    Returns:
+        Tuple of (required checks known, blocker when not known).
+    """
+    if oracle.get("execution_status") != "available":
+        return False, f"oracle_execution_{oracle.get('execution_status', 'unknown')}"
+    nominal = oracle.get("nominal_verdict")
+    geometric = nominal.get("geometric") if isinstance(nominal, Mapping) else None
+    route_status = (
+        geometric.get("route_geometrically_feasible") if isinstance(geometric, Mapping) else None
+    )
+    if not isinstance(route_status, bool):
+        return False, "oracle_route_classification_unknown"
+    nominal_status = nominal.get("status") if isinstance(nominal, Mapping) else None
+    if nominal_status not in {
+        "feasible",
+        "infeasible_by_construction",
+        "time_truncated",
+    }:
+        return False, f"oracle_nominal_status_{nominal_status or 'unknown'}"
+    return True, None
+
+
 def _validate_planner_config(planner: Mapping[str, Any]) -> None:
     """Require the frozen planner configuration paths and content digest."""
     if planner.get("algo_config") != {
@@ -1115,6 +1144,11 @@ def run_three_width_preflight(
                     "execution_status": "blocked",
                     "blocker": f"oracle_error: {exc}",
                 }
+            required_checks_known, readiness_blocker = _oracle_required_checks(oracle)
+            oracle["required_checks_known"] = required_checks_known
+            oracle["readiness_status"] = "ready" if required_checks_known else "blocked"
+            if readiness_blocker is not None:
+                oracle["readiness_blocker"] = readiness_blocker
             records.append(
                 {
                     "variant_id": asset["variant_id"],
@@ -1151,12 +1185,28 @@ def run_three_width_preflight(
     oracle_available = all(
         item["oracle"].get("execution_status") == "available" for item in records
     )
+    oracle_required_checks_known = all(
+        item["oracle"].get("required_checks_known") is True for item in records
+    )
+    oracle_readiness_blockers = [
+        {
+            "variant_id": item["variant_id"],
+            "reason": item["oracle"].get("readiness_blocker"),
+        }
+        for item in records
+        if item["oracle"].get("required_checks_known") is not True
+    ]
     geometry_feasible = all(
         item["oracle"]
         .get("nominal_verdict", {})
         .get("geometric", {})
         .get("route_geometrically_feasible")
         is True
+        for item in records
+    )
+    all_widths_positive_clearance = all(
+        item["geometry"]["derived_clearance_margin_m"] > _TOLERANCE_M
+        and item["geometry"]["expected_geometry_tier"] == EXPECTED_TIER
         for item in records
     )
     return {
@@ -1194,12 +1244,10 @@ def run_three_width_preflight(
         "checks": {
             "baseline_passes": all(baseline_checks.values()),
             "variant_count": len(records),
-            "all_widths_positive_clearance": all(
-                item["geometry"]["derived_clearance_margin_m"] > _TOLERANCE_M
-                and item["geometry"]["expected_geometry_tier"] == EXPECTED_TIER
-                for item in records
-            ),
+            "all_widths_positive_clearance": all_widths_positive_clearance,
             "oracle_available_for_every_variant": oracle_available,
+            "oracle_required_checks_known": oracle_required_checks_known,
+            "oracle_readiness_blockers": oracle_readiness_blockers,
             "nominal_grid_route_feasible_for_every_variant": geometry_feasible,
             "planner_records_are_not_run": all(
                 item["planner"]["status"] == "not_run" for item in records
@@ -1211,6 +1259,10 @@ def run_three_width_preflight(
             "campaign_submitted": False,
             "confirmation_ready": False,
             "confirmation_blocker": "portable_initial_and_external_rng_pair_receipts_not_recorded",
+            "confirmation_blockers": [
+                "portable_initial_and_external_rng_pair_receipts_not_recorded",
+                *[f"{item['variant_id']}:{item['reason']}" for item in oracle_readiness_blockers],
+            ],
             "evidence_admission": "not_started",
             "missingness_policy": "blocked or degraded oracle/planner rows remain explicit and are not promoted",
         },
@@ -1221,7 +1273,9 @@ def run_three_width_preflight(
             (
                 all(baseline_checks.values()),
                 bool(records),
+                all_widths_positive_clearance,
                 oracle_available,
+                oracle_required_checks_known,
                 all(item["planner"]["status"] == "not_run" for item in records),
             )
         ),

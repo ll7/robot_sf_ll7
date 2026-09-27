@@ -12,7 +12,9 @@ scenarios differ only in their explained geometry identity and map path.
 The planner-free oracle runs first. Its conservative grid search reports no
 route at 2.2 and 2.8 m despite positive continuous clearance; the executed
 policies do not use that route search. This remains an explicit diagnostic
-finding, not a width effect or an ordinary planner failure.
+finding, not a width effect or an ordinary planner failure. Readiness requires
+positive continuous clearance and a known, available oracle result; unknown or
+blocked required checks keep the preflight `go` field false.
 
 ## Diagnostic commands
 

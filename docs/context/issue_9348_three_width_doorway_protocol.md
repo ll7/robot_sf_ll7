@@ -128,23 +128,23 @@ complete planner/seed pairs across three distinct map SHA-256 digests, with
 equal actor, external RNG and non-width configuration digests within each pair.
 That smoke predates the current hook implementation and is historical
 diagnostic evidence, not current-head validation. At executable source head
-`af60c0a401000fd59d4e6e4b7d9ed1cd515c7c26` on 2026-09-27,
+`c6464891e0d52dd123ab430fd890dd76ad2b0ab7` on 2026-09-27,
 `scripts/validation/run_issue_9348_paired_reset_smoke.py` was rerun across all
 18 cells and returned six complete pairs. The compact report and generated
 variants are preserved at
-`/home/luttkule/preservation-campaigns/issue9348_h1_smoke_af60c0a4_20260927/`;
+`/home/luttkule/preservation-campaigns/issue9348_h1_smoke_c6464891_20260927/`;
 the report SHA-256 is
-`2146d9067ba2b147928c27cf447018d0c008d0e39e099ede6ce6cf38c40df2e1` and the
+`76fab4c3157c38a38c1bf8dbced7eff536b0b94f5ca851d10323d4a1917a0815` and the
 SHA256SUMS file SHA-256 is
-`c555c310a97ce690bd5ef1fe27ea240f02e9b09bb9782953285f5e483fafc539`. All
+`442bd6bebd355344ad79e6410e9cb0c67f7c7d284485cee220e36014ba120bb9`. All
 rows are diagnostic-only, with
 `preflight_admission=diagnostic_only_oracle_readiness_blocked`: positive
-continuous clearance and oracle execution availability were present, but the
-required oracle route classification was unknown/blocked by
-`scenario_manifest_parse_identity_mismatch`, so `go` remained false. The
-current smoke does not claim a width comparison or re-establish the historical
-known A* no-route diagnostic. This is diagnostic custody only and must not be
-substituted for the H400 campaign.
+continuous clearance and loader-bound oracle identity were present. The 2.2 m
+and 2.8 m conservative grid no-route results were known diagnostic
+classifications; the 3.6 m nominal oracle was blocked by its rollout status,
+so `go` remained false. This smoke does not claim a width comparison or H400
+result. It is diagnostic custody only and must not be substituted for the
+H400 campaign.
 Later closed-loop pedestrian paths may diverge naturally. The full H400
 campaign must preserve the same receipts, asset hashes and source commit in
 durable storage before a width effect is promoted.

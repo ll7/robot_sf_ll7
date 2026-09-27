@@ -86,6 +86,7 @@ _ISSUE_1501_PROVENANCE_PATH_REWRITES = {
     "inputs.scenario_matrix.path": 1,
     "inputs.schema_path.path": 1,
     "raw_artifacts[0].path": 1,
+    "raw_artifacts[0].sha256": 1,
     "run.invocation": 1,
 }
 _ISSUE_1501_PROVENANCE_FIELD_ADDITIONS = {
@@ -4748,6 +4749,11 @@ def _validate_issue9645_v3_reproduction_bindings(
     artifact_by_producer = _validate_issue9645_v3_artifact_map(
         maps["artifact_map"], payload, files_by_path
     )
+    _validate_issue9645_v3_candidate_path_normalization(
+        metadata,
+        payload,
+        artifact_by_producer,
+    )
     metadata_manifest_hashes = _issue9645_v3_metadata_manifest_hashes(metadata)
     episode_flags: Counter[tuple[str, str]] = Counter()
     episode_digests: Counter[tuple[str, str]] = Counter()
@@ -4830,11 +4836,36 @@ def _load_issue9645_v3_reproduction_maps(
         original_manifest_map.get("schema_version") != "falsification_manifest_path_map.v1"
         or original_manifest_map.get("source_comparison_sha256") != comparison_record.get("sha256")
         or not isinstance(recovery, Mapping)
+        or recovery.get("schema_version") != "issue_9645_candidate_episode_record_recovery.v1"
         or recovery.get("artifact_path_map") != _issue9645_bundle_path(_artifact_map_path)
         or recovery.get("artifact_path_map_sha256") != _sha256_file(payload / _artifact_map_path)
         or recovery.get("count") != 64
         or recovery.get("binding_status")
-        != "all retained files exactly match the existing producer SHA-256 and byte count"
+        != (
+            "all 64 normalized files are bound to producer and normalized SHA-256 values and byte "
+            "counts; each differs from its producer record only at "
+            "scenario_params.route_overrides_file"
+        )
+        or recovery.get("search_or_simulation_rerun") is not False
+        or recovery.get("trace_capture_flag_counts")
+        != {
+            "scenario_params.record_simulation_step_trace": {"enabled": 0, "disabled": 64},
+            "scenario_params.record_planner_decision_trace": {"enabled": 0, "disabled": 64},
+        }
+        or recovery.get("embedded_digest_counts")
+        != {
+            "provenance.scenario_digest": {"present": 0, "missing": 64},
+            "provenance.map_digest": {"present": 0, "missing": 64},
+        }
+        or recovery.get("absolute_path_fields") != {"scenario_params.route_overrides_file": 0}
+        or recovery.get("normalized_path_fields") != {"scenario_params.route_overrides_file": 64}
+        or recovery.get("source_absolute_path_fields_normalized")
+        != {"scenario_params.route_overrides_file": 64}
+        or recovery.get("portable_replay_status")
+        != (
+            "not_portable_from_episode_records_alone; candidate-specific route override files are "
+            "not all retained and route paths now identify repo-relative producer output locations"
+        )
     ):
         raise CorpusError("#9645 v3 source maps or episode recovery receipt differ")
     derived_bindings = manifest_map.get("bindings")
@@ -4866,6 +4897,7 @@ def _validate_issue9645_v3_artifact_map(
     artifact_by_producer: dict[str, Mapping[str, Any]] = {}
     artifact_kind_counts: Counter[str] = Counter()
     candidate_record_bytes = 0
+    candidate_source_record_bytes = 0
     for binding in artifact_bindings:
         if not isinstance(binding, Mapping):
             raise CorpusError("#9645 v3 artifact binding is malformed")
@@ -4876,11 +4908,15 @@ def _validate_issue9645_v3_artifact_map(
         size = binding.get("size_bytes")
         kind = binding.get("artifact_kind")
         record = files_by_path.get(relative)
+        is_candidate_episode = kind == "candidate_episode_records"
+        retention_status = (
+            "retained_path_normalized_copy" if is_candidate_episode else "retained_exact_copy"
+        )
         if (
             not isinstance(producer, str)
             or producer in artifact_by_producer
             or bundle_path != _issue9645_bundle_path(relative)
-            or binding.get("retention_status") != "retained_exact_copy"
+            or binding.get("retention_status") != retention_status
             or not isinstance(size, int)
             or isinstance(size, bool)
             or not _is_sha256(digest)
@@ -4892,23 +4928,120 @@ def _validate_issue9645_v3_artifact_map(
             raise CorpusError("#9645 v3 artifact map binding differs from retained bytes")
         artifact_by_producer[producer] = binding
         artifact_kind_counts[str(kind)] += 1
-        if kind == "candidate_episode_records":
+        if is_candidate_episode:
+            producer_path = PurePosixPath(producer)
+            source_digest = binding.get("source_sha256_before_path_normalization")
+            source_size = binding.get("source_size_bytes")
+            if (
+                producer_path.is_absolute()
+                or "\\" in producer
+                or ".." in producer_path.parts
+                or producer_path.parts[:2] != ("output", "issue9645-pilot")
+                or producer_path.name != "episode_records.jsonl"
+                or not _is_sha256(source_digest)
+                or binding.get("normalized_sha256") != digest
+                or not isinstance(source_size, int)
+                or isinstance(source_size, bool)
+                or source_size <= size
+            ):
+                raise CorpusError("#9645 v3 normalized episode source/byte binding differs")
             candidate_record_bytes += size
+            candidate_source_record_bytes += source_size
     if (
         len(artifact_bindings) != 69
         or artifact_kind_counts
         != Counter({"candidate_episode_records": 64, "run_manifest": 4, "comparison": 1})
         or artifact_map.get("totals")
         != {
-            "exact_artifact_count": 69,
+            "exact_artifact_count": 5,
             "candidate_episode_record_count": 64,
             "candidate_episode_record_bytes": candidate_record_bytes,
+            "artifact_count": 69,
+            "path_normalized_candidate_episode_record_count": 64,
         }
         or artifact_map.get("producer_output_root") != "output/issue9645-pilot"
-        or candidate_record_bytes != 1629062
+        or candidate_record_bytes != 1623686
+        or candidate_source_record_bytes != 1629062
     ):
         raise CorpusError("#9645 v3 artifact map totals or kinds differ")
     return artifact_by_producer
+
+
+def _validate_issue9645_v3_candidate_path_normalization(
+    metadata: Mapping[str, Any],
+    payload: Path,
+    artifact_by_producer: Mapping[str, Mapping[str, Any]],
+) -> None:
+    """Bind candidate records to the producer's dual-hash path-normalization receipt."""
+    normalization = _read_json_object(payload / "path_normalization.json")
+    records = normalization.get("records")
+    retention = normalization.get("candidate_episode_record_retention")
+    validation = normalization.get("validation")
+    recovery = metadata.get("candidate_episode_record_recovery")
+    candidate_bindings = [
+        binding
+        for binding in artifact_by_producer.values()
+        if binding.get("artifact_kind") == "candidate_episode_records"
+    ]
+    candidate_records = (
+        [
+            record
+            for record in records
+            if isinstance(record, Mapping)
+            and isinstance(record.get("path"), str)
+            and record["path"].startswith("source_episode_records/")
+        ]
+        if isinstance(records, list)
+        else []
+    )
+    records_by_path = {record["path"]: record for record in candidate_records}
+    if (
+        normalization.get("schema_version") != "evidence_path_normalization.v1"
+        or normalization.get("source_revision") != metadata.get("experiment_source_commit")
+        or not isinstance(validation, Mapping)
+        or validation.get("candidate_parameters_metrics_events_and_outcomes_changed") is not False
+        or not isinstance(retention, Mapping)
+        or not isinstance(recovery, Mapping)
+        or retention.get("count") != 64
+        or retention.get("total_size_bytes") != 1623686
+        or retention.get("producer_bytes_retained_exactly") is not False
+        or retention.get("path_normalized_copy_count") != 64
+        or retention.get("field_rewrite") != "scenario_params.route_overrides_file"
+        or retention.get("route_path_policy")
+        != (
+            "Use the repo-relative producer_output_path-derived route_overrides.yaml path; "
+            "candidate-specific route inputs are not bundled for every case, and report "
+            "generation does not dereference this field."
+        )
+        or retention.get("producer_sha256_and_size_bindings")
+        != (
+            "source_sha256_before_path_normalization and source_size_bytes in "
+            "payload/pilot_report_artifact_path_map.v1.json and "
+            "payload/reproduction_inputs/input_rebase_map.v1.json"
+        )
+        or retention.get("normalized_sha256_and_size_bindings")
+        != ("sha256, normalized_sha256, and size_bytes in the same maps")
+        or recovery.get("total_size_bytes") != retention.get("total_size_bytes")
+        or recovery.get("source_total_size_bytes") != 1629062
+        or len(candidate_bindings) != 64
+        or len(candidate_records) != 64
+        or len(records_by_path) != 64
+    ):
+        raise CorpusError("#9645 v3 candidate path-normalization receipt differs")
+    for binding in candidate_bindings:
+        relative = _issue9645_payload_relative_path(binding.get("path"))
+        normalized_path = relative.removeprefix(
+            "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/"
+        )
+        record = records_by_path.get(normalized_path)
+        if (
+            record is None
+            or record.get("source_sha256_before_path_normalization")
+            != binding.get("source_sha256_before_path_normalization")
+            or record.get("normalized_sha256") != binding.get("normalized_sha256")
+            or record.get("field_rewrites") != {"scenario_params.route_overrides_file": 1}
+        ):
+            raise CorpusError("#9645 v3 candidate normalization digest or field receipt differs")
 
 
 def _issue9645_v3_metadata_manifest_hashes(metadata: Mapping[str, Any]) -> dict[str, str]:
@@ -5071,6 +5204,12 @@ def _validate_issue9645_v3_episode_binding(
         or artifact.get("path") != _issue9645_bundle_path(episode_relative)
         or artifact.get("sha256") != episode_digest
         or artifact.get("size_bytes") != episode_size
+        or binding.get("retention_status") != "retained_path_normalized_copy"
+        or binding.get("source_sha256_before_path_normalization")
+        != artifact.get("source_sha256_before_path_normalization")
+        or binding.get("source_size_bytes") != artifact.get("source_size_bytes")
+        or binding.get("normalized_sha256") != artifact.get("normalized_sha256")
+        or artifact.get("normalized_sha256") != episode_digest
         or episode_record is None
         or episode_record.get("sha256") != episode_digest
         or episode_record.get("size_bytes") != episode_size
@@ -5112,13 +5251,20 @@ def _validate_issue9645_v3_episode_binding(
         }
     )
     route_path = scenario_params.get("route_overrides_file")
+    producer_posix = PurePosixPath(producer_path) if isinstance(producer_path, str) else None
+    expected_route_path = (
+        producer_posix.with_name("route_overrides.yaml").as_posix()
+        if producer_posix is not None
+        else None
+    )
     if (
         episode.get("status") != "success"
         or episode.get("termination_reason") != "success"
         or not isinstance(episode.get("metrics"), Mapping)
         or not isinstance(episode.get("outcome"), Mapping)
         or not isinstance(route_path, str)
-        or not Path(route_path).is_absolute()
+        or Path(route_path).is_absolute()
+        or route_path != expected_route_path
     ):
         raise CorpusError("#9645 v3 episode record is not analysis-eligible evidence")
     return episode_relative, flags, digests
@@ -5179,8 +5325,10 @@ def _validate_issue9645_v3_episode_counts(
     if (
         not isinstance(path_disposition, Mapping)
         or path_disposition.get("field") != "scenario_params.route_overrides_file"
-        or path_disposition.get("absolute_producer_paths_preserved") != 64
-        or path_disposition.get("rewritten") is not False
+        or path_disposition.get("absolute_producer_paths_remaining") != 0
+        or path_disposition.get("path_normalized_candidate_record_count") != 64
+        or path_disposition.get("path_normalized_recorded_replay_count") != 5
+        or path_disposition.get("rewritten") is not True
         or path_disposition.get("report_rebuild_dereferenced_field") is not False
         or path_disposition.get("portable_replay_inputs_retained_for_all_candidates") is not False
     ):
@@ -6081,9 +6229,25 @@ def _validate_historical_replay_normalizations(
         replay_file = context["historical_dir"] / f"replay_{index}.jsonl"
         provenance_file = context["historical_dir"] / f"replay_{index}.provenance.json"
         normalized_replay = normalization_rows.get(f"{relative}.jsonl")
+        normalized_recorded_replay = normalization_rows.get(f"{relative}_recorded.jsonl")
         normalized_provenance = normalization_rows.get(f"{relative}.provenance.json")
-        if not isinstance(normalized_replay, dict) or not isinstance(normalized_provenance, dict):
+        if (
+            not isinstance(normalized_replay, dict)
+            or not isinstance(normalized_recorded_replay, dict)
+            or not isinstance(normalized_provenance, dict)
+        ):
             raise CorpusError(f"#1501 replay {index} normalization is not recorded")
+        producer_source_hash = normalized_replay.get("source_sha256_before_path_normalization")
+        if (
+            not _is_sha256(producer_source_hash)
+            or normalized_recorded_replay.get("source_sha256_before_path_normalization")
+            != producer_source_hash
+            or normalized_recorded_replay.get("normalized_sha256") != expected_hashes[index - 1]
+        ):
+            errors.append(
+                f"#1501 replay {index} producer/recorded normalization digest binding differs"
+            )
+            continue
         try:
             _validate_replay_normalization(
                 index,
@@ -6092,6 +6256,7 @@ def _validate_historical_replay_normalizations(
                 replay_file,
                 provenance_file,
                 expected_hashes[index - 1],
+                producer_source_hash,
             )
         except CorpusError as exc:
             errors.append(str(exc))
@@ -6109,9 +6274,24 @@ def _verify_one_historical_replay(
     replay_file = context["historical_dir"] / f"replay_{index}.jsonl"
     provenance_file = context["historical_dir"] / f"replay_{index}.provenance.json"
     normalized_replay = normalization_rows.get(f"{relative}.jsonl")
+    normalized_recorded_replay = normalization_rows.get(f"{relative}_recorded.jsonl")
     normalized_provenance = normalization_rows.get(f"{relative}.provenance.json")
-    if not isinstance(normalized_replay, dict) or not isinstance(normalized_provenance, dict):
+    if (
+        not isinstance(normalized_replay, dict)
+        or not isinstance(normalized_recorded_replay, dict)
+        or not isinstance(normalized_provenance, dict)
+    ):
         raise CorpusError(f"#1501 replay {index} normalization is not recorded")
+    producer_source_hash = normalized_replay.get("source_sha256_before_path_normalization")
+    if (
+        not _is_sha256(producer_source_hash)
+        or normalized_recorded_replay.get("source_sha256_before_path_normalization")
+        != producer_source_hash
+        or normalized_recorded_replay.get("normalized_sha256") != expected_source_hash
+    ):
+        raise CorpusError(
+            f"#1501 replay {index} producer/recorded normalization digest binding differs"
+        )
     _validate_replay_normalization(
         index,
         normalized_replay,
@@ -6119,6 +6299,7 @@ def _verify_one_historical_replay(
         replay_file,
         provenance_file,
         expected_source_hash,
+        producer_source_hash,
     )
     episode = _read_single_jsonl_record(replay_file)
     provenance = _read_json_object(provenance_file)
@@ -6152,7 +6333,8 @@ def _validate_replay_normalization(
     normalized_provenance: Mapping[str, Any],
     replay_file: Path,
     provenance_file: Path,
-    expected_source_hash: str,
+    expected_recorded_hash: str,
+    expected_producer_source_hash: str,
 ) -> None:
     replay_actual_hash = _sha256_file(replay_file)
     recorded_replay_file = replay_file.with_name(f"{replay_file.stem}_recorded.jsonl")
@@ -6177,8 +6359,10 @@ def _validate_replay_normalization(
         )
         content_binding_ok = normalized_episode == expected_normalized_episode
     replay_ok = (
-        normalized_replay.get("source_sha256_before_path_normalization") == expected_source_hash
-        and recorded_replay_hash == expected_source_hash
+        normalized_replay.get("source_sha256_before_path_normalization")
+        == expected_producer_source_hash
+        and _is_sha256(expected_producer_source_hash)
+        and recorded_replay_hash == expected_recorded_hash
         and normalized_replay.get("normalized_sha256") == replay_actual_hash
         and normalized_replay.get("field_rewrites") == {"scenario_params.route_overrides_file": 1}
         and content_binding_ok
@@ -6198,7 +6382,7 @@ def _validate_replay_normalization(
             "replay_path=historical_issue_1501_failure_0002/"
             f"{replay_file.name} declared_source_sha256="
             f"{normalized_replay.get('source_sha256_before_path_normalization')} "
-            f"expected_source_sha256={expected_source_hash} "
+            f"expected_source_sha256={expected_producer_source_hash} "
             f"actual_recorded_sha256={recorded_replay_hash} "
             f"recorded_content_bound={content_binding_ok} declared_normalized_sha256="
             f"{normalized_replay.get('normalized_sha256')} actual_normalized_sha256="

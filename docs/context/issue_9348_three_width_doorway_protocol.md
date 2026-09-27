@@ -119,11 +119,19 @@ comparison. An earlier one-step real-runner smoke on 2026-09-24 verified six
 complete planner/seed pairs across three distinct map SHA-256 digests, with
 equal actor, external RNG and non-width configuration digests within each pair.
 That smoke predates the current hook implementation and is historical
-diagnostic evidence, not current-head validation. At the merged-base head for
-this change, `scripts/validation/run_issue_9348_paired_reset_smoke.py` was
-rerun across all 18 cells and returned six complete pairs. This rerun is also
-diagnostic custody evidence only; its one-step outcomes are not comparison
-results and must not be substituted for the H400 campaign.
+diagnostic evidence, not current-head validation. At executable source head
+`eecb8d2f53152a1b1ad781c21ac41dd288d03dfb` on 2026-09-27,
+`scripts/validation/run_issue_9348_paired_reset_smoke.py` was rerun across all
+18 cells and returned six complete pairs. The compact report and generated
+variants are preserved at
+`/home/luttkule/preservation-campaigns/issue9348_h1_smoke_eecb8d2_20260927/`;
+the report SHA-256 is
+`13cf0e2c703849d8ac618eb8bc0d87929b73b3577622a607749ac56d06340b37` and the
+SHA256SUMS file SHA-256 is
+`cb96acbfe52bdffcf292661e4b17785b9ce3f529fee98c12201feb3681a2f088c`. The
+report retains its AI-generated needs-review marker and has no episode outcome
+fields. This is diagnostic custody only; it is not a comparison result and
+must not be substituted for the H400 campaign.
 Later closed-loop pedestrian paths may diverge naturally. The full H400
 campaign must preserve the same receipts, asset hashes and source commit in
 durable storage before a width effect is promoted.

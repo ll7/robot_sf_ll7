@@ -1,14 +1,14 @@
 {
   "registry_schema_version": "robot_sf_ecosystem_capabilities.v1",
-  "contract_version": "1.0.0",
+  "contract_version": "1.1.0",
   "producer": {
     "producer_id": "robot_sf",
     "repository_url": "https://github.com/ll7/robot_sf_ll7",
     "supported_python_input_id": "producer.python.requires"
   },
   "change": {
-    "declared_type": "initial",
-    "based_on_contract_digest": null
+    "declared_type": "additive",
+    "based_on_contract_digest": "0f3bdd15a4c821b99a83d3ffa9f0812c0f9f362ad5d77c88edb312329c3cc4ee"
   },
   "authoritative_inputs": [
     {
@@ -71,6 +71,12 @@
       "input_id": "schema.episode.v1",
       "kind": "json_schema",
       "path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
+      "selector": "$"
+    },
+    {
+      "input_id": "schema.episode.planner_key.v1",
+      "kind": "json_schema",
+      "path": "robot_sf/benchmark/schemas/episode_planner_key.schema.v1.json",
       "selector": "$"
     },
     {
@@ -258,6 +264,15 @@
       "authority": ["schema.episode.v1"]
     },
     {
+      "capability_id": "robot_sf.schema.episode_planner_key.v1",
+      "kind": "schema",
+      "interface_version": "1.0.0",
+      "status": "beta",
+      "semantics_id": "robot_sf.schema.episode_planner_key.identity_string.v1",
+      "location": "robot_sf/benchmark/schemas/episode_planner_key.schema.v1.json",
+      "authority": ["schema.episode.planner_key.v1"]
+    },
+    {
       "capability_id": "robot_sf.schema.evidence_bundle.v1",
       "kind": "schema",
       "interface_version": "1.0.0",
@@ -372,7 +387,7 @@
   "canonical_public_fixtures": [
     {
       "fixture_id": "robot_sf.ecosystem_handoff.v1",
-      "fixture_version": "1.0.0",
+      "fixture_version": "1.1.0",
       "path": "tests/fixtures/ecosystem_handoff/v1/fixture_manifest.json"
     }
   ]

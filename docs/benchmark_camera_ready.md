@@ -592,7 +592,12 @@ stable and `resume: true` skips completed episode ids.
 
 Grouping semantics:
 
-* raw per-planner `runs/<planner>/episodes.jsonl` remain the execution records
+* raw per-planner `runs/<planner>/episodes.jsonl` remain the execution records; camera-ready
+  dispatch writes each roster entry's exact `planner_key` at the episode-record root. This field is
+  optional for legacy direct `run_batch` callers and is not reconstructed from algo/config values.
+  The episode v1 schema permits additional root fields; the non-empty string value contract is
+  separately published as `robot_sf.schema.episode_planner_key.v1` at
+  `robot_sf/benchmark/schemas/episode_planner_key.schema.v1.json`.
 * `reports/seed_episode_rows.csv` is the paper-facing flat export for grouping by
 `scenario_id` , `planner_key` , `seed` , and deterministic `repeat_index`
 

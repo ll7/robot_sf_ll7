@@ -3,16 +3,16 @@
     "clock": "2026-01-01T00:00:00Z",
     "execution_mode": "conformance",
     "fixture_id": "robot_sf.ecosystem_handoff.v1",
-    "fixture_version": "1.0.0",
+    "fixture_version": "1.1.0",
     "scenario_id": "conformance.minimal_success",
     "seed": 271828,
-    "sha256": "8be75a0e6f13356a"
+    "sha256": "e71f1a81cb8a84a5"
   },
   "contract": {
-    "digest": "3dfa55a49b11efdccb006c6e6e84d80aa2cf79f3e7dec355eae550e17efb141e",
+    "digest": "4462fe4672d5095b957e3fd1ca5aeee0c3a7bfd4811e96195f43d4affdaa98c8",
     "path": "robot_sf/benchmark/contracts/robot_sf_ecosystem_contract.v1.json",
     "schema_version": "robot_sf_ecosystem_contract.v1",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "evidence": {
     "admissible": false,
@@ -48,7 +48,7 @@
   "producer": {
     "repository_url": "https://github.com/ll7/robot_sf_ll7",
     "source_identity": {
-      "contract_digest": "3dfa55a49b11efdccb006c6e6e84d80aa2cf79f3e7dec355eae550e17efb141e",
+      "contract_digest": "4462fe4672d5095b957e3fd1ca5aeee0c3a7bfd4811e96195f43d4affdaa98c8",
       "kind": "digest_bound_contract"
     }
   },

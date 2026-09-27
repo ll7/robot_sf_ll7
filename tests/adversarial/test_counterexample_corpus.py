@@ -972,6 +972,7 @@ def test_register_search_run_binds_attempted_rows_and_disjoint_outcomes(
 
     _assert_generic_admission_count_is_rejected(run, corpus, corpus_root)
     _assert_invalid_search_run_revisions_are_rejected(run, corpus, corpus_root)
+    _assert_generic_objective_is_bound(run, corpus, corpus_root)
 
     case = {
         "scenario_id": rows[0]["scenario_id"],
@@ -1053,6 +1054,69 @@ def _assert_invalid_search_run_revisions_are_rejected(
     inconsistent_counts["search_runs"][0]["invalid_candidates"] = 0
     with pytest.raises(CorpusError, match="outcome counts differ"):
         validate_corpus(inconsistent_counts, corpus_root=corpus_root)
+
+
+def _assert_generic_objective_is_bound(
+    run: dict[str, object], corpus: dict[str, object], corpus_root: Path
+) -> None:
+    empty_objective = copy.deepcopy(run)
+    empty_objective["objective"] = {}
+    with pytest.raises(CorpusError, match="objective declaration is missing or malformed"):
+        counterexample_corpus.register_search_run(
+            empty_objective, new_corpus(), corpus_root=corpus_root
+        )
+
+    changed_declaration = copy.deepcopy(run)
+    changed_declaration["objective"]["semantics"] = "different criticality definition"
+    with pytest.raises(CorpusError, match="objective differs from search run"):
+        counterexample_corpus.register_search_run(
+            changed_declaration, new_corpus(), corpus_root=corpus_root
+        )
+
+    persisted_declaration = copy.deepcopy(corpus)
+    persisted_declaration["search_runs"][0]["objective"]["semantics"] = (
+        "different criticality definition"
+    )
+    with pytest.raises(CorpusError, match="objective differs from search run"):
+        validate_corpus(persisted_declaration, corpus_root=corpus_root)
+
+
+def test_search_run_schema_separates_pilot_and_generic_admission_counts() -> None:
+    import jsonschema
+
+    schema_path = (
+        _REPO_ROOT / "robot_sf/benchmark/schemas/adversarial-counterexample-corpus.v1.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    jsonschema.Draft202012Validator.check_schema(schema)
+    run_schema = schema["properties"]["search_runs"]["items"]
+    validator = jsonschema.Draft202012Validator(run_schema)
+    base_run = {
+        "schema_version": "adversarial-counterexample-search-run.v1",
+        "run_id": "round-1",
+        "round_id": "round-1",
+        "source_issue": 9653,
+        "source_revision": "a" * 40,
+        "objective": {"name": "criticality"},
+        "search_space": {"parameter": {"low": 0, "high": 1}},
+        "attempted_candidates": 1,
+        "completed_candidates": 1,
+        "failed_candidates": 0,
+        "invalid_candidates": 0,
+        "new_counterexamples_discovered": 0,
+        "evidence_tier": "diagnostic_only",
+        "source_files": [{"path": "search/rows.jsonl", "sha256": "b" * 64}],
+        "manifest_files": [{"path": "search/manifest.json", "sha256": "c" * 64}],
+    }
+
+    assert validator.is_valid(base_run)
+    generic_with_admission_count = {**base_run, "new_counterexamples_admitted": 0}
+    assert not validator.is_valid(generic_with_admission_count)
+
+    pilot_run = {**base_run, "source_issue": 9645, "new_counterexamples_admitted": 0}
+    assert validator.is_valid(pilot_run)
+    pilot_with_nonzero_admissions = {**pilot_run, "new_counterexamples_admitted": 1}
+    assert not validator.is_valid(pilot_with_nonzero_admissions)
 
 
 def test_classifier_sidecar_digest_mismatches_fail_closed(tmp_path: Path) -> None:

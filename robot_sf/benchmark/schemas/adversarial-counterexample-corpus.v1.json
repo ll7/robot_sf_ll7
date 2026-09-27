@@ -47,7 +47,7 @@
           "round_id": {"type": "string", "minLength": 1},
           "source_issue": {"type": "integer", "minimum": 1},
           "source_revision": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-          "objective": {"type": "object"},
+          "objective": {"type": "object", "minProperties": 1},
           "search_space": {"type": "object"},
           "attempted_candidates": {"type": "integer", "minimum": 0},
           "completed_candidates": {"type": "integer", "minimum": 0},
@@ -98,7 +98,26 @@
             }
           }
         },
-        "additionalProperties": true
+        "additionalProperties": true,
+        "allOf": [
+          {
+            "if": {
+              "properties": {"source_issue": {"const": 9645}},
+              "required": ["source_issue"]
+            },
+            "then": {
+              "properties": {"new_counterexamples_admitted": {"const": 0}},
+              "required": ["new_counterexamples_admitted"]
+            }
+          },
+          {
+            "if": {
+              "properties": {"source_issue": {"not": {"const": 9645}}},
+              "required": ["source_issue"]
+            },
+            "then": {"not": {"required": ["new_counterexamples_admitted"]}}
+          }
+        ]
       }
     },
     "cases": {

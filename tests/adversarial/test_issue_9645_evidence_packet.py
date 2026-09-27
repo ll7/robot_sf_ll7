@@ -78,7 +78,118 @@ def test_final_provenance_hashes_and_bundle_only_fields_are_recorded() -> None:
             "inputs.scenario_matrix.path",
             "inputs.schema_path.path",
             "raw_artifacts[0].path",
+            "raw_artifacts[0].sha256",
         } <= set(row["field_rewrites"])
+
+
+def test_route_path_normalization_is_hash_bound_for_candidates_and_recorded_replays() -> None:
+    normalization = _read_json(PAYLOAD / "path_normalization.json")
+    ledger = {row["path"]: row for row in normalization["records"]}
+    jsonl_rows = [row for row in normalization["records"] if row["path"].endswith(".jsonl")]
+    assert len(jsonl_rows) == 74
+
+    artifact_map = _read_json(PAYLOAD / "pilot_report_artifact_path_map.v1.json")
+    candidates = [
+        row
+        for row in artifact_map["bindings"]
+        if row.get("artifact_kind") == "candidate_episode_records"
+    ]
+    assert len(candidates) == 64
+    assert artifact_map["totals"]["artifact_count"] == len(artifact_map["bindings"])
+    assert artifact_map["totals"]["exact_artifact_count"] == sum(
+        row["retention_status"] == "retained_exact_copy" for row in artifact_map["bindings"]
+    )
+    assert artifact_map["totals"]["path_normalized_candidate_episode_record_count"] == 64
+    rebase = _read_json(PAYLOAD / "reproduction_inputs/input_rebase_map.v1.json")
+    artifact_map_sha256 = _sha256(PAYLOAD / "pilot_report_artifact_path_map.v1.json")
+    assert rebase["source_episode_artifact_map_sha256"] == artifact_map_sha256
+    recovery = _read_json(PAYLOAD / "run_metadata.json")["candidate_episode_record_recovery"]
+    assert recovery["count"] == 64
+    assert recovery["artifact_path_map_sha256"] == artifact_map_sha256
+    assert recovery["total_size_bytes"] == artifact_map["totals"]["candidate_episode_record_bytes"]
+    assert recovery["absolute_path_fields"]["scenario_params.route_overrides_file"] == 0
+    rebased_candidates = {
+        row["bundle_path"]: row
+        for manifest in rebase["manifest_bindings"]
+        for row in manifest["episode_record_bindings"]
+    }
+
+    payload_relative = PAYLOAD.relative_to(REPO_ROOT)
+    for binding in candidates:
+        relative = Path(binding["bundle_path"]).relative_to(payload_relative)
+        path = PAYLOAD / relative
+        digest = _sha256(path)
+        normalization_row = ledger[str(relative)]
+        expected_route = (
+            binding["producer_output_path"].removesuffix("episode_records.jsonl")
+            + "route_overrides.yaml"
+        )
+        rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+        assert len(rows) == 1
+        route_path = rows[0]["scenario_params"]["route_overrides_file"]
+        assert route_path == expected_route
+        assert not Path(route_path).is_absolute()
+        assert binding["retention_status"] == "retained_path_normalized_copy"
+        assert binding["sha256"] == binding["normalized_sha256"] == digest
+        assert (
+            binding["source_sha256_before_path_normalization"]
+            == normalization_row["source_sha256_before_path_normalization"]
+        )
+        assert normalization_row["normalized_sha256"] == digest
+        assert binding["size_bytes"] == path.stat().st_size
+        assert binding["source_size_bytes"] >= binding["size_bytes"]
+        rebased = rebased_candidates[binding["bundle_path"]]
+        assert rebased["sha256"] == digest
+        assert (
+            rebased["source_sha256_before_path_normalization"]
+            == binding["source_sha256_before_path_normalization"]
+        )
+        assert rebased["normalized_sha256"] == digest
+
+    recorded_to_normalized = {
+        "historical_issue_1501_failure_0002/replay_1_recorded.jsonl": "historical_issue_1501_failure_0002/replay_1.jsonl",
+        "historical_issue_1501_failure_0002/replay_2_recorded.jsonl": "historical_issue_1501_failure_0002/replay_2.jsonl",
+        "representative_success/episode_records_original_recorded.jsonl": "representative_success/episode_records_original.jsonl",
+        "representative_success/episode_records_replay_recorded.jsonl": "representative_success/episode_records_replay.jsonl",
+        "smoke/corrected_success_smoke/episode_records_recorded.jsonl": "smoke/corrected_success_smoke/episode_records.jsonl",
+    }
+    for recorded, normalized in recorded_to_normalized.items():
+        path = PAYLOAD / recorded
+        row = ledger[recorded]
+        actual = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
+        counterpart = json.loads((PAYLOAD / normalized).read_text(encoding="utf-8").splitlines()[0])
+        route_path = actual["scenario_params"]["route_overrides_file"]
+        assert route_path == counterpart["scenario_params"]["route_overrides_file"]
+        assert not Path(route_path).is_absolute()
+        assert row["normalized_sha256"] == _sha256(path)
+        assert len(row["source_sha256_before_path_normalization"]) == 64
+
+
+def test_rebuilt_report_provenance_binds_inputs_and_generated_outputs() -> None:
+    provenance = _read_json(PAYLOAD / "report_provenance.json")
+    assert provenance["comparison_sha256"] == _sha256(PAYLOAD / "pilot_comparison.json")
+    assert provenance["manifest_path_map_sha256"] == _sha256(
+        PAYLOAD / "reproduction_inputs/pilot_report_manifest_path_map.v1.json"
+    )
+    assert provenance["reproduction_input_rebase_map_sha256"] == _sha256(
+        PAYLOAD / "reproduction_inputs/input_rebase_map.v1.json"
+    )
+    assert provenance["expected_episode_record_count"] == 64
+    assert (
+        provenance["episode_record_path_field_disposition"]["absolute_producer_paths_remaining"]
+        == 0
+    )
+    assert (
+        provenance["episode_record_path_field_disposition"][
+            "portable_replay_inputs_retained_for_all_candidates"
+        ]
+        is False
+    )
+    assert len(provenance["outputs"]) == 3
+    for output in provenance["outputs"]:
+        path = _repo_file(output["path"])
+        assert _sha256(path) == output["sha256"]
+        assert path.stat().st_size == output["size_bytes"]
 
 
 def test_historical_replay_provenance_binds_recorded_inputs_and_outputs() -> None:
@@ -136,10 +247,10 @@ def test_historical_replay_comparison_signature_is_reproducible() -> None:
     assert "replays_identical" not in validation
     assert projection_1 == projection_2
     assert canonical_1 == canonical_2
-    assert len(canonical_1) == metadata["projected_bytes"] == 23907
+    assert len(canonical_1) == metadata["projected_bytes"] == 23877
     assert hashlib.sha256(canonical_1).hexdigest() == metadata["digest"]
     assert metadata["digest"] == (
-        "5b5047919ac185317eeef78268564a3ed1a9667ddab915ecf1e5d4ddf1aeb1f6"
+        "8fe60a2d9bb0c80ab969151fa098e18beb697485c41a964c8f58eb7044c05899"
     )
     assert metadata["legacy_recorded_signature_status"] == "not_independently_reconstructed"
     assert metadata["legacy_recorded_signature_sha256"] == (

@@ -57,10 +57,10 @@
     {
       "kind": "episodes_jsonl",
       "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/smoke/corrected_success_smoke/episode_records_recorded.jsonl",
-      "sha256": "6dee284ba8c9b41441bd93ada3973da8a9a855a1501afef886c74f012aa15b2b",
+      "sha256": "2bc3368d980c93ee80cd20f15f2e9da83037cda35f996a13e2304a66a6d92699",
       "artifact_status": "available",
       "producer_output_path": "output/issue9645-smoke-v2/results/constraints_first_lexicographic_v1/budget_0001/seed_910/random/candidate_0000/episode_records.jsonl",
-      "bundle_retention_status": "retained_exact_copy"
+      "bundle_retention_status": "retained_path_normalized_copy"
     }
   ],
   "rows": [

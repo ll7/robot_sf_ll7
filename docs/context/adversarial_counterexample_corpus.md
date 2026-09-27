@@ -3,7 +3,8 @@
 Current contract: [issue #9652](https://github.com/ll7/robot_sf_ll7/issues/9652). The
 versioned corpus API and CLI are the implementation surface for the planned #9653 loop; the
 initial fixture is the persisted [#9645 bounded pilot](https://github.com/ll7/robot_sf_ll7/issues/9645)
-and its historical #1501 case, whose replay projections match but direct input binding is unknown.
+and the historical #1501 case artifact. Its replay projections match at the recorded regeneration
+revision, but direct input binding is unknown, so the importer rejects it as a corpus admission.
 
 The versioned corpus in `robot_sf.adversarial.counterexample_corpus` stores
 admitted challenge cases, search-run provenance, admission attempts, and planner
@@ -15,13 +16,14 @@ and configuration; no stored discovery or failure record is rewritten.
 
 The following command uses the small checked-in #9645 test/evidence fixture. It
 exercises the import path; it is not the durable output of the bounded pilot.
-The fixture contains a zero-discovery search result and a separate
-historical #1501 collision with two matching replay projections under one
-current revision.
-The importer records the pilot's 64 completed candidates and explicit zero
-discoveries, then applies the admission checks to the independently replayed
-historical case. It does not treat the pilot's successful candidates as newly
-discovered counterexamples.
+The fixture contains a zero-discovery search result and a separate historical
+#1501 collision with two matching replay projections at its recorded
+regeneration revision. The importer records the pilot's 64 completed candidates
+and explicit zero discoveries. It rejects #1501 as a case because the replay
+artifacts do not directly bind the materialized scenario, route, and map inputs.
+It does not treat the pilot's successful candidates as newly discovered
+counterexamples or the historical projection match as a validated current
+planner failure.
 
 ```bash
 uv run python scripts/tools/manage_adversarial_counterexample_corpus.py init \
@@ -34,35 +36,38 @@ uv run python scripts/tools/manage_adversarial_counterexample_corpus.py import-9
 ```
 
 Rejected admission attempts are persisted in the corpus and cause the import
-command to exit nonzero. The importer binds both current replay JSONL files,
-their provenance, the scenario and route inputs, resolved map bytes and map registry,
-the archived source record,
-the historical search source snapshots, and the #9645 accounting packet. It
-checks the packet's outer file inventory and checksum sidecar, compares the
-source-hash receipt with run metadata, and verifies each consumed payload file
-before admission. The corpus retains the outer manifest and checksum sidecar
-digests alongside the copied accounting evidence. Later corpus validation
+command to exit nonzero. The importer verifies the two historical replay JSONL
+files and their provenance, the scenario and route inputs, resolved map bytes
+and map registry, archived source record, historical search source snapshots,
+and the #9645 accounting packet. It checks the packet's outer file inventory
+and checksum sidecar, compares the source-hash receipt with run metadata, and
+verifies each consumed payload file before recording the admission attempt. The
+corpus retains the outer manifest and checksum sidecar digests alongside the
+copied accounting evidence. Later corpus validation
 recomputes the stored search-run record from the copied summary, metadata,
 candidate table, row-status receipt, and manifests. This keeps the pilot's
 explicit zero-discovery and zero-admission counts bound to their source packet.
 
 The #1501 original episode and search manifest were not archived. Its two
 regenerated rows and source sidecars have distinct run IDs, matching event and
-metric projections, and matching target/replay revisions. However, those rows
-predate direct runtime binding to the materialized scenario, route, and map
-bytes. The corpus labels their input binding `unknown_historical`; their planner
-status therefore remains `unknown`, even though the retained projections and
-sidecar custody verify. The persisted #9645 packet rewrites local paths in its
-bundled replay artifacts, so each replay receipt keeps the source digest before
-path normalization separate from the normalized bundle digest. The
-normalization receipt pins the allowed local-path rewrites.
+metric projections, and matching replay revisions at the recorded regeneration
+revision `58e516aa4f69ff3098bf518199f483006589758c`. The packet explicitly says
+this is not a replay at the current implementation head and is not a bitwise
+comparison with the absent original raw episode. Those rows predate direct
+runtime binding to the materialized scenario, route, and map bytes. The
+importer records `replay_input_binding_unknown_historical` and leaves the case
+out of `cases` and planner status until an exact target-revision replay binds
+all inputs. The persisted #9645 packet rewrites local paths in its bundled
+replay artifacts, so each source receipt keeps the original digest separate
+from the normalized bundle digest. The normalization receipt pins the allowed
+local-path rewrites.
 
-Dynamic feasibility for this case remains `admissible_feasibility_unknown`.
-The current `scenario_cert.v1` result is a static route certificate, not proof
-that the dynamic task is feasible. The #9656 mined rows are not admitted by the
-#9645 importer. Use the historical candidate importer below to retain their
-source aliases and provenance without treating mismatched, unavailable, or
-unattempted replays as verified cases.
+Dynamic feasibility for #1501 remains `unknown`. The current `scenario_cert.v1`
+result is a static route certificate, not proof that the dynamic task is
+feasible. The #9656 mined rows are also not admitted by the #9645 importer. Use
+the historical candidate importer below to retain #9656 source aliases and
+provenance without treating mismatched, unavailable, or unattempted replays as
+verified cases.
 
 An affirmative feasibility verdict requires an
 `adversarial-case-admissibility-evidence.v1` receipt bound to the case ID,

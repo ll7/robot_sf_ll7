@@ -63,8 +63,10 @@ Each bundle writes:
 
 - `payload/`: exactly the selected compact files;
 - `evidence_bundle_manifest.json`: `schema_version: evidence_bundle.v1`, command, commit,
-  claim boundary, source root, file index, sizes, SHA-256 hash checksums, and policy caveats;
-- `checksums.sha256`: checksum lines for every payload file.
+  claim boundary, source root, file index, sizes, payload locations, SHA-256 hashes, and policy
+  caveats. File-entry `path` values are relative to `payload/`; `location` is repository-relative
+  when the bundle is written inside the repository and bundle-relative otherwise;
+- `checksums.sha256`: bundle-root-relative checksum paths such as `payload/summary.json`.
 
 The schema contract lives at `robot_sf/benchmark/schemas/evidence_bundle.v1.json`.
 
@@ -125,8 +127,14 @@ for retention classes, preservation proof, and cleanup-eligibility workflows.
 
 ## Current Bundles
 
+- `issue_9656_hard_case_mining_2026-09-24/`: compact diagnostic-only mining result over the
+  checksum-pinned Release 0.0.2 bundle. It binds 36 deterministic selector cases to source row
+  hashes and materialized one-seed replay inputs, preserves 241 collision-event/count
+  inconsistencies, and records four revision-divergent replay comparisons. Raw release data and
+  generated episode outputs remain outside git.
+
 - `issue_6151_simulator_dependence_synthesis_2026-09-13/`: bounded negative synthesis for the
-  #3207 validity-boundary parent. The only defensible verdict is `invalid_missing_evidence`:
+  Issue #3207 validity-boundary parent. The only defensible verdict is `invalid_missing_evidence`:
   job-13512 bytes are checksum-covered for custody but have conflicting execution lineage and no
   materialized SNQI, while the older slice is rank-non-identifiable. No ranking, benchmark,
   realism, sim-to-real, safety, paper, or dissertation claim is promoted.

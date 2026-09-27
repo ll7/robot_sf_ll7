@@ -413,6 +413,9 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Scenario-admissibility tests exercise deterministic candidate, manifest,
+    # materialization, and provenance contracts used by the adversarial search.
+    "test_scenario_admissibility.py",
     # Social-force v2 planner contracts (issue #9724) are deterministic adapter
     # checks on synthetic grids; the four episode tests stay marked slow.
     "test_issue_9724_social_force_resolution_independent.py",

@@ -1081,6 +1081,19 @@ def test_frontier_report_rejects_duplicate_case_with_different_scenario_identity
         build_frontier_report(payload, evidence_root=tmp_path)
 
 
+def test_frontier_report_accepts_case_identity_with_uppercase_digest_hex(
+    tmp_path: Path,
+) -> None:
+    """Equivalent hexadecimal casing does not change a scenario's byte identity."""
+    payload = _evidence(tmp_path)
+    observation = payload["rounds"][0]["case_observations"][0]
+    observation["scenario_artifact_sha256"] = observation["scenario_artifact_sha256"].upper()
+    _refresh_source_artifacts(payload, tmp_path)
+
+    report = build_frontier_report(payload, evidence_root=tmp_path)
+    assert report["rounds"][0]["falsification"]["verified_counterexample_case_ids"] == ["case-001"]
+
+
 def test_frontier_report_does_not_call_unknown_case_duplicate_a_verified_repeat(
     tmp_path: Path,
 ) -> None:

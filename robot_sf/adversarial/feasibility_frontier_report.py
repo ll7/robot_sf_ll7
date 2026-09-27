@@ -1000,12 +1000,8 @@ def _validate_case_origin_identity(
         or isinstance(origin_round, bool)
     ):
         return
-    identity = (
-        origin_round,
-        observation.get("origin_candidate_id"),
-        observation.get("scenario_id"),
-        observation.get("scenario_artifact_sha256"),
-    )
+    scenario_id, scenario_digest = _case_scenario_identity(observation)
+    identity = (origin_round, observation.get("origin_candidate_id"), scenario_id, scenario_digest)
     previous_identity = case_origins.setdefault(case_id, identity)
     if previous_identity != identity:
         errors.append(
@@ -1039,10 +1035,7 @@ def _validate_discovered_case_observation(
             "its discovery record"
         )
         return
-    if any(
-        observation.get(field) != origin_candidate.get(field)
-        for field in ("scenario_id", "scenario_artifact_sha256")
-    ):
+    if _case_scenario_identity(observation) != _case_scenario_identity(origin_candidate):
         errors.append(
             f"round {current_round} case {case_id!r} scenario identity does not match "
             "its discovery candidate"
@@ -1858,7 +1851,15 @@ def _validate_case_status_source(
         "replay_status",
         "evidence_status",
     )
-    mismatched = [field for field in expected_fields if source.get(field) != observation.get(field)]
+    mismatched = [
+        field
+        for field in expected_fields
+        if (
+            not _same_text_identity(source.get(field), observation.get(field))
+            if field == "scenario_artifact_sha256"
+            else source.get(field) != observation.get(field)
+        )
+    ]
     if mismatched:
         errors.append(
             f"{prefix}.corpus_artifact case/status identity does not match the observation: "
@@ -2882,15 +2883,16 @@ def _validate_admissibility_oracle_support(
         return False
     source_records = (report, selected, nominal)
     for record in source_records:
-        if record.get("source_artifact_sha256") != scenario_artifact_sha256:
+        if not _same_text_identity(record.get("source_artifact_sha256"), scenario_artifact_sha256):
             return False
         if record.get("source_artifact_identity_stable") is not True:
             return False
     completion = nominal.get("completion")
     geometric = nominal.get("geometric")
-    assumptions_match = (
-        oracle_assumptions.get("scenario_id") == scenario_id
-        and oracle_assumptions.get("source_artifact_sha256") == scenario_artifact_sha256
+    assumptions_match = oracle_assumptions.get(
+        "scenario_id"
+    ) == scenario_id and _same_text_identity(
+        oracle_assumptions.get("source_artifact_sha256"), scenario_artifact_sha256
     )
     completion_steps = (
         completion.get("min_completion_steps") if isinstance(completion, dict) else None
@@ -3152,7 +3154,11 @@ def _validate_round_observation_identities(
 
 def _case_scenario_identity(record: dict[str, Any]) -> tuple[Any, Any]:
     """Return the scenario identity bound to a stable case ID."""
-    return record.get("scenario_id"), record.get("scenario_artifact_sha256")
+    scenario_digest = record.get("scenario_artifact_sha256")
+    return (
+        record.get("scenario_id"),
+        scenario_digest.lower() if isinstance(scenario_digest, str) else scenario_digest,
+    )
 
 
 def _validate_round_case_dispositions(

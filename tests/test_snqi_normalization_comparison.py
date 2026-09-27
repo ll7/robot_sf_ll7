@@ -143,4 +143,4 @@ def test_snqi_v1_invalid_baseline_spread_fails_closed() -> None:
 def test_compute_snqi_unknown_score_version_fails_closed() -> None:
     """Unknown score versions should fail closed instead of falling back."""
     with pytest.raises(ValueError, match="unknown SNQI score version"):
-        compute_snqi(_METRICS, _WEIGHTS, _BASELINE_STATS_V1, score_version="SNQI-v2")
+        compute_snqi(_METRICS, _WEIGHTS, _BASELINE_STATS_V1, score_version="SNQI-v3")

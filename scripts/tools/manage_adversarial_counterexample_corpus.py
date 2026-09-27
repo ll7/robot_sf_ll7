@@ -162,7 +162,8 @@ def _build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument("--output")
 
     import_parser = subparsers.add_parser(
-        "import-9645", help="admit the replay-verified #1501 case from the #9645 packet"
+        "import-9645",
+        help="record the #9645 pilot and assess historical #1501 admission evidence",
     )
     import_parser.add_argument("--payload", required=True)
     import_parser.add_argument("--corpus", required=True)

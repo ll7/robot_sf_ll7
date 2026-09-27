@@ -1877,6 +1877,8 @@ def _import_issue9645_historical_case(
     )
     near_report = _near_duplicate_report(case, corpus["cases"])
     admission_binding_errors = _case_admission_input_binding_errors(case)
+    if not admission_binding_errors:
+        admission_binding_errors = _validate_case_current_target_revision(case)
     if admission_binding_errors:
         return _reject_issue9645_historical_candidate(
             corpus,

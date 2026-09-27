@@ -1,7 +1,7 @@
 {
   "schema_version": "evidence_path_normalization.v1",
   "source_revision": "58e516aa4f69ff3098bf518199f483006589758c",
-  "policy": "Only local source/input/output path fields were normalized. Scenario parameters, planner identity, metrics, events, and replay outcomes were preserved.",
+  "policy": "Portable path rewrites and explicit bundle custody bindings were applied. Scenario parameters, planner identity, metrics, events, and replay outcomes were preserved.",
   "records": [
     {
       "path": "historical_issue_1501_failure_0002/replay_1.jsonl",
@@ -14,9 +14,18 @@
     {
       "path": "historical_issue_1501_failure_0002/replay_1.provenance.json",
       "source_sha256_before_path_normalization": "31182f37397f64e217ad465f0dfe364de982b53062d69baaf2375a9f6591e353",
-      "normalized_sha256": "65af70aa2739da46e90d75f2e7c4ed44bf444608219a884420870821c701e241",
+      "normalized_sha256": "bdd3769bd1ecd1d3fa1e7bad4dc7de9d4d5fc34d142204548ca35e10b59ca3c0",
       "field_rewrites": {
+        "inputs.scenario_matrix.path": 1,
+        "inputs.schema_path.path": 1,
+        "raw_artifacts[0].path": 1,
         "run.invocation": 1
+      },
+      "field_additions": {
+        "inputs.scenario_matrix.producer_output_path": 1,
+        "inputs.schema_path.producer_path_at_source_revision": 1,
+        "raw_artifacts[0].bundle_retention_status": 1,
+        "raw_artifacts[0].producer_output_path": 1
       }
     },
     {
@@ -30,9 +39,18 @@
     {
       "path": "historical_issue_1501_failure_0002/replay_2.provenance.json",
       "source_sha256_before_path_normalization": "52421b34a1eb4dfaf77b0c5fbbf1faea976bafb6837d5026ea18567eebc38bc4",
-      "normalized_sha256": "b1b4cead87af7e66f96329192fc0bd406952223b9717d19fe433b15c95c38a8c",
+      "normalized_sha256": "cc8837fb21751f2ef94a2692c03d520151afc7427201679733432f11ba94f28b",
       "field_rewrites": {
+        "inputs.scenario_matrix.path": 1,
+        "inputs.schema_path.path": 1,
+        "raw_artifacts[0].path": 1,
         "run.invocation": 1
+      },
+      "field_additions": {
+        "inputs.scenario_matrix.producer_output_path": 1,
+        "inputs.schema_path.producer_path_at_source_revision": 1,
+        "raw_artifacts[0].bundle_retention_status": 1,
+        "raw_artifacts[0].producer_output_path": 1
       }
     },
     {
@@ -46,9 +64,17 @@
     {
       "path": "representative_success/episode_records_original.provenance.json",
       "source_sha256_before_path_normalization": "dac92b0fe9b96a5307ee65bf04d0d8ded33fc18a68c260577b455fe24637d357",
-      "normalized_sha256": "2fb08e7a4a02e0b53fba42e4518f4dcbd67f5654121d5c37f8340e9d69843e1b",
+      "normalized_sha256": "55e80fcc08fae4427ad42d61ed5756a115da266e4d327e9bdfd326ddbd58033f",
       "field_rewrites": {
-        "inputs.schema_path.path": 1
+        "inputs.scenario_matrix.path": 1,
+        "inputs.schema_path.path": 1,
+        "raw_artifacts[0].path": 1
+      },
+      "field_additions": {
+        "inputs.scenario_matrix.producer_output_path": 1,
+        "inputs.schema_path.producer_path_at_source_revision": 1,
+        "raw_artifacts[0].bundle_retention_status": 1,
+        "raw_artifacts[0].producer_output_path": 1
       }
     },
     {
@@ -62,9 +88,18 @@
     {
       "path": "representative_success/episode_records_replay.provenance.json",
       "source_sha256_before_path_normalization": "6a4751f8754b497c9d8e83b324e96a1d3eae7e8e060e485acce5286cb4ddee0d",
-      "normalized_sha256": "2822161e58cc724e2eaee4e570b0d48a212ef57093d0d49c6b7c3a0e8d176def",
+      "normalized_sha256": "f658f722e9e62e5c250bedb0965ce1421567385424e82e4ee656db22e3370db8",
       "field_rewrites": {
+        "inputs.scenario_matrix.path": 1,
+        "inputs.schema_path.path": 1,
+        "raw_artifacts[0].path": 1,
         "run.invocation": 1
+      },
+      "field_additions": {
+        "inputs.scenario_matrix.producer_output_path": 1,
+        "inputs.schema_path.producer_path_at_source_revision": 1,
+        "raw_artifacts[0].bundle_retention_status": 1,
+        "raw_artifacts[0].producer_output_path": 1
       }
     },
     {
@@ -78,16 +113,25 @@
     {
       "path": "smoke/corrected_success_smoke/episode_records.provenance.json",
       "source_sha256_before_path_normalization": "93e9c8a1261bf4ab2e62c47067e99a665d71f3b1a6ccb6bb02b3cdf8d16ccde1",
-      "normalized_sha256": "e20601a3e9cba6ed0da234ecf6857a94fd07d08acc7e72963b71782d08b5fc6e",
+      "normalized_sha256": "8461838d4cb43391fa4e1abcbc1dd3aad046da7b9964ada3b937e9ed857aa7b8",
       "field_rewrites": {
-        "inputs.schema_path.path": 1
+        "inputs.scenario_matrix.path": 1,
+        "inputs.schema_path.path": 1,
+        "raw_artifacts[0].path": 1
+      },
+      "field_additions": {
+        "inputs.scenario_matrix.producer_output_path": 1,
+        "inputs.schema_path.producer_path_at_source_revision": 1,
+        "raw_artifacts[0].bundle_retention_status": 1,
+        "raw_artifacts[0].producer_output_path": 1
       }
     }
   ],
   "validation": {
     "jsonl_source_record_comparison": "all 5 normalized records equal their captured source records after excluding only the documented scenario_params.route_overrides_file field",
-    "provenance_source_record_comparison": "all 5 normalized provenance records equal their captured source records after excluding only the documented run.invocation and/or inputs.schema_path.path fields",
-    "candidate_parameters_metrics_events_and_outcomes_changed": false
+    "provenance_source_record_comparison": "All 5 final provenance records matched their captured source bytes after applying only the per-record path rewrites and removing the listed bundle-only binding additions. The source bytes were found by their recorded SHA-256 in preserved local output/ files; those original provenance files are not included in the durable bundle.",
+    "candidate_parameters_metrics_events_and_outcomes_changed": false,
+    "provenance_bundle_binding_hashes": "normalized_sha256 values bind the final tracked provenance bytes after producer-path and exact-copy retention annotations were added."
   },
   "unmodified_candidate_episode_record_retention": {
     "count": 64,

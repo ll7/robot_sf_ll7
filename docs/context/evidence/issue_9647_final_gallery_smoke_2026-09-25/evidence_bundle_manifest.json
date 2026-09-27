@@ -1,0 +1,34 @@
+{
+  "schema_version": "evidence_bundle.v1",
+  "created_at_utc": "2026-09-25T20:21:19Z",
+  "bundle_name": "issue_9647_final_gallery_smoke_2026-09-25",
+  "source_root": "output/adversarial-replay-gallery/issue9647_final_smoke_b5e8af66/receipt-source",
+  "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/materialize_adversarial_replay_gallery.py tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json --out output/adversarial-replay-gallery/issue9647_final_smoke_b5e8af66 --top-k 1",
+  "commit": "b5e8af66c4b5b59df2ad60f8a2ae515c587bc14f",
+  "claim_boundary": "historical_outcome_reproduction_not_exact_source_or_feasibility_evidence",
+  "policy": {
+    "large_raw_artifacts": "excluded",
+    "output_tree_mirroring": "forbidden",
+    "paper_or_benchmark_claim": "not_established_by_bundle_alone"
+  },
+  "totals": {
+    "file_count": 2,
+    "total_bytes": 9452
+  },
+  "files": [
+    {
+      "path": "receipt.md",
+      "size_bytes": 3038,
+      "sha256": "25173061b0c40c1cf3b46bd886b2117e9216d8021777d869a5a334701dbdda87",
+      "kind": "misc"
+    },
+    {
+      "path": "summary.json",
+      "size_bytes": 6414,
+      "sha256": "35cc9b7e2d4db595a748771faf063caf14e0f977b3cc74b48e8e45be331dad31",
+      "kind": "aggregates"
+    }
+  ],
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "location": "Referenced output/ products are ignored local files and are not durable; compact tracked bundle members are stored in payload/."
+}

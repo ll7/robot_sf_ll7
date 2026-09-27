@@ -31,8 +31,16 @@ Each certificate includes:
   `source_artifact_sha256`, `effective_input_sha256`, and
   `effective_input_identity_stable`. The stable flag is true only when the loaded manifest closure
   and consumed snapshots match the current identity. These are optional fields inside the open
-  `evidence` object; `scenario_cert.v1` and its required fields are unchanged. The producer also
-  records optional `actor_source_census` evidence using `scenario_actor_source_census.v1`. This
+  `evidence` object; `scenario_cert.v1` and its required fields are unchanged. For scenarios that
+  use `map_id`, certification also records `scenario_map_id_input_binding.v1` with a portable registry
+  locator, the selected registry row and digest, and the resolved map locator and digest. The
+  certifier brackets map certification with this snapshot and records an explicit `unknown` when
+  the binding is unavailable or the selected inputs change during certification. Replay-gallery
+  selection compares that certificate binding with its current selected registry row and map
+  snapshot; missing or explicit unknown bindings are accounted as unknown, while unavailable or
+  mismatched bindings have dedicated dispositions. None is accepted as a source certificate. This binds map-input provenance, not feasibility or safety.
+  The producer also records optional `actor_source_census` evidence using
+  `scenario_actor_source_census.v1`. This
   census reports effective pedestrian source counts per loaded map, configured density, forced
   population size, and whether the runtime actor scene and planner-visible context are verified
   empty. Map-authored single pedestrians always count as actors; pedestrian routes and crowded

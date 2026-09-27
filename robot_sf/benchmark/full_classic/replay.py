@@ -39,6 +39,7 @@ class ReplayStep:
     Optional enrichment:
         - speed: scalar robot speed
         - ped_positions: list of (x,y) pedestrian positions
+        - pedestrian_ids: identity for each pedestrian position, when known
         - action: (ax, ay) or (vx, vy) tuple representing last action
         - ray_vecs: list of ray vectors for lidar visualization
         - ped_actions: per-pedestrian action vectors (if available)
@@ -55,6 +56,7 @@ class ReplayStep:
     ray_vecs: list[tuple[float, float]] | None = None
     ped_actions: list[tuple[float, float]] | None = None
     robot_goal: tuple[float, float] | None = None
+    pedestrian_ids: list[str] | None = None
 
 
 @dataclass(slots=True)

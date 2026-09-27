@@ -295,6 +295,86 @@ def test_changed_checksum_manifest_validates_targets(tmp_path: Path) -> None:
     assert problems == []
 
 
+def test_evidence_bundle_v1_resolves_checksum_entries_under_payload(tmp_path: Path) -> None:
+    """Canonical evidence_bundle.v1 checksums name payload-relative files."""
+    bundle = tmp_path / "docs/context/evidence/issue_9647_bundle"
+    payload_dir = bundle / "payload"
+    payload_dir.mkdir(parents=True)
+    receipt = payload_dir / "receipt.md"
+    summary = payload_dir / "summary.json"
+    receipt.write_text("# Receipt\n", encoding="utf-8")
+    summary.write_text('{"status": "diagnostic"}\n', encoding="utf-8")
+    (bundle / "evidence_bundle_manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "evidence_bundle.v1",
+                "files": [
+                    {
+                        "path": path.name,
+                        "size_bytes": path.stat().st_size,
+                        "sha256": _sha256(path),
+                    }
+                    for path in (receipt, summary)
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    checksums = bundle / "checksums.sha256"
+    checksums.write_text(
+        "".join(f"{_sha256(path)}  {path.name}\n" for path in (receipt, summary)),
+        encoding="utf-8",
+    )
+    _write_catalog(
+        tmp_path,
+        [
+            bundle.relative_to(tmp_path).as_posix() + "/evidence_bundle_manifest.json",
+            checksums.relative_to(tmp_path).as_posix(),
+            receipt.relative_to(tmp_path).as_posix(),
+            summary.relative_to(tmp_path).as_posix(),
+        ],
+    )
+
+    problems = check_files([checksums.relative_to(tmp_path).as_posix()], root=tmp_path)
+
+    assert problems == []
+
+
+def test_changed_evidence_bundle_payload_file_checks_root_manifest(tmp_path: Path) -> None:
+    """Changing one payload file finds and validates its bundle-root checksums."""
+    bundle = tmp_path / "docs/context/evidence/issue_9647_changed_payload"
+    payload_dir = bundle / "payload"
+    payload_dir.mkdir(parents=True)
+    summary = payload_dir / "summary.json"
+    summary.write_text('{"status": "before"}\n', encoding="utf-8")
+    (bundle / "evidence_bundle_manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "evidence_bundle.v1",
+                "files": [
+                    {
+                        "path": "summary.json",
+                        "size_bytes": summary.stat().st_size,
+                        "sha256": _sha256(summary),
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (bundle / "checksums.sha256").write_text(
+        f"{_sha256(summary)}  summary.json\n", encoding="utf-8"
+    )
+    _write_catalog(tmp_path, [summary.relative_to(tmp_path).as_posix()])
+
+    summary.write_text('{"status": "after"}\n', encoding="utf-8")
+    problems = check_files([summary.relative_to(tmp_path).as_posix()], root=tmp_path)
+
+    assert any("checksum mismatch" in problem for problem in problems)
+
+
 def test_bare_name_manifest_verifies_packet_local_file(tmp_path: Path) -> None:
     """A bare SHA256SUMS entry must verify the packet's own file, not a repo-root twin.
 

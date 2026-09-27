@@ -199,6 +199,10 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
     from robot_sf.benchmark.camera_ready._config import (  # noqa: PLC0415
         _scenario_with_kinematics,
     )
+    from robot_sf.benchmark.camera_ready._run_state import (  # noqa: PLC0415
+        _count_episode_rows_written_since,
+        _episode_jsonl_snapshot,
+    )
     from robot_sf.benchmark.camera_ready._util import (  # noqa: PLC0415
         _latency_stress_metadata,
         _synthetic_actuation_metadata,
@@ -242,6 +246,7 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
     warnings: list[str] = []
     planner_started_at_utc = _utc_now()
     planner_start = time.perf_counter()
+    episode_file_before = _episode_jsonl_snapshot(params.episodes_path)
     try:
         summary = run_batch(
             scoped_scenarios,
@@ -292,7 +297,11 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
             "status": "failed",
             "error": repr(exc),
             "total_jobs": 0,
-            "written": 0,
+            "written": _count_episode_rows_written_since(
+                params.episodes_path,
+                episode_file_before,
+                resume=params.resume,
+            ),
             "failed_jobs": 0,
             "failures": [],
         }

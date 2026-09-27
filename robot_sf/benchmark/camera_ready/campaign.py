@@ -65,6 +65,8 @@ from robot_sf.benchmark.camera_ready._resume_plan import (
 from robot_sf.benchmark.camera_ready._run_state import (
     _build_arm_rollup,
     _campaign_success_counters,
+    _count_episode_rows_written_since,
+    _episode_jsonl_snapshot,
     validate_campaign_integrity,
 )
 from robot_sf.benchmark.camera_ready._summaries import (
@@ -551,6 +553,7 @@ def _execute_campaign_planner_batch(
         if cfg.retained_metric_contract_path is not None
         else {}
     )
+    episode_file_before = _episode_jsonl_snapshot(run.episodes_path)
     try:
         summary = dependencies.run_batch(
             run.scoped_scenarios,
@@ -604,7 +607,11 @@ def _execute_campaign_planner_batch(
             "status": "failed",
             "error": repr(exc),
             "total_jobs": 0,
-            "written": 0,
+            "written": _count_episode_rows_written_since(
+                run.episodes_path,
+                episode_file_before,
+                resume=cfg.resume,
+            ),
             "failed_jobs": 0,
             "failures": [],
         }

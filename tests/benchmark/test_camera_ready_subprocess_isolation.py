@@ -887,6 +887,50 @@ class TestScopedScenarioParity:
 
         assert captured["resume"] is True
 
+    def test_worker_counts_rows_written_before_runner_exception(self, tmp_path):
+        """The subprocess summary retains rows written before post-run validation fails."""
+        from robot_sf.benchmark.camera_ready.resource_lifecycle import (
+            _run_single_arm_subprocess,
+        )
+
+        episodes_path = tmp_path / "episodes.jsonl"
+        episodes_path.write_text(
+            json.dumps({"scenario_id": "retained", "seed": 1}) + "\n",
+            encoding="utf-8",
+        )
+        scoped_path = tmp_path / "scoped_scenarios.json"
+        scoped_path.write_text("[]", encoding="utf-8")
+        base = _make_arm_params()
+        params = _SubprocessArmParams(
+            **{
+                **base.__dict__,
+                "episodes_path": episodes_path,
+                "summary_path": tmp_path / "summary.json",
+                "scoped_scenarios_path": scoped_path,
+                "resume": True,
+            }
+        )
+
+        def fake_run_batch(*_args, **_kwargs):
+            """Append a valid row before simulating retained-metric validation failure."""
+            with episodes_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps({"scenario_id": "new", "seed": 2}) + "\n")
+            raise RuntimeError("post-run retained metric validation failed")
+
+        with (
+            patch("robot_sf.benchmark.runner.run_batch", side_effect=fake_run_batch),
+            patch(
+                "robot_sf.benchmark.fallback_policy.availability_payload",
+                return_value={},
+            ),
+        ):
+            result = _run_single_arm_subprocess(params)
+
+        assert result["summary"]["status"] == "failed"
+        assert result["summary"]["written"] == 1
+        assert result["summary"]["episodes_written_this_invocation"] == 1
+        assert result["summary"]["episodes_total"] == 2
+
     def test_worker_runtime_includes_run_batch_execution(self, tmp_path, monkeypatch):
         """The arm timer starts before the batch and ends after its work."""
         from unittest.mock import Mock as _Mock

@@ -4163,6 +4163,172 @@ def test_run_campaign_counts_existing_records_when_resumed_attempt_fails(
     assert planner_row["most_likely_failure_reason"] == "resume crash"
 
 
+def test_run_campaign_counts_rows_written_before_runner_exception(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Rows appended before a post-run validation exception remain in throughput."""
+    scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+
+    config_path = tmp_path / "campaign_runner_exception.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: test_campaign_runner_exception",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "resume: true",
+                "stop_on_failure: false",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    benchmark_profile: baseline-safe",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+
+    def _fake_run_batch(_scenarios, out_path, *_args, **_kwargs):
+        """Model the runner failing after a complete row has been durably appended."""
+        Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        with Path(out_path).open("a", encoding="utf-8") as handle:
+            handle.write(
+                json.dumps(
+                    {
+                        "scenario_id": "smoke",
+                        "seed": 111,
+                        "termination_reason": "success",
+                        "metrics": {"success": 1.0, "collisions": 0.0, "snqi": 0.5},
+                    },
+                )
+                + "\n",
+            )
+        raise RuntimeError("post-run retained metric validation failed")
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+
+    result = run_campaign(cfg, output_root=tmp_path / "campaign_out", label="runner_exception")
+    summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
+    planner_row = summary_payload["planner_rows"][0]
+    arm_summary = summary_payload["runs"][0]["summary"]
+
+    assert planner_row["status"] == "failed"
+    assert planner_row["episodes"] == 1
+    assert arm_summary["written"] == 1
+    assert arm_summary["episodes_written_this_invocation"] == 1
+    assert arm_summary["episodes_total"] == 1
+    assert result["episodes_written_this_invocation"] == 1
+    assert result["total_episodes"] == 1
+
+
+def test_run_campaign_counts_only_appended_rows_when_resumed_runner_raises(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """A runner exception counts its appended rows, not rows retained from earlier runs."""
+    scenario_rel = Path("configs/scenarios/single/resume_throughput.yaml")
+    scenario_abs = (tmp_path / scenario_rel).resolve()
+    scenario_abs.parent.mkdir(parents=True, exist_ok=True)
+    scenario_abs.write_text(
+        "- name: smoke_a\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n"
+        "- name: smoke_b\n  map_file: maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "campaign_resumed_runner_exception.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "name: test_campaign_resumed_runner_exception",
+                f"scenario_matrix: {scenario_rel.as_posix()}",
+                "seed_policy:",
+                "  mode: fixed-list",
+                "  seeds: [111]",
+                "resume: true",
+                "stop_on_failure: false",
+                "planners:",
+                "  - key: goal",
+                "    algo: goal",
+                "    benchmark_profile: baseline-safe",
+            ],
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+    output_root = tmp_path / "campaign_out"
+    campaign_id = "resumed-runner-exception"
+    retained_row = {
+        "scenario_id": "smoke_a",
+        "seed": 111,
+        "termination_reason": "success",
+        "metrics": {"success": 1.0, "collisions": 0.0, "snqi": 0.5},
+    }
+    calls = 0
+
+    def _fake_run_batch(_scenarios, out_path, *_args, algo="goal", **_kwargs):
+        """Create valid resume state, then append one new row and fail."""
+        nonlocal calls
+        calls += 1
+        with Path(out_path).open("a", encoding="utf-8") as handle:
+            handle.write(
+                json.dumps(
+                    retained_row
+                    if calls == 1
+                    else {
+                        "scenario_id": "smoke_b",
+                        "seed": 111,
+                        "termination_reason": "success",
+                        "metrics": {"success": 1.0, "collisions": 0.0, "snqi": 0.5},
+                    }
+                )
+                + "\n",
+            )
+        if calls == 1:
+            return {
+                "status": "ok",
+                "total_jobs": 1,
+                "written": 1,
+                "failed_jobs": 0,
+                "failures": [],
+                "out_path": str(out_path),
+                "algorithm_readiness": {
+                    "name": algo,
+                    "tier": "baseline-ready",
+                    "profile": "baseline-safe",
+                },
+                "preflight": {
+                    "status": "ok",
+                    "learned_policy_contract": {"status": "not_applicable"},
+                },
+            }
+        raise RuntimeError("post-run retained metric validation failed")
+
+    monkeypatch.setattr("robot_sf.benchmark.camera_ready_campaign.run_batch", _fake_run_batch)
+
+    first_result = run_campaign(cfg, output_root=output_root, campaign_id=campaign_id)
+    assert first_result["episodes_written_this_invocation"] == 1
+
+    result = run_campaign(cfg, output_root=output_root, campaign_id=campaign_id)
+    summary_payload = json.loads(Path(result["summary_json"]).read_text(encoding="utf-8"))
+    arm_summary = summary_payload["runs"][0]["summary"]
+
+    assert arm_summary["episodes_total"] == 2
+    assert arm_summary["written"] == 1
+    assert arm_summary["episodes_written_this_invocation"] == 1
+    assert result["total_episodes"] == 2
+    assert result["episodes_written_this_invocation"] == 1
+
+
 def test_write_campaign_report_escapes_markdown_cells(tmp_path: Path) -> None:
     """Markdown report tables should escape raw cell separators from planner metadata."""
     report_path = tmp_path / "campaign_report.md"

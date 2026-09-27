@@ -381,6 +381,44 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
 _MAX_FIRST_ERROR_LEN = 200
 
 
+def _episode_jsonl_snapshot(path: Path) -> tuple[int, int, int, int, int] | None:
+    """Return the file identity needed to measure rows appended by one runner call."""
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return None
+    if not path.is_file():
+        return None
+    return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns
+
+
+def _count_episode_rows_written_since(
+    path: Path,
+    before: tuple[int, int, int, int, int] | None,
+    *,
+    resume: bool,
+) -> int:
+    """Count completed JSONL rows written before a runner failure.
+
+    Returns:
+        Number of newline-terminated rows added since the snapshot.
+    """
+    after = _episode_jsonl_snapshot(path)
+    if after is None or before == after:
+        return 0
+
+    start_offset = 0
+    if resume and before is not None and before[:2] == after[:2] and after[2] >= before[2]:
+        start_offset = before[2]
+
+    with path.open("rb") as handle:
+        handle.seek(start_offset)
+        appended = handle.read()
+    # The benchmark writer terminates each serialized record with a newline;
+    # an incomplete final fragment is not a completed episode row.
+    return appended.count(b"\n")
+
+
 def _arm_episode_counts(summary: Mapping[str, Any]) -> tuple[int, int]:
     """Return invocation-written and retained row counts for one arm."""
     legacy_written_value = summary.get("written")

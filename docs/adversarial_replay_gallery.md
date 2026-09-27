@@ -17,10 +17,12 @@ files are absent, pass its `payload/` directory to the same command. Directory m
 source search manifests against `candidate_evaluations.csv`, `row_status.json`, `summary.json`, and
 `convergence_report.json`. The payload must sit beside `evidence_bundle_manifest.json` and
 `checksums.sha256`; the command validates their file lists, sizes, and digests before reconciling
-rows. It requires `run_metadata.manifest_files` and each summary run's path and digest to name
-exactly the loaded source-manifest set. When a manifest inventory includes `artifact_path`, that
-locator must resolve inside the packet to the corresponding source-manifest bytes. Candidate-level
-errors must agree with the source manifest;
+rows. Summary schemas v1 and v2 are supported. For v2, each `run_metadata.manifest_files` entry
+must bind the packet-relative retained source manifest to the producer's original output path and
+declare `retained_exact_copy`; the copied bytes must match the recorded digest. Each summary run's
+path and digest must name exactly the loaded source-manifest set. When a manifest inventory
+includes `artifact_path`, that locator must resolve inside the packet to the corresponding
+source-manifest bytes. Candidate-level errors must agree with the source manifest;
 failed or unresolved evaluations stay visible and cannot establish successful execution or a
 zero-critical result. Certification counts require a passed certificate with an admissible
 classification, and collision counts must agree with the collision-event flag. It binds planned
@@ -29,7 +31,9 @@ and duplicate evaluations. It reports a zero-critical result only when the
 declared budget is complete, no candidate is scoreless, every candidate has known noncritical
 criticality, and sampler aggregates agree. Unknown criticality, scoreless candidates, and missing
 budget slots stay visible and are not counted as zero. A packet containing a critical candidate
-requires its original search manifest for normal selection, materialization, and replay. Each packet
+requires its original search manifest for normal selection, materialization, and replay. Directory
+mode is accounting-only: it never invokes case materialization or replay and always reports an empty
+case list. Each packet
 row keeps execution outcome, scenario eligibility, case criticality, and replay-input availability as
 separate statuses. Missing raw inputs remain missing and do not mean the scenario is infeasible. The
 input status covers the candidate's scenario YAML and episode record; it does not certify that all
@@ -37,20 +41,27 @@ maps or runner configuration needed for replay are present.
 
 Convergence report schemas v1 through v3 are accepted. For v3, each report evaluation's candidate
 digest, criticality status, and collision/severe-intrusion tier are reconciled against the packet
-ledger, along with per-run and sampler-level tri-state counts. A completed success with no observed
-collision remains `unknown` when explicit severe-intrusion evidence is absent; the report's
+ledger, along with per-run tri-state counts, sampler-level all-row observed-critical totals, and
+budgeted unknown totals. A completed success with no observed collision remains `unknown` when
+explicit severe-intrusion evidence is absent; the report's
 `unknown_or_scoreless` execution-budget count is not a safety-criticality verdict. This preserves the
 #9645 pilot's 64 completed goal-planner episodes with unknown criticality instead of treating its
 missing intrusion evidence as a verified zero-critical result.
 
 ```bash
+source_evidence_root=/tmp/robot-sf-issue9645-3da290d
+git worktree add --detach "$source_evidence_root" 3da290d6e853675b5f64b53dd3ac4dd124331694
 scripts/dev/run_worktree_shared_venv.sh -- uv run python \
   scripts/tools/materialize_adversarial_replay_gallery.py \
-  docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload \
+  "$source_evidence_root/docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload" \
   --out output/adversarial-replay-gallery/issue-9645-accounting
 ```
 
-This packet result is bounded to its recorded search budget. A zero-critical result does not mean
+The pinned source packet is the #9645 evidence branch commit `3da290d6e853675b5f64b53dd3ac4dd124331694`;
+its bundle checksums bind the packet files used by the command. On this packet, the gallery accounts
+for 64/64 rows, records zero attributed critical cases and 64 unknown criticality values, selects no
+cases, and reports `zero_critical_result_verified: false`. Replay remains unattempted. This packet
+result is bounded to its recorded search budget. A zero-critical result does not mean
 that no counterexample exists, and historical compatibility replays such as #1501 remain separate
 from candidates counted in the packet.
 

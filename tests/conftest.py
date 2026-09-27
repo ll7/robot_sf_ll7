@@ -413,6 +413,19 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Scenario-admissibility tests exercise deterministic candidate, manifest,
+    # materialization, and provenance contracts used by the adversarial search.
+    "test_scenario_admissibility.py",
+    # Issue #9651 search-consumer contracts use a fake sampler/certifier and do
+    # not construct a simulator; keep the changed search adapter in PR coverage.
+    "test_search.py",
+    # MAP-Elites QD unit tests inject candidate evaluations and are CPU-only.
+    "test_issue_5308_qd.py",
+    # Map migration/source-capture tests use local SVG fixtures only.
+    "test_map_migration.py",
+    # Scenario-cache profiler tests use synthetic data and patched loaders; keep
+    # the changed cache instrumentation covered in the fast lane.
+    "test_perf_scenario_cache.py",
     # Social-force v2 planner contracts (issue #9724) are deterministic adapter
     # checks on synthetic grids; the four episode tests stay marked slow.
     "test_issue_9724_social_force_resolution_independent.py",

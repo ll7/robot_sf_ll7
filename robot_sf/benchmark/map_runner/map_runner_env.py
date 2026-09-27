@@ -22,13 +22,18 @@ def build_env_config(
     scenario: dict[str, Any],
     *,
     scenario_path: Path,
+    runtime_input_records: list[dict[str, str]] | None = None,
 ) -> RobotSimulationConfig:
     """Build the benchmark environment config for one scenario.
 
     Returns:
         RobotSimulationConfig: Config with SocNav structured observations and grid enabled.
     """
-    config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+    config = build_robot_config_from_scenario(
+        scenario,
+        scenario_path=scenario_path,
+        runtime_input_records=runtime_input_records,
+    )
     config.observation_mode = ObservationMode.SOCNAV_STRUCT
     config.use_occupancy_grid = True
     config.include_grid_in_observation = True

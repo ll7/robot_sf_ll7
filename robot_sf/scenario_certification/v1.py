@@ -6,7 +6,7 @@ import hashlib
 import json
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any, cast
 
@@ -25,6 +25,11 @@ from robot_sf.planner.classic_global_planner import (
 from robot_sf.robot.bicycle_drive import BicycleDriveSettings
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
+from robot_sf.scenario_certification.input_identity import (
+    runtime_input_records_match,
+    scenario_input_identity,
+    scenario_manifest_records_match,
+)
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
 if TYPE_CHECKING:
@@ -35,6 +40,7 @@ if TYPE_CHECKING:
     from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
 
 CERT_SCHEMA_VERSION = "scenario_cert.v1"
+ACTOR_SOURCE_CENSUS_SCHEMA = "scenario_actor_source_census.v1"
 
 VALID = "valid"
 INVALID = "invalid"
@@ -108,11 +114,17 @@ def certify_scenario_file(
     *,
     scenario_id: str | None = None,
     settings: CertificationSettings | None = None,
+    runtime_input_records: list[dict[str, str]] | None = None,
 ) -> list[ScenarioCertificate]:
     """Certify all scenarios, or one selected scenario, from a scenario manifest.
 
     Returns:
-        List of certificates in manifest order, or a single selected certificate.
+        List of certificates in manifest order, or a single selected certificate. Each
+        file-produced certificate carries optional producer-owned source and effective-input
+        digests in its open ``evidence`` object. The digests are marked stable only when the
+        loaded manifest closure and parser-consumed map/route snapshots match. When
+        ``runtime_input_records`` is supplied, it also receives those parser-consumed snapshots.
+        The optional evidence keys do not change the ``scenario_cert.v1`` schema version.
     """
 
     scenarios = load_scenarios(scenario_path)
@@ -123,10 +135,70 @@ def certify_scenario_file(
     ]
     if scenario_id is not None and not selected:
         raise ValueError(f"Scenario id '{scenario_id}' not found in {scenario_path}")
-    return [
-        certify_scenario(scenario, scenario_path=scenario_path, settings=settings)
-        for scenario in selected
-    ]
+    certificates = []
+    for scenario in selected:
+        consumed_runtime_inputs: list[dict[str, str]] = []
+        certificate = certify_scenario(
+            scenario,
+            scenario_path=scenario_path,
+            settings=settings,
+            runtime_input_records=consumed_runtime_inputs,
+        )
+        certificate = _bind_file_certificate_input_identity(
+            certificate,
+            scenario,
+            scenario_path=scenario_path,
+            consumed_runtime_inputs=consumed_runtime_inputs,
+        )
+        if runtime_input_records is not None:
+            runtime_input_records.extend(consumed_runtime_inputs)
+        certificates.append(certificate)
+    return certificates
+
+
+def _bind_file_certificate_input_identity(
+    certificate: ScenarioCertificate,
+    scenario: Mapping[str, Any],
+    *,
+    scenario_path: Path,
+    consumed_runtime_inputs: list[dict[str, str]],
+) -> ScenarioCertificate:
+    """Attach producer-time source/input identities to a file-generated certificate.
+
+    Returns:
+        Certificate with optional v1 evidence fields bound to the manifest closure and the
+        exact map/route snapshots consumed by the certifier. A missing or inconsistent input
+        identity is recorded as unstable, so legacy fail-closed consumers retain the case.
+    """
+    scenario_id = _scenario_id(scenario)
+    identity = scenario_input_identity(scenario_path, scenario_id=scenario_id)
+    manifest_matches = identity.get("status") == "available" and scenario_manifest_records_match(
+        identity, scenario
+    )
+    consumed_inputs_match = manifest_matches and runtime_input_records_match(
+        identity,
+        consumed_runtime_inputs,
+        scenario_id=scenario_id,
+    )
+    stable = bool(consumed_inputs_match)
+    if identity.get("status") != "available":
+        failure_reason = identity.get("reason_code") or "scenario_input_identity_unavailable"
+    elif not manifest_matches:
+        failure_reason = "scenario_manifest_parse_identity_mismatch"
+    elif not consumed_inputs_match:
+        failure_reason = "scenario_runtime_input_snapshots_mismatch"
+    else:
+        failure_reason = None
+
+    evidence = {
+        **certificate.evidence,
+        "source_artifact_sha256": identity.get("source_artifact_sha256"),
+        "effective_input_sha256": identity.get("effective_input_sha256"),
+        "effective_input_identity_stable": stable,
+        "runtime_input_identity_stable": stable,
+        "runtime_input_identity_failure_reason": failure_reason,
+    }
+    return replace(certificate, evidence=evidence)
 
 
 def certify_scenario(
@@ -134,17 +206,27 @@ def certify_scenario(
     *,
     scenario_path: Path,
     settings: CertificationSettings | None = None,
+    runtime_input_records: list[dict[str, str]] | None = None,
 ) -> ScenarioCertificate:
     """Build a ``scenario_cert.v1`` certificate from a scenario-loader entry.
 
     Returns:
-        Scenario certificate with fail-closed classification and evidence.
+        Scenario certificate with fail-closed classification and evidence. When
+        ``runtime_input_records`` is supplied, it receives the parser-consumed external
+        map and route-override snapshots without changing the ``scenario_cert.v1`` payload.
     """
 
     cert_settings = settings or CertificationSettings()
     sid = _scenario_id(scenario)
     try:
-        config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+        if runtime_input_records is None:
+            config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+        else:
+            config = build_robot_config_from_scenario(
+                scenario,
+                scenario_path=scenario_path,
+                runtime_input_records=runtime_input_records,
+            )
     except Exception as exc:  # noqa: BLE001 - certificate must fail closed on loader errors.
         return _invalid_scenario_certificate(
             scenario,
@@ -181,12 +263,19 @@ def certify_scenario(
             source=scenario_path.as_posix(),
             reason="no_applicable_robot_routes",
         )
-    return _aggregate_scenario_certificate(
+    certificate = _aggregate_scenario_certificate(
         scenario,
         scenario_id=sid,
         source=scenario_path.as_posix(),
         route_certs=route_certs,
         settings=cert_settings,
+    )
+    return replace(
+        certificate,
+        evidence={
+            **certificate.evidence,
+            "actor_source_census": scenario_actor_source_census(config),
+        },
     )
 
 
@@ -228,13 +317,128 @@ def certify_map_definition(
             source=source,
             reason="no_applicable_robot_routes",
         )
-    return _aggregate_scenario_certificate(
+    certificate = _aggregate_scenario_certificate(
         scenario_payload,
         scenario_id=_scenario_id(scenario_payload),
         source=source,
         route_certs=route_certs,
         settings=settings or CertificationSettings(),
     )
+    return replace(
+        certificate,
+        evidence={
+            **certificate.evidence,
+            "actor_source_census": scenario_actor_source_census(config),
+        },
+    )
+
+
+def scenario_actor_source_census(config: RobotSimulationConfig) -> dict[str, Any]:
+    """Inventory effective pedestrian actors and actor-context changes after loading.
+
+    Returns:
+        A versioned census over every effective map, including scenario overlays already
+        applied by ``build_robot_config_from_scenario``. The empty-scene assertion is
+        deliberately conservative: a forced population, map-authored pedestrian, or
+        density-backed route/crowded zone means the case is not verified empty. Social
+        groups are tracked separately because they alter planner-visible context without
+        spawning actors themselves.
+    """
+    density = getattr(config.sim_config, "peds_per_area_m2", None)
+    forced_population_size = getattr(config.sim_config, "population_size", None)
+    map_defs = getattr(getattr(config, "map_pool", None), "map_defs", None)
+    result: dict[str, Any] = {
+        "schema_version": ACTOR_SOURCE_CENSUS_SCHEMA,
+        "status": "unknown",
+        "verified_empty": False,
+        "density_per_m2": density,
+        "forced_population_size": forced_population_size,
+        "effective_map_count": 0,
+        "maps": [],
+        "dynamic_actor_source_reasons": [],
+        "planner_context_equivalent": False,
+    }
+    if (
+        not isinstance(density, (int, float))
+        or isinstance(density, bool)
+        or not math.isfinite(density)
+        or density < 0
+        or (
+            forced_population_size is not None
+            and (
+                not isinstance(forced_population_size, int)
+                or isinstance(forced_population_size, bool)
+                or forced_population_size < 0
+            )
+        )
+        or not isinstance(map_defs, Mapping)
+        or not map_defs
+    ):
+        result["dynamic_actor_source_reasons"] = ["effective_actor_inventory_incomplete"]
+        return result
+
+    map_rows: list[dict[str, Any]] = []
+    dynamic_reasons: list[str] = []
+    context_equivalent = True
+    complete = True
+    for map_id, map_def in sorted(map_defs.items(), key=lambda item: str(item[0])):
+        single_pedestrians = getattr(map_def, "single_pedestrians", None)
+        ped_routes = getattr(map_def, "ped_routes", None)
+        crowded_zones = getattr(map_def, "ped_crowded_zones", None)
+        social_groups = getattr(map_def, "social_groups", None)
+        if not all(
+            isinstance(value, list)
+            for value in (single_pedestrians, ped_routes, crowded_zones, social_groups)
+        ):
+            complete = False
+            continue
+
+        reasons: list[str] = []
+        if single_pedestrians:
+            reasons.append("map_single_pedestrians")
+        if forced_population_size is not None and forced_population_size > 0:
+            reasons.append("forced_population_size")
+        if density > 0 and ped_routes:
+            reasons.append("density_backed_pedestrian_routes")
+        if density > 0 and crowded_zones:
+            reasons.append("density_backed_crowded_zones")
+        if social_groups:
+            context_equivalent = False
+        dynamic_reasons.extend(f"{map_id}:{reason}" for reason in reasons)
+        map_rows.append(
+            {
+                "map_id": str(map_id),
+                "single_pedestrian_count": len(single_pedestrians),
+                "pedestrian_route_count": len(ped_routes),
+                "crowded_zone_count": len(crowded_zones),
+                "social_group_count": len(social_groups),
+                "dynamic_actor_source_reasons": reasons,
+                "verified_empty": not reasons and not social_groups,
+            }
+        )
+
+    result.update(
+        {
+            "status": "complete" if complete and len(map_rows) == len(map_defs) else "unknown",
+            "verified_empty": (
+                complete
+                and len(map_rows) == len(map_defs)
+                and context_equivalent
+                and not dynamic_reasons
+            ),
+            "effective_map_count": len(map_rows),
+            "maps": map_rows,
+            "dynamic_actor_source_reasons": list(dict.fromkeys(dynamic_reasons)),
+            "planner_context_equivalent": context_equivalent,
+        }
+    )
+    if not complete or len(map_rows) != len(map_defs):
+        result["dynamic_actor_source_reasons"] = list(
+            dict.fromkeys(
+                [*result["dynamic_actor_source_reasons"], "map_actor_inventory_incomplete"]
+            )
+        )
+    return result
 
 
 def certificate_to_dict(certificate: ScenarioCertificate) -> dict[str, Any]:

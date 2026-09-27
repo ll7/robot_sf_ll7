@@ -68,6 +68,7 @@ def _fixture_artifacts(tmp_path: Path) -> SimpleNamespace:
         campaign_exit_code=0,
         benchmark_success=False,
         total_episodes=1,
+        episodes_written_this_invocation=1,
         runtime_sec=0.1,
     )
     snqi = SimpleNamespace(
@@ -301,6 +302,8 @@ def test_orchestrator_return_contract_preserves_artifact_paths_and_status_axes(
     assert result["campaign_execution_status"] == "completed"
     assert result["evidence_status"] == "diagnostic-only"
     assert result["benchmark_success"] is False
+    assert result["total_episodes"] == 1
+    assert result["episodes_written_this_invocation"] == 1
     assert result["status"] == "completed"
     assert result["status_reason"] == "fixture completion"
     assert result["publication_bundle"] is None

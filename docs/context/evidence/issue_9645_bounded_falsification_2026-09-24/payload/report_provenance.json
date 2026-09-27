@@ -5,7 +5,7 @@
   "expected_episode_record_count": 64,
   "experiment_source_commit": "58e516aa4f69ff3098bf518199f483006589758c",
   "experiment_source_commit_evidence_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/run_metadata.json",
-  "experiment_source_commit_sha256": "a1cf19be4df94dc1e9252c2e1632ffb08fbf556334d1279310db62026cf25c6f",
+  "experiment_source_commit_sha256": "cd55d5235c0e2d094723ee9157190f9030ce76d63a88be9a803426bb2d532872",
   "manifest_path_map_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/pilot_report_manifest_path_map.v1.json",
   "manifest_path_map_sha256": "1a8cf3b763e562a8febe0d946c2db34cdcc9cbe8a183117c50d3f1c91da45ae7",
   "reproduction_input_rebase_map_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/input_rebase_map.v1.json",

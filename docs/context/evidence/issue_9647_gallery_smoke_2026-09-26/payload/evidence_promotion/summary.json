@@ -1,0 +1,85 @@
+{
+  "case": {
+    "case_id": "case_0000_01595b2ea612",
+    "dynamic_task_feasibility": "unknown",
+    "planner": "goal",
+    "scenario_id": "crossing_ttc_template_adversarial_0008",
+    "seed": 320,
+    "source_input_binding": "unknown_source_episode_map_registry_digest_missing",
+    "static_route_certificate": "passed_hard_but_solvable_post_hoc"
+  },
+  "claim_boundary": "Diagnostic selector, replay-outcome reproduction at a changed code revision, and existing-renderer smoke only. Not a new search discovery, exact-source reproduction, dynamic-feasibility proof, planner comparison, safety result, or real-world safety claim. The tracked follow-up figures are render-only derivatives of the preserved 4b961 trace; they do not represent a second replay or simulation.",
+  "current_base_at_capture": "7815da2daaf646d8fb6d3bada1ab8c31fb2d3572",
+  "environment": {
+    "python_version": "3.13.14",
+    "replay_batch_runtime_seconds": 5.728581277653575,
+    "workers": 1
+  },
+  "input": {
+    "fixture": "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json",
+    "historical_origin": "#1501 failure_0002",
+    "kind": "tracked_historical_compatibility_fixture",
+    "new_search_discovery": false,
+    "represented_candidate_rows": 1,
+    "source_search_manifest_budget": 32,
+    "source_search_manifest_method": "Optuna",
+    "source_search_manifest_seed": 42
+  },
+  "purpose": "diagnostic_one_case_replay_and_render_smoke",
+  "render_only_provenance": "evidence_promotion/render_only_provenance.json",
+  "rendering": {
+    "annotations": {
+      "collision_event_source": "event_ledger.collision_events[0].collision_time",
+      "collision_event_time_s": 1.0,
+      "collision_nearest_sample_step": 9,
+      "measurements_share_sample": true,
+      "minimum_clearance_m": -0.015686402836192603,
+      "minimum_clearance_source": "algorithm_metadata.simulation_step_trace.steps[9].pedestrians[0].surface_clearance_m",
+      "minimum_clearance_time_s": 1.0
+    },
+    "critical_frame_png_step": 9,
+    "dynamics_executed": false,
+    "filmstrip_png_frame_steps": [
+      0,
+      2,
+      4,
+      7,
+      9
+    ],
+    "filmstrip_png_frames": 5,
+    "map_overlay": "unavailable_no_map_asset_passed_to_render_only_renderer",
+    "render_mode": "stored_trace_only",
+    "renderer_revision": "d0a8ccf822c48ae7d61dae361440e7335ee43013",
+    "repeat_render_byte_identity": true,
+    "trajectory_png": "included",
+    "video": "unavailable_pygame_missing_moviepy_unavailable"
+  },
+  "result": "passed_smoke",
+  "runner_revision": "4b9617338ecbaf6bd3612b4d8c5269f993581a0a",
+  "schema_version": "issue_9647_gallery_smoke_summary.v1",
+  "selection_and_replay": {
+    "collision_count": 1,
+    "failure_attribution_match": true,
+    "identity_match": true,
+    "near_misses": 5,
+    "objective_value": 4.833333333333333,
+    "outcome": "collision",
+    "outcome_match": true,
+    "path_efficiency": 1.0,
+    "replayed": 1,
+    "route_complete": false,
+    "selected": 1,
+    "termination_reason": "collision",
+    "top_k": 1
+  },
+  "source_episode_revision_for_verification": "58e516aa4f69ff3098bf518199f483006589758c",
+  "source_revision_match": false,
+  "trace_provenance": {
+    "source_episode_record_provenance_sha256": "5d54d9167b49c57e04f7a04ce87e220edac5c32a85eab5cf7db4369b9f28a2e0",
+    "source_episode_record_sha256": "cd5597cec3728b27379c21e10434c9ed17aaa0f65937a98f24fb4bd9d692cdc8",
+    "trace_path": "cases/case_0000_01595b2ea612/replay/simulation_step_trace.json",
+    "trace_provenance_path": "cases/case_0000_01595b2ea612/replay/trace_provenance.json",
+    "trace_provenance_sha256": "5f2ac197e51e629c023c1ecbbb669d4f2ccc69e6c5bc4ee2b211c21e43407d23",
+    "trace_sha256": "d12df9eb2030a29eae8cea8cc1bc5b042c9865bd9b9afcca8d83ed3da5872788"
+  }
+}

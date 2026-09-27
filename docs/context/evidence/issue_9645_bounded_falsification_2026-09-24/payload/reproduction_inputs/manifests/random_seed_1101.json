@@ -183,7 +183,7 @@
         "status": "passed"
       },
       "effective_scenario_hash": "06ae946815f9f2e54d68a8d0328b25ad0b6d585838d3727bc24b6efc02ae2feb",
-      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0000/episode_records.jsonl",
+      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0000/episode_records.jsonl",
       "error": null,
       "failure_attribution": {
         "details": {
@@ -388,7 +388,7 @@
         "status": "passed"
       },
       "effective_scenario_hash": "807288841288dc8ddbe8c6d4917ad0b271ade34c4def78d9f93508e72f372d5b",
-      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0001/episode_records.jsonl",
+      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0001/episode_records.jsonl",
       "error": null,
       "failure_attribution": {
         "details": {
@@ -596,7 +596,7 @@
         "status": "passed"
       },
       "effective_scenario_hash": "aab67659eadeca436cb210c326e458496671a6176180b891635a5638619eab00",
-      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0002/episode_records.jsonl",
+      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0002/episode_records.jsonl",
       "error": null,
       "failure_attribution": {
         "details": {
@@ -795,7 +795,7 @@
         "status": "passed"
       },
       "effective_scenario_hash": "4701c4102d1855b2b7ba60c2634f9885ec3f31350ca49970a523371ec083d4c5",
-      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0003/episode_records.jsonl",
+      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0003/episode_records.jsonl",
       "error": null,
       "failure_attribution": {
         "details": {
@@ -1011,7 +1011,7 @@
         "status": "passed"
       },
       "effective_scenario_hash": "814e11a4a4ac37d136d895f3477aec9085a0fb797d3d1c2fffb3cdeee34efc8f",
-      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0004/episode_records.jsonl",
+      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0004/episode_records.jsonl",
       "error": null,
       "failure_attribution": {
         "details": {
@@ -1211,7 +1211,7 @@
         "status": "passed"
       },
       "effective_scenario_hash": "9dfdc84565fdb1bb7165c6a9c4dbbf707acb6d7fbadcc2de6248eb1153bdc370",
-      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0005/episode_records.jsonl",
+      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0005/episode_records.jsonl",
       "error": null,
       "failure_attribution": {
         "details": {
@@ -1411,7 +1411,7 @@
         "status": "passed"
       },
       "effective_scenario_hash": "6ca4efb1b21f8e0be7ac1814d44c82a85d1656e182ba0f9b2e333890be6501e6",
-      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0006/episode_records.jsonl",
+      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0006/episode_records.jsonl",
       "error": null,
       "failure_attribution": {
         "details": {
@@ -1610,7 +1610,7 @@
         "status": "passed"
       },
       "effective_scenario_hash": "e393eb5c5e3a48f75a5fa79364724393c4e6d17a0ceb0c868bc14f075362abb6",
-      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0007/episode_records.jsonl",
+      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0007/episode_records.jsonl",
       "error": null,
       "failure_attribution": {
         "details": {
@@ -1826,7 +1826,7 @@
         "status": "passed"
       },
       "effective_scenario_hash": "310593025e55a4cff9166b1f705109256fdca41b2446606c1bd3c0d43e296310",
-      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0008/episode_records.jsonl",
+      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0008/episode_records.jsonl",
       "error": null,
       "failure_attribution": {
         "details": {
@@ -2028,7 +2028,7 @@
         "status": "passed"
       },
       "effective_scenario_hash": "4332fa932bb7ab1de8acdb5ee6e1cb0bfb615f8bf8d012697ba1ac817180a447",
-      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0009/episode_records.jsonl",
+      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0009/episode_records.jsonl",
       "error": null,
       "failure_attribution": {
         "details": {
@@ -2229,7 +2229,7 @@
         "status": "passed"
       },
       "effective_scenario_hash": "b084913b8f23370d16c0ea0cf361d00f2befffc8312e97203c5888f12e43e8e8",
-      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0010/episode_records.jsonl",
+      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0010/episode_records.jsonl",
       "error": null,
       "failure_attribution": {
         "details": {
@@ -2429,7 +2429,7 @@
         "status": "passed"
       },
       "effective_scenario_hash": "2cf346d65563fd3f81b78fd6c7f71b0b4f42796caea4d38cbbb9cae16247e281",
-      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0011/episode_records.jsonl",
+      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0011/episode_records.jsonl",
       "error": null,
       "failure_attribution": {
         "details": {
@@ -2631,7 +2631,7 @@
         "status": "passed"
       },
       "effective_scenario_hash": "5eeea52e17c41d2b48b1739c27520034f2917a2ea0c092444fdd8d23a94d1234",
-      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0012/episode_records.jsonl",
+      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0012/episode_records.jsonl",
       "error": null,
       "failure_attribution": {
         "details": {
@@ -2830,7 +2830,7 @@
         "status": "passed"
       },
       "effective_scenario_hash": "23e81ec24515c346a925ec40664ac3688f24d2ea3873bdf02d40d754514ac30e",
-      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0013/episode_records.jsonl",
+      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0013/episode_records.jsonl",
       "error": null,
       "failure_attribution": {
         "details": {
@@ -3038,7 +3038,7 @@
         "status": "passed"
       },
       "effective_scenario_hash": "3f46ee46b5a77d9053ac975bac68ce358f692ae6621bd4723f66d0f35bc8824d",
-      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0014/episode_records.jsonl",
+      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0014/episode_records.jsonl",
       "error": null,
       "failure_attribution": {
         "details": {
@@ -3246,7 +3246,7 @@
         "status": "passed"
       },
       "effective_scenario_hash": "34c7db86fd0791b5b41818a71bf22aba693b6e4d921ba59f253d4d295c1c9833",
-      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0015/episode_records.jsonl",
+      "episode_record_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/path_normalized_episode_records/seed_1101_random/candidate_0015/episode_records.jsonl",
       "error": null,
       "failure_attribution": {
         "details": {

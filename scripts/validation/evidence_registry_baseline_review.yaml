@@ -17,12 +17,10 @@ source_issue_addendum: 5981
 latest_reconciliation_issue: 9647
 latest_reviewed_date: 2026-09-27
 latest_reviewed_by: Codex #9647 delivery lane; exact-byte sidecar audit only, no additional human sign-off is claimed.
-latest_review_actor: >-
-  Codex autonomous lead engineer, independently reviewed by a read-only Codex subagent
-  for the current user-directed task; this is not maintainer approval.
+latest_review_actor: Codex autonomous lead; updated packet delta review pending.
 latest_evidence_tree_refresh_issue: 9645
-latest_evidence_tree_refresh_files_added: 136
-latest_evidence_tree_refresh_sha256: 232bd30b57001f63f487580ffa0e8f6c283af4e8519ce8677f1a99417b57188a
+latest_evidence_tree_refresh_files_added: 200
+latest_evidence_tree_refresh_sha256: cfdce55677cbc50edf0eb5c45ac86e3f381967b1eefc022bd29a9d1177ba736d
 evidence_tree_refresh_addenda:
   - issue: 9647
     reviewed_date: 2026-09-26
@@ -81,37 +79,30 @@ evidence_tree_refresh_addenda:
       count: 2465
       sha256: 7253f1cc2eb98da8e6ddd3acdab31c59efaf534968f782c69933c89232132dd0
     candidate:
-      count: 2601
-      sha256: 232bd30b57001f63f487580ffa0e8f6c283af4e8519ce8677f1a99417b57188a
-    files_added: 136
+      count: 2665
+      sha256: cfdce55677cbc50edf0eb5c45ac86e3f381967b1eefc022bd29a9d1177ba736d
+    files_added: 200
     finding_delta: none
     decision: >-
-      Reconciled the #9645 packet refresh against current main after rebasing. The diagnostic
-      packet contributes 136 tracked files to the current-main evidence tree. The evidence registry
-      retains 438 findings across 98 files, with zero active strict-CI findings; this refresh
-      changes only the evidence-tree inventory. The 394 packet checksums were verified at source
-      head ff84feb83a30e47f7b57d9b83b78c0f830d31f8e, and the independently reviewed packet records
-      64 evaluations with criticality unknown for all 64. This is not evidence that safety failures
-      or counterexamples do not exist; dynamic feasibility of the historical #1501 case remains
-      unknown. The source-revision scoring defect that maps missing severe-intrusion data to a
-      zero-valued safety composite is recorded in the research report and must not be treated as
-      safety evidence. The baseline remains diagnostic-only and admits no planner-safety claim.
+      Recomputed the evidence-tree candidate after rebasing #9645 onto current main. The packet adds
+      200 tracked evidence paths to the 2,465-file current-main tree, including 64 path-normalized
+      candidate episode records. The generated registry projection remains 438 findings across 98
+      files, with zero active strict-CI findings; this baseline change is limited to the evidence-tree
+      manifest. The exact updated packet content and new normalized records remain pending independent
+      review before PR merge. This candidate is not a maintainer approval or a planner-safety claim.
 latest_refresh_review_addendum: >-
-  Evidence-tree refresh addendum (Issue #9645; 2026-09-27, rebased on current main at
-  d0acb1c0d5e9e293165bafa4dbc95a4b34d9e255): the packet contributes 136 tracked evidence files
-  to the current-main tree, moving the evidence-tree manifest from 2,465 files at SHA-256
-  7253f1cc2eb98da8e6ddd3acdab31c59efaf534968f782c69933c89232132dd0 to 2,601 files at SHA-256
-  232bd30b57001f63f487580ffa0e8f6c283af4e8519ce8677f1a99417b57188a. The candidate registry
-  projection retains 438 findings across 98 files, unchanged, and strict CI still has zero active
-  findings; only the evidence-tree manifest changes. The 394 packet checksums verified at source
-  head ff84feb83a30e47f7b57d9b83b78c0f830d31f8e. The bounded search observed 64 evaluations and
-  unknown criticality for all 64; it does not establish absence of counterexamples. A reviewer
-  also found that, at experiment source revision 58e516aa4f69ff3098bf518199f483006589758c,
-  missing severe-intrusion evidence was collapsed into a zero-valued safety composite. Preserve
-  that as a methodological caveat, not a safety result. Historical #1501 input binding and dynamic
-  feasibility remain unknown, and the case is not admitted. This baseline refresh makes no planner
-  safety or feasibility claim. The evidence review was performed by the Codex autonomous lead
-  engineer and an independent read-only Codex subagent; it is not maintainer approval.
+  Evidence-tree refresh addendum (Issue #9645; candidate recomputed on current main at
+  d0acb1c0d5e9e293165bafa4dbc95a4b34d9e255): the packet adds 200 tracked evidence paths to the
+  2,465-file current-main tree, producing 2,665 files at SHA-256
+  cfdce55677cbc50edf0eb5c45ac86e3f381967b1eefc022bd29a9d1177ba736d. This includes 64
+  path-normalized candidate episode records and updated source bindings. The evidence-registry
+  projection remains 438 findings across 98 files and strict CI has zero active findings; only the
+  evidence-tree manifest changes. The underlying finite search remains 64 evaluations with unknown
+  criticality for all candidates; no counterexample absence or planner safety is established.
+  The source-revision scorer's zero-valued safety composite when severe-intrusion evidence is missing
+  remains a methodological caveat. Historical #1501 input binding and dynamic feasibility remain
+  unknown, and the case is not admitted. The updated packet files and normalization record have not
+  yet received independent exact-content review; that review is required before PR merge.
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73

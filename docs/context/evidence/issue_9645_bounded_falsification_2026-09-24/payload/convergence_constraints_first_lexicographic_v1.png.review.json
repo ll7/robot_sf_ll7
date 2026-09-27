@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/convergence_constraints_first_lexicographic_v1.png",
-  "artifact_sha256": "ff02f0984a4a34b848451d4e6310b52b82f5237a0e4c5c117b1ab623013461f5",
+  "artifact_sha256": "9c90cde66ccd990e28b68711ed70137ff3d96fb32d568226c04def35d25d070d",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

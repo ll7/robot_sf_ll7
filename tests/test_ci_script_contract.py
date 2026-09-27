@@ -75,6 +75,17 @@ DEV_GUIDE = ROOT / "docs" / "dev_guide.md"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
 
+def _clear_shared_venv_selection(env: dict[str, str]) -> dict[str, str]:
+    """Keep explicit wrapper selection out of isolated repository fixtures."""
+    for name in (
+        "VIRTUAL_ENV",
+        "UV_PROJECT_ENVIRONMENT",
+        "ROBOT_SF_EXPLICIT_VENV_OVERRIDE",
+    ):
+        env.pop(name, None)
+    return env
+
+
 def test_ci_driver_smoke_uses_runtime_schema_and_output_matrix_path() -> None:
     """Keep smoke preflight aligned with the runtime benchmark invocation."""
 
@@ -300,6 +311,7 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
             "FIXTURE_OUTPUT": str(output),
             "FIXTURE_EXIT": str(pytest_exit),
         }
+        _clear_shared_venv_selection(env)
         result = subprocess.run(
             [str(script_dir / "run_tests_parallel.sh")],
             cwd=repo,
@@ -330,6 +342,7 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
         "FIXTURE_OUTPUT": str(output),
         "FIXTURE_EXIT": "0",
     }
+    _clear_shared_venv_selection(missing_coverage_env)
     missing_coverage_env.pop("COVERAGE_FILE", None)
     result = subprocess.run(
         [str(script_dir / "run_tests_parallel.sh")],
@@ -658,7 +671,9 @@ def test_cuda_preflight_dispatches_status_to_serial_optional_lane(
     )
     driver.chmod(0o755)
 
-    env = {**os.environ, "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}"}
+    env = _clear_shared_venv_selection(
+        {**os.environ, "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}"}
+    )
     for key in ("PR_READY_SKIP_PREFLIGHT", "ROBOT_SF_CUDA_RUNTIME_STATUS", "PYTEST_NUM_WORKERS"):
         env.pop(key, None)
     env.update(
@@ -727,17 +742,20 @@ def _run_parallel_lane(
     lane: str,
 ) -> subprocess.CompletedProcess[str]:
     """Run a fixture lane with serial workers and capture its pytest command."""
-    return subprocess.run(
-        [str(script_dir / "run_tests_parallel.sh"), "--lane", lane, "--no-ordering"],
-        cwd=repo,
-        env={
+    env = _clear_shared_venv_selection(
+        {
             **os.environ,
             "BASE_REF": "HEAD~1",
             "PYTEST_NUM_WORKERS": "1",
             "PYTEST_FAST_FAIL": "0",
             "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
             "UV_CAPTURED_ARGS": str(captured_args),
-        },
+        }
+    )
+    return subprocess.run(
+        [str(script_dir / "run_tests_parallel.sh"), "--lane", lane, "--no-ordering"],
+        cwd=repo,
+        env=env,
         capture_output=True,
         text=True,
         timeout=30,
@@ -781,14 +799,17 @@ def test_run_tests_parallel_fails_before_worker_resolution_on_incomplete_profile
     )
     fake_uv.chmod(0o755)
 
-    result = subprocess.run(
-        [str(script_dir / "run_tests_parallel.sh"), "--lane", "all"],
-        cwd=repo,
-        env={
+    env = _clear_shared_venv_selection(
+        {
             **os.environ,
             "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
             "UV_CALLED": str(uv_called),
-        },
+        }
+    )
+    result = subprocess.run(
+        [str(script_dir / "run_tests_parallel.sh"), "--lane", "all"],
+        cwd=repo,
+        env=env,
         capture_output=True,
         text=True,
         timeout=30,
@@ -895,17 +916,20 @@ def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(  # 
         text=True,
     )
 
-    result = subprocess.run(
-        [str(script_dir / "run_tests_parallel.sh"), "--lane", "core", "--no-ordering"],
-        cwd=repo,
-        env={
+    env = _clear_shared_venv_selection(
+        {
             **os.environ,
             "BASE_REF": "HEAD~1",
             "PYTEST_NUM_WORKERS": "1",
             "PYTEST_FAST_FAIL": "0",
             "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
             "UV_CAPTURED_ARGS": str(captured_args),
-        },
+        }
+    )
+    result = subprocess.run(
+        [str(script_dir / "run_tests_parallel.sh"), "--lane", "core", "--no-ordering"],
+        cwd=repo,
+        env=env,
         capture_output=True,
         text=True,
         timeout=30,
@@ -1031,10 +1055,8 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
     fake_uv.chmod(0o755)
 
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
-    result = subprocess.run(
-        [str(script_dir / "run_tests_parallel.sh"), "--no-ordering", "tests/dev"],
-        cwd=repo,
-        env={
+    env = _clear_shared_venv_selection(
+        {
             **os.environ,
             "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
             "PR_READY_SERIAL_FALLBACK": "1",
@@ -1044,7 +1066,12 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
             "UV_CAPTURED_ARGS": str(captured_args),
             "UV_DIAGNOSTIC_ARGS": str(captured_diagnostic_args),
             "UV_COUNT_FILE": str(invocation_count),
-        },
+        }
+    )
+    result = subprocess.run(
+        [str(script_dir / "run_tests_parallel.sh"), "--no-ordering", "tests/dev"],
+        cwd=repo,
+        env=env,
         capture_output=True,
         text=True,
         timeout=30,

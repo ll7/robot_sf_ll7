@@ -15,8 +15,8 @@ approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
 latest_reconciliation_issue: 9647
-latest_reviewed_date: 2026-09-26
-latest_reviewed_by: Codex autonomous lead agent, with an independent provenance review under the user's programme authorization; no additional human sign-off is claimed.
+latest_reviewed_date: 2026-09-27
+latest_reviewed_by: Codex #9647 delivery lane; exact-byte sidecar audit only, no additional human sign-off is claimed.
 evidence_tree_refresh_addenda:
   - issue: 9647
     reviewed_date: 2026-09-26
@@ -53,6 +53,22 @@ evidence_tree_refresh_addenda:
       Those source artifacts remain available only in ignored local output in this checkout and are
       not preserved by the tracked bundle. The render-only claims remain limited to byte-reproducible
       figures from stored trace samples; no simulator, replay, search, or campaign result is asserted.
+  - issue: 9647
+    reviewed_date: 2026-09-27
+    previous:
+      count: 2462
+      sha256: d76bed17284d321a99cc2fd51e19c5d0e32de11af9f3c49b8e5ebd3b1007a29f
+    candidate:
+      count: 2465
+      sha256: 7253f1cc2eb98da8e6ddd3acdab31c59efaf534968f782c69933c89232132dd0
+    files_added: 3
+    finding_delta: none
+    decision: >-
+      Reviewed the three new exact-byte review sidecars for the tracked #9647 gallery-demo figures.
+      Each sidecar's artifact path matches its adjacent PNG and its SHA-256 matches the unchanged PNG
+      bytes. The sidecars mark AI-generated images as needing review; this addendum makes no new
+      interpretation or benchmark claim. The refreshed machine baseline retains 438 findings and
+      changes only the evidence-tree manifest for these three tracked files.
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73

@@ -1,10 +1,10 @@
 {
   "schema_version": "evidence_bundle.v1",
-  "created_at_utc": "2026-09-27T00:29:07.482844Z",
+  "created_at_utc": "2026-09-27T00:40:50.137792Z",
   "bundle_name": "issue_9645_bounded_falsification_2026-09-24",
   "source_root": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload",
-  "command": "Clean-root reproduction of report_falsification_search.py using the checksum-bound comparison and four archived manifests; no search or simulation rerun.",
-  "commit": "8ba6abdfca95bc638b7cef768aa7621ab5aa8119",
+  "command": "Clean-root reproduction of the schema-v3 falsification report from the checksum-bound comparison and four archived manifests; no search or simulation rerun.",
+  "commit": "8619769f7f083e2a44c79726163271f3ec7d0b67",
   "claim_boundary": "diagnostic_only_not_benchmark_evidence",
   "policy": {
     "large_raw_artifacts": "excluded",
@@ -193,7 +193,7 @@
     {
       "path": "report_provenance.json",
       "size_bytes": 3444,
-      "sha256": "d19ddbe7fe61715e80dcbd1a7c55943b0d18112d1ed34a18ed2e2465f43edd82",
+      "sha256": "c01667fb6f1aadb1835c5ed435e662669a8808785160825f36bdbdde3fd2826a",
       "kind": "reports"
     },
     {

@@ -44,6 +44,7 @@ from robot_sf.evidence.distance_convention import (  # noqa: E402
 from scripts.ci.check_evidence_writer_usage import (  # noqa: E402
     check_changed_files as check_evidence_writer_usage,
 )
+from scripts.dev._gh_rest import gh_api_metadata_get  # noqa: E402
 from scripts.dev.check_issue_line_budget import (  # noqa: E402
     evaluate_budget,
     has_declared_cap,
@@ -255,13 +256,7 @@ def get_issue_metadata(issue: str, repo: str) -> tuple[list[str], str] | None:
     enforce a closing contract must treat that result as unknown and fail closed.
     """
     try:
-        res = subprocess.run(
-            ["gh", "issue", "view", issue, "--json", "labels,body", "--repo", repo],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
+        res = gh_api_metadata_get(f"repos/{repo}/issues/{issue}", timeout=10)
         if res.returncode != 0:
             return None
         data = json.loads(res.stdout)

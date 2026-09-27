@@ -193,6 +193,9 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
         Summary dict compatible with campaign orchestration expectations.
     """
 
+    import time  # noqa: PLC0415
+
+    from robot_sf.benchmark.aggregate import read_jsonl  # noqa: PLC0415
     from robot_sf.benchmark.camera_ready._config import (  # noqa: PLC0415
         _scenario_with_kinematics,
     )
@@ -237,6 +240,8 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
     # Run the batch
     status = "ok"
     warnings: list[str] = []
+    planner_started_at_utc = _utc_now()
+    planner_start = time.perf_counter()
     try:
         summary = run_batch(
             scoped_scenarios,
@@ -293,24 +298,25 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
         }
         warnings.append(f"Arm failed: {exc}")
 
-    # Add metadata to summary
-    import time  # noqa: PLC0415
-
-    planner_started_at_utc = _utc_now()
-    planner_start = time.perf_counter()
-
     planner_finished_at_utc = _utc_now()
     runtime_sec = float(max(1e-9, time.perf_counter() - planner_start))
     episodes_written = int(summary.get("written", 0))
+    retained_records = (
+        read_jsonl(str(params.episodes_path))
+        if params.episodes_path.is_file() and params.episodes_path.stat().st_size > 0
+        else []
+    )
+    episodes_total = len(retained_records)
 
     summary["status"] = status
     summary["started_at_utc"] = planner_started_at_utc
     summary["finished_at_utc"] = planner_finished_at_utc
     summary["runtime_sec"] = runtime_sec
     summary["episodes_per_second"] = (episodes_written / runtime_sec) if runtime_sec > 0 else 0.0
+    summary["episodes_written_this_invocation"] = episodes_written
     summary["kinematics"] = params.kinematics
     summary["benchmark_availability"] = availability_payload(summary)
-    summary["episodes_total"] = episodes_written
+    summary["episodes_total"] = episodes_total
 
     # Write summary.json
     params.summary_path.parent.mkdir(parents=True, exist_ok=True)
@@ -327,7 +333,8 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
         "summary": summary,
         "cleanup_metrics": cleanup_metrics,
         "warnings": warnings,
-        "episodes_total": episodes_written,
+        "episodes_total": episodes_total,
+        "episodes_written_this_invocation": episodes_written,
     }
 
     return result

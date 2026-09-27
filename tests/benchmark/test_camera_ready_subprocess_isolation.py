@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -885,6 +886,51 @@ class TestScopedScenarioParity:
             _run_single_arm_subprocess(params)
 
         assert captured["resume"] is True
+
+    def test_worker_runtime_includes_run_batch_execution(self, tmp_path, monkeypatch):
+        """The arm timer starts before the batch and ends after its work."""
+        from unittest.mock import Mock as _Mock
+
+        from robot_sf.benchmark.camera_ready.resource_lifecycle import (
+            _run_single_arm_subprocess,
+        )
+
+        scoped_path = tmp_path / "scoped_scenarios.json"
+        scoped_path.write_text("[]", encoding="utf-8")
+        base = _make_arm_params()
+        params = _SubprocessArmParams(
+            **{
+                **base.__dict__,
+                "episodes_path": tmp_path / "episodes.jsonl",
+                "summary_path": tmp_path / "summary.json",
+                "scoped_scenarios_path": scoped_path,
+            }
+        )
+        clock = [100.0]
+        monkeypatch.setattr(time, "perf_counter", lambda: clock[0])
+
+        def fake_run_batch(*_args, **_kwargs):
+            clock[0] += 4.25
+            return {
+                "status": "ok",
+                "total_jobs": 2,
+                "written": 2,
+                "failed_jobs": 0,
+                "failures": [],
+            }
+
+        with (
+            patch("robot_sf.benchmark.runner.run_batch", side_effect=fake_run_batch),
+            patch(
+                "robot_sf.benchmark.fallback_policy.summarize_benchmark_availability",
+                return_value=_Mock(availability_status="ok"),
+            ),
+            patch("robot_sf.benchmark.fallback_policy.availability_payload", return_value={}),
+        ):
+            result = _run_single_arm_subprocess(params)
+
+        assert result["summary"]["runtime_sec"] == pytest.approx(4.25)
+        assert result["summary"]["episodes_per_second"] == pytest.approx(2 / 4.25)
 
 
 if __name__ == "__main__":

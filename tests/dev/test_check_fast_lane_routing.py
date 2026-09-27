@@ -181,6 +181,7 @@ def test_trajectory_mode_risk_contract_tests_are_registered_in_fast_lane() -> No
     policy = load_fast_lane_policy(Path("tests/conftest.py").read_text(encoding="utf-8"))
 
     assert policy.is_fast("tests/research/collision_risk/test_trajectory_mode_risk.py")
+    assert policy.is_fast("tests/dev/test_check_fast_lane_routing.py")
 
 
 def test_release_checkpoint_producer_tests_are_registered_in_fast_lane() -> None:

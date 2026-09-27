@@ -525,11 +525,11 @@ unit as `episode_rows`, and sets its scope to `campaign_all_planner_arms`; the r
 individual planner-arm throughput value. Its declared unit is `episode_rows/second`. This records
 the operational rate basis and does not replace per-run status or benchmark-evidence gates.
 The current denominator semantics are `campaign_elapsed_through_outcome_snapshot`: monotonic
-elapsed time starts immediately before campaign preflight and is sampled for the outcome snapshot
-after planner execution, post-run integrity/fairness, and initial table/breakdown writes. It excludes
-later diagnostic/report and publication-finalization writes, so it is not end-to-end command wall
-time. Keep this descriptor aligned with the outcome-snapshot boundary if the producer lifecycle
-moves.
+elapsed time starts immediately before campaign preflight and includes planner execution, optional
+SNQI-v2 row enrichment when enabled, post-run integrity/fairness, and initial table/breakdown writes;
+it is sampled for the outcome snapshot after those stages. It excludes later diagnostic/report and
+publication-finalization writes, so it is not end-to-end command wall time. Keep this descriptor
+aligned with the outcome-snapshot boundary if the producer lifecycle moves.
 
 ## Fixed-Scenario Multi-Seed Variability
 

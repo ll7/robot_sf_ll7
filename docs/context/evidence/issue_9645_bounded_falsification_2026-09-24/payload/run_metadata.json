@@ -283,7 +283,7 @@
     "count": 64,
     "total_size_bytes": 1623686,
     "artifact_path_map": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_report_artifact_path_map.v1.json",
-    "artifact_path_map_sha256": "c4a051073cb8be83b08c277e9c8f7b1ac935288e45e4a798eba0d3ebce491b8f",
+    "artifact_path_map_sha256": "4d37bebe8da4b095185a6e1284c9997daab0811f55b107a007104ddce2d58e8d",
     "binding_status": "all 64 normalized files are bound to producer and normalized SHA-256 values and byte counts; each differs from its producer record only at scenario_params.route_overrides_file",
     "search_or_simulation_rerun": false,
     "trace_capture_flag_counts": {

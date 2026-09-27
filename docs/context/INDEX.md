@@ -23,8 +23,9 @@ safety claim or corpus admission:
 Issue #9645 bounded falsification pilot: the four native Random/TPE runs completed 64
 distinct candidates but found no critical case and made no best-so-far progress. This is a
 diagnostic-only **NO-GO for scaling #9648 under the tested fixed-seed domain**, not a claim that
-the search cannot find counterexamples. A tracked #1501 collision was regenerated and reproduced
-twice under current source; task feasibility remains unknown without a successful reference
+the search cannot find counterexamples. A tracked #1501 collision was regenerated and replayed
+twice at its recorded source revision `58e516aa4f69ff3098bf518199f483006589758c`; this was not a
+replay under the current source. Task feasibility remains unknown without a successful reference
 planner. See the [pilot receipt](evidence/issue_9645_bounded_falsification_2026-09-24/payload/report.md),
 [convergence report](evidence/issue_9645_bounded_falsification_2026-09-24/payload/convergence_report.md),
 and [machine-readable evidence bundle](evidence/issue_9645_bounded_falsification_2026-09-24/evidence_bundle_manifest.json).

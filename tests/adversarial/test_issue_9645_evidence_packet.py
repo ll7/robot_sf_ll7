@@ -100,6 +100,14 @@ def test_route_path_normalization_is_hash_bound_for_candidates_and_recorded_repl
         row["retention_status"] == "retained_exact_copy" for row in artifact_map["bindings"]
     )
     assert artifact_map["totals"]["path_normalized_candidate_episode_record_count"] == 64
+    assert artifact_map["totals"]["exact_artifact_count"] == 5
+    assert artifact_map["claim_boundary"] == (
+        "Mixed retention: bindings labeled retained_exact_copy preserve producer bytes; "
+        "bindings labeled retained_path_normalized_copy are path-rewritten copies with "
+        "source_sha256_before_path_normalization and normalized_sha256 bindings. Totals report "
+        "5 exact artifacts and 64 path-normalized candidate episode records. No feasibility "
+        "or planner safety claim."
+    )
     rebase = _read_json(PAYLOAD / "reproduction_inputs/input_rebase_map.v1.json")
     artifact_map_sha256 = _sha256(PAYLOAD / "pilot_report_artifact_path_map.v1.json")
     assert rebase["source_episode_artifact_map_sha256"] == artifact_map_sha256

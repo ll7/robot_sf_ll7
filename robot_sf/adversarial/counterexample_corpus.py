@@ -854,10 +854,11 @@ def _validate_generic_source_row_run_contract(
 ) -> None:
     """Ensure candidate objective and search space agree with run-level declarations."""
     run_objective = run.get("objective")
-    if isinstance(run_objective, Mapping) and any(
-        run_objective.get(key) != objective.get(key)
-        for key in ("name", "direction", "semantics")
-        if key in run_objective
+    if not isinstance(run_objective, Mapping) or not run_objective:
+        raise CorpusError("search run objective declaration is missing or malformed")
+    if any(
+        key not in objective or _stable_json(objective[key]) != _stable_json(declared_value)
+        for key, declared_value in run_objective.items()
     ):
         raise CorpusError(f"candidate source row {row_index} objective differs from search run")
     if settings.get("search_space") != run.get("search_space"):

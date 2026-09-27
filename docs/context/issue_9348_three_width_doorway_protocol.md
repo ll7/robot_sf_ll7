@@ -130,15 +130,20 @@ complete planner/seed pairs across three distinct map SHA-256 digests, with
 equal actor, external RNG and non-width configuration digests within each pair.
 That smoke predates the current hook implementation and is historical
 diagnostic evidence, not current-head validation. At executable source head
-`c6464891e0d52dd123ab430fd890dd76ad2b0ab7` on 2026-09-27,
-`scripts/validation/run_issue_9348_paired_reset_smoke.py` was rerun across all
-18 cells and returned six complete pairs. The compact report and generated
-variants are preserved at
-`/home/luttkule/preservation-campaigns/issue9348_h1_smoke_c6464891_20260927/`;
-the report SHA-256 is
-`76fab4c3157c38a38c1bf8dbced7eff536b0b94f5ca851d10323d4a1917a0815` and the
-SHA256SUMS file SHA-256 is
-`442bd6bebd355344ad79e6410e9cb0c67f7c7d284485cee220e36014ba120bb9`. All
+`e665a52067e74b3773c81c4deaeaa7985bc28c15` on 2026-09-27,
+`scripts/validation/run_issue_9348_paired_reset_smoke.py` was rerun three
+times across all 18 cells; each run returned six complete pairs. The compact
+reports and generated variants are preserved at
+`/home/luttkule/preservation-campaigns/issue9348_h1_smoke_e665a52_1_20260927/`,
+`/home/luttkule/preservation-campaigns/issue9348_h1_smoke_e665a52_2_20260927/`,
+and
+`/home/luttkule/preservation-campaigns/issue9348_h1_smoke_e665a52_3_20260927/`.
+Each `smoke.json` has SHA-256
+`518d38c3f7ab9d3f330acecce19b0db4d1001ae11cb3517e52d58173089d0a69`; the
+respective `SHA256SUMS` file hashes are
+`310c1158be749e1a484041232c2354302962e114647eccf2204847133eeda480`,
+`325a5c907e1e91197715879f5818a7db902e06d7043492617b25afe4684a2486`, and
+`20363d2d3f7e7cc377d52bfc2f8f481094c3855c1ee7cd3b14cf752cb995b6d2`. All
 rows are diagnostic-only, with
 `preflight_admission=diagnostic_only_oracle_readiness_blocked`: positive
 continuous clearance and loader-bound oracle identity were present. The 2.2 m

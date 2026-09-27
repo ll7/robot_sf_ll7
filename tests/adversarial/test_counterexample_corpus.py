@@ -722,6 +722,43 @@ def _seed_bound_test_case(corpus: dict[str, object], corpus_root: Path) -> None:
     validate_corpus(corpus, corpus_root=corpus_root)
 
 
+def _attach_unknown_classifier_sidecar(case: dict[str, object], corpus_root: Path) -> str:
+    """Attach exact classifier and execution sidecars, retaining one outside case input root."""
+    case_root = corpus_root / "cases" / str(case["case_id"])
+    sidecar_relative = "retained_classifier/declared_execution.jsonl"
+    sidecar = corpus_root / sidecar_relative
+    sidecar.parent.mkdir(parents=True, exist_ok=True)
+    sidecar.write_text('{"source":"retained classifier sidecar"}\n', encoding="utf-8")
+    result = copy.deepcopy(case["admissibility"]["classifier_receipt"]["classifier_result"])
+    result["evidence"]["reference_execution"] = {
+        "evidence_ref": str(sidecar),
+        "source_episodes_jsonl_sha256": hashlib.sha256(sidecar.read_bytes()).hexdigest(),
+    }
+    raw_relative = f"cases/{case['case_id']}/source_evidence/scenario_admissibility.json"
+    raw_artifact = corpus_root / raw_relative
+    raw_artifact.write_text(json.dumps(result, sort_keys=True) + "\n", encoding="utf-8")
+    case["admissibility"]["classifier_receipt"] = (
+        counterexample_corpus.create_case_scenario_admissibility_receipt(
+            case,
+            result,
+            corpus_root=corpus_root,
+            raw_classifier_artifact_path=raw_relative,
+            source_revision="a" * 40,
+            artifact_root=corpus_root,
+            evidence_root=corpus_root,
+        )
+    )
+    counterexample_corpus._attach_case_external_artifact_references(case)
+    case["source_evidence"]["corpus_files"] = counterexample_corpus._case_file_inventory(
+        case_root, corpus_root
+    )
+    case["source_evidence"]["corpus_files"].append(
+        {"path": sidecar_relative, "sha256": hashlib.sha256(sidecar.read_bytes()).hexdigest()}
+    )
+    case["source_evidence"]["corpus_files"].sort(key=lambda item: item["path"])
+    return sidecar_relative
+
+
 def test_issue9645_fixture_binds_the_promoted_v3_packet() -> None:
     fixture_receipt = json.loads(_ISSUE9645_FIXTURE_RECEIPT.read_text(encoding="utf-8"))
     bundle_manifest = json.loads(
@@ -847,6 +884,160 @@ def test_issue9645_v3_bundle_and_generator_revisions_are_separate(tmp_path: Path
         "unknown_without_reference_planner_success"
     )
     assert corpus["cases"] == []
+
+
+def test_register_search_run_binds_attempted_rows_and_disjoint_outcomes(
+    tmp_path: Path,
+) -> None:
+    corpus_root = tmp_path / "corpus"
+    source_dir = corpus_root / "search_runs" / "round-1"
+    source_dir.mkdir(parents=True)
+    search_space = {"pedestrian_speed_mps": {"low": 0.5, "high": 2.0}}
+    objective = {
+        "name": "criticality",
+        "direction": "maximize",
+        "semantics": "minimum clearance and completion outcome",
+    }
+    settings = {"search_space": search_space, "sampler": "tpe", "seed": 37}
+    run_id = "round-1"
+    source_revision = "a" * 40
+    effective_sha256 = "b" * 64
+    rows = []
+    statuses = ("discovered", "discovered", "not_discovered", "failed", "invalid")
+    for index, status in enumerate(statuses):
+        parameters = {"pedestrian_speed_mps": 1.75, "scenario_seed": 9}
+        if index > 1:
+            parameters["trial"] = index
+        rows.append(
+            {
+                "schema_version": "adversarial-search-candidate-source-row.v1",
+                "run_id": run_id,
+                "source_revision": source_revision,
+                "round_id": run_id,
+                "source_run_id": "optimizer-seed-37",
+                "candidate_id": hashlib.sha256(
+                    counterexample_corpus._stable_json(parameters).encode("utf-8")
+                ).hexdigest(),
+                "scenario_id": "crossing_candidate_1" if status == "discovered" else None,
+                "scenario_seed": 9 if status == "discovered" else None,
+                "effective_scenario_sha256": effective_sha256 if status == "discovered" else None,
+                "candidate_parameters": parameters,
+                "objective": {**objective, "value": 0.25},
+                "search_settings": settings,
+                "criticality": {"collision_event": True, "min_clearance_m": 0.2},
+                "discovery_status": status,
+            }
+        )
+    source_path = source_dir / "candidate_evaluations.jsonl"
+    source_path.write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8"
+    )
+    source_relative = source_path.relative_to(corpus_root).as_posix()
+    source_sha256 = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    manifest_path = source_dir / "manifest.json"
+    manifest_path.write_text('{"schema_version":"test-manifest.v1"}\n', encoding="utf-8")
+    manifest_relative = manifest_path.relative_to(corpus_root).as_posix()
+    manifest_sha256 = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    run = {
+        "schema_version": "adversarial-counterexample-search-run.v1",
+        "run_id": run_id,
+        "round_id": run_id,
+        "source_issue": 9653,
+        "source_revision": source_revision,
+        "objective": objective,
+        "search_space": search_space,
+        "attempted_candidates": 5,
+        "completed_candidates": 3,
+        "failed_candidates": 1,
+        "invalid_candidates": 1,
+        "new_counterexamples_discovered": 2,
+        "new_counterexamples_admitted": 0,
+        "evidence_tier": "diagnostic_only",
+        "source_files": [{"path": source_relative, "sha256": source_sha256}],
+        "manifest_files": [{"path": manifest_relative, "sha256": manifest_sha256}],
+        "candidate_evaluation_source": {"path": source_relative, "sha256": source_sha256},
+    }
+
+    corpus, registration = counterexample_corpus.register_search_run(
+        run, new_corpus(), corpus_root=corpus_root
+    )
+    assert registration["decision"] == "registered"
+    stored = corpus["search_runs"][0]
+    assert [item["discovery_status"] for item in stored["candidate_evaluations"]] == list(statuses)
+    assert (
+        stored["candidate_evaluations"][0]["evaluation_id"]
+        != stored["candidate_evaluations"][1]["evaluation_id"]
+    )
+    assert stored["candidate_evaluations"][3]["scenario_id"] is None
+
+    case = {
+        "scenario_id": rows[0]["scenario_id"],
+        "scenario_seed": rows[0]["scenario_seed"],
+        "effective_scenario_sha256": effective_sha256,
+        "discovery": {
+            "round_id": run_id,
+            "discovery_issue": 9653,
+            "candidate_parameters": rows[0]["candidate_parameters"],
+            "objective": rows[0]["objective"],
+            "criticality": rows[0]["criticality"],
+            "search_source": {
+                "run_id": run_id,
+                "origin_issue": 9653,
+                "source_revision": source_revision,
+                "candidate_id": rows[0]["candidate_id"],
+                "evaluation_id": stored["candidate_evaluations"][0]["evaluation_id"],
+                "search_settings": settings,
+            },
+        },
+    }
+    assert (
+        counterexample_corpus._validate_case_search_run_reference(case, corpus["search_runs"]) == []
+    )
+    mismatched_origin = copy.deepcopy(case)
+    mismatched_origin["discovery"]["search_source"]["origin_issue"] = 9645
+    assert any(
+        "origin issue differs" in error
+        for error in counterexample_corpus._validate_case_search_run_reference(
+            mismatched_origin, corpus["search_runs"]
+        )
+    )
+
+    duplicate_corpus, duplicate = counterexample_corpus.register_search_run(
+        run, corpus, corpus_root=corpus_root
+    )
+    assert duplicate["decision"] == "duplicate"
+    assert len(duplicate_corpus["search_runs"]) == 1
+
+    missing_evaluations = copy.deepcopy(corpus)
+    missing_evaluations["search_runs"][0].pop("candidate_evaluations")
+    with pytest.raises(CorpusError, match="candidate evaluation evidence is missing"):
+        validate_corpus(missing_evaluations, corpus_root=corpus_root)
+    inconsistent_counts = copy.deepcopy(corpus)
+    inconsistent_counts["search_runs"][0]["invalid_candidates"] = 0
+    with pytest.raises(CorpusError, match="outcome counts differ"):
+        validate_corpus(inconsistent_counts, corpus_root=corpus_root)
+
+
+def test_classifier_sidecar_digest_mismatches_fail_closed(tmp_path: Path) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    case = corpus["cases"][0]
+    sidecar_relative = _attach_unknown_classifier_sidecar(case, corpus_root)
+    receipt = case["admissibility"]["classifier_receipt"]
+    result = receipt["classifier_result"]
+    raw_artifact = corpus_root / receipt["raw_classifier_artifact"]["path"]
+    sidecar = corpus_root / sidecar_relative
+
+    raw_artifact.write_text('{"tampered":true}\n', encoding="utf-8")
+    raw_errors = counterexample_corpus._validate_raw_classifier_artifact_reference(
+        receipt, result, corpus_root
+    )
+    assert any("raw classifier artifact digest differs" in error for error in raw_errors)
+
+    sidecar.write_text('{"tampered":"execution evidence"}\n', encoding="utf-8")
+    sidecar_errors = counterexample_corpus._validate_classifier_declared_evidence_artifacts(
+        case, receipt, result, corpus_root
+    )
+    assert any("custody failed" in error and "digest differs" in error for error in sidecar_errors)
 
 
 @pytest.mark.parametrize(
@@ -1626,7 +1817,8 @@ def test_discovery_requires_round_and_persisted_search_run_or_explicit_history(
     source["source_revision"] = run["source_revision"]
     source.pop("historical_source_revision")
     run_linked["cases"][0]["discovery"]["round_id"] = run["round_id"]
-    validate_corpus(run_linked, corpus_root=corpus_root)
+    with pytest.raises(CorpusError, match="structured candidate evaluation evidence"):
+        validate_corpus(run_linked, corpus_root=corpus_root)
 
     orphaned = copy.deepcopy(run_linked)
     orphaned["cases"][0]["discovery"]["search_source"]["run_id"] = "missing-run"
@@ -1644,6 +1836,8 @@ def test_duplicate_case_admission_preserves_second_planner_replay_and_configurat
 ) -> None:
     corpus, _receipt, corpus_root = _import(tmp_path)
     existing = corpus["cases"][0]
+    retained_sidecar = _attach_unknown_classifier_sidecar(existing, corpus_root)
+    original_classifier_receipt = copy.deepcopy(existing["admissibility"]["classifier_receipt"])
     original_replay_receipt = copy.deepcopy(existing["replay_receipt"])
     prior_receipt = existing["replay_receipt"]["artifact_receipts"][0]
     source_artifact = corpus_root / prior_receipt["artifact_path"]
@@ -1719,6 +1913,19 @@ def test_duplicate_case_admission_preserves_second_planner_replay_and_configurat
     assert len(corpus["cases"]) == 1
     stored = corpus["cases"][0]
     assert stored["replay_receipt"] == original_replay_receipt
+    assert stored["admissibility"]["classifier_receipt"] == original_classifier_receipt
+    declared_artifact = next(
+        item
+        for item in stored["admissibility"]["classifier_receipt"]["declared_evidence_artifacts"]
+        if item["declared_at"] == "evidence.reference_execution.evidence_ref"
+    )
+    assert declared_artifact["path"] == retained_sidecar
+    retained_evidence = [stored["source_evidence"], *stored.get("supporting_source_evidence", [])]
+    assert any(
+        item["path"] == retained_sidecar
+        for evidence in retained_evidence
+        for item in evidence["corpus_files"]
+    )
     supporting_evaluation = next(
         evaluation
         for evaluation in corpus["planner_evaluations"]

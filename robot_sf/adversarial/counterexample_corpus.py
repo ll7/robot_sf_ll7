@@ -23,7 +23,7 @@ import shutil
 import subprocess
 import tempfile
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -86,6 +86,8 @@ HISTORICAL_CANDIDATE_SCHEMA_VERSION = "adversarial-historical-candidate.v2"
 LEGACY_HISTORICAL_CANDIDATE_SCHEMA_VERSION = "adversarial-historical-candidate.v1"
 LEGACY_UNPINNED_SOURCE_EVIDENCE_SCHEMA = "adversarial-legacy-source-evidence.v1"
 SEARCH_MANIFEST_SCHEMA = "adversarial-search-manifest.v1"
+SEARCH_CANDIDATE_EVALUATION_SCHEMA_VERSION = "adversarial-search-candidate-evaluation.v1"
+SEARCH_CANDIDATE_SOURCE_ROW_SCHEMA_VERSION = "adversarial-search-candidate-source-row.v1"
 _ISSUE_1501_REPLAY_SIGNATURE_EXCLUDED_FIELDS = (
     "timestamps.start",
     "timestamps.end",
@@ -287,7 +289,9 @@ def validate_corpus(corpus: Mapping[str, Any], *, corpus_root: str | Path | None
         if case["case_id"] != f"case-{case['effective_scenario_sha256']}":
             raise CorpusError("case_id must be the full canonical effective-scenario SHA-256")
         errors = _validate_case_record(case, corpus_root=root)
-        errors.extend(_validate_case_search_run_reference(case, corpus["search_runs"]))
+        errors.extend(
+            _validate_case_search_run_reference(case, corpus["search_runs"], corpus_root=root)
+        )
         if errors:
             raise CorpusError(f"case {case['case_id']} is not admissible: " + "; ".join(errors))
     case_id_set = set(case_ids)
@@ -332,10 +336,195 @@ def _validate_search_run_evidence(
         _validate_one_search_run_evidence(run, root, known_artifact_digests)
 
 
-def _validate_case_search_run_reference(
-    case: Mapping[str, Any], search_runs: Sequence[Mapping[str, Any]]
+def register_search_run(
+    search_run_record: Mapping[str, Any],
+    corpus: dict[str, Any],
+    *,
+    corpus_root: str | Path,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Register a run whose candidate rows are persisted as canonical JSONL evidence.
+
+    The caller writes one ``adversarial-search-candidate-source-row.v1`` JSON
+    object per attempted candidate under corpus custody, adds its path and SHA to
+    ``source_files``, and names it in ``candidate_evaluation_source``. This
+    owner API derives evaluation IDs and source-row bindings from those bytes,
+    validates the complete prospective corpus, then returns an append-only
+    corpus plus an idempotent registration receipt. The pinned #9645 import path
+    remains owned by its evidence-specific importer.
+    """
+    root = Path(corpus_root).resolve()
+    validate_corpus(corpus, corpus_root=root)
+    if not isinstance(search_run_record, Mapping):
+        raise CorpusError("search-run registration requires a mapping record")
+    run = copy.deepcopy(dict(search_run_record))
+    if run.get("schema_version") != "adversarial-counterexample-search-run.v1":
+        raise CorpusError("unsupported search-run registration schema")
+    if run.get("source_issue") == 9645 or _search_run_references_issue9645_packet(run):
+        raise CorpusError("the pinned #9645 pilot can only be registered by its evidence importer")
+    if "candidate_evaluations" in run:
+        raise CorpusError("candidate evaluations must be derived from the named source-row file")
+    run["candidate_evaluations"] = _derive_search_run_candidate_evaluations(run, root)
+
+    existing = next(
+        (item for item in corpus["search_runs"] if item.get("run_id") == run.get("run_id")),
+        None,
+    )
+    if existing is not None:
+        if dict(existing) == run:
+            return corpus, {
+                "schema_version": "adversarial-search-run-registration.v1",
+                "run_id": run["run_id"],
+                "decision": "duplicate",
+            }
+        raise CorpusError("search-run ID is already registered with different evidence")
+
+    prospective = copy.deepcopy(corpus)
+    prospective["search_runs"].append(run)
+    prospective["search_runs"].sort(key=lambda item: str(item.get("run_id", "")))
+    validate_corpus(prospective, corpus_root=root)
+    return prospective, {
+        "schema_version": "adversarial-search-run-registration.v1",
+        "run_id": run["run_id"],
+        "decision": "registered",
+    }
+
+
+def _derive_search_run_candidate_evaluations(
+    run: Mapping[str, Any], corpus_root: Path
+) -> list[dict[str, Any]]:
+    """Derive evaluations from the run's digest-pinned JSONL source rows."""
+    source = run.get("candidate_evaluation_source")
+    if not isinstance(source, Mapping):
+        raise CorpusError("search-run candidate_evaluation_source is required")
+    source_path = source.get("path")
+    source_sha256 = source.get("sha256")
+    if not _safe_bundle_relative_path(source_path) or not _is_sha256(source_sha256):
+        raise CorpusError("search-run candidate evaluation source path or digest is invalid")
+    matching_receipts = [
+        item
+        for item in run.get("source_files", [])
+        if isinstance(item, Mapping)
+        and item.get("path") == source_path
+        and item.get("sha256") == source_sha256
+    ]
+    if len(matching_receipts) != 1:
+        raise CorpusError(
+            "candidate evaluation source must have exactly one matching source receipt"
+        )
+    _verify_search_run_artifact(corpus_root, source_path, source_sha256)
+    source_file = corpus_root / Path(*PurePosixPath(source_path).parts)
+    rows = _read_search_candidate_source_rows(source_file)
+    if len(rows) != run.get("attempted_candidates"):
+        raise CorpusError("candidate source-row count differs from attempted candidate count")
+    return [
+        _generic_candidate_evaluation_from_row(
+            row,
+            row_index=index,
+            source_path=source_path,
+            source_sha256=source_sha256,
+            run=run,
+        )
+        for index, row in enumerate(rows, start=1)
+    ]
+
+
+def _validate_search_run_discovery_binding(
+    case: Mapping[str, Any],
+    discovery: Mapping[str, Any],
+    source: Mapping[str, Any],
+    run: Mapping[str, Any],
 ) -> list[str]:
-    """Bind search-derived discovery provenance to its persisted run record."""
+    """Check run identity and resolve one candidate evaluation for a case."""
+    errors = []
+    if discovery.get("round_id") != run.get("round_id"):
+        errors.append("discovery round ID differs from its persisted search run")
+    source_revision = source.get("source_revision")
+    if source_revision != run.get("source_revision"):
+        errors.append("discovery source revision differs from its persisted search run")
+    evaluations = run.get("candidate_evaluations")
+    if not isinstance(evaluations, list):
+        return errors + ["discovery search run has no structured candidate evaluation evidence"]
+    candidate_id = source.get("candidate_id")
+    evaluation_id = source.get("evaluation_id")
+    matches = [
+        item
+        for item in evaluations
+        if isinstance(item, Mapping)
+        and item.get("candidate_id") == candidate_id
+        and item.get("evaluation_id") == evaluation_id
+    ]
+    if len(matches) != 1:
+        return errors + [
+            "discovery candidate/evaluation IDs do not identify exactly one persisted evaluation"
+        ]
+    evaluation = matches[0]
+    errors.extend(
+        _validate_case_search_evaluation_binding(case, discovery, source, run, evaluation)
+    )
+    return errors
+
+
+def _validate_case_search_evaluation_binding(
+    case: Mapping[str, Any],
+    discovery: Mapping[str, Any],
+    source: Mapping[str, Any],
+    run: Mapping[str, Any],
+    evaluation: Mapping[str, Any],
+) -> list[str]:
+    """Require case discovery claims to equal the exact persisted candidate row."""
+    errors = []
+    if run.get("new_counterexamples_discovered") == 0:
+        errors.append("discovery search run records zero new counterexamples")
+    if evaluation.get("discovery_status") != "discovered":
+        errors.append("discovery candidate evaluation is not recorded as a discovery")
+    expected_bindings = (
+        (
+            any(
+                evaluation.get(field) != case.get(field)
+                for field in ("scenario_id", "scenario_seed", "effective_scenario_sha256")
+            ),
+            "discovery candidate evaluation does not bind the case inputs",
+        ),
+        (
+            discovery.get("candidate_parameters") != evaluation.get("candidate_parameters"),
+            "discovery candidate parameters differ from the persisted evaluation",
+        ),
+        (
+            discovery.get("objective") != evaluation.get("objective"),
+            "discovery objective/value differs from the persisted evaluation",
+        ),
+        (
+            source.get("search_settings") != evaluation.get("search_settings"),
+            "discovery search settings differ from the persisted evaluation",
+        ),
+        (
+            discovery.get("criticality") != evaluation.get("criticality"),
+            "discovery criticality differs from the persisted evaluation",
+        ),
+        (
+            source.get("kind") == "historical_adversarial_search_archive",
+            "historical discovery origin cannot be relabeled as a search-run discovery",
+        ),
+        (
+            discovery.get("discovery_issue") != run.get("source_issue"),
+            "discovery origin issue differs from its persisted search run",
+        ),
+        (
+            source.get("origin_issue") != run.get("source_issue"),
+            "discovery source origin issue differs from its persisted search run",
+        ),
+    )
+    errors.extend(message for mismatched, message in expected_bindings if mismatched)
+    return errors
+
+
+def _validate_case_search_run_reference(
+    case: Mapping[str, Any],
+    search_runs: Sequence[Mapping[str, Any]],
+    *,
+    corpus_root: Path | None = None,
+) -> list[str]:
+    """Bind search-derived discoveries to one source-bound candidate evaluation."""
     discovery = case.get("discovery")
     discovery = discovery if isinstance(discovery, Mapping) else {}
     source = discovery.get("search_source")
@@ -351,13 +540,7 @@ def _validate_case_search_run_reference(
     if len(matching) != 1:
         return ["discovery search run does not identify exactly one persisted run"]
     run = matching[0]
-    errors = []
-    if discovery.get("round_id") != run.get("round_id"):
-        errors.append("discovery round ID differs from its persisted search run")
-    source_revision = source.get("source_revision")
-    if source_revision != run.get("source_revision"):
-        errors.append("discovery source revision differs from its persisted search run")
-    return errors
+    return _validate_search_run_discovery_binding(case, discovery, source, run)
 
 
 def _valid_historical_search_source(
@@ -414,13 +597,325 @@ def _validate_one_search_run_evidence(
         artifacts_in_run=artifacts_in_run,
         known_artifact_digests=known_artifact_digests,
     )
-    if (
+    is_issue9645_pilot = (
         run.get("source_issue") == 9645
         or run.get("run_id") == _ISSUE_9645_PILOT_RUN_ID
         or run.get("evidence_bundle_root") == _ISSUE_9645_PILOT_EVIDENCE_ROOT
         or _search_run_references_issue9645_packet(run)
-    ):
+    )
+    if is_issue9645_pilot:
         _validate_issue9645_search_run_record(run, root)
+    else:
+        _validate_search_run_candidate_evaluations(run, root)
+
+
+def _validate_search_run_candidate_evaluations(run: Mapping[str, Any], root: Path) -> None:
+    """Recompute structured candidate bindings from their digest-pinned source rows."""
+    evaluations = run.get("candidate_evaluations")
+    if not isinstance(evaluations, list):
+        raise CorpusError("search-run candidate evaluation evidence is missing or malformed")
+    if len(evaluations) != run.get("attempted_candidates"):
+        raise CorpusError("search-run candidate evaluation inventory differs from attempt count")
+
+    source_receipts = {
+        item.get("path"): item.get("sha256")
+        for item in run.get("source_files", [])
+        if isinstance(item, Mapping)
+    }
+    rows_by_path: dict[str, list[dict[str, Any]]] = {}
+    evaluation_ids: set[str] = set()
+    status_counts = {"discovered": 0, "not_discovered": 0, "invalid": 0, "failed": 0}
+    for item in evaluations:
+        expected = _recompute_search_candidate_evaluation(
+            item,
+            run=run,
+            root=root,
+            source_receipts=source_receipts,
+            rows_by_path=rows_by_path,
+        )
+        if dict(item) != expected:
+            raise CorpusError("search-run candidate evaluation differs from its source row")
+        evaluation_id = item.get("evaluation_id")
+        if evaluation_id in evaluation_ids:
+            raise CorpusError("search-run candidate evaluation IDs must be unique")
+        evaluation_ids.add(str(evaluation_id))
+        status_counts[item["discovery_status"]] += 1
+    expected_counts = {
+        "attempted_candidates": len(evaluations),
+        "completed_candidates": status_counts["discovered"] + status_counts["not_discovered"],
+        "failed_candidates": status_counts["failed"],
+        "invalid_candidates": status_counts["invalid"],
+        "new_counterexamples_discovered": status_counts["discovered"],
+    }
+    mismatched = [
+        name for name, expected_count in expected_counts.items() if run.get(name) != expected_count
+    ]
+    if mismatched:
+        raise CorpusError(
+            "search-run outcome counts differ from candidate evaluation evidence: "
+            + ", ".join(mismatched)
+        )
+
+
+def _candidate_source_row_coordinates(
+    source_artifact: Mapping[str, Any], source_receipts: Mapping[str, Any]
+) -> tuple[str, str, int]:
+    """Validate a candidate row's file receipt and one-based row index."""
+    source_path = source_artifact.get("path")
+    source_sha256 = source_artifact.get("sha256")
+    row_index = source_artifact.get("row_index")
+    if (
+        not isinstance(source_path, str)
+        or not _safe_bundle_relative_path(source_path)
+        or source_receipts.get(source_path) != source_sha256
+        or not _is_sha256(source_sha256)
+        or not isinstance(row_index, int)
+        or isinstance(row_index, bool)
+        or row_index < 1
+    ):
+        raise CorpusError("search-run candidate source row does not bind a persisted artifact")
+    return source_path, source_sha256, row_index
+
+
+def _read_search_candidate_source_rows(path: Path) -> list[dict[str, Any]]:
+    """Read strict one-object-per-line candidate source evidence."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as exc:
+        raise CorpusError(f"search-run candidate source rows cannot be read: {path}") from exc
+    if not lines or any(not line.strip() for line in lines):
+        raise CorpusError("candidate source JSONL must contain only non-empty records")
+    rows = []
+    for index, line in enumerate(lines, start=1):
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise CorpusError(f"candidate source JSONL row {index} is malformed") from exc
+        if not isinstance(row, dict):
+            raise CorpusError(f"candidate source JSONL row {index} must be an object")
+        rows.append(row)
+    return rows
+
+
+def _generic_candidate_evaluation_from_row(
+    row: Mapping[str, Any],
+    *,
+    row_index: int,
+    source_path: str,
+    source_sha256: str,
+    run: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Normalize a canonical source row and bind it to its exact JSONL bytes."""
+    _validate_generic_source_row_identity(row, row_index, run)
+    parameters, objective, settings, criticality, status = _candidate_source_row_values(
+        row, row_index
+    )
+    scenario_id, scenario_seed, effective_sha256 = _candidate_source_row_case_identity(
+        row, row_index, status
+    )
+    _validate_generic_source_row_run_contract(row_index, run, objective, settings)
+
+    record = {
+        "schema_version": SEARCH_CANDIDATE_EVALUATION_SCHEMA_VERSION,
+        "run_id": row["run_id"],
+        "source_revision": row["source_revision"],
+        "round_id": row["round_id"],
+        "candidate_id": row["candidate_id"],
+        "source_run_id": row["source_run_id"],
+        "scenario_id": scenario_id,
+        "scenario_seed": scenario_seed,
+        "effective_scenario_sha256": effective_sha256,
+        "candidate_parameters": dict(parameters),
+        "objective": dict(objective),
+        "search_settings": dict(settings),
+        "criticality": dict(criticality),
+        "discovery_status": status,
+        "source_artifact": {
+            "path": source_path,
+            "sha256": source_sha256,
+            "row_index": row_index,
+            "row_sha256": hashlib.sha256(_stable_json(dict(row)).encode("utf-8")).hexdigest(),
+        },
+    }
+    record["evaluation_id"] = _search_candidate_evaluation_digest(record)
+    return record
+
+
+def _validate_generic_source_row_identity(
+    row: Mapping[str, Any], row_index: int, run: Mapping[str, Any]
+) -> None:
+    """Bind source row identity fields to its containing search run."""
+    required = {
+        "schema_version",
+        "run_id",
+        "source_revision",
+        "round_id",
+        "source_run_id",
+        "candidate_id",
+        "scenario_id",
+        "scenario_seed",
+        "effective_scenario_sha256",
+        "candidate_parameters",
+        "objective",
+        "search_settings",
+        "criticality",
+        "discovery_status",
+    }
+    if set(row) != required:
+        raise CorpusError(f"candidate source row {row_index} has missing or unknown fields")
+    if (
+        row.get("schema_version") != SEARCH_CANDIDATE_SOURCE_ROW_SCHEMA_VERSION
+        or row.get("run_id") != run.get("run_id")
+        or row.get("source_revision") != run.get("source_revision")
+        or row.get("round_id") != run.get("round_id")
+        or not isinstance(row.get("source_run_id"), str)
+        or not row["source_run_id"].strip()
+    ):
+        raise CorpusError(f"candidate source row {row_index} does not bind its search run")
+
+
+def _candidate_source_row_values(
+    row: Mapping[str, Any], row_index: int
+) -> tuple[Mapping[str, Any], Mapping[str, Any], Mapping[str, Any], Mapping[str, Any], str]:
+    """Validate the candidate parameters, objective, settings, and criticality payloads."""
+    parameters = row.get("candidate_parameters")
+    objective = row.get("objective")
+    settings = row.get("search_settings")
+    criticality = row.get("criticality")
+    if not isinstance(parameters, Mapping) or not parameters:
+        raise CorpusError(f"candidate source row {row_index} parameters are malformed")
+    if not isinstance(objective, Mapping) or not objective:
+        raise CorpusError(f"candidate source row {row_index} objective is missing")
+    if not isinstance(settings, Mapping) or not settings:
+        raise CorpusError(f"candidate source row {row_index} search settings are missing")
+    if not isinstance(criticality, Mapping) or not criticality:
+        raise CorpusError(f"candidate source row {row_index} criticality is missing")
+
+    candidate_id = hashlib.sha256(_stable_json(dict(parameters)).encode("utf-8")).hexdigest()
+    if row.get("candidate_id") != candidate_id:
+        raise CorpusError(
+            f"candidate source row {row_index} candidate ID differs from its parameters"
+        )
+    status = row.get("discovery_status")
+    if not isinstance(status, str) or status not in {
+        "discovered",
+        "not_discovered",
+        "invalid",
+        "failed",
+    }:
+        raise CorpusError(f"candidate source row {row_index} discovery status is unsupported")
+    return parameters, objective, settings, criticality, status
+
+
+def _candidate_source_row_case_identity(
+    row: Mapping[str, Any], row_index: int, status: str
+) -> tuple[str | None, int | None, str | None]:
+    """Require exact scenario identity for discoveries while retaining unknowns otherwise."""
+    scenario_id = row.get("scenario_id")
+    scenario_seed = row.get("scenario_seed")
+    effective_sha256 = row.get("effective_scenario_sha256")
+    if status == "discovered":
+        if (
+            not isinstance(scenario_id, str)
+            or not scenario_id.strip()
+            or not isinstance(scenario_seed, int)
+            or isinstance(scenario_seed, bool)
+            or not _is_sha256(effective_sha256)
+        ):
+            raise CorpusError(f"discovered source row {row_index} has no exact case input identity")
+    elif scenario_id is not None and not isinstance(scenario_id, str):
+        raise CorpusError(f"candidate source row {row_index} scenario ID is malformed")
+    elif scenario_seed is not None and (
+        not isinstance(scenario_seed, int) or isinstance(scenario_seed, bool)
+    ):
+        raise CorpusError(f"candidate source row {row_index} scenario seed is malformed")
+    elif effective_sha256 is not None and not _is_sha256(effective_sha256):
+        raise CorpusError(f"candidate source row {row_index} scenario digest is malformed")
+    return scenario_id, scenario_seed, effective_sha256
+
+
+def _validate_generic_source_row_run_contract(
+    row_index: int,
+    run: Mapping[str, Any],
+    objective: Mapping[str, Any],
+    settings: Mapping[str, Any],
+) -> None:
+    """Ensure candidate objective and search space agree with run-level declarations."""
+    run_objective = run.get("objective")
+    if isinstance(run_objective, Mapping) and any(
+        run_objective.get(key) != objective.get(key)
+        for key in ("name", "direction", "semantics")
+        if key in run_objective
+    ):
+        raise CorpusError(f"candidate source row {row_index} objective differs from search run")
+    if settings.get("search_space") != run.get("search_space"):
+        raise CorpusError(f"candidate source row {row_index} search space differs from search run")
+
+
+def _search_candidate_evaluation_digest(evaluation: Mapping[str, Any]) -> str:
+    payload = {
+        key: value
+        for key, value in evaluation.items()
+        if key not in {"evaluation_id", "source_artifact"}
+    }
+    source_artifact = evaluation.get("source_artifact")
+    if isinstance(source_artifact, Mapping):
+        # Repeated trials can have identical parameters and outcomes. Preserve
+        # each attempt as a distinct evaluation by including its source row index.
+        payload["source_row_index"] = source_artifact.get("row_index")
+    return hashlib.sha256(_stable_json(payload).encode("utf-8")).hexdigest()
+
+
+def _load_search_candidate_source_rows(
+    source_path: str,
+    source_sha256: str,
+    *,
+    run: Mapping[str, Any],
+    root: Path,
+) -> list[dict[str, Any]]:
+    """Load only the run's declared, digest-pinned canonical JSONL source."""
+    source = run.get("candidate_evaluation_source")
+    if (
+        not isinstance(source, Mapping)
+        or source.get("path") != source_path
+        or source.get("sha256") != source_sha256
+    ):
+        raise CorpusError("search-run candidate rows do not bind the canonical JSONL source")
+    source_file = root / Path(*PurePosixPath(source_path).parts)
+    _verify_search_run_artifact(root, source_path, source_sha256)
+    return _read_search_candidate_source_rows(source_file)
+
+
+def _recompute_search_candidate_evaluation(
+    item: Any,
+    *,
+    run: Mapping[str, Any],
+    root: Path,
+    source_receipts: Mapping[str, Any],
+    rows_by_path: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    """Rebuild one evaluation from its exact hash-bound JSONL source row."""
+    if not isinstance(item, Mapping):
+        raise CorpusError("search-run candidate evaluation row is malformed")
+    source_artifact = item.get("source_artifact")
+    if not isinstance(source_artifact, Mapping):
+        raise CorpusError("search-run candidate evaluation has no source artifact binding")
+    source_path, source_sha256, row_index = _candidate_source_row_coordinates(
+        source_artifact, source_receipts
+    )
+    rows = rows_by_path.get(source_path)
+    if rows is None:
+        rows = _load_search_candidate_source_rows(source_path, source_sha256, run=run, root=root)
+        rows_by_path[source_path] = rows
+    if row_index > len(rows):
+        raise CorpusError("search-run candidate row index is outside its source table")
+    return _generic_candidate_evaluation_from_row(
+        rows[row_index - 1],
+        row_index=row_index,
+        source_path=source_path,
+        source_sha256=source_sha256,
+        run=run,
+    )
 
 
 def _search_run_references_issue9645_packet(run: Mapping[str, Any]) -> bool:
@@ -2315,13 +2810,16 @@ def admit_case_record(
     if not source_kind.strip() or not source_id.strip():
         raise CorpusError("case admission source kind and ID must be non-empty")
     incoming = copy.deepcopy(dict(case_record)) if isinstance(case_record, Mapping) else {}
+    _attach_case_external_artifact_references(incoming)
     identity = incoming.get("effective_scenario_sha256")
     try:
         artifact_root_path = _resolve_corpus_directory(artifact_root, root)
         errors = _validate_case_record(incoming, corpus_root=root)
         errors.extend(_case_admission_input_binding_errors(incoming))
         errors.extend(_validate_case_current_target_revision(incoming))
-        errors.extend(_validate_case_search_run_reference(incoming, corpus["search_runs"]))
+        errors.extend(
+            _validate_case_search_run_reference(incoming, corpus["search_runs"], corpus_root=root)
+        )
         if errors:
             raise CorpusError("case record rejected: " + "; ".join(errors))
         _case_artifacts_within_root(incoming, root, artifact_root_path)
@@ -2405,6 +2903,7 @@ def admit_case_record(
             artifact_root=artifact_root_path,
             new_root=f"cases/{case_id}/inputs/source_bundle",
         )
+        _attach_case_external_artifact_references(incoming)
         incoming["source_evidence"]["admission_artifact_root"] = artifact_root
         staging.replace(final_dir)
         incoming["source_evidence"]["corpus_files"] = _case_file_inventory(final_dir, root)
@@ -2450,6 +2949,7 @@ def _retain_duplicate_case_evidence(
     support_relative = _duplicate_support_relative_path(
         planner_id, config_identity, artifact_root, existing["case_id"]
     )
+    retained_artifact_paths = _retained_duplicate_source_paths(existing)
     support_dir = corpus_root / support_relative
     old_source_evidence = copy.deepcopy(existing["source_evidence"])
     had_supporting_evidence = "supporting_source_evidence" in existing
@@ -2464,7 +2964,9 @@ def _retain_duplicate_case_evidence(
             corpus_root=corpus_root,
             support_relative=support_relative,
             support_dir=support_dir,
+            preserved_artifact_paths=retained_artifact_paths,
         )
+        _attach_case_external_artifact_references(incoming)
         _merge_duplicate_source_evidence(
             existing,
             incoming,
@@ -2568,6 +3070,7 @@ def _stage_duplicate_supporting_bundle(
     corpus_root: Path,
     support_relative: str,
     support_dir: Path,
+    preserved_artifact_paths: set[str] | frozenset[str] = frozenset(),
 ) -> tuple[Path, bool]:
     cases_dir = corpus_root / "cases"
     staging_parent = cases_dir
@@ -2588,6 +3091,7 @@ def _stage_duplicate_supporting_bundle(
             corpus_root=corpus_root,
             artifact_root=artifact_root,
             new_root=f"{support_relative}/source_bundle",
+            preserved_artifact_paths=preserved_artifact_paths,
         )
         if support_dir.exists():
             if _tree_file_inventory(staged_bundle) != _tree_file_inventory(
@@ -2637,7 +3141,30 @@ def _merge_duplicate_source_evidence(
     support_relative: str,
     corpus_root: Path,
 ) -> None:
-    support_files = _case_file_inventory(support_dir, corpus_root)
+    support_files_by_path = {
+        item["path"]: item for item in _case_file_inventory(support_dir, corpus_root)
+    }
+    retained_inventory = {
+        item["path"]: item["sha256"] for item in _retained_case_file_inventory(existing)
+    }
+    for reference in _case_external_artifact_references(incoming).values():
+        if not isinstance(reference, Mapping):
+            continue
+        path = reference.get("path")
+        digest = reference.get("sha256")
+        if not isinstance(path, str) or not isinstance(digest, str):
+            continue
+        if path in support_files_by_path:
+            if support_files_by_path[path]["sha256"] != digest:
+                raise CorpusError("duplicate external artifact reference conflicts with support")
+            continue
+        if retained_inventory.get(path) != digest:
+            raise CorpusError(
+                "duplicate external artifact reference is neither staged nor retained"
+            )
+        _verify_corpus_artifact(corpus_root, path, digest)
+        support_files_by_path[path] = {"path": path, "sha256": digest}
+    support_files = [support_files_by_path[path] for path in sorted(support_files_by_path)]
     evidence = incoming.get("source_evidence")
     if not isinstance(evidence, dict):
         raise CorpusError("duplicate admission source evidence is missing")
@@ -2653,6 +3180,31 @@ def _merge_duplicate_source_evidence(
         copied["corpus_files"] = support_files
         _merge_source_evidence(existing, copied)
     existing["source_evidence"]["corpus_files"] = _case_file_inventory(case_dir, corpus_root)
+
+
+def _retained_case_file_inventory(existing: Mapping[str, Any]) -> list[dict[str, str]]:
+    """Collect exact corpus-file receipts already retained by a case."""
+    receipts: dict[str, dict[str, str]] = {}
+    evidence_records = [existing.get("source_evidence")]
+    existing_support = existing.get("supporting_source_evidence", [])
+    if isinstance(existing_support, Sequence) and not isinstance(existing_support, (str, bytes)):
+        evidence_records.extend(existing_support)
+    for record in evidence_records:
+        if not isinstance(record, Mapping):
+            continue
+        for item in record.get("corpus_files", []):
+            if (
+                isinstance(item, Mapping)
+                and isinstance(item.get("path"), str)
+                and isinstance(item.get("sha256"), str)
+            ):
+                receipts[item["path"]] = {"path": item["path"], "sha256": item["sha256"]}
+    return [receipts[path] for path in sorted(receipts)]
+
+
+def _retained_duplicate_source_paths(existing: Mapping[str, Any]) -> set[str]:
+    """Collect corpus-relative paths already retained as case evidence."""
+    return {item["path"] for item in _retained_case_file_inventory(existing)}
 
 
 def _append_duplicate_case_evaluations(
@@ -3252,12 +3804,52 @@ def _copy_tree_without_symlinks(source: Path, destination: Path) -> None:
             raise CorpusError("case artifact bundle contains a non-regular file")
 
 
+def _case_external_artifact_references(case: Mapping[str, Any]) -> dict[str, Any]:
+    """Return digest-bound raw classifier and declared evidence references."""
+    admissibility = case.get("admissibility")
+    admissibility = admissibility if isinstance(admissibility, Mapping) else {}
+    receipt = admissibility.get("classifier_receipt")
+    receipt = receipt if isinstance(receipt, Mapping) else {}
+    references: dict[str, Any] = {}
+    raw_classifier = receipt.get("raw_classifier_artifact")
+    if isinstance(raw_classifier, Mapping):
+        references["raw_classifier_artifact"] = copy.deepcopy(dict(raw_classifier))
+    for index, item in enumerate(receipt.get("declared_evidence_artifacts", [])):
+        if not isinstance(item, Mapping) or item.get("status") not in {
+            "custodied",
+            "matched_case_input",
+            "matched_staged_artifact",
+        }:
+            continue
+        references[f"classifier_declared_evidence_{index:03d}"] = {
+            "path": item.get("path"),
+            "sha256": item.get("sha256"),
+            "role": "admissibility-evidence",
+            "declared_at": item.get("declared_at"),
+            "source_reference": item.get("source_reference"),
+        }
+    return references
+
+
+def _attach_case_external_artifact_references(case: dict[str, Any]) -> None:
+    references = _case_external_artifact_references(case)
+    source_evidence = case.get("source_evidence")
+    if not isinstance(source_evidence, dict):
+        return
+    if references:
+        retained = source_evidence.get("case_artifact_references")
+        merged = copy.deepcopy(dict(retained)) if isinstance(retained, Mapping) else {}
+        merged.update(references)
+        source_evidence["case_artifact_references"] = merged
+
+
 def _rewrite_case_artifact_paths(
     case: dict[str, Any],
     *,
     corpus_root: Path,
     artifact_root: Path,
     new_root: str,
+    preserved_artifact_paths: set[str] | frozenset[str] = frozenset(),
 ) -> None:
     def rewrite(relative: Any) -> str:
         path = _resolve_corpus_artifact(relative, corpus_root)
@@ -3279,7 +3871,46 @@ def _rewrite_case_artifact_paths(
                 replay[key] = rewrite(replay[key])
     for replay in receipt.get("artifact_receipts", []):
         replay["artifact_path"] = rewrite(replay["artifact_path"])
+    admissibility = case.get("admissibility")
+    admissibility = admissibility if isinstance(admissibility, dict) else {}
+    classifier_receipt = admissibility.get("classifier_receipt")
+    classifier_receipt = classifier_receipt if isinstance(classifier_receipt, dict) else {}
+    _rewrite_classifier_artifact_paths(
+        classifier_receipt,
+        rewrite,
+        preserved_artifact_paths=preserved_artifact_paths,
+    )
     case["source_evidence"]["corpus_files"] = []
+
+
+def _rewrite_classifier_artifact_paths(
+    classifier_receipt: dict[str, Any],
+    rewrite: Callable[[Any], str],
+    *,
+    preserved_artifact_paths: set[str] | frozenset[str] = frozenset(),
+) -> None:
+    """Rewrite classifier references when staged and rebind the receipt digest."""
+
+    def rewrite_classifier(relative: Any) -> str:
+        if isinstance(relative, str) and relative in preserved_artifact_paths:
+            return relative
+        return rewrite(relative)
+
+    classifier_artifact = classifier_receipt.get("raw_classifier_artifact")
+    if isinstance(classifier_artifact, dict):
+        classifier_artifact["path"] = rewrite_classifier(classifier_artifact["path"])
+    for item in classifier_receipt.get("declared_evidence_artifacts", []):
+        if isinstance(item, dict) and item.get("status") in {
+            "custodied",
+            "matched_case_input",
+            "matched_staged_artifact",
+        }:
+            item["path"] = rewrite_classifier(item["path"])
+    if classifier_receipt:
+        classifier_receipt.pop("binding_sha256", None)
+        classifier_receipt["binding_sha256"] = hashlib.sha256(
+            _stable_json(classifier_receipt).encode("utf-8")
+        ).hexdigest()
 
 
 def _stage_issue9656_candidate(
@@ -4221,14 +4852,419 @@ def _promote_issue9656_candidate_artifacts(
         raise
 
 
+def _artifact_root_file_digests(artifact_root: Path, corpus_root: Path) -> list[tuple[str, str]]:
+    """Index regular bytes already present in the producer's staged case bundle."""
+    rows = []
+    for path in sorted(artifact_root.rglob("*")):
+        if path.is_symlink() or not path.is_file():
+            continue
+        relative = path.resolve().relative_to(corpus_root).as_posix()
+        rows.append((relative, _sha256_file(path)))
+    return rows
+
+
+def _capture_classifier_evidence_artifact(
+    declaration: Mapping[str, Any],
+    *,
+    staged_inputs: Sequence[tuple[str, str]],
+    staged_files: Sequence[tuple[str, str]],
+    corpus_root: Path,
+    artifact_root: Path,
+    evidence_root: Path,
+) -> dict[str, Any]:
+    reference = declaration["source_reference"]
+    if "://" in reference:
+        return {**declaration, "status": "unavailable"}
+    raw_path = Path(reference).expanduser()
+    candidate = raw_path if raw_path.is_absolute() else evidence_root / raw_path
+    try:
+        if candidate.is_symlink():
+            raise OSError("declared evidence path is a symlink")
+        resolved = candidate.resolve(strict=True)
+        if not resolved.is_file():
+            raise OSError("declared evidence path is not a regular file")
+        actual_sha256 = _sha256_file(resolved)
+    except (OSError, RuntimeError, ValueError):
+        return _classifier_evidence_matched_input(
+            declaration,
+            staged_inputs=staged_inputs,
+            staged_files=staged_files,
+            corpus_root=corpus_root,
+        )
+    expected_sha256 = declaration["expected_sha256"]
+    if expected_sha256 is not None and expected_sha256 != actual_sha256:
+        raise CorpusError("#9651 declared evidence digest differs from source bytes")
+    if resolved.is_relative_to(artifact_root):
+        relative = resolved.relative_to(corpus_root).as_posix()
+        return {**declaration, "status": "custodied", "path": relative, "sha256": actual_sha256}
+    matched = _classifier_evidence_matched_input(
+        declaration,
+        staged_inputs=staged_inputs,
+        staged_files=staged_files,
+        corpus_root=corpus_root,
+        actual_sha256=actual_sha256,
+    )
+    if matched["status"] == "unavailable":
+        raise CorpusError(
+            "#9651 declared evidence exists outside artifact_root and is not a staged case input"
+        )
+    return matched
+
+
+def _capture_classifier_evidence_artifacts(
+    case: Mapping[str, Any],
+    classifier_result: Mapping[str, Any],
+    *,
+    corpus_root: Path,
+    artifact_root: Path,
+    evidence_root: Path,
+) -> list[dict[str, Any]]:
+    """Resolve declared #9651 paths to staged bytes without changing source references."""
+    staged_inputs = _case_input_artifact_digests(case)
+    staged_files = _artifact_root_file_digests(artifact_root, corpus_root)
+    return [
+        _capture_classifier_evidence_artifact(
+            declaration,
+            staged_inputs=staged_inputs,
+            staged_files=staged_files,
+            corpus_root=corpus_root,
+            artifact_root=artifact_root,
+            evidence_root=evidence_root,
+        )
+        for declaration in _classifier_evidence_path_declarations(classifier_result)
+    ]
+
+
+def _case_input_artifact_digest_mapping(case: Mapping[str, Any]) -> dict[str, str]:
+    case_inputs = case.get("inputs")
+    case_inputs = case_inputs if isinstance(case_inputs, Mapping) else {}
+    staged_inputs: dict[str, str] = {}
+    for key, digest_key in (
+        ("scenario_path", "scenario_sha256"),
+        ("route_overrides_path", "route_overrides_sha256"),
+    ):
+        path = case_inputs.get(key)
+        digest = case_inputs.get(digest_key)
+        if isinstance(path, str) and isinstance(digest, str):
+            staged_inputs[path] = digest.lower()
+    map_assets = case_inputs.get("map_assets")
+    if isinstance(map_assets, list):
+        for asset in map_assets:
+            if (
+                isinstance(asset, Mapping)
+                and isinstance(asset.get("path"), str)
+                and isinstance(asset.get("sha256"), str)
+            ):
+                staged_inputs[asset["path"]] = asset["sha256"].lower()
+    return staged_inputs
+
+
+def _case_input_artifact_digests(case: Mapping[str, Any]) -> list[tuple[str, str]]:
+    case_inputs = case.get("inputs")
+    case_inputs = case_inputs if isinstance(case_inputs, Mapping) else {}
+    staged_inputs: list[tuple[str, str]] = []
+    for key, digest_key in (
+        ("scenario_path", "scenario_sha256"),
+        ("route_overrides_path", "route_overrides_sha256"),
+    ):
+        path = case_inputs.get(key)
+        digest = case_inputs.get(digest_key)
+        if isinstance(path, str) and isinstance(digest, str) and _is_sha256(digest):
+            staged_inputs.append((path, digest.lower()))
+    map_assets = case_inputs.get("map_assets")
+    if isinstance(map_assets, list):
+        for asset in map_assets:
+            if (
+                isinstance(asset, Mapping)
+                and isinstance(asset.get("path"), str)
+                and isinstance(asset.get("sha256"), str)
+                and _is_sha256(asset["sha256"])
+            ):
+                staged_inputs.append((asset["path"], asset["sha256"].lower()))
+    return staged_inputs
+
+
+def _classifier_evidence_matched_input(
+    declaration: Mapping[str, Any],
+    *,
+    staged_inputs: Sequence[tuple[str, str]],
+    staged_files: Sequence[tuple[str, str]],
+    corpus_root: Path,
+    actual_sha256: str | None = None,
+) -> dict[str, Any]:
+    expected_sha256 = declaration["expected_sha256"]
+    digest = actual_sha256 or expected_sha256
+    input_match = next(((path, sha) for path, sha in staged_inputs if digest == sha), None)
+    if input_match is not None:
+        input_path, input_sha256 = input_match
+        status = "matched_case_input"
+    else:
+        input_match = next(((path, sha) for path, sha in staged_files if digest == sha), None)
+        if input_match is None:
+            return {**declaration, "status": "unavailable"}
+        input_path, input_sha256 = input_match
+        status = "matched_staged_artifact"
+    input_artifact = _resolve_corpus_artifact(input_path, corpus_root)
+    if _sha256_file(input_artifact) != input_sha256:
+        raise CorpusError("#9651 declared evidence does not match staged case input")
+    return {
+        **declaration,
+        "status": status,
+        "path": PurePosixPath(input_path).as_posix(),
+        "sha256": input_sha256,
+    }
+
+
+def _classifier_evidence_path_declaration(
+    location: str, value: Any, expected_sha256: Any = None
+) -> dict[str, Any] | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    digest = (
+        expected_sha256.lower()
+        if isinstance(expected_sha256, str) and _is_sha256(expected_sha256)
+        else None
+    )
+    return {
+        "declared_at": location,
+        "source_reference": value,
+        "expected_sha256": digest,
+    }
+
+
+def _classifier_evidence_path_declarations(
+    classifier_result: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Extract file paths declared by the #9651 evidence contract."""
+    evidence = classifier_result.get("evidence")
+    evidence = evidence if isinstance(evidence, Mapping) else {}
+    return [
+        *_classifier_scenario_evidence_path_declarations(evidence),
+        *_classifier_execution_evidence_path_declarations(evidence),
+        *_classifier_execution_binding_path_declarations(evidence),
+    ]
+
+
+def _classifier_execution_binding_path_declarations(
+    evidence: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    declarations = []
+    bindings = evidence.get("execution_artifact_bindings")
+    if isinstance(bindings, Mapping):
+        for role in ("reference", "target", "replay"):
+            binding = bindings.get(role)
+            if not isinstance(binding, Mapping):
+                continue
+            for key, digest_key in (
+                ("evidence_ref", "replay_sidecar_sha256"),
+                ("episode_store_path", "episode_store_sha256"),
+                ("target_planner_replay_result_path", "target_planner_replay_result_sha256"),
+            ):
+                item = _classifier_evidence_path_declaration(
+                    f"evidence.execution_artifact_bindings.{role}.{key}",
+                    binding.get(key),
+                    binding.get(digest_key),
+                )
+                if item is not None:
+                    declarations.append(item)
+            producer = binding.get("producer_provenance_binding")
+            if isinstance(producer, Mapping):
+                item = _classifier_evidence_path_declaration(
+                    f"evidence.execution_artifact_bindings.{role}.producer_provenance_binding.manifest_path",
+                    producer.get("manifest_path"),
+                    producer.get("manifest_sha256"),
+                )
+                if item is not None:
+                    declarations.append(item)
+    return declarations
+
+
+def _classifier_execution_evidence_path_declarations(
+    evidence: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    declarations = []
+    for role in ("reference", "target", "replay"):
+        source = evidence.get(f"{role}_execution")
+        if isinstance(source, Mapping):
+            item = _classifier_evidence_path_declaration(
+                f"evidence.{role}_execution.evidence_ref",
+                source.get("evidence_ref"),
+                source.get("source_episodes_jsonl_sha256"),
+            )
+            if item is not None:
+                declarations.append(item)
+    return declarations
+
+
+def _classifier_scenario_evidence_path_declarations(
+    evidence: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    declarations = []
+    scenario_identity = evidence.get("scenario_artifact_identity")
+    if isinstance(scenario_identity, Mapping):
+        item = _classifier_evidence_path_declaration(
+            "evidence.scenario_artifact_identity.path",
+            scenario_identity.get("path"),
+            scenario_identity.get("sha256"),
+        )
+        if item is not None:
+            declarations.append(item)
+        input_files = scenario_identity.get("files")
+        if isinstance(input_files, list):
+            for index, item in enumerate(input_files):
+                if isinstance(item, Mapping):
+                    declaration = _classifier_evidence_path_declaration(
+                        f"evidence.scenario_artifact_identity.files[{index}].path",
+                        item.get("path"),
+                        item.get("sha256"),
+                    )
+                    if declaration is not None:
+                        declarations.append(declaration)
+    return declarations
+
+
+def _validate_classifier_declared_evidence_artifacts(
+    case: Mapping[str, Any],
+    receipt: Mapping[str, Any],
+    result: Mapping[str, Any],
+    corpus_root: Path,
+) -> list[str]:
+    """Check exact #9651 path declarations and any staged bytes they identify."""
+    declared = _classifier_evidence_path_declarations(result)
+    artifacts = receipt.get("declared_evidence_artifacts", [])
+    # Existing v1 receipts predate path custody. Keep their inline result valid
+    # when they have no explicit raw-artifact or sidecar claims to validate.
+    if "declared_evidence_artifacts" not in receipt and "raw_classifier_artifact" not in receipt:
+        return []
+    if not isinstance(artifacts, list) or len(artifacts) != len(declared):
+        return ["#9651 declared evidence artifact references are incomplete"]
+    staged_inputs = _case_input_artifact_digest_mapping(case)
+    errors = []
+    for index, (expected, actual) in enumerate(zip(declared, artifacts, strict=True)):
+        errors.extend(
+            _validate_classifier_evidence_artifact_row(
+                index,
+                expected,
+                actual,
+                staged_inputs=staged_inputs,
+                corpus_root=corpus_root,
+            )
+        )
+    return errors
+
+
+def _validate_classifier_evidence_artifact_row(
+    index: int,
+    expected: Mapping[str, Any],
+    actual: Any,
+    *,
+    staged_inputs: Mapping[str, str],
+    corpus_root: Path,
+) -> list[str]:
+    if not isinstance(actual, Mapping):
+        return [f"#9651 declared evidence reference {index} is malformed"]
+    errors = [
+        f"#9651 declared evidence reference {index} differs at {key}"
+        for key in ("declared_at", "source_reference", "expected_sha256")
+        if actual.get(key) != expected.get(key)
+    ]
+    status = actual.get("status")
+    if status == "unavailable":
+        if "path" in actual or "sha256" in actual:
+            errors.append(f"#9651 unavailable evidence reference {index} carries staged bytes")
+        if expected.get("expected_sha256") in staged_inputs.values():
+            errors.append(f"#9651 evidence reference {index} omitted matching case input bytes")
+        return errors
+    if status not in {"custodied", "matched_case_input", "matched_staged_artifact"}:
+        return [*errors, f"#9651 declared evidence reference {index} has an invalid status"]
+    path = actual.get("path")
+    digest = actual.get("sha256")
+    if not _safe_bundle_relative_path(path) or not _is_sha256(digest):
+        return [*errors, f"#9651 declared evidence reference {index} has invalid custody identity"]
+    if expected.get("expected_sha256") is not None and expected["expected_sha256"] != digest:
+        errors.append(f"#9651 declared evidence reference {index} digest differs from #9651")
+    if status == "matched_case_input" and staged_inputs.get(path) != digest:
+        errors.append(f"#9651 declared evidence reference {index} does not match a case input")
+    try:
+        _verify_corpus_artifact(corpus_root, path, digest)
+    except CorpusError as exc:
+        errors.append(f"#9651 declared evidence reference {index} custody failed: {exc}")
+    return errors
+
+
+def _validate_raw_classifier_artifact_reference(
+    receipt: Mapping[str, Any], result: Mapping[str, Any], corpus_root: Path | None
+) -> list[str]:
+    """Validate an optional staged raw #9651 JSON reference without changing its verdict."""
+    reference = receipt.get("raw_classifier_artifact")
+    if reference is None:
+        return []
+    if not isinstance(reference, Mapping) or corpus_root is None:
+        return ["#9651 raw classifier artifact reference is malformed or unmaterialized"]
+    path_value = reference.get("path")
+    if (
+        not _safe_bundle_relative_path(path_value)
+        or reference.get("role") != "admissibility-evidence"
+        or reference.get("schema_version") != "scenario_admissibility.v1"
+        or not _is_full_git_revision(reference.get("source_revision"))
+        or not _is_sha256(reference.get("sha256"))
+    ):
+        return ["#9651 raw classifier artifact reference has invalid identity"]
+    try:
+        path = _resolve_corpus_artifact(path_value, corpus_root)
+        payload = _read_json_object(path)
+    except (CorpusError, OSError, ValueError, TypeError) as exc:
+        return [f"#9651 raw classifier artifact is unavailable: {exc}"]
+    errors = []
+    if _sha256_file(path) != reference.get("sha256"):
+        errors.append("#9651 raw classifier artifact digest differs")
+    if payload.get("schema_version") != "scenario_admissibility.v1":
+        errors.append("#9651 raw classifier artifact schema differs")
+    if _stable_json(payload) != _stable_json(result):
+        errors.append("#9651 raw classifier artifact differs from the embedded result")
+    result_evidence = result.get("evidence")
+    result_evidence = result_evidence if isinstance(result_evidence, Mapping) else {}
+    recorded_revisions = {
+        execution.get("source_commit")
+        for name in ("reference_execution", "target_execution", "replay_execution")
+        if isinstance((execution := result_evidence.get(name)), Mapping)
+        and isinstance(execution.get("source_commit"), str)
+    }
+    if recorded_revisions and reference.get("source_revision") not in recorded_revisions:
+        errors.append("#9651 raw artifact source revision differs from its execution evidence")
+    return errors
+
+
 def create_case_scenario_admissibility_receipt(
     case: Mapping[str, Any],
     classifier_result: Mapping[str, Any],
     *,
     corpus_root: str | Path,
+    raw_classifier_artifact_path: str | None = None,
+    source_revision: str | None = None,
+    artifact_root: str | Path | None = None,
+    evidence_root: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Bind a canonical #9651 unknown-feasibility result to staged case input bytes."""
+    """Bind #9651 unknown feasibility to case inputs and optionally its raw artifact bytes.
+
+    ``raw_classifier_artifact_path`` is the exact staged ``scenario_admissibility.v1`` JSON
+    produced by #9651. When supplied, its bytes are preserved as a stable path/digest reference
+    for downstream reports. File references declared inside #9651 evidence are also retained;
+    readable evidence must be staged inside ``artifact_root`` or match a staged case input by
+    digest. Missing files remain explicit as unavailable references. This receipt never upgrades
+    unknown feasibility.
+    """
     root = Path(corpus_root).resolve()
+    artifact_root_path = (
+        Path(artifact_root).expanduser().resolve() if artifact_root is not None else root
+    )
+    evidence_root_path = (
+        Path(evidence_root).expanduser().resolve() if evidence_root is not None else root
+    )
+    try:
+        artifact_root_path.relative_to(root)
+    except ValueError as exc:
+        raise CorpusError("#9651 evidence artifact_root must be inside corpus_root") from exc
     try:
         validate_scenario_admissibility(classifier_result)
     except (ValueError, TypeError) as exc:
@@ -4274,7 +5310,28 @@ def create_case_scenario_admissibility_receipt(
         "classifier_result_sha256": hashlib.sha256(
             _stable_json(result).encode("utf-8")
         ).hexdigest(),
+        "declared_evidence_artifacts": _capture_classifier_evidence_artifacts(
+            case,
+            result,
+            corpus_root=root,
+            artifact_root=artifact_root_path,
+            evidence_root=evidence_root_path,
+        ),
     }
+    if raw_classifier_artifact_path is not None:
+        if source_revision is None or not _is_full_git_revision(source_revision):
+            raise CorpusError("#9651 raw artifact requires the exact 40-character source revision")
+        artifact = _resolve_corpus_artifact(raw_classifier_artifact_path, root)
+        raw_result = _read_json_object(artifact)
+        if _stable_json(raw_result) != _stable_json(result):
+            raise CorpusError("#9651 raw artifact JSON differs from the supplied classifier result")
+        receipt["raw_classifier_artifact"] = {
+            "path": PurePosixPath(raw_classifier_artifact_path).as_posix(),
+            "sha256": _sha256_file(artifact),
+            "source_revision": source_revision,
+            "role": "admissibility-evidence",
+            "schema_version": "scenario_admissibility.v1",
+        }
     receipt["binding_sha256"] = hashlib.sha256(_stable_json(receipt).encode("utf-8")).hexdigest()
     return receipt
 
@@ -7492,6 +8549,10 @@ def _validate_unknown_admissibility_evidence(
     errors.extend(_unknown_classifier_result_case_errors(case, result))
     errors.extend(_unknown_classifier_result_input_errors(case, result, expected_inputs))
     errors.extend(_unknown_classifier_receipt_digest_errors(receipt, result))
+    errors.extend(_validate_raw_classifier_artifact_reference(receipt, result, corpus_root))
+    errors.extend(
+        _validate_classifier_declared_evidence_artifacts(case, receipt, result, corpus_root)
+    )
     return errors
 
 
@@ -7890,20 +8951,97 @@ def _map_asset_identity(assets: Any) -> list[dict[str, str]]:
 
 def _validate_case_corpus_evidence(case: Mapping[str, Any], corpus_root: Path) -> list[str]:
     source_evidence = case.get("source_evidence")
-    files = source_evidence.get("corpus_files") if isinstance(source_evidence, dict) else None
+    records = [source_evidence]
+    supporting = case.get("supporting_source_evidence", [])
+    if isinstance(supporting, Sequence) and not isinstance(supporting, (str, bytes)):
+        records.extend(supporting)
+    inventories: list[tuple[Mapping[str, Any], dict[str, str]]] = []
+    complete_inventory: dict[str, str] = {}
+    for index, record in enumerate(records):
+        if not isinstance(record, Mapping):
+            return ["corpus custody evidence record is malformed"]
+        inventory, error = _validate_case_source_file_inventory(
+            record,
+            corpus_root,
+            required=index == 0 or bool(record.get("case_artifact_references")),
+        )
+        if error is not None:
+            return [error]
+        for path, digest in inventory.items():
+            prior_digest = complete_inventory.get(path)
+            if prior_digest is not None and prior_digest != digest:
+                return ["corpus custody inventories conflict on artifact digest"]
+            complete_inventory[path] = digest
+        inventories.append((record, inventory))
+    errors = []
+    for index, (record, _inventory) in enumerate(inventories):
+        errors.extend(
+            _validate_case_external_artifact_inventory(
+                case,
+                complete_inventory,
+                source_evidence=record,
+                include_classifier_receipt=index == 0,
+            )
+        )
+    return errors
+
+
+def _validate_case_source_file_inventory(
+    source_evidence: Mapping[str, Any], corpus_root: Path, *, required: bool
+) -> tuple[dict[str, str], str | None]:
+    files = source_evidence.get("corpus_files")
     if not isinstance(files, list) or not files:
-        return ["corpus custody inventory is missing"]
+        return ({}, None) if not required else ({}, "corpus custody inventory is missing")
+    inventory: dict[str, str] = {}
     for receipt in files:
         if (
-            not isinstance(receipt, dict)
+            not isinstance(receipt, Mapping)
             or not _safe_bundle_relative_path(receipt.get("path"))
             or not _is_sha256(receipt.get("sha256"))
         ):
-            return ["corpus custody inventory receipt is malformed"]
+            return {}, "corpus custody inventory receipt is malformed"
+        path = receipt["path"]
+        digest = receipt["sha256"]
+        prior_digest = inventory.get(path)
+        if prior_digest is not None and prior_digest != digest:
+            return {}, "corpus custody inventory contains conflicting artifact digests"
         try:
-            _verify_corpus_artifact(corpus_root, receipt["path"], receipt["sha256"])
+            _verify_corpus_artifact(corpus_root, path, digest)
         except CorpusError as exc:
-            return [f"corpus custody inventory verification failed: {exc}"]
+            return {}, f"corpus custody inventory verification failed: {exc}"
+        inventory[path] = digest
+    return inventory, None
+
+
+def _validate_case_external_artifact_inventory(
+    case: Mapping[str, Any],
+    inventory: Mapping[str, str],
+    *,
+    source_evidence: Mapping[str, Any],
+    include_classifier_receipt: bool,
+) -> list[str]:
+    """Require every declared classifier sidecar to have a matching custody receipt."""
+    references = source_evidence.get("case_artifact_references", {})
+    if references is not None and not isinstance(references, Mapping):
+        return ["case external artifact reference inventory is malformed"]
+    expected_references = (
+        _case_external_artifact_references(case) if include_classifier_receipt else {}
+    )
+    checks = list(expected_references.items())
+    checks.extend(
+        (f"source_evidence.{name}", reference) for name, reference in (references or {}).items()
+    )
+    for name, reference in checks:
+        if not isinstance(reference, Mapping):
+            return [f"case external artifact reference is malformed: {name}"]
+        path = reference.get("path")
+        digest = reference.get("sha256")
+        if (
+            not _safe_bundle_relative_path(path)
+            or not _is_sha256(digest)
+            or inventory.get(path) != digest
+        ):
+            return [f"case external artifact reference is not present in custody: {name}"]
     return []
 
 

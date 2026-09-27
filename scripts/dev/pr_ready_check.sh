@@ -36,6 +36,9 @@ Environment variables:
                       #8469), separating an environment issue from real
                       failures. Disabled by default; the gate stays fail-closed
                       and only reports the diagnostic.
+  PR_READY_LOCK_DIR   Host-local lock and receipt root (default:
+                      /tmp/robot-sf-pr-ready-locks). Set a separate root for
+                      isolated synthetic readiness fixtures.
   PR_READY_TERMINATION_RECEIPT
                       Optional absolute or worktree-relative path for the bounded
                       receipt written when readiness receives a termination signal.
@@ -72,6 +75,11 @@ pr_ready_pending_signal_number=""
 pr_ready_child_pid=""
 pr_ready_child_pgid=""
 pr_ready_child_registration_state="not_started"
+pr_ready_host_acquire_pid=""
+pr_ready_host_acquire_state="not_started"
+pr_ready_host_acquire_started=0
+pr_ready_host_previous_async_pid=""
+pr_ready_host_acquire_path_file=""
 pr_ready_child_launch_started=0
 pr_ready_previous_async_pid=""
 pr_ready_parent_pgid=""
@@ -190,6 +198,30 @@ pr_ready_cleanup_direct_child() {
   fi
 }
 
+pr_ready_terminate_host_acquire() {
+  local helper_pid="$pr_ready_host_acquire_pid"
+  local attempts=0
+  [[ "$helper_pid" =~ ^[1-9][0-9]*$ ]] || return 0
+  if pr_ready_process_alive "$helper_pid"; then
+    kill -TERM "$helper_pid" 2>/dev/null || true
+    while pr_ready_process_alive "$helper_pid" && (( attempts < 20 )); do
+      sleep 0.05 || true
+      attempts=$((attempts + 1))
+    done
+    if pr_ready_process_alive "$helper_pid"; then
+      kill -KILL "$helper_pid" 2>/dev/null || true
+      attempts=0
+      while pr_ready_process_alive "$helper_pid" && (( attempts < 20 )); do
+        sleep 0.05 || true
+        attempts=$((attempts + 1))
+      done
+    fi
+  fi
+  wait "$helper_pid" 2>/dev/null || true
+  pr_ready_host_acquire_pid=""
+  pr_ready_host_acquire_state="finished"
+}
+
 pr_ready_finalize_group_cleanup() {
   local child_pid="$1"
   local verified_status="$2"
@@ -266,10 +298,18 @@ handle_pr_ready_signal() {
     fi
     return 0
   fi
+  if [[ "$pr_ready_host_acquire_state" == "registering" ]]; then
+    if [[ -z "$pr_ready_pending_signal_number" ]]; then
+      pr_ready_pending_signal_name="$signal_name"
+      pr_ready_pending_signal_number="$signal_number"
+    fi
+    return 0
+  fi
 
   pr_ready_termination_handled=1
   pr_ready_pending_signal_name=""
   pr_ready_pending_signal_number=""
+  pr_ready_terminate_host_acquire
   terminate_pr_ready_child
   local receipt_output=""
   if receipt_output="$(python3 "$SCRIPT_DIR/pr_ready_termination.py" \
@@ -318,10 +358,24 @@ pr_ready_finalize_child_registration_for_exit() {
   pr_ready_child_registration_state="registered"
 }
 
+pr_ready_finalize_host_acquire_for_exit() {
+  [[ "$pr_ready_host_acquire_state" == "registering" ]] || return 0
+  if [[ "$pr_ready_host_acquire_started" -eq 1 && -z "$pr_ready_host_acquire_pid" ]]; then
+    local recovered_pid="${!:-}"
+    if [[ "$recovered_pid" =~ ^[1-9][0-9]*$ &&
+      "$recovered_pid" != "$pr_ready_host_previous_async_pid" ]] &&
+      pr_ready_is_direct_child "$recovered_pid"; then
+      pr_ready_host_acquire_pid="$recovered_pid"
+    fi
+  fi
+  pr_ready_host_acquire_state="registered"
+}
+
 pr_ready_exit_without_coverage() {
   local exit_code=$?
   if [[ -n "$pr_ready_pending_signal_number" && "$pr_ready_termination_handled" -eq 0 ]]; then
     pr_ready_finalize_child_registration_for_exit
+    pr_ready_finalize_host_acquire_for_exit
     handle_pr_ready_signal "$pr_ready_pending_signal_name" "$pr_ready_pending_signal_number"
   fi
   if [[ -n "$pr_ready_evidence_scope_file" ]]; then
@@ -659,17 +713,40 @@ case "$pr_ready_mode_lower" in
     ;;
 esac
 
-# Issue #8286: serialize readiness only within this canonical worktree.  The
-# lock anchor lives under one stable host-local lock root and is keyed by the
-# physical worktree path, so linked worktrees that share one Git common
-# directory remain independently runnable.  Python's inherited descriptor keeps
-# the kernel lock held by this shell until the final readiness cleanup completes.
+# Issue #8286 keeps same-worktree duplicates nonblocking; issue #9692 adds a
+# host-wide admission slot shared by linked worktrees. Python's inherited
+# descriptors keep both kernel locks held through final readiness cleanup.
 pr_ready_lock_fd=""
 pr_ready_worktree=""
 pr_ready_lock_path=""
+pr_ready_lock_root=""
+pr_ready_host_lock_fd=""
+pr_ready_host_owner_file=""
+pr_ready_host_head=""
+pr_ready_host_acquire_attempted=0
 
 release_pr_ready_lock() {
   local exit_code=$?
+  local release_error=""
+  if [[ -n "$pr_ready_host_lock_fd" ]]; then
+    if [[ "$pr_ready_host_acquire_attempted" -eq 1 ]]; then
+      if ! release_error="$(python3 "$SCRIPT_DIR/pr_ready_host_lock.py" release \
+        --lock-fd "$pr_ready_host_lock_fd" \
+        --owner-file "$pr_ready_host_owner_file" \
+        --pid "$$" \
+        --worktree "$pr_ready_worktree" \
+        --head "$pr_ready_host_head" 2>&1)"; then
+        printf 'Could not write the PR readiness host-lock release receipt; closing the kernel lock descriptor anyway.\n' >&2
+        [[ -z "$release_error" ]] || printf '%s\n' "$release_error" >&2
+      fi
+    fi
+    exec {pr_ready_host_lock_fd}>&-
+    pr_ready_host_lock_fd=""
+  fi
+  if [[ -n "$pr_ready_host_acquire_path_file" ]]; then
+    rm -f -- "$pr_ready_host_acquire_path_file" || true
+    pr_ready_host_acquire_path_file=""
+  fi
   if [[ -n "$pr_ready_lock_fd" ]]; then
     exec {pr_ready_lock_fd}>&-
     pr_ready_lock_fd=""
@@ -699,6 +776,7 @@ acquire_pr_ready_worktree_lock() {
       "$lock_root" >&2
     return 1
   fi
+  pr_ready_lock_root="$lock_root"
 
   if ! lock_key="$(PR_READY_WORKTREE="$pr_ready_worktree" python3 - <<'PY'
 import hashlib
@@ -757,6 +835,65 @@ PY
   return 1
 }
 
+acquire_pr_ready_host_lock() {
+  local host_lock_path helper_rc
+
+  pr_ready_host_head="$(git -C "$REPO_ROOT" rev-parse --verify 'HEAD^{commit}')" || {
+    printf 'Cannot determine exact readiness HEAD; refusing host admission.\n' >&2
+    return 1
+  }
+  host_lock_path="$pr_ready_lock_root/host-admission.lock"
+  pr_ready_host_owner_file="$pr_ready_lock_root/host-admission-owner.json"
+  if ! exec {pr_ready_host_lock_fd}>>"$host_lock_path"; then
+    printf 'Cannot open host-wide PR readiness lock %q; refusing to run without admission.\n' \
+      "$host_lock_path" >&2
+    return 1
+  fi
+
+  pr_ready_host_acquire_attempted=1
+  pr_ready_host_acquire_path_file="$pr_ready_lock_root/.host-admission-path.$$"
+  if ! (umask 077 && : >"$pr_ready_host_acquire_path_file"); then
+    printf 'Cannot create private PR readiness receipt-path scratch file; refusing host admission.\n' >&2
+    return 1
+  fi
+  pr_ready_host_previous_async_pid="${!:-}"
+  pr_ready_host_acquire_started=1
+  pr_ready_host_acquire_state="registering"
+  python3 "$SCRIPT_DIR/pr_ready_host_lock.py" acquire \
+    --lock-fd "$pr_ready_host_lock_fd" \
+    --owner-file "$pr_ready_host_owner_file" \
+    --receipt-dir "$pr_ready_lock_root/receipts" \
+    --pid "$$" \
+    --worktree "$pr_ready_worktree" \
+    --head "$pr_ready_host_head" >"$pr_ready_host_acquire_path_file" &
+  pr_ready_host_acquire_pid=$!
+  pr_ready_host_acquire_state="registered"
+  if [[ -n "$pr_ready_pending_signal_number" ]]; then
+    handle_pr_ready_signal "$pr_ready_pending_signal_name" "$pr_ready_pending_signal_number"
+  fi
+  if wait "$pr_ready_host_acquire_pid"; then
+    helper_rc=0
+  else
+    helper_rc=$?
+  fi
+  pr_ready_host_acquire_pid=""
+  pr_ready_host_acquire_state="finished"
+  pr_ready_host_receipt_path="$(cat -- "$pr_ready_host_acquire_path_file")"
+  rm -f -- "$pr_ready_host_acquire_path_file"
+  pr_ready_host_acquire_path_file=""
+  if [[ "$helper_rc" -eq 0 ]]; then
+    printf 'PR readiness host admission held; receipt log: %s\n' \
+      "$pr_ready_host_receipt_path" >&2
+    return 0
+  fi
+
+  # The EXIT path closes the descriptor even if the helper failed after
+  # acquiring it. Do not turn ambiguous owner metadata into permission to run.
+  printf 'Cannot start PR readiness: host-wide admission was not established (exit %d).\n' \
+    "$helper_rc" >&2
+  return 2
+}
+
 # Close the lock explicitly on normal exit and trapped signals. SIGKILL cannot
 # run a trap, but the kernel still releases the descriptor-bound lock when this
 # shell terminates; the persistent anchor file is never used as a held-lock
@@ -767,8 +904,9 @@ trap 'handle_pr_ready_signal SIGINT 2' INT
 trap 'handle_pr_ready_signal SIGQUIT 3' QUIT
 trap 'handle_pr_ready_signal SIGTERM 15' TERM
 acquire_pr_ready_worktree_lock
+acquire_pr_ready_host_lock
 pr_ready_parent_pgid="$(pr_ready_process_group_for_pid "$$" || true)"
-mark_pr_ready_progress "preflight" "none" "readiness lock acquired; entering preflight"
+mark_pr_ready_progress "preflight" "none" "worktree and host readiness admission acquired; entering preflight"
 
 # Friction guard for issue #5533: untracked new files are invisible to the
 # committed-HEAD diff gates (changed-file coverage, docstring TODO diff). They
@@ -990,6 +1128,7 @@ cleanup_pr_ready_exit() {
   local exit_code=$?
   if [[ -n "$pr_ready_pending_signal_number" && "$pr_ready_termination_handled" -eq 0 ]]; then
     pr_ready_finalize_child_registration_for_exit
+    pr_ready_finalize_host_acquire_for_exit
     handle_pr_ready_signal "$pr_ready_pending_signal_name" "$pr_ready_pending_signal_number"
   fi
   cleanup_pr_ready_coverage || true

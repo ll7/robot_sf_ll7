@@ -1559,7 +1559,7 @@ def test_pr_ready_check_final_mode_preflights_analytics_dependencies(
     script_dir.mkdir(parents=True)
     fake_bin.mkdir()
 
-    for script_name in ("pr_ready_check.sh", "common_setup.sh"):
+    for script_name in ("pr_ready_check.sh", "common_setup.sh", "pr_ready_host_lock.py"):
         source = ROOT / "scripts" / "dev" / script_name
         target = script_dir / script_name
         target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
@@ -1604,6 +1604,7 @@ def test_pr_ready_check_final_mode_preflights_analytics_dependencies(
             "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
             "PR_READY_MODE": "final",
             "PR_READY_SKIP_PREFLIGHT": "0",
+            "PR_READY_LOCK_DIR": str(repo / ".git" / "pr-ready-locks"),
             "BASE_REF": "origin/main",
             "REPO_ROOT": str(stale_repo),
         },
@@ -1628,7 +1629,7 @@ def test_pr_ready_check_rejects_process_substitution_body_paths(tmp_path: Path) 
     script_dir.mkdir(parents=True)
     fake_bin.mkdir()
 
-    for script_name in ("pr_ready_check.sh", "common_setup.sh"):
+    for script_name in ("pr_ready_check.sh", "common_setup.sh", "pr_ready_host_lock.py"):
         source = ROOT / "scripts" / "dev" / script_name
         target = script_dir / script_name
         target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
@@ -1665,6 +1666,7 @@ def test_pr_ready_check_rejects_process_substitution_body_paths(tmp_path: Path) 
         "BASE_REF": "HEAD",
         "PR_READY_MODE": "final",
         "PR_READY_SKIP_PREFLIGHT": "0",
+        "PR_READY_LOCK_DIR": str(repo / ".git" / "pr-ready-locks"),
     }
 
     process_substitution = subprocess.run(

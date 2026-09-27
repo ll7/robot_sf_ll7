@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
@@ -180,6 +181,7 @@ def _make_fake_scripts(repo: Path) -> None:
     scripts_dir = repo / "scripts" / "dev"
     scripts_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(SCRIPTS_DEV / "pr_ready_termination.py", scripts_dir / "pr_ready_termination.py")
+    shutil.copy2(SCRIPTS_DEV / "pr_ready_host_lock.py", scripts_dir / "pr_ready_host_lock.py")
     for name in _POST_PREFLIGHT_SCRIPTS:
         stub = scripts_dir / name
         if name.endswith(".py"):
@@ -613,7 +615,13 @@ def _pr_ready_environment(
     repo: Path, env_overrides: dict[str, str] | None = None
 ) -> dict[str, str]:
     """Build an isolated environment for a fake-repository readiness process."""
-    env = {**os.environ, "PATH": f"{repo / 'bin'}{os.pathsep}{os.environ['PATH']}"}
+    env = {
+        **os.environ,
+        "PATH": f"{repo / 'bin'}{os.pathsep}{os.environ['PATH']}",
+        # Every synthetic repository owns its lock root unless a test explicitly
+        # shares one to exercise linked-worktree contention.
+        "PR_READY_LOCK_DIR": str(repo / ".git" / "pr-ready-locks"),
+    }
     home = repo / ".home"
     home.mkdir(exist_ok=True)
     env["HOME"] = str(home)
@@ -877,11 +885,112 @@ def _lock_test_environment(
     }
 
 
+def _linked_lock_test_fixtures(
+    preflight_repo: Path, tmp_path: Path, prefix: str
+) -> tuple[list[Path], list[Path], list[Path], list[Path], list[dict[str, str]]]:
+    """Create two linked worktrees whose controlled readiness lanes share a lock root."""
+    labels = [f"{prefix}-one", f"{prefix}-two"]
+    worktrees = [tmp_path / label for label in labels]
+    ready_markers = [tmp_path / f"{label}-ready" for label in labels]
+    release_markers = [tmp_path / f"{label}-release" for label in labels]
+    logs = [tmp_path / f"{label}.log" for label in labels]
+    envs = [
+        _lock_test_environment(tmp_path, ready=ready, release=release, log=log)
+        for ready, release, log in zip(ready_markers, release_markers, logs, strict=True)
+    ]
+    for worktree in worktrees:
+        subprocess.run(
+            ["git", "worktree", "add", "--detach", str(worktree), "HEAD"],
+            cwd=preflight_repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        _make_fake_bin(worktree, fail=True)
+        _write_blocking_lane_stub(worktree)
+    return worktrees, ready_markers, release_markers, logs, envs
+
+
 def _lock_anchor(tmp_path: Path, repo: Path) -> Path:
     """Return the expected temporary lock anchor for a canonical worktree path."""
     canonical = str(repo.resolve())
     key = hashlib.sha256(os.fsencode(canonical)).hexdigest()
     return tmp_path / "lock-tmp" / "robot-sf-pr-ready-locks" / f"{key}.lock"
+
+
+def _host_lock_root(env: dict[str, str]) -> Path:
+    """Return the explicit root used by a readiness process."""
+    return Path(env["PR_READY_LOCK_DIR"])
+
+
+def _git_head(repo: Path) -> str:
+    """Return the exact committed HEAD of a readiness fixture."""
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def _assert_receipt_identity(events: list[dict[str, object]], worktree: Path) -> None:
+    """Check receipt schema, process identity, canonical path, and exact HEAD."""
+    expected_path = str(worktree.resolve())
+    expected_head = _git_head(worktree)
+    assert events
+    for event in events:
+        assert event["schema"] == "robot_sf.pr_ready_host_admission"
+        assert event["version"] == 1
+        assert isinstance(event["pid"], int) and event["pid"] > 0
+        identity_parts = str(event["process_start_identity"]).split(":")
+        assert len(identity_parts) == 3
+        assert identity_parts[0] == "linux-proc"
+        assert len(identity_parts[1]) == 36
+        assert identity_parts[2].isdecimal()
+        assert event["canonical_worktree_path"] == expected_path
+        assert event["head"] == expected_head
+        assert isinstance(event["timestamp_utc"], str) and event["timestamp_utc"].endswith("Z")
+
+
+def _receipt_events(lock_root: Path, worktree: Path) -> list[dict[str, object]]:
+    """Read this worktree's machine-readable host-admission events."""
+    events: list[dict[str, object]] = []
+    receipt_dir = lock_root / "receipts"
+    if not receipt_dir.exists():
+        return events
+    for receipt_path in receipt_dir.glob("*.jsonl"):
+        for line in receipt_path.read_text(encoding="utf-8").splitlines():
+            event = json.loads(line)
+            if event.get("canonical_worktree_path") == str(worktree.resolve()):
+                events.append(event)
+    return sorted(events, key=lambda event: str(event["timestamp_utc"]))
+
+
+def _wait_for_receipt_status(
+    lock_root: Path,
+    worktree: Path,
+    status: str,
+    process: subprocess.Popen[str],
+    *,
+    timeout: float = 5.0,
+) -> list[dict[str, object]]:
+    """Wait until a particular worktree emits a requested admission status."""
+    deadline = time.monotonic() + timeout
+    while True:
+        events = _receipt_events(lock_root, worktree)
+        if any(event.get("status") == status for event in events):
+            return events
+        if process.poll() is not None:
+            stdout, stderr = _collect_process(process, timeout=1.0)
+            raise AssertionError(
+                f"readiness exited before host receipt {status!r}: "
+                f"rc={process.returncode}\nstdout={stdout}\nstderr={stderr}"
+            )
+        if time.monotonic() >= deadline:
+            _stop_process_group(process, signal.SIGKILL)
+            stdout, stderr = _collect_process(process, timeout=1.5)
+            raise AssertionError(
+                f"readiness did not emit host receipt {status!r} within {timeout}s\n"
+                f"stdout={stdout}\nstderr={stderr}"
+            )
+        time.sleep(0.02)
 
 
 def _child_pgids_for_pid(parent_pid: int) -> set[int]:
@@ -1657,21 +1766,13 @@ def test_pr_ready_sigterm_writes_optional_receipt_and_cleans_lane(
 @pytest.mark.skipif(
     os.name != "posix", reason="linked-worktree process semantics are POSIX-specific"
 )
-def test_pr_ready_lock_allows_distinct_linked_worktrees(
+def test_pr_ready_host_lock_serializes_distinct_linked_worktrees(
     preflight_repo: Path, tmp_path: Path
 ) -> None:
-    """Linked worktrees sharing Git metadata can hold independent readiness locks."""
-    worktrees = [tmp_path / "worktree-one", tmp_path / "worktree-two"]
-    for worktree in worktrees:
-        subprocess.run(
-            ["git", "worktree", "add", "--detach", str(worktree), "HEAD"],
-            cwd=preflight_repo,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        _make_fake_bin(worktree, fail=True)
-        _write_blocking_lane_stub(worktree)
+    """Linked worktrees sharing a lock root enter the expensive lane in sequence."""
+    worktrees, ready_markers, release_markers, logs, envs = _linked_lock_test_fixtures(
+        preflight_repo, tmp_path, "worktree"
+    )
 
     common_dirs = []
     for worktree in worktrees:
@@ -1689,35 +1790,268 @@ def test_pr_ready_lock_allows_distinct_linked_worktrees(
     assert len(set(common_dirs)) == 1
     assert worktrees[0].resolve() != worktrees[1].resolve()
 
-    ready_markers = [tmp_path / "worktree-one-ready", tmp_path / "worktree-two-ready"]
-    release_markers = [tmp_path / "worktree-one-release", tmp_path / "worktree-two-release"]
-    logs = [tmp_path / "worktree-one.log", tmp_path / "worktree-two.log"]
-    processes = [
-        _start_pr_ready(
-            worktree,
-            env_overrides=_lock_test_environment(tmp_path, ready=ready, release=release, log=log),
-        )
-        for worktree, ready, release, log in zip(
-            worktrees, ready_markers, release_markers, logs, strict=True
-        )
-    ]
+    processes: list[subprocess.Popen[str]] = []
     try:
-        for process, ready in zip(processes, ready_markers, strict=True):
-            _wait_for_marker(ready, process)
-        assert all(process.poll() is None for process in processes)
+        first = _start_pr_ready(worktrees[0], env_overrides=envs[0])
+        processes.append(first)
+        _wait_for_marker(ready_markers[0], first)
+        assert first.poll() is None
         assert _lock_anchor(tmp_path, worktrees[0]).is_file()
-        assert _lock_anchor(tmp_path, worktrees[1]).is_file()
+        assert not _lock_anchor(tmp_path, worktrees[1]).exists()
         assert _lock_anchor(tmp_path, worktrees[0]) != _lock_anchor(tmp_path, worktrees[1])
 
-        for release in release_markers:
-            release.touch()
-        for process in processes:
-            stdout, stderr = _collect_process(process)
-            assert process.returncode == 0, stdout + stderr
+        lock_root = _host_lock_root(envs[0])
+        second = _start_pr_ready(worktrees[1], env_overrides=envs[1])
+        processes.append(second)
+        second_events = _wait_for_receipt_status(lock_root, worktrees[1], "wait", second)
+        assert not ready_markers[1].exists()
+        assert logs[0].read_text(encoding="utf-8").splitlines() == ["invoked"]
+        assert not logs[1].exists()
+        wait_event = next(event for event in second_events if event.get("status") == "wait")
+        waiting_for = wait_event["waiting_for"]
+        assert isinstance(waiting_for, dict)
+        assert waiting_for["canonical_worktree_path"] == str(worktrees[0].resolve())
+        assert waiting_for["head"] == _git_head(worktrees[0])
+        assert isinstance(waiting_for["pid"], int) and waiting_for["pid"] > 0
+        assert str(waiting_for["process_start_identity"]).startswith("linux-proc:")
+
+        release_markers[0].touch()
+        first_stdout, first_stderr = _collect_process(first)
+        assert first.returncode == 0, first_stdout + first_stderr
+        _wait_for_marker(ready_markers[1], second)
+        assert _lock_anchor(tmp_path, worktrees[1]).is_file()
+        release_markers[1].touch()
+        second_stdout, second_stderr = _collect_process(second)
+        assert second.returncode == 0, second_stdout + second_stderr
+
+        first_events = _receipt_events(lock_root, worktrees[0])
+        second_events = _receipt_events(lock_root, worktrees[1])
+        _assert_receipt_identity(first_events, worktrees[0])
+        _assert_receipt_identity(second_events, worktrees[1])
+        assert [event["status"] for event in first_events] == ["held", "released"]
+        second_statuses = [event["status"] for event in second_events]
+        second_hold_index = second_statuses.index("held")
+        wait_indexes = [index for index, status in enumerate(second_statuses) if status == "wait"]
+        assert (
+            second_statuses.count("held") == 1
+            and second_statuses.count("released") == 1
+            and bool(wait_indexes)
+            and all(index < second_hold_index for index in wait_indexes)
+            and wait_event in second_events
+        )
+        first_release = first_events[-1]
+        second_hold = second_events[second_hold_index]
+        assert first_release["timestamp_utc"] <= second_hold["timestamp_utc"]
+        assert logs[0].read_text(encoding="utf-8").splitlines() == ["invoked"]
+        assert logs[1].read_text(encoding="utf-8").splitlines() == ["invoked"]
     finally:
         for process in processes:
             _stop_process_group(process, signal.SIGKILL)
             _collect_process(process)
+
+
+@pytest.mark.skipif(
+    os.name != "posix", reason="linked-worktree process semantics are POSIX-specific"
+)
+def test_pr_ready_host_lock_cancellation_releases_waiter(
+    preflight_repo: Path, tmp_path: Path
+) -> None:
+    """A cancelled holder releases the kernel lock before a linked waiter enters its lane."""
+    worktrees, ready_markers, release_markers, logs, envs = _linked_lock_test_fixtures(
+        preflight_repo, tmp_path, "cancel"
+    )
+    processes: list[subprocess.Popen[str]] = []
+    try:
+        holder = _start_pr_ready(worktrees[0], env_overrides=envs[0])
+        processes.append(holder)
+        _wait_for_marker(ready_markers[0], holder)
+        waiter = _start_pr_ready(worktrees[1], env_overrides=envs[1])
+        processes.append(waiter)
+        lock_root = _host_lock_root(envs[0])
+        _wait_for_receipt_status(lock_root, worktrees[1], "wait", waiter)
+        assert not ready_markers[1].exists()
+        assert logs[0].read_text(encoding="utf-8").splitlines() == ["invoked"]
+        assert not logs[1].exists()
+
+        _stop_process_group(holder, signal.SIGTERM)
+        holder_stdout, holder_stderr = _collect_process(holder)
+        assert holder.returncode == 143, holder_stdout + holder_stderr
+        _wait_for_marker(ready_markers[1], waiter)
+        release_markers[1].touch()
+        waiter_stdout, waiter_stderr = _collect_process(waiter)
+        assert waiter.returncode == 0, waiter_stdout + waiter_stderr
+
+        holder_events = _receipt_events(lock_root, worktrees[0])
+        waiter_events = _receipt_events(lock_root, worktrees[1])
+        _assert_receipt_identity(holder_events, worktrees[0])
+        _assert_receipt_identity(waiter_events, worktrees[1])
+        assert [event["status"] for event in holder_events] == ["held", "released"]
+        assert [event["status"] for event in waiter_events] == ["wait", "held", "released"]
+        waiter_hold = next(event for event in waiter_events if event["status"] == "held")
+        assert holder_events[-1]["timestamp_utc"] <= waiter_hold["timestamp_utc"]
+        assert logs[0].read_text(encoding="utf-8").splitlines() == ["invoked"]
+        assert logs[1].read_text(encoding="utf-8").splitlines() == ["invoked"]
+    finally:
+        for process in processes:
+            _stop_process_group(process, signal.SIGKILL)
+            _collect_process(process)
+
+
+@pytest.mark.skipif(
+    os.name != "posix", reason="linked-worktree process semantics are POSIX-specific"
+)
+def test_pr_ready_host_lock_waiter_sigterm_stops_wait_without_releasing_holder(
+    preflight_repo: Path, tmp_path: Path
+) -> None:
+    """A direct SIGTERM cancels the waiter helper while preserving the current holder."""
+    worktrees, ready_markers, release_markers, logs, envs = _linked_lock_test_fixtures(
+        preflight_repo, tmp_path, "signal"
+    )
+    processes: list[subprocess.Popen[str]] = []
+    try:
+        holder = _start_pr_ready(worktrees[0], env_overrides=envs[0])
+        processes.append(holder)
+        _wait_for_marker(ready_markers[0], holder)
+        waiter = _start_pr_ready(worktrees[1], env_overrides=envs[1])
+        processes.append(waiter)
+        lock_root = _host_lock_root(envs[0])
+        _wait_for_receipt_status(lock_root, worktrees[1], "wait", waiter)
+        assert not ready_markers[1].exists()
+
+        waiter.send_signal(signal.SIGTERM)
+        waiter_stdout, waiter_stderr = _collect_process(waiter, timeout=5.0)
+        assert waiter.returncode == 143, waiter_stdout + waiter_stderr
+        assert not list(lock_root.glob(".host-admission-path.*"))
+        assert holder.poll() is None
+        assert ready_markers[1].exists() is False
+        assert logs[1].exists() is False
+        with (lock_root / "host-admission.lock").open("a+b") as contender:
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(contender.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+        release_markers[0].touch()
+        holder_stdout, holder_stderr = _collect_process(holder)
+        assert holder.returncode == 0, holder_stdout + holder_stderr
+        waiter_events = _receipt_events(lock_root, worktrees[1])
+        assert [event["status"] for event in waiter_events] == ["wait"]
+    finally:
+        for process in processes:
+            _stop_process_group(process, signal.SIGKILL)
+            _collect_process(process)
+
+
+def test_pr_ready_host_lock_replaces_stale_owner_when_kernel_lock_is_free(
+    preflight_repo: Path, tmp_path: Path
+) -> None:
+    """A stale owner record cannot block admission when the kernel lock is free."""
+    _write_lane_logging_stub(preflight_repo)
+    lock_root = tmp_path / "unlocked-stale-owner"
+    lock_root.mkdir()
+    owner_file = lock_root / "host-admission-owner.json"
+    owner_file.write_text(
+        json.dumps(
+            {
+                "schema": "robot_sf.pr_ready_host_admission",
+                "version": 1,
+                "status": "held",
+                "timestamp_utc": "2000-01-01T00:00:00Z",
+                "pid": os.getpid(),
+                "process_start_identity": "linux-proc:00000000-0000-0000-0000-000000000000:0",
+                "canonical_worktree_path": str(tmp_path / "removed-worktree"),
+                "head": "a" * 40,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    env = {
+        "PR_READY_MODE": "interim",
+        "PR_READY_LOCK_DIR": str(lock_root),
+    }
+
+    result = _run_pr_ready(preflight_repo, env_overrides=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    current_owner = json.loads(owner_file.read_text(encoding="utf-8"))
+    assert current_owner["status"] == "released"
+    assert current_owner["canonical_worktree_path"] == str(preflight_repo.resolve())
+    assert current_owner["head"] == _git_head(preflight_repo)
+    events = _receipt_events(lock_root, preflight_repo)
+    _assert_receipt_identity(events, preflight_repo)
+    assert [event["status"] for event in events] == ["held", "released"]
+
+
+def test_pr_ready_synthetic_fixture_uses_its_isolated_lock_root(preflight_repo: Path) -> None:
+    """The fake-repository environment never claims the production lock root."""
+    _write_lane_logging_stub(preflight_repo)
+
+    result = _run_pr_ready(preflight_repo)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    lock_root = preflight_repo / ".git" / "pr-ready-locks"
+    assert (lock_root / "host-admission-owner.json").is_file()
+    events = _receipt_events(lock_root, preflight_repo)
+    _assert_receipt_identity(events, preflight_repo)
+    assert [event["status"] for event in events] == ["held", "released"]
+
+
+@pytest.mark.parametrize("owner_state", ["missing", "reused_pid"])
+def test_pr_ready_host_lock_fails_closed_when_busy_owner_is_ambiguous(
+    preflight_repo: Path, tmp_path: Path, owner_state: str
+) -> None:
+    """Busy host locks without verifiable owner identity cannot admit readiness."""
+    ready = tmp_path / f"ambiguous-{owner_state}-ready"
+    release = tmp_path / f"ambiguous-{owner_state}-release"
+    log = tmp_path / f"ambiguous-{owner_state}.log"
+    _write_blocking_lane_stub(preflight_repo)
+    env = _lock_test_environment(tmp_path, ready=ready, release=release, log=log)
+    lock_root = _host_lock_root(env)
+    lock_root.mkdir(parents=True, exist_ok=True)
+    host_lock_path = lock_root / "host-admission.lock"
+    anchor = host_lock_path.open("a+b")
+    fcntl.flock(anchor.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    owner_file = lock_root / "host-admission-owner.json"
+    if owner_state == "reused_pid":
+        owner_file.write_text(
+            json.dumps(
+                {
+                    "schema": "robot_sf.pr_ready_host_admission",
+                    "version": 1,
+                    "status": "held",
+                    "timestamp_utc": "2026-09-27T00:00:00Z",
+                    "pid": os.getpid(),
+                    "process_start_identity": "linux-proc:00000000-0000-0000-0000-000000000000:0",
+                    "canonical_worktree_path": str(preflight_repo.resolve()),
+                    "head": subprocess.run(
+                        ["git", "rev-parse", "HEAD"],
+                        cwd=preflight_repo,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    ).stdout.strip(),
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+    process = _start_pr_ready(preflight_repo, env_overrides=env)
+    try:
+        stdout, stderr = _collect_process(process, timeout=8.0)
+        assert process.returncode == 2, stdout + stderr
+        assert "PR readiness host admission failed closed" in stderr
+        assert "Could not write the PR readiness host-lock release receipt" not in stderr
+        if owner_state == "missing":
+            assert "owner metadata is missing or released" in stderr
+        else:
+            assert "different process-start identity" in stderr
+        assert not ready.exists()
+        assert not log.exists()
+    finally:
+        _stop_process_group(process, signal.SIGKILL)
+        _collect_process(process)
+        fcntl.flock(anchor.fileno(), fcntl.LOCK_UN)
+        anchor.close()
 
 
 def test_help_bypasses_preflight(preflight_repo: Path) -> None:

@@ -988,6 +988,35 @@ def test_generic_case_admission_rejects_historical_unknown_input_binding(
     assert corpus["planner_evaluations"] == []
 
 
+def test_issue9645_import_rejects_stale_target_revision_after_input_binding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        counterexample_corpus,
+        "_case_admission_input_binding_errors",
+        lambda _case: [],
+    )
+    monkeypatch.setattr(
+        counterexample_corpus,
+        "_current_target_revision",
+        lambda: "a" * 40,
+    )
+
+    corpus, receipt = import_issue9645_packet(
+        _SOURCE_PACKET, new_corpus(), corpus_root=tmp_path / "corpus"
+    )
+
+    assert receipt["decision"] == "rejected"
+    assert any(
+        "admission replay does not match the independently resolved current target revision"
+        in blocker
+        for blocker in receipt["blockers"]
+    )
+    assert len(corpus["search_runs"]) == 1
+    assert corpus["cases"] == []
+    assert corpus["planner_evaluations"] == []
+
+
 def test_rehashed_route_input_cannot_reuse_a_stale_replay_jsonl(tmp_path: Path) -> None:
     corpus, _receipt, corpus_root = _import(tmp_path)
     evaluation = _append_episode_evaluation(

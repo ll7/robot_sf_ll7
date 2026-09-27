@@ -175,6 +175,11 @@ def test_route_path_normalization_is_hash_bound_for_candidates_and_recorded_repl
 
 def test_rebuilt_report_provenance_binds_inputs_and_generated_outputs() -> None:
     provenance = _read_json(PAYLOAD / "report_provenance.json")
+    source_metadata_path = REPO_ROOT / provenance["experiment_source_commit_evidence_path"]
+    source_metadata = _read_json(source_metadata_path)
+    assert source_metadata_path == PAYLOAD / "run_metadata.json"
+    assert provenance["experiment_source_commit"] == source_metadata["experiment_source_commit"]
+    assert provenance["experiment_source_commit_sha256"] == _sha256(source_metadata_path)
     assert provenance["comparison_sha256"] == _sha256(PAYLOAD / "pilot_comparison.json")
     assert provenance["manifest_path_map_sha256"] == _sha256(
         PAYLOAD / "reproduction_inputs/pilot_report_manifest_path_map.v1.json"

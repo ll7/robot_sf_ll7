@@ -1205,6 +1205,7 @@ def _historical_case_states(rounds: list[dict[str, Any]]) -> dict[str, dict[str,
             if (
                 state["first_verified_target_failure_round"] is None
                 and observation["replay_status"] == "verified"
+                and _is_allowed(observation["planner_status"], _PLANNER_STATUSES)
                 and observation["planner_status"] in {"unsolved", "mixed"}
             ):
                 state["first_verified_target_failure_round"] = number
@@ -1417,7 +1418,10 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
             errors.append(f"{candidate_prefix}.case_id must be non-empty text or null")
         elif corpus_disposition == "duplicate" and not isinstance(case_id, str):
             errors.append(f"{candidate_prefix} duplicate record requires case_id")
-        if corpus_disposition in {"admitted", "duplicate"}:
+        if _is_allowed(corpus_disposition, _CORPUS_DISPOSITIONS) and corpus_disposition in {
+            "admitted",
+            "duplicate",
+        }:
             _require_text(candidate, "scenario_id", errors, candidate_prefix)
             _require_sha(
                 candidate.get("scenario_artifact_sha256"),
@@ -1430,7 +1434,10 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
             errors.append(
                 f"{candidate_prefix}.admissibility_evidence_artifact is required for verified replay"
             )
-        if corpus_disposition in {"admitted", "duplicate"}:
+        if _is_allowed(corpus_disposition, _CORPUS_DISPOSITIONS) and corpus_disposition in {
+            "admitted",
+            "duplicate",
+        }:
             _validate_artifact_role(
                 admissibility_artifact,
                 f"{candidate_prefix}.admissibility_evidence_artifact",
@@ -1660,7 +1667,8 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
                     scenario_artifact_sha256=observation.get("scenario_artifact_sha256"),
                     target_failure_observed=(
                         True
-                        if observation.get("planner_status") in {"unsolved", "mixed"}
+                        if _is_allowed(observation.get("planner_status"), _PLANNER_STATUSES)
+                        and observation.get("planner_status") in {"unsolved", "mixed"}
                         else False
                         if observation.get("planner_status") == "solved"
                         else None
@@ -2723,7 +2731,8 @@ def _validate_admissibility_execution(  # noqa: C901, PLR0912 - report producer-
             _SHA256.fullmatch(checkpoint) is not None
             or (
                 checkpoint == "not_applicable"
-                and run.get("planner_id") in {"goal", "orca", "social_force"}
+                and isinstance(run.get("planner_id"), str)
+                and run["planner_id"] in {"goal", "orca", "social_force"}
             )
         )
     ):
@@ -3032,8 +3041,7 @@ def _is_verified_counterexample(candidate: dict[str, Any]) -> bool:
         and candidate.get("evaluation_status") == "complete"
         and candidate.get("target_failure_observed") is True
         and candidate.get("replay_status") == "verified"
-        and candidate.get("admissibility_verdict")
-        in {"empirically_feasible", "planner_specific_failure"}
+        and _is_allowed(candidate.get("admissibility_verdict"), _CONFIRMED_FEASIBILITY_VERDICTS)
     )
 
 
@@ -3070,21 +3078,8 @@ def _classify_search_candidates(
 
 
 def _validate_case_dispositions(rounds: list[Any], errors: list[str]) -> None:
-    """Keep stable case IDs unique while allowing explicit references to known cases."""
-    known_case_ids: set[str] = set()
-    for round_data in rounds:
-        if not isinstance(round_data, dict):
-            continue
-        observations = round_data.get("case_observations", [])
-        if isinstance(observations, list):
-            known_case_ids.update(
-                item["case_id"]
-                for item in observations
-                if isinstance(item, dict)
-                and item.get("origin_round") == 0
-                and isinstance(item.get("case_id"), str)
-            )
-
+    """Keep stable IDs bound to one scenario across admissions and observations."""
+    case_identities = _historical_case_identities(rounds, errors)
     for round_data in rounds:
         if not isinstance(round_data, dict):
             continue
@@ -3092,13 +3087,78 @@ def _validate_case_dispositions(rounds: list[Any], errors: list[str]) -> None:
         falsification = round_data.get("falsification")
         candidates = falsification.get("candidates", []) if isinstance(falsification, dict) else []
         if isinstance(candidates, list):
-            _validate_round_case_dispositions(current_round, candidates, known_case_ids, errors)
+            _validate_round_case_dispositions(current_round, candidates, case_identities, errors)
+        _validate_round_observation_identities(
+            current_round,
+            round_data.get("case_observations", []),
+            case_identities,
+            errors,
+        )
+
+
+def _historical_case_identities(rounds: list[Any], errors: list[str]) -> dict[str, tuple[Any, Any]]:
+    """Seed canonical identities from all origin-zero observations."""
+    case_identities: dict[str, tuple[Any, Any]] = {}
+    for round_data in rounds:
+        if not isinstance(round_data, dict):
+            continue
+        observations = round_data.get("case_observations", [])
+        if not isinstance(observations, list):
+            continue
+        for observation in observations:
+            if (
+                not isinstance(observation, dict)
+                or observation.get("origin_round") != 0
+                or not isinstance(observation.get("case_id"), str)
+            ):
+                continue
+            case_id = observation["case_id"]
+            identity = _case_scenario_identity(observation)
+            previous_identity = case_identities.setdefault(case_id, identity)
+            if previous_identity != identity:
+                errors.append(
+                    f"historical case {case_id!r} changes its canonical scenario identity"
+                )
+    return case_identities
+
+
+def _validate_round_observation_identities(
+    current_round: Any,
+    observations: Any,
+    case_identities: dict[str, tuple[Any, Any]],
+    errors: list[str],
+) -> None:
+    if not isinstance(observations, list):
+        return
+    for observation in observations:
+        if not isinstance(observation, dict):
+            continue
+        case_id = observation.get("case_id")
+        if not isinstance(case_id, str):
+            continue
+        identity = _case_scenario_identity(observation)
+        canonical_identity = case_identities.get(case_id)
+        if canonical_identity is None:
+            errors.append(
+                f"round {current_round} observation for case {case_id!r} has no "
+                "canonical scenario identity"
+            )
+        elif canonical_identity != identity:
+            errors.append(
+                f"round {current_round} observation for case {case_id!r} changes its "
+                "canonical scenario identity"
+            )
+
+
+def _case_scenario_identity(record: dict[str, Any]) -> tuple[Any, Any]:
+    """Return the scenario identity bound to a stable case ID."""
+    return record.get("scenario_id"), record.get("scenario_artifact_sha256")
 
 
 def _validate_round_case_dispositions(
     current_round: Any,
     candidates: list[Any],
-    known_case_ids: set[str],
+    case_identities: dict[str, tuple[Any, Any]],
     errors: list[str],
 ) -> None:
     for candidate in candidates:
@@ -3106,21 +3166,25 @@ def _validate_round_case_dispositions(
             continue
         case_id = candidate.get("case_id")
         disposition = candidate.get("corpus_disposition")
-        if disposition == "duplicate" and (
-            not isinstance(case_id, str) or case_id not in known_case_ids
-        ):
-            errors.append(
-                f"round {current_round} duplicate candidate must refer to a previously "
-                "known corpus case"
-            )
+        if disposition == "duplicate":
+            if not isinstance(case_id, str) or case_id not in case_identities:
+                errors.append(
+                    f"round {current_round} duplicate candidate must refer to a previously "
+                    "known corpus case"
+                )
+            elif _case_scenario_identity(candidate) != case_identities[case_id]:
+                errors.append(
+                    f"round {current_round} duplicate candidate for case {case_id!r} "
+                    "does not match its canonical scenario identity"
+                )
         elif disposition == "admitted" and isinstance(case_id, str):
-            if case_id in known_case_ids:
+            if case_id in case_identities:
                 errors.append(
                     f"round {current_round} re-admits known case {case_id!r}; use "
                     "corpus_disposition=duplicate"
                 )
             else:
-                known_case_ids.add(case_id)
+                case_identities[case_id] = _case_scenario_identity(candidate)
 
 
 def _is_repeated_verified_counterexample(candidate: dict[str, Any]) -> bool:
@@ -3131,8 +3195,7 @@ def _is_repeated_verified_counterexample(candidate: dict[str, Any]) -> bool:
         and candidate.get("evaluation_status") == "complete"
         and candidate.get("target_failure_observed") is True
         and candidate.get("replay_status") == "verified"
-        and candidate.get("admissibility_verdict")
-        in {"empirically_feasible", "planner_specific_failure"}
+        and _is_allowed(candidate.get("admissibility_verdict"), _CONFIRMED_FEASIBILITY_VERDICTS)
     )
 
 

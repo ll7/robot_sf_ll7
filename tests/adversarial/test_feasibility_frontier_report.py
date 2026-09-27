@@ -1037,6 +1037,50 @@ def test_frontier_report_does_not_count_repeated_case_as_new_discovery(tmp_path:
     assert "1 known corpus case(s) were replay-verified again." in statement
 
 
+def test_frontier_report_rejects_duplicate_case_with_different_scenario_identity(
+    tmp_path: Path,
+) -> None:
+    """A checksummed replay cannot turn changed scenario bytes into a known-case repeat."""
+    payload = _evidence(tmp_path)
+    candidate = payload["rounds"][1]["falsification"]["candidates"][0]
+    candidate["corpus_disposition"] = "duplicate"
+    candidate["case_id"] = "case-001"
+    alternate_scenario_id = "unrelated-scenario"
+    alternate_scenario_bytes = b"alternate scenario bytes for identity regression\n"
+    alternate_scenario_sha256 = hashlib.sha256(alternate_scenario_bytes).hexdigest()
+    scenario_path = tmp_path / "fixture" / f"{alternate_scenario_id}.yaml"
+    scenario_path.parent.mkdir(parents=True, exist_ok=True)
+    scenario_path.write_bytes(alternate_scenario_bytes)
+    candidate["scenario_id"] = alternate_scenario_id
+    candidate["scenario_artifact_sha256"] = alternate_scenario_sha256
+
+    admissibility_ref = candidate["admissibility_evidence_artifact"]
+    admissibility_path = tmp_path / admissibility_ref["path"]
+    admissibility = json.loads(admissibility_path.read_text(encoding="utf-8"))
+    admissibility["case_id"] = "case-001"
+    admissibility["scenario_id"] = alternate_scenario_id
+    identity = admissibility["evidence"]["scenario_artifact_identity"]
+    identity["path"] = f"fixture/{alternate_scenario_id}.yaml"
+    identity["sha256"] = alternate_scenario_sha256
+    for role in ("target", "replay"):
+        execution = admissibility["evidence"][f"{role}_execution"]
+        execution["case_id"] = "case-001"
+        execution["scenario_id"] = alternate_scenario_id
+        execution["scenario_sha256"] = alternate_scenario_sha256
+    admissibility_bytes = (
+        json.dumps(admissibility, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode()
+    admissibility_path.write_bytes(admissibility_bytes)
+    admissibility_ref["sha256"] = hashlib.sha256(admissibility_bytes).hexdigest()
+
+    _refresh_source_artifacts(payload, tmp_path)
+    with pytest.raises(
+        FrontierReportError,
+        match="duplicate candidate for case 'case-001' does not match its canonical scenario identity",
+    ):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
 def test_frontier_report_does_not_call_unknown_case_duplicate_a_verified_repeat(
     tmp_path: Path,
 ) -> None:
@@ -1775,6 +1819,50 @@ def test_frontier_report_wraps_unhashable_target_planner_outcome_as_report_error
         build_frontier_report(payload, evidence_root=tmp_path)
 
 
+def _malformed_enum_evidence(
+    tmp_path: Path, category: str, malformed_value: Any
+) -> tuple[dict[str, Any], str]:
+    payload = _evidence(tmp_path)
+    if category == "planner_status":
+        payload["rounds"][0]["case_observations"][0]["planner_status"] = malformed_value
+        message = "planner_status is unsupported"
+        _refresh_source_artifacts(payload, tmp_path)
+    elif category == "corpus_disposition":
+        payload["rounds"][0]["falsification"]["candidates"][0]["corpus_disposition"] = (
+            malformed_value
+        )
+        message = "corpus_disposition is unsupported"
+        _refresh_source_artifacts(payload, tmp_path)
+    elif category == "reference_planner_id":
+        _rewrite_admissibility_artifact(
+            payload,
+            tmp_path,
+            0,
+            lambda source: source["evidence"]["reference_execution"].update(
+                planner_id=malformed_value,
+                planner_checkpoint_sha256="not_applicable",
+            ),
+        )
+        message = "reference_execution.planner_id must be non-empty text"
+    else:
+        raise AssertionError(f"unsupported test category: {category}")
+    return payload, message
+
+
+@pytest.mark.parametrize("malformed_value", [[], {}])
+@pytest.mark.parametrize(
+    "category", ["planner_status", "corpus_disposition", "reference_planner_id"]
+)
+def test_frontier_report_wraps_unhashable_round_and_execution_categoricals(
+    tmp_path: Path, category: str, malformed_value: Any
+) -> None:
+    """Malformed JSON enum and planner fields stay in the structured report error channel."""
+    payload, message = _malformed_enum_evidence(tmp_path, category, malformed_value)
+
+    with pytest.raises(FrontierReportError, match=message):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
 def test_frontier_report_cli_returns_structured_diagnostic_for_malformed_verdict(
     tmp_path: Path,
 ) -> None:
@@ -1809,6 +1897,43 @@ def test_frontier_report_cli_returns_structured_diagnostic_for_malformed_verdict
     assert result.stdout == ""
     assert diagnostic["status"] == "error"
     assert "invalid frontier evidence" in diagnostic["error"]
+
+
+@pytest.mark.parametrize(
+    "category", ["planner_status", "corpus_disposition", "reference_planner_id"]
+)
+@pytest.mark.parametrize("malformed_value", [[], {}])
+def test_frontier_report_cli_returns_exit_two_for_unhashable_categoricals(
+    tmp_path: Path, category: str, malformed_value: Any
+) -> None:
+    """Malformed categories are reported as JSON diagnostics instead of tracebacks."""
+    payload, message = _malformed_enum_evidence(tmp_path, category, malformed_value)
+    input_path = tmp_path / f"malformed-{category}-{type(malformed_value).__name__}.json"
+    input_path.write_text(json.dumps(payload), encoding="utf-8")
+    script_path = (
+        Path(__file__).resolve().parents[2]
+        / "scripts/tools/build_adversarial_feasibility_frontier_report.py"
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(script_path),
+            "--input",
+            str(input_path),
+            "--out-dir",
+            str(tmp_path / f"malformed-{category}-report-{type(malformed_value).__name__}"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    diagnostic = json.loads(result.stderr)
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert diagnostic["status"] == "error"
+    assert message in diagnostic["error"]
 
 
 def test_frontier_report_rejects_malformed_evaluation_record_id(tmp_path: Path) -> None:

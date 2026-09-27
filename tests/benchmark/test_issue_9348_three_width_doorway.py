@@ -889,6 +889,11 @@ def test_preflight_blocks_unknown_oracle_readiness(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """An available oracle with an unknown required classification cannot set go."""
+    unavailable, unavailable_blocker = doorway_application._oracle_required_checks(
+        {"execution_status": "blocked"}
+    )
+    assert unavailable is False
+    assert unavailable_blocker == "oracle_execution_blocked"
     monkeypatch.setattr(
         doorway_application,
         "envelope_sensitivity_verdict_to_dict",

@@ -102,7 +102,9 @@ derives candidate and evaluation identities from those rows and validates the
 run's disjoint accounting: completed is discovered plus not discovered, while
 failed and invalid are counted separately. Missing attempts, altered rows,
 relabelled discoveries, and count mismatches fail validation. The pinned #9645
-pilot keeps its separate packet importer.
+pilot keeps its separate packet importer. Generic runs omit
+`new_counterexamples_admitted`; later admission is represented by the retained
+case links. Generic run revisions must be exact 40-character Git SHAs.
 
 When a #9651 classifier records raw output or file-backed execution evidence,
 the corpus receipt preserves those exact bytes or records the reference as

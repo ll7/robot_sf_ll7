@@ -951,7 +951,6 @@ def test_register_search_run_binds_attempted_rows_and_disjoint_outcomes(
         "failed_candidates": 1,
         "invalid_candidates": 1,
         "new_counterexamples_discovered": 2,
-        "new_counterexamples_admitted": 0,
         "evidence_tier": "diagnostic_only",
         "source_files": [{"path": source_relative, "sha256": source_sha256}],
         "manifest_files": [{"path": manifest_relative, "sha256": manifest_sha256}],
@@ -969,6 +968,10 @@ def test_register_search_run_binds_attempted_rows_and_disjoint_outcomes(
         != stored["candidate_evaluations"][1]["evaluation_id"]
     )
     assert stored["candidate_evaluations"][3]["scenario_id"] is None
+    assert "new_counterexamples_admitted" not in stored
+
+    _assert_generic_admission_count_is_rejected(run, corpus, corpus_root)
+    _assert_invalid_search_run_revisions_are_rejected(run, corpus, corpus_root)
 
     case = {
         "scenario_id": rows[0]["scenario_id"],
@@ -1012,6 +1015,40 @@ def test_register_search_run_binds_attempted_rows_and_disjoint_outcomes(
     missing_evaluations["search_runs"][0].pop("candidate_evaluations")
     with pytest.raises(CorpusError, match="candidate evaluation evidence is missing"):
         validate_corpus(missing_evaluations, corpus_root=corpus_root)
+
+
+def _assert_generic_admission_count_is_rejected(
+    run: dict[str, object], corpus: dict[str, object], corpus_root: Path
+) -> None:
+    for admitted_count in (0, 1):
+        unsupported_count = copy.deepcopy(run)
+        unsupported_count["new_counterexamples_admitted"] = admitted_count
+        with pytest.raises(CorpusError, match="must omit new_counterexamples_admitted"):
+            counterexample_corpus.register_search_run(
+                unsupported_count, new_corpus(), corpus_root=corpus_root
+            )
+
+        persisted_count = copy.deepcopy(corpus)
+        persisted_count["search_runs"][0]["new_counterexamples_admitted"] = admitted_count
+        with pytest.raises(CorpusError, match="must omit new_counterexamples_admitted"):
+            validate_corpus(persisted_count, corpus_root=corpus_root)
+
+
+def _assert_invalid_search_run_revisions_are_rejected(
+    run: dict[str, object], corpus: dict[str, object], corpus_root: Path
+) -> None:
+    for invalid_revision in ("a" * 39, "g" * 40):
+        invalid_run = copy.deepcopy(run)
+        invalid_run["source_revision"] = invalid_revision
+        with pytest.raises(CorpusError, match="full 40-character Git SHA"):
+            counterexample_corpus.register_search_run(
+                invalid_run, new_corpus(), corpus_root=corpus_root
+            )
+
+        persisted_revision = copy.deepcopy(corpus)
+        persisted_revision["search_runs"][0]["source_revision"] = invalid_revision
+        with pytest.raises(CorpusError, match="search_runs/0/source_revision"):
+            validate_corpus(persisted_revision, corpus_root=corpus_root)
     inconsistent_counts = copy.deepcopy(corpus)
     inconsistent_counts["search_runs"][0]["invalid_candidates"] = 0
     with pytest.raises(CorpusError, match="outcome counts differ"):

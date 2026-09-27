@@ -21,12 +21,14 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import quote
 
+from robot_sf.adversarial.episode_store_binding import validate_episode_store_row_binding
 from robot_sf.common.optional_import import try_import
 
 INPUT_SCHEMA_VERSION = "adversarial-coevolution-evidence.v3"
 REPORT_SCHEMA_VERSION = "adversarial-feasibility-frontier.v2"
 _GIT_SHA = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 _SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
+_PRODUCER_RUN_ID = re.compile(r"^[0-9a-fA-F]{32}$")
 _ADMISSIBILITY_VERDICTS = {
     "structurally_invalid",
     "geometric_or_kinodynamic_impossibility",
@@ -2524,6 +2526,7 @@ def _validate_admissibility_evidence_source(  # noqa: C901 - report independent 
             source,
             evidence,
             context,
+            evidence_root,
             prefix,
             errors,
         )
@@ -2538,6 +2541,8 @@ def _validate_admissibility_evidence_source(  # noqa: C901 - report independent 
                 role="target",
                 context=context,
                 scenario_identity=scenario_identity,
+                execution_artifact_bindings=evidence.get("execution_artifact_bindings"),
+                evidence_root=evidence_root,
                 prefix=f"{prefix}.evidence.target_execution",
                 errors=errors,
             )
@@ -2556,7 +2561,9 @@ def _validate_admissibility_evidence_source(  # noqa: C901 - report independent 
                     "unknown-feasibility case is supported by a completed target execution"
                 )
         if context.require_replay_binding:
-            _validate_reported_replay_binding(source, evidence, context, prefix, errors)
+            _validate_reported_replay_binding(
+                source, evidence, context, evidence_root, prefix, errors
+            )
     target_outcome = source.get("target_planner_outcome")
     if isinstance(context.target_failure_observed, bool) and _is_allowed(
         target_outcome, {"route_completed", "route_incomplete"}
@@ -2720,6 +2727,7 @@ def _validate_confirmed_admissibility_support(  # noqa: C901 - keep verdict proo
     source: dict[str, Any],
     evidence: dict[str, Any],
     context: _AdmissibilityContext,
+    evidence_root: Path,
     prefix: str,
     errors: list[str],
 ) -> None:
@@ -2737,6 +2745,8 @@ def _validate_confirmed_admissibility_support(  # noqa: C901 - keep verdict proo
             role=role,
             context=context,
             scenario_identity=evidence.get("scenario_artifact_identity"),
+            execution_artifact_bindings=evidence.get("execution_artifact_bindings"),
+            evidence_root=evidence_root,
             prefix=f"{prefix}.evidence.{role}_execution",
             errors=errors,
         )
@@ -2744,14 +2754,16 @@ def _validate_confirmed_admissibility_support(  # noqa: C901 - keep verdict proo
     if context.require_replay_binding:
         target = runs["target"]
         replay = runs["replay"]
+        _validate_replay_artifact_reference(replay, context, prefix, errors)
         if not valid_runs["target"] or not valid_runs["replay"]:
             errors.append(
                 f"{prefix} verified replay requires complete, case-bound target and replay executions"
             )
         elif isinstance(target, dict) and isinstance(replay, dict):
-            if not _admissibility_replay_matches_target(replay, target):
+            if not _admissibility_replay_matches_target(
+                replay, target, evidence.get("execution_artifact_bindings")
+            ):
                 errors.append(f"{prefix} replay execution does not reproduce its target execution")
-            _validate_replay_artifact_reference(replay, context, prefix, errors)
     target_run = runs["target"]
     target_observation_bound = _validate_target_planner_observation(
         evidence.get("target_planner_observation"),
@@ -2807,8 +2819,12 @@ def _validate_confirmed_admissibility_support(  # noqa: C901 - keep verdict proo
             and isinstance(reference, dict)
             and isinstance(target, dict)
             and isinstance(replay, dict)
-            and _admissibility_runs_share_case(reference, target)
-            and _admissibility_replay_matches_target(replay, target)
+            and _admissibility_runs_share_case(
+                reference, target, evidence.get("execution_artifact_bindings")
+            )
+            and _admissibility_replay_matches_target(
+                replay, target, evidence.get("execution_artifact_bindings")
+            )
             and reference.get("route_complete") is True
             and target.get("route_complete") is False
             and replay.get("route_complete") is False
@@ -2819,8 +2835,33 @@ def _validate_confirmed_admissibility_support(  # noqa: C901 - keep verdict proo
             errors.append(f"{prefix} does not contain matched planner-specific failure evidence")
 
 
-def _admissibility_runs_share_case(left: dict[str, Any], right: dict[str, Any]) -> bool:
+def _admissibility_runs_share_case(
+    left: dict[str, Any],
+    right: dict[str, Any],
+    execution_artifact_bindings: Any,
+) -> bool:
     """Match the producer's reference/target scenario, environment, and seed identity."""
+    if not _admissibility_runs_share_case_identity(left, right):
+        return False
+    left_producer = _execution_provenance_binding(execution_artifact_bindings, "reference")
+    right_producer = _execution_provenance_binding(execution_artifact_bindings, "target")
+    return (
+        _reported_producer_binding_is_valid(left_producer)
+        and _reported_producer_binding_is_valid(right_producer)
+        and isinstance(left_producer.get("case_identity_sha256"), str)
+        and bool(left_producer["case_identity_sha256"])
+        and left_producer.get("case_identity_sha256") == right_producer.get("case_identity_sha256")
+        and left_producer.get("execution_context_sha256")
+        == right_producer.get("execution_context_sha256")
+        and left_producer.get("scenario_matrix_sha256")
+        == right_producer.get("scenario_matrix_sha256")
+        and left_producer.get("simulator_settings_sha256")
+        == right_producer.get("simulator_settings_sha256")
+    )
+
+
+def _admissibility_runs_share_case_identity(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    """Compare normalized non-planner case identity without execution source identifiers."""
     fields = (
         "case_id",
         "scenario_id",
@@ -2836,10 +2877,14 @@ def _admissibility_runs_share_case(left: dict[str, Any], right: dict[str, Any]) 
     return all(left.get(field) == right.get(field) for field in fields)
 
 
-def _admissibility_replay_matches_target(replay: dict[str, Any], target: dict[str, Any]) -> bool:
+def _admissibility_replay_matches_target(
+    replay: dict[str, Any], target: dict[str, Any], execution_artifact_bindings: Any
+) -> bool:
     """Require the deterministic replay to match all target case and episode bindings."""
+    target_producer = _execution_provenance_binding(execution_artifact_bindings, "target")
+    replay_producer = _execution_provenance_binding(execution_artifact_bindings, "replay")
     return (
-        _admissibility_runs_share_case(replay, target)
+        _admissibility_runs_share_case_identity(replay, target)
         and replay.get("planner_id") == target.get("planner_id")
         and replay.get("planner_config_sha256") == target.get("planner_config_sha256")
         and replay.get("planner_checkpoint_sha256") == target.get("planner_checkpoint_sha256")
@@ -2848,13 +2893,49 @@ def _admissibility_replay_matches_target(replay: dict[str, Any], target: dict[st
         and replay.get("route_complete") == target.get("route_complete")
         and replay.get("determinism_check_status") == "pass"
         and replay.get("resimulated") is True
+        and _reported_producer_binding_is_valid(target_producer)
+        and _reported_producer_binding_is_valid(replay_producer)
+        and target_producer.get("case_identity_sha256")
+        == replay_producer.get("case_identity_sha256")
+        and target_producer.get("execution_context_sha256")
+        == replay_producer.get("execution_context_sha256")
+        and target_producer.get("scenario_matrix_sha256")
+        == replay_producer.get("scenario_matrix_sha256")
+        and target_producer.get("simulator_settings_sha256")
+        == replay_producer.get("simulator_settings_sha256")
+        and target_producer.get("planner_config_sha256")
+        == replay_producer.get("planner_config_sha256")
+        and target_producer.get("run_id") != replay_producer.get("run_id")
     )
+
+
+def _execution_provenance_binding(bindings: Any, role: str) -> dict[str, Any] | None:
+    """Select the producer manifest binding for one source or replay-produced episode."""
+    if not isinstance(bindings, dict):
+        return None
+    role_binding = bindings.get(role)
+    if not isinstance(role_binding, dict):
+        return None
+    if role != "replay":
+        producer = role_binding.get("producer_provenance_binding")
+        return producer if isinstance(producer, dict) else None
+    result_binding = role_binding.get("target_planner_replay_result_binding")
+    replay_episode_binding = (
+        result_binding.get("replay_episode_binding") if isinstance(result_binding, dict) else None
+    )
+    producer = (
+        replay_episode_binding.get("producer_provenance_binding")
+        if isinstance(replay_episode_binding, dict)
+        else None
+    )
+    return producer if isinstance(producer, dict) else None
 
 
 def _validate_reported_replay_binding(
     source: dict[str, Any],
     evidence: dict[str, Any],
     context: _AdmissibilityContext,
+    evidence_root: Path,
     prefix: str,
     errors: list[str],
 ) -> None:
@@ -2862,11 +2943,14 @@ def _validate_reported_replay_binding(
     scenario_identity = evidence.get("scenario_artifact_identity")
     target = evidence.get("target_execution")
     replay = evidence.get("replay_execution")
+    _validate_replay_artifact_reference(replay, context, prefix, errors)
     target_valid = _validate_admissibility_execution(
         target,
         role="target",
         context=context,
         scenario_identity=scenario_identity,
+        execution_artifact_bindings=evidence.get("execution_artifact_bindings"),
+        evidence_root=evidence_root,
         prefix=f"{prefix}.evidence.target_execution",
         errors=errors,
     )
@@ -2875,6 +2959,8 @@ def _validate_reported_replay_binding(
         role="replay",
         context=context,
         scenario_identity=scenario_identity,
+        execution_artifact_bindings=evidence.get("execution_artifact_bindings"),
+        evidence_root=evidence_root,
         prefix=f"{prefix}.evidence.replay_execution",
         errors=errors,
     )
@@ -2883,9 +2969,10 @@ def _validate_reported_replay_binding(
             f"{prefix} verified replay requires complete, case-bound target and replay executions"
         )
     elif isinstance(target, dict) and isinstance(replay, dict):
-        if not _admissibility_replay_matches_target(replay, target):
+        if not _admissibility_replay_matches_target(
+            replay, target, evidence.get("execution_artifact_bindings")
+        ):
             errors.append(f"{prefix} replay execution does not reproduce its target execution")
-        _validate_replay_artifact_reference(replay, context, prefix, errors)
     target_outcome = source.get("target_planner_outcome")
     if (
         target_valid
@@ -2907,7 +2994,7 @@ def _validate_replay_artifact_reference(
     artifact = context.replay_artifact
     if not isinstance(artifact, dict) or not isinstance(artifact.get("path"), str):
         errors.append(f"{prefix}.replay_artifact is required to bind verified replay evidence")
-    elif replay.get("evidence_ref") != artifact["path"]:
+    elif not isinstance(replay, dict) or replay.get("evidence_ref") != artifact["path"]:
         errors.append(
             f"{prefix}.evidence.replay_execution.evidence_ref does not match replay_artifact.path"
         )
@@ -2918,6 +3005,8 @@ def _validate_admissibility_execution(  # noqa: C901, PLR0912 - report producer-
     role: str,
     context: _AdmissibilityContext,
     scenario_identity: Any,
+    execution_artifact_bindings: Any,
+    evidence_root: Path,
     prefix: str,
     errors: list[str],
 ) -> bool:
@@ -3027,7 +3116,534 @@ def _validate_admissibility_execution(  # noqa: C901, PLR0912 - report producer-
         run.get("determinism_check_status") != "pass" or run.get("resimulated") is not True
     ):
         errors.append(f"{prefix} must pass replay determinism and simulator resimulation")
+    _validate_reported_execution_artifact_binding(
+        run,
+        role=role,
+        execution_artifact_bindings=execution_artifact_bindings,
+        evidence_root=evidence_root,
+        prefix=prefix,
+        errors=errors,
+    )
     return len(errors) == start_errors
+
+
+def _validate_reported_execution_artifact_binding(  # noqa: C901, PLR0912 - retain source binding diagnostics.
+    run: dict[str, Any],
+    *,
+    role: str,
+    execution_artifact_bindings: Any,
+    evidence_root: Path,
+    prefix: str,
+    errors: list[str],
+) -> None:
+    """Re-check producer binding claims against their persisted bytes and episode rows."""
+    if not isinstance(execution_artifact_bindings, dict):
+        errors.append(f"{prefix} has no producer execution_artifact_bindings object")
+        return
+    binding = execution_artifact_bindings.get(role)
+    if not isinstance(binding, dict):
+        errors.append(f"{prefix} has no producer execution_artifact_bindings entry")
+        return
+    if binding.get("status") != "valid":
+        errors.append(f"{prefix} producer execution_artifact_bindings status is not valid")
+    for field, expected in (
+        ("episode_id", run.get("episode_id")),
+        ("route_complete", run.get("route_complete")),
+    ):
+        if binding.get(field) != expected:
+            errors.append(f"{prefix} producer execution_artifact_bindings.{field} does not match")
+
+    if role == "replay":
+        _validate_reported_replay_artifact_binding(
+            run, binding, evidence_root=evidence_root, prefix=prefix, errors=errors
+        )
+        return
+
+    store_path = _resolve_reported_execution_path(
+        run.get("evidence_ref"), evidence_root=evidence_root
+    )
+    if store_path is None:
+        errors.append(f"{prefix}.evidence_ref does not resolve to a source episode store")
+        return
+    try:
+        store_bytes = store_path.read_bytes()
+    except OSError:
+        errors.append(f"{prefix}.evidence_ref source episode store is unreadable")
+        return
+    actual_sha256 = hashlib.sha256(store_bytes).hexdigest()
+    reported_sha256 = binding.get("episode_store_sha256")
+    if (
+        not isinstance(reported_sha256, str)
+        or not isinstance(run.get("source_episodes_jsonl_sha256"), str)
+        or actual_sha256 != reported_sha256.lower()
+        or actual_sha256 != run["source_episodes_jsonl_sha256"].lower()
+    ):
+        errors.append(f"{prefix} source episode store bytes do not match producer binding")
+        return
+    reported_store_path = _resolve_reported_execution_path(
+        binding.get("episode_store_path"), evidence_root=evidence_root
+    )
+    if reported_store_path != store_path:
+        errors.append(f"{prefix} producer binding points to a different episode store")
+    reported_ref_path = _resolve_reported_execution_path(
+        binding.get("evidence_ref"), evidence_root=evidence_root
+    )
+    if reported_ref_path != store_path:
+        errors.append(f"{prefix} producer binding points to a different evidence_ref")
+    if not _reported_producer_binding_is_valid(binding.get("producer_provenance_binding")):
+        errors.append(f"{prefix} producer provenance/run-context binding is not valid")
+        return
+    episode, row_problem = validate_episode_store_row_binding(store_bytes, source=run, role=role)
+    if episode is None:
+        errors.append(f"{prefix} source episode row is invalid: {row_problem}")
+        return
+    if not _reported_episode_row_identity_matches(binding.get("row_identity"), episode):
+        errors.append(f"{prefix} producer row_identity does not match the source episode row")
+
+    producer = binding.get("producer_provenance_binding")
+    if producer.get("episode_store_sha256") != actual_sha256:
+        errors.append(f"{prefix} producer provenance is not bound to the source episode bytes")
+    if producer.get("planner_config_sha256") != run.get("planner_config_sha256"):
+        errors.append(f"{prefix} producer planner config does not match the normalized execution")
+    _verify_reported_producer_manifest(
+        store_path.with_name(store_path.name + ".provenance.json"),
+        producer,
+        reported_path=producer.get("manifest_path"),
+        evidence_root=evidence_root,
+        episode_store_path=store_path,
+        episode_store_bytes=store_bytes,
+        episode=episode,
+        prefix=prefix,
+        errors=errors,
+    )
+
+
+def _validate_reported_replay_artifact_binding(  # noqa: C901, PLR0912, PLR0915 - validate every persisted replay boundary.
+    run: dict[str, Any],
+    binding: dict[str, Any],
+    *,
+    evidence_root: Path,
+    prefix: str,
+    errors: list[str],
+) -> None:
+    """Bind replay sidecar, source row, result, and replay-produced row to their bytes."""
+    sidecar_path = _resolve_reported_execution_path(
+        run.get("evidence_ref"), evidence_root=evidence_root
+    )
+    if sidecar_path is None:
+        errors.append(f"{prefix}.evidence_ref does not resolve to a replay sidecar")
+        return
+    try:
+        sidecar_bytes = sidecar_path.read_bytes()
+        sidecar = json.loads(sidecar_bytes)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        errors.append(f"{prefix} replay sidecar is unreadable or malformed")
+        return
+    sidecar_sha256 = hashlib.sha256(sidecar_bytes).hexdigest()
+    if (
+        not isinstance(sidecar, dict)
+        or binding.get("replay_sidecar_sha256") != sidecar_sha256
+        or sidecar.get("episode_id") != run.get("episode_id")
+        or sidecar.get("scenario_id") != run.get("scenario_id")
+        or sidecar.get("seed") != run.get("seed")
+        or sidecar.get("planner_key") != run.get("planner_id")
+        or sidecar.get("repo_commit") != run.get("source_commit")
+        or sidecar.get("source_episodes_jsonl_sha256") != run.get("source_episodes_jsonl_sha256")
+        or sidecar.get("determinism_check_status") != "pass"
+        or sidecar.get("resimulated") is not True
+        or not isinstance(sidecar.get("replay_command"), str)
+        or not sidecar.get("replay_command", "").strip()
+    ):
+        errors.append(f"{prefix} replay sidecar does not match its producer binding")
+        return
+    reported_sidecar_path = _resolve_reported_execution_path(
+        binding.get("evidence_ref"), evidence_root=evidence_root
+    )
+    if reported_sidecar_path != sidecar_path:
+        errors.append(f"{prefix} replay producer binding points to a different sidecar")
+
+    store_path = _resolve_reported_execution_path(
+        sidecar.get("source_episodes_jsonl_path"),
+        evidence_root=evidence_root,
+        relative_to=sidecar_path.parent,
+    )
+    if store_path is None:
+        errors.append(f"{prefix} replay source episode store is unavailable")
+        return
+    try:
+        store_bytes = store_path.read_bytes()
+    except OSError:
+        errors.append(f"{prefix} replay source episode store is unreadable")
+        return
+    store_sha256 = hashlib.sha256(store_bytes).hexdigest()
+    if store_sha256 != run.get("source_episodes_jsonl_sha256") or store_sha256 != binding.get(
+        "episode_store_sha256"
+    ):
+        errors.append(f"{prefix} replay source episode store bytes do not match producer binding")
+        return
+    reported_store_path = _resolve_reported_execution_path(
+        binding.get("episode_store_path"), evidence_root=evidence_root
+    )
+    if reported_store_path != store_path:
+        errors.append(f"{prefix} replay producer binding points to a different source store")
+    episode, row_problem = validate_episode_store_row_binding(
+        store_bytes, source=run, role="replay"
+    )
+    if episode is None:
+        errors.append(f"{prefix} replay source episode row is invalid: {row_problem}")
+        return
+    if not _reported_episode_row_identity_matches(binding.get("row_identity"), episode):
+        errors.append(f"{prefix} replay producer row_identity does not match its source row")
+
+    result_binding = binding.get("target_planner_replay_result_binding")
+    if (
+        not isinstance(result_binding, dict)
+        or result_binding.get("status") != "valid"
+        or not isinstance(result_binding.get("run_context_binding"), dict)
+        or result_binding["run_context_binding"].get("status") != "valid"
+    ):
+        errors.append(f"{prefix} target-planner replay-result binding is not valid")
+        return
+    result_path = _resolve_reported_execution_path(
+        sidecar.get("target_planner_replay_result_path"),
+        evidence_root=evidence_root,
+        relative_to=sidecar_path.parent,
+    )
+    if result_path is None:
+        errors.append(f"{prefix} target-planner replay result is unavailable")
+        return
+    reported_result_path = _resolve_reported_execution_path(
+        binding.get("target_planner_replay_result_path"), evidence_root=evidence_root
+    )
+    if reported_result_path != result_path:
+        errors.append(f"{prefix} replay binding points to a different target-planner result")
+    try:
+        result_bytes = result_path.read_bytes()
+        result = json.loads(result_bytes)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        errors.append(f"{prefix} target-planner replay result is unreadable or malformed")
+        return
+    result_sha256 = hashlib.sha256(result_bytes).hexdigest()
+    if (
+        not isinstance(result, dict)
+        or sidecar.get("target_planner_replay_result_sha256") != result_sha256
+        or binding.get("target_planner_replay_result_sha256") != result_sha256
+        or result_binding.get("episode_id") != run.get("episode_id")
+        or result_binding.get("route_complete") is not run.get("route_complete")
+        or result.get("schema_version") != "target_planner_replay_result.v1"
+        or result.get("episode_id") != run.get("episode_id")
+        or result.get("scenario_id") != run.get("scenario_id")
+        or result.get("seed") != run.get("seed")
+        or result.get("planner_id") != run.get("planner_id")
+        or result.get("source_commit") != run.get("source_commit")
+        or result.get("source_episodes_jsonl_sha256") != run.get("source_episodes_jsonl_sha256")
+        or result.get("route_complete") is not run.get("route_complete")
+        or result.get("run_status") != "ok"
+        or result.get("fallback_or_degraded") is not False
+        or not isinstance(result.get("termination_reason"), str)
+        or not result.get("termination_reason", "").strip()
+    ):
+        errors.append(f"{prefix} target-planner replay result does not match its producer binding")
+        return
+
+    replay_episode_binding = result_binding.get("replay_episode_binding")
+    if (
+        not isinstance(replay_episode_binding, dict)
+        or replay_episode_binding.get("status") != "valid"
+    ):
+        errors.append(f"{prefix} replay-produced episode binding is not valid")
+        return
+    replay_store_path = _resolve_reported_execution_path(
+        result.get("replay_episodes_jsonl_path"),
+        evidence_root=evidence_root,
+        relative_to=result_path.parent,
+    )
+    if replay_store_path is None:
+        errors.append(f"{prefix} replay-produced episode store is unavailable")
+        return
+    try:
+        replay_store_bytes = replay_store_path.read_bytes()
+    except OSError:
+        errors.append(f"{prefix} replay-produced episode store is unreadable")
+        return
+    replay_store_sha256 = hashlib.sha256(replay_store_bytes).hexdigest()
+    if replay_store_sha256 != result.get(
+        "replay_episodes_jsonl_sha256"
+    ) or replay_store_sha256 != replay_episode_binding.get("replay_episode_store_sha256"):
+        errors.append(f"{prefix} replay-produced episode bytes do not match producer binding")
+        return
+    replay_source = {
+        **run,
+        "episode_id": result.get("replay_episode_id"),
+        "route_complete": result.get("route_complete"),
+    }
+    replay_episode, replay_row_problem = validate_episode_store_row_binding(
+        replay_store_bytes,
+        source=replay_source,
+        role="target",
+        expected_episode_id=result.get("replay_episode_id"),
+    )
+    if replay_episode is None:
+        errors.append(f"{prefix} replay-produced episode row is invalid: {replay_row_problem}")
+        return
+    if replay_episode_binding.get("replay_episode_id") != result.get(
+        "replay_episode_id"
+    ) or replay_episode.get("termination_reason") != result.get("termination_reason"):
+        errors.append(f"{prefix} replay-produced row identity does not match producer binding")
+
+    replay_producer = replay_episode_binding.get("producer_provenance_binding")
+    if not _reported_producer_binding_is_valid(replay_producer):
+        errors.append(f"{prefix} replay-produced producer/run-context binding is not valid")
+        return
+    if replay_producer.get("episode_store_sha256") != replay_store_sha256:
+        errors.append(f"{prefix} replay producer provenance is not bound to output episode bytes")
+        return
+    if replay_producer.get("planner_config_sha256") != run.get("planner_config_sha256"):
+        errors.append(f"{prefix} replay producer planner config does not match the execution")
+        return
+    replay_manifest_path = _resolve_reported_execution_path(
+        result.get("replay_provenance_manifest_path"),
+        evidence_root=evidence_root,
+        relative_to=result_path.parent,
+    )
+    if replay_manifest_path is None:
+        errors.append(f"{prefix} replay producer manifest is unavailable")
+        return
+    _verify_reported_producer_manifest(
+        replay_manifest_path,
+        replay_producer,
+        reported_path=replay_producer.get("manifest_path"),
+        evidence_root=evidence_root,
+        episode_store_path=replay_store_path,
+        episode_store_bytes=replay_store_bytes,
+        episode=replay_episode,
+        expected_digest=result.get("replay_provenance_manifest_sha256"),
+        prefix=prefix,
+        errors=errors,
+    )
+
+
+def _resolve_reported_execution_path(
+    value: Any,
+    *,
+    evidence_root: Path,
+    relative_to: Path | None = None,
+) -> Path | None:
+    """Resolve an execution artifact path while keeping relative refs in the report bundle."""
+    if not isinstance(value, str) or not value.strip() or "\\" in value:
+        return None
+    raw_path = Path(value).expanduser()
+    if raw_path.is_absolute():
+        candidate = raw_path
+    else:
+        relative_path = PurePosixPath(value)
+        if relative_path.is_absolute() or ".." in relative_path.parts:
+            return None
+        candidate = (relative_to or evidence_root) / Path(*relative_path.parts)
+    try:
+        resolved = candidate.resolve(strict=True)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return resolved if resolved.is_file() else None
+
+
+def _reported_episode_row_identity_matches(binding: Any, episode: dict[str, Any]) -> bool:
+    """Compare producer row identity to the row that was read from source bytes."""
+    if not isinstance(binding, dict):
+        return False
+    outcome = episode.get("outcome")
+    return all(
+        binding.get(field) == expected
+        for field, expected in (
+            ("scenario_id", episode.get("scenario_id")),
+            ("planner_id", episode.get("algo")),
+            ("seed", episode.get("seed")),
+            ("source_commit", episode.get("git_hash")),
+            (
+                "route_complete",
+                outcome.get("route_complete") if isinstance(outcome, dict) else None,
+            ),
+            ("termination_reason", episode.get("termination_reason")),
+        )
+    )
+
+
+def _reported_producer_binding_is_valid(binding: Any) -> bool:
+    """Require an explicit valid producer manifest and run-context binding."""
+    if not isinstance(binding, dict) or binding.get("status") != "valid":
+        return False
+    run_context = binding.get("run_context_binding")
+    return (
+        isinstance(run_context, dict)
+        and run_context.get("status") == "valid"
+        and all(
+            run_context.get(field) == "valid"
+            for field in (
+                "execution_context_binding_status",
+                "scenario_matrix_binding_status",
+                "planner_config_binding_status",
+                "case_identity_binding_status",
+                "selected_scenario_row_binding_status",
+            )
+        )
+        and run_context.get("scenario_runtime_input_closure_binding_status")
+        in {"valid", "not_required"}
+        and run_context.get("selected_map_binding_status") in {"valid", "not_required"}
+        and run_context.get("missing_fields") == []
+        and isinstance(binding.get("run_id"), str)
+        and _PRODUCER_RUN_ID.fullmatch(binding["run_id"]) is not None
+        and binding.get("planner_checkpoint_status") in {"bound", "not_applicable"}
+        and isinstance(binding.get("manifest_sha256"), str)
+        and _SHA256.fullmatch(binding["manifest_sha256"]) is not None
+        and isinstance(binding.get("row_index"), int)
+        and not isinstance(binding.get("row_index"), bool)
+        and binding["row_index"] >= 0
+        and isinstance(binding.get("row_config_hash"), str)
+        and bool(binding["row_config_hash"].strip())
+        and all(
+            isinstance(binding.get(field), str) and _SHA256.fullmatch(binding[field]) is not None
+            for field in (
+                "execution_context_sha256",
+                "scenario_matrix_sha256",
+                "planner_config_sha256",
+                "case_identity_sha256",
+                "simulator_settings_sha256",
+            )
+        )
+    )
+
+
+def _verify_reported_producer_manifest(  # noqa: C901, PLR0913 - verify each persisted manifest binding.
+    manifest_path: Path,
+    producer_binding: dict[str, Any],
+    *,
+    reported_path: Any,
+    evidence_root: Path,
+    episode_store_path: Path,
+    episode_store_bytes: bytes,
+    episode: dict[str, Any],
+    expected_digest: Any = None,
+    prefix: str,
+    errors: list[str],
+) -> None:
+    """Check that the adjacent producer manifest bytes and run/row identity are preserved."""
+    try:
+        manifest_bytes = manifest_path.read_bytes()
+        manifest = json.loads(manifest_bytes)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        errors.append(f"{prefix} producer provenance manifest is unreadable or malformed")
+        return
+    actual_digest = hashlib.sha256(manifest_bytes).hexdigest()
+    reported_manifest_path = _resolve_reported_execution_path(
+        reported_path, evidence_root=evidence_root
+    )
+    completeness = manifest.get("completeness") if isinstance(manifest, dict) else None
+    run = manifest.get("run") if isinstance(manifest, dict) else None
+    if (
+        actual_digest != str(producer_binding.get("manifest_sha256", "")).lower()
+        or (expected_digest is not None and actual_digest != str(expected_digest).lower())
+        or reported_manifest_path != manifest_path.resolve()
+        or not isinstance(manifest, dict)
+        or manifest.get("schema_version") != "benchmark_result_provenance.v1"
+        or manifest.get("input_binding_schema_version")
+        != "benchmark_result_provenance.input_binding.v2"
+        or not isinstance(completeness, dict)
+        or completeness.get("status") != "complete"
+        or not isinstance(run, dict)
+        or run.get("run_id") != producer_binding.get("run_id")
+    ):
+        errors.append(f"{prefix} producer provenance manifest does not match its binding")
+        return
+    run_data = manifest.get("run")
+    campaign = manifest.get("campaign_identity")
+    if (
+        run_data.get("repo_commit") != episode.get("git_hash")
+        or run_data.get("runner") != "map_runner.run_map_batch"
+        or not isinstance(manifest.get("inputs"), dict)
+        or not isinstance(campaign, dict)
+        or campaign.get("algorithm") != episode.get("algo")
+    ):
+        errors.append(f"{prefix} producer provenance manifest does not identify this episode run")
+        return
+
+    raw_artifacts = manifest.get("raw_artifacts")
+    episode_artifacts = (
+        [
+            artifact
+            for artifact in raw_artifacts
+            if isinstance(artifact, dict) and artifact.get("kind") == "episodes_jsonl"
+        ]
+        if isinstance(raw_artifacts, list)
+        else []
+    )
+    if len(episode_artifacts) != 1:
+        errors.append(f"{prefix} producer provenance manifest has no unique episode artifact")
+        return
+    artifact = episode_artifacts[0]
+    artifact_path = _resolve_reported_execution_path(
+        artifact.get("path"), evidence_root=evidence_root
+    )
+    if (
+        artifact.get("artifact_status") != "available"
+        or artifact_path != episode_store_path
+        or artifact.get("sha256") != hashlib.sha256(episode_store_bytes).hexdigest()
+    ):
+        errors.append(f"{prefix} producer provenance manifest episode artifact does not match")
+        return
+
+    rows = manifest.get("rows")
+    matching_rows = (
+        [
+            row
+            for row in rows
+            if isinstance(row, dict) and row.get("episode_id") == episode.get("episode_id")
+        ]
+        if isinstance(rows, list)
+        else []
+    )
+    if len(matching_rows) != 1:
+        errors.append(f"{prefix} producer provenance manifest has no bound episode row")
+        return
+    row = matching_rows[0]
+    row_index = producer_binding.get("row_index")
+    try:
+        lines = episode_store_bytes.decode("utf-8").splitlines()
+        line_episode = (
+            json.loads(lines[row_index])
+            if isinstance(row_index, int)
+            and not isinstance(row_index, bool)
+            and 0 <= row_index < len(lines)
+            else None
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        line_episode = None
+    settings = row.get("simulator_settings")
+    settings_digest = None
+    if isinstance(settings, dict):
+        try:
+            encoded_settings = json.dumps(
+                settings, sort_keys=True, separators=(",", ":"), allow_nan=False
+            )
+        except (TypeError, ValueError):
+            encoded_settings = None
+        if encoded_settings is not None:
+            settings_digest = hashlib.sha256(encoded_settings.encode("utf-8")).hexdigest()
+    if (
+        row.get("jsonl_line") != row_index
+        or not isinstance(row.get("jsonl_line"), int)
+        or isinstance(row.get("jsonl_line"), bool)
+        or row.get("scenario_id") != episode.get("scenario_id")
+        or row.get("seed") != episode.get("seed")
+        or row.get("config_hash") != episode.get("config_hash")
+        or row.get("config_hash") != producer_binding.get("row_config_hash")
+        or row.get("repo_commit") != episode.get("git_hash")
+        or row.get("raw_artifact") != artifact.get("path")
+        or not isinstance(settings, dict)
+        or settings.get("horizon") != episode.get("horizon")
+        or settings_digest != producer_binding.get("simulator_settings_sha256")
+        or line_episode != episode
+    ):
+        errors.append(f"{prefix} producer provenance manifest row does not match source episode")
 
 
 def _validate_target_planner_observation(  # noqa: C901 - collect case/planner binding defects.

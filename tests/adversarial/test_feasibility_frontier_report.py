@@ -160,7 +160,8 @@ def _scenario_digest(case_id: str) -> str:
     return hashlib.sha256(_scenario_artifact_bytes(case_id)).hexdigest()
 
 
-def _execution_record(
+def _execution_record(  # noqa: PLR0913 - fixture mirrors the producer execution input contract.
+    root: Path,
     *,
     case_id: str,
     scenario_id: str,
@@ -168,8 +169,26 @@ def _execution_record(
     route_complete: bool,
     planner_config_sha256: str,
     role: str,
+    artifact_key: str,
     evidence_ref: str | None = None,
+    target_execution: dict[str, Any] | None = None,
+    bindings: dict[str, Any],
 ) -> dict[str, Any]:
+    if role == "replay":
+        assert target_execution is not None
+        return _replay_execution_record(
+            root,
+            case_id=case_id,
+            scenario_id=scenario_id,
+            route_complete=route_complete,
+            planner_config_sha256=planner_config_sha256,
+            artifact_key=artifact_key,
+            evidence_ref=evidence_ref,
+            target_execution=target_execution,
+            bindings=bindings,
+        )
+
+    episode_id = f"episode-{case_id}-{role}"
     record: dict[str, Any] = {
         "case_id": case_id,
         "scenario_id": scenario_id,
@@ -187,17 +206,281 @@ def _execution_record(
         "planner_checkpoint_sha256": "not_applicable",
         "environment_sha256": "f" * 64,
         "source_commit": _REVISION,
-        "evidence_ref": evidence_ref or f"fixture/{role}/{case_id}",
+        "evidence_ref": f"fixture/episodes/{artifact_key}-{role}.jsonl",
+        "episode_id": episode_id,
     }
-    record.update(
-        episode_id=(
-            f"episode-{case_id}-reference" if role == "reference" else f"episode-{case_id}-target"
-        ),
-        source_episodes_jsonl_sha256="a" * 64,
+    episode = _episode_row(record)
+    store_path = root / record["evidence_ref"]
+    store_path.parent.mkdir(parents=True, exist_ok=True)
+    store_bytes = (json.dumps(episode, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    store_path.write_bytes(store_bytes)
+    store_sha256 = hashlib.sha256(store_bytes).hexdigest()
+    record["source_episodes_jsonl_sha256"] = store_sha256
+    producer_binding = _write_fixture_producer_manifest(
+        store_path,
+        episode,
+        record=record,
+        artifact_key=f"{artifact_key}-{role}",
     )
-    if role == "replay":
-        record.update(determinism_check_status="pass", resimulated=True)
+    bindings[role] = _execution_artifact_binding(
+        record, store_path=store_path, episode=episode, producer_binding=producer_binding
+    )
     return record
+
+
+def _replay_execution_record(  # noqa: PLR0913 - fixture mirrors persisted replay bindings.
+    root: Path,
+    *,
+    case_id: str,
+    scenario_id: str,
+    route_complete: bool,
+    planner_config_sha256: str,
+    artifact_key: str,
+    evidence_ref: str | None,
+    target_execution: dict[str, Any],
+    bindings: dict[str, Any],
+) -> dict[str, Any]:
+    """Materialize a replay sidecar/result and its separate episode row for report fixtures."""
+    record = {
+        **target_execution,
+        "route_complete": route_complete,
+        "planner_config_sha256": planner_config_sha256,
+        "determinism_check_status": "pass",
+        "resimulated": True,
+    }
+    sidecar_relpath = evidence_ref or f"fixture/replays/{artifact_key}.json"
+    sidecar_path = root / sidecar_relpath
+    sidecar_path.parent.mkdir(parents=True, exist_ok=True)
+    target_store_path = root / target_execution["evidence_ref"]
+    target_store_bytes = target_store_path.read_bytes()
+    target_store_sha256 = hashlib.sha256(target_store_bytes).hexdigest()
+    output_episode = _episode_row(record)
+    output_store_path = root / "fixture" / "replay-output" / f"{artifact_key}.jsonl"
+    output_store_path.parent.mkdir(parents=True, exist_ok=True)
+    output_store_bytes = (
+        json.dumps(output_episode, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode()
+    output_store_path.write_bytes(output_store_bytes)
+    output_store_sha256 = hashlib.sha256(output_store_bytes).hexdigest()
+    output_producer_binding = _write_fixture_producer_manifest(
+        output_store_path,
+        output_episode,
+        record=record,
+        artifact_key=f"{artifact_key}-replay-output",
+    )
+    result_path = root / "fixture" / "replay-results" / f"{artifact_key}.json"
+    result_path.parent.mkdir(parents=True, exist_ok=True)
+    result = {
+        "schema_version": "target_planner_replay_result.v1",
+        "replay_kind": "target_planner",
+        "episode_id": record["episode_id"],
+        "scenario_id": scenario_id,
+        "seed": record["seed"],
+        "planner_id": record["planner_id"],
+        "source_commit": record["source_commit"],
+        "source_episodes_jsonl_sha256": target_store_sha256,
+        "replay_episode_id": output_episode["episode_id"],
+        "replay_episodes_jsonl_path": output_store_path.as_posix(),
+        "replay_episodes_jsonl_sha256": output_store_sha256,
+        "replay_provenance_manifest_path": output_producer_binding["manifest_path"],
+        "replay_provenance_manifest_sha256": output_producer_binding["manifest_sha256"],
+        "run_status": "ok",
+        "fallback_or_degraded": False,
+        "route_complete": route_complete,
+        "termination_reason": output_episode["termination_reason"],
+        "replay_command": "fixture target-planner replay",
+    }
+    result_bytes = (json.dumps(result, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    result_path.write_bytes(result_bytes)
+    result_sha256 = hashlib.sha256(result_bytes).hexdigest()
+    sidecar = {
+        "episode_id": record["episode_id"],
+        "scenario_id": scenario_id,
+        "seed": record["seed"],
+        "planner_key": record["planner_id"],
+        "repo_commit": record["source_commit"],
+        "replay_command": "fixture target-planner replay",
+        "determinism_check_status": "pass",
+        "source_episodes_jsonl_path": target_store_path.as_posix(),
+        "source_episodes_jsonl_sha256": target_store_sha256,
+        "target_planner_replay_result_path": result_path.as_posix(),
+        "target_planner_replay_result_sha256": result_sha256,
+        "resimulated": True,
+    }
+    sidecar_bytes = (json.dumps(sidecar, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    sidecar_path.write_bytes(sidecar_bytes)
+    record["evidence_ref"] = sidecar_relpath
+    record["source_episodes_jsonl_sha256"] = target_store_sha256
+    replay_episode_binding = {
+        "status": "valid",
+        "replay_episode_store_path": output_store_path.as_posix(),
+        "replay_episode_store_sha256": output_store_sha256,
+        "replay_episode_id": output_episode["episode_id"],
+        "producer_provenance_binding": output_producer_binding,
+        "run_context_binding": {"status": "valid"},
+    }
+    result_binding = {
+        "status": "valid",
+        "schema_version": result["schema_version"],
+        "episode_id": result["episode_id"],
+        "route_complete": result["route_complete"],
+        "replay_episode_binding": replay_episode_binding,
+        "producer_provenance_binding": output_producer_binding,
+        "run_context_binding": {"status": "valid"},
+    }
+    source_episode = json.loads(target_store_bytes.splitlines()[0])
+    bindings["replay"] = {
+        "status": "valid",
+        "evidence_ref": sidecar_relpath,
+        "episode_store_path": target_execution["evidence_ref"],
+        "episode_store_sha256": target_store_sha256,
+        "episode_id": record["episode_id"],
+        "route_complete": route_complete,
+        "replay_sidecar_sha256": hashlib.sha256(sidecar_bytes).hexdigest(),
+        "target_planner_replay_result_path": result_path.as_posix(),
+        "target_planner_replay_result_sha256": result_sha256,
+        "target_planner_replay_result_binding": result_binding,
+        "run_context_binding": {"status": "valid"},
+        "row_identity": _episode_row_identity(source_episode),
+    }
+    return record
+
+
+def _episode_row(record: dict[str, Any]) -> dict[str, Any]:
+    termination = "success" if record["route_complete"] else "max_steps"
+    return {
+        "version": "v1",
+        "episode_id": record["episode_id"],
+        "scenario_id": record["scenario_id"],
+        "scenario_params": {},
+        "config_hash": "0" * 16,
+        "seed": record["seed"],
+        "horizon": record["horizon_steps"],
+        "algo": record["planner_id"],
+        "git_hash": record["source_commit"],
+        "status": "success" if record["route_complete"] else "failure",
+        "metrics": {"collisions": 0, "success": int(record["route_complete"])},
+        "termination_reason": termination,
+        "outcome": {
+            "route_complete": record["route_complete"],
+            "collision_event": False,
+            "timeout_event": not record["route_complete"],
+        },
+        "integrity": {"contradictions": []},
+        "algorithm_metadata": {
+            "status": "ok",
+            "canonical_algorithm": record["planner_id"],
+            "execution_mode": "native",
+        },
+    }
+
+
+def _write_fixture_producer_manifest(
+    store_path: Path,
+    episode: dict[str, Any],
+    *,
+    record: dict[str, Any],
+    artifact_key: str,
+) -> dict[str, Any]:
+    run_id = hashlib.sha256(artifact_key.encode()).hexdigest()[:32]
+    episode_store_sha256 = hashlib.sha256(store_path.read_bytes()).hexdigest()
+    simulator_settings = {"horizon": episode["horizon"]}
+    manifest_path = store_path.with_name(store_path.name + ".provenance.json")
+    manifest = {
+        "schema_version": "benchmark_result_provenance.v1",
+        "input_binding_schema_version": "benchmark_result_provenance.input_binding.v2",
+        "run": {
+            "run_id": run_id,
+            "repo_commit": episode["git_hash"],
+            "runner": "map_runner.run_map_batch",
+        },
+        "inputs": {},
+        "campaign_identity": {"algorithm": episode["algo"]},
+        "completeness": {"status": "complete"},
+        "raw_artifacts": [
+            {
+                "kind": "episodes_jsonl",
+                "path": store_path.as_posix(),
+                "artifact_status": "available",
+                "sha256": episode_store_sha256,
+            }
+        ],
+        "rows": [
+            {
+                "episode_id": episode["episode_id"],
+                "jsonl_line": 0,
+                "scenario_id": episode["scenario_id"],
+                "seed": episode["seed"],
+                "config_hash": episode["config_hash"],
+                "repo_commit": episode["git_hash"],
+                "raw_artifact": store_path.as_posix(),
+                "simulator_settings": simulator_settings,
+            }
+        ],
+    }
+    manifest_bytes = (json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    manifest_path.write_bytes(manifest_bytes)
+    return {
+        "status": "valid",
+        "manifest_path": manifest_path.as_posix(),
+        "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+        "episode_store_sha256": episode_store_sha256,
+        "run_id": run_id,
+        "row_index": 0,
+        "row_config_hash": episode["config_hash"],
+        "execution_context_sha256": record["environment_sha256"],
+        "scenario_matrix_sha256": record["scenario_sha256"],
+        "planner_config_sha256": record["planner_config_sha256"],
+        "case_identity_sha256": hashlib.sha256(
+            f"{episode['scenario_id']}|{episode['seed']}|{episode['git_hash']}".encode()
+        ).hexdigest(),
+        "planner_checkpoint_status": "not_applicable",
+        "simulator_settings_sha256": hashlib.sha256(
+            json.dumps(simulator_settings, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+        "run_context_binding": {
+            "status": "valid",
+            "execution_context_binding_status": "valid",
+            "scenario_matrix_binding_status": "valid",
+            "planner_config_binding_status": "valid",
+            "case_identity_binding_status": "valid",
+            "selected_scenario_row_binding_status": "valid",
+            "scenario_runtime_input_closure_binding_status": "not_required",
+            "selected_map_binding_status": "not_required",
+            "missing_fields": [],
+        },
+    }
+
+
+def _episode_row_identity(episode: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "scenario_id": episode["scenario_id"],
+        "planner_id": episode["algo"],
+        "seed": episode["seed"],
+        "source_commit": episode["git_hash"],
+        "route_complete": episode["outcome"]["route_complete"],
+        "termination_reason": episode["termination_reason"],
+    }
+
+
+def _execution_artifact_binding(
+    record: dict[str, Any],
+    *,
+    store_path: Path,
+    episode: dict[str, Any],
+    producer_binding: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "status": "valid",
+        "evidence_ref": record["evidence_ref"],
+        "episode_store_path": store_path.as_posix(),
+        "episode_store_sha256": record["source_episodes_jsonl_sha256"],
+        "episode_id": record["episode_id"],
+        "route_complete": record["route_complete"],
+        "producer_provenance_binding": producer_binding,
+        "run_context_binding": {"status": "valid"},
+        "row_identity": _episode_row_identity(episode),
+    }
 
 
 def _admissibility_artifact(
@@ -220,6 +503,7 @@ def _admissibility_artifact(
         )
     scenario_id = _scenario_id(case_id)
     _write_scenario_artifact(root, case_id)
+    execution_bindings: dict[str, Any] = {}
     evidence: dict[str, Any] = {
         "scenario_artifact_identity": {
             "status": "available",
@@ -234,89 +518,113 @@ def _admissibility_artifact(
     if verdict == "empirically_feasible":
         evidence.update(
             reference_execution=_execution_record(
+                root,
                 case_id=case_id,
                 scenario_id=scenario_id,
                 planner_id="orca",
                 route_complete=True,
                 planner_config_sha256="1" * 64,
                 role="reference",
+                artifact_key=name.removesuffix(".json"),
+                bindings=execution_bindings,
             ),
             target_execution=_execution_record(
+                root,
                 case_id=case_id,
                 scenario_id=scenario_id,
                 planner_id="goal",
                 route_complete=target_route_complete,
                 planner_config_sha256=planner_config_sha256,
                 role="target",
+                artifact_key=name.removesuffix(".json"),
+                bindings=execution_bindings,
             ),
         )
         if replay_artifact_path is not None:
             evidence["replay_execution"] = _execution_record(
+                root,
                 case_id=case_id,
                 scenario_id=scenario_id,
                 planner_id="goal",
                 route_complete=target_route_complete,
                 planner_config_sha256=planner_config_sha256,
                 role="replay",
+                artifact_key=name.removesuffix(".json"),
                 evidence_ref=replay_artifact_path,
+                target_execution=evidence["target_execution"],
+                bindings=execution_bindings,
             )
         reason_codes = ["named_execution_completed_original_case"]
         target_outcome = "route_completed" if target_route_complete else "route_incomplete"
     elif verdict == "planner_specific_failure":
-        evidence.update(
-            reference_execution=_execution_record(
-                case_id=case_id,
-                scenario_id=scenario_id,
-                planner_id="orca",
-                route_complete=True,
-                planner_config_sha256="1" * 64,
-                role="reference",
-            ),
-            target_execution=_execution_record(
-                case_id=case_id,
-                scenario_id=scenario_id,
-                planner_id="goal",
-                route_complete=target_route_complete,
-                planner_config_sha256=planner_config_sha256,
-                role="target",
-            ),
-            replay_execution=_execution_record(
-                case_id=case_id,
-                scenario_id=scenario_id,
-                planner_id="goal",
-                route_complete=target_route_complete,
-                planner_config_sha256=planner_config_sha256,
-                role="replay",
-                evidence_ref=replay_artifact_path,
-            ),
+        evidence["reference_execution"] = _execution_record(
+            root,
+            case_id=case_id,
+            scenario_id=scenario_id,
+            planner_id="orca",
+            route_complete=True,
+            planner_config_sha256="1" * 64,
+            role="reference",
+            artifact_key=name.removesuffix(".json"),
+            bindings=execution_bindings,
+        )
+        evidence["target_execution"] = _execution_record(
+            root,
+            case_id=case_id,
+            scenario_id=scenario_id,
+            planner_id="goal",
+            route_complete=target_route_complete,
+            planner_config_sha256=planner_config_sha256,
+            role="target",
+            artifact_key=name.removesuffix(".json"),
+            bindings=execution_bindings,
+        )
+        evidence["replay_execution"] = _execution_record(
+            root,
+            case_id=case_id,
+            scenario_id=scenario_id,
+            planner_id="goal",
+            route_complete=target_route_complete,
+            planner_config_sha256=planner_config_sha256,
+            role="replay",
+            artifact_key=name.removesuffix(".json"),
+            evidence_ref=replay_artifact_path,
+            target_execution=evidence["target_execution"],
+            bindings=execution_bindings,
         )
         reason_codes = ["matched_reference_target_failure_reproduced_by_replay"]
         target_outcome = "route_completed" if target_route_complete else "route_incomplete"
     elif replay_artifact_path is not None:
-        evidence.update(
-            target_execution=_execution_record(
-                case_id=case_id,
-                scenario_id=scenario_id,
-                planner_id="goal",
-                route_complete=False,
-                planner_config_sha256=planner_config_sha256,
-                role="target",
-            ),
-            replay_execution=_execution_record(
-                case_id=case_id,
-                scenario_id=scenario_id,
-                planner_id="goal",
-                route_complete=False,
-                planner_config_sha256=planner_config_sha256,
-                role="replay",
-                evidence_ref=replay_artifact_path,
-            ),
+        evidence["target_execution"] = _execution_record(
+            root,
+            case_id=case_id,
+            scenario_id=scenario_id,
+            planner_id="goal",
+            route_complete=False,
+            planner_config_sha256=planner_config_sha256,
+            role="target",
+            artifact_key=name.removesuffix(".json"),
+            bindings=execution_bindings,
+        )
+        evidence["replay_execution"] = _execution_record(
+            root,
+            case_id=case_id,
+            scenario_id=scenario_id,
+            planner_id="goal",
+            route_complete=False,
+            planner_config_sha256=planner_config_sha256,
+            role="replay",
+            artifact_key=name.removesuffix(".json"),
+            evidence_ref=replay_artifact_path,
+            target_execution=evidence["target_execution"],
+            bindings=execution_bindings,
         )
         reason_codes = ["feasibility_not_demonstrated"]
         target_outcome = "route_incomplete"
     else:
         reason_codes = ["feasibility_not_demonstrated"]
         target_outcome = "unavailable"
+    evidence["execution_artifact_bindings"] = execution_bindings
     payload = {
         "schema_version": "scenario_admissibility.v1",
         "case_id": case_id,
@@ -357,6 +665,19 @@ def _write_source_artifact(
     reference["sha256"] = hashlib.sha256(content).hexdigest()
     reference["source_revision"] = payload["source_revision"]
     reference["schema_version"] = schema_version
+
+
+def _refresh_replay_artifact_digest(root: Path | None, reference: dict[str, Any] | None) -> None:
+    """Refresh the outer replay reference after its fixture sidecar has been materialized."""
+    if (
+        not isinstance(root, Path)
+        or not isinstance(reference, dict)
+        or not isinstance(reference.get("path"), str)
+    ):
+        return
+    path = root / reference["path"]
+    if path.is_file():
+        reference["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _rewrite_optimizer_artifact(
@@ -674,6 +995,8 @@ def _candidate(  # noqa: PLR0913 - fixture helper mirrors the persisted candidat
                 else None
             ),
         )
+        _refresh_replay_artifact_digest(root, replay_artifact)
+    _refresh_replay_artifact_digest(root, replay_artifact)
     if case_id is not None:
         scenario_id = scenario_id or _scenario_id(case_id)
         scenario_artifact_sha256 = scenario_artifact_sha256 or _scenario_digest(case_id)
@@ -747,6 +1070,7 @@ def _observation(
             ),
         ),
     }
+    _refresh_replay_artifact_digest(root, replay_artifact)
     planner = {
         "planner_id": "goal",
         "config_identity_sha256": _CONFIG if round_number == 1 else "c" * 64,
@@ -829,7 +1153,7 @@ def _round(root: Path, round_number: int) -> dict[str, Any]:
         success_count = 1
         stop_reason = "budget_exhausted"
     else:
-        c2_replay = _artifact(root, "round-2-case-unknown-replay.json", role="replay")
+        c2_replay = _artifact(root, f"round-{round_number}-case-unknown-replay.json", role="replay")
         candidates = [
             _candidate(
                 candidate_id="c2",
@@ -869,7 +1193,7 @@ def _round(root: Path, round_number: int) -> dict[str, Any]:
         observations = [
             _observation(
                 root,
-                round_number=2,
+                round_number=round_number,
                 case_id="case-001",
                 origin_round=1,
                 origin_candidate_id="c1",
@@ -879,7 +1203,7 @@ def _round(root: Path, round_number: int) -> dict[str, Any]:
             ),
             _observation(
                 root,
-                round_number=2,
+                round_number=round_number,
                 case_id="case-unknown",
                 origin_round=2,
                 origin_candidate_id="c2",
@@ -907,6 +1231,7 @@ def _round(root: Path, round_number: int) -> dict[str, Any]:
                     else None
                 ),
             )
+            _refresh_replay_artifact_digest(root, candidate.get("replay_artifact"))
     for observation in observations:
         if observation.get("origin_round") != round_number:
             continue
@@ -924,6 +1249,7 @@ def _round(root: Path, round_number: int) -> dict[str, Any]:
             observation["admissibility_evidence_artifact"] = candidate.get(
                 "admissibility_evidence_artifact"
             )
+            _refresh_replay_artifact_digest(root, observation.get("replay_artifact"))
     return {
         "round_number": round_number,
         "source_revision": _REVISION,
@@ -1048,6 +1374,7 @@ def test_frontier_report_does_not_count_repeated_case_as_new_discovery(tmp_path:
                 verdict="empirically_feasible",
                 replay_artifact_path=repeat_replay["path"],
             ),
+            root=tmp_path,
         )
     )
     second_search["budget"]["candidate_limit"] = 5
@@ -1157,6 +1484,7 @@ def test_frontier_report_does_not_call_unknown_case_duplicate_a_verified_repeat(
                 verdict="empirically_feasible",
                 replay_artifact_path=repeat_replay["path"],
             ),
+            root=tmp_path,
         )
     )
     second_search["budget"]["candidate_limit"] += 1
@@ -1247,6 +1575,7 @@ def test_frontier_report_can_upgrade_historical_unknown_feasibility_once(tmp_pat
         target_route_complete=True,
         replay_artifact_path=upgraded["replay_artifact"]["path"],
     )
+    _refresh_replay_artifact_digest(tmp_path, upgraded["replay_artifact"])
     payload["rounds"][1]["case_observations"].append(upgraded)
 
     _refresh_source_artifacts(payload, tmp_path)
@@ -2485,11 +2814,125 @@ def test_frontier_report_accepts_producer_bound_reference_execution(tmp_path: Pa
         )
     )
     reference = artifact["evidence"]["reference_execution"]
+    reference_binding = artifact["evidence"]["execution_artifact_bindings"]["reference"]
 
     assert reference["episode_id"] == "episode-case-001-reference"
-    assert reference["source_episodes_jsonl_sha256"] == "a" * 64
+    assert reference_binding["status"] == "valid"
+    assert reference_binding["producer_provenance_binding"]["status"] == "valid"
+    assert reference_binding["episode_store_sha256"] == reference["source_episodes_jsonl_sha256"]
     report = build_frontier_report(payload, evidence_root=tmp_path)
     assert report["rounds"][0]["falsification"]["verified_counterexample_case_ids"] == ["case-001"]
+
+
+def test_frontier_report_rejects_missing_producer_execution_binding(tmp_path: Path) -> None:
+    """A normalized episode ID and hash cannot replace the producer's binding record."""
+    payload = _evidence(tmp_path)
+
+    def remove_reference_binding(record: dict[str, Any]) -> None:
+        record["evidence"]["execution_artifact_bindings"].pop("reference")
+
+    _rewrite_admissibility_artifact(payload, tmp_path, 0, remove_reference_binding)
+    with pytest.raises(FrontierReportError, match="no producer execution_artifact_bindings entry"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_rejects_mismatched_producer_episode_digest(tmp_path: Path) -> None:
+    """The producer binding digest must match both normalized metadata and source bytes."""
+    payload = _evidence(tmp_path)
+
+    def mismatch_reference_binding(record: dict[str, Any]) -> None:
+        record["evidence"]["execution_artifact_bindings"]["reference"]["episode_store_sha256"] = (
+            "0" * 64
+        )
+
+    _rewrite_admissibility_artifact(payload, tmp_path, 0, mismatch_reference_binding)
+    with pytest.raises(FrontierReportError, match="source episode store bytes do not match"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_rejects_source_episode_bytes_changed_after_binding(tmp_path: Path) -> None:
+    """A well-formed producer binding cannot mask changed episode-store bytes."""
+    payload = _evidence(tmp_path)
+    candidate = payload["rounds"][0]["falsification"]["candidates"][0]
+    admissibility = json.loads(
+        (tmp_path / candidate["admissibility_evidence_artifact"]["path"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    source_path = Path(
+        admissibility["evidence"]["execution_artifact_bindings"]["reference"]["episode_store_path"]
+    )
+    source_path.write_bytes(b'{"episode_id":"fabricated-after-binding"}\n')
+
+    with pytest.raises(FrontierReportError, match="source episode store bytes do not match"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_rejects_source_episode_row_mismatch_after_digest_rebinding(
+    tmp_path: Path,
+) -> None:
+    """Recomputed hashes cannot make a source episode row match the normalized execution."""
+    payload = _evidence(tmp_path)
+
+    def rewrite_reference_row(record: dict[str, Any]) -> None:
+        execution = record["evidence"]["reference_execution"]
+        binding = record["evidence"]["execution_artifact_bindings"]["reference"]
+        store_path = tmp_path / execution["evidence_ref"]
+        episode = json.loads(store_path.read_text(encoding="utf-8"))
+        episode["scenario_id"] = "fabricated-scenario"
+        store_bytes = (json.dumps(episode, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        store_path.write_bytes(store_bytes)
+        digest = hashlib.sha256(store_bytes).hexdigest()
+        producer = binding["producer_provenance_binding"]
+        manifest_path = store_path.with_name(store_path.name + ".provenance.json")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["raw_artifacts"][0]["sha256"] = digest
+        manifest["rows"][0]["scenario_id"] = episode["scenario_id"]
+        manifest_bytes = (
+            json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n"
+        ).encode()
+        manifest_path.write_bytes(manifest_bytes)
+        execution["source_episodes_jsonl_sha256"] = digest
+        binding["episode_store_sha256"] = digest
+        producer["episode_store_sha256"] = digest
+        producer["manifest_sha256"] = hashlib.sha256(manifest_bytes).hexdigest()
+
+    _rewrite_admissibility_artifact(payload, tmp_path, 0, rewrite_reference_row)
+    with pytest.raises(
+        FrontierReportError, match="source episode row is invalid: episode_identity_mismatch"
+    ):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_rejects_missing_replay_execution_binding(tmp_path: Path) -> None:
+    """A replay sidecar cannot replace the producer's per-role execution binding."""
+    payload = _evidence(tmp_path)
+
+    def remove_replay_binding(record: dict[str, Any]) -> None:
+        record["evidence"]["execution_artifact_bindings"].pop("replay")
+
+    _rewrite_admissibility_artifact(payload, tmp_path, 0, remove_replay_binding)
+    with pytest.raises(
+        FrontierReportError,
+        match="replay_execution has no producer execution_artifact_bindings entry",
+    ):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_rejects_mismatched_replay_sidecar_binding(tmp_path: Path) -> None:
+    """The replay-sidecar digest in execution bindings must match persisted sidecar bytes."""
+    payload = _evidence(tmp_path)
+
+    def mismatch_replay_binding(record: dict[str, Any]) -> None:
+        record["evidence"]["execution_artifact_bindings"]["replay"]["replay_sidecar_sha256"] = (
+            "0" * 64
+        )
+
+    _rewrite_admissibility_artifact(payload, tmp_path, 0, mismatch_replay_binding)
+    with pytest.raises(
+        FrontierReportError, match="replay sidecar does not match its producer binding"
+    ):
+        build_frontier_report(payload, evidence_root=tmp_path)
 
 
 def test_frontier_report_rejects_route_boolean_without_producer_execution_provenance(
@@ -2556,6 +2999,7 @@ def test_frontier_report_binds_planner_specific_failure_to_target_and_replay(
         verdict="planner_specific_failure",
         replay_artifact_path=candidate["replay_artifact"]["path"],
     )
+    _refresh_replay_artifact_digest(tmp_path, candidate["replay_artifact"])
     candidate["admissibility_evidence_artifact"] = reference
     observation["admissibility_evidence_artifact"] = reference
     followup = payload["rounds"][1]["case_observations"][0]
@@ -2892,6 +3336,7 @@ def test_frontier_report_rejects_feasibility_downgrade_after_confirmation(tmp_pa
         target_route_complete=True,
         replay_artifact_path=upgraded["replay_artifact"]["path"],
     )
+    _refresh_replay_artifact_digest(tmp_path, upgraded["replay_artifact"])
     second["case_observations"].append(upgraded)
     third = _round(tmp_path, 3)
     third["falsification"]["candidates"] = []
@@ -2941,13 +3386,17 @@ def test_frontier_report_requires_target_execution_for_solved_unknown_case(
     artifact_path = tmp_path / reference["path"]
     admissibility = json.loads(artifact_path.read_text(encoding="utf-8"))
     admissibility["target_planner_outcome"] = "route_completed"
+    execution_bindings = admissibility["evidence"].setdefault("execution_artifact_bindings", {})
     admissibility["evidence"]["target_execution"] = _execution_record(
+        tmp_path,
         case_id="historical-unknown-solved",
         scenario_id=_scenario_id("historical-unknown-solved"),
         planner_id="goal",
         route_complete=True,
         planner_config_sha256=_CONFIG,
         role="target",
+        artifact_key="historical-unknown-solved-target",
+        bindings=execution_bindings,
     )
     content = (json.dumps(admissibility, sort_keys=True, separators=(",", ":")) + "\n").encode()
     artifact_path.write_bytes(content)

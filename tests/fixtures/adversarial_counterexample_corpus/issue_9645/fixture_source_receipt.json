@@ -1,17 +1,18 @@
 {
   "bundle_file_count": 134,
-  "bundle_manifest_sha256": "0d0bae9f26a4bcf49d50a1d6ce593ff11447524bc589db4513ff81893d017a59",
-  "checksums_sha256": "0e2c8dfdc0b912247c5bacf1e7c50aa9050c427295f4afff46f7095693114f7c",
+  "bundle_manifest_sha256": "5e91c489147233552853fbfec1e0654875b0b375e3aef25a0669f2809b9f2002",
+  "checksums_sha256": "f5f977be32eecdd60bcb3573c55f748bd0ff2820e2c62ae61d4ca154a1afe74b",
   "claim_boundary": "diagnostic_only_not_benchmark_evidence",
-  "packet_producer_revision": "499ac172d50c2fdc979950d7138daf66d3606715",
-  "report_build_execution_checkout_head": "499ac172d50c2fdc979950d7138daf66d3606715",
+  "packet_producer_revision": "dd703565459fe5431519d71b58f6a819f313db77",
+  "report_build_execution_checkout_head": "dd703565459fe5431519d71b58f6a819f313db77",
+  "report_generator_commit": "499ac172d50c2fdc979950d7138daf66d3606715",
   "report_generator_source_sha256": "fd0267274516834ac934dff38d77d8deede08c22f7c4dc433d3521e513919e1e",
   "report_provenance_schema_version": "issue_9645_report_build_provenance.v3",
-  "report_provenance_sha256": "e4b013681bb345bf7f16ab087c36a959f4dc3de5c1e7a7aa27a2be8c1127fd53",
+  "report_provenance_sha256": "c5d330cb23566712c2617af2724b0d013ad227a56db52bdc414b6c69aef27183",
   "schema_version": "issue_9652_fixture_source_receipt.v1",
   "source_branch": "autopilot/issue9645-falsification-final-20260927",
   "source_experiment_revision": "58e516aa4f69ff3098bf518199f483006589758c",
-  "source_head": "f447479d1ace505c574450bfbd93fcc5ddad7d28",
+  "source_head": "f027f23b0fc4a99f30979a65a78bcb9feae12892",
   "source_issue": 9645,
-  "summary_sha256": "51d44f4cf96bb15e23005d84721f2d758195061c76ecd7cad6018aef12708c32"
+  "summary_sha256": "9dd20b251a373eb995e0714bfec817d126f8be1537588d699f0b307bcf9af72d"
 }

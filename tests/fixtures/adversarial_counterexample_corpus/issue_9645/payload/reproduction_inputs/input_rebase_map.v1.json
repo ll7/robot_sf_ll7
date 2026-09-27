@@ -5,7 +5,7 @@
   "source_manifest_path_map": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_report_manifest_path_map.v1.json",
   "source_manifest_path_map_sha256": "692db3b44f12b1fd4d0d7ff506b8924e4009710b5062e71c30840ce74e4a8b28",
   "source_episode_artifact_map": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_report_artifact_path_map.v1.json",
-  "source_episode_artifact_map_sha256": "c68f2dd100670cbc4504980ea3ddd42565c18e62829d693149bb74f1183211aa",
+  "source_episode_artifact_map_sha256": "4d37bebe8da4b095185a6e1284c9997daab0811f55b107a007104ddce2d58e8d",
   "manifest_bindings": [
     {
       "declared_manifest_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/manifest.json",
@@ -20,129 +20,193 @@
           "candidate_index": 0,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0000/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0000/episode_records.jsonl",
-          "sha256": "34f84b7c414f963a1af78ee0c8db0a69c142119c4d1ebb8fb0be915c0170d847",
-          "size_bytes": 25439,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0000/episode_records.jsonl"
+          "sha256": "3d5360fe890cf1ef54da104de6573be79f9d5534601315b3ebc50c2539c5d89f",
+          "size_bytes": 25355,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0000/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "34f84b7c414f963a1af78ee0c8db0a69c142119c4d1ebb8fb0be915c0170d847",
+          "normalized_sha256": "3d5360fe890cf1ef54da104de6573be79f9d5534601315b3ebc50c2539c5d89f",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25439
         },
         {
           "candidate_index": 1,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0001/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0001/episode_records.jsonl",
-          "sha256": "0f9ad563110a2e7e941606ce2a4b7507a4c34ef24887ba3561de1a095612a37b",
-          "size_bytes": 25434,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0001/episode_records.jsonl"
+          "sha256": "dfd4e5ffa8595c541489244dc542133ca29b9b0918832c817e95a541c868f262",
+          "size_bytes": 25350,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0001/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "0f9ad563110a2e7e941606ce2a4b7507a4c34ef24887ba3561de1a095612a37b",
+          "normalized_sha256": "dfd4e5ffa8595c541489244dc542133ca29b9b0918832c817e95a541c868f262",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25434
         },
         {
           "candidate_index": 2,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0002/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0002/episode_records.jsonl",
-          "sha256": "d7d8d1b0b43c97ac6d2e9e5c51f793d524a0f06ad0d2adecc2f1312d1052ad21",
-          "size_bytes": 25487,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0002/episode_records.jsonl"
+          "sha256": "44aae2ee8141013d99b46367044a8500456d8280d8627158359fe2f67874c714",
+          "size_bytes": 25403,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0002/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "d7d8d1b0b43c97ac6d2e9e5c51f793d524a0f06ad0d2adecc2f1312d1052ad21",
+          "normalized_sha256": "44aae2ee8141013d99b46367044a8500456d8280d8627158359fe2f67874c714",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25487
         },
         {
           "candidate_index": 3,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0003/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0003/episode_records.jsonl",
-          "sha256": "6611858cd492dd56a5cd146d6da6159991fca3e519c19bed00de4db8ebab3688",
-          "size_bytes": 25480,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0003/episode_records.jsonl"
+          "sha256": "a9dfd438de78cacb1831d1af52ac14249b3436e51db2a71977ca2050cf16d4c2",
+          "size_bytes": 25396,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0003/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "6611858cd492dd56a5cd146d6da6159991fca3e519c19bed00de4db8ebab3688",
+          "normalized_sha256": "a9dfd438de78cacb1831d1af52ac14249b3436e51db2a71977ca2050cf16d4c2",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25480
         },
         {
           "candidate_index": 4,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0004/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0004/episode_records.jsonl",
-          "sha256": "679d218d404a35eee5372e33e3ed193dbee397c42a5af00a21b88efc755a5494",
-          "size_bytes": 25440,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0004/episode_records.jsonl"
+          "sha256": "83e847a3884e38eefa8949a67924f48299a6037d705731e5db0a209e352fef57",
+          "size_bytes": 25356,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0004/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "679d218d404a35eee5372e33e3ed193dbee397c42a5af00a21b88efc755a5494",
+          "normalized_sha256": "83e847a3884e38eefa8949a67924f48299a6037d705731e5db0a209e352fef57",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25440
         },
         {
           "candidate_index": 5,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0005/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0005/episode_records.jsonl",
-          "sha256": "129f88933ba632bebb134ddf4edf85babc8ef75d4a0a2f3f72c6139516d6f78a",
-          "size_bytes": 25451,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0005/episode_records.jsonl"
+          "sha256": "9a6764763f328682d014ee6e492a532a1b3ebdf668ea840cc8ba8e5f36b751f2",
+          "size_bytes": 25367,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0005/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "129f88933ba632bebb134ddf4edf85babc8ef75d4a0a2f3f72c6139516d6f78a",
+          "normalized_sha256": "9a6764763f328682d014ee6e492a532a1b3ebdf668ea840cc8ba8e5f36b751f2",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25451
         },
         {
           "candidate_index": 6,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0006/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0006/episode_records.jsonl",
-          "sha256": "19608886d21a45b10ad776ad33f7ca0a5dea7143b2fde0cc77efd56c63552ac9",
-          "size_bytes": 25420,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0006/episode_records.jsonl"
+          "sha256": "6f20b1116c2be42ecf97b51a3e43f011c5dfe459b7d4b6c6982784a879d95313",
+          "size_bytes": 25336,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0006/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "19608886d21a45b10ad776ad33f7ca0a5dea7143b2fde0cc77efd56c63552ac9",
+          "normalized_sha256": "6f20b1116c2be42ecf97b51a3e43f011c5dfe459b7d4b6c6982784a879d95313",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25420
         },
         {
           "candidate_index": 7,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0007/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0007/episode_records.jsonl",
-          "sha256": "36509fe895aed6b77c5072cad3df4a0735d1f5fb1f92baca2d13df18df0959b8",
-          "size_bytes": 25488,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0007/episode_records.jsonl"
+          "sha256": "ea59802f3f9e153de00b49ed02f8c5f7a9498b07aa962fe09e9222f1b6781560",
+          "size_bytes": 25404,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0007/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "36509fe895aed6b77c5072cad3df4a0735d1f5fb1f92baca2d13df18df0959b8",
+          "normalized_sha256": "ea59802f3f9e153de00b49ed02f8c5f7a9498b07aa962fe09e9222f1b6781560",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25488
         },
         {
           "candidate_index": 8,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0008/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0008/episode_records.jsonl",
-          "sha256": "3d05b55ed21e3c2237360e0b4df4d21aae3cca4910de043fe967c154c4d21812",
-          "size_bytes": 25488,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0008/episode_records.jsonl"
+          "sha256": "c75612e00196043ce8e1a1ad808304bb3e1a5aca616914652a48b633b3613d73",
+          "size_bytes": 25404,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0008/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "3d05b55ed21e3c2237360e0b4df4d21aae3cca4910de043fe967c154c4d21812",
+          "normalized_sha256": "c75612e00196043ce8e1a1ad808304bb3e1a5aca616914652a48b633b3613d73",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25488
         },
         {
           "candidate_index": 9,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0009/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0009/episode_records.jsonl",
-          "sha256": "bfc441ff29d1ea5e4d7ac5790d49e9acbee4d3f3f2d82c45e5a56783028a8711",
-          "size_bytes": 25486,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0009/episode_records.jsonl"
+          "sha256": "5e393ea65e76a9f064c0fc69d6f3bc602d85e2f04fe6b20ea4040c2d5dec8a1d",
+          "size_bytes": 25402,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0009/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "bfc441ff29d1ea5e4d7ac5790d49e9acbee4d3f3f2d82c45e5a56783028a8711",
+          "normalized_sha256": "5e393ea65e76a9f064c0fc69d6f3bc602d85e2f04fe6b20ea4040c2d5dec8a1d",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25486
         },
         {
           "candidate_index": 10,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0010/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0010/episode_records.jsonl",
-          "sha256": "d58af050a3b43e187ab6437af2733164f62bb3efce572f56bc987b2ccd2b94ed",
-          "size_bytes": 25430,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0010/episode_records.jsonl"
+          "sha256": "2b9079cbf408261a7a2986b270948f7d286b91b32cf98f567f5640efd7973c85",
+          "size_bytes": 25346,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0010/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "d58af050a3b43e187ab6437af2733164f62bb3efce572f56bc987b2ccd2b94ed",
+          "normalized_sha256": "2b9079cbf408261a7a2986b270948f7d286b91b32cf98f567f5640efd7973c85",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25430
         },
         {
           "candidate_index": 11,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0011/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0011/episode_records.jsonl",
-          "sha256": "c48d75e4a850de8d73499ef8c8d13d96d87d982c45bcff0a194f3b4947ab00b8",
-          "size_bytes": 25445,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0011/episode_records.jsonl"
+          "sha256": "d8ca18010d931b98693f9920f99e62f9f58fdff6978f2f4fb7f9d2d183e34f57",
+          "size_bytes": 25361,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0011/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "c48d75e4a850de8d73499ef8c8d13d96d87d982c45bcff0a194f3b4947ab00b8",
+          "normalized_sha256": "d8ca18010d931b98693f9920f99e62f9f58fdff6978f2f4fb7f9d2d183e34f57",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25445
         },
         {
           "candidate_index": 12,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0012/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0012/episode_records.jsonl",
-          "sha256": "bbf8cee9675afbfb539ed108d689381316b628ed10da4b1fcd985bc51a6dc632",
-          "size_bytes": 25434,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0012/episode_records.jsonl"
+          "sha256": "0e2ebb6ceccad781e5b6b6cecd03bf1d6e720d3a9d1648801b04764b3c9cb87f",
+          "size_bytes": 25350,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0012/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "bbf8cee9675afbfb539ed108d689381316b628ed10da4b1fcd985bc51a6dc632",
+          "normalized_sha256": "0e2ebb6ceccad781e5b6b6cecd03bf1d6e720d3a9d1648801b04764b3c9cb87f",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25434
         },
         {
           "candidate_index": 13,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0013/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0013/episode_records.jsonl",
-          "sha256": "4fbdc7f47876c2c7c59e093bd04429f553cf678cdb1fd31a650141b1f4e6685c",
-          "size_bytes": 25442,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0013/episode_records.jsonl"
+          "sha256": "7323b98402033f1ebf5f3d9463b443467af46c76a11c6e7c58bba549f5e464e0",
+          "size_bytes": 25358,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0013/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "4fbdc7f47876c2c7c59e093bd04429f553cf678cdb1fd31a650141b1f4e6685c",
+          "normalized_sha256": "7323b98402033f1ebf5f3d9463b443467af46c76a11c6e7c58bba549f5e464e0",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25442
         },
         {
           "candidate_index": 14,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0014/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0014/episode_records.jsonl",
-          "sha256": "7e597221cb9a56a2a3c9fab6a57e4837ed154c28a0a848b4176690b0fe9bb762",
-          "size_bytes": 25445,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0014/episode_records.jsonl"
+          "sha256": "ce4d5b3eaaa0fc818348fadec6a9f74ded2dc7230c2c270aaac86bb7677a7d88",
+          "size_bytes": 25361,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0014/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "7e597221cb9a56a2a3c9fab6a57e4837ed154c28a0a848b4176690b0fe9bb762",
+          "normalized_sha256": "ce4d5b3eaaa0fc818348fadec6a9f74ded2dc7230c2c270aaac86bb7677a7d88",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25445
         },
         {
           "candidate_index": 15,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/optuna/candidate_0015/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0015/episode_records.jsonl",
-          "sha256": "65d8be5acb6889b55463e457dd25e5ca422022c7ef50063726993002d138e56d",
-          "size_bytes": 25440,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0015/episode_records.jsonl"
+          "sha256": "8cc2ec6537262d131b94d2f3fd591d0d738f1bf274042818c5764d1281ec3425",
+          "size_bytes": 25356,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_optuna/candidate_0015/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "65d8be5acb6889b55463e457dd25e5ca422022c7ef50063726993002d138e56d",
+          "normalized_sha256": "8cc2ec6537262d131b94d2f3fd591d0d738f1bf274042818c5764d1281ec3425",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25440
         }
       ]
     },
@@ -159,129 +223,193 @@
           "candidate_index": 0,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0000/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0000/episode_records.jsonl",
-          "sha256": "5a5608b8819dafc3766fd4a66ea5a4b77edffdaec247c052b2f22a1824ae8dc3",
-          "size_bytes": 25436,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0000/episode_records.jsonl"
+          "sha256": "8285f88532d9bff9287f6752b3317f98bc400c824687b26f47b96badcb76392f",
+          "size_bytes": 25352,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0000/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "5a5608b8819dafc3766fd4a66ea5a4b77edffdaec247c052b2f22a1824ae8dc3",
+          "normalized_sha256": "8285f88532d9bff9287f6752b3317f98bc400c824687b26f47b96badcb76392f",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25436
         },
         {
           "candidate_index": 1,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0001/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0001/episode_records.jsonl",
-          "sha256": "fd757ec1066bd2a2a8b80c8f3bc4c4ae09349e8ccd46c5dfd8894e4557f30d3b",
-          "size_bytes": 25485,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0001/episode_records.jsonl"
+          "sha256": "5e33886c24bb0e1a3336e0435ca1d53459e2c283cf10b69d801a36ab217fc24c",
+          "size_bytes": 25401,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0001/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "fd757ec1066bd2a2a8b80c8f3bc4c4ae09349e8ccd46c5dfd8894e4557f30d3b",
+          "normalized_sha256": "5e33886c24bb0e1a3336e0435ca1d53459e2c283cf10b69d801a36ab217fc24c",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25485
         },
         {
           "candidate_index": 2,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0002/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0002/episode_records.jsonl",
-          "sha256": "8b7fd6b6f365610dcb0ce9cccf61dd3e01faff1df941fd2868296f01c44bd130",
-          "size_bytes": 25498,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0002/episode_records.jsonl"
+          "sha256": "847d3618e3c255a79dbb2015356548ae15b83542dd869d06728f21172d4019c5",
+          "size_bytes": 25414,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0002/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "8b7fd6b6f365610dcb0ce9cccf61dd3e01faff1df941fd2868296f01c44bd130",
+          "normalized_sha256": "847d3618e3c255a79dbb2015356548ae15b83542dd869d06728f21172d4019c5",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25498
         },
         {
           "candidate_index": 3,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0003/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0003/episode_records.jsonl",
-          "sha256": "d0f163d18de7603818fcb8d0cfb1871185c2c85db2adc2f01a12ec3351f04e72",
-          "size_bytes": 25427,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0003/episode_records.jsonl"
+          "sha256": "5ab7665b96c2a4db203ea1df533701f41ce97f091ccf9c4873a44de173948a71",
+          "size_bytes": 25343,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0003/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "d0f163d18de7603818fcb8d0cfb1871185c2c85db2adc2f01a12ec3351f04e72",
+          "normalized_sha256": "5ab7665b96c2a4db203ea1df533701f41ce97f091ccf9c4873a44de173948a71",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25427
         },
         {
           "candidate_index": 4,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0004/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0004/episode_records.jsonl",
-          "sha256": "a6ef9029d4b7208f7053e8e197a8ff618a4360cb2be654e87f1dc5480e5675e3",
-          "size_bytes": 25445,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0004/episode_records.jsonl"
+          "sha256": "3ae00c279a68c549a5ac0ff3b45dd96f11ef9726dd0764f0955d58218bd2c4e3",
+          "size_bytes": 25361,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0004/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "a6ef9029d4b7208f7053e8e197a8ff618a4360cb2be654e87f1dc5480e5675e3",
+          "normalized_sha256": "3ae00c279a68c549a5ac0ff3b45dd96f11ef9726dd0764f0955d58218bd2c4e3",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25445
         },
         {
           "candidate_index": 5,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0005/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0005/episode_records.jsonl",
-          "sha256": "53584c4b586f2aa031524bd84d814930445f8ea9233bd0b3ce6e486f2282cb23",
-          "size_bytes": 25403,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0005/episode_records.jsonl"
+          "sha256": "531b11f663c2e2e4119c0692ff4fa250f20cbf0285f35c3bfd569c7d27e6a040",
+          "size_bytes": 25319,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0005/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "53584c4b586f2aa031524bd84d814930445f8ea9233bd0b3ce6e486f2282cb23",
+          "normalized_sha256": "531b11f663c2e2e4119c0692ff4fa250f20cbf0285f35c3bfd569c7d27e6a040",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25403
         },
         {
           "candidate_index": 6,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0006/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0006/episode_records.jsonl",
-          "sha256": "9796c9f89f512f57d4c101d4b600a1c0befc10ed7ceefa1113e1a3f8d81cbaf2",
-          "size_bytes": 25481,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0006/episode_records.jsonl"
+          "sha256": "85f9dfab6bb926a8a2dc1d19eb14ab6e0874fb06ad6783f5dbd2a063bf642e05",
+          "size_bytes": 25397,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0006/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "9796c9f89f512f57d4c101d4b600a1c0befc10ed7ceefa1113e1a3f8d81cbaf2",
+          "normalized_sha256": "85f9dfab6bb926a8a2dc1d19eb14ab6e0874fb06ad6783f5dbd2a063bf642e05",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25481
         },
         {
           "candidate_index": 7,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0007/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0007/episode_records.jsonl",
-          "sha256": "e8922b2cf62dbc462fb16a36a2485666a5209915a5bb3e5dbcd269d4ac80e789",
-          "size_bytes": 25439,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0007/episode_records.jsonl"
+          "sha256": "3ba37fccf563386b1bdce7ae69733d5a35875f40ec275ef33ab5dd18c53cb8bd",
+          "size_bytes": 25355,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0007/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "e8922b2cf62dbc462fb16a36a2485666a5209915a5bb3e5dbcd269d4ac80e789",
+          "normalized_sha256": "3ba37fccf563386b1bdce7ae69733d5a35875f40ec275ef33ab5dd18c53cb8bd",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25439
         },
         {
           "candidate_index": 8,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0008/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0008/episode_records.jsonl",
-          "sha256": "037e992b241b745c4482ba6b8ca4f757f897d978017fb33879c0ca9b8d1ad9cb",
-          "size_bytes": 25444,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0008/episode_records.jsonl"
+          "sha256": "e858870d9639caad4ed590c04964dd736cfd301fd73874898a06f72fea02db8a",
+          "size_bytes": 25360,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0008/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "037e992b241b745c4482ba6b8ca4f757f897d978017fb33879c0ca9b8d1ad9cb",
+          "normalized_sha256": "e858870d9639caad4ed590c04964dd736cfd301fd73874898a06f72fea02db8a",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25444
         },
         {
           "candidate_index": 9,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0009/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0009/episode_records.jsonl",
-          "sha256": "28b2efe2e283ffebce3886be133b35be343614092d6b5629740c32e1720884dd",
-          "size_bytes": 25443,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0009/episode_records.jsonl"
+          "sha256": "2db4cb93a9e58f159e820d2c7895b6eb3f433302c819830ccdb25c49af320272",
+          "size_bytes": 25359,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0009/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "28b2efe2e283ffebce3886be133b35be343614092d6b5629740c32e1720884dd",
+          "normalized_sha256": "2db4cb93a9e58f159e820d2c7895b6eb3f433302c819830ccdb25c49af320272",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25443
         },
         {
           "candidate_index": 10,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0010/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0010/episode_records.jsonl",
-          "sha256": "a1c422c2a553017598731bd8669873e5ec72d7150eff457304f4129c10f424bf",
-          "size_bytes": 25442,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0010/episode_records.jsonl"
+          "sha256": "e5a59637ccbd2fb5fbc8c411f1d9a9c8c378a3093175da8c355777697cccca9b",
+          "size_bytes": 25358,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0010/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "a1c422c2a553017598731bd8669873e5ec72d7150eff457304f4129c10f424bf",
+          "normalized_sha256": "e5a59637ccbd2fb5fbc8c411f1d9a9c8c378a3093175da8c355777697cccca9b",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25442
         },
         {
           "candidate_index": 11,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0011/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0011/episode_records.jsonl",
-          "sha256": "224eda922a6b3329ee085631a8cc8c649321492f6dd81f3103aa18df56419ebc",
-          "size_bytes": 25437,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0011/episode_records.jsonl"
+          "sha256": "c251ae61a13b3b2e09b6c7ea3837a320aa175e68b674815f2eb7d7aeb854b83c",
+          "size_bytes": 25353,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0011/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "224eda922a6b3329ee085631a8cc8c649321492f6dd81f3103aa18df56419ebc",
+          "normalized_sha256": "c251ae61a13b3b2e09b6c7ea3837a320aa175e68b674815f2eb7d7aeb854b83c",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25437
         },
         {
           "candidate_index": 12,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0012/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0012/episode_records.jsonl",
-          "sha256": "5af855ee80ce54f402610b2b8e786a6fc0e9206a85cd4d6bf27f0a89eb8af834",
-          "size_bytes": 25434,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0012/episode_records.jsonl"
+          "sha256": "270f05ec5b6ac3e882f944eb5f8d4caba503e0e0ad0ec9afb635d8631500e10e",
+          "size_bytes": 25350,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0012/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "5af855ee80ce54f402610b2b8e786a6fc0e9206a85cd4d6bf27f0a89eb8af834",
+          "normalized_sha256": "270f05ec5b6ac3e882f944eb5f8d4caba503e0e0ad0ec9afb635d8631500e10e",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25434
         },
         {
           "candidate_index": 13,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0013/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0013/episode_records.jsonl",
-          "sha256": "1fae12e439e1e66ebdb3327b93d0cc05674956144c2cc15a2895166169f90c30",
-          "size_bytes": 25482,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0013/episode_records.jsonl"
+          "sha256": "9f7190571b762eb1c0a1ac34518f897d4596c6e270991a9d6949fb748c349210",
+          "size_bytes": 25398,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0013/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "1fae12e439e1e66ebdb3327b93d0cc05674956144c2cc15a2895166169f90c30",
+          "normalized_sha256": "9f7190571b762eb1c0a1ac34518f897d4596c6e270991a9d6949fb748c349210",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25482
         },
         {
           "candidate_index": 14,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0014/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0014/episode_records.jsonl",
-          "sha256": "357ee6eb67c576c65306c7cd3ffd999bd41394d4fb2828c6cead8c02571c2f62",
-          "size_bytes": 25431,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0014/episode_records.jsonl"
+          "sha256": "71ef77b7ff32e101e8a26b782d6203ad9f5a9e130810586de86e9c614e477623",
+          "size_bytes": 25347,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0014/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "357ee6eb67c576c65306c7cd3ffd999bd41394d4fb2828c6cead8c02571c2f62",
+          "normalized_sha256": "71ef77b7ff32e101e8a26b782d6203ad9f5a9e130810586de86e9c614e477623",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25431
         },
         {
           "candidate_index": 15,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_1101/random/candidate_0015/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0015/episode_records.jsonl",
-          "sha256": "c5e7ecfffdfd3a4eed8a70e4c5f8a0bd107d79bc07fe1cbcdc96f7dd3f62280c",
-          "size_bytes": 25438,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0015/episode_records.jsonl"
+          "sha256": "cfb349abbe52dbdc01f2d9cc1ad3a61647d19170e1c2cf4297035e379539437d",
+          "size_bytes": 25354,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_1101_random/candidate_0015/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "c5e7ecfffdfd3a4eed8a70e4c5f8a0bd107d79bc07fe1cbcdc96f7dd3f62280c",
+          "normalized_sha256": "cfb349abbe52dbdc01f2d9cc1ad3a61647d19170e1c2cf4297035e379539437d",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25438
         }
       ]
     },
@@ -298,129 +426,193 @@
           "candidate_index": 0,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0000/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0000/episode_records.jsonl",
-          "sha256": "e6f46057e25fb908ca006eef30fbbe72a88c40850c9f20a035ac7f171b9c45f3",
-          "size_bytes": 25440,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0000/episode_records.jsonl"
+          "sha256": "e4cf661e0ab3770fa07ed41403ed333a930be377626aa0a85285da698a03823f",
+          "size_bytes": 25356,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0000/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "e6f46057e25fb908ca006eef30fbbe72a88c40850c9f20a035ac7f171b9c45f3",
+          "normalized_sha256": "e4cf661e0ab3770fa07ed41403ed333a930be377626aa0a85285da698a03823f",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25440
         },
         {
           "candidate_index": 1,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0001/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0001/episode_records.jsonl",
-          "sha256": "79db78d67bb8a44e4fb82338e15d965feb9aecee13042e3f71330966963f9882",
-          "size_bytes": 25443,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0001/episode_records.jsonl"
+          "sha256": "e173efc7229b2ad81f808fee271405d09c0405adcdec58b60b8dd20407c3c38e",
+          "size_bytes": 25359,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0001/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "79db78d67bb8a44e4fb82338e15d965feb9aecee13042e3f71330966963f9882",
+          "normalized_sha256": "e173efc7229b2ad81f808fee271405d09c0405adcdec58b60b8dd20407c3c38e",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25443
         },
         {
           "candidate_index": 2,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0002/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0002/episode_records.jsonl",
-          "sha256": "28d2c178ac86c2286aa943d5b316dcff1de1fe9b48bdeebb3f8a851efcb22c8c",
-          "size_bytes": 25425,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0002/episode_records.jsonl"
+          "sha256": "7675fb7dd9e692da3bf99ceb6e1291c6066f6b7047d2887fd2259f2533b1439e",
+          "size_bytes": 25341,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0002/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "28d2c178ac86c2286aa943d5b316dcff1de1fe9b48bdeebb3f8a851efcb22c8c",
+          "normalized_sha256": "7675fb7dd9e692da3bf99ceb6e1291c6066f6b7047d2887fd2259f2533b1439e",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25425
         },
         {
           "candidate_index": 3,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0003/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0003/episode_records.jsonl",
-          "sha256": "6325b82cab5d9dfee988fb272992c70dfd2522d49a13357e5b56bfe6ba4f57e4",
-          "size_bytes": 25453,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0003/episode_records.jsonl"
+          "sha256": "f0dc53987c7b670717730848a57ecee48ea528239de6be0eef12c018a9fbc56a",
+          "size_bytes": 25369,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0003/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "6325b82cab5d9dfee988fb272992c70dfd2522d49a13357e5b56bfe6ba4f57e4",
+          "normalized_sha256": "f0dc53987c7b670717730848a57ecee48ea528239de6be0eef12c018a9fbc56a",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25453
         },
         {
           "candidate_index": 4,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0004/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0004/episode_records.jsonl",
-          "sha256": "a6043c6aaa6d01cd4a1600a6c832d21f17802e6ab7425ba0967553636dce223c",
-          "size_bytes": 25484,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0004/episode_records.jsonl"
+          "sha256": "f270a9278ec938c7eed4a50757f3a44ad40f63852862e7190b1cbe5b75949530",
+          "size_bytes": 25400,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0004/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "a6043c6aaa6d01cd4a1600a6c832d21f17802e6ab7425ba0967553636dce223c",
+          "normalized_sha256": "f270a9278ec938c7eed4a50757f3a44ad40f63852862e7190b1cbe5b75949530",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25484
         },
         {
           "candidate_index": 5,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0005/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0005/episode_records.jsonl",
-          "sha256": "3a95f10cd82718f2a750564f9f4aaac4ae0c92cef958bf69c5057640c6cb22b7",
-          "size_bytes": 25483,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0005/episode_records.jsonl"
+          "sha256": "2212644633216a03c362e6c6840c71347d0ee71c40c8225d20380033b9afa091",
+          "size_bytes": 25399,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0005/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "3a95f10cd82718f2a750564f9f4aaac4ae0c92cef958bf69c5057640c6cb22b7",
+          "normalized_sha256": "2212644633216a03c362e6c6840c71347d0ee71c40c8225d20380033b9afa091",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25483
         },
         {
           "candidate_index": 6,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0006/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0006/episode_records.jsonl",
-          "sha256": "8a88d4b73976b970fc66b5ec5efbf4eb1830fcdbb13f8c5c941e06e17cee8a0e",
-          "size_bytes": 25485,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0006/episode_records.jsonl"
+          "sha256": "0e32adabb4e43e1ca1fd7c10dcc3db008432c3db8f2dc414269165c26d4b8c7b",
+          "size_bytes": 25401,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0006/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "8a88d4b73976b970fc66b5ec5efbf4eb1830fcdbb13f8c5c941e06e17cee8a0e",
+          "normalized_sha256": "0e32adabb4e43e1ca1fd7c10dcc3db008432c3db8f2dc414269165c26d4b8c7b",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25485
         },
         {
           "candidate_index": 7,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0007/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0007/episode_records.jsonl",
-          "sha256": "859baf6772cb9261b631120a86a9a1cb7fd98d6cec35e148b113de14f61ac153",
-          "size_bytes": 25493,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0007/episode_records.jsonl"
+          "sha256": "3193f100c7389a6a033b03fb5eacecab29b5b0f195ef5cb737d34fd8f626f735",
+          "size_bytes": 25409,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0007/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "859baf6772cb9261b631120a86a9a1cb7fd98d6cec35e148b113de14f61ac153",
+          "normalized_sha256": "3193f100c7389a6a033b03fb5eacecab29b5b0f195ef5cb737d34fd8f626f735",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25493
         },
         {
           "candidate_index": 8,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0008/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0008/episode_records.jsonl",
-          "sha256": "ef9ceaa604a8f5aeb29218849ea3e5d061a716703b621815a782606d723aef2d",
-          "size_bytes": 25439,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0008/episode_records.jsonl"
+          "sha256": "4d1c4636f13aea230cb2ce5ed54adc98a0776cd92a53120336c72f80f44e1301",
+          "size_bytes": 25355,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0008/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "ef9ceaa604a8f5aeb29218849ea3e5d061a716703b621815a782606d723aef2d",
+          "normalized_sha256": "4d1c4636f13aea230cb2ce5ed54adc98a0776cd92a53120336c72f80f44e1301",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25439
         },
         {
           "candidate_index": 9,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0009/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0009/episode_records.jsonl",
-          "sha256": "dbad9f6f87687bf0f6c0c808aa6734b0376b80e43a198ab317a30d5de622912b",
-          "size_bytes": 25486,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0009/episode_records.jsonl"
+          "sha256": "58c5dd1bf6c9fa1ef2e019215390753ac53956c49cd6d1ada82f3f3207c1e2eb",
+          "size_bytes": 25402,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0009/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "dbad9f6f87687bf0f6c0c808aa6734b0376b80e43a198ab317a30d5de622912b",
+          "normalized_sha256": "58c5dd1bf6c9fa1ef2e019215390753ac53956c49cd6d1ada82f3f3207c1e2eb",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25486
         },
         {
           "candidate_index": 10,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0010/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0010/episode_records.jsonl",
-          "sha256": "292e9a10bb4d306ddd08e92891fcfc9be4efd3423f18ae613999c866e3e4e45f",
-          "size_bytes": 25485,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0010/episode_records.jsonl"
+          "sha256": "4c8dc28e5725eabaafecd412d34816ae618c4f45466e212510ff1f34d7b0df7d",
+          "size_bytes": 25401,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0010/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "292e9a10bb4d306ddd08e92891fcfc9be4efd3423f18ae613999c866e3e4e45f",
+          "normalized_sha256": "4c8dc28e5725eabaafecd412d34816ae618c4f45466e212510ff1f34d7b0df7d",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25485
         },
         {
           "candidate_index": 11,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0011/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0011/episode_records.jsonl",
-          "sha256": "e8bb366f21f6f74338d6d6a07db891c9f288d117d5a9dab4071bd06670f2797e",
-          "size_bytes": 25449,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0011/episode_records.jsonl"
+          "sha256": "88ca40ba641ad5aa7bab0f410327b18b70ce4472b57ba69604f2f643dd2349d9",
+          "size_bytes": 25365,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0011/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "e8bb366f21f6f74338d6d6a07db891c9f288d117d5a9dab4071bd06670f2797e",
+          "normalized_sha256": "88ca40ba641ad5aa7bab0f410327b18b70ce4472b57ba69604f2f643dd2349d9",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25449
         },
         {
           "candidate_index": 12,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0012/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0012/episode_records.jsonl",
-          "sha256": "1dff92c2518384f0183c202dff4939a5b8c270fea05c0527fb4ef901c6c24b85",
-          "size_bytes": 25489,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0012/episode_records.jsonl"
+          "sha256": "a5c58d695e3240a9a01d05dbd6c1d68fa1ca52e2135f1a8c82e3941fe90ad5fa",
+          "size_bytes": 25405,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0012/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "1dff92c2518384f0183c202dff4939a5b8c270fea05c0527fb4ef901c6c24b85",
+          "normalized_sha256": "a5c58d695e3240a9a01d05dbd6c1d68fa1ca52e2135f1a8c82e3941fe90ad5fa",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25489
         },
         {
           "candidate_index": 13,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0013/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0013/episode_records.jsonl",
-          "sha256": "4e3f0fc1e28fb5d63fc17a95bf5e06c9eb1e25edf6288fbfb8b97ea8a8a70550",
-          "size_bytes": 25442,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0013/episode_records.jsonl"
+          "sha256": "8e6034e28a004319408f3200ee791d56d5f3cc8844df5987d1df06641a0f9353",
+          "size_bytes": 25358,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0013/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "4e3f0fc1e28fb5d63fc17a95bf5e06c9eb1e25edf6288fbfb8b97ea8a8a70550",
+          "normalized_sha256": "8e6034e28a004319408f3200ee791d56d5f3cc8844df5987d1df06641a0f9353",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25442
         },
         {
           "candidate_index": 14,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0014/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0014/episode_records.jsonl",
-          "sha256": "b3716b987c7ea4327a3ea4847b26275dd17b57e66ce7965528d8e01e611ef3fb",
-          "size_bytes": 25491,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0014/episode_records.jsonl"
+          "sha256": "66f22fc95b217a7502a8dcd3dd41bad44e09e781db0515a4e529804b2be62a35",
+          "size_bytes": 25407,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0014/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "b3716b987c7ea4327a3ea4847b26275dd17b57e66ce7965528d8e01e611ef3fb",
+          "normalized_sha256": "66f22fc95b217a7502a8dcd3dd41bad44e09e781db0515a4e529804b2be62a35",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25491
         },
         {
           "candidate_index": 15,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/optuna/candidate_0015/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0015/episode_records.jsonl",
-          "sha256": "24b163e7e0f001d261041615801c8a7e4f2497c8e765cd7abd166c6c28fa36a8",
-          "size_bytes": 25441,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0015/episode_records.jsonl"
+          "sha256": "b7e2ebd3adb6222ed3987ed8384856436c3729518f134fb9be2577d6308bd2ef",
+          "size_bytes": 25357,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_optuna/candidate_0015/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "24b163e7e0f001d261041615801c8a7e4f2497c8e765cd7abd166c6c28fa36a8",
+          "normalized_sha256": "b7e2ebd3adb6222ed3987ed8384856436c3729518f134fb9be2577d6308bd2ef",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25441
         }
       ]
     },
@@ -437,133 +629,197 @@
           "candidate_index": 0,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0000/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0000/episode_records.jsonl",
-          "sha256": "df0731a655d9de85a636c759df5cd490ddf8e457ebbda5837dd535949e4a8374",
-          "size_bytes": 25434,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0000/episode_records.jsonl"
+          "sha256": "7df85b4e5a6ccd6d3e43f0f22afe9678cd8975812b6afff609113dd611435b7f",
+          "size_bytes": 25350,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0000/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "df0731a655d9de85a636c759df5cd490ddf8e457ebbda5837dd535949e4a8374",
+          "normalized_sha256": "7df85b4e5a6ccd6d3e43f0f22afe9678cd8975812b6afff609113dd611435b7f",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25434
         },
         {
           "candidate_index": 1,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0001/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0001/episode_records.jsonl",
-          "sha256": "e9e81b95d073c3afc7a8afb6001036f0ce47fe1de90b6a4a6a7b058cd0aff4d6",
-          "size_bytes": 25414,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0001/episode_records.jsonl"
+          "sha256": "0c58fa563e3132754b00460240979564ea0ae6658695b6f2cbf231c40e1d04a4",
+          "size_bytes": 25330,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0001/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "e9e81b95d073c3afc7a8afb6001036f0ce47fe1de90b6a4a6a7b058cd0aff4d6",
+          "normalized_sha256": "0c58fa563e3132754b00460240979564ea0ae6658695b6f2cbf231c40e1d04a4",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25414
         },
         {
           "candidate_index": 2,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0002/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0002/episode_records.jsonl",
-          "sha256": "3ccd6464d292593f5fb064256cdcb5b7c842305fd14d5ea8e66d29b23d17ea51",
-          "size_bytes": 25488,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0002/episode_records.jsonl"
+          "sha256": "8d56303aab873fc130ce9b87eed20356374c1701178d80c1fb6de7a84c592add",
+          "size_bytes": 25404,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0002/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "3ccd6464d292593f5fb064256cdcb5b7c842305fd14d5ea8e66d29b23d17ea51",
+          "normalized_sha256": "8d56303aab873fc130ce9b87eed20356374c1701178d80c1fb6de7a84c592add",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25488
         },
         {
           "candidate_index": 3,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0003/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0003/episode_records.jsonl",
-          "sha256": "a7812c2b475b1604ea3cda796c977285e101ae52114d418b3f4eb08d67c4a7c9",
-          "size_bytes": 25441,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0003/episode_records.jsonl"
+          "sha256": "4683503019527b424a895dd81ac315d6f9a94ef09a9d466ae9d56fe2430339f4",
+          "size_bytes": 25357,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0003/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "a7812c2b475b1604ea3cda796c977285e101ae52114d418b3f4eb08d67c4a7c9",
+          "normalized_sha256": "4683503019527b424a895dd81ac315d6f9a94ef09a9d466ae9d56fe2430339f4",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25441
         },
         {
           "candidate_index": 4,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0004/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0004/episode_records.jsonl",
-          "sha256": "0663cd167c642c0dc2efffdb24c5bb38a979a85b12b1a45ebb84ea1c642d2b82",
-          "size_bytes": 25440,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0004/episode_records.jsonl"
+          "sha256": "f46a200c4bef9728a41c9df93808f29e31942c10b8903e6ab62355909f9e8196",
+          "size_bytes": 25356,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0004/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "0663cd167c642c0dc2efffdb24c5bb38a979a85b12b1a45ebb84ea1c642d2b82",
+          "normalized_sha256": "f46a200c4bef9728a41c9df93808f29e31942c10b8903e6ab62355909f9e8196",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25440
         },
         {
           "candidate_index": 5,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0005/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0005/episode_records.jsonl",
-          "sha256": "98204c97094d8cab790757a5ab9935a89d53a825ffb2e5a5962956a2a9ad483a",
-          "size_bytes": 25440,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0005/episode_records.jsonl"
+          "sha256": "a6752dfb0e480b3f95ee52b6a58a54d40ba222f145b1bcedd428128c52dc4ee9",
+          "size_bytes": 25356,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0005/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "98204c97094d8cab790757a5ab9935a89d53a825ffb2e5a5962956a2a9ad483a",
+          "normalized_sha256": "a6752dfb0e480b3f95ee52b6a58a54d40ba222f145b1bcedd428128c52dc4ee9",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25440
         },
         {
           "candidate_index": 6,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0006/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0006/episode_records.jsonl",
-          "sha256": "2c7e47bf69dc0dc2d23eb575cb5ed1c0187ed76d3dc77b4eaaf052f27e6858b5",
-          "size_bytes": 25430,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0006/episode_records.jsonl"
+          "sha256": "b51fddd4b3b1bef2b7f472bf47f61af74f7a2a77b1734415cb733a97ace8b111",
+          "size_bytes": 25346,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0006/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "2c7e47bf69dc0dc2d23eb575cb5ed1c0187ed76d3dc77b4eaaf052f27e6858b5",
+          "normalized_sha256": "b51fddd4b3b1bef2b7f472bf47f61af74f7a2a77b1734415cb733a97ace8b111",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25430
         },
         {
           "candidate_index": 7,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0007/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0007/episode_records.jsonl",
-          "sha256": "d7de2c1b579db51ef83cf221cda6e082cab3aeddfacf472b306b902513cbbba6",
-          "size_bytes": 25485,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0007/episode_records.jsonl"
+          "sha256": "d9f2d2f2a0c6b03d6b16d1201108c78337cdacc1faba9d42367ae2e086f48607",
+          "size_bytes": 25401,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0007/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "d7de2c1b579db51ef83cf221cda6e082cab3aeddfacf472b306b902513cbbba6",
+          "normalized_sha256": "d9f2d2f2a0c6b03d6b16d1201108c78337cdacc1faba9d42367ae2e086f48607",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25485
         },
         {
           "candidate_index": 8,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0008/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0008/episode_records.jsonl",
-          "sha256": "6f65a616b0b242501de15ee866bd77f08bb31e3ed946dcf9dff84c2d39a5fb05",
-          "size_bytes": 25427,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0008/episode_records.jsonl"
+          "sha256": "e9f505089048b135c9164a3490b54ff6a5a8d82b1ea767727e90f8004b46a2f5",
+          "size_bytes": 25343,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0008/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "6f65a616b0b242501de15ee866bd77f08bb31e3ed946dcf9dff84c2d39a5fb05",
+          "normalized_sha256": "e9f505089048b135c9164a3490b54ff6a5a8d82b1ea767727e90f8004b46a2f5",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25427
         },
         {
           "candidate_index": 9,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0009/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0009/episode_records.jsonl",
-          "sha256": "83b1a4a93d380731df944ddc3d4131c673962f9d2237d270b630804b89335142",
-          "size_bytes": 25445,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0009/episode_records.jsonl"
+          "sha256": "51dd66fef56a43cfe94dca4e7dd8ea77c800794cf2415ad7af2343e23fee60dc",
+          "size_bytes": 25361,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0009/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "83b1a4a93d380731df944ddc3d4131c673962f9d2237d270b630804b89335142",
+          "normalized_sha256": "51dd66fef56a43cfe94dca4e7dd8ea77c800794cf2415ad7af2343e23fee60dc",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25445
         },
         {
           "candidate_index": 10,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0010/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0010/episode_records.jsonl",
-          "sha256": "19a64982c299e9bb82ac754247f3162b89f64329e6e4ea28e0151b4c668bf2b3",
-          "size_bytes": 25418,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0010/episode_records.jsonl"
+          "sha256": "6da3f0932d3aa2ece2b0f701eaf3372028f8fcb4817dd95527922595f395d279",
+          "size_bytes": 25334,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0010/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "19a64982c299e9bb82ac754247f3162b89f64329e6e4ea28e0151b4c668bf2b3",
+          "normalized_sha256": "6da3f0932d3aa2ece2b0f701eaf3372028f8fcb4817dd95527922595f395d279",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25418
         },
         {
           "candidate_index": 11,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0011/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0011/episode_records.jsonl",
-          "sha256": "190df56bad20987c62f464c3f9e40226e61253dcdcb0b4982d7cf474f0ff47cb",
-          "size_bytes": 25489,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0011/episode_records.jsonl"
+          "sha256": "48ee191fd082b338a2d6a7e03d7e29cabc289673ecdf051ce9526935563ce5d7",
+          "size_bytes": 25405,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0011/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "190df56bad20987c62f464c3f9e40226e61253dcdcb0b4982d7cf474f0ff47cb",
+          "normalized_sha256": "48ee191fd082b338a2d6a7e03d7e29cabc289673ecdf051ce9526935563ce5d7",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25489
         },
         {
           "candidate_index": 12,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0012/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0012/episode_records.jsonl",
-          "sha256": "303be888223403f50f8cf500382577a9cecbf83bab02286041ccc4ff42f2587e",
-          "size_bytes": 25491,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0012/episode_records.jsonl"
+          "sha256": "272b3e39a57d5c81cb7b6e5ad98b7760cc8cb0210f9a828231c4b1894a93a81a",
+          "size_bytes": 25407,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0012/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "303be888223403f50f8cf500382577a9cecbf83bab02286041ccc4ff42f2587e",
+          "normalized_sha256": "272b3e39a57d5c81cb7b6e5ad98b7760cc8cb0210f9a828231c4b1894a93a81a",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25491
         },
         {
           "candidate_index": 13,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0013/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0013/episode_records.jsonl",
-          "sha256": "3a0345e1696363d8c924beca7b290146bb3c398f69c993b60976b63af47a397f",
-          "size_bytes": 25495,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0013/episode_records.jsonl"
+          "sha256": "5969666c044c1195afb7532821866878065592269e3bae6cf91a80a36ec33c81",
+          "size_bytes": 25411,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0013/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "3a0345e1696363d8c924beca7b290146bb3c398f69c993b60976b63af47a397f",
+          "normalized_sha256": "5969666c044c1195afb7532821866878065592269e3bae6cf91a80a36ec33c81",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25495
         },
         {
           "candidate_index": 14,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0014/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0014/episode_records.jsonl",
-          "sha256": "d1ffa6e9b7137e8d6615153544a58dc165460e542df03f237f93e2ca43c93b52",
-          "size_bytes": 25434,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0014/episode_records.jsonl"
+          "sha256": "daadba6394ff4be42d84ea7a1e77b4519babda0255fa82bee62986033f00c058",
+          "size_bytes": 25350,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0014/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "d1ffa6e9b7137e8d6615153544a58dc165460e542df03f237f93e2ca43c93b52",
+          "normalized_sha256": "daadba6394ff4be42d84ea7a1e77b4519babda0255fa82bee62986033f00c058",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25434
         },
         {
           "candidate_index": 15,
           "producer_output_path": "output/issue9645-pilot/results/constraints_first_lexicographic_v1/budget_0016/seed_2202/random/candidate_0015/episode_records.jsonl",
           "bundle_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0015/episode_records.jsonl",
-          "sha256": "1884640ac39e95fcda3558c02f50ef8068088b6f84b49d5f66bf290185ee0758",
-          "size_bytes": 25449,
-          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0015/episode_records.jsonl"
+          "sha256": "0a114e80cd707da9d53e08e08391fee5e649045af2499804d92eb5d489b729ce",
+          "size_bytes": 25365,
+          "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0015/episode_records.jsonl",
+          "source_sha256_before_path_normalization": "1884640ac39e95fcda3558c02f50ef8068088b6f84b49d5f66bf290185ee0758",
+          "normalized_sha256": "0a114e80cd707da9d53e08e08391fee5e649045af2499804d92eb5d489b729ce",
+          "retention_status": "retained_path_normalized_copy",
+          "source_size_bytes": 25449
         }
       ]
     }
   ],
-  "transformation": "Copy source manifests and replace only each candidate episode_record_path with the digest-verified retained exact file; source comparison bytes and sampler results are unchanged.",
+  "transformation": "Copy source manifests and replace each candidate episode_record_path with its retained path-normalized file; candidate route metadata changes only from an absolute producer route path to the repo-relative producer output path. Original and normalized SHA-256 values are recorded; source comparison bytes and sampler results are unchanged.",
   "search_or_simulation_rerun": false
 }

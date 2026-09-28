@@ -46,6 +46,23 @@ known non-critical counts. The experiment commit is recorded separately in
 `payload/run_metadata.json`. This report does not reinterpret the historical v1 objective score or
 claim safety from objective eligibility.
 
+## Objective evidence limitation and versioned correction
+
+The recorded campaign used the frozen `constraints_first_lexicographic_v1` objective at source
+revision `58e516aa4f69ff3098bf518199f483006589758c`. An independent methodology review found that
+v1 can return a negative safety composite when collision is observed false but severe-intrusion
+evidence is absent. The 64 historical `0.0` scores remain recorded, but they cannot support a
+non-critical safety tier; the report's `unknown` criticality classification is controlling for that
+claim. The recorded source and results are not rewritten or re-scored.
+
+The implementation now provides `constraints_first_lexicographic_v2` for future searches. It uses
+three-valued OR: known collision or intrusion evidence establishes a safety failure, both components
+must be explicitly false to establish a negative safety result, and otherwise the objective returns
+no score. The frozen v1 implementation remains available for exact reproduction of existing
+contracts. This code correction does not authorize another campaign or change the current NO-GO for
+scaling #9648. A future bounded pilot would need v2, complete intrusion metrics, a domain containing
+known hard cases, and multiple simulator seeds before it could reconsider that gate.
+
 The mixed distance columns in `payload/candidate_evaluations.csv` are defined in its sibling
 `payload/metadata.json`: `distance_to_human_min_m` is center-to-center distance, and
 `min_clearance_m` is surface clearance after subtracting both agents' radii. Entries in

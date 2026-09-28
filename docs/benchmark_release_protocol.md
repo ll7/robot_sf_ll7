@@ -261,8 +261,11 @@ are retained under
 `<campaign_root>/reports/spawn_matrix_preflight.v1.{json,md}`. A blocked row stops the release
 before planner execution. Their recorded SHA-256 digests are checked again after the campaign and
 in the publication bundle. These reports are setup diagnostics; they are not planner-performance,
-navigation-success, or release-success evidence. An infeasible path or passage is exempt only when
-the scenario explicitly declares `expected_outcome: infeasible_safe_hold`.
+navigation-success, or release-success evidence. A declared
+`expected_outcome: infeasible_safe_hold` is labelled as an infeasibility probe only when the
+separate, checksummed manifest has `release_kind: benchmark-infeasibility-probe`. Its report
+remains blocked for release admission. The nominal benchmark-data manifest rejects that
+declaration even when geometry is infeasible; it needs a versioned feasible successor.
 
 To inspect the same manifest gate directly, use the manifest-bound command and provide both report
 paths:

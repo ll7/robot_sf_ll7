@@ -53,6 +53,7 @@ DEFAULT_CLEARANCE_MARGIN_M = 0.1
 DEFAULT_RESPAWN_WINDOW_STEPS = 20
 DEFAULT_GRID_RESOLUTION_M = 0.1
 _EXPECTED_OUTCOMES = frozenset({"infeasible_safe_hold"})
+INFEASIBILITY_PROBE_RELEASE_KIND = "benchmark-infeasibility-probe"
 
 
 def _parse_seeds(text: str) -> list[int]:
@@ -350,12 +351,37 @@ def _ordered_route_grid_path(
     return route_path, None
 
 
+def _apply_infeasibility_declaration(
+    reachability: dict[str, Any],
+    passage: dict[str, Any],
+    *,
+    probe_manifest: bool,
+) -> None:
+    """Keep nominal declarations blocked and probe declarations diagnostic."""
+    if not probe_manifest:
+        for check in (reachability, passage):
+            check["observed_status"] = check["status"]
+            check["observed_reason"] = check["reason"]
+            check["status"] = "invalid"
+            check["reason"] = "infeasibility_probe_requires_separate_manifest"
+    elif reachability["status"] == "pass" and passage["status"] == "pass":
+        for check in (reachability, passage):
+            check["status"] = "invalid"
+            check["reason"] = "declared_infeasibility_not_observed"
+    else:
+        for check in (reachability, passage):
+            if check["status"] == "fail":
+                check["status"] = "exempt_expected_outcome"
+                check["reason"] = "infeasibility_declared_expected_safe_hold"
+
+
 def _check_footprint_path(
     env: Any,
     analysis: dict[str, Any],
     *,
     scenario: dict[str, Any],
     margin_m: float,
+    probe_manifest: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Check route reachability in inflated grid cells and estimate path opening widths.
 
@@ -455,10 +481,7 @@ def _check_footprint_path(
             }
 
         if expected_outcome == "infeasible_safe_hold":
-            for check in (reachability, passage):
-                if check["status"] == "fail":
-                    check["status"] = "exempt_expected_outcome"
-                    check["reason"] = "infeasibility_declared_expected_safe_hold"
+            _apply_infeasibility_declaration(reachability, passage, probe_manifest=probe_manifest)
 
     if declaration_error:
         reachability["expected_outcome"] = scenario.get("expected_outcome")
@@ -604,14 +627,22 @@ def _check_scenario(job: tuple[dict[str, Any], str, list[int], bool, bool]) -> d
 
 
 def _check_release_scenario(  # noqa: C901
-    job: tuple[dict[str, Any], str, tuple[int, ...], float, int, float],
+    job: tuple[dict[str, Any], str, tuple[int, ...], float, int, float, bool],
 ) -> dict[str, Any]:
     """Run every release seed for one scenario and return stable check rows.
 
     Returns:
         Scenario identity, one check row per seed, and static map warnings.
     """
-    scenario, matrix_path, seeds, margin_m, respawn_window_steps, grid_resolution_m = job
+    (
+        scenario,
+        matrix_path,
+        seeds,
+        margin_m,
+        respawn_window_steps,
+        grid_resolution_m,
+        probe_manifest,
+    ) = job
     name = str(scenario.get("name") or scenario.get("scenario_id") or "unknown")
     rows: list[dict[str, Any]] = []
     map_warnings: list[dict[str, Any]] | None = None
@@ -674,6 +705,7 @@ def _check_release_scenario(  # noqa: C901
                     map_analysis,
                     scenario=scenario,
                     margin_m=margin_m,
+                    probe_manifest=probe_manifest,
                 )
                 row["footprint_reachability"] = reachability
                 row["passage_width"] = passage
@@ -721,7 +753,7 @@ def _check_release_scenario(  # noqa: C901
         row["overall_status"] = (
             "blocked"
             if any(status in {"fail", "invalid", "not_assessed"} for status in check_statuses)
-            else "valid"
+            else ("infeasibility_probe" if "exempt_expected_outcome" in check_statuses else "valid")
         )
         rows.append(row)
     return {"scenario": name, "rows": rows, "map_warnings": map_warnings or []}
@@ -819,6 +851,7 @@ def _release_manifest_inputs(  # noqa: C901, PLR0912, PLR0915
         "manifest_path": _portable_path(manifest_path),
         "manifest_sha256": manifest_sha256,
         "release_id": str(getattr(manifest, "release_id", "")),
+        "release_kind": str(getattr(manifest, "release_kind", "") or ""),
         "manifest_schema_version": str(getattr(manifest, "schema_version", "")),
         "scenario_matrix_path": _portable_path(matrix_path),
         "scenario_matrix_sha256": matrix_sha256,
@@ -848,6 +881,7 @@ def _preflight_markdown(report: dict[str, Any]) -> str:
         "",
         f"- Status: `{report.get('status', 'invalid')}`",
         f"- Release: `{identity.get('release_id', 'unknown')}`",
+        f"- Release kind: `{identity.get('release_kind', 'unknown')}`",
         f"- Manifest SHA-256: `{identity.get('manifest_sha256', 'unavailable')}`",
         f"- Matrix: `{identity.get('scenario_matrix_path', 'unavailable')}`",
         f"- Matrix SHA-256: `{identity.get('scenario_matrix_sha256', 'unavailable')}`",
@@ -959,6 +993,7 @@ def run_manifest_preflight(  # noqa: C901
         }
         return report
 
+    probe_manifest = identity.get("release_kind") == INFEASIBILITY_PROBE_RELEASE_KIND
     jobs = [
         (
             scenario,
@@ -967,6 +1002,7 @@ def run_manifest_preflight(  # noqa: C901
             clearance_margin_m,
             respawn_window_steps,
             grid_resolution_m,
+            probe_manifest,
         )
         for scenario in scenarios
     ]
@@ -1040,7 +1076,9 @@ def run_manifest_preflight(  # noqa: C901
     blocked = sum(row["overall_status"] != "valid" for row in rows)
     report = {
         "schema_version": "spawn_matrix_preflight.v1",
-        "status": "valid" if blocked == 0 and input_error is None else "blocked",
+        "status": (
+            "valid" if blocked == 0 and input_error is None and not probe_manifest else "blocked"
+        ),
         "evidence_class": "preflight_diagnostic_only",
         "benchmark_success": None,
         "source_commit": source_commit,

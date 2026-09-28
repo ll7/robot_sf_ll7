@@ -188,14 +188,28 @@ def test_issue_9728_undeclared_doorway_fails_reachability_and_width() -> None:
     assert passage["required_opening_width_m"] == pytest.approx(2.2)
 
 
-def test_safe_hold_exempts_only_declared_path_and_width_failures() -> None:
-    """The explicit expected-outcome token is the only geometry exemption."""
+def test_safe_hold_requires_separate_probe_manifest() -> None:
+    """A declaration cannot make an infeasible nominal route valid."""
     env, analysis, scenario = _doorway_fixture(expected_outcome="infeasible_safe_hold")
     reachability, passage = spawn_preflight._check_footprint_path(
         env,
         analysis,
         scenario=scenario,
         margin_m=0.1,
+    )
+    assert reachability["status"] == "invalid"
+    assert passage["status"] == "invalid"
+    assert reachability["reason"] == "infeasibility_probe_requires_separate_manifest"
+    assert reachability["observed_status"] == "fail"
+    assert passage["observed_status"] == "fail"
+    assert passage["minimum_opening_width_estimate_m"] < 2.2
+
+    reachability, passage = spawn_preflight._check_footprint_path(
+        env,
+        analysis,
+        scenario=scenario,
+        margin_m=0.1,
+        probe_manifest=True,
     )
     assert reachability["status"] == "exempt_expected_outcome"
     assert passage["status"] == "exempt_expected_outcome"
@@ -210,6 +224,23 @@ def test_safe_hold_exempts_only_declared_path_and_width_failures() -> None:
     assert reachability["status"] == "invalid"
     assert passage["status"] == "invalid"
     assert reachability["reason"] == "unsupported_expected_outcome"
+
+
+def test_probe_declaration_requires_observed_infeasibility() -> None:
+    env, analysis, scenario = _doorway_fixture(expected_outcome="infeasible_safe_hold")
+    analysis["occupancy"] = np.zeros_like(analysis["occupancy"], dtype=bool)
+    analysis["inflated"] = analysis["occupancy"]
+    analysis["wall_geometry"] = LineString([(-100.0, -100.0), (-100.0, 100.0)])
+    reachability, passage = spawn_preflight._check_footprint_path(
+        env,
+        analysis,
+        scenario=scenario,
+        margin_m=0.1,
+        probe_manifest=True,
+    )
+    assert reachability["status"] == "invalid"
+    assert passage["status"] == "invalid"
+    assert reachability["reason"] == "declared_infeasibility_not_observed"
 
 
 def test_footprint_path_checks_required_intermediate_waypoints_in_order() -> None:
@@ -561,7 +592,7 @@ def test_release_scenario_keeps_rows_and_reuses_map_analysis(monkeypatch, analys
     )
 
     result = spawn_preflight._check_release_scenario(
-        ({"name": "fixture"}, "matrix.yaml", (111, 112), 0.1, 20, 0.1)
+        ({"name": "fixture"}, "matrix.yaml", (111, 112), 0.1, 20, 0.1, False)
     )
 
     assert [row["seed"] for row in result["rows"]] == [111, 112]
@@ -595,7 +626,7 @@ def test_release_scenario_keeps_initialization_errors_as_invalid_rows(monkeypatc
     monkeypatch.setattr(spawn_preflight, "make_robot_env", lambda **_kwargs: env)
 
     result = spawn_preflight._check_release_scenario(
-        ({"scenario_id": "fixture"}, "matrix.yaml", (111,), 0.1, 20, 0.1)
+        ({"scenario_id": "fixture"}, "matrix.yaml", (111,), 0.1, 20, 0.1, False)
     )
     row = result["rows"][0]
 
@@ -663,6 +694,65 @@ def test_manifest_runner_returns_complete_diagnostic_for_small_valid_matrix(
     assert report["expected_cell_count"] == report["cell_count"] == 1
     assert report["map_warnings"] == {"fixture": [{"kind": "fixture-warning"}]}
     assert report["rows"][0]["scenario_matrix_sha256"] == identity["scenario_matrix_sha256"]
+
+
+def test_probe_manifest_is_labelled_diagnostic_and_never_passes_release_gate(
+    tmp_path: Path, monkeypatch
+) -> None:
+    manifest = _minimal_manifest_files(tmp_path)
+    manifest.release_kind = spawn_preflight.INFEASIBILITY_PROBE_RELEASE_KIND
+    identity = {
+        "manifest_path": "release.yaml",
+        "manifest_sha256": sha256_file(manifest.path),
+        "release_kind": manifest.release_kind,
+        "scenario_matrix_path": "matrix.yaml",
+        "scenario_matrix_sha256": sha256_file(manifest.scenario_matrix_path),
+        "seed_set": "fixture-seeds",
+        "seed_sets_path": None,
+        "seed_sets_sha256": None,
+    }
+    monkeypatch.setattr(
+        spawn_preflight,
+        "_release_manifest_inputs",
+        lambda _manifest: (identity, [{"name": "doorway"}], (111,)),
+    )
+
+    def check_probe_job(job):
+        assert job[6] is True
+        return {
+            "scenario": "doorway",
+            "map_warnings": [],
+            "rows": [
+                {
+                    "scenario": "doorway",
+                    "seed": 111,
+                    "overall_status": "infeasibility_probe",
+                    "footprint_reachability": {"status": "exempt_expected_outcome"},
+                    "passage_width": {"status": "exempt_expected_outcome"},
+                }
+            ],
+        }
+
+    monkeypatch.setattr(spawn_preflight, "_check_release_scenario", check_probe_job)
+    report = spawn_preflight.run_manifest_preflight(manifest)
+
+    assert report["status"] == "blocked"
+    assert report["blocked_cell_count"] == 1
+    assert report["release_inputs"]["release_kind"] == manifest.release_kind
+    assert report["rows"][0]["overall_status"] == "infeasibility_probe"
+
+    monkeypatch.setattr(
+        spawn_preflight,
+        "_check_release_scenario",
+        lambda job: {
+            "scenario": job[0]["name"],
+            "map_warnings": [],
+            "rows": [{"scenario": "doorway", "seed": 111, "overall_status": "valid"}],
+        },
+    )
+    feasible_probe = spawn_preflight.run_manifest_preflight(manifest)
+    assert feasible_probe["blocked_cell_count"] == 0
+    assert feasible_probe["status"] == "blocked"
 
 
 def test_manifest_runner_preserves_cells_when_worker_fails(tmp_path: Path, monkeypatch) -> None:

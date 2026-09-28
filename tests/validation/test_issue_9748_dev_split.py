@@ -210,6 +210,19 @@ def test_tuning_log_requires_seed_on_each_entry(tmp_path: Path) -> None:
         CHECKER._validate_tuning_log(path)
 
 
+def test_tuning_log_rejects_mixed_seeded_and_unseeded_entries(tmp_path: Path) -> None:
+    payload = _valid_log_payload()
+    first = copy.deepcopy(payload["entries"][0])
+    second = copy.deepcopy(first)
+    second.pop("seeds")
+    payload["entries"] = [first, second]
+    payload["seed"] = 1001
+    path = _write_log(tmp_path, payload)
+
+    with pytest.raises(CHECKER.ValidationError, match="entry 1.*typed seed field"):
+        CHECKER._validate_tuning_log(path)
+
+
 @pytest.mark.parametrize("malformed_seed", [True, "1001", [1001, "1002"]])
 def test_tuning_log_rejects_malformed_entry_seed(tmp_path: Path, malformed_seed: object) -> None:
     payload = _valid_log_payload()

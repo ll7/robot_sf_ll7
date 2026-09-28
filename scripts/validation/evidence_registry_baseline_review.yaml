@@ -15,8 +15,14 @@ approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
 latest_reconciliation_issue: 9656
-latest_reviewed_date: 2026-09-27
-latest_reviewed_by: Codex #9656 integration lane; evidence-tree inventory and checksum audit only, no additional human sign-off is claimed.
+latest_reviewed_date: 2026-09-28
+latest_reviewed_by: >-
+  Independent exact reviewers verified the #9656 packet and #9645 source packet; this records
+  the autonomous combined-tree baseline refresh and claims no maintainer sign-off.
+latest_review_actor: Codex autonomous lead; no maintainer sign-off is claimed.
+latest_evidence_tree_refresh_issue: 9645
+latest_evidence_tree_refresh_files_added: 398
+latest_evidence_tree_refresh_sha256: dadd4c5cb72f5f57a61b2ecf4ccee43628b40ea25693cdef6946ec45bda8f205
 evidence_tree_refresh_addenda:
   - issue: 9647
     reviewed_date: 2026-09-26
@@ -84,6 +90,32 @@ evidence_tree_refresh_addenda:
       sidecars against the merged #9808 main tree. The regenerated candidate baseline retains 438
       findings across 98 files with no new or increased per-code finding; this refresh binds the
       combined evidence-tree path set only and introduces no finding disposition or scientific claim.
+  - issue: 9645
+    reviewed_date: 2026-09-28
+    previous:
+      count: 2475
+      sha256: df403f7cc9982246fd776c1e13cef5fb1426575dddeb23ce9cd0db4c769b3f4f
+    candidate:
+      count: 2873
+      sha256: dadd4c5cb72f5f57a61b2ecf4ccee43628b40ea25693cdef6946ec45bda8f205
+    files_added: 398
+    finding_delta: none
+    decision: >-
+      Recomputed the evidence-tree candidate after integrating #9656 and refreshing #9645 onto
+      main at db2eeb71ccb2bce8621a06eaf0557597273c611f. The current-main tree contains 2,475
+      tracked evidence paths; this branch adds 398 #9645 packet paths for a 2,873-file candidate.
+      The evidence-registry projection remains 438 findings across 98 files with zero active
+      strict-CI findings. The #9656 packet was independently checksum-audited; the #9645 packet
+      has 394 passing checksums and independent source-packet review. This changes the evidence-tree
+      manifest only and makes no new scientific or planner-safety claim.
+latest_refresh_review_addendum: >-
+  Combined evidence-tree refresh for #9645 after #9656 merged. Current main db2eeb71ccb2bce8621a06eaf0557597273c611f
+  contains 2,475 tracked evidence paths. The #9645 packet adds 398 tracked paths, resulting in
+  2,873 files with SHA-256 dadd4c5cb72f5f57a61b2ecf4ccee43628b40ea25693cdef6946ec45bda8f205. The ratchet remains 438 findings across 98 files
+  with no new per-file/code finding; the strict policy has zero active findings. This is a path
+  inventory refresh only. The #9656 packet's five payload digests and five review sidecars
+  were independently verified; the #9645 packet has 394 passing checksums and independent
+  exact-packet review. No campaign, simulation, replay, or new safety claim is added by this update.
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73

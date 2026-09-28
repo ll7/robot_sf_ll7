@@ -186,9 +186,10 @@ def test_dwa_obstacle_crop_covers_safety_margin_beyond_clearance_distance() -> N
     )
     planner = DWAPlannerAdapter(config)
     grid = np.zeros((1, 20, 20), dtype=float)
-    # At 0.25 m/cell this cell is 1.75 m from the rollout point. The old crop
-    # reached only six cells for clearance_distance=1.0, so it omitted this
-    # obstacle even though its post-radius clearance is below safety_margin.
+    # At 0.25 m/cell this cell is 1.75 m from the rollout point. Before this
+    # safety-bound fix, the PR's metric crop used clearance_distance + robot_radius
+    # (= 1.25 m), for a six-cell radius that omitted this obstacle even though its
+    # post-radius clearance is below safety_margin.
     grid[0, 10, 17] = 1.0
     meta = {
         "origin": np.asarray([-2.5, -2.5], dtype=float),

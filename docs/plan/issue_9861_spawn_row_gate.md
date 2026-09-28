@@ -25,7 +25,10 @@ nominal rates and SNQI-v2 calibration. Keep historical 0.0.7 artifacts unchanged
 ## Implementation and proof
 
 1. Emit versioned reset validity and separate reasons; propagate invalidity to
-   aggregate, camera-ready, parquet, and seed-rate consumers.
+   aggregate, camera-ready, parquet, and seed-rate consumers. Those consumers
+   also inspect v2 reset telemetry directly, so a forged valid flag cannot
+   admit an overlapping, unavailable, or incomplete reset block; legacy v1
+   rows retain their historical diagnostic comparison behavior.
 2. Reconcile `goal_reached && invalid_run` only for a versioned invalid-start
    provenance; continue rejecting unexplained contradictory ledgers.
 3. Reject invalid and forged-valid unmeasured resets before SNQI-v2 score or

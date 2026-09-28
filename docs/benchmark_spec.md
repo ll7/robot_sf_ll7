@@ -306,7 +306,9 @@ Full details live in
   an incomplete route. Invalid rows remain in raw episode records with their reason but are
   excluded from nominal rates and SNQI-v2 calibration. The event ledger preserves an observed
   `goal_reached` alongside `invalid_run` only when the versioned spawn block explains the
-  invalid start; that pair is not a successful benchmark row.
+  invalid start; that pair is not a successful benchmark row. Rate readers also
+  exclude inconsistent v2 reset telemetry even when its `invalid_run` flag says
+  false. Historical v1 rows retain their original diagnostic comparison behavior.
 * `metrics.collisions`: collision count metric based on distance thresholds. For schema v1 episode
   outputs it must agree with `outcome.collision_event`: positive when the canonical event is true
   and zero when the canonical event is false.

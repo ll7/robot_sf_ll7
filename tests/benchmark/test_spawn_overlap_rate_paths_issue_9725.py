@@ -21,7 +21,11 @@ from robot_sf.benchmark.parquet_export import (
     _comparison_record_eligible,
 )
 from robot_sf.benchmark.seed_variance import build_seed_variability_rows
-from robot_sf.benchmark.spawn_validity import build_spawn_validity
+from robot_sf.benchmark.spawn_validity import (
+    build_spawn_validity,
+    record_has_invalid_spawn,
+    record_has_spawn_overlap,
+)
 
 _OVERLAP = build_spawn_validity({"overlap": True}, [])
 _CLEAN = build_spawn_validity({"overlap": False}, [])
@@ -189,6 +193,7 @@ def test_respawn_collision_needs_same_pedestrian_and_time_window() -> None:
         {"overlap": False}, [event], collision_events=[collision("3", 1.1)]
     )
     assert same_soon["invalid_run"] is True
+    assert record_has_spawn_overlap({"spawn_validity": same_soon}) is True
     other_ped = build_spawn_validity(
         {"overlap": False}, [event], collision_events=[collision("7", 1.1)]
     )
@@ -293,6 +298,46 @@ def test_aggregate_meta_counts_unmeasured_reset_clearance() -> None:
     assert episode_rows[1]["invalid_reason"] == "reset_clearance_unavailable"
     metrics, *_ = _resolve_planner_metrics({}, records, (0.0, 0.0), (0.0, 0.0), (0.0, 0.0))
     assert metrics["success_mean"] == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["reported_overlap", "raw_overlap", "unavailable", "missing_status"],
+)
+def test_v2_forged_valid_reset_telemetry_stays_out_of_rates(mutation: str) -> None:
+    """Rate readers inspect v2 reset telemetry, not only its invalid flag."""
+    from robot_sf.benchmark.aggregate import compute_aggregates
+    from robot_sf.benchmark.seed_variance import build_seed_episode_rows
+
+    forged = build_spawn_validity({"overlap": False}, [])
+    if mutation == "reported_overlap":
+        forged["reset_overlap"] = True
+    elif mutation == "raw_overlap":
+        forged["reset_clearance"]["overlap"] = True
+    elif mutation == "unavailable":
+        forged["reset_clearance_status"] = "unavailable"
+    else:
+        del forged["reset_clearance_status"]
+    assert forged["invalid_run"] is False
+    bad = _record(seed=1, collision=True, spawn=forged)
+    good = _record(seed=2, collision=False, spawn=_CLEAN)
+    assert record_has_invalid_spawn(bad) is True
+    assert _cell_record_eligible(bad) is False
+    assert _comparison_record_eligible(bad) is False
+    assert compute_aggregates([bad, good], group_by="algo")["orca"]["success"][
+        "mean"
+    ] == pytest.approx(1.0)
+    metrics, *_ = _resolve_planner_metrics({}, [bad, good], (0.0, 0.0), (0.0, 0.0), (0.0, 0.0))
+    assert metrics["success_mean"] == pytest.approx(1.0)
+    seed_rows = build_seed_variability_rows(
+        [bad, good], metrics=["success"], campaign_id="c", config_hash="h", git_hash="g"
+    )
+    assert seed_rows[0]["seed_list"] == [2]
+    rows = {row["seed"]: row for row in build_seed_episode_rows([bad, good])}
+    assert rows[1]["invalid_run"] is True
+    assert rows[1]["invalid_reason"] == "spawn_validity_inconsistent"
+    legacy = dict(forged, schema_version="spawn_validity.v1")
+    assert record_has_invalid_spawn(_record(seed=1, collision=True, spawn=legacy)) is False
 
 
 def test_map_inventory_includes_successor_maps() -> None:

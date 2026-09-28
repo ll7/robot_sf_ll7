@@ -141,17 +141,50 @@ def spawn_validity_counts(records: Sequence[Mapping[str, Any]]) -> dict[str, int
 def record_has_spawn_overlap(record: Mapping[str, Any]) -> bool:
     """Return whether an episode record is invalid because of a spawn overlap."""
     block = record.get("spawn_validity")
+    if not isinstance(block, Mapping):
+        return False
+    if block.get("schema_version") == SPAWN_VALIDITY_SCHEMA_VERSION:
+        clearance = block.get("reset_clearance")
+        return (
+            block.get("reset_overlap") is True
+            or (isinstance(clearance, Mapping) and clearance.get("overlap") is True)
+            or (
+                block.get("invalid_run") is True
+                and block.get("invalid_reason") == SPAWN_OVERLAP_INVALID_REASON
+            )
+        )
     return (
-        isinstance(block, Mapping)
-        and block.get("invalid_run") is True
+        block.get("invalid_run") is True
         and block.get("invalid_reason") == SPAWN_OVERLAP_INVALID_REASON
     )
 
 
 def record_has_invalid_spawn(record: Mapping[str, Any]) -> bool:
-    """Return whether spawn validity excludes an episode from rates."""
+    """Exclude invalid v2 reset telemetry even when its verdict flag was forged.
+
+    Historical v1 and absent blocks retain their original rate behavior for
+    diagnostic comparisons. A corrected v2 producer must prove a clear reset.
+
+    Returns:
+        True when the row must be excluded from nominal rates.
+    """
     block = record.get("spawn_validity")
-    return isinstance(block, Mapping) and block.get("invalid_run") is True
+    if not isinstance(block, Mapping):
+        return False
+    if block.get("invalid_run") is True:
+        return True
+    if block.get("schema_version") != SPAWN_VALIDITY_SCHEMA_VERSION:
+        return False
+    clearance = block.get("reset_clearance")
+    return (
+        block.get("invalid_run") is not False
+        or block.get("invalid_reason") is not None
+        or block.get("reset_clearance_status") != "available"
+        or block.get("reset_clearance_error") is not None
+        or not isinstance(clearance, Mapping)
+        or clearance.get("overlap") is not False
+        or block.get("reset_overlap") is not False
+    )
 
 
 __all__ = [

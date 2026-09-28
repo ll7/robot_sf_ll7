@@ -603,6 +603,7 @@ def build_seed_episode_rows(
                     "invalid_run": record_has_invalid_spawn(record),
                     "invalid_reason": (
                         record.get("spawn_validity", {}).get("invalid_reason")
+                        or "spawn_validity_inconsistent"
                         if record_has_invalid_spawn(record)
                         else ""
                     ),

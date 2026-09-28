@@ -2513,7 +2513,9 @@ def _prepare_worktree_identity_fixture(
 
 def _move_identity_during_final_gate(repo: Path, *, drift_kind: str) -> None:
     """Apply exactly one controlled local, remote, or designated-owner identity move."""
-    if drift_kind == "local_head":
+    if drift_kind == "branch_name":
+        _git(repo, "branch", "-m", "concurrent-writer-renamed-branch")
+    elif drift_kind == "local_head":
         _git(repo, "commit", "--allow-empty", "-m", "concurrent writer moved HEAD")
     elif drift_kind == "remote_upstream":
         current_head = subprocess.run(
@@ -2560,7 +2562,37 @@ def _move_identity_during_final_gate(repo: Path, *, drift_kind: str) -> None:
         lease_path.write_text(json.dumps(lease) + "\n", encoding="utf-8")
 
 
-@pytest.mark.parametrize("drift_kind", ["stable", "local_head", "remote_upstream", "lease_owner"])
+def _write_blocking_dependency_preflight(repo: Path, *, ready: Path, release: Path) -> None:
+    """Pause the first final-mode dependency check before it evaluates the repo."""
+    real_uv = shutil.which("uv") or "uv"
+    fake_uv = repo / "bin" / "uv"
+    fake_uv.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'if [[ "${1:-}" == "run" && "${2:-}" == "python" && "${3:-}" == "-" ]]; then\n'
+        f"  : > {str(ready)!r}\n"
+        f"  while [[ ! -e {str(release)!r} ]]; do sleep 0.05; done\n"
+        "  exit 0\n"
+        "fi\n"
+        'if [[ "${1:-}" == "run" ]]; then shift; exec "$@"; fi\n'
+        f'exec "{real_uv}" "$@"\n',
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+    cuda_probe = repo / "scripts" / "dev" / "check_cuda_runtime.py"
+    cuda_probe.write_text(
+        'print(\'{"schema":"cuda_runtime_readiness.v1",'
+        '"status":"unavailable","reason":"fixture"}\')\n',
+        encoding="utf-8",
+    )
+    (repo / "scripts" / "dev" / "check_fast_pysf_runtime.py").write_text(
+        "import sys\nsys.exit(0)\n", encoding="utf-8"
+    )
+
+
+@pytest.mark.parametrize(
+    "drift_kind", ["stable", "branch_name", "local_head", "remote_upstream", "lease_owner"]
+)
 def test_final_pr_ready_checks_worktree_identity_at_stamp_boundary(
     preflight_repo: Path, tmp_path: Path, drift_kind: str
 ) -> None:
@@ -2611,12 +2643,71 @@ def test_final_pr_ready_checks_worktree_identity_at_stamp_boundary(
     if drift_kind == "local_head":
         assert '"head_sha"' in output
         assert admitted_head in output
+    elif drift_kind == "branch_name":
+        assert '"branch"' in output
+        assert "concurrent-writer-renamed-branch" in output
     elif drift_kind == "remote_upstream":
         assert '"upstream"' in output
         assert "readiness-probe" in output
     else:
         assert '"active_lease"' in output
         assert "replacement-test-owner" in output
+
+
+def test_final_pr_ready_captures_worktree_identity_before_preflight(
+    preflight_repo: Path, tmp_path: Path
+) -> None:
+    """Issue #9712: drift during initial preflight must not become the admitted identity."""
+    repo = preflight_repo
+    branch, admitted_head = _prepare_worktree_identity_fixture(repo, tmp_path, drift_kind="stable")
+    preflight_ready = tmp_path / "dependency-preflight-ready"
+    preflight_release = tmp_path / "dependency-preflight-release"
+    lane_ready = tmp_path / "identity-lane-ready"
+    lane_release = tmp_path / "identity-lane-release"
+    lane_log = tmp_path / "identity-lane.log"
+    _write_blocking_dependency_preflight(repo, ready=preflight_ready, release=preflight_release)
+    _write_blocking_lane_stub(repo)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "blocking identity preflight fixture")
+    branch = subprocess.run(
+        ["git", "branch", "--show-current"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    admitted_head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    _install_test_worktree_lease(repo, branch=branch, head_sha=admitted_head)
+
+    process = _start_pr_ready(
+        repo,
+        env_overrides={
+            "PR_READY_MODE": "final",
+            "BASE_REF": "HEAD",
+            "PR_READY_PR_BODY_FILE": "",
+            "PR_READY_LOCK_TEST_READY": str(lane_ready),
+            "PR_READY_LOCK_TEST_RELEASE": str(lane_release),
+            "PR_READY_LOCK_TEST_LOG": str(lane_log),
+        },
+    )
+    try:
+        _wait_for_marker(preflight_ready, process)
+        _git(repo, "commit", "--allow-empty", "-m", "concurrent writer moved HEAD in preflight")
+        preflight_release.touch()
+        _wait_for_marker(lane_ready, process)
+        lane_release.touch()
+        stdout, stderr = _collect_process(process, timeout=20)
+    finally:
+        preflight_release.touch()
+        lane_release.touch()
+        if process.poll() is None:
+            _stop_process_group(process, signal.SIGTERM)
+
+    output = stdout + stderr
+    stamp_path = repo / "output" / "validation" / "pr_ready" / f"{branch}.json"
+    assert process.returncode != 0, f"preflight drift unexpectedly passed:\n{output}"
+    assert "worktree_identity_changed" in output
+    assert admitted_head in output
+    assert '"head_sha"' in output
+    assert not stamp_path.exists(), f"drifted readiness wrote success stamp: {stamp_path}"
 
 
 def test_publication_preflight_lane_coverage_routing(preflight_repo: Path) -> None:

@@ -774,6 +774,19 @@ acquire_pr_ready_worktree_lock
 pr_ready_parent_pgid="$(pr_ready_process_group_for_pid "$$" || true)"
 mark_pr_ready_progress "preflight" "none" "readiness lock acquired; entering preflight"
 
+if [[ "$pr_ready_final" == "1" ]]; then
+  identity_tmp_parent="${TMPDIR:-/tmp}"
+  if [[ ! -d "$identity_tmp_parent" ]]; then
+    printf 'Final PR readiness cannot capture worktree identity: temporary directory is missing: %s\n' \
+      "$identity_tmp_parent" >&2
+    exit 2
+  fi
+  pr_ready_worktree_identity_file="$(mktemp "$identity_tmp_parent/robot-sf-pr-ready-identity.XXXXXX")"
+  uv run python "$SCRIPT_DIR/pr_ready_freshness.py" capture-worktree-identity \
+    --output-file "$pr_ready_worktree_identity_file"
+  printf 'Captured final-readiness worktree identity at admission before preflight checks.\n' >&2
+fi
+
 # Friction guard for issue #5533: untracked new files are invisible to the
 # committed-HEAD diff gates (changed-file coverage, docstring TODO diff). They
 # previously produced a misleading "No changed files vs BASE_REF" while silently
@@ -1043,18 +1056,6 @@ export COVERAGE_FILE="$pr_ready_coverage_dir/.coverage"
 trap cleanup_pr_ready_exit EXIT
 printf 'Using readiness-owned coverage database: %s\n' "$COVERAGE_FILE" >&2
 
-if [[ "$pr_ready_final" == "1" ]]; then
-  identity_tmp_parent="${TMPDIR:-/tmp}"
-  if [[ ! -d "$identity_tmp_parent" ]]; then
-    printf 'Final PR readiness cannot capture worktree identity: temporary directory is missing: %s\n' \
-      "$identity_tmp_parent" >&2
-    exit 2
-  fi
-  pr_ready_worktree_identity_file="$(mktemp "$identity_tmp_parent/robot-sf-pr-ready-identity.XXXXXX")"
-  uv run python "$SCRIPT_DIR/pr_ready_freshness.py" capture-worktree-identity \
-    --output-file "$pr_ready_worktree_identity_file"
-  printf 'Captured final-readiness worktree identity before validation lanes.\n' >&2
-fi
 printf 'Running core readiness lane.\n' >&2
 # PR_READY_ADVISORY is a body-contract escape hatch used to carry a pending
 # domain gate through this diagnostic readiness run. Do not leak it into pytest:

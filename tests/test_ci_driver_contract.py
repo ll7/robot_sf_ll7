@@ -570,7 +570,10 @@ def test_examples_smoke_uses_narrow_lock_backed_dependency_group() -> None:
     )
 
     assert setup_step is not None, "examples-smoke setup step not found"
-    assert setup_step["with"] == {"sync-args": "--group examples --frozen"}
+    assert setup_step["with"] == {
+        "sync-args": "--group examples --frozen",
+        "install-system-packages": "${{ runner.environment == 'github-hosted' && 'true' || 'false' }}",
+    }
 
     dependency_groups = _pyproject()["dependency-groups"]
     assert dependency_groups["examples"] == [

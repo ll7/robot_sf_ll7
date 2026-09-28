@@ -629,6 +629,14 @@ def _prepare_candidate(  # noqa: C901, PLR0912, PLR0915 - keep ordered validatio
         return None, _accounting_row(
             index, candidate_payload, "effective_scenario_hash_missing_or_mismatch"
         )
+    eligibility = candidate_payload["analysis_eligibility"]
+    receipt_effective_hash = eligibility.get("effective_scenario_hash")
+    if not isinstance(receipt_effective_hash, str) or receipt_effective_hash != effective_hash:
+        return None, _accounting_row(
+            index,
+            candidate_payload,
+            "source_analysis_eligibility_effective_hash_mismatch",
+        )
     if not _source_identity_matches(candidate, source_record, scenario_identity):
         return None, _accounting_row(index, candidate_payload, "source_candidate_identity_mismatch")
     source_availability_problem = _source_availability_problem(candidate_payload, source_record)
@@ -3030,7 +3038,8 @@ def _source_analysis_eligibility_problem(candidate_payload: dict[str, Any]) -> s
     The canonical analysis gate remains native-only. For replay-gallery diagnostics only, an
     adapter or mixed row can proceed when its v1 receipt is otherwise well formed and records
     exactly the canonical ``execution_mode_not_native`` exclusion. The receipt remains
-    ineligible for optimizer/archive analysis and corpus admission.
+    ineligible for optimizer/archive analysis and corpus admission. Its effective scenario hash
+    is bound to the recomputed source inputs before selection.
     """
     eligibility = candidate_payload.get("analysis_eligibility")
     attribution = candidate_payload.get("failure_attribution")
@@ -3072,7 +3081,6 @@ def _analysis_eligibility_receipt_problem(
         for field in ("certificate_ok", "trace_present", "objective_scored")
     ):
         return "source_analysis_eligibility_flags_mismatch"
-
     if execution_mode in ELIGIBLE_EXECUTION_MODES:
         expected_eligible = True
         expected_reason_codes: list[str] = []

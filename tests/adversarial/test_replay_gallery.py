@@ -185,6 +185,7 @@ def _source_manifest(
     source_readiness = "native" if execution_mode == "native" else "adapter"
     analysis_eligible = execution_mode == "native"
     reason_codes = [] if analysis_eligible else ["execution_mode_not_native"]
+    effective_scenario_hash = replay_gallery.compute_effective_scenario_hash(scenario, {})
     payload = {
         "schema_version": "adversarial-search-manifest.v1",
         "config": {
@@ -207,6 +208,7 @@ def _source_manifest(
                     "trace_present": True,
                     "execution_mode": execution_mode,
                     "objective_scored": True,
+                    "effective_scenario_hash": effective_scenario_hash,
                 },
                 "certification_status": certification_status,
                 "failure_attribution": {
@@ -220,9 +222,7 @@ def _source_manifest(
                         "availability_status": "available",
                     },
                 },
-                "effective_scenario_hash": replay_gallery.compute_effective_scenario_hash(
-                    scenario, {}
-                ),
+                "effective_scenario_hash": effective_scenario_hash,
                 "scenario_yaml_path": str(scenario_path),
                 "episode_record_path": str(episode_path),
                 "bundle_path": str(bundle),
@@ -235,6 +235,19 @@ def _source_manifest(
     manifest_path = tmp_path / "search_manifest.json"
     manifest_path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
     return manifest_path
+
+
+def _bind_effective_scenario_hash(
+    candidate_row: dict[str, Any],
+    scenario: dict[str, Any],
+    route_overrides: dict[str, Any] | None = None,
+) -> str:
+    effective_hash = replay_gallery.compute_effective_scenario_hash(
+        scenario, route_overrides or {}
+    )
+    candidate_row["effective_scenario_hash"] = effective_hash
+    candidate_row["analysis_eligibility"]["effective_scenario_hash"] = effective_hash
+    return effective_hash
 
 
 def _replay_episode(
@@ -1177,9 +1190,7 @@ def test_gallery_passes_materialized_map_to_renderer_and_marks_external_map_unbo
     candidate_row["certification_status"] = _bind_certificate_to_scenario(
         candidate_row["certification_status"], scenario_path
     )
-    candidate_row["effective_scenario_hash"] = replay_gallery.compute_effective_scenario_hash(
-        scenario, {}
-    )
+    _bind_effective_scenario_hash(candidate_row, scenario)
     manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
     rendered_maps: list[Path | None] = []
     _install_fake_replay(monkeypatch, rendered_map_paths=rendered_maps)
@@ -1233,9 +1244,7 @@ def test_gallery_materializes_map_id_registry_and_pins_runner_resolution(
     candidate_row["certification_status"] = _bind_certificate_to_scenario(
         candidate_row["certification_status"], scenario_path
     )
-    candidate_row["effective_scenario_hash"] = replay_gallery.compute_effective_scenario_hash(
-        scenario, {}
-    )
+    _bind_effective_scenario_hash(candidate_row, scenario)
     manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
     rendered_maps: list[Path | None] = []
     calls = _install_fake_replay(monkeypatch, rendered_map_paths=rendered_maps)
@@ -1699,9 +1708,7 @@ def test_gallery_detects_materialized_map_bytes_changed_before_replay(
     candidate_row["certification_status"] = _bind_certificate_to_scenario(
         candidate_row["certification_status"], scenario_path
     )
-    candidate_row["effective_scenario_hash"] = replay_gallery.compute_effective_scenario_hash(
-        scenario, {}
-    )
+    _bind_effective_scenario_hash(candidate_row, scenario)
     manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
     materialize_scenario = replay_gallery._materialize_scenario
 
@@ -1747,9 +1754,7 @@ def test_gallery_detects_map_bytes_changed_after_candidate_selection(
     candidate_row["certification_status"] = _bind_certificate_to_scenario(
         candidate_row["certification_status"], scenario_path
     )
-    candidate_row["effective_scenario_hash"] = replay_gallery.compute_effective_scenario_hash(
-        scenario, {}
-    )
+    _bind_effective_scenario_hash(candidate_row, scenario)
     manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
     materialize_scenario = replay_gallery._materialize_scenario
 
@@ -2332,6 +2337,48 @@ def test_gallery_keeps_adapter_native_only_analysis_exclusions_fail_closed(
     assert result["summary"]["dispositions"]["source_analysis_eligibility_reasons_mismatch"] == 1
 
 
+@pytest.mark.parametrize("execution_mode", ["adapter", "mixed"])
+def test_gallery_rejects_non_native_analysis_receipt_without_effective_hash(
+    tmp_path: Path, execution_mode: str
+) -> None:
+    manifest = _source_manifest(tmp_path, execution_mode=execution_mode)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["candidates"][0]["analysis_eligibility"].pop("effective_scenario_hash")
+    manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "output" / "gallery", render=False, video=False
+    )
+
+    assert result["summary"]["selected_case_count"] == 0
+    assert (
+        result["summary"]["dispositions"]["source_analysis_eligibility_effective_hash_mismatch"]
+        == 1
+    )
+
+
+@pytest.mark.parametrize("execution_mode", ["adapter", "mixed"])
+def test_gallery_rejects_non_native_analysis_receipt_with_mismatched_effective_hash(
+    tmp_path: Path, execution_mode: str
+) -> None:
+    manifest = _source_manifest(tmp_path, execution_mode=execution_mode)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    eligibility = payload["candidates"][0]["analysis_eligibility"]
+    expected_hash = eligibility["effective_scenario_hash"]
+    eligibility["effective_scenario_hash"] = "0" * 64 if expected_hash != "0" * 64 else "1" * 64
+    manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "output" / "gallery", render=False, video=False
+    )
+
+    assert result["summary"]["selected_case_count"] == 0
+    assert (
+        result["summary"]["dispositions"]["source_analysis_eligibility_effective_hash_mismatch"]
+        == 1
+    )
+
+
 def test_gallery_rejects_adapter_receipt_marked_eligible_with_native_only_reason(
     tmp_path: Path,
 ) -> None:
@@ -2527,9 +2574,7 @@ def test_gallery_rejects_route_overrides_changed_after_selection_before_replay(
     payload["candidates"][0]["certification_status"] = _bind_certificate_to_scenario(
         payload["candidates"][0]["certification_status"], scenario_path
     )
-    payload["candidates"][0]["effective_scenario_hash"] = (
-        replay_gallery.compute_effective_scenario_hash(scenario, route_payload)
-    )
+    _bind_effective_scenario_hash(payload["candidates"][0], scenario, route_payload)
     manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
     calls = _install_fake_replay(monkeypatch)
     materialize_scenario = replay_gallery._materialize_scenario
@@ -2572,9 +2617,7 @@ def test_gallery_rejects_route_input_drift_before_certificate_selection(tmp_path
     candidate_row["certification_status"] = _bind_certificate_to_scenario(
         candidate_row["certification_status"], scenario_path
     )
-    candidate_row["effective_scenario_hash"] = replay_gallery.compute_effective_scenario_hash(
-        scenario, original_route
-    )
+    _bind_effective_scenario_hash(candidate_row, scenario, original_route)
     route_path.write_text(
         yaml.safe_dump({"route": {"waypoints": [[1.0, 1.0], [3.0, 3.0]]}}),
         encoding="utf-8",
@@ -2608,9 +2651,7 @@ def test_gallery_rechecks_route_bytes_against_selection_snapshot(
     candidate_row["certification_status"] = _bind_certificate_to_scenario(
         candidate_row["certification_status"], scenario_path
     )
-    candidate_row["effective_scenario_hash"] = replay_gallery.compute_effective_scenario_hash(
-        scenario, original_route
-    )
+    _bind_effective_scenario_hash(candidate_row, scenario, original_route)
     manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
 
     original_hash = replay_gallery._source_effective_scenario_hash

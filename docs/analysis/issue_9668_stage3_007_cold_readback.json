@@ -1,0 +1,44 @@
+{
+  "schema_version": "issue_9668_stage3_007_cold_readback.v1",
+  "claim_boundary": "read-only 0.0.7 reference custody and parser compatibility; no 0.0.8 comparison or release admission",
+  "source": {
+    "record": "https://zenodo.org/records/22814343",
+    "file": "issue9431_release_benchmark_data_0_0_7_07f7e8d43084_20260922_publication_bundle.tar.gz",
+    "bytes": 56961687,
+    "sha256": "684da7c557c426756f22ddbf5cb3270141ee8ae385669a39d36f324852a6fb2f"
+  },
+  "resolved_manifest": {
+    "raw_sha256": "51b2cf9c4e4517d9ff5d45c0bad21d0db2cb8c9587fe17599f8a35034f7ac703",
+    "source_sha": "07f7e8d43084de748915e1b1eb8b2a1603357c6e",
+    "canonical_campaign_config_sha256": "095331329b06673dc165109c8523579549f769c98542b207a712f6e2bf9ed6ad",
+    "scenario_matrix_path": "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml",
+    "scenario_matrix_sha256": "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c",
+    "expected_episode_cells": 20160,
+    "horizon_steps": 600
+  },
+  "readback": {
+    "episode_rows": 20160,
+    "arm_slots": 14,
+    "scenario_identities": 48,
+    "seeds": 30,
+    "reader_anomalies": 0,
+    "required_row_field_anomalies": 0,
+    "missing_or_nonfinite_snqi_rows": 0,
+    "historical_runtime_variants": "The two scenario_adaptive_hybrid_orca_v2 arms each use algo=orca on francis2023_leave_group for seeds 111-140 (60 rows); the other hybrid rows use hybrid_rule_local_planner.",
+    "legacy_nonfinite_sentinels": {
+      "metrics.min_separation_corrupted_m": 20160,
+      "metrics.metric_values.min_predicted_separation_m": 420,
+      "metric_values.min_predicted_separation_m": 420
+    }
+  },
+  "historical_self_pair_diagnostic": {
+    "claim_boundary": "historical rows compared with themselves solely to exercise the parser; not corrected-campaign or release evidence",
+    "paired_rows": 20160,
+    "missing_or_extra_identities": 0,
+    "changed_fields": 0,
+    "current_execution_audit_findings": 1,
+    "current_execution_audit_example": "guarded_ppo/francis2023_circular_crossing/seed140: algorithm_metadata.guard_stats.stop_best_effort=1; current comparator policy applied retrospectively, not a ruling against accepted 0.0.7"
+  },
+  "method": "Downloaded only the compressed public carrier; verified its SHA-256; read the resolved manifest and all episode JSONL members directly through tarfile without extracting files; ran compare_release_007_008.read_historical_bundle and row-field validation.",
+  "limitations": "The accepted 0.0.7 archive has intentional non-finite legacy metric sentinels. Equal sentinels are classified symbolically rather than treated as numeric equivalence; changed sentinels remain field-level findings. No corrected 0.0.8 rows were available."
+}

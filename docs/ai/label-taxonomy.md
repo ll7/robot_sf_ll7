@@ -71,8 +71,11 @@ coexist:
 execution-state precedence set. Verify the issue/PR terminal state separately.
 
 These are composable state qualifiers rather than replacement execution states:
-`state:parked`, `state:review`, `state:needs-artifact-promotion`, and
-`state:needs-interpretation`.
+`state:parked`, `state:blocked-dependency`, `state:review`,
+`state:needs-artifact-promotion`, and `state:needs-interpretation`.
+`state:blocked-dependency` records that a prerequisite owned by another issue
+or dependency must be resolved before work can proceed; it is an active
+qualifier, not a dispatch signal.
 An issue with no `state:*` label is undispatchable, not implicitly ready. A
 `resource:*` label never promotes an issue to ready.
 

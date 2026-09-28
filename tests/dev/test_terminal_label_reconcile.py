@@ -618,6 +618,23 @@ def test_state_qualifier_classification_is_explicit() -> None:
     assert STATE_QUALIFIER_CLASSIFICATION["state:hold"] == "historical"
 
 
+def test_blocked_dependency_is_reconciled_as_active() -> None:
+    """Dependency blocks are recognized by the terminal inventory as active qualifiers."""
+    report = run_terminal_inventory(
+        fixture=[
+            _closed_item(
+                17,
+                labels=["state:blocked-dependency", "type:workflow"],
+            )
+        ],
+        observed_at="2026-08-25T00:00:00Z",
+    )
+
+    assert report["label_classifications"]["state:blocked-dependency"] == "active"
+    assert report["items"][0]["terminal_class"] == "completed"
+    assert "state:blocked-dependency" in report["items"][0]["preserved"]
+
+
 def test_terminal_class_from_state() -> None:
     """REST state/reason/merged fields map to the documented terminal classes."""
     assert (

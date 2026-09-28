@@ -88,6 +88,7 @@ STATE_QUALIFIER_CLASSIFICATION = {
     "state:working": "active",
     "state:review": "active",
     "state:blocked": "active",
+    "state:blocked-dependency": "active",
     "state:parked": "active",
     "state:blocked-external-input": "active",
     "state:blocked-no-code-slice": "active",

@@ -73,6 +73,32 @@ _BACKEND_RESPONSE_MARKERS = (
     "/codex/responses",
 )
 _TRANSIENT_STARTUP_STATUSES = frozenset({429, 500, 502, 503, 504})
+# Credential failures are not transient: no bounded retry can refresh an invalid
+# service API credential, so they are reported as an actionable auth blocker
+# instead of being pooled with an undifferentiated startup or task failure.
+_AUTH_STATUSES = frozenset({401, 403})
+_AUTH_FAILURE_CLASSES = frozenset(
+    {
+        "auth",
+        "authentication_error",
+        "invalid_api_key",
+        "invalid_service_api_credential",
+        "worker_auth",
+        "worker_startup_auth",
+    }
+)
+_AUTH_TEXT_MARKERS = (
+    "invalid service api credential",
+    "invalid_api_key",
+    "invalid api key",
+    "authentication_error",
+    "unauthorized",
+)
+_AUTH_REMEDY = (
+    "the dispatched route reported an authentication or credential failure; retrying the same "
+    "dispatch cannot fix it, so refresh or re-establish the agent-session credential before "
+    "retrying, and treat any review requirement bound to this attempt as still unmet"
+)
 
 
 class TerminalFailure(enum.StrEnum):
@@ -86,6 +112,7 @@ class TerminalFailure(enum.StrEnum):
     ROUTE_NOT_STARTED = "route_not_started"
     SCOPE_VIOLATION = "scope_violation"
     UNAVAILABLE = "unavailable"
+    AUTH = "auth"
 
 
 def classify_terminal_state(
@@ -104,6 +131,8 @@ def classify_terminal_state(
     """
     if not has_run_dir:
         return TerminalFailure.ROUTE_NOT_STARTED
+    if failure_class == "auth" or failure_class in _AUTH_FAILURE_CLASSES:
+        return TerminalFailure.AUTH
     if failure_class == "timeout" or returncode == 124:
         return TerminalFailure.TIMEOUT
     if failure_class in {"exception", "error"} or (returncode is not None and returncode < 0):
@@ -200,6 +229,22 @@ def _failure_class(attempt: dict[str, Any]) -> str:
     return str(value).strip().lower() if value is not None else ""
 
 
+def _auth_failure(attempt: dict[str, Any], status: int | None, text: str) -> bool:
+    """Return whether one attempt carries an authentication or credential failure.
+
+    The HTTP status is authoritative. Free text is only consulted together with a
+    backend response marker, so prose that merely mentions "unauthorized" in an
+    unrelated task message is not promoted into a credential blocker.
+    """
+    if status in _AUTH_STATUSES:
+        return True
+    if _failure_class(attempt) in _AUTH_FAILURE_CLASSES:
+        return True
+    if not any(marker in text for marker in _AUTH_TEXT_MARKERS):
+        return False
+    return any(marker in text for marker in _BACKEND_RESPONSE_MARKERS)
+
+
 def classify_delegation_attempt(attempt: dict[str, Any]) -> dict[str, Any]:
     """Classify startup versus task failures for one delegated-worker attempt.
 
@@ -254,6 +299,17 @@ def classify_delegation_attempt(attempt: dict[str, Any]) -> dict[str, Any]:
                 "review_evidence_status": "none",
                 "reason": "transient HTTP failure occurred before worker startup",
             }
+        if _auth_failure(attempt, status, text):
+            return {
+                "phase": "worker_startup",
+                "classification": "startup_auth",
+                "signature": f"worker_startup_auth_http_{status}"
+                if status in _AUTH_STATUSES
+                else "worker_startup_auth",
+                "retryable": False,
+                "review_evidence_status": "none",
+                "reason": _AUTH_REMEDY,
+            }
         return {
             "phase": "worker_startup",
             "classification": "startup_failure",
@@ -274,6 +330,17 @@ def classify_delegation_attempt(attempt: dict[str, Any]) -> dict[str, Any]:
             "reason": "worker terminal status is missing; success cannot be inferred",
         }
     if returncode != 0 or failure_class not in {"", "none", "success"}:
+        if _auth_failure(attempt, status, text):
+            return {
+                "phase": "worker_task",
+                "classification": "worker_task_auth",
+                "signature": f"worker_task_auth_http_{status}"
+                if status in _AUTH_STATUSES
+                else "worker_task_auth",
+                "retryable": False,
+                "review_evidence_status": "none",
+                "reason": _AUTH_REMEDY,
+            }
         return {
             "phase": "worker_task",
             "classification": "worker_task_failure",

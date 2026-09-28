@@ -111,6 +111,19 @@ def _packet() -> dict[str, Any]:
     return campaign.build_production_packet(source_commit=SOURCE_COMMIT, **_receipts())
 
 
+def _journal_header(*, expected_rows: int, packet: dict[str, Any] | None = None) -> dict[str, Any]:
+    return {
+        "event": "header",
+        "schema_version": campaign.JOURNAL_SCHEMA_VERSION,
+        "issue": 8872,
+        "packet_sha256": packet["packet_sha256"] if packet else "3" * 64,
+        "packet_binding_hash": packet["packet_binding_hash"] if packet else _binding(),
+        "source_commit": packet["source_commit"] if packet else SOURCE_COMMIT,
+        "manifest_hash": packet["manifest_hash"] if packet else campaign.PRODUCTION_MANIFEST_HASH,
+        "expected_rows": expected_rows,
+    }
+
+
 def _protocol_metrics() -> dict[str, float]:
     return {
         "success_rate": 1.0,
@@ -473,6 +486,8 @@ def test_terminal_journal_preserves_metrics_and_reconcile_hides_path(tmp_path: A
     journal.parent.mkdir()
     identity_key = campaign._compiled_manifest()["identities"][0]["identity_key"]
     with journal.open("w", encoding="utf-8") as handle:
+        campaign._append_journal_event(handle, **_journal_header(expected_rows=1))
+        campaign._append_journal_event(handle, "row_started", identity_key=identity_key)
         campaign._append_journal_event(
             handle,
             "row_finished",
@@ -506,7 +521,10 @@ def test_reconcile_rejects_malformed_in_flight_identity_without_echo(tmp_path: A
     bad_identity = "../../private/cluster/secret-token"
     journal = tmp_path / "run.jsonl"
     journal.write_text(
-        campaign.json.dumps({"event": "row_started", "identity_key": bad_identity}) + "\n",
+        campaign.json.dumps(_journal_header(expected_rows=1))
+        + "\n"
+        + campaign.json.dumps({"event": "row_started", "identity_key": bad_identity})
+        + "\n",
         encoding="utf-8",
     )
 
@@ -522,7 +540,9 @@ def test_reconcile_rejects_malformed_terminal_identity_without_echo(tmp_path: An
     bad_identity = "/private/cluster/secret-token"
     journal = tmp_path / "run.jsonl"
     journal.write_text(
-        campaign.json.dumps(
+        campaign.json.dumps(_journal_header(expected_rows=1))
+        + "\n"
+        + campaign.json.dumps(
             {
                 "event": "row_finished",
                 "identity_key": bad_identity,
@@ -551,7 +571,11 @@ def test_reconcile_rejects_malformed_nested_identity_without_echo(
     identity_key = campaign._compiled_manifest()["identities"][0]["identity_key"]
     journal = tmp_path / "run.jsonl"
     journal.write_text(
-        campaign.json.dumps(
+        campaign.json.dumps(_journal_header(expected_rows=1))
+        + "\n"
+        + campaign.json.dumps({"event": "row_started", "identity_key": identity_key})
+        + "\n"
+        + campaign.json.dumps(
             {
                 "event": "row_finished",
                 "identity_key": identity_key,
@@ -577,7 +601,11 @@ def test_reconcile_rejects_mismatched_compiled_nested_identity(tmp_path: Any) ->
     other_identity_key = identities[1]["identity_key"]
     journal = tmp_path / "run.jsonl"
     journal.write_text(
-        campaign.json.dumps(
+        campaign.json.dumps(_journal_header(expected_rows=1))
+        + "\n"
+        + campaign.json.dumps({"event": "row_started", "identity_key": identity_key})
+        + "\n"
+        + campaign.json.dumps(
             {
                 "event": "row_finished",
                 "identity_key": identity_key,
@@ -603,7 +631,11 @@ def test_reconcile_rejects_raw_missingness_without_echo(tmp_path: Any) -> None:
     bad_missingness = "private-ops-test-token-xxxxxxxx"
     journal = tmp_path / "run.jsonl"
     journal.write_text(
-        campaign.json.dumps(
+        campaign.json.dumps(_journal_header(expected_rows=1))
+        + "\n"
+        + campaign.json.dumps({"event": "row_started", "identity_key": identity_key})
+        + "\n"
+        + campaign.json.dumps(
             {
                 "event": "row_finished",
                 "identity_key": identity_key,
@@ -625,13 +657,17 @@ def test_reconcile_rejects_raw_missingness_without_echo(tmp_path: Any) -> None:
 
 @pytest.mark.parametrize(
     "bad_reason",
-    ("reason:private-ops-test-token-xxxxxxxx", "host=auxme-gpu-01"),
+    ("reason:private-ops-test-token-xxxxxxxx", "host=cluster-node.example"),
 )
 def test_reconcile_redacts_sensitive_reason_details(tmp_path: Any, bad_reason: str) -> None:
     identity_key = campaign._compiled_manifest()["identities"][0]["identity_key"]
     journal = tmp_path / "run.jsonl"
     journal.write_text(
-        campaign.json.dumps(
+        campaign.json.dumps(_journal_header(expected_rows=1))
+        + "\n"
+        + campaign.json.dumps({"event": "row_started", "identity_key": identity_key})
+        + "\n"
+        + campaign.json.dumps(
             {
                 "event": "row_finished",
                 "identity_key": identity_key,
@@ -655,7 +691,11 @@ def test_reconcile_rejects_unallowlisted_provenance_detail_without_echo(tmp_path
     bad_detail = "../../private/cluster/secret-token"
     journal = tmp_path / "run.jsonl"
     journal.write_text(
-        campaign.json.dumps(
+        campaign.json.dumps(_journal_header(expected_rows=1))
+        + "\n"
+        + campaign.json.dumps({"event": "row_started", "identity_key": identity_key})
+        + "\n"
+        + campaign.json.dumps(
             {
                 "event": "row_finished",
                 "identity_key": identity_key,
@@ -694,6 +734,8 @@ def test_reconcile_accepts_protocol_provenance_fields(tmp_path: Any) -> None:
     assert outcome["terminal_status"] == campaign.SUCCESS_STATUS
     journal = tmp_path / "run.jsonl"
     with journal.open("w", encoding="utf-8") as handle:
+        campaign._append_journal_event(handle, **_journal_header(expected_rows=1, packet=packet))
+        campaign._append_journal_event(handle, "row_started", identity_key=identity["identity_key"])
         campaign._append_journal_event(
             handle,
             "row_finished",
@@ -843,8 +885,38 @@ def test_receipts_reject_raw_tokens_and_unknown_authorization_keys() -> None:
         packet[field][key] = TOKEN
         packet["packet_sha256"] = campaign._canonical_hash(campaign._packet_core(packet))
 
-        with pytest.raises(campaign.CampaignAdapterError, match="secret material"):
+        with pytest.raises(campaign.CampaignAdapterError, match="unsupported public field"):
             campaign.validate_production_packet(packet)
+
+
+@pytest.mark.parametrize("private_field", ("partition", "qos", "account", "node", "queue_name"))
+def test_private_scheduler_fields_cannot_enter_public_packet(private_field: str) -> None:
+    receipts = _receipts()
+    receipts["private_admission"]["predicates"][private_field] = "private-value"
+
+    with pytest.raises(campaign.CampaignAdapterError, match="unsupported public field"):
+        campaign.build_production_packet(source_commit=SOURCE_COMMIT, **receipts)
+
+
+def test_journal_row_payload_rejects_nested_private_fields() -> None:
+    identity_key = campaign._compiled_manifest()["identities"][0]["identity_key"]
+    payload = campaign._journal_row_payload(
+        {
+            "identity_key": identity_key,
+            "terminal_status": "failed",
+            "partition": "private-value",
+        }
+    )
+    assert "partition" not in payload
+
+    with pytest.raises(campaign.CampaignAdapterError, match="unsupported field"):
+        campaign._journal_row_payload(
+            {
+                "identity_key": identity_key,
+                "terminal_status": "failed",
+                "provenance": {"partition": "private-value"},
+            }
+        )
 
 
 def test_cli_summary_uses_safe_output_reference() -> None:
@@ -857,17 +929,76 @@ def test_cli_summary_uses_safe_output_reference() -> None:
 
 
 def test_existing_journal_refuses_retry(tmp_path: Any) -> None:
+    packet = _packet()
     journal = tmp_path / "run.jsonl"
     identity_key = campaign._compiled_manifest()["identities"][0]["identity_key"]
     journal.write_text(
-        campaign.json.dumps({"event": "row_started", "identity_key": identity_key}) + "\n",
+        campaign.json.dumps(_journal_header(expected_rows=2160, packet=packet))
+        + "\n"
+        + campaign.json.dumps({"event": "row_started", "identity_key": identity_key})
+        + "\n",
         encoding="utf-8",
     )
     summary = campaign.reconcile_execution_journal(journal, expected_rows=2160)
     assert summary["retry_allowed"] is False
     assert summary["in_flight_identity_keys"] == [identity_key]
     with pytest.raises(campaign.CampaignAdapterError, match="automatic retry is forbidden"):
-        campaign._prepare_execution_paths(tmp_path / "receipt.json", journal, tmp_path / "run.lock")
+        campaign._prepare_execution_paths(
+            tmp_path / "receipt.json",
+            journal,
+            tmp_path / "run.lock",
+            packet=packet,
+        )
+
+
+def test_reconcile_rejects_headerless_journal_even_when_row_count_matches(tmp_path: Any) -> None:
+    identity_key = campaign._compiled_manifest()["identities"][0]["identity_key"]
+    journal = tmp_path / "run.jsonl"
+    journal.write_text(
+        campaign.json.dumps(
+            {
+                "event": "row_finished",
+                "identity_key": identity_key,
+                "terminal_status": "failed",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(campaign.CampaignAdapterError, match="header is missing"):
+        campaign.reconcile_execution_journal(journal, expected_rows=1)
+
+
+def test_reconcile_rejects_header_with_wrong_packet_binding(tmp_path: Any) -> None:
+    header = _journal_header(expected_rows=1)
+    header["packet_binding_hash"] = "f" * 64
+    journal = tmp_path / "run.jsonl"
+    journal.write_text(campaign.json.dumps(header) + "\n", encoding="utf-8")
+
+    with pytest.raises(campaign.CampaignAdapterError, match="packet binding is invalid"):
+        campaign.reconcile_execution_journal(journal, expected_rows=1)
+
+
+def test_reconcile_rejects_terminal_event_before_start(tmp_path: Any) -> None:
+    identity_key = campaign._compiled_manifest()["identities"][0]["identity_key"]
+    journal = tmp_path / "run.jsonl"
+    journal.write_text(
+        campaign.json.dumps(_journal_header(expected_rows=1))
+        + "\n"
+        + campaign.json.dumps(
+            {
+                "event": "row_finished",
+                "identity_key": identity_key,
+                "terminal_status": "failed",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(campaign.CampaignAdapterError, match="finished before it started"):
+        campaign.reconcile_execution_journal(journal, expected_rows=1)
 
 
 def test_smoke_packet_is_tiny_disjoint_and_diagnostic() -> None:

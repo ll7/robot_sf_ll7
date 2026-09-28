@@ -138,6 +138,18 @@ SAFE_ARTIFACT_REFERENCE = re.compile(r"^(?:artifact|wandb)://[A-Za-z0-9._/-]+(?:
 HEX_COMMIT = re.compile(r"^[0-9a-f]{40}$")
 JOURNAL_SCHEMA_VERSION = "robot_sf.issue_8872_pedestrian_speed_execution_journal.v1"
 RECEIPT_SCHEMA_VERSION = "robot_sf.issue_8872_pedestrian_speed_execution_receipt.v1"
+JOURNAL_HEADER_FIELDS = frozenset(
+    {
+        "event",
+        "schema_version",
+        "issue",
+        "packet_sha256",
+        "packet_binding_hash",
+        "source_commit",
+        "manifest_hash",
+        "expected_rows",
+    }
+)
 PRODUCTION_TOKEN_ENV = "ROBOT_SF_8872_EXECUTION_TOKEN"
 ROBOT_SPEED_CAP_M_S = 2.0
 PRODUCTION_EXECUTION_DISABLED_REASON = (
@@ -163,6 +175,70 @@ AUTHORIZATION_KEYS = frozenset(
         "token_sha256",
     }
 )
+PUBLIC_RECEIPT_SCHEMAS = {
+    "activation_receipt": {
+        "schema_version": None,
+        "issue": None,
+        "verdict": None,
+        "preserved": None,
+        "current": None,
+        "registered_rows_executed": None,
+        "seed_disjoint": None,
+        "protocol_semantic_hash": None,
+        "production_manifest_hash": None,
+        "source_commit": None,
+        "packet_binding_hash": None,
+        "preservation": {
+            "status": None,
+            "artifact_reference": None,
+            "receipt_sha256": None,
+        },
+    },
+    "speed_integrity_receipt": {
+        "schema_version": None,
+        "issue": None,
+        "status": None,
+        "preserved": None,
+        "manifest_hash": None,
+        "expected_rows": None,
+        "native_rows": None,
+        "excluded_rows": None,
+        "fallback_rows": None,
+        "degraded_rows": None,
+        "missing_rows": None,
+        "duplicate_rows": None,
+        "provenance_invalid_rows": None,
+        "execution_mode": None,
+        "artifact_reference": None,
+        "artifact_digest": None,
+        "source_commit": None,
+        "packet_binding_hash": None,
+    },
+    "native_preflight": {
+        "schema_version": None,
+        "issue": None,
+        "status": None,
+        "native": None,
+        "fallback": None,
+        "degraded": None,
+        "planner_ids": None,
+        "checkpoint_provenance_complete": None,
+        "protocol_semantic_hash": None,
+        "manifest_hash": None,
+        "source_commit": None,
+        "packet_binding_hash": None,
+    },
+    "private_admission": {
+        "schema_version": None,
+        "issue": None,
+        "wrapper_status": None,
+        "predicates": dict.fromkeys(REQUIRED_PRIVATE_PREDICATES),
+        "private_details_excluded": None,
+        "source_commit": None,
+        "packet_binding_hash": None,
+    },
+    "production_authorization": dict.fromkeys(AUTHORIZATION_KEYS),
+}
 SAFE_JOURNAL_REFERENCE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 SAFE_IDENTITY_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$")
 SAFE_REASON_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
@@ -428,6 +504,50 @@ def _assert_safe_public_value(value: Any, path: str = "receipt", key: str = "") 
     elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         for index, child in enumerate(value):
             _assert_safe_public_value(child, f"{path}[{index}]")
+
+
+def _copy_public_leaf(value: Any, path: str) -> Any:
+    """Copy JSON-shaped receipt leaves without permitting hidden mappings."""
+    if isinstance(value, Mapping):
+        raise CampaignAdapterError(f"{path} contains an unsupported nested mapping")
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_copy_public_leaf(item, f"{path}[{index}]") for index, item in enumerate(value)]
+    _require(
+        value is None or isinstance(value, (bool, int, float, str)),
+        f"{path} contains an unsupported value",
+    )
+    return value
+
+
+def _project_public_mapping(value: Any, *, path: str, schema: Mapping[str, Any]) -> dict[str, Any]:
+    """Project one receipt mapping through an explicit nested public schema."""
+    mapping = _mapping(value, path)
+    _require(
+        set(mapping).issubset(schema),
+        f"{path} contains an unsupported public field",
+    )
+    projected: dict[str, Any] = {}
+    for key, item in mapping.items():
+        child_schema = schema[key]
+        child_path = f"{path}.{key}"
+        if child_schema is None:
+            projected[key] = _copy_public_leaf(item, child_path)
+        else:
+            projected[key] = _project_public_mapping(
+                item,
+                path=child_path,
+                schema=child_schema,
+            )
+    return projected
+
+
+def _project_public_receipt(value: Any, field: str) -> dict[str, Any]:
+    """Project a private-ops receipt before it is copied into a public packet."""
+    schema = PUBLIC_RECEIPT_SCHEMAS.get(field)
+    _require(schema is not None, f"receipt field {field} has no public schema")
+    projected = _project_public_mapping(value, path=field, schema=schema)
+    _assert_no_transient_state(projected, field)
+    return projected
 
 
 def _assert_no_transient_state(value: Any, path: str = "receipt") -> None:
@@ -1097,6 +1217,11 @@ def validate_production_packet(
     )
     for field in receipt_fields:
         _require(field in packet, f"production packet is missing {field}")
+        projected = _project_public_receipt(packet.get(field), field)
+        _require(
+            projected == packet.get(field),
+            f"{field} is not the canonical public receipt projection",
+        )
         _assert_no_transient_state(packet.get(field), field)
     _validate_activation_receipt(packet["activation_receipt"], binding_hash, source_commit)
     _validate_speed_integrity_receipt(
@@ -1146,14 +1271,16 @@ def build_production_packet(
     manifest = _compiled_manifest(config_path)
     binding_hash = _packet_binding_hash(manifest, source_commit)
     receipts = {
-        "activation_receipt": dict(activation_receipt),
-        "speed_integrity_receipt": dict(speed_integrity_receipt),
-        "native_preflight": dict(native_preflight),
-        "private_admission": dict(private_admission),
-        "production_authorization": dict(production_authorization),
+        "activation_receipt": _project_public_receipt(activation_receipt, "activation_receipt"),
+        "speed_integrity_receipt": _project_public_receipt(
+            speed_integrity_receipt, "speed_integrity_receipt"
+        ),
+        "native_preflight": _project_public_receipt(native_preflight, "native_preflight"),
+        "private_admission": _project_public_receipt(private_admission, "private_admission"),
+        "production_authorization": _project_public_receipt(
+            production_authorization, "production_authorization"
+        ),
     }
-    for field, receipt in receipts.items():
-        _assert_no_transient_state(receipt, field)
     _validate_source_checkout(source_commit)
     _validate_activation_receipt(receipts["activation_receipt"], binding_hash, source_commit)
     _validate_speed_integrity_receipt(
@@ -1949,24 +2076,133 @@ def _read_journal(path: Path) -> list[dict[str, Any]]:
     return events
 
 
+def _validate_journal_header(
+    header: Mapping[str, Any],
+    *,
+    expected_rows: int | None,
+    packet_sha256: str | None,
+    packet_binding_hash: str | None,
+    source_commit: str | None,
+    manifest_hash: str | None,
+) -> int:
+    """Validate the immutable execution identity before reading terminal rows."""
+    _require(
+        set(header) == JOURNAL_HEADER_FIELDS,
+        "execution journal header is incomplete or contains unsupported fields",
+    )
+    _require(
+        header.get("event") == "header"
+        and header.get("schema_version") == JOURNAL_SCHEMA_VERSION
+        and header.get("issue") == 8872,
+        "execution journal header is invalid",
+    )
+    header_packet_sha256 = _require_digest(
+        header.get("packet_sha256"), "execution journal header packet_sha256"
+    )
+    header_binding_hash = _require_digest(
+        header.get("packet_binding_hash"),
+        "execution journal header packet_binding_hash",
+    )
+    header_source_commit = header.get("source_commit")
+    _require(
+        isinstance(header_source_commit, str)
+        and HEX_COMMIT.fullmatch(header_source_commit) is not None,
+        "execution journal header source_commit is invalid",
+    )
+    header_manifest_hash = _require_digest(
+        header.get("manifest_hash"), "execution journal header manifest_hash"
+    )
+    _require(
+        header_manifest_hash == PRODUCTION_MANIFEST_HASH,
+        "execution journal header manifest_hash is not the frozen production manifest",
+    )
+    _require(
+        header_binding_hash == _packet_binding_hash(_compiled_manifest(), header_source_commit),
+        "execution journal header packet binding is invalid",
+    )
+    header_expected_rows = header.get("expected_rows")
+    _require(
+        isinstance(header_expected_rows, int)
+        and not isinstance(header_expected_rows, bool)
+        and header_expected_rows > 0,
+        "execution journal header expected_rows is invalid",
+    )
+    if expected_rows is not None:
+        _require(
+            expected_rows == header_expected_rows,
+            "execution journal header expected_rows does not match the requested count",
+        )
+    if packet_sha256 is not None:
+        _require(
+            _require_digest(packet_sha256, "expected packet_sha256") == header_packet_sha256,
+            "execution journal header packet does not match the expected packet",
+        )
+    if packet_binding_hash is not None:
+        _require(
+            _require_digest(packet_binding_hash, "expected packet_binding_hash")
+            == header_binding_hash,
+            "execution journal header binding does not match the expected packet",
+        )
+    if source_commit is not None:
+        _require(
+            isinstance(source_commit, str)
+            and HEX_COMMIT.fullmatch(source_commit) is not None
+            and source_commit == header_source_commit,
+            "execution journal header source does not match the expected packet",
+        )
+    if manifest_hash is not None:
+        _require(
+            _require_digest(manifest_hash, "expected manifest_hash") == header_manifest_hash,
+            "execution journal header manifest does not match the expected packet",
+        )
+    return header_expected_rows
+
+
 def reconcile_execution_journal(
-    journal_path: str | Path, *, expected_rows: int | None = None
+    journal_path: str | Path,
+    *,
+    expected_rows: int | None = None,
+    packet_sha256: str | None = None,
+    packet_binding_hash: str | None = None,
+    source_commit: str | None = None,
+    manifest_hash: str | None = None,
 ) -> dict[str, Any]:
     """Summarize an interrupted journal; this function never authorizes a retry."""
     path = Path(journal_path)
     _require(path.is_file(), "execution journal does not exist")
     events = _read_journal(path)
-    started = [
-        _journal_identity_key(event.get("identity_key"))
-        for event in events
-        if event.get("event") == "row_started"
-    ]
+    _require(events and events[0].get("event") == "header", "execution journal header is missing")
+    header_expected_rows = _validate_journal_header(
+        events[0],
+        expected_rows=expected_rows,
+        packet_sha256=packet_sha256,
+        packet_binding_hash=packet_binding_hash,
+        source_commit=source_commit,
+        manifest_hash=manifest_hash,
+    )
+    started: list[str] = []
     terminal_rows: list[dict[str, Any]] = []
     finished: list[str] = []
-    for event in events:
-        if event.get("event") != "row_finished":
-            continue
+    started_set: set[str] = set()
+    for event in events[1:]:
+        event_name = event.get("event")
+        _require(
+            event_name in {"row_started", "row_finished"},
+            "execution journal event ordering is invalid",
+        )
         identity_key = _journal_identity_key(event.get("identity_key"))
+        if event_name == "row_started":
+            _require(
+                identity_key not in started_set,
+                "execution journal row was started more than once",
+            )
+            started.append(identity_key)
+            started_set.add(identity_key)
+            continue
+        _require(
+            identity_key in started_set,
+            "execution journal row finished before it started",
+        )
         terminal_status = event.get("terminal_status")
         _require(
             isinstance(terminal_status, str) and terminal_status in TERMINAL_STATUSES,
@@ -2005,7 +2241,6 @@ def reconcile_execution_journal(
         _assert_no_transient_state(row, "journal.row_finished")
         finished.append(identity_key)
         terminal_rows.append(row)
-    started_set = set(started)
     finished_set = set(finished)
     journal_reference = _safe_journal_reference(path)
     return {
@@ -2019,11 +2254,10 @@ def reconcile_execution_journal(
         "duplicate_finished_identity_keys": sorted(
             key for key, count in Counter(finished).items() if count > 1
         ),
-        "expected_rows": expected_rows,
+        "expected_rows": header_expected_rows,
         "complete": (
-            expected_rows is not None
-            and len(finished) == expected_rows
-            and len(finished_set) == expected_rows
+            len(finished) == header_expected_rows
+            and len(finished_set) == header_expected_rows
             and not any(count > 1 for count in Counter(finished).values())
         ),
         "retry_allowed": False,
@@ -2031,7 +2265,13 @@ def reconcile_execution_journal(
     }
 
 
-def _prepare_execution_paths(output_path: Path, journal_path: Path, lock_path: Path) -> None:
+def _prepare_execution_paths(
+    output_path: Path,
+    journal_path: Path,
+    lock_path: Path,
+    *,
+    packet: Mapping[str, Any] | None = None,
+) -> None:
     _require(
         output_path.resolve() not in {journal_path.resolve(), lock_path.resolve()},
         "execution paths collide",
@@ -2039,7 +2279,18 @@ def _prepare_execution_paths(output_path: Path, journal_path: Path, lock_path: P
     _require(journal_path.resolve() != lock_path.resolve(), "journal and lock paths collide")
     _require(not output_path.exists(), "refusing duplicate execution: receipt already exists")
     if journal_path.exists():
-        summary = reconcile_execution_journal(journal_path)
+        _require(
+            packet is not None,
+            "existing execution journal reconciliation requires the preserved packet",
+        )
+        summary = reconcile_execution_journal(
+            journal_path,
+            expected_rows=(packet.get("expected_rows") if packet is not None else None),
+            packet_sha256=(packet.get("packet_sha256") if packet is not None else None),
+            packet_binding_hash=(packet.get("packet_binding_hash") if packet is not None else None),
+            source_commit=(packet.get("source_commit") if packet is not None else None),
+            manifest_hash=(packet.get("manifest_hash") if packet is not None else None),
+        )
         raise CampaignAdapterError(
             "existing execution journal requires reconciliation; automatic retry is forbidden "
             f"(started={summary['started_rows']}, finished={summary['finished_rows']})"
@@ -2055,13 +2306,17 @@ def _append_journal_event(handle: Any, event: str, **payload: Any) -> None:
 
 def _journal_row_payload(row: Mapping[str, Any]) -> dict[str, Any]:
     """Return a complete, already-normalized terminal row for the durable journal."""
+    identity_key = _journal_identity_key(row.get("identity_key"))
+    provenance = row.get("provenance")
     payload = {
-        "identity_key": row.get("identity_key"),
+        "identity_key": identity_key,
         "terminal_status": row.get("terminal_status"),
         "missingness": row.get("missingness"),
         "reason": row.get("reason"),
         "metrics": row.get("metrics"),
-        "provenance": row.get("provenance"),
+        "provenance": (
+            None if provenance is None else _journal_provenance(provenance, identity_key)
+        ),
     }
     _assert_no_transient_state(payload, "journal.row_finished")
     return payload
@@ -2114,7 +2369,7 @@ def run_production(
     output_path = Path(output_path)
     journal_path = Path(journal_path)
     lock_path = Path(lock_path)
-    _prepare_execution_paths(output_path, journal_path, lock_path)
+    _prepare_execution_paths(output_path, journal_path, lock_path, packet=packet)
     checkpoint_root = Path(checkpoint_root).expanduser().resolve()
     from robot_sf.benchmark.map_runner.map_runner import build_map_policy
     from scripts.benchmark.run_issue_8871_pedestrian_speed_canary import (
@@ -2163,9 +2418,11 @@ def run_production(
             journal,
             "header",
             schema_version=JOURNAL_SCHEMA_VERSION,
+            issue=8872,
             packet_sha256=packet["packet_sha256"],
             packet_binding_hash=packet["packet_binding_hash"],
             source_commit=packet["source_commit"],
+            manifest_hash=packet["manifest_hash"],
             expected_rows=EXPECTED_ROWS,
         )
         try:
@@ -2335,10 +2592,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     reconcile_parser = subparsers.add_parser(
-        "reconcile", help="inspect an interrupted journal without retrying it"
+        "reconcile", help="inspect an interrupted journal bound to its preserved packet"
     )
     reconcile_parser.add_argument("--journal", type=Path, required=True)
-    reconcile_parser.add_argument("--expected-rows", type=int, default=EXPECTED_ROWS)
+    reconcile_parser.add_argument("--packet", type=Path, required=True)
+    reconcile_parser.add_argument("--expected-rows", type=int)
 
     args = parser.parse_args(argv)
     try:
@@ -2381,7 +2639,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.mode == "run-production":
             raise CampaignAdapterError(PRODUCTION_EXECUTION_DISABLED_REASON)
         if args.mode == "reconcile":
-            summary = reconcile_execution_journal(args.journal, expected_rows=args.expected_rows)
+            packet = _load_json(args.packet, "production packet")
+            summary = reconcile_execution_journal(
+                args.journal,
+                expected_rows=(
+                    args.expected_rows
+                    if args.expected_rows is not None
+                    else packet.get("expected_rows")
+                ),
+                packet_sha256=packet.get("packet_sha256"),
+                packet_binding_hash=packet.get("packet_binding_hash"),
+                source_commit=packet.get("source_commit"),
+                manifest_hash=packet.get("manifest_hash"),
+            )
             print(json.dumps(summary, sort_keys=True))
             return 0
     except CampaignAdapterError as exc:

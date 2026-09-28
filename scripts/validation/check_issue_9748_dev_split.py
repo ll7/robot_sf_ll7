@@ -127,6 +127,70 @@ def _frozen_commit_sha256(commit: str, path: Path, *, label: str) -> str:
     return hashlib.sha256(result.stdout).hexdigest()
 
 
+_TUNING_FILE_REFERENCE_KEYS = frozenset(
+    {
+        "algo_config",
+        "base_config_path",
+        "includes",
+        "map_file",
+        "map_svg",
+        "scenario_matrix",
+        "scenario_config",
+        "scenario_config_path",
+    }
+)
+
+
+def _iter_tuning_file_references(value: Any, *, owner_path: Path) -> list[Path]:
+    """Yield repository files referenced by tuning YAML inputs."""
+    found: list[Path] = []
+    if isinstance(value, Mapping):
+        for key, nested in value.items():
+            normalized = str(key).strip().lower().replace("-", "_")
+            if normalized in _TUNING_FILE_REFERENCE_KEYS:
+                raw_values = (
+                    nested if normalized == "includes" and isinstance(nested, list) else [nested]
+                )
+                for raw in raw_values:
+                    if not isinstance(raw, str) or not raw.strip():
+                        continue
+                    path = _repo_path(raw, relative_to=owner_path.parent)
+                    if not path.is_file():
+                        raise ValidationError(
+                            f"referenced tuning input does not exist: {raw!r} in {owner_path}"
+                        )
+                    found.append(path)
+            found.extend(_iter_tuning_file_references(nested, owner_path=owner_path))
+    elif isinstance(value, list):
+        for nested in value:
+            found.extend(_iter_tuning_file_references(nested, owner_path=owner_path))
+    return found
+
+
+def _tuning_input_paths(
+    *,
+    config_path: Path,
+    scenario_matrix_path: Path,
+    candidate_paths: Mapping[str, Path],
+) -> tuple[Path, ...]:
+    """Resolve the transitive scenario, map, campaign, and candidate inputs."""
+    pending = [config_path.resolve(), scenario_matrix_path.resolve()]
+    pending.extend(path.resolve() for path in candidate_paths.values())
+    found: set[Path] = set()
+    while pending:
+        path = pending.pop()
+        if path in found:
+            continue
+        if not path.is_file():
+            raise ValidationError(f"transitive tuning input does not exist: {path}")
+        found.add(path)
+        if path.suffix.lower() not in {".yaml", ".yml"}:
+            continue
+        payload = _load_mapping(path, label="transitive tuning input")
+        pending.extend(_iter_tuning_file_references(payload, owner_path=path))
+    return tuple(sorted(found, key=lambda path: path.as_posix()))
+
+
 def _current_source_commit() -> str:
     try:
         result = subprocess.run(
@@ -156,6 +220,11 @@ def _require_source_commit(raw: Any) -> str:
             "provenance.source_commit must be a lowercase 40-character source commit SHA"
         )
     current = _current_source_commit()
+    if raw == current:
+        raise ValidationError(
+            "provenance.source_commit must be a strict ancestor of the validating checkout "
+            f"commit {current}; record the tuning log in a descendant commit"
+        )
     try:
         result = subprocess.run(
             ["git", "merge-base", "--is-ancestor", raw, current],
@@ -529,27 +598,55 @@ def _collect_typed_fields(value: Any, *, field_names: frozenset[str]) -> list[tu
     return found
 
 
+def _reject_unbound_seed_fields(value: Any, path: tuple[str, ...] = ()) -> None:
+    """Reject seed-like keys except the canonical direct per-entry ``seeds`` list."""
+    if isinstance(value, Mapping):
+        for key, nested in value.items():
+            normalized = str(key).strip().lower().replace("-", "_")
+            child_path = (*path, normalized)
+            allowed = len(path) == 2 and path[0] == "entries" and normalized == "seeds"
+            if "seed" in normalized and not allowed:
+                raise ValidationError(
+                    "unsupported seed field "
+                    f"{'.'.join(child_path)!r}; bind seeds only in entries[i].seeds"
+                )
+            _reject_unbound_seed_fields(nested, child_path)
+    elif isinstance(value, list):
+        for index, nested in enumerate(value):
+            _reject_unbound_seed_fields(nested, (*path, str(index)))
+
+
+def _entry_seed_values(entry: Any, *, index: int) -> list[int]:
+    """Read one entry's canonical typed seed list."""
+    if not isinstance(entry, Mapping):
+        raise ValidationError(f"structured tuning-log entry {index} must be a mapping")
+    if "seeds" not in entry:
+        raise ValidationError(
+            f"structured tuning-log entry {index} must contain a non-empty seeds list"
+        )
+    raw = entry["seeds"]
+    if not isinstance(raw, list) or not raw:
+        raise ValidationError(
+            f"structured tuning-log entry {index} seeds must be a non-empty list of typed integer seeds"
+        )
+    if any(type(seed) is not int for seed in raw):
+        raise ValidationError(
+            f"structured tuning-log entry {index} seeds must contain only typed integer seeds"
+        )
+    return raw
+
+
 def _validate_tuning_log_seeds(payload: Mapping[str, Any]) -> int:
     entries = payload.get("entries")
-    if isinstance(entries, list):
-        for index, entry in enumerate(entries):
-            if not isinstance(entry, Mapping):
-                raise ValidationError(f"structured tuning-log entry {index} must be a mapping")
-            entry_fields = _collect_typed_fields(entry, field_names=_SEED_FIELD_NAMES)
-            if not entry_fields:
-                raise ValidationError(
-                    f"structured tuning-log entry {index} must contain at least one typed seed field"
-                )
-            for field, raw in entry_fields:
-                _require_typed_seed_values(
-                    raw,
-                    label=f"structured tuning-log entry {index} field {field!r}",
-                )
+    if not isinstance(entries, list):
+        raise ValidationError("structured tuning log entries must be a list")
 
-    seed_values: list[int] = []
-    for field, raw in _collect_typed_fields(payload, field_names=_SEED_FIELD_NAMES):
-        values = _require_typed_seed_values(raw, label=f"structured tuning-log field {field!r}")
-        seed_values.extend(values)
+    _reject_unbound_seed_fields(payload)
+    seed_values = [
+        seed
+        for index, entry in enumerate(entries)
+        for seed in _entry_seed_values(entry, index=index)
+    ]
     if not seed_values:
         raise ValidationError("structured tuning log must contain at least one typed seed field")
     release_seed_values = sorted(set(seed_values) & RELEASE_SEEDS)
@@ -598,9 +695,16 @@ def _validate_tuning_log_scenarios(
     payload: Mapping[str, Any], entries: Sequence[Mapping[str, Any]]
 ) -> int:
     for index, entry in enumerate(entries):
+        direct_fields = [
+            (field, entry[field]) for field in _ENTRY_SCENARIO_FIELD_NAMES if field in entry
+        ]
+        if len(direct_fields) > 1:
+            raise ValidationError(
+                f"structured tuning-log entry {index} must use exactly one direct scenario_id field"
+            )
         entry_values = [
             scenario_id
-            for field, raw in _collect_typed_fields(entry, field_names=_ENTRY_SCENARIO_FIELD_NAMES)
+            for field, raw in direct_fields
             for scenario_id in _typed_scenario_values(field, raw)
         ]
         if not entry_values:
@@ -649,6 +753,31 @@ def _validate_candidate_provenance(raw: Any) -> dict[str, dict[str, str]]:
             "sha256": recorded_hash,
         }
     return normalized_candidates
+
+
+def _validate_frozen_tuning_inputs(
+    source_commit: str,
+    *,
+    config_path: Path,
+    scenario_matrix_path: Path,
+) -> None:
+    """Require every transitive campaign input to match its frozen source bytes."""
+    input_paths = _tuning_input_paths(
+        config_path=config_path,
+        scenario_matrix_path=scenario_matrix_path,
+        candidate_paths=EXPECTED_PLANNER_CONFIGS,
+    )
+    for input_path in input_paths:
+        input_label = input_path.relative_to(ROOT).as_posix()
+        current_input_hash = _sha256(input_path, label=f"transitive tuning input {input_label}")
+        frozen_input_hash = _frozen_commit_sha256(
+            source_commit, input_path, label=f"transitive tuning input {input_label}"
+        )
+        if current_input_hash != frozen_input_hash:
+            raise ValidationError(
+                f"transitive tuning input {input_label} differs from frozen source "
+                f"commit {source_commit}"
+            )
 
 
 def _validate_frozen_provenance(
@@ -722,6 +851,12 @@ def _validate_frozen_provenance(
                 f"provenance candidate config hash for {key} does not match frozen source "
                 f"commit {source_commit} ({frozen_candidate_hash})"
             )
+
+    _validate_frozen_tuning_inputs(
+        source_commit,
+        config_path=config_path,
+        scenario_matrix_path=scenario_matrix_path,
+    )
 
     return {
         "source_commit": source_commit,

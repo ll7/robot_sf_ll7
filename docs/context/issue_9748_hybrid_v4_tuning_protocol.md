@@ -56,6 +56,13 @@ Any change to a scenario, seed, candidate config, or loader after that point
 requires a new protocol version and a fresh review. This implementation
 intentionally records no run hash or tuning result.
 
+The source commit also binds the transitive files resolved from those inputs:
+included scenario YAML files, their referenced map files, and every candidate
+`base_config_path`. The validator checks their tracked bytes at both the frozen
+source commit and the current checkout. Changing an included scenario, map, or
+inherited planner config therefore invalidates the log even when the direct
+manifest and candidate YAML hashes remain unchanged.
+
 ## Structured tuning-log contract
 
 Each tuning log must be YAML or JSON with the following top-level shape:
@@ -79,34 +86,33 @@ entries:
     scenario_ids:
       - issue_9748_dev_classic_doorway_medium
     seeds: [1001, 1002]
-    # Optional typed fields may include seed, scenario_seed, seed_range,
-    # resolved_seeds, scenario_id, or scenario_ids.
     notes: "Free-form rationale may mention the held-out range."
 ```
 
 When a tuning log is supplied, `provenance` is mandatory. Its source commit
-must exist in the current repository and be an ancestor of the checked-out
-commit. This permits the tuning log itself to be committed after its frozen
-source point. The recorded hashes must match the campaign, scenario manifest,
-and candidate files both at that frozen commit and in the current tracked tree.
+must exist in the current repository and be a strict ancestor of the checked-out
+commit. Record the log in a descendant commit after the frozen source point.
+The recorded hashes must match the campaign, scenario manifest, and candidate
+files both at that frozen commit and in the current tracked tree; the recursive
+scenario, map, and candidate-base inputs must also match at both points.
 The validator requires `candidate_configs` to contain exactly the two
 approved candidate IDs, paths, and SHA-256 values. Every entry must name one
 approved candidate and repeat its matching candidate-config hash. A missing
-or non-ancestor source commit, unknown candidate, or mismatched input hash
-fails closed. The validator still accepts no tuning log because no trial is
-authorized or recorded by this protocol.
+or non-ancestor source commit, unknown candidate, or mismatched direct or
+transitive input hash fails closed. The validator still accepts no tuning log
+because no trial is authorized or recorded by this protocol.
 
-The validator inspects typed values under the seed fields (`seed`, `seeds`,
-`scenario_seed`, `scenario_seeds`, `seed_range`, `resolved_seeds`, and
-`tuning_seeds`) and under the scenario identity fields. It requires typed seeds
-to belong to 1001–1030 and rejects any 111–140 value. It requires structured
-scenario IDs to belong to the four development identities, and every tuning-log
-entry must contain a nonempty string `scenario_id` or a list of string
-`scenario_ids`. Release scenario IDs in typed config or log fields fail closed.
-Free-form strings such as `notes`, `rationale`, and `claim_boundary` are not
-parsed as admissions, so mentioning held-out values does not create a false
-violation. Malformed logs, missing typed seed fields, and non-string structured
-scenario IDs fail closed.
+Each entry must contain its own nonempty `seeds` list of integer values and a
+direct `scenario_id` string or `scenario_ids` list of strings. Seeds must
+belong to 1001–1030; any 111–140 value is rejected. Scenario IDs must belong to
+the four development identities. Seed-like aliases such as `episode_seed`,
+`run_seed`, nested seed fields, or top-level seeds are rejected; the checker
+accepts seeds only at `entries[i].seeds`. A scenario identity nested under
+metadata does not satisfy the direct per-entry binding. Free-form strings such
+as `notes`, `rationale`, and `claim_boundary` are not parsed as admissions, so
+mentioning held-out values does not create a false violation. Malformed logs,
+missing per-entry bindings, and non-integer seed or non-string scenario values
+fail closed.
 
 Run the checker with:
 

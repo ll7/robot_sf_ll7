@@ -33,8 +33,12 @@ causal receipt. No real 0.0.8 row is available for admission yet.
 
 1. Parse the pinned archive and a checksummed candidate root without extracting
    the archive. Require source/config/matrix identities and exact arm-slot map.
+   Resolve every scenario's effective algorithm from the hashed campaign and
+   hybrid configs, including the only approved ORCA hand-off.
 2. Inventory missing, extra, malformed, and duplicate identities while pairing
-   every available valid historical/candidate row.
+   every available valid historical/candidate row. Audit raw candidate execution
+   markers and integrity before row compaction; do not apply new admission
+   policy retroactively to accepted 0.0.7 rows.
 3. Compare all common outcome and metric fields at absolute `1e-12`; treat every
    change as a finding. Verify one explicit attribution ledger entry per finding
    against a checksummed causal receipt and a versioned change declared by the

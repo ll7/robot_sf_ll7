@@ -36,8 +36,9 @@
     "paired_rows": 20160,
     "missing_or_extra_identities": 0,
     "changed_fields": 0,
-    "current_execution_audit_findings": 1,
-    "current_execution_audit_example": "guarded_ppo/francis2023_circular_crossing/seed140: algorithm_metadata.guard_stats.stop_best_effort=1; current comparator policy applied retrospectively, not a ruling against accepted 0.0.7"
+    "current_candidate_audit_episode_count": 1,
+    "current_candidate_audit_entries": 1,
+    "current_candidate_audit_example": "guarded_ppo/francis2023_circular_crossing/seed140: algorithm_metadata.guard_stats.stop_best_effort=1 is one deduplicated candidate-audit reason; candidate policy applied retrospectively solely for parser diagnosis, not a ruling against accepted 0.0.7"
   },
   "method": "Downloaded only the compressed public carrier; verified its SHA-256; read the resolved manifest and all episode JSONL members directly through tarfile without extracting files; ran compare_release_007_008.read_historical_bundle and row-field validation.",
   "limitations": "The accepted 0.0.7 archive has intentional non-finite legacy metric sentinels. Equal sentinels are classified symbolically rather than treated as numeric equivalence; changed sentinels remain field-level findings. No corrected 0.0.8 rows were available."

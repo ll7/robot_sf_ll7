@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 from typing import TYPE_CHECKING
 
 import pytest
+import yaml
 
 from scripts.analysis import compare_release_007_008 as comparator
 from scripts.analysis.compare_release_007_008 import (
@@ -34,6 +36,7 @@ def _row(arm: str, *, success: bool, collision: bool, score: float) -> dict:
         "metrics": {"snqi": score, "path_length": 3.0},
         "metric_values": {"clearance": 0.5},
         "status": "ok",
+        "integrity": {"contradictions": []},
         "steps": 10,
         "algorithm_metadata": {
             "planner_kinematics": {"execution_mode": "native"},
@@ -77,6 +80,58 @@ def test_unexplained_outcome_and_metric_changes_block_at_1e12() -> None:
     assert not summary["comparison_passed"]
     assert summary["rate_impacts"]["success_rate"]["arm_a"]["delta"] == 1.0
     assert summary["rate_impacts"]["collision_rate"]["arm_a"]["delta"] == -1.0
+
+
+def test_raw_candidate_degradation_and_contradiction_block_unchanged_pair() -> None:
+    old_row = _row("arm_a", success=True, collision=False, score=1.0)
+    new_row = _row("arm_a", success=True, collision=False, score=1.0)
+    new_row.update(
+        {
+            "readiness_status": "degraded",
+            "row_status": "degraded",
+            "availability_status": "unavailable",
+            "fallback_used": True,
+            "planner_runtime": {"fallback_count": 1},
+            "integrity": {"contradictions": ["invalid"]},
+        }
+    )
+    summary, findings = _compare(
+        {("arm_a", "s", 111): old_row},
+        {("arm_a", "s", 111): new_row},
+        [_slot()],
+    )
+    assert findings == []
+    candidate_anomalies = [
+        item for item in summary["row_anomalies"] if item["kind"] == "degraded_candidate_row"
+    ]
+    assert len(candidate_anomalies) == 1
+    details = candidate_anomalies[0]["reasons"]
+    assert any("readiness_status=degraded" in item for item in details)
+    assert any("row_status=degraded" in item for item in details)
+    assert any("availability_status=unavailable" in item for item in details)
+    assert any("fallback_used=true" in item for item in details)
+    assert any("fallback_count" in item for item in details)
+    assert any("integrity.contradictions" in item for item in details)
+    assert not summary["comparison_passed"]
+
+
+def test_overlapping_guarded_ppo_status_checks_report_one_candidate_reason() -> None:
+    row = _row("guarded_ppo", success=True, collision=False, score=1.0)
+    row["algorithm_metadata"]["guard_stats"] = {"stop_best_effort": 1}
+    summary, findings = _compare(
+        {("guarded_ppo", "s", 111): row},
+        {("guarded_ppo", "s", 111): row},
+        [_slot("guarded_ppo")],
+    )
+    assert findings == []
+    assert summary["row_anomalies"] == [
+        {
+            "kind": "degraded_candidate_row",
+            "identity": ["guarded_ppo", "s", 111],
+            "reasons": ["algorithm_metadata.guard_stats.stop_best_effort=1"],
+        }
+    ]
+    assert not summary["comparison_passed"]
 
 
 def test_tolerance_detects_only_change_exceeding_1e12() -> None:
@@ -235,21 +290,38 @@ def test_candidate_reader_reports_duplicate_and_nonfinite_rows(tmp_path: Path) -
     row.update({"scenario_id": "s", "seed": 111, "algo": "arm_a", "git_hash": "a" * 40})
     episode_file = run / "episodes.jsonl"
     bad_algo = dict(row, seed=112, algo=["arm_a"])
+    bad_status = dict(row, seed=113, readiness_status="degraded", fallback_used=True)
+    bad_status["integrity"] = {"contradictions": ["bad"]}
     episode_file.write_text(
-        json.dumps(row) + "\n" + json.dumps(row) + "\n" + "{invalid\n" + json.dumps(bad_algo) + "\n"
+        json.dumps(row)
+        + "\n"
+        + json.dumps(row)
+        + "\n"
+        + "{invalid\n"
+        + json.dumps(bad_algo)
+        + "\n"
+        + json.dumps(bad_status)
+        + "\n"
     )
     identity = {
         "source_sha": "a" * 40,
         "arm_slots": [{"new_key": "arm_a", "row_algos": ["arm_a"]}],
+        "_effective_algorithms": {"arm_a": {"s": "arm_a"}},
         "episode_files": {"runs/arm_a__differential_drive/episodes.jsonl": _sha(episode_file)},
     }
     rows, anomalies = read_candidate_rows(tmp_path, identity)
-    assert len(rows) == 2
+    assert len(rows) == 3
     assert {item["kind"] for item in anomalies} == {
         "duplicate_identity",
         "malformed_json",
         "arm_mismatch",
+        "ineligible_candidate_row",
     }
+    assert any(
+        any("integrity.contradictions" in reason for reason in item["reasons"])
+        for item in anomalies
+        if item["kind"] == "ineligible_candidate_row"
+    )
 
 
 def test_candidate_identity_requires_exact_roster_and_v4_names(
@@ -257,6 +329,7 @@ def test_candidate_identity_requires_exact_roster_and_v4_names(
 ) -> None:
     monkeypatch.setattr(comparator, "_source_head", lambda _root: "a" * 40)
     monkeypatch.setattr(comparator, "_bound_file", lambda _root, _path, digest, **_kw: digest)
+    monkeypatch.setattr(comparator, "_validate_effective_algorithms", lambda _identity, _root: {})
     slots = [
         {
             "old_key": old,
@@ -300,3 +373,206 @@ def test_candidate_identity_requires_exact_roster_and_v4_names(
     path.write_text(json.dumps(identity))
     with pytest.raises(ValueError, match="v4 replacement"):
         comparator.load_candidate_identity(path, tmp_path)
+
+
+def _write_yaml(root: Path, relative: str, payload: dict) -> str:
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(payload, sort_keys=True))
+    return _sha(path)
+
+
+def _git_commit(root: Path) -> str:
+    subprocess.run(["git", "-C", str(root), "add", "."], check=True, capture_output=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(root),
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-m",
+            "fixture",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    return subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+def _versioned_v4_fixture(tmp_path: Path) -> tuple[Path, Path, dict, str]:
+    source = tmp_path / "source"
+    source.mkdir()
+    subprocess.run(["git", "-C", str(source), "init", "-q"], check=True, capture_output=True)
+    v4_base_sha = _write_yaml(
+        source,
+        comparator.V4_BASE_CONFIG_PATH,
+        {
+            "planner_variant": comparator.V4_PLANNER_VARIANT,
+        },
+    )
+    v3_path = "configs/algos/hybrid_rule_v3_fixture.yaml"
+    v3_base_sha = _write_yaml(source, v3_path, {"planner_variant": "hybrid_rule_v3"})
+    orca_sha = _write_yaml(source, comparator.APPROVED_ORCA_CONFIG_PATH, {"orca_time_horizon": 5.0})
+    matrix_sha = _write_yaml(source, "configs/matrix.yaml", {"fixture": True})
+    slots = []
+    planners = []
+    target_old = "scenario_adaptive_hybrid_orca_v2_bottleneck_yield"
+    for old in sorted(comparator.EXPECTED_ARM_KEYS):
+        hybrid = old in comparator.HYBRID_SLOTS
+        replaced = old == target_old
+        new = old + "_v4" if replaced else old
+        slot = {
+            "old_key": old,
+            "new_key": new,
+            "implementation_replaced": replaced,
+            "implementation_version": "v4" if replaced else "historical",
+            "row_algos": (
+                ["hybrid_rule_local_planner", "orca"]
+                if old in comparator.ADAPTIVE_HYBRID_SLOTS
+                else (["hybrid_rule_local_planner"] if hybrid else [new])
+            ),
+            "config_path": None,
+            "config_sha256": None,
+        }
+        planner = {"key": new, "algo": "hybrid_rule_local_planner" if hybrid else new}
+        if hybrid:
+            config_path = f"configs/policy_search/candidates/{new}.yaml"
+            config = {
+                "name": new + "_s30_h600_release",
+                "algo": "hybrid_rule_local_planner",
+                "base_config_path": comparator.V4_BASE_CONFIG_PATH if replaced else v3_path,
+                "params": {},
+            }
+            if old in comparator.ADAPTIVE_HYBRID_SLOTS:
+                config["scenario_algo_overrides"] = {
+                    comparator.APPROVED_ORCA_HANDOFF_SCENARIO: {
+                        "algo": "orca",
+                        "base_config_path": comparator.APPROVED_ORCA_CONFIG_PATH,
+                        "params": {},
+                    }
+                }
+                slot["handoff_config_sha256"] = orca_sha
+            slot.update(
+                {
+                    "config_path": config_path,
+                    "config_sha256": _write_yaml(source, config_path, config),
+                    "base_config_sha256": v4_base_sha if replaced else v3_base_sha,
+                }
+            )
+            planner["algo_config"] = config_path
+        slots.append(slot)
+        planners.append(planner)
+    campaign_sha = _write_yaml(source, "configs/campaign.yaml", {"planners": planners})
+    source_sha = _git_commit(source)
+    identity = {
+        "schema_version": comparator.CANDIDATE_SCHEMA,
+        "release": "0.0.8",
+        "source_sha": source_sha,
+        "effective_config_path": "configs/campaign.yaml",
+        "effective_config_sha256": campaign_sha,
+        "scenario_matrix": {"path": "configs/matrix.yaml", "sha256": matrix_sha},
+        "arm_slots": slots,
+        "scenario_ids": sorted(comparator.EXPECTED_SCENARIO_IDS),
+        "seeds": list(comparator.EXPECTED_SEEDS),
+        "episode_files": {"runs/example/episodes.jsonl": "d" * 64},
+        "versioned_changes": [
+            {
+                "id": "v4-source",
+                "kind": "source",
+                "version": "v4",
+                "old_identity": comparator.HISTORICAL_SOURCE_SHA,
+                "new_identity": source_sha,
+            }
+        ],
+    }
+    identity_path = tmp_path / "identity.json"
+    identity_path.write_text(json.dumps(identity))
+    return source, identity_path, identity, target_old
+
+
+def test_hashed_v4_config_derives_per_scenario_runtime_and_rejects_row_switch(
+    tmp_path: Path,
+) -> None:
+    source, identity_path, identity, target_old = _versioned_v4_fixture(tmp_path)
+    checked = comparator.load_candidate_identity(identity_path, source)
+    target = next(slot for slot in identity["arm_slots"] if slot["old_key"] == target_old)
+    new_key = target["new_key"]
+    assert (
+        checked["_effective_algorithms"][new_key]["classic_bottleneck_low"]
+        == "hybrid_rule_local_planner"
+    )
+    assert checked["_effective_algorithms"][new_key]["francis2023_leave_group"] == "orca"
+    run = tmp_path / "candidate" / "runs" / f"{new_key}__differential_drive"
+    run.mkdir(parents=True)
+    row = _row("orca", success=True, collision=False, score=1.0)
+    row.update(
+        {
+            "scenario_id": "classic_bottleneck_low",
+            "seed": 111,
+            "algo": "orca",
+            "git_hash": identity["source_sha"],
+        }
+    )
+    episode_file = run / "episodes.jsonl"
+    episode_file.write_text(json.dumps(row) + "\n")
+    checked["episode_files"] = {
+        f"runs/{new_key}__differential_drive/episodes.jsonl": _sha(episode_file)
+    }
+    _, anomalies = read_candidate_rows(tmp_path / "candidate", checked)
+    assert any(item["kind"] == "arm_mismatch" for item in anomalies)
+
+
+def test_joint_hybrid_config_and_row_algo_edits_cannot_make_all_orca_valid(tmp_path: Path) -> None:
+    source, identity_path, identity, target_old = _versioned_v4_fixture(tmp_path)
+    target = next(slot for slot in identity["arm_slots"] if slot["old_key"] == target_old)
+    path = source / target["config_path"]
+    config = yaml.safe_load(path.read_text())
+    config["scenario_algo_overrides"] = {
+        scenario: {"algo": "orca", "base_config_path": comparator.APPROVED_ORCA_CONFIG_PATH}
+        for scenario in identity["scenario_ids"]
+    }
+    target["config_sha256"] = _write_yaml(source, target["config_path"], config)
+    target["row_algos"] = ["orca"]
+    identity["source_sha"] = _git_commit(source)
+    identity["versioned_changes"][0]["new_identity"] = identity["source_sha"]
+    identity_path.write_text(json.dumps(identity))
+    with pytest.raises(ValueError, match="unapproved scenario algorithm override"):
+        comparator.load_candidate_identity(identity_path, source)
+
+
+def test_v4_key_cannot_bind_v3_base_even_with_updated_hashes(tmp_path: Path) -> None:
+    source, identity_path, identity, target_old = _versioned_v4_fixture(tmp_path)
+    target = next(slot for slot in identity["arm_slots"] if slot["old_key"] == target_old)
+    path = source / target["config_path"]
+    config = yaml.safe_load(path.read_text())
+    config["base_config_path"] = "configs/algos/hybrid_rule_v3_fixture.yaml"
+    target["config_sha256"] = _write_yaml(source, target["config_path"], config)
+    target["base_config_sha256"] = _sha(source / config["base_config_path"])
+    identity["source_sha"] = _git_commit(source)
+    identity["versioned_changes"][0]["new_identity"] = identity["source_sha"]
+    identity_path.write_text(json.dumps(identity))
+    with pytest.raises(ValueError, match="approved v4 base"):
+        comparator.load_candidate_identity(identity_path, source)
+
+
+def test_v4_key_cannot_override_effective_variant_for_one_scenario(tmp_path: Path) -> None:
+    source, identity_path, identity, target_old = _versioned_v4_fixture(tmp_path)
+    target = next(slot for slot in identity["arm_slots"] if slot["old_key"] == target_old)
+    path = source / target["config_path"]
+    config = yaml.safe_load(path.read_text())
+    config["scenario_overrides"] = {"classic_bottleneck_low": {"planner_variant": "hybrid_rule_v3"}}
+    target["config_sha256"] = _write_yaml(source, target["config_path"], config)
+    identity["source_sha"] = _git_commit(source)
+    identity["versioned_changes"][0]["new_identity"] = identity["source_sha"]
+    identity_path.write_text(json.dumps(identity))
+    with pytest.raises(ValueError, match="effective planner variant is not v4"):
+        comparator.load_candidate_identity(identity_path, source)

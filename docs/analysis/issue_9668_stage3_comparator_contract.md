@@ -15,13 +15,21 @@ The identity JSON has schema `release_007_008_candidate_identity.v1` and
 `path` and `sha256`, the sorted canonical 48 `scenario_ids`, seeds 111–140,
 `episode_files` mapping each `runs/<arm>__differential_drive/episodes.jsonl`
 path to its SHA-256, and exactly 14 `arm_slots`. Each slot has `old_key`,
-`new_key`, `implementation_replaced`, `implementation_version`, `config_path`,
-`config_sha256`, and `row_algos` (the runtime `algo` keys allowed for that arm).
+`new_key`, `implementation_replaced`, `implementation_version`, `config_path`
+and `config_sha256` (both null only when the campaign planner has no
+`algo_config`), and `row_algos` (the runtime `algo` keys expected for that arm).
 Only the four #9751 hybrid slots may acquire new v4-named `new_key`s. Historical
 adaptive hybrid rows have 60 intentional `algo=orca` selections on
 `francis2023_leave_group`; their cohort keys still name the historical arm.
-A candidate must declare its own exact allowed runtime keys, not inherit this
-historical selection by assumption.
+The comparator reads the hashed campaign config and each hashed hybrid candidate
+manifest, resolves the producer's effective algorithm for all 48 scenarios,
+and requires `row_algos` and each row's `algo` to match that resolved map.
+Hybrid slots also declare `base_config_sha256`; adaptive slots declare
+`handoff_config_sha256`. A replaced v4 slot must use the approved v4 base
+config and effective `planner_variant` in every non-ORCA scenario. Only the
+two adaptive arms may hand off to the approved ORCA config, and only on
+`francis2023_leave_group`. A v4 name plus a changed identity declaration
+cannot make all-ORCA or v3 execution admissible.
 
 `versioned_changes` names each correction with a unique `id`, `kind`
 (`source`, `config`, `map`, `model`, or `planner`), `version`, `old_identity`, and
@@ -40,6 +48,10 @@ are relative to the ledger directory. A receipt has schema
 source/input evidence; this tool only verifies the recorded decision, bindings,
 and bytes. Unexplained findings, orphaned or malformed ledger entries, invalid
 rows, and incomplete/duplicate matrices block structural comparison acceptance.
+Candidate execution eligibility is audited on each raw row before compaction,
+using the release status-marker policy plus explicit integrity-contradiction
+and runtime-shape checks. Accepted 0.0.7 rows remain under their historical
+interpretation; the stricter candidate gate is not applied retroactively.
 
 The findings JSONL contains every changed common outcome/metric with old/new
 values at absolute tolerance `1e-12`, plus `implementation replaced` for a v4

@@ -22,6 +22,10 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+import yaml
+
+from robot_sf.benchmark.policy_search_manifest import resolve_candidate_manifest_runtime
+from robot_sf.benchmark.release_acceptance import _status_markers
 from scripts.analysis.compare_issue_9431_release import (
     EXPECTED_ARM_KEYS,
     EXPECTED_SCENARIO_IDS,
@@ -50,6 +54,13 @@ HYBRID_SLOTS = frozenset(
         "hybrid_rule_v3_fast_progress_static_escape_continuous",
     }
 )
+ADAPTIVE_HYBRID_SLOTS = frozenset(
+    old for old in HYBRID_SLOTS if old.startswith("scenario_adaptive_hybrid_orca_v2_")
+)
+V4_BASE_CONFIG_PATH = "configs/algos/hybrid_rule_v4_clearance_braking.yaml"
+V4_PLANNER_VARIANT = "hybrid_rule_v4_clearance_braking"
+APPROVED_ORCA_HANDOFF_SCENARIO = "francis2023_leave_group"
+APPROVED_ORCA_CONFIG_PATH = "configs/algos/issue707_orca_tuned.yaml"
 TOLERANCE = Decimal("1e-12")
 RATE_FIELDS = (
     ("success_rate", "route_complete", "descending"),
@@ -193,12 +204,16 @@ def load_candidate_identity(  # noqa: C901, PLR0912 - keep identity gates in one
             raise ValueError(f"{old_key}: row_algos must bind runtime implementation keys")
         if old_key not in HYBRID_SLOTS and row_algos != [new_key]:
             raise ValueError(f"{old_key}: non-hybrid row_algos must match new arm key")
-        _bound_file(
-            source_root,
-            slot.get("config_path"),
-            slot.get("config_sha256"),
-            label=f"{old_key} arm config",
-        )
+        if slot.get("config_path") is None:
+            if slot.get("config_sha256") is not None:
+                raise ValueError(f"{old_key}: config SHA requires a config path")
+        else:
+            _bound_file(
+                source_root,
+                slot.get("config_path"),
+                slot.get("config_sha256"),
+                label=f"{old_key} arm config",
+            )
     if old_keys != EXPECTED_ARM_KEYS:
         raise ValueError("candidate slot map differs from accepted 0.0.7 arm roster")
     if identity.get("scenario_ids") != sorted(EXPECTED_SCENARIO_IDS):
@@ -208,6 +223,7 @@ def load_candidate_identity(  # noqa: C901, PLR0912 - keep identity gates in one
     if not isinstance(identity.get("episode_files"), Mapping) or not identity["episode_files"]:
         raise ValueError("candidate episode_files checksums are missing")
     _validate_changes(identity, source_root)
+    identity["_effective_algorithms"] = _validate_effective_algorithms(identity, source_root)
     return identity
 
 
@@ -221,7 +237,7 @@ def _validate_changes(  # noqa: C901 - independent change-custody checks
         identity["source_sha"],
         identity["effective_config_sha256"],
         identity["scenario_matrix"]["sha256"],
-        *(slot["config_sha256"] for slot in identity["arm_slots"]),
+        *(slot["config_sha256"] for slot in identity["arm_slots"] if slot.get("config_sha256")),
     }
     inputs = identity.get("versioned_inputs", [])
     if not isinstance(inputs, list):
@@ -256,6 +272,127 @@ def _validate_changes(  # noqa: C901 - independent change-custody checks
             raise ValueError(f"{change_id}: new identity is unbound or unchanged")
 
 
+def _yaml_mapping(path: Path, *, label: str) -> dict[str, Any]:
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{label} must be a YAML mapping")
+    return data
+
+
+def _validate_effective_algorithms(  # noqa: C901, PLR0912, PLR0915 - source-bound dispatch gate
+    identity: Mapping[str, Any], source_root: Path
+) -> dict[str, dict[str, str]]:
+    """Resolve every 0.0.8 arm/scenario algorithm from the bound campaign config."""
+    campaign = _yaml_mapping(
+        source_root / identity["effective_config_path"], label="candidate campaign config"
+    )
+    raw_planners = campaign.get("planners")
+    if not isinstance(raw_planners, list) or len(raw_planners) != len(EXPECTED_ARM_KEYS):
+        raise ValueError("candidate campaign config must declare exactly 14 planners")
+    planners: dict[str, Mapping[str, Any]] = {}
+    for planner in raw_planners:
+        if not isinstance(planner, Mapping) or not isinstance(planner.get("key"), str):
+            raise ValueError("candidate campaign planner entry is malformed")
+        key = planner["key"]
+        if key in planners:
+            raise ValueError(f"duplicate candidate campaign planner key {key}")
+        planners[key] = planner
+    slots = identity["arm_slots"]
+    if set(planners) != {slot["new_key"] for slot in slots}:
+        raise ValueError("candidate campaign planner roster differs from 14 mapped slots")
+
+    expected: dict[str, dict[str, str]] = {}
+    for slot in slots:
+        old_key, new_key = slot["old_key"], slot["new_key"]
+        planner = planners[new_key]
+        default_algo = planner.get("algo")
+        if not isinstance(default_algo, str) or not default_algo:
+            raise ValueError(f"{new_key}: campaign planner algo is missing")
+        config_path = slot.get("config_path")
+        if planner.get("algo_config") != config_path:
+            raise ValueError(f"{new_key}: campaign algo_config differs from bound slot config")
+        if old_key not in HYBRID_SLOTS:
+            if default_algo != new_key or set(slot["row_algos"]) != {default_algo}:
+                raise ValueError(f"{new_key}: non-hybrid runtime algorithm differs from arm key")
+            expected[new_key] = dict.fromkeys(identity["scenario_ids"], default_algo)
+            continue
+        if default_algo != "hybrid_rule_local_planner" or not isinstance(config_path, str):
+            raise ValueError(f"{new_key}: hybrid campaign must use a candidate manifest")
+        candidate = _yaml_mapping(source_root / config_path, label=f"{new_key} candidate config")
+        if candidate.get("algo") != default_algo or not str(candidate.get("name", "")).startswith(
+            new_key
+        ):
+            raise ValueError(f"{new_key}: candidate manifest name/algorithm mismatch")
+        base_path = candidate.get("base_config_path")
+        if not isinstance(base_path, str):
+            raise ValueError(f"{new_key}: candidate base_config_path is missing")
+        if slot["implementation_replaced"] and base_path != V4_BASE_CONFIG_PATH:
+            raise ValueError(f"{new_key}: v4 replacement does not use the approved v4 base")
+        base_sha = slot.get("base_config_sha256")
+        _bound_file(source_root, base_path, base_sha, label=f"{new_key} base config")
+        base_config = _yaml_mapping(source_root / base_path, label=f"{new_key} base config")
+        if (
+            slot["implementation_replaced"]
+            and base_config.get("planner_variant") != V4_PLANNER_VARIANT
+        ):
+            raise ValueError(f"{new_key}: effective base planner variant is not v4")
+        overrides = candidate.get("scenario_algo_overrides") or {}
+        approved_scenarios = (
+            {APPROVED_ORCA_HANDOFF_SCENARIO} if old_key in ADAPTIVE_HYBRID_SLOTS else set()
+        )
+        if not isinstance(overrides, Mapping) or set(overrides) != approved_scenarios:
+            raise ValueError(f"{new_key}: unapproved scenario algorithm override")
+        config_cache = {base_path: base_config}
+        if approved_scenarios:
+            handoff = overrides[APPROVED_ORCA_HANDOFF_SCENARIO]
+            if (
+                not isinstance(handoff, Mapping)
+                or handoff.get("algo") != "orca"
+                or handoff.get("base_config_path") != APPROVED_ORCA_CONFIG_PATH
+            ):
+                raise ValueError(f"{new_key}: ORCA hand-off differs from approved scenario")
+            _bound_file(
+                source_root,
+                APPROVED_ORCA_CONFIG_PATH,
+                slot.get("handoff_config_sha256"),
+                label=f"{new_key} ORCA hand-off config",
+            )
+            config_cache[APPROVED_ORCA_CONFIG_PATH] = _yaml_mapping(
+                source_root / APPROVED_ORCA_CONFIG_PATH, label=f"{new_key} ORCA hand-off config"
+            )
+
+        def load_config(raw_path: object) -> dict[str, Any]:
+            if not isinstance(raw_path, str) or raw_path not in config_cache:
+                raise ValueError(f"{new_key}: policy resolver requested unbound base config")
+            return dict(config_cache[raw_path])
+
+        by_scenario: dict[str, str] = {}
+        for scenario in identity["scenario_ids"]:
+            effective_algo, effective_config = resolve_candidate_manifest_runtime(
+                default_algo=default_algo,
+                manifest=candidate,
+                scenario={"name": scenario},
+                load_config=load_config,
+            )
+            if effective_algo not in {"hybrid_rule_local_planner", "orca"}:
+                raise ValueError(f"{new_key}/{scenario}: unsupported effective algorithm")
+            if effective_algo == "orca" and scenario not in approved_scenarios:
+                raise ValueError(f"{new_key}/{scenario}: unapproved ORCA hand-off")
+            if (
+                slot["implementation_replaced"]
+                and effective_algo == "hybrid_rule_local_planner"
+                and effective_config.get("planner_variant") != V4_PLANNER_VARIANT
+            ):
+                raise ValueError(f"{new_key}/{scenario}: effective planner variant is not v4")
+            by_scenario[scenario] = effective_algo
+        if set(slot["row_algos"]) != set(by_scenario.values()):
+            raise ValueError(
+                f"{new_key}: row_algos differs from source-resolved scenario algorithms"
+            )
+        expected[new_key] = by_scenario
+    return expected
+
+
 def _compact_row(row: Mapping[str, Any]) -> dict[str, Any]:
     return {
         key: row.get(key)
@@ -274,16 +411,48 @@ def _compact_row(row: Mapping[str, Any]) -> dict[str, Any]:
             "algorithm_metadata",
             "spawn_validity",
             "scenario_params",
+            "integrity",
+            "planner_runtime",
+            "readiness_status",
+            "row_status",
+            "availability_status",
+            "fallback_used",
+            "degraded",
+            "fallback",
+            "fallback_triggered",
+            "fallback_or_degraded",
         )
         if key in row
     }
 
 
-def _read_jsonl_stream(
+def _candidate_execution_issues(row: Mapping[str, Any], *, expected_algo: str) -> list[str]:
+    """Audit candidate execution eligibility on the raw row before compaction."""
+    issues = [
+        f"{path.removeprefix('candidate_row.')}={marker}"
+        for path, marker in _status_markers(row, "candidate_row", expected_algorithm=expected_algo)
+    ]
+    issues.extend(_execution_audit(row, expected_algorithm=expected_algo))
+    integrity = row.get("integrity")
+    if not isinstance(integrity, Mapping):
+        issues.append("integrity block missing or malformed")
+    elif integrity.get("contradictions") != []:
+        issues.append("integrity.contradictions must be an empty list")
+    runtime = row.get("planner_runtime")
+    if runtime is not None and not isinstance(runtime, Mapping):
+        issues.append("planner_runtime must be an object when present")
+    validity = row.get("spawn_validity")
+    if isinstance(validity, Mapping) and validity.get("invalid_run") is True:
+        issues.append("spawn_validity.invalid_run=true")
+    return list(dict.fromkeys(issues))
+
+
+def _read_jsonl_stream(  # noqa: C901 - all raw-row gates share one read
     lines: Any,
     *,
     arm: str,
     expected_algos: set[str],
+    effective_algorithms: Mapping[str, str] | None = None,
     source: str,
     expected_commit: str,
     rows: dict[tuple[str, str, int], dict[str, Any]],
@@ -347,7 +516,14 @@ def _read_jsonl_stream(
                 }
             )
         row_algo = row.get("algo")
-        if not isinstance(row_algo, str) or row_algo not in expected_algos:
+        expected_scenario_algo = (
+            effective_algorithms.get(scenario) if effective_algorithms is not None else None
+        )
+        if (
+            not isinstance(row_algo, str)
+            or row_algo not in expected_algos
+            or (effective_algorithms is not None and row_algo != expected_scenario_algo)
+        ):
             anomalies.append(
                 {
                     "kind": "arm_mismatch",
@@ -356,6 +532,21 @@ def _read_jsonl_stream(
                     "identity": list(key),
                 }
             )
+        if effective_algorithms is not None:
+            expected_algo = expected_scenario_algo or (
+                row_algo if isinstance(row_algo, str) else arm
+            )
+            issues = _candidate_execution_issues(row, expected_algo=expected_algo)
+            if issues:
+                anomalies.append(
+                    {
+                        "kind": "ineligible_candidate_row",
+                        "source": source,
+                        "line": line_number,
+                        "identity": list(key),
+                        "reasons": issues,
+                    }
+                )
         rows[key] = _compact_row(row)
 
 
@@ -447,6 +638,7 @@ def read_candidate_rows(
     expected = identity["episode_files"]
     observed = {path.relative_to(root).as_posix(): path for path in paths}
     row_algos = {slot["new_key"]: set(slot["row_algos"]) for slot in identity["arm_slots"]}
+    effective = identity["_effective_algorithms"]
     for missing in sorted(set(expected) - set(observed)):
         anomalies.append({"kind": "missing_episode_file", "source": missing})
     for extra in sorted(set(observed) - set(expected)):
@@ -460,6 +652,7 @@ def read_candidate_rows(
                 stream,
                 arm=arm,
                 expected_algos=row_algos.get(arm, {arm}),
+                effective_algorithms=effective.get(arm, {}),
                 source=relative,
                 expected_commit=identity["source_sha"],
                 rows=rows,
@@ -690,13 +883,17 @@ def compare_episode_maps(  # noqa: C901, PLR0912 - all per-pair checks share one
                     }
                 )
             if side == "new":
-                for problem in _execution_audit(row, expected_algorithm=slot["new_key"]):
+                problems = _candidate_execution_issues(
+                    row, expected_algo=str(row.get("algo") or slot["new_key"])
+                )
+                if problems:
                     anomalies.append(
-                        {"kind": "degraded_candidate_row", "identity": identity, "detail": problem}
+                        {
+                            "kind": "degraded_candidate_row",
+                            "identity": identity,
+                            "reasons": problems,
+                        }
                     )
-                validity = row.get("spawn_validity")
-                if isinstance(validity, Mapping) and validity.get("invalid_run") is True:
-                    anomalies.append({"kind": "invalid_candidate_spawn", "identity": identity})
             outcome = row.get("outcome")
             if canonical and isinstance(outcome, Mapping):
                 for _, outcome_key, _ in RATE_FIELDS:

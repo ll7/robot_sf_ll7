@@ -191,6 +191,14 @@ def test_multimodal_arbitration_contract_tests_are_registered_in_fast_lane() -> 
     assert policy.is_fast("tests/test_multimodal_trajectory_arbitration.py")
 
 
+def test_hybrid_reflection_transform_and_route_tests_are_registered_in_fast_lane() -> None:
+    """Issue #9759 transform and synthetic-grid contracts stay in changed-line shards."""
+    policy = load_fast_lane_policy(Path("tests/conftest.py").read_text(encoding="utf-8"))
+
+    assert policy.is_fast("tests/benchmark/test_release_map_mirror.py")
+    assert policy.is_fast("tests/planner/test_grid_route.py")
+
+
 def test_release_checkpoint_producer_tests_are_registered_in_fast_lane() -> None:
     """Release-smoke producer coverage must reach the hosted changed-line combiner."""
     policy = load_fast_lane_policy(Path("tests/conftest.py").read_text(encoding="utf-8"))

@@ -218,6 +218,8 @@ def test_kernel_selector_preserves_legacy_force_config_hash_and_hashes_opt_in():
     assert wrapped.social_force_kernel_resolution_mode == "explicit"
     assert wrapped != legacy
     assert wrapped.to_dict()["kernel_version"] == SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    wrapped.__post_init__()
+    assert wrapped.kernel_version == SOCIAL_FORCE_KERNEL_WRAPPED_V2
     assert SocialForceConfig(**wrapped.to_dict()) == wrapped
     assert stable_config_hash(wrapped) != stable_config_hash(legacy)
     assert stable_config_hash(SimulatorConfig(social_force_config=wrapped)) != stable_config_hash(

@@ -474,9 +474,10 @@ class SocialForceConfig:
     activation_threshold: float = 20.0
     kernel_version: InitVar[Any] = None
 
-    def __post_init__(self, kernel_version: Any) -> None:
+    def __post_init__(self, *init_vars: Any) -> None:
         """Resolve the selector without adding a default key to legacy dataclass payloads."""
-        self.kernel_version = kernel_version
+        if init_vars:
+            self.kernel_version = init_vars[0]
 
     def __getattribute__(self, name: str) -> Any:
         """Expose the runtime selector stored outside serialized dataclass fields.

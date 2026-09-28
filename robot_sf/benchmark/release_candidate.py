@@ -194,6 +194,17 @@ def _candidate_pins(
         raise ValueError(
             f"sha256_files must pin exactly the input closure; missing={missing}, extra={extra}"
         )
+    tracked_result = _run_git(root, "ls-files", "-z", "--cached")
+    if tracked_result.returncode != 0:
+        raise ValueError("candidate tracked source inventory could not be read")
+    tracked = {item.decode("utf-8") for item in tracked_result.stdout.split(b"\0") if item}
+    untracked = sorted(
+        path.relative_to(root).as_posix()
+        for path in expected_paths
+        if path.relative_to(root).as_posix() not in tracked
+    )
+    if untracked:
+        raise ValueError(f"candidate input files are not in source_commit: {untracked}")
     return pinned
 
 

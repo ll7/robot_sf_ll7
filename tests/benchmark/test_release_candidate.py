@@ -180,6 +180,26 @@ def test_candidate_rejects_source_commit_drift(candidate_repo) -> None:
         load_prepublication_candidate(path, repository_root=root)
 
 
+def test_candidate_rejects_pinned_but_untracked_map(candidate_repo) -> None:
+    root, path, payload = candidate_repo
+    map_path = next(name for name in payload["sha256_files"] if name.endswith(".svg"))
+    _git(root, "rm", "--cached", "-q", map_path)
+    _git(
+        root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "drop map from source",
+    )
+    payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="not in source_commit"):
+        load_prepublication_candidate(path, repository_root=root)
+
+
 def test_builder_creates_ignored_valid_candidate_without_doi(candidate_repo) -> None:
     root, _path, _payload = candidate_repo
     output = root / "output" / "candidate.json"

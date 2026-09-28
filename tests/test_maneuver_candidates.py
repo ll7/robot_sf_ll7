@@ -15,6 +15,7 @@ from robot_sf.planner.maneuver_candidates import (
     generate_maneuver_candidates,
 )
 from robot_sf.research.collision_risk import (
+    CandidateAction,
     RiskEstimatorConfig,
     estimate_action_conditioned_risk,
 )
@@ -169,6 +170,50 @@ def test_short_horizon_reports_incomplete_stop() -> None:
 
     assert stop.states[-1, 3] > 0.0
     assert stop.metadata["stop_complete_within_horizon"] is False
+    assert stop.metadata["robot_radius_m"] == pytest.approx(config.robot_radius_m)
+
+
+def test_generated_candidates_retain_cycle_and_static_verification_metadata() -> None:
+    """The arbitration seam receives the generator's cycle and geometry evidence."""
+    result = generate_maneuver_candidates(_route(), _state(), static_geometry=(), timestamp_s=12.5)
+
+    assert result
+    assert all(candidate.metadata["timestamp_s"] == pytest.approx(12.5) for candidate in result)
+    assert all(candidate.metadata["static_feasible"] is True for candidate in result)
+
+
+def test_candidate_id_must_match_action_identity() -> None:
+    """A producer wrapper cannot rename the canonical action it carries."""
+    candidate = generate_maneuver_candidates(_route(), _state(), static_geometry=())[0]
+
+    with pytest.raises(ValueError, match="candidate_id must match action.action_id"):
+        replace(candidate, candidate_id=f"{candidate.candidate_id}-alias")
+
+
+def test_candidate_rollout_rejects_waypoints_unexplained_by_controls() -> None:
+    """Moving risk waypoints cannot be paired with zero-speed hard-gate states."""
+    candidate = generate_maneuver_candidates(_route(), _state(), static_geometry=())[0]
+    states = np.zeros_like(candidate.states)
+    states[:, 0] = np.arange(states.shape[0], dtype=float) * 0.05
+    action = CandidateAction(
+        action_id=candidate.candidate_id,
+        waypoints=states[:, :2],
+        representation=candidate.action.representation,
+    )
+
+    with pytest.raises(ValueError, match="states must match the unicycle control rollout"):
+        replace(
+            candidate,
+            action=action,
+            controls=((0.0, 0.0),) * HORIZON,
+            states=states,
+        )
+
+
+def test_generated_candidate_timestamp_must_be_nonnegative_and_finite() -> None:
+    """Malformed cycle timestamps cannot be embedded in candidate metadata."""
+    with pytest.raises(ValueError, match="timestamp_s"):
+        generate_maneuver_candidates(_route(), _state(), timestamp_s=float("nan"))
 
 
 def test_stop_completion_requires_linear_and_angular_rest() -> None:

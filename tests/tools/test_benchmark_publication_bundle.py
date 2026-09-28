@@ -1,7 +1,12 @@
 """Tests for benchmark publication bundle CLI helper."""
 
+# evidence-writer-exempt: this module writes synthetic and intentionally malformed evidence
+# fixtures under pytest tmp_path, including fake binary payloads; production shared writers would
+# normalize fixture bytes, and no durable repository output is produced by these fixture writes.
+
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -325,9 +330,29 @@ def test_evidence_bundle_command_creates_manifest_and_checksums(tmp_path: Path, 
         "summary.json",
         "trace_manifest.yaml",
     ]
+    assert [entry["location"] for entry in manifest["files"]] == [
+        "payload/claim_boundary.md",
+        "payload/metric_table.csv",
+        "payload/summary.json",
+        "payload/trace_manifest.yaml",
+    ]
     checksums = checksums_path.read_text(encoding="utf-8")
-    assert "summary.json" in checksums
-    assert "metric_table.csv" in checksums
+    assert "  payload/summary.json\n" in checksums
+    assert "  payload/metric_table.csv\n" in checksums
+    assert {line.split(maxsplit=1)[1] for line in checksums.splitlines()} == {
+        f"payload/{entry['path']}" for entry in manifest["files"]
+    }
+    checksum_entries = {
+        relative_path: digest
+        for line in checksums.splitlines()
+        for digest, relative_path in [line.split("  ", maxsplit=1)]
+    }
+    for entry in manifest["files"]:
+        relative_path = f"payload/{entry['path']}"
+        payload_path = bundle_dir / relative_path
+        assert checksum_entries[relative_path] == entry["sha256"]
+        payload_digest = hashlib.sha256(payload_path.read_bytes()).hexdigest()
+        assert payload_digest == checksum_entries[relative_path]
 
 
 def test_evidence_bundle_command_writes_dry_run_mirror_manifest(

@@ -35,6 +35,7 @@ from tests.metamorphic.planner_arms import (
     interaction_scene,
     mirror_x,
     mirror_y,
+    release_arm,
     rotate_90,
     run_arm_episode,
 )
@@ -308,6 +309,7 @@ def test_release_arm_trace_is_mirror_and_rotation_equivariant(arm: str) -> None:
     _requires_rvo2(arm)
     base = run_arm_episode(arm, interaction_scene(), seed=_SEED, max_steps=_ARM_STEPS)
     assert base.status == "ok"
+    assert base.flat_socnav_observation
     assert len(base.commands) >= 20
     without_pedestrian = run_arm_episode(
         arm, interaction_scene(pedestrian=False), seed=_SEED, max_steps=_ARM_STEPS
@@ -334,10 +336,44 @@ def test_release_arm_trace_is_mirror_and_rotation_equivariant(arm: str) -> None:
         transformed = run_arm_episode(
             arm, interaction_scene(point_map), seed=_SEED, max_steps=_ARM_STEPS
         )
+        assert transformed.flat_socnav_observation
         _assert_arm_equivariant(base, transformed, name)
 
 
-def test_risk_dwa_release_trace_is_rotation_equivariant() -> None:
+@pytest.mark.parametrize(
+    "arm",
+    [
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+    ],
+)
+def test_release_scenario_orca_override_trace_is_rotation_equivariant(arm: str) -> None:
+    """The two leave-group overrides resolve to ORCA and rotate through the episode path."""
+    _requires_rvo2("orca")
+    scenario = "francis2023_leave_group"
+    effective_algo, effective_config = release_arm(arm, scenario=scenario)
+    assert effective_algo == "orca"
+    assert effective_config["orca_symmetry_bias"] == pytest.approx(0.22)
+    assert effective_config["orca_head_on_bias"] == pytest.approx(0.30)
+
+    base = run_arm_episode(
+        arm, interaction_scene(), seed=_SEED, max_steps=_ARM_STEPS, scenario=scenario
+    )
+    rotated = run_arm_episode(
+        arm,
+        interaction_scene(rotate_90),
+        seed=_SEED,
+        max_steps=_ARM_STEPS,
+        scenario=scenario,
+    )
+
+    assert base.status == rotated.status == "ok"
+    assert base.flat_socnav_observation
+    assert rotated.flat_socnav_observation
+    _assert_arm_equivariant(base, rotated, "rotate_90")
+
+
+def test_risk_dwa_flat_release_trace_is_rotation_equivariant() -> None:
     """The deterministic Risk-DWA release arm rotates its flat scene and trace."""
     base = run_arm_episode("risk_dwa", interaction_scene(), seed=_SEED, max_steps=_ARM_STEPS)
     rotated = run_arm_episode(
@@ -345,12 +381,14 @@ def test_risk_dwa_release_trace_is_rotation_equivariant() -> None:
     )
 
     assert base.status == rotated.status == "ok"
+    assert base.flat_socnav_observation
+    assert rotated.flat_socnav_observation
     _assert_arm_equivariant(base, rotated, "rotate_90")
 
 
 @pytest.mark.parametrize("arm", ["risk_dwa", "guarded_ppo"])
 def test_flat_velocity_rotation_equivariance_for_world_frame_rollouts(arm: str) -> None:
-    """World-frame safety inputs rotate with a 90-degree transformed flat scene."""
+    """World-frame rollouts agree for a 90-degree transformed flat scene."""
     heading = 0.37
     ego_velocity = np.asarray([0.8, -0.25], dtype=float)
     cos_h, sin_h = np.cos(heading), np.sin(heading)
@@ -397,6 +435,42 @@ def test_flat_velocity_rotation_equivariance_for_world_frame_rollouts(arm: str) 
         atol=1e-12,
         err_msg=arm,
     )
+
+    command = (0.45, 0.12)
+    if arm == "risk_dwa":
+        planner = RiskDWAPlannerAdapter()
+        base_state = planner._extract_robot_goal_ped(base)
+        transformed_state = planner._extract_robot_goal_ped(transformed)
+        base_score = planner._rollout_score(
+            robot_pos=base_state[0],
+            heading=base_state[1],
+            goal=base_state[2],
+            command=command,
+            ped_pos=base_state[3],
+            ped_vel=base_state[4],
+            observation=base,
+            current_speed=0.0,
+        )
+        transformed_score = planner._rollout_score(
+            robot_pos=transformed_state[0],
+            heading=transformed_state[1],
+            goal=transformed_state[2],
+            command=command,
+            ped_pos=transformed_state[3],
+            ped_vel=transformed_state[4],
+            observation=transformed,
+            current_speed=0.0,
+        )
+        assert transformed_score == pytest.approx(base_score, rel=0.0, abs=1e-12)
+    else:
+        planner = GuardedPPOAdapter()
+        base_evaluation = planner._evaluate_command(base, command)
+        transformed_evaluation = planner._evaluate_command(transformed, command)
+        assert transformed_evaluation["safe"] == base_evaluation["safe"]
+        for key in ("progress", "min_ped_clear", "first_ped_clear", "min_obs_clear", "min_ttc"):
+            assert transformed_evaluation[key] == pytest.approx(
+                base_evaluation[key], rel=0.0, abs=1e-12
+            )
 
 
 @pytest.mark.xfail(

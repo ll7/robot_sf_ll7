@@ -265,7 +265,9 @@ def test_report_keeps_missing_scoreless_duplicate_and_degraded_attempts_visible(
     assert random_2202["num_effective_scenario_duplicates"] == 1
     assert random_2202["num_scoreless_valid_candidates"] == 1
     assert random_2202["degraded_candidate_count"] == 1
-    assert random_2202["first_critical_evaluation"] == 3
+    assert random_2202["first_critical_evaluation"] is None
+    assert random_2202["evaluations"][3]["criticality_status"] == "unknown"
+    assert random_2202["num_criticality_unknown_candidates"] >= 1
     assert missing_run["artifact_status"] == "missing"
     assert missing_run["num_missing_evaluations"] == 2
     assert missing_run["best_objective_value"] is None
@@ -802,6 +804,7 @@ def test_over_budget_attempt_is_auditable_but_cannot_change_budgeted_best_or_pai
         candidate["effective_scenario_hash"] = "over-budget-critical"
         candidate["objective_value"] = 99.0
         candidate["failure_attribution"]["primary_failure"] = "collision"
+        candidate["failure_attribution"]["details"]["outcome"] = {"collision_event": True}
         manifest["candidates"].append(candidate)
 
     report = _report_with_manifest(tmp_path, row_index=0, mutate=append_over_budget_candidate)
@@ -930,6 +933,7 @@ def test_ineligible_degraded_score_and_criticality_remain_observed_but_not_eligi
         candidate = manifest["candidates"][3]
         candidate["objective_value"] = 99.0
         candidate["failure_attribution"]["primary_failure"] = "incomplete"
+        candidate["failure_attribution"]["details"]["outcome"] = {"route_complete": False}
         if eligibility_reason == "ineligible":
             candidate["analysis_eligibility"]["eligible"] = False
             candidate["failure_attribution"]["details"]["execution_mode"] = "native"
@@ -946,8 +950,10 @@ def test_ineligible_degraded_score_and_criticality_remain_observed_but_not_eligi
 
     assert random_2202["best_observed_objective_value"] == pytest.approx(99.0)
     assert random_2202["best_analysis_eligible_objective_value"] == pytest.approx(4.1)
-    assert random_2202["num_observed_critical_candidates"] == 2
-    assert random_2202["num_critical_candidates"] == 1
+    assert random_2202["num_observed_critical_candidates"] == 1
+    assert random_2202["num_critical_candidates"] == 0
+    assert random_2202["evaluations"][2]["criticality_status"] == "unknown"
+    assert random_2202["evaluations"][2]["criticality_failure_type"] is None
     assert degraded["observed_critical"] is True
     assert degraded["critical"] is False
     assert degraded["analysis_evidence_eligible"] is False

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from pysocialforce.config import SOCIAL_FORCE_KERNEL_WRAPPED_V2
 
 from robot_sf.planner.guarded_ppo import (
     GuardedPPOAdapter,
@@ -12,6 +13,7 @@ from robot_sf.planner.guarded_ppo import (
     build_guarded_ppo_fallback,
     build_guarded_ppo_prior,
 )
+from robot_sf.planner.socnav_orca import ORCAPlannerAdapter
 
 
 def _obs(
@@ -672,6 +674,23 @@ def test_guarded_ppo_handles_malformed_pedestrian_payloads_and_config_builders()
     fallback = build_guarded_ppo_fallback(None)
     assert fallback is not None
     assert build_guarded_ppo_prior(None) is None
+
+
+def test_guarded_ppo_orca_builder_preserves_social_force_kernel_initvar() -> None:
+    """The ORCA config bridge retains the shared config's non-field kernel selector."""
+    prior = build_guarded_ppo_prior(
+        {
+            "prior_policy": "orca",
+            "prior_orca": {
+                "social_force_kernel_version": SOCIAL_FORCE_KERNEL_WRAPPED_V2,
+                "unknown_extension": "ignored",
+            },
+        }
+    )
+
+    assert isinstance(prior, ORCAPlannerAdapter)
+    assert prior.config.social_force_kernel_version == SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    assert "unknown_extension" not in prior.config.to_dict()
 
 
 def test_guarded_ppo_reshapes_flattened_pedestrian_payloads() -> None:

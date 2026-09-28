@@ -259,7 +259,7 @@ def build_hybrid_portfolio_build_config(cfg: dict[str, Any] | None) -> HybridPor
     mppi_raw = cfg.get("mppi_social", {}) if isinstance(cfg.get("mppi_social"), dict) else {}
 
     # Keep SocNav-compatible keys in root to preserve existing ORCA/prediction config format.
-    allowed = {f.name for f in fields(SocNavPlannerConfig)}
+    allowed = {f.name for f in fields(SocNavPlannerConfig)} | {"social_force_kernel_version"}
     socnav_kwargs = {k: v for k, v in cfg.items() if k in allowed}
     socnav = SocNavPlannerConfig(**socnav_kwargs)
 

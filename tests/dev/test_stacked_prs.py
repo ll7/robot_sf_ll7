@@ -917,8 +917,23 @@ def _ancestry_git_runner(tmp_path: Path) -> Any:
             return _completed(args, stdout="a" * 40 + "\n")
         if args == ["log", "--oneline", f"refs/remotes/origin/main..{'c' * 40}"]:
             return _completed(
-                args, stdout=f"{'f' * 7} foreign work (#7308)\n{'e' * 7} intended work\n"
+                args, stdout=f"{'c' * 7} intended work\n{'f' * 7} foreign work (#7308)\n"
             )
+        if args == [
+            "log",
+            "--reverse",
+            "--format=%H%x1f%P%x1f%s",
+            f"refs/remotes/origin/main..{'c' * 40}",
+        ]:
+            return _completed(
+                args,
+                stdout=(
+                    f"{'f' * 40}\x1f{'a' * 40}\x1fforeign work (#7308)\n"
+                    f"{'c' * 40}\x1f{'f' * 40}\x1fintended work\n"
+                ),
+            )
+        if args == ["merge-base", "--is-ancestor", "a" * 40, "refs/remotes/origin/main"]:
+            return _completed(args)
         if args[:2] == ["diff", "--name-only"]:
             return _completed(args, stdout="robot_sf/foreign.py\nrobot_sf/own.py\n")
         raise AssertionError(f"unexpected git call: {args}")
@@ -954,8 +969,8 @@ def test_check_ancestry_classifies_undeclared_contamination_blocked(
     assert result["state"] == "undeclared_stack"
     assert result["status"] == "blocked"
     assert result["unexpected_commits"] == [
+        f"{'c' * 7} intended work",
         f"{'f' * 7} foreign work (#7308)",
-        f"{'e' * 7} intended work",
     ]
     assert result["unexpected_paths"] == ["robot_sf/foreign.py", "robot_sf/own.py"]
     assert "remediation_command" in result

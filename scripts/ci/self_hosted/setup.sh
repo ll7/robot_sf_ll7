@@ -71,7 +71,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -f /etc/sudoers \
     && mkdir -p /opt/robot-sf-runner \
     && cp -a /home/runner/. /opt/robot-sf-runner/ \
-    && chown -R runner:runner /opt/robot-sf-runner
+    && chown -R runner:runner /opt/robot-sf-runner \
+    && install -d -o runner -g runner /home/runner/_work
 COPY --chown=runner:runner setup.sh /usr/local/bin/robot-sf-runner
 COPY --chown=runner:runner job_started_hook.sh /usr/local/libexec/robot-sf-job-started.sh
 COPY --chown=runner:runner network_probe.sh /usr/local/libexec/robot-sf-network-probe
@@ -91,6 +92,8 @@ run_container() {
   fi
   cd /home/runner
   cp -a /opt/robot-sf-runner/. /home/runner/
+  install -d -m 700 /home/runner/_work/_tmp /home/runner/_work/_uv_cache \
+    /home/runner/_work/_tool
   ./config.sh --unattended --ephemeral --disableupdate --replace \
     --url "https://github.com/$repo" --token "$token" \
     --name "$runner_name" --labels "$label" --work _work
@@ -109,16 +112,25 @@ supervise() {
     fi
     # The API response goes directly through the pipe to the container's
     # config step. Neither a token file nor a token-bearing Docker argument is
-    # created. The container and its tmpfs disappear after one job.
+    # created. --rm removes the container and its anonymous workspace volume.
+    if ! check_docker_disk; then
+      echo "Runner $name Docker disk capacity check failed; retrying after 60 seconds" >&2
+      sleep 60
+      continue
+    fi
     if gh api -X POST "repos/$repo/actions/runners/registration-token" --jq .token |
       docker run --rm --interactive --name "$name" \
         --user 1001:1001 --read-only --network "$network" \
         --dns 1.1.1.1 --dns 9.9.9.9 \
-        --tmpfs /home/runner:rw,exec,nosuid,nodev,uid=1001,gid=1001,size=7g \
+        --tmpfs /home/runner:rw,exec,nosuid,nodev,uid=1001,gid=1001,size=1g \
+        --mount type=volume,dst=/home/runner/_work \
         --tmpfs /tmp:rw,exec,nosuid,nodev,uid=1001,gid=1001,size=512m \
         --cap-drop ALL --security-opt no-new-privileges \
         --pids-limit 512 --cpus 4 --memory 8g --memory-swap 8g \
-        --env HOME=/home/runner --env RUNNER_TOOL_CACHE=/home/runner/_tool \
+        --env HOME=/home/runner \
+        --env RUNNER_TOOL_CACHE=/home/runner/_work/_tool \
+        --env UV_CACHE_DIR=/home/runner/_work/_uv_cache \
+        --env TMPDIR=/home/runner/_work/_tmp \
         "$image" "$name"; then
       echo "Runner $name finished its job; replacing its container"
     else
@@ -126,6 +138,21 @@ supervise() {
     fi
     sleep 15
   done
+}
+
+check_docker_disk() {
+  local docker_root available_kib
+  docker_root="$(docker info -f '{{.DockerRootDir}}')" || return 1
+  [[ -n "$docker_root" ]] || return 1
+  available_kib="$(df -Pk -- "$docker_root" | awk 'NR == 2 {print $4}')" || return 1
+  if [[ ! "$available_kib" =~ ^[0-9]+$ ]]; then
+    echo "Could not determine free space on Docker root: $docker_root" >&2
+    return 1
+  fi
+  if (( available_kib < 20 * 1024 * 1024 )); then
+    echo "Docker root has $available_kib KiB free; 20 GiB required: $docker_root" >&2
+    return 1
+  fi
 }
 
 ensure_network() {

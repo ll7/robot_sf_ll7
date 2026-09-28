@@ -17,9 +17,9 @@ def _mock_command(directory: Path, name: str, body: str) -> None:
     command.chmod(0o755)
 
 
-@pytest.mark.parametrize("failure", ["none", "network", "probe"])
+@pytest.mark.parametrize("failure", ["none", "network", "probe", "disk", "info", "df"])
 def test_supervisor_checks_isolation_before_each_registration(tmp_path: Path, failure: str) -> None:
-    """A failed check skips token requests and waits 60 seconds before retrying."""
+    """A failed isolation or disk check skips token requests and retries after 60 seconds."""
     commands = tmp_path / "commands"
     commands.mkdir()
     _mock_command(commands, "hostname", "printf 'imech039\\n'\n")
@@ -29,6 +29,11 @@ def test_supervisor_checks_isolation_before_each_registration(tmp_path: Path, fa
         """
 case "$1:$2" in
   network:inspect) printf '{}\\n' ;;
+  info:-f)
+    printf 'docker-info\\n' >>"$TRACE"
+    [[ "$FAILURE" != info ]] || exit 1
+    printf '/var/lib/docker\\n'
+    ;;
   run:*)
     case " $* " in
       *' --entrypoint '*)
@@ -54,6 +59,18 @@ esac
         commands,
         "gh",
         "printf 'gh\\n' >>\"$TRACE\"\nprintf 'fixture-token\\n'\n",
+    )
+    _mock_command(
+        commands,
+        "df",
+        """
+printf 'df\\n' >>"$TRACE"
+[[ "$FAILURE" != df ]] || exit 1
+available=20971520
+[[ "$FAILURE" != disk ]] || available=20971519
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\\n'
+printf 'fixture 100000000 0 %s 0%% /var/lib/docker\\n' "$available"
+""",
     )
     _mock_command(
         commands,
@@ -87,14 +104,25 @@ printf '%s\\n' "$count" >"$SLEEP_COUNT"
     assert result.returncode == 99, result.stderr
     events = (tmp_path / "trace").read_text(encoding="utf-8").splitlines()
     if failure == "none":
-        assert events == ["network-verify", "probe", "gh", "runner", "sleep:15"] * 2
+        assert (
+            events
+            == ["network-verify", "probe", "docker-info", "df", "gh", "runner", "sleep:15"] * 2
+        )
     elif failure == "probe":
         assert events == ["network-verify", "probe", "sleep:60"] * 2
         assert "Network isolation probe failed" in result.stderr
-    else:
+    elif failure == "network":
         assert events == ["network-verify", "sleep:60"] * 2
-    if failure != "none":
+    elif failure == "info":
+        assert events == ["network-verify", "probe", "docker-info", "sleep:60"] * 2
+    else:
+        assert events == ["network-verify", "probe", "docker-info", "df", "sleep:60"] * 2
+    if failure in {"network", "probe"}:
         assert "network isolation check failed" in result.stderr
+    elif failure != "none":
+        assert "Docker disk capacity check failed" in result.stderr
+    if failure == "disk":
+        assert "20 GiB required" in result.stderr
 
 
 @pytest.mark.parametrize("reported", ["imech039", "auxme-imech039"])

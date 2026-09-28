@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 from typing import Any
 
@@ -154,13 +155,22 @@ def test_container_setup_keeps_ephemeral_and_no_host_mounts() -> None:
         "flock -x",
         '--network "$network"',
         "probe_network",
+        "check_docker_disk",
         "ACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/libexec/robot-sf-job-started.sh",
         "--ephemeral --disableupdate --replace",
     ):
         assert required in script
     assert "--volume" not in script
-    assert "--mount" not in script
+    assert re.findall(r"--mount\s+([^\s\\]+)", script) == ["type=volume,dst=/home/runner/_work"]
+    assert "src=" not in script
+    assert "source=" not in script
     assert "/var/run/docker.sock" not in script
+    for environment in (
+        "RUNNER_TOOL_CACHE=/home/runner/_work/_tool",
+        "UV_CACHE_DIR=/home/runner/_work/_uv_cache",
+        "TMPDIR=/home/runner/_work/_tmp",
+    ):
+        assert environment in script
 
 
 def test_container_image_preloads_routed_job_tools() -> None:

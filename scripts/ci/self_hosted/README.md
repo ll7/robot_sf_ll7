@@ -40,12 +40,19 @@ the image sets `ACTIONS_RUNNER_HOOK_JOB_STARTED` to its path. Refresh and review
 the digest and package set when the runner version changes; `--disableupdate`
 makes image updates explicit.
 
-Each job gets a new container with a read-only root, a tmpfs home/work directory
-and `/tmp`, UID/GID 1001, no Linux capabilities, no privilege escalation, no
-host bind mounts, no Docker socket, and limits of 4 CPUs, 8 GiB RAM, and 512
-processes. The runner executes at `nice 10`. Its ephemeral registration handles
-one job; `docker run --rm` destroys the container, and the supervisor creates
-the next one. Both runner and probe use the dedicated IPv4 Docker bridge
+Each job gets a new container with a read-only root, a 1 GiB tmpfs at
+`/home/runner` for runner binaries, a 512 MiB tmpfs at `/tmp`, and a fresh
+anonymous Docker volume at `/home/runner/_work` for the checkout, virtual
+environment, uv cache, Python tool cache, and job temporary files. `UV_CACHE_DIR`,
+`RUNNER_TOOL_CACHE`, and `TMPDIR` point into that volume. There is no volume
+source or host bind mount, so jobs never share a workspace. The container uses
+UID/GID 1001, no Linux capabilities, no privilege escalation, no Docker socket,
+and limits of 4 CPUs, 8 GiB RAM, and 512 processes. The runner executes at
+`nice 10`. Its ephemeral registration handles one job; `docker run --rm`
+destroys the container and its anonymous volume, and the supervisor creates
+the next one. Compare `docker volume ls` before and after a job to confirm
+cleanup. If a host crash leaves an unused volume, `docker volume prune` is the
+cleanup command. Both runner and probe use the dedicated IPv4 Docker bridge
 `robot-sf-ci-egress` (`172.30.244.0/24`, gateway `172.30.244.1`, bridge
 `br-robot-sf-ci`). IPv6 is disabled. Before starting a slot, `setup.sh start`
 checks that a probe container cannot ping the host gateway or a University of
@@ -53,7 +60,11 @@ Augsburg address, and can reach GitHub and PyPI over HTTPS. The supervisor
 repeats the network configuration check and isolation probe before each
 replacement container. If either check fails, it logs the failure and retries
 after 60 seconds without requesting a registration token or starting a runner.
-The probe does not replace the host firewall rules below.
+Before fetching each registration token, the supervisor also requires at least
+20 GiB free on Docker's root filesystem (`docker info -f '{{.DockerRootDir}}'`
+and `df`). If the disk check fails or cannot read capacity, it logs the failure
+and retries after 60 seconds. The probe does not replace the host firewall
+rules below.
 
 ## One-time host firewall setup (author action)
 

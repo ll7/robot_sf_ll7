@@ -394,6 +394,21 @@ def test_accounting_rejects_checkpoint_substitution(tampered_field: str) -> None
     assert row["terminal_status"] == "provenance_invalid"
 
 
+def test_accounting_rejects_source_commit_detached_from_packet() -> None:
+    packet = _packet()
+    mismatched_source_commit = "b" * 40
+    outcomes = [_native_outcome(identity, packet) for identity in packet["identities"]]
+    for outcome in outcomes:
+        outcome["provenance"]["source_commit"] = mismatched_source_commit
+
+    with pytest.raises(campaign.CampaignAdapterError, match="source_commit does not match"):
+        campaign.account_production_rows(
+            packet,
+            outcomes,
+            source_commit=mismatched_source_commit,
+        )
+
+
 def test_fallback_row_is_recorded_but_never_admitted() -> None:
     packet = _packet()
     outcomes = [_native_outcome(identity, packet) for identity in packet["identities"]]

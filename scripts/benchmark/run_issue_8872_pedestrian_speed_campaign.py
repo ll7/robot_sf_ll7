@@ -1761,6 +1761,11 @@ def account_production_rows(
         packet_context = _validate_journal_packet(manifest)
     except CampaignAdapterError:
         packet_context = None
+    if packet_context is not None:
+        _require(
+            source_commit == packet_context.get("source_commit"),
+            "row accounting source_commit does not match the validated production packet",
+        )
     expected_by_key = {str(row["identity_key"]): row for row in expected_rows}
     grouped: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     unexpected_count = 0

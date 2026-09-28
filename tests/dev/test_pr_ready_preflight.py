@@ -952,10 +952,16 @@ def _write_signal_lane_stub(repo: Path) -> None:
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
         'case "${ROBOT_SF_TEST_LANE:-unknown}" in\n'
-        '  core) ready="$PR_READY_SIGNAL_CORE_READY"; release="$PR_READY_SIGNAL_CORE_RELEASE" ;;\n'
-        '  optional) ready="$PR_READY_SIGNAL_OPTIONAL_READY"; release="$PR_READY_SIGNAL_OPTIONAL_RELEASE" ;;\n'
+        '  core) ready="$PR_READY_SIGNAL_CORE_READY"; release="$PR_READY_SIGNAL_CORE_RELEASE"; '
+        'pidfile="${PR_READY_SIGNAL_CORE_PIDFILE:-}" ;;\n'
+        '  optional) ready="$PR_READY_SIGNAL_OPTIONAL_READY"; release="$PR_READY_SIGNAL_OPTIONAL_RELEASE"; '
+        'pidfile="${PR_READY_SIGNAL_OPTIONAL_PIDFILE:-}" ;;\n'
         '  *) echo "unexpected readiness lane" >&2; exit 44 ;;\n'
         "esac\n"
+        'if [[ -n "$pidfile" ]]; then\n'
+        '  pgid="$(ps -o pgid= -p "$$" | tr -d \'[:space:]\')"\n'
+        '  printf \'%s %s\\n\' "$$" "$pgid" > "$pidfile"\n'
+        "fi\n"
         ': > "$ready"\n'
         'while [[ ! -e "$release" ]]; do sleep 0.05; done\n',
         encoding="utf-8",
@@ -1161,6 +1167,32 @@ def _child_pgids_for_pid(parent_pid: int) -> set[int]:
             if ppid == parent_pid and pgid != parent_pid:
                 child_pgids.add(pgid)
     return child_pgids
+
+
+def _process_group_liveness(pgid: int) -> str:
+    """Classify one fixture process group as absent, zombie-only, live, or unknown."""
+    try:
+        result = subprocess.run(
+            ["ps", "-eo", "pgid=,stat="],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=2.0,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "unknown"
+    if result.returncode != 0:
+        return "unknown"
+    states: list[str] = []
+    for line in result.stdout.splitlines():
+        parts = line.split(maxsplit=1)
+        if len(parts) == 2 and parts[0].isdigit() and int(parts[0]) == pgid:
+            states.append(parts[1])
+    if not states:
+        return "absent"
+    if all(state.startswith("Z") for state in states):
+        return "zombie_only"
+    return "live"
 
 
 def _stop_process_group(process: subprocess.Popen[str], signum: signal.Signals) -> None:
@@ -1513,12 +1545,14 @@ def test_pr_ready_sigterm_under_subreaper_verifies_zombie_cleanup(
     ready = tmp_path / "core-ready"
     release = tmp_path / "core-release"
     receipt = tmp_path / "core-termination.json"
+    lane_identity = tmp_path / "core-lane-process-group.txt"
     _write_signal_lane_stub(preflight_repo)
     env = {
         "PR_READY_MODE": "interim",
         "PR_READY_TERMINATION_RECEIPT": str(receipt),
         "PR_READY_SIGNAL_CORE_READY": str(ready),
         "PR_READY_SIGNAL_CORE_RELEASE": str(release),
+        "PR_READY_SIGNAL_CORE_PIDFILE": str(lane_identity),
     }
 
     pipe_r, pipe_w = os.pipe()
@@ -1534,10 +1568,29 @@ def test_pr_ready_sigterm_under_subreaper_verifies_zombie_cleanup(
     finally:
         _, status = os.waitpid(harness_pid, 0)
 
-    exit_code = os.waitstatus_to_exitcode(status)
-    report = json.loads(data) if data else {"status": "no report"}
-    assert exit_code == 0, f"subreaper harness failed with exit code {exit_code}: {report}"
-    assert report["status"] == "ok", report
+    lane_pgid: int | None = None
+    try:
+        exit_code = os.waitstatus_to_exitcode(status)
+        report = json.loads(data) if data else {"status": "no report"}
+        assert exit_code == 0, f"subreaper harness failed with exit code {exit_code}: {report}"
+        assert report["status"] == "ok", report
+        lane_pid, lane_pgid = map(int, lane_identity.read_text(encoding="utf-8").split())
+        assert lane_pid > 0 and lane_pgid > 0
+        assert lane_pgid != os.getpgrp(), "fixture lane must run in an isolated process group"
+        lane_liveness = _process_group_liveness(lane_pgid)
+        assert lane_liveness in {"absent", "zombie_only"}, (
+            f"fixture lane process group survived readiness cleanup: pid={lane_pid}, "
+            f"pgid={lane_pgid}, liveness={lane_liveness}, report={report}"
+        )
+    finally:
+        # Record liveness before releasing the marker; cleanup must not mask a
+        # fixture that survived the readiness controller's own process-group teardown.
+        release.touch()
+        if lane_pgid is not None and lane_pgid > 1 and lane_pgid != os.getpgrp():
+            try:
+                os.killpg(lane_pgid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="PR_SET_CHILD_SUBREAPER is Linux-specific")

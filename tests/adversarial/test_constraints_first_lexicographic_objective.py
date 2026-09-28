@@ -7,7 +7,12 @@ from pathlib import Path
 
 from robot_sf.adversarial.certification import passed_status
 from robot_sf.adversarial.config import CandidateEvaluation, CandidateSpec, Pose2D
-from robot_sf.adversarial.objectives import constraints_first_lexicographic_v1, get_objective
+from robot_sf.adversarial.objectives import (
+    constraints_first_lexicographic_v1,
+    constraints_first_lexicographic_v2,
+    constraints_first_outcome_projection_v2,
+    get_objective,
+)
 
 
 def _evaluation(tmp_path: Path, name: str, record: dict[str, object]) -> CandidateEvaluation:
@@ -119,6 +124,7 @@ def test_constraints_first_objective_accepts_canonical_boolean_success_metric(
             "outcome": {
                 "route_complete": True,
                 "collision_event": False,
+                "severe_intrusion_event": False,
                 "timeout_event": False,
             },
             "metrics": {"success": True, "collisions": 0, "near_misses": 0},
@@ -129,6 +135,103 @@ def test_constraints_first_objective_accepts_canonical_boolean_success_metric(
 
     assert score is not None
     assert 0.0 <= score < 1.0
+
+
+def test_constraints_first_v2_keeps_partial_negative_safety_evidence_unknown(
+    tmp_path: Path,
+) -> None:
+    """The #9645-shaped row cannot score as safe when intrusion evidence is absent."""
+    evaluation = _evaluation(
+        tmp_path,
+        "partial_safety_evidence",
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {"success": True, "collisions": 0, "near_misses": 0},
+        },
+    )
+    record = json.loads(evaluation.episode_record_path.read_text(encoding="utf-8"))
+
+    assert get_objective("constraints_first_lexicographic_v2") is constraints_first_lexicographic_v2
+    assert constraints_first_outcome_projection_v2(record)["status"] == "not_available"
+    assert constraints_first_lexicographic_v2(evaluation) is None
+    # V1 is retained unchanged for byte-bound historical contracts; new work uses v2.
+    assert constraints_first_lexicographic_v1(evaluation) is not None
+
+
+def test_constraints_first_v2_requires_both_negative_safety_components(
+    tmp_path: Path,
+) -> None:
+    """Either missing component keeps a negative safety conclusion unavailable."""
+    intrusion_only = _evaluation(
+        tmp_path,
+        "intrusion_only_negative",
+        {
+            "outcome": {
+                "route_complete": True,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {"success": True, "near_misses": 0},
+        },
+    )
+    fully_observed_clear = _evaluation(
+        tmp_path,
+        "fully_observed_clear",
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {"success": True, "collisions": 0, "near_misses": 0},
+        },
+    )
+
+    assert constraints_first_lexicographic_v2(intrusion_only) is None
+    clear_score = constraints_first_lexicographic_v2(fully_observed_clear)
+    assert clear_score is not None
+    assert 0.0 <= clear_score < 1.0
+
+
+def test_constraints_first_v2_keeps_known_positive_safety_evidence_critical(
+    tmp_path: Path,
+) -> None:
+    """Either observed safety failure remains critical if the other is unknown."""
+    collision = _evaluation(
+        tmp_path,
+        "collision_intrusion_unknown",
+        {
+            "outcome": {
+                "route_complete": False,
+                "collision_event": True,
+                "timeout_event": False,
+            },
+            "metrics": {"success": False, "collisions": 1, "near_misses": 0},
+        },
+    )
+    intrusion = _evaluation(
+        tmp_path,
+        "intrusion_collision_unknown",
+        {
+            "outcome": {
+                "route_complete": False,
+                "severe_intrusion_event": True,
+                "timeout_event": False,
+            },
+            "metrics": {"success": False, "severe_intrusion": True, "near_misses": 1},
+        },
+    )
+
+    collision_score = constraints_first_lexicographic_v2(collision)
+    intrusion_score = constraints_first_lexicographic_v2(intrusion)
+
+    assert collision_score is not None and 4.0 <= collision_score < 5.0
+    assert intrusion_score is not None and 4.0 <= intrusion_score < 5.0
 
 
 def test_constraints_first_objective_rejects_success_metric_conflicting_with_outcome(

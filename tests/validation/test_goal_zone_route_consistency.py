@@ -17,7 +17,9 @@ from robot_sf.nav.svg_map_parser import _load_single_svg
 from robot_sf.training.scenario_loader import load_scenarios_for_validation, resolve_map_id
 
 REPO_ROOT = Path(__file__).parents[2]
-LEGACY_MATRIX = (
+RELEASE_007_MATRIX = REPO_ROOT / "configs/scenarios/classic_interactions_francis2023.yaml"
+RELEASE_007_MATRIX_SHA256 = "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5"
+BASE_SUCCESSOR_MATRIX = (
     REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml"
 )
 SUCCESSOR_MATRIX = (
@@ -38,7 +40,9 @@ AFFECTED_SOURCE_MAPS = frozenset(
         "maps/svg_maps/classic_head_on_corridor.svg",
         "maps/svg_maps/classic_merging.svg",
         "maps/svg_maps/classic_overtaking.svg",
+        "maps/svg_maps/classic_realworld_bottleneck.svg",
         "maps/svg_maps/classic_t_intersection.svg",
+        "maps/svg_maps/classic_urban_crossing.svg",
         "maps/svg_maps/classic_station_platform.svg",
         "maps/svg_maps/francis2023/francis2023_blind_corner.svg",
         "maps/svg_maps/francis2023/francis2023_circular_crossing.svg",
@@ -111,14 +115,22 @@ def _without_robot_route_data(path: Path) -> bytes:
 
 def test_successor_matrix_preserves_roster_and_historical_map_bytes() -> None:
     """The release successor changes only map identity; the #9348 baseline stays frozen."""
-    legacy_rows = _load_matrix(LEGACY_MATRIX)
+    release_rows = _load_matrix(RELEASE_007_MATRIX)
+    base_successor_rows = _load_matrix(BASE_SUCCESSOR_MATRIX)
     successor_rows = _load_matrix(SUCCESSOR_MATRIX)
-    legacy_names = [row.get("name") for row in legacy_rows]
-    successor_names = [row.get("name") for row in successor_rows]
-    assert len(legacy_names) == len(set(legacy_names)), (
-        "legacy release matrix has duplicate scenarios"
+    assert _sha256(RELEASE_007_MATRIX) == RELEASE_007_MATRIX_SHA256, (
+        "0.0.7 scenario matrix bytes changed"
     )
-    assert successor_names == legacy_names, (
+    release_names = [row.get("name") for row in release_rows]
+    base_successor_names = [row.get("name") for row in base_successor_rows]
+    successor_names = [row.get("name") for row in successor_rows]
+    assert len(release_names) == len(set(release_names)), (
+        "0.0.7 release matrix has duplicate scenarios"
+    )
+    assert base_successor_names == release_names, (
+        "base successor matrix changed the 0.0.7 scenario roster or order"
+    )
+    assert successor_names == release_names, (
         "successor matrix changed release scenario roster or order"
     )
 
@@ -129,7 +141,7 @@ def test_successor_matrix_preserves_roster_and_historical_map_bytes() -> None:
         return normalized
 
     assert [without_map_identity(row) for row in successor_rows] == [
-        without_map_identity(row) for row in legacy_rows
+        without_map_identity(row) for row in base_successor_rows
     ], "successor matrix changed a non-map scenario condition"
 
     registry = yaml.safe_load((REPO_ROOT / "maps/registry.yaml").read_text(encoding="utf-8"))
@@ -188,9 +200,8 @@ def test_successor_maps_change_only_robot_route_and_keep_all_release_rows_reacha
                     f"{route_id}: final waypoint is outside goal zone in {relative_map}"
                 )
                 continue
-            if relative_map not in SUCCESSOR_MAPS:
-                continue
-            represented_successors.add(relative_map)
+            if relative_map in SUCCESSOR_MAPS:
+                represented_successors.add(relative_map)
             radius_checked_routes += 1
             margin = polygon.boundary.distance(point)
             if margin + MARGIN_TOLERANCE_M < MIN_ROBOT_GOAL_MARGIN_M:
@@ -267,6 +278,38 @@ def test_successor_geometry_diff_is_limited_to_robot_route_data() -> None:
                 if getattr(obstacle, "vertices", None)
             ]
             assert obstacle_polygons, "station-platform successor needs parsed obstacles"
+            assert not any(added_segment.intersects(obstacle) for obstacle in obstacle_polygons)
+            min_clearance = min(added_segment.distance(obstacle) for obstacle in obstacle_polygons)
+            assert min_clearance + MARGIN_TOLERANCE_M >= DEFAULT_ROBOT_RADIUS
+        elif source == "maps/svg_maps/classic_realworld_bottleneck.svg":
+            assert new_waypoints[:-1] == old_waypoints, (
+                "realworld bottleneck successor must preserve the original route"
+            )
+            assert old_waypoints[-1] == (53.0, 15.0)
+            assert new_waypoints[-1] == (54.0, 15.0)
+            added_segment = LineString([old_waypoints[-1], new_waypoints[-1]])
+            obstacle_polygons = [
+                Polygon(obstacle.vertices)
+                for obstacle in successor_def.obstacles
+                if getattr(obstacle, "vertices", None)
+            ]
+            assert obstacle_polygons, "realworld bottleneck successor needs parsed obstacles"
+            assert not any(added_segment.intersects(obstacle) for obstacle in obstacle_polygons)
+            min_clearance = min(added_segment.distance(obstacle) for obstacle in obstacle_polygons)
+            assert min_clearance + MARGIN_TOLERANCE_M >= DEFAULT_ROBOT_RADIUS
+        elif source == "maps/svg_maps/classic_urban_crossing.svg":
+            assert new_waypoints[:-1] == old_waypoints, (
+                "urban crossing successor must preserve the original route"
+            )
+            assert old_waypoints[-1] == (39.0, 25.0)
+            assert new_waypoints[-1] == (40.0, 25.0)
+            added_segment = LineString([old_waypoints[-1], new_waypoints[-1]])
+            obstacle_polygons = [
+                Polygon(obstacle.vertices)
+                for obstacle in successor_def.obstacles
+                if getattr(obstacle, "vertices", None)
+            ]
+            assert obstacle_polygons, "urban crossing successor needs parsed obstacles"
             assert not any(added_segment.intersects(obstacle) for obstacle in obstacle_polygons)
             min_clearance = min(added_segment.distance(obstacle) for obstacle in obstacle_polygons)
             assert min_clearance + MARGIN_TOLERANCE_M >= DEFAULT_ROBOT_RADIUS

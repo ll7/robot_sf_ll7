@@ -6,8 +6,8 @@ files remain byte-identical. The #9348 doorway preregistration therefore keeps u
 `7538ed173d462a5107afc1a1e43b5b2e6d2bc5c9604035cdec9a551e20a8b15e`.
 
 For a future matrix, `classic_interactions_francis2023_goal_zone_entry_v3.yaml` extends
-the current goal-zone matrix and routes 44 scenario rows through versioned map overrides.
-It uses 29 #9762 successor SVGs. The station-platform successor starts from the already
+the current goal-zone matrix and routes 46 scenario rows through versioned map overrides.
+It uses 31 #9762 successor SVGs. The station-platform successor starts from the already
 merged #9725 map (`classic_station_platform_v2.svg`, SHA-256
 `6a106e4e1a44ea927ffe1fa0089d865991d97c9ae85fe4a1608d5c8fd78f136c`) and changes only
 the robot route endpoint from `(77, 22.5)` to `(78, 22.5)`; its path segment is checked
@@ -15,8 +15,13 @@ against obstacles and its endpoint has a 1.0 m zone-boundary margin. The overrid
 `map_id` so the scenario loader resolves `map_file` rather than silently selecting the
 historical registry map.
 
+Review of every release-matrix route also found zero-margin endpoints in the real-world
+double-bottleneck and urban-crossing scenarios. Their versioned successors extend only the
+final waypoint from `(53, 15)` to `(54, 15)` and `(39, 25)` to `(40, 25)`, respectively.
+The added segments are obstacle-clear and each endpoint has a 1.0 m goal-zone margin.
+
 The route-consistency test loads both matrices through the scenario loader and checks
-that each final route waypoint enters its declared goal zone with at least the configured
+that every final route waypoint enters its declared goal zone with at least the configured
 robot-radius margin. For the crossing family, it preserves the certified interaction
 route as an unchanged prefix and adds a final segment to the goal; for station-platform,
 it preserves the #9725 spawn-corrected map and extends only the robot route endpoint.

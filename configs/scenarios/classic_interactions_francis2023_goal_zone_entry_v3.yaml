@@ -131,6 +131,12 @@ scenario_overrides_by_name:
   classic_station_platform_medium:
     map_id: null
     map_file: ../../maps/successor_svg_maps/issue_9762_classic_station_platform_goal_zone_entry_v2.svg
+  classic_realworld_double_bottleneck_high:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2.svg
+  classic_urban_crossing_medium:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_urban_crossing_goal_zone_entry_v2.svg
   classic_cross_trap_low:
     map_id: null
     map_file: ../../maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg

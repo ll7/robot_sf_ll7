@@ -2226,7 +2226,17 @@ def arbitrate_multimodal_trajectories(  # noqa: PLR0913
             candidate_set_id=prepared.candidate_set_id if prepared is not None else None,
         )
 
-    assert prepared is not None
+    if prepared is None:
+        return _invalid_input_result(
+            ValueError("candidate preparation produced no result"),
+            validation_phase="candidate",
+            forecast=forecast_value,
+            risk_config=risk_config,
+            arbitration_config=arbitration_config,
+            candidate_count=len(candidate_values),
+            evaluation_duration_ms=(time.perf_counter_ns() - started_ns) / 1e6,
+            candidate_set_id=None,
+        )
     evaluations = list(prepared.invalid_evaluations)
     route_error = prepared.route_error
     evaluation_error = bool(evaluations)

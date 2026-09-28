@@ -17,6 +17,10 @@ from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
 from robot_sf.benchmark.release_protocol import load_release_manifest
 from scripts.tools import rebuild_campaign_reports_from_rows, run_benchmark_release
 
+_ASSERT_SPAWN_PREFLIGHT_REPORT_IDENTITY = (
+    run_benchmark_release._assert_spawn_preflight_report_identity
+)
+
 
 @pytest.fixture(autouse=True)
 def _default_spawn_matrix_preflight_passes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -47,6 +51,36 @@ def _default_spawn_matrix_preflight_passes(monkeypatch: pytest.MonkeyPatch) -> N
             {"status": "valid", "blocked_cell_count": 0, "input_error": None},
         ),
     )
+    monkeypatch.setattr(
+        run_benchmark_release, "_assert_spawn_preflight_report_identity", lambda *_args: None
+    )
+
+
+@pytest.mark.parametrize("tampered_report", ["json", "markdown"])
+def test_spawn_preflight_report_readback_rejects_tampered_bytes(
+    tmp_path: Path, tampered_report: str
+) -> None:
+    """A release result cannot retain a valid digest after either report changes."""
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    json_path = reports / "spawn_matrix_preflight.v1.json"
+    markdown_path = reports / "spawn_matrix_preflight.v1.md"
+    json_path.write_text('{"status":"valid"}\n', encoding="utf-8")
+    markdown_path.write_text("# Valid preflight\n", encoding="utf-8")
+    summary = {
+        "json_path": "reports/spawn_matrix_preflight.v1.json",
+        "json_sha256": run_benchmark_release.sha256_file(json_path),
+        "markdown_path": "reports/spawn_matrix_preflight.v1.md",
+        "markdown_sha256": run_benchmark_release.sha256_file(markdown_path),
+    }
+    _ASSERT_SPAWN_PREFLIGHT_REPORT_IDENTITY(tmp_path, summary)
+
+    path = json_path if tampered_report == "json" else markdown_path
+    path.write_text(path.read_text(encoding="utf-8") + "tampered\n", encoding="utf-8")
+    with pytest.raises(
+        run_benchmark_release.ReleaseArtifactIdentityError, match="report digest changed"
+    ):
+        _ASSERT_SPAWN_PREFLIGHT_REPORT_IDENTITY(tmp_path, summary)
 
 
 def _write_json(path: Path, payload: dict) -> None:

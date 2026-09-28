@@ -212,6 +212,40 @@ def test_safe_hold_exempts_only_declared_path_and_width_failures() -> None:
     assert reachability["reason"] == "unsupported_expected_outcome"
 
 
+def test_footprint_path_checks_required_intermediate_waypoints_in_order() -> None:
+    """A reachable final goal cannot hide an unreachable required route waypoint."""
+    blocked = np.zeros((60, 60), dtype=bool)
+    blocked[:, 30] = True
+    robot = SimpleNamespace(pose=((1.0, 3.0), 0.0), config=SimpleNamespace(radius=0.1))
+    navigator = SimpleNamespace(waypoints=[(5.0, 3.0), (2.0, 3.0)])
+    env = SimpleNamespace(simulator=SimpleNamespace(robots=[robot], robot_navs=[navigator]))
+    analysis = {
+        "occupancy": blocked,
+        "inflated": blocked,
+        "origin": (0.0, 0.0),
+        "resolution": 0.1,
+        "wall_geometry": LineString([(3.0, 0.0), (3.0, 6.0)]),
+    }
+
+    reachability, passage = spawn_preflight._check_footprint_path(
+        env, analysis, scenario={"name": "ordered_route"}, margin_m=0.1
+    )
+
+    assert reachability["status"] == "fail"
+    assert reachability["first_blocked_segment_index"] == 0
+    assert reachability["route_waypoint_count"] == 2
+    assert passage["status"] == "fail"
+    assert passage["first_blocked_segment_index"] == 0
+
+    navigator.waypoints = [(2.0, 3.0), (1.0, 3.0)]
+    reachability, passage = spawn_preflight._check_footprint_path(
+        env, analysis, scenario={"name": "ordered_route"}, margin_m=0.1
+    )
+    assert reachability["status"] == "pass"
+    assert reachability["path_length_m"] == pytest.approx(2.0)
+    assert passage["status"] == "pass"
+
+
 def test_release_input_resolver_uses_manifest_matrix_and_seed_set() -> None:
     """The current release identities resolve to all 48 scenarios and seeds 111-140."""
     manifest = load_release_manifest(RELEASE_MANIFEST)

@@ -255,10 +255,12 @@ The release entrypoint:
 
 The matrix setup gate uses the release manifest's checksummed matrix and seed set without
 development-matrix or seed overrides. It requires 0.10 m surface clearance and checks the robot
-footprint on a 0.10 m occupancy grid, then holds the robot stationary for 20 steps to catch early
-route-end respawn overlap. JSON and Markdown reports are retained under
+footprint through every navigator waypoint in order on a 0.10 m occupancy grid, then holds the
+robot stationary for 20 steps to catch early route-end respawn overlap. JSON and Markdown reports
+are retained under
 `<campaign_root>/reports/spawn_matrix_preflight.v1.{json,md}`. A blocked row stops the release
-before planner execution. These reports are setup diagnostics; they are not planner-performance,
+before planner execution. Their recorded SHA-256 digests are checked again after the campaign and
+in the publication bundle. These reports are setup diagnostics; they are not planner-performance,
 navigation-success, or release-success evidence. An infeasible path or passage is exempt only when
 the scenario explicitly declares `expected_outcome: infeasible_safe_hold`.
 

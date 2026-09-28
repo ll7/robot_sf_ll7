@@ -356,6 +356,29 @@ def _run_spawn_matrix_preflight(
     return summary, report
 
 
+def _assert_spawn_preflight_report_identity(campaign_root: Path, summary: dict[str, Any]) -> None:
+    """Fail if retained preflight reports differ from their release-result digests."""
+    for path_key, digest_key, relative_path in (
+        ("json_path", "json_sha256", "reports/spawn_matrix_preflight.v1.json"),
+        ("markdown_path", "markdown_sha256", "reports/spawn_matrix_preflight.v1.md"),
+    ):
+        expected_digest = summary.get(digest_key)
+        if summary.get(path_key) != relative_path or not isinstance(expected_digest, str):
+            raise ReleaseArtifactIdentityError(f"invalid spawn preflight {path_key} identity")
+        try:
+            actual_digest = sha256_file(
+                resolve_campaign_artifact_path(campaign_root, relative_path)
+            )
+        except (OSError, ValueError) as exc:
+            raise ReleaseArtifactIdentityError(
+                f"spawn preflight report is missing or unreadable: {relative_path}"
+            ) from exc
+        if actual_digest != expected_digest:
+            raise ReleaseArtifactIdentityError(
+                f"spawn preflight report digest changed: {relative_path}"
+            )
+
+
 def _admit_release_resume(
     *,
     args: Any,
@@ -1707,6 +1730,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
     try:
         _merge_release_provenance(campaign_root, release_provenance)
         _assert_no_historical_release_identity(campaign_root)
+        _assert_spawn_preflight_report_identity(campaign_root, spawn_preflight_summary)
     except ReleaseArtifactIdentityError as exc:
         reason = str(exc)
         result.update(
@@ -1877,6 +1901,10 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
 
     if release_benchmark_success and publication_requested:
         try:
+            try:
+                _assert_spawn_preflight_report_identity(campaign_root, spawn_preflight_summary)
+            except ReleaseArtifactIdentityError as exc:
+                raise PublicationPreflightError(str(exc)) from exc
             # The first export discovers the deterministic bundle descriptor.  Then write that
             # descriptor and the final release result into the source campaign before exporting
             # again.  Repeat until the descriptor is stable so the bundle contains the same
@@ -1901,6 +1929,12 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
                 )
             result["publication_bundle"] = publication_payload
             _assert_no_historical_release_identity(Path(publication_payload["bundle_dir"]))
+            try:
+                _assert_spawn_preflight_report_identity(
+                    Path(publication_payload["bundle_dir"]), spawn_preflight_summary
+                )
+            except ReleaseArtifactIdentityError as exc:
+                raise PublicationPreflightError(str(exc)) from exc
             _run_publication_preflight(Path(publication_payload["bundle_dir"]))
         except ReleaseArtifactIdentityError as exc:
             result["publication_bundle"] = None

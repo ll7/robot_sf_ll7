@@ -20,6 +20,7 @@ import math
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor
+from itertools import pairwise
 from math import dist
 from pathlib import Path
 from typing import Any
@@ -328,6 +329,27 @@ def _path_world_points(
     ]
 
 
+def _ordered_route_grid_path(
+    blocked: np.ndarray,
+    route_points: list[tuple[float, float]],
+    *,
+    origin: tuple[float, float],
+    resolution: float,
+) -> tuple[list[tuple[int, int]] | None, int | None]:
+    """Join grid paths through every required navigator waypoint in order.
+
+    Returns:
+        The complete cell path and no failure index, or the first blocked segment index.
+    """
+    route_path: list[tuple[int, int]] = []
+    for segment_index, (start, goal) in enumerate(pairwise(route_points)):
+        segment = _grid_path(blocked, start, goal, origin=origin, resolution=resolution)
+        if segment is None:
+            return None, segment_index
+        route_path.extend(segment[1:] if route_path else segment)
+    return route_path, None
+
+
 def _check_footprint_path(
     env: Any,
     analysis: dict[str, Any],
@@ -350,14 +372,18 @@ def _check_footprint_path(
     if not waypoints:
         invalid = {"status": "invalid", "reason": "scenario_goal_route_unavailable"}
         return invalid, invalid.copy()
-    goal_xy = tuple(float(value) for value in waypoints[-1])
+    route_points = [
+        robot_xy,
+        *(tuple(float(value) for value in waypoint) for waypoint in waypoints),
+    ]
     origin = analysis["origin"]
     resolution = float(analysis["resolution"])
-    raw_path = _grid_path(
-        analysis["occupancy"], robot_xy, goal_xy, origin=origin, resolution=resolution
+
+    raw_path, raw_blocked_segment = _ordered_route_grid_path(
+        analysis["occupancy"], route_points, origin=origin, resolution=resolution
     )
-    inflated_path = _grid_path(
-        analysis["inflated"], robot_xy, goal_xy, origin=origin, resolution=resolution
+    inflated_path, inflated_blocked_segment = _ordered_route_grid_path(
+        analysis["inflated"], route_points, origin=origin, resolution=resolution
     )
     expected_outcome, declaration_error = _validate_expected_outcome(scenario)
     if declaration_error:
@@ -371,6 +397,8 @@ def _check_footprint_path(
                 if inflated_path is not None
                 else "no_collision_free_footprint_path"
             ),
+            "route_waypoint_count": len(waypoints),
+            "first_blocked_segment_index": inflated_blocked_segment,
             "path_length_m": (
                 round(
                     sum(
@@ -391,7 +419,11 @@ def _check_footprint_path(
         }
         measurement_path = inflated_path or raw_path
         if measurement_path is None:
-            passage = {"status": "fail", "reason": "no_grid_path_available_for_width_check"}
+            passage = {
+                "status": "fail",
+                "reason": "no_grid_path_available_for_width_check",
+                "first_blocked_segment_index": raw_blocked_segment,
+            }
         else:
             points = _path_world_points(measurement_path, origin=origin, resolution=resolution)
             sampled_widths = [

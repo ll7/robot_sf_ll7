@@ -17,7 +17,10 @@ from typing import Any
 
 import numpy as np
 from loguru import logger
-from pysocialforce.config import resolve_obstacle_force_law_with_mode
+from pysocialforce.config import (
+    resolve_obstacle_force_law_with_mode,
+    resolve_social_force_kernel_version_with_mode,
+)
 
 from robot_sf.common.math_utils import wrap_angle_pi_closed
 from robot_sf.planner.socnav_occupancy import OccupancyAwarePlannerMixin
@@ -421,6 +424,9 @@ class SocNavPlannerConfig:
     # are read only when ``social_force_ped_version == "surface_v3"``; see
     # ``socnav_social_force`` for the derivation of the defaults.
     social_force_ped_version: Any = field(default=None, kw_only=True)
+    # Issue #9764: preserve the historical unwrapped pair kernel by default;
+    # the shortest-angle correction is explicitly selected for next-release runs.
+    social_force_kernel_version: Any = field(default=None, kw_only=True)
     social_force_ped_v3_strength: float = field(default=6.0, kw_only=True)
     social_force_ped_v3_length: float = field(default=0.5, kw_only=True)
     social_force_ped_v3_default_ped_radius: float = field(default=0.4, kw_only=True)
@@ -470,6 +476,11 @@ class SocNavPlannerConfig:
         if name == "social_force_ped_version":
             object.__setattr__(self, name, resolve_social_force_ped_version(value))
             return
+        if name == "social_force_kernel_version":
+            resolved, mode = resolve_social_force_kernel_version_with_mode(value)
+            object.__setattr__(self, name, resolved)
+            object.__setattr__(self, "_social_force_kernel_resolution_mode", mode)
+            return
         if name == "social_force_obstacle_law":
             resolved, mode = resolve_obstacle_force_law_with_mode(value)
             object.__setattr__(self, name, resolved)
@@ -496,6 +507,11 @@ class SocNavPlannerConfig:
     def social_force_obstacle_law_version(self, value: Any) -> None:
         """Set the obstacle law through the explicit versioned alias."""
         self.social_force_obstacle_law = value
+
+    @property
+    def social_force_kernel_resolution_mode(self) -> str:
+        """Return how the pair-kernel selector was resolved."""
+        return getattr(self, "_social_force_kernel_resolution_mode", "historical_unversioned")
 
     @property
     def social_force_goal_approach_resolution_mode(self) -> str:

@@ -4,7 +4,10 @@ from dataclasses import dataclass, field, replace
 from math import ceil, isfinite, pi
 from typing import Any
 
-from pysocialforce.config import resolve_obstacle_force_law_with_mode
+from pysocialforce.config import (
+    resolve_obstacle_force_law_with_mode,
+    resolve_social_force_kernel_version_with_mode,
+)
 from pysocialforce.scene import normalize_integration_scheme
 
 from robot_sf.nav.map_config import normalize_goal_completion_policy
@@ -277,6 +280,9 @@ class SimulationSettings:
     pedestrian_model: str = "social_force_default"
     """Pedestrian dynamics model selector."""
 
+    social_force_kernel_version: Any = None
+    """Versioned pedestrian pair-kernel selector; missing preserves 0.0.7."""
+
     ttc_predictive_force: TtcPredictiveForceConfig = field(default_factory=TtcPredictiveForceConfig)
     """TTC predictive force settings used by ``hsfm_ttc_predictive_v1``."""
 
@@ -427,7 +433,17 @@ class SimulationSettings:
             object.__setattr__(self, name, resolved)
             object.__setattr__(self, "_obstacle_force_law_resolution_mode", mode)
             return
+        if name == "social_force_kernel_version":
+            resolved, mode = resolve_social_force_kernel_version_with_mode(value)
+            object.__setattr__(self, name, resolved)
+            object.__setattr__(self, "_social_force_kernel_resolution_mode", mode)
+            return
         object.__setattr__(self, name, value)
+
+    @property
+    def social_force_kernel_resolution_mode(self) -> str:
+        """Return how the pedestrian pair-kernel selector was resolved."""
+        return getattr(self, "_social_force_kernel_resolution_mode", "historical_unversioned")
 
     @property
     def resolved_action_latency_steps(self) -> int:

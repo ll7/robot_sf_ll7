@@ -272,7 +272,7 @@ def _candidate_failure(item: dict[str, Any]) -> str | None:
             return None
         value = attribution.get("primary_failure")
         if isinstance(value, str) and value.strip():
-            return value.strip()
+            return value.strip().lower()
     return None
 
 
@@ -325,7 +325,7 @@ def _metric_safety_observations(
 
 
 def _safety_component_status(
-    item: dict[str, Any], *, aliases: tuple[str, ...], metric_name: str, failures: frozenset[str]
+    item: dict[str, Any], *, aliases: tuple[str, ...], metric_name: str
 ) -> tuple[bool | None, list[str]]:
     """Read one collision/intrusion component without treating absence as a negative."""
     containers = _safety_evidence_containers(item)
@@ -333,9 +333,6 @@ def _safety_component_status(
     metric_observations, metric_malformed = _metric_safety_observations(containers, metric_name)
     observed.extend(metric_observations)
     malformed = malformed or metric_malformed
-    failure = _candidate_failure(item)
-    if failure in failures:
-        observed.append(True)
 
     if malformed:
         return None, [f"{metric_name}_evidence_malformed"]
@@ -377,13 +374,11 @@ def _collision_intrusion_tier(item: Any) -> dict[str, Any]:
         item,
         aliases=("collision", "collision_event"),
         metric_name="collisions",
-        failures=frozenset({"collision"}),
     )
     intrusion, intrusion_reasons = _safety_component_status(
         item,
         aliases=("severe_intrusion", "severe_intrusion_event"),
         metric_name="severe_intrusion",
-        failures=frozenset({"severe_intrusion"}),
     )
     if collision is True or intrusion is True:
         status = "critical"
@@ -400,16 +395,72 @@ def _collision_intrusion_tier(item: Any) -> dict[str, Any]:
 
 
 def _candidate_criticality_status(
-    candidate_status: str, failure: str | None, safety_tier: dict[str, Any]
+    candidate_status: str, failure: str | None, safety_tier: dict[str, Any], item: dict[str, Any]
 ) -> str:
-    """Combine attributed failure evidence with the explicit safety-tier evidence."""
+    """Combine explicit safety evidence with only corroborated attributed failures."""
     if candidate_status in {"invalid", "failed"}:
         return "unknown"
-    if failure in CRITICAL_FAILURES or safety_tier["status"] == "critical":
+    if safety_tier["status"] == "critical":
+        return "critical"
+    if failure in CRITICAL_FAILURES and _failure_has_positive_evidence(item, failure):
         return "critical"
     if failure == "success" and safety_tier["status"] == "not_critical":
         return "not_critical"
     return "unknown"
+
+
+def _consistent_outcome_boolean(item: dict[str, Any], *aliases: str) -> bool | None:
+    """Return a consistent outcome boolean from candidate and attribution details."""
+    values, malformed = _outcome_safety_observations(_safety_evidence_containers(item), aliases)
+    if malformed or not values or any(value != values[0] for value in values[1:]):
+        return None
+    return values[0]
+
+
+def _failure_has_positive_evidence(item: dict[str, Any], failure: str) -> bool:
+    """Require candidate details to support a non-safety primary failure label."""
+    if failure == "timeout":
+        return _consistent_outcome_boolean(item, "timeout", "timeout_event") is True
+    if failure == "incomplete":
+        return _consistent_outcome_boolean(item, "route_complete") is False
+    if failure == "near_miss":
+        containers = _safety_evidence_containers(item)
+        events, malformed = _outcome_safety_observations(
+            containers, ("near_miss", "near_miss_event")
+        )
+        if malformed or any(value is False for value in events):
+            return False
+        positive_metric = False
+        for container in containers:
+            metrics = container.get("metrics")
+            if not isinstance(metrics, dict) or metrics.get("near_misses") is None:
+                continue
+            value = _finite_number(metrics["near_misses"])
+            if value is None or value <= 0.0:
+                return False
+            positive_metric = True
+        return positive_metric or bool(events and events[0])
+    if failure == "comfort_violation":
+        return (
+            _consistent_outcome_boolean(item, "comfort_violation", "comfort_violation_event")
+            is True
+        )
+    return False
+
+
+def _criticality_failure_type(
+    status: str, failure: str | None, safety_tier: dict[str, Any], item: dict[str, Any]
+) -> str | None:
+    """Name a critical failure only when its type is supported by observed evidence."""
+    if status != "critical":
+        return None
+    if failure in {"collision", "severe_intrusion"}:
+        return failure if safety_tier.get(failure) is True else "collision_or_severe_intrusion"
+    if failure in CRITICAL_FAILURES and _failure_has_positive_evidence(item, failure):
+        return failure
+    if safety_tier.get("status") == "critical":
+        return "collision_or_severe_intrusion"
+    return None
 
 
 def _candidate_status(item: Any) -> tuple[str, str | None, float | None, bool]:
@@ -995,14 +1046,16 @@ def _derive_evaluations(
         is_mapping = isinstance(item, dict)
         collision_intrusion_tier = _collision_intrusion_tier(item)
         criticality_status = _candidate_criticality_status(
-            status, failure, collision_intrusion_tier
+            status,
+            failure,
+            collision_intrusion_tier,
+            item if is_mapping else {},
         )
-        criticality_failure_type = (
-            failure
-            if failure in CRITICAL_FAILURES
-            else "collision_or_severe_intrusion"
-            if collision_intrusion_tier["status"] == "critical"
-            else None
+        criticality_failure_type = _criticality_failure_type(
+            criticality_status,
+            failure,
+            collision_intrusion_tier,
+            item if is_mapping else {},
         )
         candidate = item.get("candidate") if is_mapping else None
         candidate_hash, effective_hash = _candidate_identity(item) if is_mapping else (None, None)

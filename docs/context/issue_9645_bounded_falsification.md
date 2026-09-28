@@ -62,7 +62,9 @@ must be explicitly false to establish a negative safety result, and otherwise th
 no score. Within each tier its soft degradation score uses near-miss count, SNQI, and path
 inefficiency (`1 - path_efficiency`) when those metrics are available. Conflicts within one
 component make only that component unknown; a confirmed positive in the other component still
-establishes the safety-failure tier. A score also requires resolved,
+establishes the safety-failure tier. A primary failure label cannot override missing or conflicting
+episode outcome details; attribution-derived criticality stays unknown without corroborating
+evidence. A score also requires resolved,
 available execution provenance (`execution_mode` native, adapter, or mixed; `readiness_status`
 native or adapter; and `availability_status` available). Fallback, degraded, unavailable, failed,
 or missing execution status remains recorded but cannot steer an optimizer. The frozen v1

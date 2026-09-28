@@ -182,6 +182,11 @@ def _validate_bindings(
     """Bind separately versioned trace configs to frozen-source run manifests."""
     if set(config_paths) != {"headon_group", "doorway"} or set(manifest_paths) != set(config_paths):
         raise ValueError("both diagnostic configs and campaign manifests are required")
+    if set(campaign_ids) != set(config_paths) or any(
+        not isinstance(campaign_ids[name], str) or not campaign_ids[name].strip()
+        for name in config_paths
+    ):
+        raise ValueError("both diagnostic campaign IDs are required and must be non-empty")
     bound: dict[str, Any] = {}
     tuples: set[tuple[str, str, int]] = set()
     for name, path in sorted(config_paths.items()):
@@ -686,6 +691,16 @@ def main() -> int:
     parser.add_argument("--doorway-config", required=True, type=Path)
     parser.add_argument("--headon-manifest", required=True, type=Path)
     parser.add_argument("--doorway-manifest", required=True, type=Path)
+    parser.add_argument(
+        "--headon-campaign-id",
+        default=CAMPAIGN_ID["headon_group"],
+        help="expected head-on campaign ID (defaults to the frozen 0.0.7 ID)",
+    )
+    parser.add_argument(
+        "--doorway-campaign-id",
+        default=CAMPAIGN_ID["doorway"],
+        help="expected doorway campaign ID (defaults to the frozen 0.0.7 ID)",
+    )
     parser.add_argument("--robot-force-sidecar-dirs", type=Path, nargs="+")
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
@@ -694,6 +709,10 @@ def main() -> int:
         args.traces,
         {"headon_group": args.headon_config, "doorway": args.doorway_config},
         {"headon_group": args.headon_manifest, "doorway": args.doorway_manifest},
+        expected_campaign_ids={
+            "headon_group": args.headon_campaign_id,
+            "doorway": args.doorway_campaign_id,
+        },
         observer_sidecar_dirs=args.robot_force_sidecar_dirs,
     )
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")

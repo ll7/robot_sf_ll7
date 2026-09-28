@@ -311,6 +311,46 @@ def test_manifest_binds_exact_sidecar_bytes_and_outcome(
         )
 
 
+def test_manifest_forwards_distinct_spec_campaign_ids_to_comparator(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec, _, _ = _fixture(tmp_path, monkeypatch)
+    checked = bundle.trace_checker.check
+    observed: dict[str, Any] = {}
+
+    def capture(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        observed.update(kwargs)
+        return checked(*args, **kwargs)
+
+    monkeypatch.setattr(bundle.trace_checker, "check", capture)
+    _build(spec)
+
+    assert observed["expected_campaign_ids"] == {
+        name: item["campaign_id"] for name, item in spec["campaigns"].items()
+    }
+
+
+@pytest.mark.parametrize("campaign_id", [None, "", "  "])
+def test_manifest_rejects_missing_or_empty_campaign_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, campaign_id: object
+) -> None:
+    spec, _, _ = _fixture(tmp_path, monkeypatch)
+    spec["campaigns"]["headon_group"]["campaign_id"] = campaign_id
+
+    with pytest.raises(ValueError, match="missing or empty campaign ID: headon_group"):
+        _build(spec)
+
+
+def test_manifest_rejects_campaign_id_disagreement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec, _, _ = _fixture(tmp_path, monkeypatch)
+    spec["campaigns"]["headon_group"]["campaign_id"] = "wrong-campaign"
+
+    with pytest.raises(ValueError, match="Slurm startup identity mismatch: headon_group"):
+        _build(spec)
+
+
 def test_manifest_accepts_respawned_force_time_slot_state(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

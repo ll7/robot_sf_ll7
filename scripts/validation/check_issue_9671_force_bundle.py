@@ -337,9 +337,14 @@ def build_manifest(  # noqa: C901, PLR0912, PLR0915 - custody gate checks disjoi
     if observer_sha != spec["observer_sha256"]:
         raise ValueError("staged observer byte hash mismatch")
     campaigns = spec["campaigns"]
+    campaign_ids: dict[str, str] = {}
+    for name, item in campaigns.items():
+        campaign_id = item.get("campaign_id") if isinstance(item, dict) else None
+        if not isinstance(campaign_id, str) or not campaign_id.strip():
+            raise ValueError(f"missing or empty campaign ID: {name}")
+        campaign_ids[name] = campaign_id
     configs = {name: Path(item["config"]) for name, item in campaigns.items()}
     manifests = {name: Path(item["campaign_manifest"]) for name, item in campaigns.items()}
-    campaign_ids = {name: item["campaign_id"] for name, item in campaigns.items()}
     trace_paths = [Path(path) for item in campaigns.values() for path in item["traces"]]
     trace_owner = {
         str(path): name for name, item in campaigns.items() for path in map(Path, item["traces"])

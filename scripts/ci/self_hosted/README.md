@@ -49,8 +49,11 @@ the next one. Both runner and probe use the dedicated IPv4 Docker bridge
 `robot-sf-ci-egress` (`172.30.244.0/24`, gateway `172.30.244.1`, bridge
 `br-robot-sf-ci`). IPv6 is disabled. Before starting a slot, `setup.sh start`
 checks that a probe container cannot ping the host gateway or a University of
-Augsburg address, and can reach GitHub and PyPI over HTTPS. It refuses to start
-when the probe fails. The probe does not replace the host firewall rules below.
+Augsburg address, and can reach GitHub and PyPI over HTTPS. The supervisor
+repeats the network configuration check and isolation probe before each
+replacement container. If either check fails, it logs the failure and retries
+after 60 seconds without requesting a registration token or starting a runner.
+The probe does not replace the host firewall rules below.
 
 ## One-time host firewall setup (author action)
 

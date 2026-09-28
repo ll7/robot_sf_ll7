@@ -99,6 +99,11 @@ supervise() {
   local name
   name="$(slot_name "$1")"
   while true; do
+    if ! ensure_network || ! probe_network; then
+      echo "Runner $name network isolation check failed; retrying after 60 seconds" >&2
+      sleep 60
+      continue
+    fi
     # The API response goes directly through the pipe to the container's
     # config step. Neither a token file nor a token-bearing Docker argument is
     # created. The container and its tmpfs disappear after one job.
@@ -196,6 +201,7 @@ stop_slot() {
 case "${1:-}" in
   build) [[ $# -eq 1 ]] || { usage; exit 2; }; build_image ;;
   network) [[ $# -eq 1 ]] || { usage; exit 2; }; ensure_network ;;
+  supervise) [[ $# -eq 2 ]] || { usage; exit 2; }; require_slot "$2"; supervise "$2" ;;
   start|stop|status)
     [[ $# -eq 2 ]] || { usage; exit 2; }
     require_slot "$2"

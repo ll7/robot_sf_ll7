@@ -241,9 +241,15 @@ def test_post_preflight_readback_rejects_candidate_digest_drift(candidate_repo) 
         )
 
 
-@pytest.mark.parametrize("change_during_run", [False, True])
+@pytest.mark.parametrize(
+    ("change_during_run", "prior_error"),
+    [(False, None), (True, None), (True, "matrix_worker_failed")],
+)
 def test_preflight_cli_accepts_candidate_and_rejects_mid_run_drift(
-    candidate_repo, monkeypatch: pytest.MonkeyPatch, change_during_run: bool
+    candidate_repo,
+    monkeypatch: pytest.MonkeyPatch,
+    change_during_run: bool,
+    prior_error: str | None,
 ) -> None:
     root, path, payload = candidate_repo
     original_digest = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -268,7 +274,7 @@ def test_preflight_cli_accepts_candidate_and_rejects_mid_run_drift(
             "rows": [],
             "cell_count": 0,
             "blocked_cell_count": 0,
-            "input_error": None,
+            "input_error": prior_error,
         }
 
     monkeypatch.setattr(spawn_preflight, "run_manifest_preflight", diagnostic_preflight)
@@ -291,6 +297,8 @@ def test_preflight_cli_accepts_candidate_and_rejects_mid_run_drift(
     if change_during_run:
         assert report["status"] == "invalid"
         assert "candidate_input_drift" in report["input_error"]
+        if prior_error:
+            assert prior_error in report["input_error"]
     else:
         assert report["status"] == "blocked"
         assert report["input_error"] is None

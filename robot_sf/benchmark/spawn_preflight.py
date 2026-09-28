@@ -1237,7 +1237,11 @@ def main(argv: list[str] | None = None) -> int:
                 )
             except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
                 report["status"] = "invalid"
-                report["input_error"] = f"candidate_input_drift: {type(exc).__name__}: {exc}"
+                drift_error = f"candidate_input_drift: {type(exc).__name__}: {exc}"
+                prior_error = report.get("input_error")
+                report["input_error"] = (
+                    f"{prior_error}; {drift_error}" if prior_error else drift_error
+                )
     except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
         report = {
             "schema_version": "spawn_matrix_preflight.v1",

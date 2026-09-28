@@ -237,6 +237,67 @@ class ManeuverPortfolioConfig:
         return float(self.max_angular_jerk_radps3 or self.max_jerk_mps3)
 
 
+def _validate_control_state_alignment(
+    states: np.ndarray,
+    controls: tuple[Control, ...],
+    metadata: Mapping[str, JSONScalar],
+) -> None:
+    """Reject producer grids whose recorded rollout disagrees with controls."""
+    if not controls:
+        raise ValueError("controls must not be empty")
+    raw_steps = metadata.get("horizon_steps")
+    if raw_steps is not None and (
+        isinstance(raw_steps, bool) or not isinstance(raw_steps, int) or raw_steps != len(controls)
+    ):
+        raise ValueError("horizon_steps metadata must match controls")
+    raw_dt = metadata.get("dt_s")
+    if raw_dt is None:
+        # The consumer rejects a generated candidate without timing metadata.
+        # Retain that malformed fixture so it can report its missing-grid reason.
+        return
+    if (
+        isinstance(raw_dt, bool)
+        or not isinstance(raw_dt, (int, float))
+        or not math.isfinite(float(raw_dt))
+        or float(raw_dt) <= 0.0
+    ):
+        raise ValueError("dt_s metadata must be finite and positive")
+
+    dt_s = float(raw_dt)
+    control_array = np.asarray(controls, dtype=float)
+    previous = states[:-1]
+    linear_speed = control_array[:, 0]
+    angular_speed = control_array[:, 1]
+    with np.errstate(over="ignore", invalid="ignore"):
+        heading_delta = angular_speed * dt_s
+        midpoint_heading = previous[:, 2] + heading_delta / 2.0
+        expected_xy = (
+            previous[:, :2]
+            + np.column_stack(
+                (linear_speed * np.cos(midpoint_heading), linear_speed * np.sin(midpoint_heading))
+            )
+            * dt_s
+        )
+    if not np.all(np.isfinite(heading_delta)):
+        raise ValueError("controls produce a non-finite rollout")
+    with np.errstate(over="ignore", invalid="ignore"):
+        expected_heading = np.asarray(
+            [
+                wrap_angle_pi(float(heading + delta))
+                for heading, delta in zip(previous[:, 2], heading_delta, strict=True)
+            ]
+        )
+    if (
+        not np.all(np.isfinite(expected_xy))
+        or not np.all(np.isfinite(expected_heading))
+        or not np.allclose(states[1:, :2], expected_xy, rtol=0.0, atol=1.0e-8)
+        or not np.allclose(states[1:, 2], expected_heading, rtol=0.0, atol=1.0e-8)
+        or not np.allclose(states[1:, 3], linear_speed, rtol=0.0, atol=1.0e-8)
+        or not np.allclose(states[1:, 4], angular_speed, rtol=0.0, atol=1.0e-8)
+    ):
+        raise ValueError("states must match the unicycle control rollout")
+
+
 @dataclass(frozen=True, slots=True)
 class ManeuverCandidate:
     """One complete executable candidate and its semantic metadata."""
@@ -254,6 +315,10 @@ class ManeuverCandidate:
         """Freeze arrays and validate the wrapper's alignment contract."""
         if not self.candidate_id or not isinstance(self.candidate_id, str):
             raise ValueError("candidate_id must be a non-empty string")
+        if not isinstance(self.action, CandidateAction):
+            raise TypeError("action must be a canonical CandidateAction")
+        if self.action.action_id != self.candidate_id:
+            raise ValueError("candidate_id must match action.action_id")
         if not isinstance(self.maneuver, ManeuverId):
             raise TypeError("maneuver must be a ManeuverId")
         if isinstance(self.generation_rank, bool) or self.generation_rank < 0:
@@ -272,6 +337,7 @@ class ManeuverCandidate:
         waypoints = _immutable_array(self.action.waypoints)
         if waypoints.shape != (array.shape[0], 2) or not np.array_equal(waypoints, array[:, :2]):
             raise ValueError("action waypoints must exactly match state positions")
+        _validate_control_state_alignment(array, controls, self.metadata)
         object.__setattr__(
             self,
             "action",

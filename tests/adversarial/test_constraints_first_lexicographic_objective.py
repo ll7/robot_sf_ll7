@@ -254,7 +254,7 @@ def test_constraints_first_v2_positive_component_survives_other_component_confli
             "metrics": {
                 "success": False,
                 "collisions": 1,
-                "severe_intrusion": True,
+                "severe_intrusion": False,
                 "near_misses": 1,
             },
         },
@@ -270,7 +270,12 @@ def test_constraints_first_v2_positive_component_survives_other_component_confli
                 "severe_intrusion_event": True,
                 "timeout_event": False,
             },
-            "metrics": {"success": False, "severe_intrusion": True, "near_misses": 1},
+            "metrics": {
+                "success": False,
+                "collisions": 0,
+                "severe_intrusion": True,
+                "near_misses": 1,
+            },
         },
     )
 
@@ -279,6 +284,40 @@ def test_constraints_first_v2_positive_component_survives_other_component_confli
 
     assert collision_score is not None and 4.0 <= collision_score < 5.0
     assert intrusion_score is not None and 4.0 <= intrusion_score < 5.0
+
+
+def test_constraints_first_v2_alias_conflicts_cannot_fall_back_to_negative_metrics(
+    tmp_path: Path,
+) -> None:
+    """A metric cannot turn contradictory aliases into a known negative component."""
+    cases = (
+        (
+            "conflicting_collision_aliases_with_zero_metric",
+            {
+                "route_complete": True,
+                "collision": False,
+                "collision_event": True,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            {"success": True, "collisions": 0, "severe_intrusion": False, "near_misses": 0},
+        ),
+        (
+            "conflicting_intrusion_aliases_with_false_metric",
+            {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion": False,
+                "severe_intrusion_event": True,
+                "timeout_event": False,
+            },
+            {"success": True, "collisions": 0, "severe_intrusion": False, "near_misses": 0},
+        ),
+    )
+
+    for name, outcome, metrics in cases:
+        evaluation = _evaluation(tmp_path, name, {"outcome": outcome, "metrics": metrics})
+        assert constraints_first_lexicographic_v2(evaluation) is None
 
 
 def test_constraints_first_v2_same_component_source_conflict_stays_unknown(

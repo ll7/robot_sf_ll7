@@ -22,15 +22,19 @@ if TYPE_CHECKING:
     from robot_sf.adversarial.config import CandidateEvaluation
 
 
-def _component_from_outcome(outcome: dict[str, Any], *names: str) -> bool | None:
+def _component_from_outcome(outcome: dict[str, Any], *names: str) -> tuple[bool | None, bool]:
+    """Return one alias value and whether present outcome evidence is malformed/conflicting."""
+    present = any(name in outcome for name in names)
     value = _consistent_boolean_alias(outcome, *names)
-    if value is None and any(name in outcome for name in names):
-        return None
-    return value
+    return value, present and value is None
 
 
 def _collision_component(outcome: dict[str, Any], metrics: dict[str, Any]) -> bool | None:
-    outcome_value = _component_from_outcome(outcome, "collision", "collision_event")
+    outcome_value, outcome_conflict = _component_from_outcome(
+        outcome, "collision", "collision_event"
+    )
+    if outcome_conflict:
+        return None
     raw_metric = metrics.get("collisions")
     metric_value: bool | None = None
     if raw_metric is not None:
@@ -45,7 +49,9 @@ def _collision_component(outcome: dict[str, Any], metrics: dict[str, Any]) -> bo
 
 def _intrusion_component(outcome: dict[str, Any], metrics: dict[str, Any]) -> bool | None:
     names = ("severe_intrusion", "severe_intrusion_event")
-    outcome_value = _component_from_outcome(outcome, *names)
+    outcome_value, outcome_conflict = _component_from_outcome(outcome, *names)
+    if outcome_conflict:
+        return None
     metric_values = [
         metrics[name] for name in names if name in metrics and metrics[name] is not None
     ]
@@ -89,12 +95,13 @@ def constraints_first_outcome_projection_v2(record: dict[str, Any]) -> dict[str,
     if not isinstance(outcome, dict) or not isinstance(metrics, dict):
         return _unavailable_projection()
 
-    route_complete = _component_from_outcome(outcome, "route_complete")
+    route_complete, route_complete_conflict = _component_from_outcome(outcome, "route_complete")
     timeout_names = ("timeout", "timeout_event")
-    timeout = _component_from_outcome(outcome, *timeout_names)
+    timeout, timeout_conflict = _component_from_outcome(outcome, *timeout_names)
     if (
         route_complete is None
-        or (timeout is None and any(name in outcome for name in timeout_names))
+        or route_complete_conflict
+        or timeout_conflict
         or not _success_metric_matches_route_complete(metrics, route_complete)
     ):
         return _unavailable_projection()

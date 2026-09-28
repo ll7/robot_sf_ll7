@@ -65,6 +65,53 @@ def test_episode_input_identity_binds_scenario_route_and_map_bytes(tmp_path: Pat
     assert changed_map["map_assets"] != identity["map_assets"]
 
 
+def test_registered_map_identity_uses_registry_bytes_that_resolved_map_id(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A registry edit cannot pair its new digest with a stale cached map path."""
+    scenario_loader._load_map_registry.cache_clear()
+    scenario_path = tmp_path / "scenario.yaml"
+    scenario_path.write_text("scenario fixture\n", encoding="utf-8")
+    route_path = tmp_path / "route.yaml"
+    route_path.write_text("route: [1, 2]\n", encoding="utf-8")
+    first_map = tmp_path / "first.svg"
+    first_map.write_text("<svg id='first'/>", encoding="utf-8")
+    second_map = tmp_path / "second.svg"
+    second_map.write_text("<svg id='second'/>", encoding="utf-8")
+    registry_path = tmp_path / "registry.yaml"
+    first_registry = b"maps:\n  - map_id: selected\n    path: first.svg\n"
+    second_registry = b"maps:\n  - map_id: selected\n    path: second.svg\n"
+    registry_path.write_bytes(first_registry)
+    monkeypatch.setenv("ROBOT_SF_MAP_REGISTRY", str(registry_path))
+    scenario = {
+        "name": "registered-map-cache",
+        "map_id": "selected",
+        "route_overrides_file": "route.yaml",
+    }
+
+    first_identity = capture_episode_input_identity(
+        scenario, scenario_path=scenario_path, seed=3, run_id="run-registry-a"
+    )
+    registry_path.write_bytes(second_registry)
+    second_identity = capture_episode_input_identity(
+        scenario, scenario_path=scenario_path, seed=3, run_id="run-registry-b"
+    )
+
+    first_assets = {asset["role"]: asset["sha256"] for asset in first_identity["map_assets"]}
+    second_assets = {asset["role"]: asset["sha256"] for asset in second_identity["map_assets"]}
+    assert first_identity["status"] == "bound"
+    assert second_identity["status"] == "bound"
+    assert first_assets == {
+        "map": hashlib.sha256(first_map.read_bytes()).hexdigest(),
+        "map_registry": hashlib.sha256(first_registry).hexdigest(),
+    }
+    assert second_assets == {
+        "map": hashlib.sha256(second_map.read_bytes()).hexdigest(),
+        "map_registry": hashlib.sha256(second_registry).hexdigest(),
+    }
+    scenario_loader._load_map_registry.cache_clear()
+
+
 def test_replaced_map_bytes_cannot_reuse_path_cached_geometry(tmp_path: Path) -> None:
     """The parsed map digest follows the exact bytes consumed across replacements."""
     repository_root = Path(__file__).resolve().parents[2]

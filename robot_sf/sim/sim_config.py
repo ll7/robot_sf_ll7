@@ -1,6 +1,6 @@
 """Configuration dataclasses for simulator timing and pedestrian behavior."""
 
-from dataclasses import dataclass, field, replace
+from dataclasses import InitVar, dataclass, field, replace
 from math import ceil, isfinite, pi
 from typing import Any
 
@@ -280,7 +280,7 @@ class SimulationSettings:
     pedestrian_model: str = "social_force_default"
     """Pedestrian dynamics model selector."""
 
-    social_force_kernel_version: Any = None
+    social_force_kernel_version: InitVar[Any] = None
     """Versioned pedestrian pair-kernel selector; missing preserves 0.0.7."""
 
     ttc_predictive_force: TtcPredictiveForceConfig = field(default_factory=TtcPredictiveForceConfig)
@@ -435,10 +435,33 @@ class SimulationSettings:
             return
         if name == "social_force_kernel_version":
             resolved, mode = resolve_social_force_kernel_version_with_mode(value)
-            object.__setattr__(self, name, resolved)
+            object.__setattr__(self, "_social_force_kernel_version", resolved)
             object.__setattr__(self, "_social_force_kernel_resolution_mode", mode)
             return
         object.__setattr__(self, name, value)
+
+    def __getattribute__(self, name: str) -> Any:
+        """Expose the runtime selector without adding a default key to legacy config hashes.
+
+        Returns:
+            The resolved selector for ``social_force_kernel_version`` or the requested attribute.
+        """
+        if name == "social_force_kernel_version":
+            try:
+                return object.__getattribute__(self, "_social_force_kernel_version")
+            except AttributeError:
+                return resolve_social_force_kernel_version_with_mode(None)[0]
+        return object.__getattribute__(self, name)
+
+    def _config_hash_overrides(self) -> dict[str, str]:
+        """Include explicit selectors in config hashes while omitting the legacy default.
+
+        Returns:
+            Only the non-default selector field, or an empty mapping for the legacy default.
+        """
+        if self.social_force_kernel_resolution_mode == "defaulted_missing":
+            return {}
+        return {"social_force_kernel_version": str(self.social_force_kernel_version)}
 
     @property
     def social_force_kernel_resolution_mode(self) -> str:
@@ -504,13 +527,14 @@ class SimulationSettings:
         if self.action_latency_steps != 0:
             raise ValueError("action_latency_steps and action_latency_ms cannot both be configured")
 
-    def __post_init__(self):  # noqa: C901
+    def __post_init__(self, social_force_kernel_version: Any):  # noqa: C901
         """
         Validate the simulation settings.
 
         This method is called after the object is initialized. It checks that all the
         settings are valid and raises a ValueError if any of them are not.
         """
+        self.social_force_kernel_version = social_force_kernel_version
         # Check that the simulation time is positive
         if self.sim_time_in_secs <= 0:
             raise ValueError("Simulation length for episodes mustn't be negative or zero!")

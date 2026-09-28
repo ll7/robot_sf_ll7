@@ -12,7 +12,9 @@ from pysocialforce.config import (
     SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1,
     SOCIAL_FORCE_KERNEL_WRAPPED_V2,
     SimulatorConfig,
+    SocialForceConfig,
 )
+from pysocialforce.force_trace import stable_config_hash
 from pysocialforce.map_config import MapDefinition
 from pysocialforce.ped_grouping import PedestrianGroupings, PedestrianStates
 
@@ -203,6 +205,21 @@ def test_social_force_config_selects_wrapped_pedestrian_simulator_kernel():
 
     assert np.linalg.norm(legacy[0]) < 1e-100
     assert np.linalg.norm(wrapped[0]) > 1e-3
+
+
+def test_kernel_selector_preserves_legacy_force_config_hash_and_hashes_opt_in():
+    """Missing selectors keep the released hash; nested opt-in configs remain distinguishable."""
+    legacy = SocialForceConfig()
+    assert stable_config_hash(legacy) == (
+        "e85e4999b0458c7b87fbb519e8eb27a6c55bd21057808fbd96a493e871d12bc8"
+    )
+
+    wrapped = SocialForceConfig(kernel_version=SOCIAL_FORCE_KERNEL_WRAPPED_V2)
+    assert wrapped.social_force_kernel_resolution_mode == "explicit"
+    assert stable_config_hash(wrapped) != stable_config_hash(legacy)
+    assert stable_config_hash(SimulatorConfig(social_force_config=wrapped)) != stable_config_hash(
+        SimulatorConfig()
+    )
 
 
 def test_gil_releasing_social_force_preserves_output_and_allows_parallel_steps():

@@ -3,7 +3,7 @@
 import hashlib
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field
 from typing import Any
 
 from pysocialforce.ped_population import PedSpawnConfig
@@ -472,13 +472,30 @@ class SocialForceConfig:
     n: int = 2
     n_prime: int = 3
     activation_threshold: float = 20.0
-    kernel_version: Any = None
+    kernel_version: InitVar[Any] = None
+
+    def __post_init__(self, kernel_version: Any) -> None:
+        """Resolve the selector without adding a default key to legacy dataclass payloads."""
+        self.kernel_version = kernel_version
+
+    def __getattribute__(self, name: str) -> Any:
+        """Expose the runtime selector stored outside serialized dataclass fields.
+
+        Returns:
+            The resolved selector for ``kernel_version`` or the requested attribute.
+        """
+        if name == "kernel_version":
+            try:
+                return object.__getattribute__(self, "_social_force_kernel_version")
+            except AttributeError:
+                return resolve_social_force_kernel_version_with_mode(None)[0]
+        return object.__getattribute__(self, name)
 
     def __setattr__(self, name: str, value: Any) -> None:
-        """Resolve the kernel selector immediately and retain its provenance."""
+        """Resolve the selector while keeping its legacy serialization shape unchanged."""
         if name == "kernel_version":
             resolved, mode = resolve_social_force_kernel_version_with_mode(value)
-            object.__setattr__(self, name, resolved)
+            object.__setattr__(self, "_social_force_kernel_version", resolved)
             object.__setattr__(self, "_social_force_kernel_resolution_mode", mode)
             return
         object.__setattr__(self, name, value)
@@ -497,6 +514,16 @@ class SocialForceConfig:
     def social_force_kernel_resolution_mode(self) -> str:
         """Return how the kernel selector was resolved."""
         return getattr(self, "_social_force_kernel_resolution_mode", "historical_unversioned")
+
+    def _config_hash_overrides(self) -> dict[str, str]:
+        """Include explicit selectors in config hashes while omitting the legacy default.
+
+        Returns:
+            Only the non-default selector field, or an empty mapping for the legacy default.
+        """
+        if self.social_force_kernel_resolution_mode == "defaulted_missing":
+            return {}
+        return {"kernel_version": str(self.kernel_version)}
 
 
 @dataclass

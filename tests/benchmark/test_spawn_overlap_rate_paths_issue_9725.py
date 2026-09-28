@@ -340,6 +340,30 @@ def test_v2_forged_valid_reset_telemetry_stays_out_of_rates(mutation: str) -> No
     assert record_has_invalid_spawn(_record(seed=1, collision=True, spawn=legacy)) is False
 
 
+def test_v1_non_overlap_invalid_reason_keeps_historical_rate_classification() -> None:
+    """Legacy rows were excluded only for the explicit spawn-overlap reason."""
+    from robot_sf.benchmark.aggregate import compute_aggregates
+
+    historical = dict(
+        build_spawn_validity({"overlap": False}, []),
+        schema_version="spawn_validity.v1",
+        invalid_run=True,
+        invalid_reason="other_diagnostic_reason",
+    )
+    row = _record(seed=1, collision=True, spawn=historical)
+    assert record_has_invalid_spawn(row) is False
+    assert _cell_record_eligible(row) == _cell_record_eligible(
+        {key: value for key, value in row.items() if key != "spawn_validity"}
+    )
+    assert _comparison_record_eligible(row) is True
+    result = compute_aggregates(
+        [row, _record(seed=2, collision=False, spawn=_CLEAN)], group_by="algo"
+    )
+    assert result["orca"]["success"]["mean"] == pytest.approx(0.5)
+    historical["invalid_reason"] = "spawn_overlap"
+    assert record_has_invalid_spawn(row) is True
+
+
 def test_map_inventory_includes_successor_maps() -> None:
     """The default map inventory verifies successor maps kept outside the pinned registry."""
     from robot_sf.maps.verification.map_inventory import MapInventory

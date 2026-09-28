@@ -171,10 +171,10 @@ def record_has_invalid_spawn(record: Mapping[str, Any]) -> bool:
     block = record.get("spawn_validity")
     if not isinstance(block, Mapping):
         return False
+    if block.get("schema_version") != SPAWN_VALIDITY_SCHEMA_VERSION:
+        return record_has_spawn_overlap(record)
     if block.get("invalid_run") is True:
         return True
-    if block.get("schema_version") != SPAWN_VALIDITY_SCHEMA_VERSION:
-        return False
     clearance = block.get("reset_clearance")
     return (
         block.get("invalid_run") is not False

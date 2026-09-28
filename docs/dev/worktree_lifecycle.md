@@ -37,7 +37,23 @@ scripts/dev/create_worktree.sh \
 
 ## Branch synchronization
 
-Implementation branches fetch the latest `origin/main` and merge it early:
+Before a manual local branch refresh, run the read-only index-lock preflight from the worktree
+being refreshed:
+
+```bash
+python3 scripts/dev/gate_worktree_guard.py preflight --path "$(git rev-parse --show-toplevel)" --json
+```
+
+Continue only when it exits successfully with `status: ready` and reports
+`lock_exists: false`. It resolves Git's actual worktree-specific `index.lock` path and reports its
+mtime, age, size, dirty state, and owner classification without changing the worktree. Any present
+lock blocks the refresh, including a proven orphan; preserve the lock and worktree and request
+review. An active owner must finish first. Ambiguous or unavailable ownership stays fail-closed.
+Do not delete or move a lock based only on its age or owner classification. After an approved
+recovery, rerun the preflight before refreshing the branch. The check is a point-in-time diagnostic;
+Git still protects its index during the subsequent operation.
+
+Implementation branches then fetch the latest `origin/main` and merge it early:
 `git fetch origin main && git merge origin/main`.
 
 That early merge is for development only. The pre-publication ancestry gate requires the branch's
@@ -46,6 +62,10 @@ merge, the branch is classified `undeclared_stack` and publication stops. Rebase
 commits onto the current tip before the final readiness run and publication, because the rebase
 moves the head and invalidates an existing readiness stamp. See the pre-publication ancestry note
 in `docs/dev_guide_reference.md` and issue #8864.
+
+The local fallback in `scripts/dev/update_pr_branch_safely.sh` runs this preflight automatically
+before its fetch, rebase, or push; callers that supply `--gate-worktree-path` must identify the same
+worktree used by the local Git commands.
 
 Read-only review worktrees or passes record target/base/head SHAs and inspect or fetch as needed.
 Never merge `origin/main` into the implementation branch or push to it during review. Ordinary Git

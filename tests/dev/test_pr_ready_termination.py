@@ -11,10 +11,13 @@ import pytest
 
 from scripts.dev import pr_ready_termination
 from scripts.dev.pr_ready_termination import (
+    LaneTerminalContext,
     TerminationContext,
     _process_group_exists,
     _process_group_liveness,
+    build_lane_terminal_receipt,
     build_receipt,
+    validate_lane_terminal_receipt,
     write_receipt,
 )
 
@@ -49,6 +52,88 @@ def test_build_receipt_is_bounded_and_credential_free() -> None:
     assert "command" not in receipt
     assert "environment" not in receipt
     assert receipt["resources"]["host"]["cpu_count"] is not None
+
+
+def test_lane_terminal_record_preserves_exit_143_without_inferring_signal(
+    tmp_path: Path,
+) -> None:
+    """A child status of 143 does not prove the wrapper observed SIGTERM."""
+    receipt = build_lane_terminal_receipt(
+        LaneTerminalContext(
+            lane="core",
+            repo_root=tmp_path,
+            source_sha="a" * 40,
+            started_at_utc="2026-09-26T10:00:00Z",
+            elapsed_seconds="65",
+            exit_status="143",
+            supervisor_pid=os.getpid(),
+            child_pid="invalid",
+            child_process_group_id=None,
+        )
+    )
+
+    assert receipt["schema"] == "pr_ready_lane_terminal.v1"
+    assert receipt["status"] == "terminal"
+    assert receipt["outcome"] == "failed"
+    assert receipt["exit_status"] == 143
+    assert receipt["signal"] == {"supervisor": None, "child": None}
+    assert receipt["repository"]["source_sha"] == "a" * 40
+    assert receipt["process"]["supervisor_pid"] == os.getpid()
+    assert receipt["process"]["child_pid"] is None
+    assert receipt["security"] == {
+        "command_line_included": False,
+        "environment_included": False,
+    }
+
+
+def test_lane_terminal_record_uses_null_for_unavailable_identity(
+    tmp_path: Path,
+) -> None:
+    """Unobserved source and process identities stay explicit null values."""
+    receipt = build_lane_terminal_receipt(
+        LaneTerminalContext(
+            lane="optional",
+            repo_root=tmp_path / "not-a-repository",
+            source_sha="unknown",
+            started_at_utc="unknown",
+            elapsed_seconds="unknown",
+            exit_status=None,
+            supervisor_pid=None,
+            child_pid=None,
+            child_process_group_id=None,
+        )
+    )
+
+    assert receipt["status"] == "terminal"
+    assert receipt["outcome"] == "unknown"
+    assert receipt["exit_status"] is None
+    assert receipt["repository"] == {"id_sha256": None, "source_sha": None}
+    assert receipt["timing"]["elapsed_seconds"] is None
+    assert receipt["process"] == {
+        "supervisor_pid": None,
+        "child_pid": None,
+        "child_process_group_id": None,
+    }
+
+
+def test_lane_terminal_receipt_validation_rejects_nonzero_as_completed(
+    tmp_path: Path,
+) -> None:
+    """A terminal record cannot label incomplete or nonzero work as completed."""
+    receipt = build_lane_terminal_receipt(
+        LaneTerminalContext(
+            lane="core",
+            repo_root=tmp_path,
+            source_sha=None,
+            started_at_utc="2026-09-26T10:00:00Z",
+            elapsed_seconds=3,
+            exit_status=0,
+        )
+    )
+    receipt["exit_status"] = 1
+
+    with pytest.raises(ValueError, match="nonzero exit status"):
+        validate_lane_terminal_receipt(receipt)
 
 
 def test_write_receipt_is_private_and_does_not_overwrite(tmp_path: Path) -> None:

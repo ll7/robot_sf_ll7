@@ -1,7 +1,10 @@
 """Mirror and rotation symmetry for deterministic planner-driven robot episodes.
 
-Release arms (``social_force``, ``orca``, hybrid v3) run through the map-runner
-policy builder. Exact trace relations apply only to deterministic planners.
+Release arms (``social_force``, ``orca``, hybrid v3, and ``risk_dwa``) run
+through the map-runner policy builder. Guarded-PPO also has a direct
+flat-observation frame relation because its world-frame safety rollout is
+deterministic, while the learned primary policy is not an exact scene-trace
+oracle. Exact trace relations apply only to deterministic planners.
 Stochastic planners (sampling, MPPI, stochastic learned policies) draw different
 samples in a transformed scene even with the same seed, so they are excluded from
 exact mirror relations; their contract is seeded replay (``test_replay_determinism``)
@@ -20,11 +23,14 @@ from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.planner import socnav
+from robot_sf.planner.guarded_ppo import GuardedPPOAdapter
+from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter
 from robot_sf.planner.socnav_base import SocNavPlannerConfig
 from robot_sf.planner.visibility_planner import PlannerConfig, VisibilityPlanner
 from robot_sf.sim.pedestrian_model_variants import _pairwise_social_force_kernel
 from tests.metamorphic.planner_arms import (
     HYBRID_V3_ARM,
+    HYBRID_V4_DIAGNOSTIC_ARM,
     ArmEpisode,
     interaction_scene,
     mirror_x,
@@ -209,6 +215,39 @@ def _wrap(angle: np.ndarray) -> np.ndarray:
     return np.arctan2(np.sin(angle), np.cos(angle))
 
 
+def _flat_frame_observation(
+    *,
+    robot: tuple[float, float],
+    heading: float,
+    goal: tuple[float, float],
+    pedestrian: tuple[float, float],
+    pedestrian_velocity_ego: tuple[float, float],
+) -> dict[str, object]:
+    """Build a flat observation with the producer's ego velocity contract."""
+    return {
+        "robot_position": np.asarray(robot, dtype=float),
+        "robot_heading": np.asarray([heading], dtype=float),
+        "robot_speed": np.asarray([0.0], dtype=float),
+        "robot_radius": np.asarray([0.25], dtype=float),
+        "goal_current": np.asarray(goal, dtype=float),
+        "goal_next": np.asarray(goal, dtype=float),
+        "pedestrians_positions": np.asarray([pedestrian], dtype=float),
+        "pedestrians_velocities": np.asarray([pedestrian_velocity_ego], dtype=float),
+        "pedestrians_count": np.asarray([1.0], dtype=float),
+        "pedestrians_radius": np.asarray([0.25], dtype=float),
+        "sim_timestep": np.asarray([0.1], dtype=float),
+    }
+
+
+def _extracted_pedestrian_velocity(arm: str, observation: dict[str, object]) -> np.ndarray:
+    """Extract one adapter's world-frame pedestrian velocity from a flat scene."""
+    if arm == "risk_dwa":
+        return RiskDWAPlannerAdapter()._extract_robot_goal_ped(observation)[-1]
+    if arm == "guarded_ppo":
+        return GuardedPPOAdapter()._extract_state(observation)[-1]
+    raise AssertionError(f"unsupported frame-test arm: {arm}")
+
+
 def _assert_arm_equivariant(base: ArmEpisode, other: ArmEpisode, name: str) -> None:
     """Compare a transformed release-arm episode with the transformed base episode."""
     point_map, heading_map, angular_sign = _TRANSFORMS[name]
@@ -298,6 +337,68 @@ def test_release_arm_trace_is_mirror_and_rotation_equivariant(arm: str) -> None:
         _assert_arm_equivariant(base, transformed, name)
 
 
+def test_risk_dwa_release_trace_is_rotation_equivariant() -> None:
+    """The deterministic Risk-DWA release arm rotates its flat scene and trace."""
+    base = run_arm_episode("risk_dwa", interaction_scene(), seed=_SEED, max_steps=_ARM_STEPS)
+    rotated = run_arm_episode(
+        "risk_dwa", interaction_scene(rotate_90), seed=_SEED, max_steps=_ARM_STEPS
+    )
+
+    assert base.status == rotated.status == "ok"
+    _assert_arm_equivariant(base, rotated, "rotate_90")
+
+
+@pytest.mark.parametrize("arm", ["risk_dwa", "guarded_ppo"])
+def test_flat_velocity_rotation_equivariance_for_world_frame_rollouts(arm: str) -> None:
+    """World-frame safety inputs rotate with a 90-degree transformed flat scene."""
+    heading = 0.37
+    ego_velocity = np.asarray([0.8, -0.25], dtype=float)
+    cos_h, sin_h = np.cos(heading), np.sin(heading)
+    base_world_velocity = np.asarray(
+        [
+            cos_h * ego_velocity[0] - sin_h * ego_velocity[1],
+            sin_h * ego_velocity[0] + cos_h * ego_velocity[1],
+        ],
+        dtype=float,
+    )
+    rotate = np.asarray([[0.0, -1.0], [1.0, 0.0]])
+    rotated_heading = heading + np.pi / 2.0
+    rotated_world_velocity = rotate @ base_world_velocity
+    rotated_ego_velocity = np.asarray(
+        [
+            np.cos(rotated_heading) * rotated_world_velocity[0]
+            + np.sin(rotated_heading) * rotated_world_velocity[1],
+            -np.sin(rotated_heading) * rotated_world_velocity[0]
+            + np.cos(rotated_heading) * rotated_world_velocity[1],
+        ],
+        dtype=float,
+    )
+    base = _flat_frame_observation(
+        robot=(3.0, 4.0),
+        heading=heading,
+        goal=(12.0, 4.0),
+        pedestrian=(6.0, 5.0),
+        pedestrian_velocity_ego=tuple(ego_velocity),
+    )
+    transformed = _flat_frame_observation(
+        robot=tuple(rotate @ np.asarray([3.0, 4.0])),
+        heading=rotated_heading,
+        goal=tuple(rotate @ np.asarray([12.0, 4.0])),
+        pedestrian=tuple(rotate @ np.asarray([6.0, 5.0])),
+        pedestrian_velocity_ego=tuple(rotated_ego_velocity),
+    )
+
+    base_velocity = _extracted_pedestrian_velocity(arm, base)
+    transformed_velocity = _extracted_pedestrian_velocity(arm, transformed)
+    np.testing.assert_allclose(
+        transformed_velocity,
+        base_velocity @ rotate.T,
+        rtol=0.0,
+        atol=1e-12,
+        err_msg=arm,
+    )
+
+
 @pytest.mark.xfail(
     strict=True,
     raises=AssertionError,
@@ -327,6 +428,23 @@ def test_release_hybrid_v3_outcome_is_mirror_and_rotation_invariant() -> None:
         assert episode.status == "ok"
         outcomes[name] = (episode.success, episode.collision, episode.step_limit_reached)
     assert set(outcomes.values()) == {(True, False, False)}, outcomes
+
+
+def test_diagnostic_hybrid_v4_trace_is_mirror_equivariant() -> None:
+    """The explicitly bound v4 diagnostic arm preserves reflected traces."""
+    base = run_arm_episode(
+        HYBRID_V4_DIAGNOSTIC_ARM, interaction_scene(), seed=_SEED, max_steps=_ARM_STEPS
+    )
+    assert base.status == "ok"
+    for name in ("mirror_y", "mirror_x"):
+        point_map = _TRANSFORMS[name][0]
+        transformed = run_arm_episode(
+            HYBRID_V4_DIAGNOSTIC_ARM,
+            interaction_scene(point_map),
+            seed=_SEED,
+            max_steps=_ARM_STEPS,
+        )
+        _assert_arm_equivariant(base, transformed, name)
 
 
 @pytest.mark.xfail(strict=True, raises=AssertionError, reason=_BRANCH_CUT_REASON)

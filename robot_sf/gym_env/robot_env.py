@@ -649,6 +649,22 @@ class RobotEnv(BaseEnv):
         self._grid_obstacle_cache_value: _GridObstacleCacheValue | None = None
         self._prime_snqi_proxy_state()
 
+    def _apply_reset_seed(self, seed: int | None) -> None:
+        """Record the reset seed, establishing a deterministic crowd when needed (issue #9760).
+
+        A directly-constructed env samples its crowd from an unseeded RNG at
+        construction. Its first seeded reset re-runs construction-time
+        population under the seeded context. Factory-seeded envs (applied_seed
+        already set) keep their construction crowd, preserving legacy replay
+        bytes. Must run inside the seeded RNG context.
+        """
+        if seed is None:
+            return
+        establish_crowd = self.applied_seed is None
+        self.applied_seed = int(seed)
+        if establish_crowd:
+            self.simulator.repopulate_crowd()
+
     def _reset_action_latency_queue(self) -> None:
         """Clear queued controls and prime the configured delay with zero commands."""
         zero_raw = np.zeros(self.action_space.shape, dtype=self.action_space.dtype)
@@ -1206,10 +1222,8 @@ class RobotEnv(BaseEnv):
         Returns:
             tuple: ``(obs, info)`` with the initial observation and placeholder info dict.
         """
-        if seed is not None:
-            self.applied_seed = int(seed)
-
         with global_reset_seed(seed):
+            self._apply_reset_seed(seed)
             super().reset(seed=seed, options=options)
             self._telemetry_episode_id += 1
             # Reset last_action

@@ -17,6 +17,89 @@ from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
 from robot_sf.benchmark.release_protocol import load_release_manifest
 from scripts.tools import rebuild_campaign_reports_from_rows, run_benchmark_release
 
+_ASSERT_SPAWN_PREFLIGHT_REPORT_IDENTITY = (
+    run_benchmark_release._assert_spawn_preflight_report_identity
+)
+_ASSERT_PUBLICATION_SPAWN_PREFLIGHT_IDENTITY = (
+    run_benchmark_release._assert_publication_spawn_preflight_identity
+)
+
+
+@pytest.fixture(autouse=True)
+def _default_spawn_matrix_preflight_passes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep release CLI unit tests focused unless they exercise the new matrix gate."""
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_campaign_id",
+        lambda *_args, **_kwargs: "fixture-campaign",
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_run_spawn_matrix_preflight",
+        lambda **_kwargs: (
+            {
+                "status": "valid",
+                "schema_version": "spawn_matrix_preflight.v1",
+                "evidence_class": "preflight_diagnostic_only",
+                "json_path": "reports/spawn_matrix_preflight.v1.json",
+                "json_sha256": "a" * 64,
+                "markdown_path": "reports/spawn_matrix_preflight.v1.md",
+                "markdown_sha256": "b" * 64,
+                "scenario_count": 48,
+                "seed_count": 30,
+                "cell_count": 1440,
+                "blocked_cell_count": 0,
+                "input_error": None,
+            },
+            {"status": "valid", "blocked_cell_count": 0, "input_error": None},
+        ),
+    )
+    monkeypatch.setattr(
+        run_benchmark_release, "_assert_spawn_preflight_report_identity", lambda *_args: None
+    )
+    monkeypatch.setattr(
+        run_benchmark_release, "_assert_publication_spawn_preflight_identity", lambda *_args: None
+    )
+
+
+@pytest.mark.parametrize("bundle_layout", [False, True])
+@pytest.mark.parametrize("tampered_report", ["json", "markdown"])
+def test_spawn_preflight_report_readback_rejects_tampered_bytes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, tampered_report: str, bundle_layout: bool
+) -> None:
+    """A release result cannot retain a valid digest after either report changes."""
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_assert_spawn_preflight_report_identity",
+        _ASSERT_SPAWN_PREFLIGHT_REPORT_IDENTITY,
+    )
+    report_root = tmp_path / "payload" if bundle_layout else tmp_path
+    reports = report_root / "reports"
+    reports.mkdir(parents=True)
+    json_path = reports / "spawn_matrix_preflight.v1.json"
+    markdown_path = reports / "spawn_matrix_preflight.v1.md"
+    json_path.write_text('{"status":"valid"}\n', encoding="utf-8")
+    markdown_path.write_text("# Valid preflight\n", encoding="utf-8")
+    summary = {
+        "json_path": "reports/spawn_matrix_preflight.v1.json",
+        "json_sha256": run_benchmark_release.sha256_file(json_path),
+        "markdown_path": "reports/spawn_matrix_preflight.v1.md",
+        "markdown_sha256": run_benchmark_release.sha256_file(markdown_path),
+    }
+    assert_identity = (
+        _ASSERT_PUBLICATION_SPAWN_PREFLIGHT_IDENTITY
+        if bundle_layout
+        else _ASSERT_SPAWN_PREFLIGHT_REPORT_IDENTITY
+    )
+    assert_identity(tmp_path, summary)
+
+    path = json_path if tampered_report == "json" else markdown_path
+    path.write_text(path.read_text(encoding="utf-8") + "tampered\n", encoding="utf-8")
+    with pytest.raises(
+        run_benchmark_release.ReleaseArtifactIdentityError, match="report digest changed"
+    ):
+        assert_identity(tmp_path, summary)
+
 
 def _write_json(path: Path, payload: dict) -> None:
     """Write an indented JSON release fixture."""
@@ -1306,6 +1389,103 @@ def test_release_run_fails_closed_on_invalid_manifest(monkeypatch, capsys) -> No
         "unexpected_failed_rows": 0,
         "fallback_or_degraded_rows": 0,
     }
+
+
+def test_release_run_stops_before_campaign_when_spawn_matrix_is_blocked(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """A blocked matrix report is retained and prevents planner campaign execution."""
+    manifest = SimpleNamespace(
+        canonical_campaign_config_path=Path("configs/benchmarks/campaign.yaml"),
+        schema_version="benchmark-release-manifest.v0.1",
+    )
+    cfg = SimpleNamespace(name="fixture_campaign", resume=False)
+    receipt_path = tmp_path / "checkpoint.json"
+    receipt_path.write_text("{}\n", encoding="utf-8")
+    called = {"run": False}
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda _path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda _path: cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda _cfg: None)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda *_args, **_kwargs: {"status": "valid", "problems": []},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "build_resolved_release_manifest",
+        lambda *_args, **_kwargs: {"release_id": "fixture"},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release, "_required_repo_relative", lambda _path: "receipt.json"
+    )
+    monkeypatch.setattr(run_benchmark_release, "sha256_file", lambda _path: "c" * 64)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_checkpoint_staging_receipt",
+        lambda *_args, **_kwargs: {
+            "generated_at_utc": "2026-09-01T00:00:00Z",
+            "submit_safe": True,
+            "arms": [],
+        },
+    )
+    monkeypatch.setattr(run_benchmark_release, "_admit_release_resume", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        run_benchmark_release, "_campaign_id", lambda *_args, **_kwargs: "fixture-run"
+    )
+    monkeypatch.setattr(run_benchmark_release, "_current_source_commit", lambda: "d" * 40)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_run_spawn_matrix_preflight",
+        lambda **_kwargs: (
+            {
+                "status": "blocked",
+                "schema_version": "spawn_matrix_preflight.v1",
+                "evidence_class": "preflight_diagnostic_only",
+                "json_path": "reports/spawn_matrix_preflight.v1.json",
+                "json_sha256": "a" * 64,
+                "markdown_path": "reports/spawn_matrix_preflight.v1.md",
+                "markdown_sha256": "b" * 64,
+                "scenario_count": 48,
+                "seed_count": 30,
+                "cell_count": 1440,
+                "blocked_cell_count": 1,
+                "input_error": None,
+            },
+            {"status": "blocked", "blocked_cell_count": 1, "input_error": None},
+        ),
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "run_campaign",
+        lambda *_args, **_kwargs: called.__setitem__("run", True),
+    )
+
+    exit_code = run_benchmark_release.main(
+        [
+            "--manifest",
+            "manifest.yaml",
+            "--checkpoint-receipt",
+            str(receipt_path),
+            "--output-root",
+            str(tmp_path / "campaigns"),
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    persisted = json.loads(
+        (tmp_path / "campaigns" / "fixture-run" / "release" / "release_result.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert exit_code == 2
+    assert called["run"] is False
+    assert payload["status"] == "spawn_matrix_preflight_failed"
+    assert payload["campaign_execution_status"] == "not_started"
+    assert payload["spawn_matrix_preflight"]["blocked_cell_count"] == 1
+    assert persisted["status"] == "spawn_matrix_preflight_failed"
 
 
 def test_release_run_reports_orca_preflight_failure_as_structured_json(

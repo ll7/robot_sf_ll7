@@ -500,6 +500,10 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                     clearance_penalty_weight=float(
                         self.config.route_guide_clearance_penalty_weight
                     ),
+                    # The v4 diagnostic twin removes reflection-dependent grid
+                    # quantization from near-line route waypoints. v3 keeps its
+                    # frozen historical route-guide behavior.
+                    mirror_equivariant_waypoint_snap_enabled=self._v4_clearance_braking,
                 )
             )
             if bool(self.config.route_guide_enabled)
@@ -1965,8 +1969,15 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             float: Normalized oscillation penalty in ``[0, 1]``.
         """
-        recent_turns = [np.sign(cmd[1]) for cmd in self._recent_commands if abs(cmd[1]) > 0.15]
-        if len(recent_turns) < 2 or abs(angular) <= 0.15:
+        # v4 commands can arrive just below the 0.15 boundary through two
+        # floating-point/drive-window paths (for example, ``0.1499999999999999``
+        # and ``0.14999984263899568``). Treat that boundary consistently for v4
+        # only; v3 keeps its historical strict threshold semantics.
+        turn_threshold = 0.15 - (1e-6 if self._v4_clearance_braking else 0.0)
+        recent_turns = [
+            np.sign(cmd[1]) for cmd in self._recent_commands if abs(cmd[1]) > turn_threshold
+        ]
+        if len(recent_turns) < 2 or abs(angular) <= turn_threshold:
             return 0.0
         alternations = sum(1 for prev, cur in pairwise(recent_turns) if prev * cur < 0)
         candidate_flip = 1 if recent_turns[-1] * np.sign(angular) < 0 else 0
@@ -2796,7 +2807,12 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         if not min_static_clearance <= required_static_clearance:
             return None, False
         if use_continuous_static_check:
-            return None, True
+            # V4's continuous geometry check may accept a path that the coarse
+            # occupancy clearance conservatively flags. That acceptance only
+            # resolves static clearance; it must not suppress independent
+            # pedestrian collision checks. Keep the historical v3 skip
+            # semantics unchanged.
+            return None, not self._v4_clearance_braking
         static_violation_policy = (
             None
             if strict_static_clearance or corridor_clearance_buffer > 0.0

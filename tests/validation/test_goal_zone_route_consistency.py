@@ -113,6 +113,31 @@ def _without_robot_route_data(path: Path) -> bytes:
     return ET.tostring(root, encoding="utf-8")
 
 
+def _assert_changed_segments_clear(
+    source: str,
+    old_waypoints: list[tuple[float, float]],
+    new_waypoints: list[tuple[float, float]],
+    obstacle_polygons: list[Polygon],
+) -> None:
+    """Check every edited route segment against the full robot radius."""
+    original_segments = {
+        (old_waypoints[index], old_waypoints[index + 1]) for index in range(len(old_waypoints) - 1)
+    }
+    changed_segments = [
+        (index, LineString([new_waypoints[index], new_waypoints[index + 1]]))
+        for index in range(len(new_waypoints) - 1)
+        if (new_waypoints[index], new_waypoints[index + 1]) not in original_segments
+    ]
+    assert changed_segments, f"successor has no changed route segment: {source}"
+    assert obstacle_polygons, f"successor has no parsed obstacles: {source}"
+    for index, segment in changed_segments:
+        min_clearance = min(segment.distance(obstacle) for obstacle in obstacle_polygons)
+        assert min_clearance + MARGIN_TOLERANCE_M >= DEFAULT_ROBOT_RADIUS, (
+            f"{source} changed segment {index} clears obstacles by {min_clearance:.6f} m, "
+            f"below robot radius {DEFAULT_ROBOT_RADIUS:.3f} m"
+        )
+
+
 def test_successor_matrix_preserves_roster_and_historical_map_bytes() -> None:
     """The release successor changes only map identity; the #9348 baseline stays frozen."""
     release_rows = _load_matrix(RELEASE_007_MATRIX)
@@ -248,6 +273,12 @@ def test_successor_geometry_diff_is_limited_to_robot_route_data() -> None:
         )
         old_waypoints = list(original_routes[0].waypoints)
         new_waypoints = list(successor_routes[0].waypoints)
+        obstacle_polygons = [
+            Polygon(obstacle.vertices)
+            for obstacle in successor_def.obstacles
+            if getattr(obstacle, "vertices", None)
+        ]
+        _assert_changed_segments_clear(source, old_waypoints, new_waypoints, obstacle_polygons)
         if source == "maps/svg_maps/classic_crossing.svg":
             assert new_waypoints[:-1] == old_waypoints, (
                 "classic crossing successor must append a goal-zone segment without changing "

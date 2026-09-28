@@ -20,14 +20,20 @@ double-bottleneck and urban-crossing scenarios. Their versioned successors exten
 final waypoint from `(53, 15)` to `(54, 15)` and `(39, 25)` to `(40, 25)`, respectively.
 The added segments are obstacle-clear and each endpoint has a 1.0 m goal-zone margin.
 
+The classic doorway successor ends at `(17.0, 12.15)` rather than the goal-zone
+center. Its changed segment clears the nearest parsed obstacle by 1.201 m, and
+the endpoint lies 1.261 m inside the goal-zone boundary for the 1.0 m robot
+radius. The route test checks obstacle clearance against that radius for every
+changed segment in all 31 successor maps, including this doorway segment.
+
 The route-consistency test loads both matrices through the scenario loader and checks
 that every final route waypoint enters its declared goal zone with at least the configured
 robot-radius margin. For the crossing family, it preserves the certified interaction
 route as an unchanged prefix and adds a final segment to the goal; for station-platform,
 it preserves the #9725 spawn-corrected map and extends only the robot route endpoint.
-Both added segments are checked against obstacles and the configured radius. Other
-successor files change only robot route data. These are input-consistency checks, not
-campaign results.
+Other successor files change only robot route data. These checks establish goal
+entry and clearance for edited segments; full route and spawn feasibility still
+require the release preflight. They are not campaign results.
 
 The v3 matrix is a candidate input for 0.0.8 integration after review. It does not change
 the 0.0.7 release config or establish any outcome, planner, or release claim.

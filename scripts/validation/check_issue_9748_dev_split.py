@@ -111,6 +111,22 @@ def _sha256(path: Path, *, label: str) -> str:
         raise ValidationError(f"could not hash {label}: {path}: {exc}") from exc
 
 
+def _frozen_commit_sha256(commit: str, path: Path, *, label: str) -> str:
+    relative_path = _repo_relative_path(path, label=label)
+    try:
+        result = subprocess.run(
+            ["git", "show", f"{commit}:{relative_path}"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ValidationError(
+            f"could not read {label} from frozen source commit {commit}: {exc}"
+        ) from exc
+    return hashlib.sha256(result.stdout).hexdigest()
+
+
 def _current_source_commit() -> str:
     try:
         result = subprocess.run(
@@ -140,9 +156,25 @@ def _require_source_commit(raw: Any) -> str:
             "provenance.source_commit must be a lowercase 40-character source commit SHA"
         )
     current = _current_source_commit()
-    if raw != current:
+    try:
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", raw, current],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:
+        raise ValidationError(f"could not verify frozen source commit ancestry: {exc}") from exc
+    if result.returncode == 1:
         raise ValidationError(
-            f"provenance.source_commit must match the current checked-out source commit {current}"
+            "provenance.source_commit must be an ancestor of the current checked-out source "
+            f"commit {current}"
+        )
+    if result.returncode != 0:
+        raise ValidationError(
+            "provenance.source_commit must name a valid commit in the current repository "
+            f"(git merge-base exited {result.returncode})"
         )
     return raw
 
@@ -652,6 +684,14 @@ def _validate_frozen_provenance(
             "provenance.campaign_config_sha256 does not match the current development "
             f"campaign config ({expected_campaign_hash})"
         )
+    frozen_campaign_hash = _frozen_commit_sha256(
+        source_commit, config_path, label="development campaign config"
+    )
+    if campaign_hash != frozen_campaign_hash:
+        raise ValidationError(
+            "provenance.campaign_config_sha256 does not match the development campaign config "
+            f"at frozen source commit {source_commit} ({frozen_campaign_hash})"
+        )
 
     scenario_hash = _require_sha256(
         provenance["scenario_manifest_sha256"],
@@ -663,8 +703,25 @@ def _validate_frozen_provenance(
             "provenance.scenario_manifest_sha256 does not match the current development "
             f"scenario manifest ({expected_scenario_hash})"
         )
+    frozen_scenario_hash = _frozen_commit_sha256(
+        source_commit, scenario_matrix_path, label="development scenario manifest"
+    )
+    if scenario_hash != frozen_scenario_hash:
+        raise ValidationError(
+            "provenance.scenario_manifest_sha256 does not match the development scenario "
+            f"manifest at frozen source commit {source_commit} ({frozen_scenario_hash})"
+        )
 
     normalized_candidates = _validate_candidate_provenance(provenance["candidate_configs"])
+    for key, candidate_path in EXPECTED_PLANNER_CONFIGS.items():
+        frozen_candidate_hash = _frozen_commit_sha256(
+            source_commit, candidate_path, label=f"candidate config {key}"
+        )
+        if normalized_candidates[key]["sha256"] != frozen_candidate_hash:
+            raise ValidationError(
+                f"provenance candidate config hash for {key} does not match frozen source "
+                f"commit {source_commit} ({frozen_candidate_hash})"
+            )
 
     return {
         "source_commit": source_commit,

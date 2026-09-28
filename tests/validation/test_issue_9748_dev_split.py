@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -282,7 +285,7 @@ def test_campaign_config_rejects_wrong_or_missing_planner_algo(mutation: str) ->
     "mutation,match",
     [
         ("missing", "missing frozen provenance fields"),
-        ("wrong_source_commit", "must match the current checked-out source commit"),
+        ("wrong_source_commit", "must name a valid commit in the current repository"),
         ("wrong_campaign_hash", "campaign_config_sha256 does not match"),
         ("wrong_scenario_hash", "scenario_manifest_sha256 does not match"),
         ("wrong_candidate_hash", "candidate config hash"),
@@ -328,6 +331,71 @@ def test_tuning_log_accepts_valid_frozen_provenance(tmp_path: Path) -> None:
 
     assert summary["provenance"]["source_commit"] == CHECKER._current_source_commit()
     assert set(summary["provenance"]["candidate_configs"]) == set(CHECKER.EXPECTED_PLANNER_CONFIGS)
+
+
+def test_tuning_log_validates_after_log_is_committed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repository = tmp_path / "repo"
+    tracked_inputs = [
+        CHECKER.DEFAULT_CONFIG,
+        CHECKER.ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml",
+        *CHECKER.EXPECTED_PLANNER_CONFIGS.values(),
+    ]
+    for source in tracked_inputs:
+        destination = repository / source.relative_to(CHECKER.ROOT)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+
+    def git(*args: str) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=repository,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+
+    git("init", "--quiet")
+    git("config", "user.name", "Issue 9748 test")
+    git("config", "user.email", "issue-9748-test@example.invalid")
+    relative_inputs = [source.relative_to(CHECKER.ROOT).as_posix() for source in tracked_inputs]
+    git("add", "--", *relative_inputs)
+    git("commit", "--quiet", "-m", "Freeze issue 9748 tuning inputs")
+    frozen_source = git("rev-parse", "HEAD")
+
+    payload = _valid_log_payload()
+    payload["provenance"]["source_commit"] = frozen_source
+    log_path = repository / "tuning-log.json"
+    log_path.write_text(json.dumps(payload), encoding="utf-8")
+    git("add", "--", "tuning-log.json")
+    git("commit", "--quiet", "-m", "Record issue 9748 tuning log")
+    committed_head = git("rev-parse", "HEAD")
+    assert git("merge-base", "--is-ancestor", frozen_source, committed_head) == ""
+
+    frozen_config = repository / CHECKER.DEFAULT_CONFIG.relative_to(CHECKER.ROOT)
+    frozen_scenario_manifest = (
+        repository / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml"
+    )
+    frozen_candidates = {
+        key: repository / path.relative_to(CHECKER.ROOT)
+        for key, path in CHECKER.EXPECTED_PLANNER_CONFIGS.items()
+    }
+    monkeypatch.setattr(CHECKER, "ROOT", repository)
+    monkeypatch.setattr(CHECKER, "DEFAULT_CONFIG", frozen_config)
+    monkeypatch.setattr(CHECKER, "EXPECTED_PLANNER_CONFIGS", frozen_candidates)
+
+    summary = CHECKER._validate_tuning_log(
+        log_path, config_path=frozen_config, scenario_matrix_path=frozen_scenario_manifest
+    )
+
+    assert summary["provenance"]["source_commit"] == frozen_source
+    assert summary["provenance"]["source_commit"] != committed_head
+    assert (
+        summary["provenance"]["campaign_config_sha256"]
+        == hashlib.sha256(frozen_config.read_bytes()).hexdigest()
+    )
 
 
 @pytest.mark.parametrize(

@@ -63,7 +63,7 @@ Each tuning log must be YAML or JSON with the following top-level shape:
 ```yaml
 schema_version: issue_9748.tuning_log.v1
 provenance:
-  source_commit: "<current frozen 40-character commit SHA>"
+  source_commit: "<frozen 40-character source commit SHA>"
   campaign_config_sha256: "<SHA-256 of issue_9748_hybrid_v4_dev_split_v1.yaml>"
   scenario_manifest_sha256: "<SHA-256 of issue_9748_hybrid_v4_dev_variants_v1.yaml>"
   candidate_configs:
@@ -85,13 +85,16 @@ entries:
 ```
 
 When a tuning log is supplied, `provenance` is mandatory. Its source commit
-must match the current checked-out source, both development files are hashed,
-and `candidate_configs` must contain exactly the two approved candidate IDs,
-paths, and SHA-256 values. Every entry must name one approved candidate and
-repeat its matching candidate-config hash. A log is therefore bound to the
-frozen source and current tracked inputs; an unknown candidate or mismatched
-hash fails closed. The validator still accepts no tuning log because no trial
-is authorized or recorded by this protocol.
+must exist in the current repository and be an ancestor of the checked-out
+commit. This permits the tuning log itself to be committed after its frozen
+source point. The recorded hashes must match the campaign, scenario manifest,
+and candidate files both at that frozen commit and in the current tracked tree.
+The validator requires `candidate_configs` to contain exactly the two
+approved candidate IDs, paths, and SHA-256 values. Every entry must name one
+approved candidate and repeat its matching candidate-config hash. A missing
+or non-ancestor source commit, unknown candidate, or mismatched input hash
+fails closed. The validator still accepts no tuning log because no trial is
+authorized or recorded by this protocol.
 
 The validator inspects typed values under the seed fields (`seed`, `seeds`,
 `scenario_seed`, `scenario_seeds`, `seed_range`, `resolved_seeds`, and

@@ -334,6 +334,67 @@ def test_candidate_rejects_jointly_pinned_v3_scenario_algorithm_override(candida
         load_prepublication_candidate(path, repository_root=root)
 
 
+@pytest.mark.parametrize("section", ["params", "family_overrides", "scenario_overrides"])
+def test_candidate_rejects_jointly_pinned_v3_hybrid_variant_override(
+    candidate_repo, section: str
+) -> None:
+    root, path, payload = candidate_repo
+    config_path = _APPROVED_008_HYBRID_CONFIGS[
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4"
+    ]
+    manifest_path = root / config_path
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    if section == "params":
+        manifest[section]["planner_variant"] = "hybrid_rule_v3_teb_like_rollout"
+    else:
+        scenario_key = "classic_bottleneck_high" if section == "scenario_overrides" else "classic"
+        manifest.setdefault(section, {}).setdefault(scenario_key, {})["planner_variant"] = (
+            "hybrid_rule_v3_teb_like_rollout"
+        )
+    manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+    payload["sha256_files"][config_path] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    _git(root, "add", config_path)
+    _git(
+        root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "jointly pinned historical hybrid variant",
+    )
+    payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="resolves to a non-v4 planner variant"):
+        load_prepublication_candidate(path, repository_root=root)
+
+
+def test_candidate_rejects_jointly_pinned_v3_variant_in_v4_base(candidate_repo) -> None:
+    root, path, payload = candidate_repo
+    base_path = "configs/algos/hybrid_rule_v4_clearance_braking.yaml"
+    base_file = root / base_path
+    base = yaml.safe_load(base_file.read_text(encoding="utf-8"))
+    base["planner_variant"] = "hybrid_rule_v3_teb_like_rollout"
+    base_file.write_text(yaml.safe_dump(base, sort_keys=False), encoding="utf-8")
+    payload["sha256_files"][base_path] = hashlib.sha256(base_file.read_bytes()).hexdigest()
+    _git(root, "add", base_path)
+    _git(
+        root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "jointly pinned historical hybrid base",
+    )
+    payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="resolves to a non-v4 planner variant"):
+        load_prepublication_candidate(path, repository_root=root)
+
+
 def test_candidate_rejects_jointly_rewritten_scenario_identity(candidate_repo) -> None:
     root, path, payload = candidate_repo
     matrix_path = root / payload["scenario"]["matrix_path"]

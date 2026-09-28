@@ -13,7 +13,10 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file
-from robot_sf.benchmark.policy_search_manifest import is_candidate_manifest
+from robot_sf.benchmark.policy_search_manifest import (
+    is_candidate_manifest,
+    resolve_candidate_manifest_runtime,
+)
 from robot_sf.benchmark.release_acceptance import _full_release_nested_config_path
 from robot_sf.benchmark.release_protocol import (
     BenchmarkReleaseManifest,
@@ -173,7 +176,42 @@ def _planner_config_paths(root: Path, config_path: Path) -> set[Path]:
     return paths
 
 
-def _validate_v4_hybrid_manifest(planner_key: str, config_path: Path) -> None:
+def _validate_v4_hybrid_runtime(
+    planner_key: str,
+    manifest: dict[str, Any],
+    config_path: Path,
+    root: Path,
+    scenarios: list[dict[str, Any]],
+) -> None:
+    """Resolve every release scenario before admitting a v4-named slot."""
+
+    def load_config(value: object) -> dict[str, Any]:
+        path = _full_release_nested_config_path(
+            value,
+            config_anchor=config_path.parent,
+            source_repository_root=root,
+            label="v4 hybrid runtime base_config_path",
+        )
+        return _load_mapping(path)
+
+    for scenario in scenarios:
+        algo, effective = resolve_candidate_manifest_runtime(
+            default_algo="hybrid_rule_local_planner",
+            manifest=manifest,
+            scenario=scenario,
+            load_config=load_config,
+        )
+        if algo == "orca":
+            continue  # The exact reviewed ORCA hand-off is checked below.
+        if algo != "hybrid_rule_local_planner" or (
+            effective.get("planner_variant") != "hybrid_rule_v4_clearance_braking"
+        ):
+            raise ValueError(f"v4 hybrid slot {planner_key} resolves to a non-v4 planner variant")
+
+
+def _validate_v4_hybrid_manifest(
+    planner_key: str, config_path: Path, root: Path, scenarios: list[dict[str, Any]]
+) -> None:
     """Reject a v4 slot that would execute an unreviewed algorithm/base pair."""
     if planner_key not in _APPROVED_008_HYBRID_CONFIGS:
         return
@@ -182,6 +220,13 @@ def _validate_v4_hybrid_manifest(planner_key: str, config_path: Path) -> None:
         raise ValueError(f"v4 hybrid slot {planner_key} has a mismatched config name")
     if manifest.get("base_config_path") != "configs/algos/hybrid_rule_v4_clearance_braking.yaml":
         raise ValueError(f"v4 hybrid slot {planner_key} must bind the v4 base config")
+    for section_name in ("family_overrides", "scenario_overrides"):
+        section = manifest.get(section_name) or {}
+        if not isinstance(section, dict):
+            raise ValueError(f"v4 hybrid {section_name} must be a mapping")
+        for override in section.values():
+            if not isinstance(override, dict):
+                raise ValueError(f"v4 hybrid {section_name} entries must be mappings")
     overrides = manifest.get("scenario_algo_overrides") or {}
     if not isinstance(overrides, dict) or any(
         not isinstance(override, dict) for override in overrides.values()
@@ -196,6 +241,7 @@ def _validate_v4_hybrid_manifest(planner_key: str, config_path: Path) -> None:
         raise ValueError(
             f"v4 hybrid slot {planner_key} has an unapproved scenario algorithm override"
         )
+    _validate_v4_hybrid_runtime(planner_key, manifest, config_path, root, scenarios)
 
 
 def _expected_input_paths(
@@ -228,7 +274,7 @@ def _expected_input_paths(
     for planner in planners:
         if planner.get("algo_config"):
             planner_config_path = _root_file(root, planner["algo_config"], "planner.algo_config")
-            _validate_v4_hybrid_manifest(planner["key"], planner_config_path)
+            _validate_v4_hybrid_manifest(planner["key"], planner_config_path, root, scenarios)
             paths.update(_planner_config_paths(root, planner_config_path))
     for scenario in scenarios:
         if scenario.get("map_id"):

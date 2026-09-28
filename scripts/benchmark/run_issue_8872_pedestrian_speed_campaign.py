@@ -167,6 +167,75 @@ SAFE_JOURNAL_REFERENCE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 SAFE_IDENTITY_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$")
 SAFE_REASON_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 SAFE_DECISION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+JOURNAL_PROVENANCE_FIELDS = frozenset(
+    {
+        "provenance_status",
+        "identity_key",
+        "scenario_id",
+        "scenario_source_sha256",
+        "regime_id",
+        "planner_id",
+        "planner_algorithm",
+        "planner_config_sha256",
+        "seed",
+        "horizon_steps",
+        "dt_seconds",
+        "robot_speed_cap_m_s",
+        "runtime_controls",
+        "protocol_semantic_hash",
+        "manifest_hash",
+        "source_commit",
+        "execution_mode",
+        "native",
+        "fallback",
+        "degraded",
+        "intervention_status",
+        "diagnostics",
+        "trace_sha256",
+        "checkpoint_provenance",
+        "metrics",
+        "terminal_status",
+    }
+)
+JOURNAL_DIAGNOSTIC_SCALARS = frozenset(
+    {
+        "configured_desired_speed_mean_m_s",
+        "configured_desired_speed_std_m_s",
+        "realized_desired_speed_mean_m_s",
+        "realized_desired_speed_std_m_s",
+        "initial_spawn_speed_mean_m_s",
+        "initial_spawn_speed_peak_m_s",
+        "time_to_desired_speed_target_seconds",
+        "acceleration_transient_steps",
+        "desired_speed_activation_fraction",
+    }
+)
+JOURNAL_DIAGNOSTIC_VECTOR_MAPS = frozenset(
+    {
+        "initial_spawn_velocity_xy_by_pedestrian",
+        "final_post_integration_velocity_xy_by_pedestrian",
+    }
+)
+JOURNAL_DIAGNOSTIC_SPEED_MAP = "runtime_max_speed_m_s_by_pedestrian"
+JOURNAL_CHECKPOINT_FIELDS = frozenset(
+    {"model_id", "path_label", "sha256", "size_bytes", "expected_sha256"}
+)
+SENSITIVE_REASON_TOKENS = frozenset(
+    {
+        "access_token",
+        "cluster",
+        "credential",
+        "host",
+        "hostname",
+        "path",
+        "private",
+        "scratch",
+        "secret",
+        "ssh",
+        "token",
+        "worktree",
+    }
+)
 
 
 class CampaignAdapterError(ValueError):
@@ -217,12 +286,14 @@ def _sanitize_reason(value: Any, *, fallback: str = "reason:unspecified") -> str
     if not isinstance(value, str) or not value.strip():
         return fallback
     raw = value.strip()
+    reason_tokens = set(re.findall(r"[A-Za-z0-9_]+", raw.lower()))
     if (
         "\x00" in raw
         or "/" in raw
         or "\\" in raw
         or ".." in raw
         or raw.startswith(("~", "file:", "ssh:"))
+        or reason_tokens.intersection(SENSITIVE_REASON_TOKENS)
     ):
         return "reason:unsafe_detail_redacted"
     token = re.sub(r"[^A-Za-z0-9_.:-]+", "_", raw).strip("_")
@@ -477,11 +548,18 @@ def _compiled_manifest(
 
 
 @lru_cache(maxsize=1)
+def _compiled_identity_rows() -> dict[str, dict[str, Any]]:
+    """Return the compiled production identity contract keyed by identity."""
+    return {
+        str(identity["identity_key"]): dict(identity)
+        for identity in _compiled_manifest()["identities"]
+    }
+
+
+@lru_cache(maxsize=1)
 def _compiled_identity_keys() -> frozenset[str]:
     """Return the only identity keys a production journal may expose."""
-    return frozenset(
-        str(identity["identity_key"]) for identity in _compiled_manifest()["identities"]
-    )
+    return frozenset(_compiled_identity_rows())
 
 
 def _journal_identity_key(value: Any) -> str:
@@ -494,6 +572,203 @@ def _journal_identity_key(value: Any) -> str:
         "journal row identity is invalid",
     )
     return value
+
+
+def _journal_safe_token(value: Any, field: str) -> str:
+    _require(
+        isinstance(value, str) and bool(SAFE_IDENTITY_KEY.fullmatch(value)) and ".." not in value,
+        f"journal provenance {field} is invalid",
+    )
+    return value
+
+
+def _journal_relative_path(value: Any) -> str:
+    _require(isinstance(value, str) and bool(value), "journal checkpoint path is invalid")
+    path = Path(value)
+    _require(
+        not path.is_absolute()
+        and ".." not in path.parts
+        and "\\" not in value
+        and all(bool(SAFE_JOURNAL_REFERENCE.fullmatch(part)) for part in path.parts),
+        "journal checkpoint path is invalid",
+    )
+    return value
+
+
+def _journal_diagnostic_map(value: Any, *, vectors: bool) -> dict[str, Any]:
+    _require(isinstance(value, Mapping), "journal diagnostic map is invalid")
+    result: dict[str, Any] = {}
+    for key, item in value.items():
+        safe_key = _journal_safe_token(key, "diagnostic pedestrian key")
+        if vectors:
+            _require(
+                isinstance(item, Sequence)
+                and not isinstance(item, (str, bytes, bytearray))
+                and len(item) == 2,
+                "journal diagnostic vector is invalid",
+            )
+            result[safe_key] = [
+                _finite_metric(component, "journal diagnostic vector component")
+                for component in item
+            ]
+        else:
+            result[safe_key] = _finite_metric(item, "journal diagnostic speed")
+    return result
+
+
+def _journal_diagnostics(value: Any) -> dict[str, Any]:
+    _require(isinstance(value, Mapping), "journal diagnostics are invalid")
+    allowed = (
+        JOURNAL_DIAGNOSTIC_SCALARS | JOURNAL_DIAGNOSTIC_VECTOR_MAPS | {JOURNAL_DIAGNOSTIC_SPEED_MAP}
+    )
+    _require(set(value).issubset(allowed), "journal diagnostics contain an unsupported field")
+    result: dict[str, Any] = {}
+    for key, item in value.items():
+        if key in JOURNAL_DIAGNOSTIC_SCALARS:
+            _require(
+                item is None or (isinstance(item, (int, float)) and not isinstance(item, bool)),
+                "journal diagnostic scalar is invalid",
+            )
+            result[key] = None if item is None else _finite_metric(item, "journal diagnostic")
+        elif key == JOURNAL_DIAGNOSTIC_SPEED_MAP:
+            result[key] = _journal_diagnostic_map(item, vectors=False)
+        else:
+            result[key] = _journal_diagnostic_map(item, vectors=True)
+    return result
+
+
+def _journal_checkpoint_provenance(value: Any) -> list[dict[str, Any]]:
+    _require(
+        isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)),
+        "journal checkpoint provenance is invalid",
+    )
+    result: list[dict[str, Any]] = []
+    for item in value:
+        _require(isinstance(item, Mapping), "journal checkpoint provenance item is invalid")
+        _require(
+            set(item).issubset(JOURNAL_CHECKPOINT_FIELDS),
+            "journal checkpoint provenance contains an unsupported field",
+        )
+        normalized: dict[str, Any] = {}
+        if "model_id" in item:
+            normalized["model_id"] = _journal_safe_token(item["model_id"], "model id")
+        if "path_label" in item:
+            normalized["path_label"] = _journal_relative_path(item["path_label"])
+        for field in ("sha256", "expected_sha256"):
+            if field in item:
+                _require_digest(item[field], f"journal checkpoint {field}")
+                normalized[field] = item[field]
+        if "size_bytes" in item:
+            _require(
+                isinstance(item["size_bytes"], int)
+                and not isinstance(item["size_bytes"], bool)
+                and item["size_bytes"] >= 0,
+                "journal checkpoint size is invalid",
+            )
+            normalized["size_bytes"] = item["size_bytes"]
+        result.append(normalized)
+    return result
+
+
+def _journal_provenance(  # noqa: C901, PLR0912
+    value: Any, identity_key: str
+) -> dict[str, Any]:
+    """Validate and project protocol provenance before it enters journal output."""
+    provenance = _mapping(value, "journal.row_finished.provenance")
+    _require(
+        set(provenance).issubset(JOURNAL_PROVENANCE_FIELDS),
+        "journal provenance contains an unsupported field",
+    )
+    if "identity_key" in provenance:
+        nested_identity = _journal_identity_key(provenance["identity_key"])
+        _require(
+            nested_identity == identity_key,
+            "journal provenance identity does not match row identity",
+        )
+    expected = _compiled_identity_rows()[identity_key]
+    normalized = dict(provenance)
+    for field in (
+        "identity_key",
+        "scenario_id",
+        "scenario_source_sha256",
+        "regime_id",
+        "planner_id",
+        "planner_config_sha256",
+        "seed",
+        "horizon_steps",
+        "dt_seconds",
+        "robot_speed_cap_m_s",
+        "runtime_controls",
+    ):
+        if field in normalized:
+            _require(
+                normalized[field] == expected[field],
+                "journal provenance identity contract is invalid",
+            )
+    for field in ("scenario_source_sha256", "planner_config_sha256"):
+        if field in normalized:
+            _require_digest(normalized[field], f"journal provenance {field}")
+    for field in ("protocol_semantic_hash", "manifest_hash", "trace_sha256"):
+        if field in normalized:
+            _require_digest(normalized[field], f"journal provenance {field}")
+    if "source_commit" in normalized:
+        _require(
+            isinstance(normalized["source_commit"], str)
+            and HEX_COMMIT.fullmatch(normalized["source_commit"]) is not None,
+            "journal provenance source commit is invalid",
+        )
+    for field in ("planner_algorithm",):
+        if field in normalized:
+            normalized[field] = _journal_safe_token(normalized[field], field)
+    if "provenance_status" in normalized:
+        _require(
+            normalized["provenance_status"] == "expected_identity_only",
+            "journal provenance status is invalid",
+        )
+    if "execution_mode" in normalized:
+        _require(
+            normalized["execution_mode"] == expected["execution_mode"],
+            "journal provenance mode is invalid",
+        )
+    if "terminal_status" in normalized:
+        _require(
+            isinstance(normalized["terminal_status"], str)
+            and normalized["terminal_status"] in TERMINAL_STATUSES,
+            "journal provenance terminal status is invalid",
+        )
+    if "intervention_status" in normalized:
+        _require(
+            normalized["intervention_status"] in {"not_applicable", "activated", "not_activated"},
+            "journal provenance intervention status is invalid",
+        )
+    for field in ("native", "fallback", "degraded"):
+        if field in normalized:
+            _require(isinstance(normalized[field], bool), "journal provenance flag is invalid")
+    if "diagnostics" in normalized:
+        normalized["diagnostics"] = _journal_diagnostics(normalized["diagnostics"])
+    if "checkpoint_provenance" in normalized:
+        normalized["checkpoint_provenance"] = _journal_checkpoint_provenance(
+            normalized["checkpoint_provenance"]
+        )
+    if "metrics" in normalized:
+        normalized["metrics"] = _finite_protocol_metrics(
+            normalized["metrics"], field="journal.row_finished.provenance.metrics"
+        )
+    _assert_no_transient_state(normalized, "journal.row_finished.provenance")
+    return normalized
+
+
+def _journal_missingness(value: Any) -> str | None:
+    _require(
+        value is None or (isinstance(value, str) and value in TERMINAL_STATUSES),
+        "journal row missingness is invalid",
+    )
+    return value
+
+
+def _journal_reason(value: Any) -> str | None:
+    _require(value is None or isinstance(value, str), "journal row reason is invalid")
+    return None if value is None else _sanitize_reason(value)
 
 
 def _packet_binding_hash(manifest: Mapping[str, Any], source_commit: str) -> str:
@@ -1700,25 +1975,12 @@ def reconcile_execution_journal(
         row: dict[str, Any] = {
             "identity_key": identity_key,
             "terminal_status": terminal_status,
-            "missingness": event.get("missingness"),
-            "reason": (
-                None if event.get("reason") is None else _sanitize_reason(event.get("reason"))
-            ),
+            "missingness": _journal_missingness(event.get("missingness")),
+            "reason": _journal_reason(event.get("reason")),
         }
         provenance = None
         if event.get("provenance") is not None:
-            provenance = _mapping(event.get("provenance"), "journal.row_finished.provenance")
-            if "identity_key" in provenance:
-                provenance_identity_key = _journal_identity_key(provenance["identity_key"])
-                _require(
-                    provenance_identity_key == identity_key,
-                    "journal provenance identity does not match row identity",
-                )
-            if "metrics" in provenance:
-                provenance["metrics"] = _finite_protocol_metrics(
-                    provenance.get("metrics"),
-                    field="journal.row_finished.provenance.metrics",
-                )
+            provenance = _journal_provenance(event.get("provenance"), identity_key)
         metric_value = event.get("metrics")
         if metric_value is None and isinstance(provenance, Mapping):
             metric_value = provenance.get("metrics")

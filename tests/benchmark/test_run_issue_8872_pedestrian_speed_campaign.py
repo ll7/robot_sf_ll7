@@ -598,6 +598,118 @@ def test_reconcile_rejects_mismatched_compiled_nested_identity(tmp_path: Any) ->
     assert other_identity_key not in str(exc_info.value)
 
 
+def test_reconcile_rejects_raw_missingness_without_echo(tmp_path: Any) -> None:
+    identity_key = campaign._compiled_manifest()["identities"][0]["identity_key"]
+    bad_missingness = "private-ops-test-token-xxxxxxxx"
+    journal = tmp_path / "run.jsonl"
+    journal.write_text(
+        campaign.json.dumps(
+            {
+                "event": "row_finished",
+                "identity_key": identity_key,
+                "terminal_status": "failed",
+                "missingness": bad_missingness,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        campaign.CampaignAdapterError, match="journal row missingness is invalid"
+    ) as exc_info:
+        campaign.reconcile_execution_journal(journal, expected_rows=1)
+
+    assert bad_missingness not in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "bad_reason",
+    ("reason:private-ops-test-token-xxxxxxxx", "host=auxme-gpu-01"),
+)
+def test_reconcile_redacts_sensitive_reason_details(tmp_path: Any, bad_reason: str) -> None:
+    identity_key = campaign._compiled_manifest()["identities"][0]["identity_key"]
+    journal = tmp_path / "run.jsonl"
+    journal.write_text(
+        campaign.json.dumps(
+            {
+                "event": "row_finished",
+                "identity_key": identity_key,
+                "terminal_status": "failed",
+                "missingness": "failed",
+                "reason": bad_reason,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    summary = campaign.reconcile_execution_journal(journal, expected_rows=1)
+
+    assert summary["rows"][0]["reason"] == "reason:unsafe_detail_redacted"
+    assert bad_reason not in campaign.json.dumps(summary, sort_keys=True)
+
+
+def test_reconcile_rejects_unallowlisted_provenance_detail_without_echo(tmp_path: Any) -> None:
+    identity_key = campaign._compiled_manifest()["identities"][0]["identity_key"]
+    bad_detail = "../../private/cluster/secret-token"
+    journal = tmp_path / "run.jsonl"
+    journal.write_text(
+        campaign.json.dumps(
+            {
+                "event": "row_finished",
+                "identity_key": identity_key,
+                "terminal_status": "failed",
+                "missingness": "failed",
+                "provenance": {"detail": bad_detail},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        campaign.CampaignAdapterError,
+        match="journal provenance contains an unsupported field",
+    ) as exc_info:
+        campaign.reconcile_execution_journal(journal, expected_rows=1)
+
+    assert bad_detail not in str(exc_info.value)
+
+
+def test_reconcile_accepts_protocol_provenance_fields(tmp_path: Any) -> None:
+    packet = _packet()
+    identity = next(
+        item for item in packet["identities"] if item["regime_id"] == "slow_distributed"
+    )
+    outcome = campaign._native_outcome_from_record(
+        identity,
+        _fake_native_record(),
+        source_commit=packet["source_commit"],
+        manifest_hash=packet["manifest_hash"],
+        planner_algorithm="fake-native-planner",
+        robot_speed_cap_m_s=2.0,
+        checkpoint_provenance=[],
+    )
+    assert outcome["terminal_status"] == campaign.SUCCESS_STATUS
+    journal = tmp_path / "run.jsonl"
+    with journal.open("w", encoding="utf-8") as handle:
+        campaign._append_journal_event(
+            handle,
+            "row_finished",
+            **campaign._journal_row_payload(outcome),
+        )
+
+    summary = campaign.reconcile_execution_journal(journal, expected_rows=1)
+
+    assert summary["complete"] is True
+    assert summary["rows"][0]["identity_key"] == identity["identity_key"]
+    assert (
+        summary["rows"][0]["provenance"]["diagnostics"]["runtime_max_speed_m_s_by_pedestrian"]["p0"]
+        == 0.65
+    )
+
+
 def test_self_minted_authorization_cannot_enter_production_runner(tmp_path: Any) -> None:
     packet = _packet()
 

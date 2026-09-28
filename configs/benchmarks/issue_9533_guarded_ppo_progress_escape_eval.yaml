@@ -2,7 +2,7 @@
 # The 16 classic scenario candidates are selected from the historical constrained cells
 # in #9480. The guard-control dev rows alone select the later frozen constrained subset.
 # All three arms use the BR-06 v3 checkpoint and retain planner/simulation traces.
-name: issue_9533_guarded_ppo_progress_escape_dev_v2
+name: issue_9533_guarded_ppo_progress_escape_eval_v2
 paper_facing: false
 paper_profile_version: paper-matrix-v1
 scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
@@ -28,7 +28,7 @@ route_clearance_certifications: configs/benchmarks/route_clearance_certification
 
 seed_policy:
   mode: seed-set
-  seed_set: dev
+  seed_set: eval
   seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
 
 workers: 8

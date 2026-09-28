@@ -24,7 +24,16 @@ def _guard_decision(*, label: str, intervened: bool) -> dict[str, object]:
         "hard_constraint_violation": False,
         "violated_constraints": [],
         "intervention_reason": "fallback_command_satisfied_short_horizon_constraints",
-        "fallback_controller_state": {"policy": "RiskDWAPlannerAdapter"},
+        "fallback_controller_state": {
+            "policy": "RiskDWAPlannerAdapter",
+            "planner_diagnostics": {
+                "schema_version": "risk-dwa-progress-escape.v1",
+                "status": "selected",
+                "reason": "candidate_score_better",
+                "candidate_command": [0.2, 0.1],
+                "candidate_score": 1.25,
+            },
+        },
         "proposed_evaluation": {
             "safe": False,
             "min_ped_clear": 0.42,
@@ -83,6 +92,14 @@ def test_guard_trace_retains_evaluations_and_marks_intervention_edges() -> None:
     assert first["guard_intervened"] is True
     assert first["guard_intervention_start"] is True
     assert first["guard_intervention_end"] is False
+    assert (
+        first["safety_guard"]["fallback_controller_state"]["planner_diagnostics"]["status"]
+        == "selected"
+    )
+    assert (
+        first["safety_guard"]["fallback_controller_state"]["planner_diagnostics"]["candidate_score"]
+        == 1.25
+    )
 
     second_decision = _guard_decision(label="ppo_safe", intervened=False)
     second_decision["intervention_reason"] = "proposed_action_satisfies_shield"
@@ -115,7 +132,7 @@ def _changed_paths(left: object, right: object, prefix: str = "") -> set[str]:
 def test_progress_escape_treatment_is_a_single_knob_delta() -> None:
     config_root = Path(__file__).parents[2] / "configs" / "algos"
     baseline = yaml.safe_load(
-        (config_root / "guarded_ppo_camera_ready.yaml").read_text(encoding="utf-8")
+        (config_root / "guarded_ppo_camera_ready_cpu.yaml").read_text(encoding="utf-8")
     )
     treatment = yaml.safe_load(
         (config_root / "guarded_ppo_issue_9533_progress_escape.yaml").read_text(encoding="utf-8")
@@ -124,3 +141,80 @@ def test_progress_escape_treatment_is_a_single_knob_delta() -> None:
     assert _changed_paths(baseline, treatment) == {"fallback_risk_dwa.progress_escape_enabled"}
     assert baseline["fallback_risk_dwa"]["progress_escape_enabled"] is False
     assert treatment["fallback_risk_dwa"]["progress_escape_enabled"] is True
+
+
+def test_issue_9533_campaign_configs_freeze_paired_dev_eval_design() -> None:
+    """The matched arm, scenario, and trace design must be identical across seed sets."""
+    benchmark_root = Path(__file__).parents[2] / "configs" / "benchmarks"
+    dev = yaml.safe_load(
+        (benchmark_root / "issue_9533_guarded_ppo_progress_escape.yaml").read_text(encoding="utf-8")
+    )
+    evaluation = yaml.safe_load(
+        (benchmark_root / "issue_9533_guarded_ppo_progress_escape_eval.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    expected_scenarios = [
+        "classic_bottleneck_low",
+        "classic_bottleneck_medium",
+        "classic_bottleneck_high",
+        "classic_cross_trap_low",
+        "classic_cross_trap_medium",
+        "classic_cross_trap_high",
+        "classic_doorway_low",
+        "classic_doorway_medium",
+        "classic_doorway_high",
+        "classic_merging_low",
+        "classic_merging_medium",
+        "classic_overtaking_low",
+        "classic_overtaking_medium",
+        "classic_t_intersection_low",
+        "classic_t_intersection_medium",
+        "classic_realworld_double_bottleneck_high",
+    ]
+    assert dev["seed_policy"]["seed_set"] == "dev"
+    assert evaluation["seed_policy"]["seed_set"] == "eval"
+    assert dev["scenario_candidates"] == expected_scenarios
+    assert evaluation["scenario_candidates"] == expected_scenarios
+    assert _changed_paths(dev, evaluation) == {"name", "seed_policy.seed_set"}
+    assert dev["workers"] <= 8
+    assert evaluation["workers"] <= 8
+    assert dev["record_planner_decision_trace"] is True
+    assert dev["record_simulation_step_trace"] is True
+    expected_planners = [
+        (
+            "ppo_br06_matched_guard_off",
+            "ppo",
+            "configs/algos/ppo_v3_issue_9533_cpu.yaml",
+        ),
+        ("guarded_ppo_baseline", "guarded_ppo", "configs/algos/guarded_ppo_camera_ready_cpu.yaml"),
+        (
+            "guarded_ppo_progress_escape",
+            "guarded_ppo",
+            "configs/algos/guarded_ppo_issue_9533_progress_escape.yaml",
+        ),
+    ]
+    actual = [(arm["key"], arm["algo"], arm["algo_config"]) for arm in dev["planners"]]
+    assert actual == expected_planners
+    model_ids = {
+        yaml.safe_load(
+            (Path(__file__).parents[2] / arm["algo_config"]).read_text(encoding="utf-8")
+        )["model_id"]
+        for arm in dev["planners"]
+    }
+    assert model_ids == {"ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"}
+    canonical_ppo = yaml.safe_load(
+        (Path(__file__).parents[2] / "configs/algos/ppo_v3_camera_ready.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    matched_cpu_ppo = yaml.safe_load(
+        (Path(__file__).parents[2] / "configs/algos/ppo_v3_issue_9533_cpu.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert _changed_paths(canonical_ppo, matched_cpu_ppo) == {"device"}
+    assert matched_cpu_ppo["device"] == "cpu"
+    assert "paper_eval_s30" not in (
+        benchmark_root / "issue_9533_guarded_ppo_progress_escape.yaml"
+    ).read_text(encoding="utf-8")

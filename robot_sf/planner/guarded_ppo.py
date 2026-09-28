@@ -575,8 +575,8 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
 
     def _uncertainty_fallback_command(
         self, observation: dict[str, Any], ppo_command: tuple[float, float]
-    ) -> tuple[tuple[float, float], str, str]:
-        """Return configured uncertainty fallback command, label, and policy."""
+    ) -> tuple[tuple[float, float], str, str, dict[str, Any] | None]:
+        """Return configured uncertainty fallback command and call diagnostics."""
         mode = self.config.uncertainty_fallback_mode
         if mode == "slow_down":
             speed = max(float(self.config.uncertainty_slow_down_speed_m_s), 0.0)
@@ -585,15 +585,34 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 (linear, float(ppo_command[1])),
                 "uncertainty_fallback_slow_down",
                 "slow_down",
+                None,
             )
         if mode == "fallback":
-            command = self.fallback_adapter.plan(observation)
+            command, diagnostics = self._plan_fallback_with_diagnostics(observation)
             return (
                 (float(command[0]), float(command[1])),
                 "uncertainty_fallback_configured",
                 type(self.fallback_adapter).__name__,
+                diagnostics,
             )
-        return (0.0, 0.0), "uncertainty_fallback_stop", "stop"
+        return (0.0, 0.0), "uncertainty_fallback_stop", "stop", None
+
+    def _plan_fallback_with_diagnostics(
+        self, observation: dict[str, Any]
+    ) -> tuple[tuple[float, float], dict[str, Any] | None]:
+        """Plan fallback and preserve optional call-scoped metadata.
+
+        Returns:
+            tuple[tuple[float, float], dict[str, Any] | None]: Command and planner metadata.
+        """
+        plan_with_diagnostics = getattr(self.fallback_adapter, "plan_with_diagnostics", None)
+        if callable(plan_with_diagnostics):
+            command, diagnostics = plan_with_diagnostics(observation)
+            return (float(command[0]), float(command[1])), (
+                dict(diagnostics) if isinstance(diagnostics, dict) else None
+            )
+        command = self.fallback_adapter.plan(observation)
+        return (float(command[0]), float(command[1])), None
 
     def choose_command(
         self, observation: dict[str, Any], ppo_command: tuple[float, float]
@@ -811,8 +830,8 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         )
         if not bool(uncertainty_eval["triggered"]):
             return None
-        fallback_command, label, fallback_policy = self._uncertainty_fallback_command(
-            observation, ppo_command
+        fallback_command, label, fallback_policy, fallback_diagnostics = (
+            self._uncertainty_fallback_command(observation, ppo_command)
         )
         fallback_eval = self._evaluate_command(
             observation, fallback_command, state=cached_state, grid_payload=cached_grid
@@ -842,6 +861,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             ppo_eval=ppo_eval,
             selected_eval=fallback_eval,
             fallback_policy=fallback_policy,
+            fallback_diagnostics=fallback_diagnostics,
             uncertainty_metadata=uncertainty_metadata,
             calibration_metadata=calibration_metadata,
         )
@@ -929,7 +949,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         Returns:
             ShieldDecision: Always returns a decision (never ``None``).
         """
-        fallback_command = self.fallback_adapter.plan(observation)
+        fallback_command, fallback_diagnostics = self._plan_fallback_with_diagnostics(observation)
         fallback_eval = self._evaluate_command(
             observation, fallback_command, state=cached_state, grid_payload=cached_grid
         )
@@ -942,6 +962,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 ppo_eval=ppo_eval,
                 selected_eval=fallback_eval,
                 fallback_policy=type(self.fallback_adapter).__name__,
+                fallback_diagnostics=fallback_diagnostics,
             )
 
         stop_eval = self._evaluate_command(
@@ -956,6 +977,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 ppo_eval=ppo_eval,
                 selected_eval=stop_eval,
                 fallback_policy="stop",
+                fallback_diagnostics=fallback_diagnostics,
             )
 
         if float(fallback_eval["min_ped_clear"]) > max(
@@ -972,6 +994,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 selected_eval=fallback_eval,
                 fallback_policy=type(self.fallback_adapter).__name__,
                 hard_constraint_violation=True,
+                fallback_diagnostics=fallback_diagnostics,
             )
         return self._shield_decision(
             ppo_command=ppo_command,
@@ -982,6 +1005,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             selected_eval=stop_eval,
             fallback_policy="stop",
             hard_constraint_violation=True,
+            fallback_diagnostics=fallback_diagnostics,
         )
 
     def _shield_decision(  # noqa: PLR0913
@@ -998,6 +1022,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         hard_constraint_violation: bool | None = None,
         uncertainty_metadata: dict[str, Any] | None = None,
         calibration_metadata: dict[str, Any] | None = None,
+        fallback_diagnostics: dict[str, Any] | None = None,
     ) -> ShieldDecision:
         """Build a structured shield decision for benchmark metadata.
 
@@ -1047,6 +1072,13 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 "residual_clipped": False,
                 "hard_guard_authoritative": True,
             }
+        fallback_controller_state: dict[str, Any] = {
+            "policy": fallback_policy or type(self.fallback_adapter).__name__,
+            "prior_available": self.prior_adapter is not None,
+            "action_adaptation": action_adaptation,
+        }
+        if fallback_diagnostics is not None:
+            fallback_controller_state["planner_diagnostics"] = dict(fallback_diagnostics)
         return ShieldDecision(
             proposed_action=(float(ppo_command[0]), float(ppo_command[1])),
             filtered_action=(float(filtered_command[0]), float(filtered_command[1])),
@@ -1058,11 +1090,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             prediction_dt=float(self.config.rollout_dt),
             uncertainty_metadata=uncertainty_metadata or {"mode": "deterministic_rollout"},
             calibration_metadata=calibration_metadata or {"status": "not_calibrated"},
-            fallback_controller_state={
-                "policy": fallback_policy or type(self.fallback_adapter).__name__,
-                "prior_available": self.prior_adapter is not None,
-                "action_adaptation": action_adaptation,
-            },
+            fallback_controller_state=fallback_controller_state,
             proposed_evaluation=dict(ppo_eval),
             selected_evaluation=dict(selected_eval),
             intervened=explicit_intervened,

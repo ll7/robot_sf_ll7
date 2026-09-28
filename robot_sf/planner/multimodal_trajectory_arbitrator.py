@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from hashlib import sha256
 from itertools import pairwise
 from numbers import Integral
@@ -2401,6 +2401,302 @@ def arbitrate_multimodal_trajectories(  # noqa: PLR0913
     )
 
 
+def _zero_switch_costs(candidates: Sequence[object]) -> dict[str, float]:
+    """Build explicit zero costs for every recoverable candidate identity.
+
+    The ordinary arbitrator accepts a candidate's metadata as a compatibility
+    fallback when ``switch_costs`` is absent.  The base-evaluation seam must
+    make that fallback impossible, including for a malformed candidate that is
+    retained only as a diagnostic.
+
+    Returns:
+        One finite zero cost for every recoverable candidate identity.
+    """
+    return {
+        _candidate_id_hint(candidate, index=index): 0.0
+        for index, candidate in enumerate(candidates)
+    }
+
+
+def _base_evaluation_result(result: ArbitrationResult) -> ArbitrationResult:
+    """Return a base result with finite zero switch costs on all diagnostics.
+
+    ``_invalid_candidate_evaluation`` intentionally uses an infinite switch
+    cost because the combined arbitrator cannot rank an evaluation that failed
+    before switch-cost validation.  The evaluate-once seam exposes those
+    retained records to a later pure reorder, so their public switch-cost field
+    is normalized to zero while every ineligibility, safety, risk, and decision
+    key field remains untouched.
+    """
+    evaluations = tuple(replace(item, switch_cost=0.0) for item in result.evaluations)
+    if evaluations == result.evaluations:
+        return result
+    return replace(result, evaluations=evaluations)
+
+
+def evaluate_multimodal_trajectories_base(  # noqa: PLR0913
+    candidates: Sequence[CandidateAction | object],
+    forecast: object,
+    *,
+    belief: BeliefAwarePlannerInput,
+    risk_config: RiskEstimatorConfig | None = None,
+    arbitration_config: MultimodalArbitrationConfig | None = None,
+    route_progress: Mapping[str, float] | Sequence[float] | Callable[[object], float] | None = None,
+    current_command: Sequence[float] | None = None,
+    stopped_duration_s: float = 0.0,
+    verifier_config: TrajectoryVerifierConfig | None = None,
+    actuator_config: ActuatorLimitsConfig | None = None,
+    observation_timestamp_s: float | None = None,
+) -> ArbitrationResult:
+    """Evaluate a candidate portfolio once with an explicit zero-cost base.
+
+    This additive seam deliberately delegates all forecast validation, hard
+    feasibility checks, risk estimation, and diagnostics to the existing
+    arbitrator exactly once.  A caller can then pass the returned immutable
+    result to :func:`reorder_multimodal_trajectories` after commitment has
+    produced an allowed set and switch costs.
+
+    The existing :func:`arbitrate_multimodal_trajectories` entry point and its
+    aliases retain their original behavior, including their metadata fallback
+    for callers that do not supply switch costs.
+
+    Returns:
+        The immutable arbitration result with explicit zero base costs.
+    """
+    candidate_values = tuple(candidates)
+    result = arbitrate_multimodal_trajectories(
+        candidate_values,
+        forecast,
+        belief=belief,
+        risk_config=risk_config,
+        arbitration_config=arbitration_config,
+        route_progress=route_progress,
+        current_command=current_command,
+        stopped_duration_s=stopped_duration_s,
+        switch_costs=_zero_switch_costs(candidate_values),
+        verifier_config=verifier_config,
+        actuator_config=actuator_config,
+        observation_timestamp_s=observation_timestamp_s,
+    )
+    return _base_evaluation_result(result)
+
+
+def _validate_reorder_inputs(
+    base_result: ArbitrationResult,
+    allowed_candidate_ids: Iterable[str],
+    switch_costs: Mapping[str, float],
+) -> tuple[tuple[str, ...], dict[str, float], dict[str, CandidateEvaluation]]:
+    """Validate the immutable base result and strict reorder inputs.
+
+    Returns:
+        The allowed IDs, normalized costs, and base evaluations keyed by ID.
+    """
+    if not isinstance(base_result, ArbitrationResult):
+        raise TypeError("base_result must be an ArbitrationResult")
+    allowed = _validate_allowed_ids(allowed_candidate_ids)
+    evaluation_by_id = _validate_base_evaluations(base_result)
+    normalized_costs = _validate_switch_costs(switch_costs, set(evaluation_by_id))
+    unknown_allowed = set(allowed) - set(evaluation_by_id)
+    if unknown_allowed:
+        unknown = ", ".join(sorted(unknown_allowed))
+        raise ValueError(f"allowed_candidate_ids contain unknown IDs: {unknown}")
+    return allowed, normalized_costs, evaluation_by_id
+
+
+def _validate_allowed_ids(allowed_candidate_ids: Iterable[str]) -> tuple[str, ...]:
+    """Validate and freeze the requested allowed candidate IDs.
+
+    Returns:
+        A tuple preserving the caller's allowed-ID order.
+    """
+    if isinstance(allowed_candidate_ids, (str, bytes)):
+        raise TypeError("allowed_candidate_ids must be an iterable of candidate IDs")
+    try:
+        allowed = tuple(allowed_candidate_ids)
+    except TypeError as exc:
+        raise TypeError("allowed_candidate_ids must be iterable") from exc
+    if any(not isinstance(candidate_id, str) or not candidate_id for candidate_id in allowed):
+        raise ValueError("allowed_candidate_ids must contain non-empty strings")
+    if len(set(allowed)) != len(allowed):
+        raise ValueError("allowed_candidate_ids must be unique")
+    return allowed
+
+
+def _validate_base_evaluations(base_result: ArbitrationResult) -> dict[str, CandidateEvaluation]:
+    """Validate base evaluation identity and decision-key ownership.
+
+    Returns:
+        Base evaluations keyed by their stable candidate ID.
+    """
+    evaluations = tuple(base_result.evaluations)
+    evaluation_by_id: dict[str, CandidateEvaluation] = {}
+    for evaluation in evaluations:
+        if not isinstance(evaluation, CandidateEvaluation):
+            raise TypeError("base_result.evaluations must contain CandidateEvaluation values")
+        candidate_id = evaluation.candidate_id
+        if not isinstance(candidate_id, str) or not candidate_id:
+            raise ValueError("base evaluations must have non-empty candidate IDs")
+        if candidate_id in evaluation_by_id:
+            raise ValueError(f"duplicate base evaluation candidate ID: {candidate_id}")
+        evaluation_by_id[candidate_id] = evaluation
+    known_ids = set(evaluation_by_id)
+    ordered_ids = tuple(base_result.ordered_candidate_ids)
+    if set(ordered_ids) != known_ids or len(ordered_ids) != len(known_ids):
+        raise ValueError("base result ordered IDs must exactly match evaluation IDs")
+    return evaluation_by_id
+
+
+def _validate_switch_costs(
+    switch_costs: Mapping[str, float],
+    known_ids: set[str],
+) -> dict[str, float]:
+    """Validate exact finite non-negative cost coverage.
+
+    Returns:
+        Costs normalized to plain finite floats and keyed by candidate ID.
+    """
+    if not isinstance(switch_costs, Mapping):
+        raise TypeError("switch_costs must be a mapping")
+    raw_cost_keys = tuple(switch_costs)
+    if any(not isinstance(candidate_id, str) or not candidate_id for candidate_id in raw_cost_keys):
+        raise ValueError("switch_costs keys must be non-empty candidate ID strings")
+    cost_keys = set(raw_cost_keys)
+    if cost_keys != known_ids:
+        missing = ", ".join(sorted(known_ids - cost_keys))
+        unknown = ", ".join(sorted(cost_keys - known_ids))
+        details = []
+        if missing:
+            details.append(f"missing: {missing}")
+        if unknown:
+            details.append(f"unknown: {unknown}")
+        raise ValueError(
+            "switch_costs must cover exactly base evaluation IDs (" + "; ".join(details) + ")"
+        )
+    normalized_costs: dict[str, float] = {}
+    for candidate_id in sorted(known_ids):
+        value = switch_costs[candidate_id]
+        if isinstance(value, (bool, np.bool_)):
+            raise ValueError(f"switch cost for {candidate_id} must be finite and non-negative")
+        try:
+            cost = float(value)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(
+                f"switch cost for {candidate_id} must be finite and non-negative"
+            ) from exc
+        if not math.isfinite(cost) or cost < 0.0:
+            raise ValueError(f"switch cost for {candidate_id} must be finite and non-negative")
+        normalized_costs[candidate_id] = cost
+    return normalized_costs
+
+
+def _replace_switch_cost_tie_break(
+    evaluation: CandidateEvaluation,
+    switch_cost: float,
+    *,
+    switch_cost_scale: float,
+) -> CandidateEvaluation:
+    """Replace only the documented switch-cost component of a decision key.
+
+    Returns:
+        A copied evaluation with the supplied public and ordering switch cost.
+    """
+    decision_key = tuple(evaluation.decision_key)
+    # Valid #8062 keys contain the complete safety/risk prefix and the
+    # penultimate scaled switch-cost component.  Retained failed evaluations
+    # intentionally carry the shorter diagnostic key from
+    # ``_invalid_candidate_evaluation``; preserve it byte-for-byte.
+    has_full_key = (
+        len(decision_key) >= 14
+        and decision_key[-1] == evaluation.candidate_id
+        and isinstance(decision_key[-2], (int, float, np.integer, np.floating))
+    )
+    if not has_full_key:
+        if not evaluation.eligible:
+            return replace(evaluation, switch_cost=float(switch_cost))
+        if len(decision_key) < 14:
+            raise ValueError("base evaluation decision_key is malformed")
+        if decision_key[-1] != evaluation.candidate_id:
+            raise ValueError("base evaluation decision_key must end with its candidate ID")
+        raise ValueError("base evaluation decision_key has no numeric switch-cost component")
+    updated_key = decision_key[:-2] + (float(switch_cost) / switch_cost_scale,) + decision_key[-1:]
+    return replace(evaluation, switch_cost=float(switch_cost), decision_key=updated_key)
+
+
+def reorder_multimodal_trajectories(
+    base_result: ArbitrationResult,
+    allowed_candidate_ids: Iterable[str],
+    switch_costs: Mapping[str, float],
+    *,
+    switch_cost_scale: float,
+) -> ArbitrationResult:
+    """Purely reorder an immutable base result using allowed IDs and costs.
+
+    No forecast, verifier, or risk-estimator code is reachable from this
+    function.  The existing hard-feasibility/braking/risk-limit/risk-bucket
+    prefix stays intact; only the switch-cost tie-break component is replaced.
+    A non-selected base status remains fail closed and cannot be upgraded by
+    filtering or by supplied costs.
+
+    ``switch_cost_scale`` is required so callers must carry forward the exact
+    positive scale used by the base arbitration configuration.  Reorder does
+    not infer or silently substitute a scale.
+
+    Returns:
+        A new result containing exactly the allowed evaluations.
+    """
+    if isinstance(switch_cost_scale, (bool, np.bool_)):
+        raise ValueError("switch_cost_scale must be finite and positive")
+    try:
+        normalized_scale = float(switch_cost_scale)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("switch_cost_scale must be finite and positive") from exc
+    if not math.isfinite(normalized_scale) or normalized_scale <= 0.0:
+        raise ValueError("switch_cost_scale must be finite and positive")
+    allowed, normalized_costs, evaluation_by_id = _validate_reorder_inputs(
+        base_result,
+        allowed_candidate_ids,
+        switch_costs,
+    )
+    filtered = [
+        _replace_switch_cost_tie_break(
+            evaluation_by_id[candidate_id],
+            normalized_costs[candidate_id],
+            switch_cost_scale=normalized_scale,
+        )
+        for candidate_id in allowed
+    ]
+    filtered.sort(key=lambda item: item.decision_key)
+    ordered_ids = tuple(item.candidate_id for item in filtered)
+
+    if base_result.status != "selected":
+        status = base_result.status
+        selected_id = None
+        reason = base_result.no_selection_reason
+    elif not filtered:
+        status = "no_candidates"
+        selected_id = None
+        reason = "allowed candidate set is empty"
+    else:
+        status, selected_id, reason = _resolve_selection(
+            filtered,
+            route_error=False,
+            evaluation_error=any(
+                item.rejection_reason is not None
+                and item.rejection_reason.startswith("evaluation_error:")
+                for item in filtered
+            ),
+        )
+    return replace(
+        base_result,
+        status=status,
+        selected_candidate_id=selected_id,
+        ordered_candidate_ids=ordered_ids,
+        evaluations=tuple(filtered),
+        no_selection_reason=reason,
+        candidate_count=len(filtered),
+    )
+
+
 # Names that make the pure evaluator discoverable to callers using either the
 # issue vocabulary (arbitration) or the existing ranker vocabulary (ranking).
 evaluate_multimodal_trajectories = arbitrate_multimodal_trajectories
@@ -2418,4 +2714,6 @@ __all__ = [
     "arbitrate_multimodal_trajectories",
     "discrete_tail_metrics",
     "discrete_upper_tail_cvar",
+    "evaluate_multimodal_trajectories_base",
+    "reorder_multimodal_trajectories",
 ]

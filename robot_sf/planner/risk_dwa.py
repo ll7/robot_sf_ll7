@@ -115,13 +115,13 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         # controls truncation, while absent or empty counts retain the legacy
         # full-buffer behavior.
         if "robot" in observation:
-            count_supplied = "count" in ped_state
-            count_value = ped_state.get("count", [])
+            count_value = ped_state.get("count")
         else:
-            count_supplied = "pedestrians_count" in observation
-            count_value = observation.get("pedestrians_count", [])
+            count_value = observation.get("pedestrians_count")
         count_raw = (
-            self._as_1d_float(count_value, pad=None) if count_supplied else np.empty(0, dtype=float)
+            self._as_1d_float(count_value, pad=None)
+            if count_value is not None
+            else np.empty(0, dtype=float)
         )
         ped_count = max(int(count_raw[0]), 0) if count_raw.size else None
         if ped_pos.ndim == 1 and ped_pos.size % 2 == 0:

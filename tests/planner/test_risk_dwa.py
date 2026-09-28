@@ -434,3 +434,23 @@ def test_risk_dwa_nested_missing_or_empty_count_preserves_padded_rows(
     assert ped_pos.shape == ped_vel.shape == (4, 2)
     np.testing.assert_allclose(ped_pos, np.asarray([[1.0, 0.5]] * 4))
     np.testing.assert_allclose(ped_vel, np.asarray([[-1.0, 2.0]] * 4))
+
+
+def test_risk_dwa_normalized_none_count_preserves_padded_rows() -> None:
+    """A normalized ``None`` count is absent, not an explicit zero count."""
+    observation = _observation(
+        heading=float(np.pi / 2.0),
+        pedestrians=[(1.0, 0.5)] * 4,
+        pedestrian_velocities=[(2.0, 1.0)] * 4,
+    )
+    nested_pedestrians = observation["pedestrians"]
+    assert isinstance(nested_pedestrians, dict)
+    nested_pedestrians["count"] = None
+
+    _robot_pos, _heading, _goal, ped_pos, ped_vel = RiskDWAPlannerAdapter()._extract_robot_goal_ped(
+        observation
+    )
+
+    assert ped_pos.shape == ped_vel.shape == (4, 2)
+    np.testing.assert_allclose(ped_pos, np.asarray([[1.0, 0.5]] * 4))
+    np.testing.assert_allclose(ped_vel, np.asarray([[-1.0, 2.0]] * 4))

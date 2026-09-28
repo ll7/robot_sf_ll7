@@ -60,7 +60,12 @@ report parses the JSON and binds captured scenario bytes to the candidate and co
 producer's `scenario_artifact_identity.path` must be relative to the evidence bundle, resolve to a
 file inside that bundle, and contain bytes whose SHA-256 matches both the producer identity and
 candidate/corpus digest; adapters must stage the scenario file into the bundle when an upstream
-producer only records a host-local absolute path.
+producer only records a host-local absolute path. Every nested producer execution, episode-store,
+replay-sidecar, replay-result, and provenance-manifest path must also be relative to the evidence
+bundle. Adapters must stage and rewrite host-local paths before report generation; absolute paths,
+including absolute aliases into the bundle, and symlinks resolving outside it fail closed. The
+report inventories every validated nested file by bundle-relative path and SHA-256 so the evidence
+bundle remains auditable after relocation.
 For a confirmed verdict, named execution records must include the producer's run status, original
 scenario variant, fallback state, seed/horizon, scenario/robot/simulator/planner/environment
 digests, source commit, and execution reference. Their scenario digest and source commit must match

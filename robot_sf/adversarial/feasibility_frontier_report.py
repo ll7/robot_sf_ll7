@@ -14,6 +14,7 @@ import os
 import re
 import tempfile
 from collections import Counter
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib import import_module
@@ -945,6 +946,7 @@ def _validate_evidence(  # noqa: C901 - preserve independent top-level evidence 
     evidence: dict[str, Any], evidence_root: Path, artifacts: dict[str, dict[str, str]]
 ) -> dict[int, list[dict[str, Any]] | None]:
     errors: list[str] = []
+    nested_artifacts: dict[str, dict[str, str]] = {}
     if evidence.get("schema_version") != INPUT_SCHEMA_VERSION:
         errors.append(f"schema_version must be {INPUT_SCHEMA_VERSION!r}")
     if not _is_allowed(
@@ -985,6 +987,7 @@ def _validate_evidence(  # noqa: C901 - preserve independent top-level evidence 
             evidence.get("experiment_id"),
             evidence_root,
             artifacts,
+            nested_artifacts,
             errors,
         )
         falsification = round_data.get("falsification")
@@ -1004,6 +1007,17 @@ def _validate_evidence(  # noqa: C901 - preserve independent top-level evidence 
     _validate_admitted_candidate_observations(rounds, errors)
     _validate_evaluation_cohorts(rounds, errors)
     _validate_optimization_evaluation_disjointness(rounds, optimization_tuning_identities, errors)
+
+    for relative_path, nested_artifact in nested_artifacts.items():
+        existing_artifact = artifacts.get(relative_path)
+        if existing_artifact is None:
+            artifacts[relative_path] = nested_artifact
+        elif existing_artifact.get("sha256") != nested_artifact.get(
+            "sha256"
+        ) or existing_artifact.get("source_revision") != nested_artifact.get("source_revision"):
+            errors.append(
+                f"nested artifact {relative_path!r} conflicts with its top-level provenance"
+            )
 
     if errors:
         raise FrontierReportError("invalid frontier evidence:\n- " + "\n- ".join(errors))
@@ -1334,6 +1348,7 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
     experiment_id: Any,
     evidence_root: Path,
     artifacts: dict[str, dict[str, str]],
+    nested_artifacts: dict[str, dict[str, str]],
     errors: list[str],
 ) -> list[dict[str, Any]] | None:
     prefix = f"rounds[{number - 1}]"
@@ -1575,6 +1590,7 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
                     require_replay_binding=candidate.get("replay_status") == "verified",
                 ),
                 evidence_root=evidence_root,
+                artifacts=nested_artifacts,
                 prefix=f"{candidate_prefix}.admissibility_evidence_artifact",
                 errors=errors,
             )
@@ -1609,6 +1625,7 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
                     require_replay_binding=candidate.get("replay_status") == "verified",
                 ),
                 evidence_root=evidence_root,
+                artifacts=nested_artifacts,
                 prefix=f"{candidate_prefix}.admissibility_evidence_artifact",
                 errors=errors,
             )
@@ -1790,6 +1807,7 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
                     ),
                 ),
                 evidence_root=evidence_root,
+                artifacts=nested_artifacts,
                 prefix=f"{obs_prefix}.admissibility_evidence_artifact",
                 errors=errors,
             )
@@ -2482,6 +2500,7 @@ def _validate_admissibility_evidence_source(  # noqa: C901 - report independent 
     artifact: Any,
     context: _AdmissibilityContext,
     evidence_root: Path,
+    artifacts: dict[str, dict[str, str]],
     prefix: str,
     errors: list[str],
 ) -> None:
@@ -2521,7 +2540,8 @@ def _validate_admissibility_evidence_source(  # noqa: C901 - report independent 
         prefix,
         errors,
     )
-    if _is_allowed(context.verdict, _CONFIRMED_FEASIBILITY_VERDICTS):
+    confirmed_verdict = _is_allowed(context.verdict, _CONFIRMED_FEASIBILITY_VERDICTS)
+    if confirmed_verdict:
         _validate_confirmed_admissibility_support(
             source,
             evidence,
@@ -2530,40 +2550,37 @@ def _validate_admissibility_evidence_source(  # noqa: C901 - report independent 
             prefix,
             errors,
         )
-    else:
+    elif (
+        context.verdict == "admissible_feasibility_unknown"
+        and context.target_failure_observed is False
+    ):
+        target_execution = evidence.get("target_execution")
+        target_execution_valid = _validate_admissibility_execution(
+            target_execution,
+            role="target",
+            context=context,
+            scenario_identity=scenario_identity,
+            execution_artifact_bindings=evidence.get("execution_artifact_bindings"),
+            evidence_root=evidence_root,
+            prefix=f"{prefix}.evidence.target_execution",
+            errors=errors,
+        )
         if (
-            context.verdict == "admissible_feasibility_unknown"
-            and context.target_failure_observed is False
+            not target_execution_valid
+            or not isinstance(target_execution, dict)
+            or target_execution.get("route_complete") is not True
         ):
-            target_execution = evidence.get("target_execution")
-            target_execution_valid = _validate_admissibility_execution(
-                target_execution,
-                role="target",
-                context=context,
-                scenario_identity=scenario_identity,
-                execution_artifact_bindings=evidence.get("execution_artifact_bindings"),
-                evidence_root=evidence_root,
-                prefix=f"{prefix}.evidence.target_execution",
-                errors=errors,
+            errors.append(
+                f"{prefix} solved unknown-feasibility case requires a complete, case-bound "
+                "target execution showing route completion"
             )
-            if (
-                not target_execution_valid
-                or not isinstance(target_execution, dict)
-                or target_execution.get("route_complete") is not True
-            ):
-                errors.append(
-                    f"{prefix} solved unknown-feasibility case requires a complete, case-bound "
-                    "target execution showing route completion"
-                )
-            if source.get("target_planner_outcome") != "route_completed":
-                errors.append(
-                    f"{prefix}.target_planner_outcome must be route_completed when a solved "
-                    "unknown-feasibility case is supported by a completed target execution"
-                )
-        if context.require_replay_binding:
-            _validate_reported_replay_binding(
-                source, evidence, context, evidence_root, prefix, errors
+        if source.get("target_planner_outcome") != "route_completed":
+            errors.append(
+                f"{prefix}.target_planner_outcome must be route_completed when a solved "
+                "unknown-feasibility case is supported by a completed target execution"
             )
+    if not confirmed_verdict and context.require_replay_binding:
+        _validate_reported_replay_binding(source, evidence, context, evidence_root, prefix, errors)
     target_outcome = source.get("target_planner_outcome")
     if isinstance(context.target_failure_observed, bool) and _is_allowed(
         target_outcome, {"route_completed", "route_incomplete"}
@@ -2572,6 +2589,103 @@ def _validate_admissibility_evidence_source(  # noqa: C901 - report independent 
             errors.append(
                 f"{prefix}.target_planner_outcome does not match the candidate failure record"
             )
+    _register_nested_evidence_artifacts(
+        evidence,
+        evidence_root=evidence_root,
+        source_revision=context.source_revision,
+        artifacts=artifacts,
+        prefix=f"{prefix}.evidence",
+        errors=errors,
+    )
+
+
+def _register_nested_evidence_artifacts(
+    evidence: dict[str, Any],
+    *,
+    evidence_root: Path,
+    source_revision: str,
+    artifacts: dict[str, dict[str, str]],
+    prefix: str,
+    errors: list[str],
+) -> None:
+    """Index nested producer files after their case and digest bindings are checked."""
+    root = evidence_root.resolve()
+    for path_value, path_prefix in _iter_nested_evidence_paths(evidence, prefix):
+        resolved = _resolve_reported_execution_path(path_value, evidence_root=root)
+        if resolved is None:
+            errors.append(f"{path_prefix} must be a relative file path inside the evidence bundle")
+            continue
+        _record_nested_evidence_artifact(
+            resolved,
+            root=root,
+            source_revision=source_revision,
+            artifacts=artifacts,
+            prefix=path_prefix,
+            errors=errors,
+        )
+
+
+def _iter_nested_evidence_paths(value: Any, location: str) -> Iterator[tuple[str, str]]:
+    """Yield file references carried by nested producer evidence dictionaries."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_prefix = f"{location}.{key}"
+            if key in {"path", "evidence_ref"} or key.endswith("_path"):
+                if isinstance(child, str) and child.strip():
+                    yield child, child_prefix
+            elif isinstance(child, (dict, list)):
+                yield from _iter_nested_evidence_paths(child, child_prefix)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            yield from _iter_nested_evidence_paths(child, f"{location}[{index}]")
+
+
+def _record_nested_evidence_artifact(
+    path: Path,
+    *,
+    root: Path,
+    source_revision: str,
+    artifacts: dict[str, dict[str, str]],
+    prefix: str,
+    errors: list[str],
+) -> None:
+    """Add a contained nested producer file to the machine-readable artifact ledger."""
+    try:
+        relative_path = path.relative_to(root).as_posix()
+        digest = _sha256_file(path)
+        schema_version = _nested_artifact_schema_version(path)
+    except (OSError, ValueError) as exc:
+        errors.append(f"{prefix} could not be inventoried: {exc}")
+        return
+    artifact = {
+        "path": relative_path,
+        "sha256": digest,
+        "source_revision": source_revision,
+        "role": "nested-producer-evidence",
+        "schema_version": schema_version,
+    }
+    previous = artifacts.get(relative_path)
+    if previous is None:
+        artifacts[relative_path] = artifact
+    elif previous.get("sha256") != digest or previous.get("source_revision") != source_revision:
+        errors.append(f"{prefix} has conflicting provenance for artifact {relative_path!r}")
+
+
+def _nested_artifact_schema_version(path: Path) -> str:
+    """Use a file's declared JSON schema when available, with stable kind labels otherwise."""
+    if path.suffix.lower() == ".jsonl":
+        return "episode-store-jsonl.v1"
+    if path.suffix.lower() == ".json":
+        try:
+            payload = json.loads(path.read_bytes())
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            return "json.v1"
+        if isinstance(payload, dict) and isinstance(payload.get("schema_version"), str):
+            return payload["schema_version"]
+        return "json.v1"
+    if path.suffix.lower() in {".yaml", ".yml"}:
+        return "scenario-input.v1"
+    return "file.v1"
 
 
 def _validate_admissibility_record_shape(  # noqa: C901 - report independent schema-field defects.
@@ -3265,7 +3379,6 @@ def _validate_reported_replay_artifact_binding(  # noqa: C901, PLR0912, PLR0915 
     store_path = _resolve_reported_execution_path(
         sidecar.get("source_episodes_jsonl_path"),
         evidence_root=evidence_root,
-        relative_to=sidecar_path.parent,
     )
     if store_path is None:
         errors.append(f"{prefix} replay source episode store is unavailable")
@@ -3307,7 +3420,6 @@ def _validate_reported_replay_artifact_binding(  # noqa: C901, PLR0912, PLR0915 
     result_path = _resolve_reported_execution_path(
         sidecar.get("target_planner_replay_result_path"),
         evidence_root=evidence_root,
-        relative_to=sidecar_path.parent,
     )
     if result_path is None:
         errors.append(f"{prefix} target-planner replay result is unavailable")
@@ -3356,7 +3468,6 @@ def _validate_reported_replay_artifact_binding(  # noqa: C901, PLR0912, PLR0915 
     replay_store_path = _resolve_reported_execution_path(
         result.get("replay_episodes_jsonl_path"),
         evidence_root=evidence_root,
-        relative_to=result_path.parent,
     )
     if replay_store_path is None:
         errors.append(f"{prefix} replay-produced episode store is unavailable")
@@ -3404,7 +3515,6 @@ def _validate_reported_replay_artifact_binding(  # noqa: C901, PLR0912, PLR0915 
     replay_manifest_path = _resolve_reported_execution_path(
         result.get("replay_provenance_manifest_path"),
         evidence_root=evidence_root,
-        relative_to=result_path.parent,
     )
     if replay_manifest_path is None:
         errors.append(f"{prefix} replay producer manifest is unavailable")
@@ -3427,22 +3537,22 @@ def _resolve_reported_execution_path(
     value: Any,
     *,
     evidence_root: Path,
-    relative_to: Path | None = None,
 ) -> Path | None:
-    """Resolve an execution artifact path while keeping relative refs in the report bundle."""
+    """Resolve a bundle-relative execution path and reject absolute or escaping aliases."""
     if not isinstance(value, str) or not value.strip() or "\\" in value:
         return None
-    raw_path = Path(value).expanduser()
-    if raw_path.is_absolute():
-        candidate = raw_path
-    else:
-        relative_path = PurePosixPath(value)
-        if relative_path.is_absolute() or ".." in relative_path.parts:
-            return None
-        candidate = (relative_to or evidence_root) / Path(*relative_path.parts)
+    relative_path = PurePosixPath(value)
+    if relative_path.is_absolute() or ".." in relative_path.parts:
+        return None
+    root = evidence_root.resolve()
+    candidate = root / Path(*relative_path.parts)
     try:
         resolved = candidate.resolve(strict=True)
     except (OSError, RuntimeError, ValueError):
+        return None
+    try:
+        resolved.relative_to(root)
+    except ValueError:
         return None
     return resolved if resolved.is_file() else None
 

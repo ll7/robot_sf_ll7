@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -141,6 +142,11 @@ def _artifact(root: Path, name: str, *, role: str) -> dict[str, str]:
     }
 
 
+def _bundle_relative(root: Path, path: Path) -> str:
+    """Return a stable evidence-root-relative path for nested producer artifacts."""
+    return path.resolve().relative_to(root.resolve()).as_posix()
+
+
 def _scenario_id(case_id: str) -> str:
     return f"scenario-{case_id}"
 
@@ -217,13 +223,18 @@ def _execution_record(  # noqa: PLR0913 - fixture mirrors the producer execution
     store_sha256 = hashlib.sha256(store_bytes).hexdigest()
     record["source_episodes_jsonl_sha256"] = store_sha256
     producer_binding = _write_fixture_producer_manifest(
+        root,
         store_path,
         episode,
         record=record,
         artifact_key=f"{artifact_key}-{role}",
     )
     bindings[role] = _execution_artifact_binding(
-        record, store_path=store_path, episode=episode, producer_binding=producer_binding
+        record,
+        root=root,
+        store_path=store_path,
+        episode=episode,
+        producer_binding=producer_binding,
     )
     return record
 
@@ -263,6 +274,7 @@ def _replay_execution_record(  # noqa: PLR0913 - fixture mirrors persisted repla
     output_store_path.write_bytes(output_store_bytes)
     output_store_sha256 = hashlib.sha256(output_store_bytes).hexdigest()
     output_producer_binding = _write_fixture_producer_manifest(
+        root,
         output_store_path,
         output_episode,
         record=record,
@@ -280,7 +292,7 @@ def _replay_execution_record(  # noqa: PLR0913 - fixture mirrors persisted repla
         "source_commit": record["source_commit"],
         "source_episodes_jsonl_sha256": target_store_sha256,
         "replay_episode_id": output_episode["episode_id"],
-        "replay_episodes_jsonl_path": output_store_path.as_posix(),
+        "replay_episodes_jsonl_path": _bundle_relative(root, output_store_path),
         "replay_episodes_jsonl_sha256": output_store_sha256,
         "replay_provenance_manifest_path": output_producer_binding["manifest_path"],
         "replay_provenance_manifest_sha256": output_producer_binding["manifest_sha256"],
@@ -301,9 +313,9 @@ def _replay_execution_record(  # noqa: PLR0913 - fixture mirrors persisted repla
         "repo_commit": record["source_commit"],
         "replay_command": "fixture target-planner replay",
         "determinism_check_status": "pass",
-        "source_episodes_jsonl_path": target_store_path.as_posix(),
+        "source_episodes_jsonl_path": _bundle_relative(root, target_store_path),
         "source_episodes_jsonl_sha256": target_store_sha256,
-        "target_planner_replay_result_path": result_path.as_posix(),
+        "target_planner_replay_result_path": _bundle_relative(root, result_path),
         "target_planner_replay_result_sha256": result_sha256,
         "resimulated": True,
     }
@@ -313,7 +325,7 @@ def _replay_execution_record(  # noqa: PLR0913 - fixture mirrors persisted repla
     record["source_episodes_jsonl_sha256"] = target_store_sha256
     replay_episode_binding = {
         "status": "valid",
-        "replay_episode_store_path": output_store_path.as_posix(),
+        "replay_episode_store_path": _bundle_relative(root, output_store_path),
         "replay_episode_store_sha256": output_store_sha256,
         "replay_episode_id": output_episode["episode_id"],
         "producer_provenance_binding": output_producer_binding,
@@ -337,7 +349,7 @@ def _replay_execution_record(  # noqa: PLR0913 - fixture mirrors persisted repla
         "episode_id": record["episode_id"],
         "route_complete": route_complete,
         "replay_sidecar_sha256": hashlib.sha256(sidecar_bytes).hexdigest(),
-        "target_planner_replay_result_path": result_path.as_posix(),
+        "target_planner_replay_result_path": _bundle_relative(root, result_path),
         "target_planner_replay_result_sha256": result_sha256,
         "target_planner_replay_result_binding": result_binding,
         "run_context_binding": {"status": "valid"},
@@ -376,6 +388,7 @@ def _episode_row(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def _write_fixture_producer_manifest(
+    root: Path,
     store_path: Path,
     episode: dict[str, Any],
     *,
@@ -386,6 +399,8 @@ def _write_fixture_producer_manifest(
     episode_store_sha256 = hashlib.sha256(store_path.read_bytes()).hexdigest()
     simulator_settings = {"horizon": episode["horizon"]}
     manifest_path = store_path.with_name(store_path.name + ".provenance.json")
+    relative_store_path = _bundle_relative(root, store_path)
+    relative_manifest_path = _bundle_relative(root, manifest_path)
     manifest = {
         "schema_version": "benchmark_result_provenance.v1",
         "input_binding_schema_version": "benchmark_result_provenance.input_binding.v2",
@@ -400,7 +415,7 @@ def _write_fixture_producer_manifest(
         "raw_artifacts": [
             {
                 "kind": "episodes_jsonl",
-                "path": store_path.as_posix(),
+                "path": relative_store_path,
                 "artifact_status": "available",
                 "sha256": episode_store_sha256,
             }
@@ -413,7 +428,7 @@ def _write_fixture_producer_manifest(
                 "seed": episode["seed"],
                 "config_hash": episode["config_hash"],
                 "repo_commit": episode["git_hash"],
-                "raw_artifact": store_path.as_posix(),
+                "raw_artifact": relative_store_path,
                 "simulator_settings": simulator_settings,
             }
         ],
@@ -422,7 +437,7 @@ def _write_fixture_producer_manifest(
     manifest_path.write_bytes(manifest_bytes)
     return {
         "status": "valid",
-        "manifest_path": manifest_path.as_posix(),
+        "manifest_path": relative_manifest_path,
         "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
         "episode_store_sha256": episode_store_sha256,
         "run_id": run_id,
@@ -466,6 +481,7 @@ def _episode_row_identity(episode: dict[str, Any]) -> dict[str, Any]:
 def _execution_artifact_binding(
     record: dict[str, Any],
     *,
+    root: Path,
     store_path: Path,
     episode: dict[str, Any],
     producer_binding: dict[str, Any],
@@ -473,7 +489,7 @@ def _execution_artifact_binding(
     return {
         "status": "valid",
         "evidence_ref": record["evidence_ref"],
-        "episode_store_path": store_path.as_posix(),
+        "episode_store_path": _bundle_relative(root, store_path),
         "episode_store_sha256": record["source_episodes_jsonl_sha256"],
         "episode_id": record["episode_id"],
         "route_complete": record["route_complete"],
@@ -1350,6 +1366,79 @@ def test_frontier_report_separates_valid_discoveries_unknowns_and_exclusions(
     assert "case-unknown" in markdown
     assert "replay artifact" in markdown.lower()
     assert "Search candidate accounting" in markdown
+    artifact_paths = {artifact["path"] for artifact in report["source_artifacts"]}
+    assert "fixture/scenario-case-001.yaml" in artifact_paths
+    assert "fixture/episodes/round-1-c1-admissibility-reference.jsonl" in artifact_paths
+    assert "fixture/episodes/round-1-c1-admissibility-reference.jsonl.provenance.json" in (
+        artifact_paths
+    )
+
+
+def test_frontier_report_rejects_absolute_nested_episode_store_reference(tmp_path: Path) -> None:
+    """Nested producer evidence cannot bind a host-local file outside the bundle."""
+    payload = _evidence(tmp_path)
+    external_episode_store = tmp_path.parent / f"{tmp_path.name}-external-episode-store.jsonl"
+
+    def point_binding_outside_bundle(record: dict[str, Any]) -> None:
+        execution_binding = record["evidence"]["execution_artifact_bindings"]["reference"]
+        bundled_episode_store = tmp_path / execution_binding["episode_store_path"]
+        external_episode_store.write_bytes(bundled_episode_store.read_bytes())
+        execution_binding["episode_store_path"] = external_episode_store.as_posix()
+
+    _rewrite_admissibility_artifact(payload, tmp_path, 0, point_binding_outside_bundle)
+
+    with pytest.raises(FrontierReportError, match="relative file path inside the evidence bundle"):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_nested_artifacts_survive_bundle_relocation(tmp_path: Path) -> None:
+    """Relative nested producer evidence remains valid after moving the full bundle."""
+    original_root = tmp_path / "original"
+    original_root.mkdir()
+    payload = _evidence(original_root)
+    relocated_root = tmp_path / "relocated"
+    shutil.copytree(original_root, relocated_root)
+
+    report = build_frontier_report(payload, evidence_root=relocated_root)
+
+    assert report["rounds"][0]["falsification"]["verified_counterexample_case_ids"] == ["case-001"]
+
+
+def test_reported_execution_path_rejects_absolute_and_symlink_aliases(tmp_path: Path) -> None:
+    """Only relocatable bundle-relative files can back nested execution evidence."""
+    evidence_root = tmp_path / "bundle"
+    evidence_root.mkdir()
+    bundled_path = evidence_root / "episode.jsonl"
+    bundled_path.write_text("{}\n", encoding="utf-8")
+    external_path = tmp_path / "external.jsonl"
+    external_path.write_text("{}\n", encoding="utf-8")
+    symlink_path = evidence_root / "episode-alias.jsonl"
+    symlink_path.symlink_to(external_path)
+
+    assert (
+        frontier_module._resolve_reported_execution_path(
+            "episode.jsonl", evidence_root=evidence_root
+        )
+        == bundled_path
+    )
+    assert (
+        frontier_module._resolve_reported_execution_path(
+            bundled_path.as_posix(), evidence_root=evidence_root
+        )
+        is None
+    )
+    assert (
+        frontier_module._resolve_reported_execution_path(
+            external_path.as_posix(), evidence_root=evidence_root
+        )
+        is None
+    )
+    assert (
+        frontier_module._resolve_reported_execution_path(
+            "episode-alias.jsonl", evidence_root=evidence_root
+        )
+        is None
+    )
 
 
 def test_frontier_report_does_not_count_repeated_case_as_new_discovery(tmp_path: Path) -> None:
@@ -2859,7 +2948,7 @@ def test_frontier_report_rejects_source_episode_bytes_changed_after_binding(tmp_
             encoding="utf-8"
         )
     )
-    source_path = Path(
+    source_path = tmp_path / Path(
         admissibility["evidence"]["execution_artifact_bindings"]["reference"]["episode_store_path"]
     )
     source_path.write_bytes(b'{"episode_id":"fabricated-after-binding"}\n')

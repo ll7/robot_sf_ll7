@@ -32,7 +32,12 @@ classes can be audited without changing the historical collision count or event 
 # Decisions and risks
 
 - `0.05 m/s` is a declared diagnostic stationary threshold, not a causal rule.
-  Measured speed is preserved for later sensitivity analysis.
+  Measured speed is displacement over the collision simulation step, not an
+  instantaneous velocity at the exact collision instant. The saved collision
+  event carries the source speed and step index; the provenance block must
+  agree with it. A release gate must remeasure speed from the retained trace
+  and bind the row to source/config and artifact checksums, because jointly
+  altered copies within a row cannot be detected by ledger reconciliation.
 - Respawn matching inherits the existing timed pedestrian-row match; a match
   remains diagnostic until simulator-level reinjection and release comparison pass.
 - An observed collision is never relabeled as planner-caused by this block.

@@ -256,10 +256,7 @@ def _contact_provenance(
     respawn_matches = spawn.get("respawn_overlap_collisions")
     respawn_matches = respawn_matches if isinstance(respawn_matches, list) else []
     contacts: list[dict[str, Any]] = []
-    sorted_events = sorted(
-        collision_events or [],
-        key=lambda event: (event.get("collision_time"), event.get("collision_partner_type")),
-    )
+    sorted_events = _sorted_contact_sources(collision_events)
     for index, event in enumerate(sorted_events):
         speed = _finite_float(event.get("robot_speed_at_contact_m_s"))
         if speed is not None and speed < 0.0:
@@ -315,6 +312,7 @@ def _contact_provenance(
                 "collision_partner_type": partner_type,
                 "robot_speed_at_contact_m_s": speed,
                 "robot_speed_source": "runtime.step.robot_position_delta/dt",
+                "robot_speed_measurement_window": "simulation_step",
                 "contact_class": contact_class,
                 "reset_overlap_match": reset_match,
                 "respawn_match": dict(matched) if matched is not None else None,
@@ -330,6 +328,20 @@ def _contact_provenance(
         "classification_status": _contact_classification_status(spawn, contacts),
         "planner_causation_admitted": False,
     }
+
+
+def _sorted_contact_sources(
+    collision_events: Sequence[Mapping[str, Any]] | None,
+) -> list[Mapping[str, Any]]:
+    """Use the canonical ledger event order for source/provenance pairing.
+
+    Returns:
+        Raw source events in ledger order.
+    """
+    return sorted(
+        collision_events or [],
+        key=lambda event: (event.get("collision_time"), event.get("collision_partner_type")),
+    )
 
 
 def _contact_classification_status(
@@ -495,7 +507,17 @@ def build_event_ledger(
         isinstance(scenario_params, Mapping)
         and scenario_params.get("collision_attribution_version") == "v1"
     ):
-        payload["contact_provenance"] = _contact_provenance(record, collision_events)
+        for event, source in zip(
+            payload["collision_events"], _sorted_contact_sources(collision_events), strict=True
+        ):
+            # Keep the step measurement and contact set next to the exact event.
+            # The separate classification can then be reconciled against this
+            # source; release admission still requires trace-derived remeasurement.
+            event["robot_speed_at_contact_m_s"] = source.get("robot_speed_at_contact_m_s")
+            event["contact_step_index"] = source.get("contact_step_index")
+            if isinstance(source.get("contact_partner_ids"), list):
+                event["contact_partner_ids"] = list(source["contact_partner_ids"])
+        payload["contact_provenance"] = _contact_provenance(record, payload["collision_events"])
     payload["reconciliation"]["audit_result"] = (
         "pass" if not reconcile_event_ledger(payload) else "fail"
     )
@@ -632,11 +654,7 @@ def _contact_entry_violations(index: int, contact: Any, event: Any) -> list[str]
         return [f"{prefix} exact event is not a mapping"]
     if not isinstance(contact, Mapping) or contact.get("collision_event_index") != index:
         return [f"{prefix} index mismatch"]
-    violations: list[str] = []
-    if contact.get("collision_time") != event.get("collision_time") or contact.get(
-        "collision_partner_type"
-    ) != event.get("collision_partner_type"):
-        violations.append(f"{prefix} event identity mismatch")
+    violations = _contact_source_violations(prefix, contact, event)
     speed = _finite_float(contact.get("robot_speed_at_contact_m_s"))
     if speed is None or speed < 0.0:
         if contact.get("contact_class") != "unresolved_missing_robot_speed":
@@ -663,6 +681,28 @@ def _contact_entry_violations(index: int, contact: Any, event: Any) -> list[str]
     return violations
 
 
+def _contact_source_violations(
+    prefix: str, contact: Mapping[str, Any], event: Mapping[str, Any]
+) -> list[str]:
+    """Check classified fields against their saved exact-event source.
+
+    Returns:
+        Source/provenance disagreement messages.
+    """
+    violations: list[str] = []
+    if contact.get("collision_time") != event.get("collision_time") or contact.get(
+        "collision_partner_type"
+    ) != event.get("collision_partner_type"):
+        violations.append(f"{prefix} event identity mismatch")
+    if contact.get("robot_speed_at_contact_m_s") != event.get("robot_speed_at_contact_m_s"):
+        violations.append(f"{prefix} robot speed differs from saved collision source")
+    if contact.get("contact_step_index") != event.get("contact_step_index"):
+        violations.append(f"{prefix} step index differs from saved collision source")
+    if contact.get("robot_speed_measurement_window") != "simulation_step":
+        violations.append(f"{prefix} robot speed measurement window is missing")
+    return violations
+
+
 def validate_record_event_ledger(record: dict[str, Any]) -> list[str]:
     """Ensure and reconcile the event ledger on one episode record.
 
@@ -678,6 +718,14 @@ def validate_record_event_ledger(record: dict[str, Any]) -> list[str]:
             violations.append(f"unsupported collision_attribution_version: {version!r}")
         elif version == "v1" and "contact_provenance" not in ledger:
             violations.append("opt-in contact_provenance.v1 block is missing")
+        elif version == "v1":
+            source_events = ledger.get("collision_events")
+            if not isinstance(source_events, list) or not all(
+                isinstance(event, Mapping) for event in source_events
+            ):
+                violations.append("opt-in collision event sources are malformed")
+            elif ledger.get("contact_provenance") != _contact_provenance(record, source_events):
+                violations.append("opt-in contact provenance differs from saved event source")
     return violations
 
 

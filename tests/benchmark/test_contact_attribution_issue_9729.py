@@ -79,6 +79,12 @@ def test_step_displacement_classifies_contact_without_changing_exact_collision(
     assert ledger["exact_events"]["collision"] is True
     assert ledger["reconciliation"]["collision_metric_value"] == 1.0
     assert len(ledger["collision_events"]) == 1
+    assert (
+        ledger["collision_events"][0]["robot_speed_at_contact_m_s"]
+        == (contact["robot_speed_at_contact_m_s"])
+    )
+    assert ledger["collision_events"][0]["contact_step_index"] == 2
+    assert contact["robot_speed_measurement_window"] == "simulation_step"
     assert ledger["contact_provenance"]["planner_causation_admitted"] is False
     assert reconcile_event_ledger(ledger) == []
 
@@ -146,6 +152,22 @@ def test_forged_stationary_class_with_moving_speed_fails_reconciliation() -> Non
     ledger = build_event_ledger(_record(), collision_events=[_step_event(np.array([0.8, 0.0]))])
     ledger["contact_provenance"]["contacts"][0]["contact_class"] = "pedestrian_on_stationary_robot"
     assert any("class inconsistent with speed" in issue for issue in reconcile_event_ledger(ledger))
+
+
+def test_saved_speed_cannot_diverge_from_collision_source() -> None:
+    """Changing the classified speed alone fails exact-ledger reconciliation."""
+    record = _record()
+    ledger = build_event_ledger(record, collision_events=[_step_event(np.array([0.8, 0.0]))])
+    ledger["contact_provenance"]["contacts"][0]["robot_speed_at_contact_m_s"] = 0.0
+    assert any(
+        "robot speed differs from saved collision source" in issue
+        for issue in reconcile_event_ledger(ledger)
+    )
+    record["event_ledger"] = ledger
+    assert any(
+        "opt-in contact provenance differs from saved event source" in issue
+        for issue in validate_record_event_ledger(record)
+    )
 
 
 def test_missing_step_index_cannot_admit_a_contact_class() -> None:

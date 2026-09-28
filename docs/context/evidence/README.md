@@ -64,7 +64,9 @@ Each bundle writes:
 - `payload/`: exactly the selected compact files;
 - `evidence_bundle_manifest.json`: `schema_version: evidence_bundle.v1`, command, commit,
   claim boundary, source root, file index, sizes, SHA-256 hash checksums, and policy caveats;
-- `checksums.sha256`: checksum lines for every payload file.
+- `checksums.sha256`: checksum lines for every payload file. The canonical publisher writes
+  bundle-root-relative `payload/...` paths; the integrity checker also accepts payload-relative
+  entries used by existing gallery bundles.
 
 The schema contract lives at `robot_sf/benchmark/schemas/evidence_bundle.v1.json`.
 
@@ -124,6 +126,56 @@ See also: [Artifact Retention, Preservation, and Cleanup Guide](../artifact_rete
 for retention classes, preservation proof, and cleanup-eligibility workflows.
 
 ## Current Bundles
+
+- `issue_9656_hard_case_mining_2026-09-24/`: compact diagnostic-only mining result over the
+  checksum-pinned Release 0.0.2 bundle. It binds 36 deterministic selector cases to source row
+  hashes and materialized one-seed replay inputs, preserves 241 collision-event/count
+  inconsistencies, and records four revision-divergent attempts with per-metric comparisons and
+  refreshed unavailable-execution-evidence statuses. Raw release data and generated episode
+  outputs remain outside git.
+
+- `issue_9647_gallery_smoke_2026-09-26/`: one-case replay and renderer smoke on code revision
+  `4b9617338ecbaf6bd3612b4d8c5269f993581a0a`, based on main `7815da2`. The case is a tracked
+  #1501 `failure_0002` compatibility fixture, not a #9645 discovery; the fixture records
+  Optuna/seed 42/budget 32 but represents only one candidate row. The original replay matches the
+  collision outcome and objective at a changed code revision. Its exact ten-sample trace and
+  extraction provenance are now retained without the full episode JSONL or ignored output tree.
+  Renderer revision `d0a8ccf8` then produced a five-frame filmstrip, annotated critical still, and
+  trajectory plot from those stored samples only; a second render produced byte-identical PNGs.
+  The minimum surface-clearance sample and exact collision-ledger time are separately sourced and
+  both fall at step 9 / 1.0 s for this case. Dynamic feasibility and full source map-registry
+  binding remain unknown. Map overlay is unavailable; video was attempted but the environment lacks
+  pygame and MoviePy. This is diagnostic gallery and render-plumbing evidence only. See the
+  [receipt and figures](issue_9647_gallery_smoke_2026-09-26/payload/evidence_promotion/receipt.md),
+  [machine-readable summary](issue_9647_gallery_smoke_2026-09-26/payload/evidence_promotion/summary.json),
+  and [render provenance](issue_9647_gallery_smoke_2026-09-26/payload/evidence_promotion/render_only_provenance.json).
+
+- `issue_9647_gallery_demo_2026-09-25/`: current strict-gate one-case replay and rendering smoke
+  from the #9647 gallery CLI. At code revision `4ad36ecae489eea9e6461932a0b208a58ee27663`, the
+  documented command selected one tracked #1501 `failure_0002` compatibility row and replayed one
+  episode with matching identity, collision outcome, failure attribution, and objective. The
+  `scenario_cert.v1` certificate was generated post-hoc at `a468f1960278afb0896145221af105648bb3965f`
+  from the fixture's tracked scenario, route overrides, map registry, and map asset; its input and
+  certificate digests are in the fixture provenance file. It is static-route evidence only, not
+  original search-time or dynamic-feasibility evidence. Replay verification is
+  `outcome_reproduced_revision_changed`; source map-registry binding and dynamic task feasibility
+  remain unknown. Three small figures (trajectory, critical frame, filmstrip) are tracked with
+  checksums; map overlay and video are unavailable. This is selector/replay/rendering plumbing
+  evidence, not a new discovery or planner-safety result. See the [receipt and figures](issue_9647_gallery_demo_2026-09-25/payload/receipt.md)
+  and [machine-readable summary](issue_9647_gallery_demo_2026-09-25/payload/summary.json).
+
+- `issue_9647_final_gallery_smoke_2026-09-25/`: earlier #9647 one-case smoke at code revision
+  `b5e8af66c4b5b59df2ad60f8a2ae515c587bc14f`, before strict canonical certificate validation and
+  route-aggregation checks. The fixture then contained only a compact certificate annotation, so
+  this receipt's historical selection does not demonstrate current-gate acceptance. It is retained
+  as run history and superseded by the strict-gate gallery demo above. Raw replay streams remain in
+  ignored local `output/`; see the checksummed [receipt](issue_9647_final_gallery_smoke_2026-09-25/payload/receipt.md)
+  and [machine-readable summary](issue_9647_final_gallery_smoke_2026-09-25/payload/summary.json).
+
+- `issue_9647_gallery_smoke_2026-09-25/`: earlier smoke at code revision
+  `1357ebd4084a5da077e10e5ab9ed74e5a4d9a9e4`, before strict certificate, map-registry, and
+  actor-track checks. It cannot establish current selector acceptance and is retained only as
+  historical audit context; the strict-gate gallery demo above is the current smoke reference.
 
 - `issue_6151_simulator_dependence_synthesis_2026-09-13/`: bounded negative synthesis for the
   #3207 validity-boundary parent. The only defensible verdict is `invalid_missing_evidence`:

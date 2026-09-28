@@ -436,6 +436,20 @@ _FAST_FILES = {
     "test_pedestrian_removal.py",
     "test_planner_unit_consistency.py",
     "test_replay_determinism.py",
+    # Issue #9759 map-reflection and route-waypoint checks use in-memory maps and
+    # synthetic grids; keep their changed transform/planner branches in fast shards.
+    "test_release_map_mirror.py",
+    "test_grid_route.py",
+    # Adversarial evidence packet and gallery tests are deterministic fixture
+    # contracts for replay provenance, materialization, and report schemas.
+    "test_replay_gallery.py",
+    "test_search_evidence_packet.py",
+    # Recorded episode figure tests use pinned fixture traces and deterministic
+    # render inputs; keep changed replay materialization coverage in PR shards.
+    "test_episode_replay_figure.py",
+    # Telemetry replay alignment and export checks use synthetic samples and
+    # arrays, so they provide deterministic coverage for replay consumers.
+    "test_replay.py",
     # socnav_sampling bounded_v2 contracts (issues #9727, #9746) are deterministic
     # planner checks on synthetic grids; the two episode replays stay marked slow.
     "test_issue_9727_socnav_sampling.py",
@@ -450,6 +464,10 @@ _FAST_FILES = {
     # Force-residual predictor tests are deterministic synthetic contracts and
     # must cover the changed planner-visible prediction module in PR shards.
     "test_force_residual_intent_predictor.py",
+    # Guarded-PPO and Risk-DWA planner tests use synthetic observations and
+    # adapters; keep their planner contracts and frame checks in PR shards.
+    "test_guarded_ppo.py",
+    "test_risk_dwa.py",
     # Surface-distance pedestrian-term contracts include deterministic rollout
     # and construction-validation checks; keep changed lines in PR shards.
     "test_socnav_ped_surface_v3.py",
@@ -745,6 +763,9 @@ _FAST_FILES = {
     "test_spawn_overlap_rate_paths_issue_9725.py",
     "test_spawn_clearance_issue_9725.py",
     "test_spawn_preflight_issue_9725.py",
+    # Release-matrix preflight contracts use synthetic fixtures and monkeypatched
+    # environments; keep changed preflight logic covered in PR fast shards.
+    "test_spawn_preflight.py",
     "test_hierarchical_paired_release_analysis.py",
     "test_parquet_export.py",
     "test_seed_variance.py",
@@ -997,6 +1018,9 @@ _FAST_FILES = {
     # both focused files in the exact-head fast lane.
     "test_maneuver_candidates.py",
     "test_maneuver_candidates_counterexamples.py",
+    # Multimodal arbitration tests are deterministic planner/risk contracts and
+    # cover the issue #8062 selector in exact-head changed-line shards.
+    "test_multimodal_trajectory_arbitration.py",
     # Versioned obstacle-force dispatch tests are deterministic contract
     # coverage for the planner, simulator, and wrapper seams; keep their
     # top-level modules in PR shards so changed coverage cannot exclude them as

@@ -46,6 +46,25 @@ def _observation(
     }
 
 
+def _flat_observation(
+    *,
+    heading: float,
+    pedestrian_velocities: list[tuple[float, float]],
+) -> dict[str, object]:
+    """Build a flat map-runner observation using the producer frame contract."""
+    count = len(pedestrian_velocities)
+    return {
+        "robot_position": np.asarray([0.0, 0.0], dtype=float),
+        "robot_heading": np.asarray([heading], dtype=float),
+        "robot_speed": np.asarray([0.0], dtype=float),
+        "goal_current": np.asarray([4.0, 0.0], dtype=float),
+        "goal_next": np.asarray([4.0, 0.0], dtype=float),
+        "pedestrians_positions": np.asarray([[1.0, 0.5]] * count, dtype=float),
+        "pedestrians_velocities": np.asarray(pedestrian_velocities, dtype=float),
+        "pedestrians_count": np.asarray([count], dtype=float),
+    }
+
+
 def _scalar_rollout_score(  # noqa: PLR0913
     planner: RiskDWAPlannerAdapter,
     *,
@@ -284,3 +303,24 @@ def test_risk_dwa_plan_stops_at_goal() -> None:
     obs = _observation(robot=(0.0, 0.0), heading=0.0, goal=(0.1, 0.0))
     planner = RiskDWAPlannerAdapter(config)
     assert planner.plan(obs) == (0.0, 0.0)
+
+
+@pytest.mark.parametrize("flat", [False, True], ids=["structured", "flat"])
+def test_risk_dwa_observation_rotates_pedestrian_velocity_to_world(flat: bool) -> None:
+    """SocNav ego velocities are converted before world-frame prediction."""
+    heading = float(np.pi / 2.0)
+    ego_velocity = (1.25, -0.5)
+    planner = RiskDWAPlannerAdapter()
+    observation = (
+        _flat_observation(heading=heading, pedestrian_velocities=[ego_velocity])
+        if flat
+        else _observation(
+            heading=heading,
+            pedestrians=[(1.0, 0.5)],
+            pedestrian_velocities=[ego_velocity],
+        )
+    )
+
+    _robot_pos, _heading, _goal, _ped_pos, ped_vel = planner._extract_robot_goal_ped(observation)
+
+    np.testing.assert_allclose(ped_vel, np.asarray([[0.5, 1.25]]), rtol=0.0, atol=1e-12)

@@ -157,6 +157,16 @@ behavior, including base fallback, and does not run the new early check. A succe
 only an early rejection filter: all later readiness gates, core registry invariants, hosted
 checks, and final freshness requirements still apply. No success is cached between runs.
 
+## Early docs/evidence-integrity check in final readiness
+
+Final readiness also runs `scripts/dev/check_docs_evidence_integrity.py` before formatting or test
+lanes when a changed path matches the pull-request path filters in
+[the hosted docs/evidence-integrity workflow](../../.github/workflows/docs-evidence-integrity.yml).
+The checker receives the same `BASE_REF` used for readiness and evaluates the same committed
+base-to-head changes. Code-only changes outside those filters skip this check. A changed catalog or
+evidence file that fails the checker stops readiness before expensive lanes; a successful check is
+not a substitute for later tests or the separate evidence-registry gate above.
+
 ## Readiness count selectors
 
 When reporting readiness counts, name the exact selector so another contributor can reproduce the

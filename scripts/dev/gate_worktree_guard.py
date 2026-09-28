@@ -25,6 +25,9 @@ Usage:
     # Verify the current gate worktree is intact; exit non-zero if missing.
     python scripts/dev/gate_worktree_guard.py verify --path /abs/worktree
 
+    # Read-only preflight before a local Git fetch/merge/rebase/push.
+    python scripts/dev/gate_worktree_guard.py preflight --path /abs/worktree --json
+
     # Same, but recreate from the surviving lease if missing.
     python scripts/dev/gate_worktree_guard.py ensure --path /abs/worktree
 """
@@ -34,13 +37,20 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
+import stat
 import subprocess
+import time
 from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = "gate_worktree_guard.v1"
 MISSING_STATE_LOSS_BOUNDARY = "dirty_untracked_ignored_state_not_recoverable"
+INDEX_LOCK_SCHEMA_VERSION = "gate_worktree_index_lock.v1"
+PREFLIGHT_SCHEMA_VERSION = "gate_worktree_preflight.v1"
+PROC_ROOT = Path("/proc")
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +88,25 @@ class GateWorktreeRecreate:
     recovery: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True)
+class IndexLockInspection:
+    """Read-only inspection of a worktree's Git index lock."""
+
+    schema: str
+    worktree_path: str
+    index_lock_path: str | None
+    lock_exists: bool | None
+    lock_mtime_utc: str | None
+    lock_age_seconds: float | None
+    lock_size_bytes: int | None
+    dirty_state: str
+    owner_classification: str
+    owner_pids: list[int] = field(default_factory=list)
+    ownership_error: str | None = None
+    inspection_error: str | None = None
+    next_action: str = ""
+
+
 def _run_command(
     args: list[str],
     *,
@@ -108,6 +137,275 @@ def _run_command(
             stdout="",
             stderr=str(exc),
         )
+
+
+def _proc_lock_owners(  # noqa: C901 - scan failures remain separately observable.
+    lock_stat: os.stat_result,
+    *,
+    proc_root: Path | None = None,
+) -> tuple[str, list[int], str | None]:
+    """Classify lock ownership by checking process file descriptors.
+
+    A complete scan with no matching descriptor proves the lock is orphaned.
+    Permission-limited or otherwise incomplete scans stay ambiguous. Processes
+    that disappear while being inspected are ignored because their descriptors
+    can no longer own the live lock.
+    """
+    proc_root = PROC_ROOT if proc_root is None else proc_root
+    try:
+        processes = [entry for entry in proc_root.iterdir() if entry.name.isdecimal()]
+    except OSError as exc:
+        return "unavailable", [], f"could not enumerate process table: {exc}"
+    if not processes:
+        return "unavailable", [], "process table contained no inspectable process entries"
+
+    owners: list[int] = []
+    uncertainties: list[str] = []
+    for process in processes:
+        pid = int(process.name)
+        try:
+            descriptors = list((process / "fd").iterdir())
+        except FileNotFoundError:
+            # The process exited between enumerating /proc and reading fd/.
+            continue
+        except OSError as exc:
+            uncertainties.append(f"pid {pid} descriptors unavailable: {exc}")
+            continue
+
+        for descriptor in descriptors:
+            try:
+                descriptor_stat = descriptor.stat()
+            except FileNotFoundError:
+                # The process closed this descriptor while the scan was running.
+                continue
+            except OSError as exc:
+                uncertainties.append(f"pid {pid} descriptor {descriptor.name} unavailable: {exc}")
+                continue
+            if (descriptor_stat.st_dev, descriptor_stat.st_ino) == (
+                lock_stat.st_dev,
+                lock_stat.st_ino,
+            ):
+                owners.append(pid)
+                break
+
+    if owners:
+        return "active", sorted(set(owners)), "; ".join(uncertainties[:3]) or None
+    if uncertainties:
+        return "ambiguous", [], "; ".join(uncertainties[:3])
+    return "proven_orphan", [], None
+
+
+def _index_lock_next_action(owner_classification: str) -> str:
+    """Return a safe, non-mutating recovery action for an index-lock state."""
+    actions = {
+        "absent": "continue_local_refresh",
+        "active": "wait_for_owner_to_finish_then_rerun_preflight",
+        "proven_orphan": "preserve_lock_and_worktree_then_request_manual_recovery_review",
+        "ambiguous": "preserve_lock_and_worktree_then_resolve_ownership_uncertainty",
+        "unavailable": "preserve_lock_and_worktree_then_retry_preflight_when_inspection_is_available",
+    }
+    return actions.get(owner_classification, actions["unavailable"])
+
+
+def _unavailable_index_lock_inspection(
+    path: str | Path,
+    *,
+    lock_path: str | None = None,
+    lock_exists: bool | None = None,
+    error: str,
+) -> IndexLockInspection:
+    """Build an explicit fail-closed result when lock inspection is incomplete."""
+    try:
+        worktree_path = str(Path(path).resolve())
+    except OSError:
+        worktree_path = str(path)
+    return IndexLockInspection(
+        schema=INDEX_LOCK_SCHEMA_VERSION,
+        worktree_path=worktree_path,
+        index_lock_path=lock_path,
+        lock_exists=lock_exists,
+        lock_mtime_utc=None,
+        lock_age_seconds=None,
+        lock_size_bytes=None,
+        dirty_state="unavailable",
+        owner_classification="unavailable",
+        inspection_error=error,
+        next_action=_index_lock_next_action("unavailable"),
+    )
+
+
+def inspect_index_lock(path: str | Path) -> IndexLockInspection:  # noqa: C901 - inspection failures stay distinct.
+    """Inspect a worktree's exact Git ``index.lock`` without changing it.
+
+    Git resolves ``--git-path index.lock`` so linked worktrees and configured
+    index paths use their actual administrative location. Status inspection
+    disables Git's optional index refresh, avoiding lock creation as a side
+    effect of this preflight.
+    """
+    try:
+        requested_path = Path(path).resolve(strict=True)
+        if not requested_path.is_dir():
+            raise OSError(f"worktree path is not a directory: {requested_path}")
+    except (OSError, RuntimeError, ValueError) as exc:
+        return _unavailable_index_lock_inspection(path, error=f"invalid worktree path: {exc}")
+
+    top_level_result = _run_command(
+        ["git", "rev-parse", "--show-toplevel"], cwd=str(requested_path)
+    )
+    top_level_text = top_level_result.stdout.strip()
+    if top_level_result.returncode != 0 or not top_level_text:
+        detail = top_level_result.stderr.strip() or "git did not return a worktree root"
+        return _unavailable_index_lock_inspection(
+            requested_path, error=f"could not resolve Git worktree root: {detail}"
+        )
+    try:
+        worktree_path = Path(top_level_text).resolve(strict=True)
+    except (OSError, RuntimeError, ValueError) as exc:
+        return _unavailable_index_lock_inspection(
+            requested_path, error=f"could not resolve Git worktree root: {exc}"
+        )
+
+    lock_result = _run_command(
+        ["git", "rev-parse", "--git-path", "index.lock"], cwd=str(worktree_path)
+    )
+    lock_text = lock_result.stdout.strip()
+    if lock_result.returncode != 0 or not lock_text:
+        detail = lock_result.stderr.strip() or "git did not return an index-lock path"
+        return _unavailable_index_lock_inspection(
+            worktree_path, error=f"could not resolve Git index-lock path: {detail}"
+        )
+    lock_path = Path(lock_text)
+    if not lock_path.is_absolute():
+        lock_path = worktree_path / lock_path
+    # Normalize `.` and `..` without following a possible index.lock symlink;
+    # lstat below must describe the exact entry Git resolved.
+    lock_path = Path(os.path.abspath(lock_path))
+
+    try:
+        lock_stat = lock_path.lstat()
+    except FileNotFoundError:
+        return IndexLockInspection(
+            schema=INDEX_LOCK_SCHEMA_VERSION,
+            worktree_path=str(worktree_path),
+            index_lock_path=str(lock_path),
+            lock_exists=False,
+            lock_mtime_utc=None,
+            lock_age_seconds=None,
+            lock_size_bytes=None,
+            dirty_state="not_checked",
+            owner_classification="absent",
+            next_action=_index_lock_next_action("absent"),
+        )
+    except OSError as exc:
+        return _unavailable_index_lock_inspection(
+            worktree_path,
+            lock_path=str(lock_path),
+            error=f"could not inspect Git index-lock path: {exc}",
+        )
+
+    mtime_utc = datetime.fromtimestamp(lock_stat.st_mtime, UTC).isoformat().replace("+00:00", "Z")
+    dirty_result = _run_command(
+        [
+            "git",
+            "--no-optional-locks",
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+        ],
+        cwd=str(worktree_path),
+    )
+    if dirty_result.returncode == 0:
+        dirty_state = "dirty" if dirty_result.stdout.strip() else "clean"
+        dirty_error = None
+    else:
+        dirty_state = "unavailable"
+        dirty_error = dirty_result.stderr.strip() or "git status failed"
+
+    if not stat.S_ISREG(lock_stat.st_mode):
+        owner_classification = "ambiguous"
+        owner_pids: list[int] = []
+        ownership_error = "index-lock path is not a regular file"
+    else:
+        owner_classification, owner_pids, ownership_error = _proc_lock_owners(lock_stat)
+
+    return IndexLockInspection(
+        schema=INDEX_LOCK_SCHEMA_VERSION,
+        worktree_path=str(worktree_path),
+        index_lock_path=str(lock_path),
+        lock_exists=True,
+        lock_mtime_utc=mtime_utc,
+        lock_age_seconds=round(time.time() - lock_stat.st_mtime, 6),
+        lock_size_bytes=lock_stat.st_size,
+        dirty_state=dirty_state,
+        owner_classification=owner_classification,
+        owner_pids=owner_pids,
+        ownership_error=ownership_error,
+        inspection_error=dirty_error,
+        next_action=_index_lock_next_action(owner_classification),
+    )
+
+
+def _preflight_recovery_packet(inspection: IndexLockInspection) -> dict[str, Any]:
+    """Serialize the minimum recovery facts for blocked preflight output."""
+    return {
+        "worktree_path": inspection.worktree_path,
+        "index_lock_path": inspection.index_lock_path,
+        "lock_exists": inspection.lock_exists,
+        "lock_mtime_utc": inspection.lock_mtime_utc,
+        "lock_age_seconds": inspection.lock_age_seconds,
+        "lock_size_bytes": inspection.lock_size_bytes,
+        "dirty_state": inspection.dirty_state,
+        "owner_classification": inspection.owner_classification,
+        "owner_pids": inspection.owner_pids,
+        "ownership_error": inspection.ownership_error,
+        "inspection_error": inspection.inspection_error,
+        "next_action": inspection.next_action,
+    }
+
+
+def preflight_gate_worktree(path: str | Path) -> dict[str, Any]:
+    """Return a reusable fail-closed preflight for local Git mutations.
+
+    The function is read-only. A present lock or any unavailable inspection
+    blocks the caller and carries a structured recovery packet.
+    """
+    health = verify_gate_worktree(path)
+    if not health.exists:
+        inspection = _unavailable_index_lock_inspection(
+            health.path,
+            error="worktree path is missing; its index-lock state cannot be inspected",
+        )
+        inspection = IndexLockInspection(
+            **{
+                **asdict(inspection),
+                "next_action": "restore_or_reselect_the_worktree_then_rerun_preflight",
+            }
+        )
+        return {
+            "schema": PREFLIGHT_SCHEMA_VERSION,
+            "status": "worktree_missing",
+            "worktree_health": asdict(health),
+            "index_lock": asdict(inspection),
+            "recovery_packet": _preflight_recovery_packet(inspection),
+        }
+
+    inspection = inspect_index_lock(path)
+    if inspection.lock_exists is True:
+        status = "index_lock_present"
+        packet: dict[str, Any] | None = _preflight_recovery_packet(inspection)
+    elif inspection.lock_exists is False and inspection.owner_classification == "absent":
+        status = "ready"
+        packet = None
+    else:
+        status = "inspection_unavailable"
+        packet = _preflight_recovery_packet(inspection)
+    return {
+        "schema": PREFLIGHT_SCHEMA_VERSION,
+        "status": status,
+        "worktree_health": asdict(health),
+        "index_lock": asdict(inspection),
+        "recovery_packet": packet,
+    }
 
 
 def _owner_label(owner: str | None, pr_number: int | None, gate_id: str | None) -> str | None:
@@ -571,10 +869,19 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     ensure_parser.add_argument("--json", action="store_true", help="Emit JSON")
 
+    preflight_parser = subparsers.add_parser(
+        "preflight",
+        help="Inspect worktree health and index.lock before local Git mutation",
+    )
+    preflight_parser.add_argument(
+        "--path", required=True, help="Git worktree path to inspect without mutation"
+    )
+    preflight_parser.add_argument("--json", action="store_true", help="Emit JSON")
+
     return parser.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # noqa: C901 - CLI status branches fail closed.
     """CLI entry point."""
     args = _parse_args(argv)
 
@@ -601,6 +908,25 @@ def main(argv: list[str] | None = None) -> int:
         if recreate is not None:
             return 0 if recreate.recreated else 1
         return 0 if health.exists else 1
+
+    if args.command == "preflight":
+        payload = preflight_gate_worktree(args.path)
+        if args.json:
+            print(json.dumps(payload, indent=2, sort_keys=True))
+        else:
+            print(f"Gate Worktree Preflight (schema: {payload['schema']})")
+            print(f"  Path: {payload['worktree_health']['path']}")
+            print(f"  Status: {payload['status']}")
+            inspection = payload["index_lock"]
+            print(f"  Index lock: {inspection['index_lock_path'] or 'unavailable'}")
+            print(f"  Owner classification: {inspection['owner_classification']}")
+            if payload["recovery_packet"] is not None:
+                print(f"  Next action: {payload['recovery_packet']['next_action']}")
+        if payload["status"] == "ready":
+            return 0
+        if payload["status"] == "inspection_unavailable":
+            return 2
+        return 1
 
     return 2
 

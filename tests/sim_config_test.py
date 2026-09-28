@@ -11,6 +11,7 @@ from pysocialforce.config import (
     SURFACE_DISTANCE_UNIT_NORMAL_V2,
 )
 
+from robot_sf.gym_env.config_validation import get_resolved_config_dict
 from robot_sf.gym_env.env_config import (
     BicycleDriveRobot,
     BicycleDriveSettings,
@@ -25,6 +26,7 @@ from robot_sf.gym_env.robot_env import (
     _hash_payload_without_default_goal_policy,
     _stable_config_hash,
 )
+from robot_sf.sim.sim_config import TtcPredictiveForceConfig
 
 
 def test_env_settings_initialization():
@@ -76,6 +78,34 @@ def test_kernel_selector_preserves_legacy_simulation_and_environment_hashes():
     assert expected_wrapped_env_hash != expected_legacy_env_hash
 
     assert replace(legacy).social_force_kernel_resolution_mode == "defaulted_missing"
+    assert legacy != wrapped
+    assert wrapped.to_dict()["social_force_kernel_version"] == SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    assert SimulationSettings(**wrapped.to_dict()) == wrapped
+    assert replace(wrapped) == wrapped
+
+    wrapped.__post_init__()
+    assert wrapped.social_force_kernel_version == SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    assert wrapped.social_force_kernel_resolution_mode == "explicit"
+
+    positional_ttc = TtcPredictiveForceConfig()
+    positional = SimulationSettings(
+        200.0,
+        0.1,
+        0,
+        None,
+        "semi_implicit_euler",
+        False,
+        False,
+        1.3,
+        "social_force_default",
+        positional_ttc,
+    )
+    assert positional.ttc_predictive_force == positional_ttc
+
+    resolved_payload = get_resolved_config_dict(EnvSettings(sim_config=wrapped))
+    assert resolved_payload["sim_config"]["social_force_kernel_version"] == (
+        SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    )
 
 
 def test_robot_factory():

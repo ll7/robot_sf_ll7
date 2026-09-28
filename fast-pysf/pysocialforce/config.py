@@ -3,7 +3,7 @@
 import hashlib
 import json
 from collections.abc import Mapping
-from dataclasses import InitVar, dataclass, field
+from dataclasses import InitVar, dataclass, field, fields
 from typing import Any
 
 from pysocialforce.ped_population import PedSpawnConfig
@@ -450,7 +450,7 @@ class DesiredForceConfig:
     goal_threshold: float = 0.2
 
 
-@dataclass
+@dataclass(eq=False)
 class SocialForceConfig:
     """Parameters for pedestrian-pedestrian interaction (social repulsion).
 
@@ -524,6 +524,30 @@ class SocialForceConfig:
         if self.social_force_kernel_resolution_mode == "defaulted_missing":
             return {}
         return {"kernel_version": str(self.kernel_version)}
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize force settings with explicit version selectors and legacy shape.
+
+        Returns:
+            The standard dataclass mapping plus the selector only when it was supplied.
+        """
+        payload = {item.name: getattr(self, item.name) for item in fields(self)}
+        payload.update(self._config_hash_overrides())
+        return payload
+
+    __hash__ = None
+
+    def __eq__(self, other: object) -> bool:
+        """Compare force parameters and selector provenance.
+
+        Returns:
+            Whether all parameters and explicit selector identity match.
+        """
+        if not isinstance(other, SocialForceConfig) or type(other) is not type(self):
+            return False
+        return all(
+            getattr(self, item.name) == getattr(other, item.name) for item in fields(self)
+        ) and (self._config_hash_overrides() == other._config_hash_overrides())
 
 
 @dataclass

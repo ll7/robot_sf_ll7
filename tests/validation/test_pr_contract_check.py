@@ -11,7 +11,7 @@ import json
 import re
 import subprocess
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -167,6 +167,109 @@ class HistoricalPREvidence:
             raise ValueError("historical evidence must carry validated numstat")
         if self.changed_files != self.numstat.changed_files:
             raise ValueError("historical evidence files do not match validated numstat")
+
+
+@dataclass(frozen=True)
+class HistoricalMalformedV2Fixture:
+    """Immutable identity and parser-error binding for one merged PR body."""
+
+    pr_number: int
+    base_sha: str
+    head_sha: str
+    merge_commit_sha: str
+    merge_parent_shas: tuple[str, ...]
+    merge_base_sha: str
+    body_sha256: str
+    parser_errors: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        """Reject incomplete bindings that could turn into a broad allowlist."""
+        if (
+            not isinstance(self.pr_number, int)
+            or isinstance(self.pr_number, bool)
+            or self.pr_number <= 0
+        ):
+            raise ValueError("historical malformed-v2 PR number must be positive")
+        if (
+            not isinstance(self.merge_parent_shas, tuple)
+            or not self.merge_parent_shas
+            or any(
+                not isinstance(parent_sha, str)
+                or re.fullmatch(r"[0-9a-fA-F]{40}", parent_sha) is None
+                for parent_sha in self.merge_parent_shas
+            )
+            or len(self.merge_parent_shas) != len(set(self.merge_parent_shas))
+        ):
+            raise ValueError("historical malformed-v2 merge parents must be unique full IDs")
+        revisions = (
+            self.base_sha,
+            self.head_sha,
+            self.merge_commit_sha,
+            self.merge_base_sha,
+        )
+        if any(
+            not isinstance(sha, str) or re.fullmatch(r"[0-9a-fA-F]{40}", sha) is None
+            for sha in revisions
+        ):
+            raise ValueError("historical malformed-v2 revisions must be full commit IDs")
+        if self.merge_base_sha != self.base_sha:
+            raise ValueError("historical malformed-v2 merge base must equal the base")
+        if re.fullmatch(r"[0-9a-f]{64}", self.body_sha256) is None:
+            raise ValueError("historical malformed-v2 body digest must be lowercase SHA-256")
+        if (
+            not isinstance(self.parser_errors, tuple)
+            or not self.parser_errors
+            or any(not isinstance(error, str) or not error.strip() for error in self.parser_errors)
+            or len(self.parser_errors) != len(set(self.parser_errors))
+        ):
+            raise ValueError("historical malformed-v2 parser errors must be unique strings")
+
+
+# This is a test-only compatibility fixture. It does not weaken the parser: the live
+# regression sweep may filter only the exact malformed body and immutable revision
+# identity recorded here. Any changed body, revision, parent, merge base, or parser
+# error remains an unexpected blocker.
+KNOWN_HISTORICAL_MALFORMED_V2_FIXTURES: dict[int, HistoricalMalformedV2Fixture] = {
+    9854: HistoricalMalformedV2Fixture(
+        pr_number=9854,
+        base_sha="5d7aba11f7ae34fc88cd99620ba179d0ebfec635",
+        head_sha="1422bad91ebfdd52880c8f9c2998cdcedd8cf150",
+        merge_commit_sha="58af735480babc6d2e2e8f4b56a94611f6f76d49",
+        merge_parent_shas=("5634639ba5a3ead8323462355c5d7dc0efa00d0d",),
+        merge_base_sha="5d7aba11f7ae34fc88cd99620ba179d0ebfec635",
+        body_sha256="1b1d18d1767e807bef69022228533e5263f4dabbd6ab777e459169ad07f1e9f2",
+        parser_errors=(
+            "linked_issues and deferred_work contain duplicate issue references",
+            "evidence-bearing contracts require domain_approval.status=approved or waived",
+        ),
+    )
+}
+
+
+def _is_expected_historical_malformed_v2_blocker(
+    evidence: HistoricalPREvidence, body: str, blocker: str
+) -> bool:
+    """Filter only the exact immutable historical malformed-v2 blocker."""
+    fixture = KNOWN_HISTORICAL_MALFORMED_V2_FIXTURES.get(evidence.pr_number)
+    if fixture is None:
+        return False
+    if (
+        evidence.base_sha != fixture.base_sha
+        or evidence.head_sha != fixture.head_sha
+        or evidence.merge_commit_sha != fixture.merge_commit_sha
+        or evidence.merge_parent_shas != fixture.merge_parent_shas
+        or evidence.merge_base_sha != fixture.merge_base_sha
+    ):
+        return False
+    if hashlib.sha256(body.encode("utf-8")).hexdigest() != fixture.body_sha256:
+        return False
+    parsed = parse_pr_contract_v2(body, source="historical compatibility fixture")
+    if parsed.status != "malformed" or parsed.errors != fixture.parser_errors:
+        return False
+    expected_blocker = (
+        f"BLOCKER: {parsed.message}; v1 fallback is disabled when a v2 marker is present."
+    )
+    return blocker == expected_blocker
 
 
 # This is a test-only compatibility fixture. It deliberately cannot authorize a live
@@ -1257,6 +1360,70 @@ def test_historical_budget_exception_requires_exact_evidence() -> None:
         )
     finally:
         KNOWN_HISTORICAL_BUDGET_EXCEPTIONS.clear()
+
+
+def test_historical_malformed_v2_exception_requires_exact_binding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A malformed-v2 exception rejects changed body, identity, or parser errors."""
+    body = """<!-- pr-contract:v2
+change_class: benchmark_or_metric
+linked_issues:
+  closes: []
+  relates: [9517]
+deferred_work:
+  status: open
+  issues: [9517]
+  reason: "follow-up"
+evidence:
+  applicability: evidence-bearing
+  tier: launch_packet
+  result: diagnostic-only
+domain_approval:
+  required: true
+  status: pending
+  domains: [benchmark-evidence]
+  note: "pending"
+  validity_checklist:
+    target_claim: "claim"
+    comparator_validity: "comparison"
+    fallback_exclusions: "none"
+    claim_boundary: "boundary"
+    implementation_integrity: "integrity"
+performance:
+  claimed: false
+-->
+"""
+    parsed = parse_pr_contract_v2(body, source="fixture")
+    assert parsed.status == "malformed"
+    fixture = KNOWN_HISTORICAL_MALFORMED_V2_FIXTURES[9854]
+    synthetic_fixture = replace(
+        fixture,
+        body_sha256=hashlib.sha256(body.encode("utf-8")).hexdigest(),
+        parser_errors=parsed.errors,
+    )
+    monkeypatch.setitem(KNOWN_HISTORICAL_MALFORMED_V2_FIXTURES, 9854, synthetic_fixture)
+    numstat = pr_contract_check.HistoricalNumstatEvidence.from_numstat("1\t0\tfixture.py\n")
+    evidence = HistoricalPREvidence(
+        pr_number=9854,
+        base_sha=fixture.base_sha,
+        head_sha=fixture.head_sha,
+        merge_commit_sha=fixture.merge_commit_sha,
+        merge_parent_shas=fixture.merge_parent_shas,
+        merge_base_sha=fixture.merge_base_sha,
+        changed_files=numstat.changed_files,
+        numstat=numstat,
+    )
+    blocker = f"BLOCKER: {parsed.message}; v1 fallback is disabled when a v2 marker is present."
+
+    assert _is_expected_historical_malformed_v2_blocker(evidence, body, blocker)
+    assert not _is_expected_historical_malformed_v2_blocker(evidence, body + " ", blocker)
+    assert not _is_expected_historical_malformed_v2_blocker(
+        replace(evidence, head_sha="a" * 40), body, blocker
+    )
+    assert not _is_expected_historical_malformed_v2_blocker(
+        evidence, body, blocker.replace(parsed.errors[0], "different parser error")
+    )
 
 
 def test_historical_pr_evidence_rejects_malformed_identity_and_file_binding() -> None:
@@ -2414,6 +2581,7 @@ def test_regression_last_20_merged_prs() -> None:
                 for issue in expected_parity_issues
             )
             and not _is_expected_historical_budget_blocker(historical_evidence, body, blocker)
+            and not _is_expected_historical_malformed_v2_blocker(historical_evidence, body, blocker)
         ]
         assert not unexpected_blockers, (
             f"PR #{number} ('{title}') triggered unexpected blockers: {unexpected_blockers}"

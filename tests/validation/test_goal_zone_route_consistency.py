@@ -39,6 +39,7 @@ AFFECTED_SOURCE_MAPS = frozenset(
         "maps/svg_maps/classic_merging.svg",
         "maps/svg_maps/classic_overtaking.svg",
         "maps/svg_maps/classic_t_intersection.svg",
+        "maps/svg_maps/classic_station_platform.svg",
         "maps/svg_maps/francis2023/francis2023_blind_corner.svg",
         "maps/svg_maps/francis2023/francis2023_circular_crossing.svg",
         "maps/svg_maps/francis2023/francis2023_crowd_navigation.svg",
@@ -63,6 +64,11 @@ SUCCESSOR_MAPS = frozenset(
     f"maps/successor_svg_maps/issue_9762_{Path(source).stem}_goal_zone_entry_v2.svg"
     for source in AFFECTED_SOURCE_MAPS
 )
+SUCCESSOR_BASE_MAPS = {
+    "maps/svg_maps/classic_station_platform.svg": (
+        "maps/successor_svg_maps/classic_station_platform_v2.svg"
+    ),
+}
 
 
 def _sha256(path: Path) -> str:
@@ -208,7 +214,7 @@ def test_successor_maps_change_only_robot_route_and_keep_all_release_rows_reacha
 def test_successor_geometry_diff_is_limited_to_robot_route_data() -> None:
     """Versioned route repairs retain geometry and the certified interaction route."""
     for source in AFFECTED_SOURCE_MAPS:
-        original_path = REPO_ROOT / source
+        original_path = REPO_ROOT / SUCCESSOR_BASE_MAPS.get(source, source)
         successor_path = (
             REPO_ROOT
             / "maps/successor_svg_maps"
@@ -244,6 +250,23 @@ def test_successor_geometry_diff_is_limited_to_robot_route_data() -> None:
                 if getattr(obstacle, "vertices", None)
             ]
             assert obstacle_polygons, "classic crossing successor needs parsed obstacles"
+            assert not any(added_segment.intersects(obstacle) for obstacle in obstacle_polygons)
+            min_clearance = min(added_segment.distance(obstacle) for obstacle in obstacle_polygons)
+            assert min_clearance + MARGIN_TOLERANCE_M >= DEFAULT_ROBOT_RADIUS
+        elif source == "maps/svg_maps/classic_station_platform.svg":
+            assert new_waypoints[:-1] == old_waypoints[:-1], (
+                "station-platform successor must retain the #9725 spawn-corrected route "
+                "approach before extending its endpoint"
+            )
+            assert old_waypoints[-1] == (77.0, 22.5)
+            assert new_waypoints[-1] == (78.0, 22.5)
+            added_segment = LineString([old_waypoints[-1], new_waypoints[-1]])
+            obstacle_polygons = [
+                Polygon(obstacle.vertices)
+                for obstacle in successor_def.obstacles
+                if getattr(obstacle, "vertices", None)
+            ]
+            assert obstacle_polygons, "station-platform successor needs parsed obstacles"
             assert not any(added_segment.intersects(obstacle) for obstacle in obstacle_polygons)
             min_clearance = min(added_segment.distance(obstacle) for obstacle in obstacle_polygons)
             assert min_clearance + MARGIN_TOLERANCE_M >= DEFAULT_ROBOT_RADIUS

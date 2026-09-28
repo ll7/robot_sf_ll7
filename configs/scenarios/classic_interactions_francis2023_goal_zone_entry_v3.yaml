@@ -130,7 +130,7 @@ scenario_overrides_by_name:
     map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_robot_crowding_goal_zone_entry_v2.svg
   classic_station_platform_medium:
     map_id: null
-    map_file: ../../maps/successor_svg_maps/classic_station_platform_v2.svg
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_station_platform_goal_zone_entry_v2.svg
   classic_cross_trap_low:
     map_id: null
     map_file: ../../maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg

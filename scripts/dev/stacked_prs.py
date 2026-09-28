@@ -22,7 +22,8 @@ five deliberately small operations:
     ``origin/main`` merge base for a branch or PR head, enumerates the commits
     and changed paths introduced through non-``main`` ancestry, and classifies
     the branch as ``clean``, ``stacked``, ``undeclared_stack``,
-    ``mismatched_declaration``, ``parent_invalidated``, or ``parent_merged``
+    ``stale_main_base``, ``mismatched_declaration``, ``parent_invalidated``,
+    or ``parent_merged``
     against one machine-readable ``## Stack Declaration`` (``parent_pr`` +
     ``parent_head``).  Blocking states exit non-zero with the full diagnostic
     block (actual base, merge base, unexpected commits/paths, declared parent,
@@ -1446,6 +1447,7 @@ def check_ancestry(
     repo: str,
     *,
     target: str,
+    issue_number: int | None = None,
     worktree: Path | None = None,
     branch: str | None = None,
     declaration_text: str | None = None,
@@ -1458,6 +1460,10 @@ def check_ancestry(
     resolved against the remote.  For a PR target the base ref, head SHA, and PR
     body come from GitHub; for a branch target the caller supplies ``branch``
     (local branch name) and the base ref defaults to ``main``.
+
+    ``issue_number`` is the issue whose exact ``(#N)`` subject markers may
+    attribute a linear stale-main chain.  Callers must provide it explicitly;
+    omitting it keeps attribution fail-closed as ``undeclared_stack``.
 
     The check always fetches the live remote refs first, then computes the
     merge base, the non-``main`` ancestry commits and paths, and classifies
@@ -1531,6 +1537,9 @@ def check_ancestry(
         parent_state=parent_state,
         parent_merged=parent_merged,
         parent_head_changed=parent_head_changed,
+        issue_number=issue_number,
+        merge_base_is_ancestor_of_main=facts.get("merge_base_is_ancestor_of_main"),
+        commit_records=facts.get("commit_records"),
     )
     state["unexpected_paths"] = facts["changed_paths"]
     return _finalize_ancestry_result(state, target=target_text, branch=branch or target_text)
@@ -1624,7 +1633,15 @@ def main(argv: list[str] | None = None) -> int:
 
     ancestry_parser = subparsers.add_parser(
         "check-ancestry",
-        help="fail-closed non-main ancestry gate for one branch or PR (issue #7515)",
+        help=(
+            "fail-closed ancestry gate (clean, stacked, undeclared_stack, "
+            "stale_main_base, or invalid declaration)"
+        ),
+        description=(
+            "Classify one branch or PR against current origin/main. "
+            "A stale_main_base result requires --issue so exact issue markers "
+            "can be verified; otherwise attribution remains undeclared_stack."
+        ),
     )
     _add_common_arguments(ancestry_parser)
     ancestry_parser.add_argument(
@@ -1644,6 +1661,16 @@ def main(argv: list[str] | None = None) -> int:
     ancestry_parser.add_argument(
         "--declaration-text",
         help="stack declaration text override (default: PR body for PR targets)",
+    )
+    ancestry_parser.add_argument(
+        "--issue",
+        dest="issue_number",
+        type=int,
+        metavar="NUMBER",
+        help=(
+            "issue number whose exact (#NUMBER) commit markers may prove "
+            "stale_main_base (omit to fail closed)"
+        ),
     )
 
     args = parser.parse_args(argv)
@@ -1668,6 +1695,7 @@ def main(argv: list[str] | None = None) -> int:
         result = check_ancestry(
             args.repo,
             target=args.target,
+            issue_number=args.issue_number,
             worktree=args.worktree,
             branch=args.branch,
             declaration_text=args.declaration_text,

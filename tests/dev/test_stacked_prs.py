@@ -976,6 +976,108 @@ def test_check_ancestry_classifies_undeclared_contamination_blocked(
     assert "remediation_command" in result
 
 
+def _stale_main_ancestry_git_runner() -> Any:
+    """Build a Git fake for an explicitly issue-attributed stale-main chain."""
+    ancestry_range = f"refs/remotes/origin/main..{'c' * 40}"
+    responses = {
+        ("fetch", "--no-tags", "origin", "main"): "",
+        ("rev-parse", "refs/remotes/origin/main"): "b" * 40 + "\n",
+        ("merge-base", "refs/remotes/origin/main", "c" * 40): "a" * 40 + "\n",
+        ("log", "--oneline", ancestry_range): "c" * 7 + " intended work (#9393)\n",
+        (
+            "log",
+            "--reverse",
+            "--format=%H%x1f%P%x1f%s",
+            ancestry_range,
+        ): "c" * 40 + "\x1f" + "a" * 40 + "\x1fintended work (#9393)\n",
+        ("merge-base", "--is-ancestor", "a" * 40, "refs/remotes/origin/main"): "",
+    }
+
+    def fake_git(args: list[str], worktree: Path) -> subprocess.CompletedProcess[str]:
+        stdout = responses.get(tuple(args))
+        if stdout is not None:
+            return _completed(args, stdout=stdout)
+        if args[:2] == ["diff", "--name-only"]:
+            return _completed(args, stdout="robot_sf/own.py\n")
+        raise AssertionError(f"unexpected git call: {args}")
+
+    return fake_git
+
+
+def test_check_ancestry_wires_stale_main_proof_and_issue_number(
+    tmp_path: Path,
+) -> None:
+    """The CLI-level coordinator exposes the distinct stale-main state."""
+    from scripts.dev.stacked_prs import check_ancestry
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        if path.endswith("/pulls/5"):
+            return _ancestry_payload(
+                5,
+                head_ref="fix/issue-9393-stale-main",
+                head_sha="c" * 40,
+                base_ref="main",
+            ), None
+        raise AssertionError(f"unexpected api call: {path}")
+
+    result = check_ancestry(
+        "owner/repo",
+        target="5",
+        issue_number=9393,
+        worktree=tmp_path,
+        api=fake_api,
+        git_runner=_stale_main_ancestry_git_runner(),
+    )
+
+    assert result["state"] == "stale_main_base"
+    assert result["status"] == "blocked"
+    assert "check_prepublication_state.py reconstruct" in result["remediation"]
+
+
+def test_check_ancestry_requires_explicit_issue_for_stale_main_attribution(
+    tmp_path: Path,
+) -> None:
+    """Without an issue number, the same proof remains fail-closed."""
+    from scripts.dev.stacked_prs import check_ancestry
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        if path.endswith("/pulls/6"):
+            return _ancestry_payload(
+                6,
+                head_ref="fix/issue-9393-stale-main",
+                head_sha="c" * 40,
+                base_ref="main",
+            ), None
+        raise AssertionError(f"unexpected api call: {path}")
+
+    result = check_ancestry(
+        "owner/repo",
+        target="6",
+        worktree=tmp_path,
+        api=fake_api,
+        git_runner=_stale_main_ancestry_git_runner(),
+    )
+
+    assert result["state"] == "undeclared_stack"
+    assert result["status"] == "blocked"
+
+
+def test_check_ancestry_help_mentions_stale_main_classification(capsys) -> None:  # type: ignore[no-untyped-def]
+    """The public CLI documents the stale-main classification and proof input."""
+    from scripts.dev.stacked_prs import main
+
+    try:
+        main(["check-ancestry", "--help"])
+    except SystemExit as exc:
+        assert exc.code == 0
+    else:
+        raise AssertionError("argparse help did not exit")
+
+    output = capsys.readouterr().out
+    assert "stale_main_base" in output
+    assert "--issue" in output
+
+
 def _clean_ancestry_git_runner() -> Any:
     """Build a Git fake for a clean, single-commit PR ancestry."""
     ancestry_range = f"refs/remotes/origin/main..{'c' * 40}"

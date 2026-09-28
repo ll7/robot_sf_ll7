@@ -14,7 +14,7 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 9645
+latest_reconciliation_issue: 9656
 latest_reviewed_date: 2026-09-28
 latest_reviewed_by: >-
   Independent exact reviewers verified the #9656 packet and #9645 source packet; this records

@@ -619,7 +619,7 @@ def _checksum_manifest_paths(path: Path, *, root: Path) -> list[Path]:
 
 
 def _is_evidence_bundle_v1(manifest: Path) -> bool:
-    """Return whether an adjacent bundle manifest defines payload-relative hashes."""
+    """Return whether an adjacent bundle manifest defines payload-relative file entries."""
     bundle_manifest = manifest.parent / "evidence_bundle_manifest.json"
     try:
         payload = json.loads(bundle_manifest.read_text(encoding="utf-8"))
@@ -631,17 +631,23 @@ def _is_evidence_bundle_v1(manifest: Path) -> bool:
 def _resolve_checksum_target(candidate: Path, *, manifest: Path, root: Path) -> Path:
     """Resolve a manifest checksum entry to the file it should verify.
 
-    ``evidence_bundle.v1`` entries are relative to ``payload/``. Other manifests
-    prefer the file adjacent to the manifest (standard ``sha256sum -c`` semantics
-    run from the packet directory), so a bare entry such as ``README.md`` verifies
-    the packet's own file rather than a repo-root file with the same name (issue
-    #4317). Fall back to the repo-root-relative resolution only when no
-    manifest-local file exists, which preserves manifests written with
-    repo-root-relative paths (for example ``docs/context/evidence/.../summary.json``).
+    ``evidence_bundle.v1`` file entries are relative to ``payload/``. Its checksum
+    manifests have existed in both bundle-root form (``payload/summary.json``, as
+    written by the canonical publisher) and payload-relative form (``summary.json``,
+    used by gallery bundles). Other manifests prefer the file adjacent to the
+    manifest (standard ``sha256sum -c`` semantics run from the packet directory), so
+    a bare entry such as ``README.md`` verifies the packet's own file rather than a
+    repo-root file with the same name (issue #4317). Fall back to the repo-root-
+    relative resolution only when no manifest-local file exists, which preserves
+    manifests written with repo-root-relative paths (for example
+    ``docs/context/evidence/.../summary.json``).
     """
     if _is_evidence_bundle_v1(manifest):
-        # evidence_bundle.v1 writes checksum names relative to its payload root;
-        # its machine-readable files[].path values use the same convention.
+        # Accept both the publisher's bundle-root paths and gallery payload-relative
+        # entries. The explicit payload/ prefix is unambiguous and preserves
+        # ``sha256sum -c`` from the bundle root; bare names resolve inside payload/.
+        if candidate.parts and candidate.parts[0] == "payload":
+            return manifest.parent / candidate
         return manifest.parent / "payload" / candidate
     manifest_candidate = manifest.parent / candidate
     if manifest_candidate.exists():

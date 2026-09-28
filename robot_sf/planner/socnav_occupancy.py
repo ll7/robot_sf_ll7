@@ -152,7 +152,11 @@ class OccupancyAwarePlannerMixin:
             return None
         # Boolean, object, string, and complex arrays are not channel-index
         # metadata even when a coercion might happen to produce integers.
-        if raw_array.ndim != 1 or raw_array.dtype.kind not in "iuf":
+        if (
+            raw_array.ndim != 1
+            or raw_array.size != len(OBSERVATION_CHANNEL_ORDER)
+            or raw_array.dtype.kind not in "iuf"
+        ):
             return None
         try:
             indices = np.asarray(raw_array, dtype=float)
@@ -297,6 +301,7 @@ class OccupancyAwarePlannerMixin:
             or use_ego_arr.ndim != 1
             or use_ego_arr.size != 1
             or not np.all(np.isfinite(use_ego_arr))
+            or not np.all(np.isin(use_ego_arr, (0.0, 1.0)))
         ):
             self._obstacle_grid_payload_failure_reason = self._OBSTACLE_GRID_METADATA_FAILURE_REASON
             return None

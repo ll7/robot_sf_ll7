@@ -15,6 +15,7 @@ from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_mark
 from robot_sf.planner import socnav as _socnav_module
 from robot_sf.planner import socnav_social_force as _social_force_module
 from robot_sf.planner.socnav import (
+    SOCIAL_FORCE_PLANNER_LEGACY_V1,
     SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2,
     HRVOPlannerAdapter,
     ORCAPlannerAdapter,
@@ -1697,11 +1698,25 @@ def test_social_force_accepts_missing_channel_sentinel_without_fallback(channel_
         ("channel_indices", np.array([-2.0, 1.0, 2.0, 3.0], dtype=np.float32)),
         ("channel_indices", np.array([True, False, False, False], dtype=bool)),
         ("channel_indices", np.array([0.0, 1.0, 2.0, 4.0], dtype=np.float32)),
+        ("channel_indices", np.array([0.0], dtype=np.float32)),
+        ("channel_indices", np.array([0.0, 1.0, 2.0], dtype=np.float32)),
+        ("channel_indices", np.array([0.0, 1.0, 2.0, 3.0, 4.0], dtype=np.float32)),
+        ("use_ego_frame", np.array([-1.0], dtype=np.float32)),
+        ("use_ego_frame", np.array([0.5], dtype=np.float32)),
+        ("use_ego_frame", np.array([2.0], dtype=np.float32)),
     ],
 )
-def test_social_force_malformed_grid_metadata_fails_closed(metadata_key, metadata_value):
+@pytest.mark.parametrize(
+    "planner_version",
+    [SOCIAL_FORCE_PLANNER_LEGACY_V1, SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2],
+)
+def test_social_force_malformed_grid_metadata_fails_closed(
+    metadata_key, metadata_value, planner_version
+):
     """Malformed/non-finite grid metadata yields structured zero-force diagnostics."""
-    adapter = SocialForcePlannerAdapter(SocNavPlannerConfig())
+    adapter = SocialForcePlannerAdapter(
+        SocNavPlannerConfig(social_force_planner_version=planner_version)
+    )
     obs = _with_occupancy_grid(
         _make_obs(goal=(5.0, 0.0)),
         obstacle_cells=[(2, 3)],

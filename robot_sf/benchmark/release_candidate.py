@@ -142,6 +142,13 @@ def _candidate_planners(
     planner_rows = config.get("planners")
     if not isinstance(planner_rows, list) or any(not isinstance(row, dict) for row in planner_rows):
         raise ValueError("campaign planners must be a list of mappings")
+    if any(
+        not isinstance(row.get("key"), str)
+        or not row["key"].strip()
+        or type(row.get("enabled", True)) is not bool
+        for row in planner_rows
+    ):
+        raise ValueError("campaign planner keys and enabled flags must be explicit and valid")
     enabled = [row for row in planner_rows if row.get("enabled", True)]
     observed_keys = tuple(str(row.get("key") or "") for row in enabled)
     if (
@@ -163,7 +170,10 @@ def _candidate_seed_policy(
         raise ValueError("seed_policy.resolved_seeds must be seeds 111 through 140")
     if policy.get("mode") != "seed-set" or not isinstance(policy.get("seed_set"), str):
         raise ValueError("seed_policy must name a seed-set")
+    _nonempty(policy["seed_set"], "seed_policy.seed_set")
     config_policy = _require_mapping(config.get("seed_policy"), "campaign.seed_policy")
+    if config_policy.get("mode") != "seed-set":
+        raise ValueError("campaign seed policy must use the named seed-set mode")
     if config_policy.get("seed_set") != policy["seed_set"]:
         raise ValueError("campaign seed set differs from candidate seed set")
     if config_policy.get("seed_sets_path") != policy.get("seed_sets_path"):

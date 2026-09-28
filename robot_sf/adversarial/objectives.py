@@ -112,11 +112,8 @@ def _consistent_boolean_alias(outcome: dict[str, Any], *names: str) -> bool | No
     return present[0]
 
 
-def _safety_evidence(
-    outcome: dict[str, Any],
-    metrics: dict[str, Any],
-) -> bool | None:
-    """Combine collision and intrusion evidence under the frozen v1 semantics."""
+def _safety_evidence(outcome: dict[str, Any], metrics: dict[str, Any]) -> bool | None:
+    """Combine collision and intrusion evidence without hiding contradictions."""
     collision_names = ("collision", "collision_event")
     intrusion_names = ("severe_intrusion", "severe_intrusion_event")
     collision = _consistent_boolean_alias(outcome, *collision_names)
@@ -147,92 +144,12 @@ def _safety_evidence(
     return any(present) if present else None
 
 
-def _collision_component_v2(outcome: dict[str, Any], metrics: dict[str, Any]) -> bool | None:
-    """Read collision evidence independently, preserving malformed/conflicting state as unknown."""
-    names = ("collision", "collision_event")
-    outcome_value = _consistent_boolean_alias(outcome, *names)
-    if outcome_value is None and any(name in outcome for name in names):
-        return None
-
-    raw_metric = metrics.get("collisions")
-    metric_value: bool | None = None
-    if raw_metric is not None:
-        if not _valid_constraints_metric("collisions", raw_metric):
-            return None
-        metric_value = raw_metric > 0
-
-    if outcome_value is not None and metric_value is not None and outcome_value != metric_value:
-        return None
-    return outcome_value if outcome_value is not None else metric_value
-
-
-def _intrusion_component_v2(outcome: dict[str, Any], metrics: dict[str, Any]) -> bool | None:
-    """Read severe-intrusion evidence independently from collision evidence."""
-    names = ("severe_intrusion", "severe_intrusion_event")
-    outcome_value = _consistent_boolean_alias(outcome, *names)
-    if outcome_value is None and any(name in outcome for name in names):
-        return None
-
-    metric_values = [
-        metrics[name] for name in names if name in metrics and metrics[name] is not None
-    ]
-    if metric_values and (
-        not all(isinstance(value, bool) for value in metric_values)
-        or any(value != metric_values[0] for value in metric_values[1:])
-    ):
-        return None
-    metric_value = metric_values[0] if metric_values else None
-
-    if outcome_value is not None and metric_value is not None and outcome_value != metric_value:
-        return None
-    return outcome_value if outcome_value is not None else metric_value
-
-
-def _safety_evidence_v2(outcome: dict[str, Any], metrics: dict[str, Any]) -> bool | None:
-    """Combine independently validated components with three-valued OR semantics."""
-    collision = _collision_component_v2(outcome, metrics)
-    intrusion = _intrusion_component_v2(outcome, metrics)
-    if collision is True or intrusion is True:
-        return True
-    if collision is False and intrusion is False:
-        return False
-    return None
-
-
 def constraints_first_outcome_projection(record: dict[str, Any]) -> dict[str, Any]:
-    """Project an episode with the frozen v1 safety-evidence semantics."""
-    return _constraints_first_outcome_projection(record, require_complete_safety=False)
-
-
-def constraints_first_outcome_projection_v2(record: dict[str, Any]) -> dict[str, Any]:
-    """Project an episode, keeping incomplete collision/intrusion evidence unknown."""
-    return _constraints_first_outcome_projection(record, require_complete_safety=True)
-
-
-def _constraints_metrics_valid(metrics: dict[str, Any], *, require_complete_safety: bool) -> bool:
-    """Validate non-safety metrics and apply v1 safety-field checks when required."""
-    for name in ("collisions", "success", "near_misses", "snqi", "path_efficiency"):
-        if require_complete_safety and name == "collisions":
-            continue
-        if not _valid_constraints_metric(name, metrics.get(name)):
-            return False
-
-    if not require_complete_safety:
-        for name in ("severe_intrusion", "severe_intrusion_event"):
-            value = metrics.get(name)
-            if value is not None and not isinstance(value, bool):
-                return False
-    return True
-
-
-def _constraints_first_outcome_projection(
-    record: dict[str, Any], *, require_complete_safety: bool
-) -> dict[str, Any]:
-    """Project one episode record into a constraints-first outcome vector.
+    """Project one episode record into the strict constraints-first outcome vector.
 
     Missing containers or non-boolean outcome flags are unavailable rather than
-    being coerced into a liveness failure. ``require_complete_safety`` preserves
-    the corrected v2 rule that a negative safety result needs both components.
+    being coerced into a liveness failure.  This keeps the search objective and
+    the diagnostic row writer aligned when an episode record is malformed.
     """
     if not isinstance(record, dict):
         return _unavailable_constraints_first_outcome()
@@ -251,14 +168,19 @@ def _constraints_first_outcome_projection(
     ):
         return _unavailable_constraints_first_outcome()
 
-    if not _constraints_metrics_valid(metrics, require_complete_safety=require_complete_safety):
-        return _unavailable_constraints_first_outcome()
+    for name in ("collisions", "success", "near_misses", "snqi", "path_efficiency"):
+        value = metrics.get(name)
+        # ``post_process_metrics`` emits the canonical success metric as a bool;
+        # the other scalar metrics must remain numeric so malformed records do
+        # not get coerced into a clean outcome.
+        if not _valid_constraints_metric(name, value):
+            return _unavailable_constraints_first_outcome()
+    for name in ("severe_intrusion", "severe_intrusion_event"):
+        value = metrics.get(name)
+        if value is not None and not isinstance(value, bool):
+            return _unavailable_constraints_first_outcome()
 
-    collision_or_intrusion = (
-        _safety_evidence_v2(outcome, metrics)
-        if require_complete_safety
-        else _safety_evidence(outcome, metrics)
-    )
+    collision_or_intrusion = _safety_evidence(outcome, metrics)
     if collision_or_intrusion is None:
         return _unavailable_constraints_first_outcome()
 
@@ -326,10 +248,6 @@ def constraints_first_lexicographic_score(outcome: dict[str, Any]) -> float | No
 def constraints_first_lexicographic_v1(evaluation: CandidateEvaluation) -> float | None:
     """Score adversarial outcomes with bounded, constraints-first tiers.
 
-    This frozen v1 behavior is retained for historical contracts. It can score a
-    row when one safety component is absent; new studies should use v2, which
-    preserves that component as unknown.
-
     The search API accepts a scalar objective, so this encodes the frozen
     lexicographic ordering in disjoint score bands: collision/severe intrusion
     (``[4, 5)``), liveness failure (``[2, 3)``), then bounded
@@ -346,26 +264,8 @@ def constraints_first_lexicographic_v1(evaluation: CandidateEvaluation) -> float
     return constraints_first_lexicographic_score(projection)
 
 
-def constraints_first_lexicographic_v2(evaluation: CandidateEvaluation) -> float | None:
-    """Score with constraints-first tiers and fail-closed safety evidence.
-
-    Unlike the frozen v1 contract, v2 returns no score when one safety component
-    is absent and the other is observed negative. A known positive collision or
-    intrusion still establishes the safety-failure tier.
-    """
-    record = read_first_jsonl_record(evaluation.episode_record_path)
-    if record is None:
-        return None
-
-    projection = constraints_first_outcome_projection_v2(record)
-    if projection["status"] != "observed":
-        return None
-    return constraints_first_lexicographic_score(projection)
-
-
 _OBJECTIVES: dict[str, ObjectiveFn] = {
     "constraints_first_lexicographic_v1": constraints_first_lexicographic_v1,
-    "constraints_first_lexicographic_v2": constraints_first_lexicographic_v2,
     "minimize_episode_min_robot_distance": minimize_episode_min_robot_distance,
     "worst_case_snqi": worst_case_snqi,
     "temporal_robustness": temporal_robustness_objective,

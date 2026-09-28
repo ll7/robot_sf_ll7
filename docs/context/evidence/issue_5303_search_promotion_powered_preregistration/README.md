@@ -267,3 +267,14 @@ the powered contract's pinned historical v1 contract-file SHA-256 were refreshed
 provenance, and the derived powered contract SHA-256 was recomputed in the manifest. This refresh did not run a planner, search, replay, or campaign and authorizes
 none; the historical v1 contract remains diagnostic-only, and powered #6145 execution remains
 separately gated.
+
+## Outcome-free render-path provenance refresh (2026-09-28)
+
+The stored-comparison renderer now rejects aliased input, Markdown, and provenance paths before
+writing and hashes the exact source bytes it parses. Its raw execution-runner hash was refreshed
+to `8f58214272181655c2630a46d12e264d5c15bef30faff0fcf3a6404eeb0bb2a5`, and the powered contract
+hash in the manifest was recomputed. The powered contract's historical v1 input hash was also
+rebound to the re-frozen diagnostic-only contract. The search method, candidate evaluation,
+objective, seed schedule, candidate budget, confirmation gates, denominator, and decision rule
+are unchanged.
+No planner, search, replay, or campaign ran; the powered #6145 campaign remains separately gated.

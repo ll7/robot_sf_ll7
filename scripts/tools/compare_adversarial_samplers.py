@@ -998,7 +998,19 @@ def render_stored_comparison(
     """Render a saved comparison without rerunning search or simulation."""
     if execution_mode not in {"empirical", "synthetic"}:
         raise ValueError("render execution mode must be empirical or synthetic")
-    payload = json.loads(comparison_path.read_text(encoding="utf-8"))
+    named_paths = [("comparison input", comparison_path), ("Markdown output", output_path)]
+    if provenance_path is not None:
+        named_paths.append(("provenance output", provenance_path))
+    for index, (left_name, left_path) in enumerate(named_paths):
+        for right_name, right_path in named_paths[index + 1 :]:
+            if _paths_alias(left_path, right_path):
+                raise ValueError(
+                    "stored comparison render paths must be distinct: "
+                    f"{left_name} and {right_name} refer to the same file"
+                )
+
+    comparison_bytes = comparison_path.read_bytes()
+    payload = json.loads(comparison_bytes)
     raw_rows, objectives, budgets, seeds = _stored_comparison_metadata(payload)
     rows = _stored_comparison_rows(raw_rows, repo_root=repo_root)
     table = render_durable_comparison_table(
@@ -1009,20 +1021,21 @@ def render_stored_comparison(
         seeds=seeds,
         execution_mode=execution_mode,
     )
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(table, encoding="utf-8")
+    table_bytes = table.encode("utf-8")
     result: dict[str, Any] = {
         "schema_version": "adversarial-sampler-render-provenance.v1",
         "comparison_path": _relative_path(comparison_path, repo_root),
-        "comparison_sha256": _sha256_file(comparison_path),
+        "comparison_sha256": hashlib.sha256(comparison_bytes).hexdigest(),
         "markdown_path": _relative_path(output_path, repo_root),
-        "markdown_sha256": _sha256_file(output_path),
+        "markdown_sha256": hashlib.sha256(table_bytes).hexdigest(),
         "renderer": "scripts/tools/compare_adversarial_samplers.py",
         "renderer_commit": _git_head(repo_root),
         "execution_mode": execution_mode,
         "row_count": len(rows),
         "search_or_simulation_rerun": False,
     }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(table_bytes)
     if provenance_path is not None:
         provenance_path.parent.mkdir(parents=True, exist_ok=True)
         result["provenance_path"] = _relative_path(provenance_path, repo_root)
@@ -1044,8 +1057,25 @@ def render_stored_comparison(
                 _relative_path(provenance_path, repo_root),
             ]
         )
-        provenance_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+        provenance_bytes = (json.dumps(result, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        provenance_path.write_bytes(provenance_bytes)
     return result
+
+
+def _paths_alias(left: Path, right: Path) -> bool:
+    """Return whether two paths resolve to the same file, including links/hard links."""
+    try:
+        if left.resolve(strict=False) == right.resolve(strict=False):
+            return True
+    except (OSError, RuntimeError) as exc:
+        raise ValueError("stored comparison render paths could not be resolved safely") from exc
+
+    try:
+        return left.samefile(right)
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        raise ValueError("stored comparison render paths could not be compared safely") from exc
 
 
 def _relative_path(path: Path, root: Path) -> str:

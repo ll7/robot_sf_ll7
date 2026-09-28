@@ -48,6 +48,14 @@ RUNTIME_SMOKE_V04_CONFIG_PATH = REPO_ROOT / (
 RUNTIME_SMOKE_V04_MANIFEST_PATH = REPO_ROOT / (
     "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_4.yaml"
 )
+RUNTIME_SMOKE_V05_CONFIG_PATH = REPO_ROOT / (
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml"
+)
+RUNTIME_SMOKE_V05_MANIFEST_PATH = REPO_ROOT / (
+    "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml"
+)
+PINNED_V04_CONFIG_SHA256 = "43683e998a5fbbb9fa5828aba7a5662a82dae091c629214a3b96ec0349d73ddc"
+PINNED_V04_MANIFEST_SHA256 = "163fe1484a6c5865ed4f166aec0e703d7e71857b7a154b0efea05423f1aa876b"
 PINNED_V03_CONFIG_SHA256 = "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4"
 PINNED_V03_MANIFEST_SHA256 = "d6f3047adaacfb8cad2cc12430ee5ce7331f11b0777ac522209fd1e5af019241"
 CAMPAIGN_TEMPLATE_SHA256 = "f453b7c824fdd47298cbc66dae3afc1fffcd7eedf57ee4bb87cd1c67b4feb1d7"
@@ -458,13 +466,13 @@ def test_runtime_smoke_v0_4_matches_campaign_template_and_preserves_v0_3() -> No
 
 def test_calibration_smoke_and_template_resolve_the_same_arm_inputs() -> None:
     """All 14 arms share effective inputs across the three campaign profiles (#9850)."""
-    paths = (CALIBRATION_CONFIG_PATH, RUNTIME_SMOKE_V04_CONFIG_PATH, CAMPAIGN_TEMPLATE_PATH)
+    paths = (CALIBRATION_CONFIG_PATH, RUNTIME_SMOKE_V05_CONFIG_PATH, CAMPAIGN_TEMPLATE_PATH)
     raw = [_load_yaml(path) for path in paths]
     configs = [load_campaign_config(path) for path in paths]
     scenarios = [
         {row["name"]: row for row in _load_campaign_scenarios(config)} for config in configs
     ]
-    calibration, _, template = raw
+    calibration, smoke, template = raw
     allowed_calibration_differences = {
         "arm_isolation",  # execution resource policy
         "export_publication_bundle",  # publication identity
@@ -476,13 +484,37 @@ def test_calibration_smoke_and_template_resolve_the_same_arm_inputs() -> None:
         "workers",  # execution resource policy
     }
     assert _diff_paths(calibration, template) - {"planners"} <= (allowed_calibration_differences)
+    allowed_smoke_differences = {
+        "artifact_provenance",  # publication identity and artifact custody
+        "bootstrap_samples",  # bounded runtime resources
+        "claim_boundary",  # publication identity
+        "derived_from",  # publication identity
+        "doi",  # publication identity
+        "export_publication_bundle",  # publication identity
+        "name",  # publication identity
+        "overwrite_publication_bundle",  # publication identity
+        "paper_interpretation_profile",  # publication identity
+        "release_kind",  # publication identity
+        "release_status",  # publication identity
+        "release_tag",  # publication identity
+        "resume",  # runtime resource policy
+        "scenario_matrix",  # scenario subset
+        "seed_policy.mode",
+        "seed_policy.seed_set",
+        "seed_policy.seeds",
+        "snqi_contract.calibration_trials",  # bounded runtime resources
+        "zenodo",  # publication identity
+    }
+    assert _diff_paths(smoke, template) == allowed_smoke_differences
     assert set(scenarios[0]) == set(scenarios[2])
     assert set(scenarios[1]) <= set(scenarios[2])
     assert len(scenarios[0]) == len(scenarios[2]) == 48
     assert len(scenarios[1]) == 1
     assert len(configs[0].planners) == len(configs[1].planners) == len(configs[2].planners) == 14
     assert {101, 102}.isdisjoint(range(111, 141))
+    assert {103}.isdisjoint({101, 102} | set(range(111, 141)) | set(range(1001, 1031)))
     assert {seed for row in scenarios[0].values() for seed in row["seeds"]} == {101, 102}
+    assert {seed for row in scenarios[1].values() for seed in row["seeds"]} == {103}
     assert {seed for row in scenarios[2].values() for seed in row["seeds"]} == set(range(111, 141))
 
     mismatches: list[str] = []
@@ -563,3 +595,44 @@ def test_runtime_smoke_v0_4_manifest_is_source_bound_and_refused_until_v4_freeze
     assert manifest.seed_policy["mode"] == "fixed-list"
     assert manifest.seed_policy["seeds"] == [111]
     assert manifest.expected_kinematics_matrix == ("differential_drive",)
+
+
+def test_runtime_smoke_v0_5_changes_only_seed_and_publication_identity() -> None:
+    """The development-seed successor cannot alter the frozen v0_4 runtime contract."""
+    assert _sha256(RUNTIME_SMOKE_V04_CONFIG_PATH) == PINNED_V04_CONFIG_SHA256
+    assert _sha256(RUNTIME_SMOKE_V04_MANIFEST_PATH) == PINNED_V04_MANIFEST_SHA256
+
+    predecessor = _load_yaml(RUNTIME_SMOKE_V04_CONFIG_PATH)
+    successor = _load_yaml(RUNTIME_SMOKE_V05_CONFIG_PATH)
+    assert _diff_paths(predecessor, successor) == {
+        "name",
+        "release_tag",
+        "seed_policy.seeds",
+    }
+    assert successor["name"] == "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5"
+    assert successor["release_tag"] == "paper-matrix-v2-h600-s30-runtime-smoke-v0_5"
+    assert successor["seed_policy"]["seeds"] == [103]
+
+    old_manifest = _load_yaml(RUNTIME_SMOKE_V04_MANIFEST_PATH)
+    new_manifest = _load_yaml(RUNTIME_SMOKE_V05_MANIFEST_PATH)
+    assert _diff_paths(old_manifest, new_manifest) == {
+        "release_id",
+        "release_tag",
+        "canonical_campaign_config",
+        "campaign_config_sha256",
+        "artifact_provenance.command",
+        "seed_policy.seeds",
+    }
+    assert new_manifest["release_id"] == successor["name"]
+    assert new_manifest["release_tag"] == successor["release_tag"]
+    assert new_manifest["seed_policy"]["seeds"] == [103]
+    assert new_manifest["campaign_config_sha256"] == _sha256(RUNTIME_SMOKE_V05_CONFIG_PATH)
+
+    manifest = load_release_manifest(RUNTIME_SMOKE_V05_MANIFEST_PATH)
+    assert validate_release_manifest(manifest) == {
+        "manifest_path": "configs/benchmarks/releases/"
+        "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml",
+        "status": "valid",
+        "problem_count": 0,
+        "problems": [],
+    }

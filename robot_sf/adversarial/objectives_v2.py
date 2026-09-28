@@ -127,7 +127,35 @@ def constraints_first_outcome_projection_v2(record: dict[str, Any]) -> dict[str,
 
 
 def constraints_first_lexicographic_v2(evaluation: CandidateEvaluation) -> float | None:
-    """Score observed failures by safety, liveness, then bounded soft degradation."""
+    """Score available planner executions by safety, liveness, then soft degradation.
+
+    The persisted episode outcome alone is not enough to attribute an event to
+    the requested planner: fallback, degraded, unavailable, or unbound execution
+    must not steer an optimizer. Preserve those attempts as unscored candidates.
+    """
+    if evaluation.error is not None:
+        return None
+    attribution = evaluation.failure_attribution
+    if attribution is None or attribution.status != "attributed":
+        return None
+    details = attribution.details
+    if not isinstance(details, dict):
+        return None
+
+    def normalized_status(name: str) -> str | None:
+        value = details.get(name)
+        return value.strip().lower() if isinstance(value, str) and value.strip() else None
+
+    execution_mode = normalized_status("execution_mode")
+    readiness_status = normalized_status("readiness_status")
+    availability_status = normalized_status("availability_status")
+    if (
+        execution_mode not in {"native", "adapter", "mixed"}
+        or readiness_status not in {"native", "adapter"}
+        or availability_status != "available"
+    ):
+        return None
+
     record = read_first_jsonl_record(evaluation.episode_record_path)
     if record is None:
         return None

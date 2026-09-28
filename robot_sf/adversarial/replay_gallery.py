@@ -25,6 +25,10 @@ from robot_sf.adversarial.attribution import attribution_from_episode_record
 from robot_sf.adversarial.bundle import compute_effective_scenario_hash
 from robot_sf.adversarial.certification_types import CertificationStatus
 from robot_sf.adversarial.config import CandidateEvaluation, CandidateSpec, Pose2D
+from robot_sf.adversarial.eligibility import ELIGIBLE_EXECUTION_MODES
+from robot_sf.adversarial.eligibility import (
+    SCHEMA_VERSION as SEARCH_ANALYSIS_ELIGIBILITY_SCHEMA_VERSION,
+)
 from robot_sf.adversarial.objectives import (
     constraints_first_outcome_projection,
     get_objective,
@@ -466,9 +470,9 @@ def _prepare_candidate(  # noqa: C901, PLR0912, PLR0915 - keep ordered validatio
     row = _accounting_row(index, candidate_payload, "eligible", case_id=case_id)
     if candidate_payload.get("error"):
         return None, _accounting_row(index, candidate_payload, "evaluation_failed")
-    eligibility = candidate_payload.get("analysis_eligibility")
-    if not isinstance(eligibility, dict) or eligibility.get("eligible") is not True:
-        return None, _accounting_row(index, candidate_payload, "analysis_ineligible")
+    analysis_eligibility_problem = _source_analysis_eligibility_problem(candidate_payload)
+    if analysis_eligibility_problem is not None:
+        return None, _accounting_row(index, candidate_payload, analysis_eligibility_problem)
     objective_value = _finite_number(candidate_payload.get("objective_value"))
     if objective_value is None:
         return None, _accounting_row(index, candidate_payload, "objective_unavailable")
@@ -3017,6 +3021,68 @@ def _source_availability_problem(
         return "source_execution_mode_mismatch"
     if _runtime_algorithm_fallback_marker(record) is not None:
         return "source_runtime_fallback_or_degraded"
+    return None
+
+
+def _source_analysis_eligibility_problem(candidate_payload: dict[str, Any]) -> str | None:
+    """Validate the canonical eligibility receipt without promoting adapter rows.
+
+    The canonical analysis gate remains native-only. For replay-gallery diagnostics only, an
+    adapter or mixed row can proceed when its v1 receipt is otherwise well formed and records
+    exactly the canonical ``execution_mode_not_native`` exclusion. The receipt remains
+    ineligible for optimizer/archive analysis and corpus admission.
+    """
+    eligibility = candidate_payload.get("analysis_eligibility")
+    attribution = candidate_payload.get("failure_attribution")
+    details = attribution.get("details") if isinstance(attribution, dict) else None
+    if not isinstance(eligibility, dict) or not isinstance(details, dict):
+        return "source_analysis_eligibility_missing_or_malformed"
+    if eligibility.get("schema_version") != SEARCH_ANALYSIS_ELIGIBILITY_SCHEMA_VERSION:
+        return "source_analysis_eligibility_schema_unsupported"
+
+    execution_mode = details.get("execution_mode")
+    if not isinstance(execution_mode, str) or not execution_mode.strip():
+        return "source_availability_missing_or_malformed"
+    if execution_mode not in _SUPPORTED_EXECUTION_MODES:
+        return (
+            "source_execution_mode_unknown"
+            if execution_mode == "unknown"
+            else "source_execution_mode_unsupported"
+        )
+    if eligibility.get("execution_mode") != execution_mode:
+        return "source_execution_mode_mismatch"
+
+    return _analysis_eligibility_receipt_problem(eligibility, execution_mode=execution_mode)
+
+
+def _analysis_eligibility_receipt_problem(
+    eligibility: dict[str, Any], *, execution_mode: str
+) -> str | None:
+    """Validate receipt fields and the canonical mode-specific verdict."""
+    eligible = eligibility.get("eligible")
+    if not isinstance(eligible, bool):
+        return "source_analysis_eligibility_flag_malformed"
+    reason_codes = eligibility.get("reason_codes")
+    if not isinstance(reason_codes, list) or any(
+        not isinstance(reason, str) for reason in reason_codes
+    ):
+        return "source_analysis_eligibility_reasons_malformed"
+    if any(
+        eligibility.get(field) is not True
+        for field in ("certificate_ok", "trace_present", "objective_scored")
+    ):
+        return "source_analysis_eligibility_flags_mismatch"
+
+    if execution_mode in ELIGIBLE_EXECUTION_MODES:
+        expected_eligible = True
+        expected_reason_codes: list[str] = []
+    else:
+        expected_eligible = False
+        expected_reason_codes = ["execution_mode_not_native"]
+    if eligible is not expected_eligible:
+        return "source_analysis_eligibility_status_mismatch"
+    if reason_codes != expected_reason_codes:
+        return "source_analysis_eligibility_reasons_mismatch"
     return None
 
 

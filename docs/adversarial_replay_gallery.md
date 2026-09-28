@@ -138,19 +138,22 @@ The source failure attribution must agree
 with the canonical episode. Source availability must explicitly report `available` and mode-matched
 readiness: `native` for `native`, or `adapter` for `adapter` and `mixed`. The mode in the
 attribution, analysis-eligibility receipt, and source episode metadata must agree exactly. The
-analysis-eligibility receipt must already say `eligible: true`; the gallery never overrides the
-optimizer-facing native-only exclusion. Replay runner availability and its episode record must
-then report the same exact mode as the source. The source episode must have successful algorithm
-metadata and no fallback/degraded runtime marker. Missing, unknown,
-unsupported, unavailable, fallback, degraded, or inconsistent source/replay evidence stays in
-candidate accounting and cannot be shown as a replay-verified case. Successful episodes are
+analysis-eligibility receipt must use the canonical `search_analysis_eligibility.v1` schema and
+carry consistent status and reasons. `native` requires `eligible: true` with no reason codes.
+`adapter` and `mixed` remain `eligible: false` with exactly the canonical
+`execution_mode_not_native` reason; the gallery may replay those rows for diagnosis, but does not
+change their optimizer-facing eligibility. Unsupported schemas, malformed reasons, contradictory
+status/reason pairs, or additional exclusion reasons stay in candidate accounting. Replay runner
+availability and its episode record must then report the same exact mode as the source. The source
+episode must have successful algorithm metadata and no fallback/degraded runtime marker. Missing,
+unknown, unsupported, unavailable, fallback, degraded, or inconsistent source/replay evidence stays
+in candidate accounting and cannot be shown as a replay-verified case. Successful episodes are
 accounted as `source_episode_not_a_failure` and are not shown as falsification cases.
 The current canonical search eligibility contract admits only native execution, so current
-search-produced adapter/mixed rows do not reach replay. When a separately valid eligible source
-receipt is available, matching adapter/mixed replays are tagged
+search-produced adapter/mixed rows are ineligible for optimizer/archive analysis. The gallery keeps
+them ineligible while labeling their matching replay as
 `execution_mode_claim_boundary: diagnostic_only`; they are not optimizer eligibility or corpus
-admission evidence. The synthetic tests exercise this replay contract without claiming that a
-current search run can produce such an eligible row.
+admission evidence.
 The fallback scan checks algorithm metadata but ignores unsupported statuses in the paired-metric
 and simulation-step-trace diagnostic products. Those statuses do not by themselves mean planner
 execution fell back; explicit fallback or degraded markers remain disqualifying.

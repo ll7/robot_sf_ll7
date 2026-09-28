@@ -160,7 +160,6 @@ def _source_manifest(
     source_revision: str | None = "a" * 40,
     manifest_revision: str | None = None,
     execution_mode: str = "native",
-    analysis_eligible: bool | None = None,
 ) -> Path:
     bundle = tmp_path / "candidate_0000"
     bundle.mkdir()
@@ -184,9 +183,8 @@ def _source_manifest(
         encoding="utf-8",
     )
     source_readiness = "native" if execution_mode == "native" else "adapter"
-    analysis_eligible = (
-        execution_mode == "native" if analysis_eligible is None else analysis_eligible
-    )
+    analysis_eligible = execution_mode == "native"
+    reason_codes = [] if analysis_eligible else ["execution_mode_not_native"]
     payload = {
         "schema_version": "adversarial-search-manifest.v1",
         "config": {
@@ -203,9 +201,9 @@ def _source_manifest(
                 "objective_value": 4.5,
                 "analysis_eligibility": {
                     "schema_version": "search_analysis_eligibility.v1",
-                    "eligible": True,
+                    "eligible": analysis_eligible,
                     "certificate_ok": True,
-                    "reason_codes": [],
+                    "reason_codes": reason_codes,
                     "trace_present": True,
                     "execution_mode": execution_mode,
                     "objective_scored": True,
@@ -232,10 +230,6 @@ def _source_manifest(
         ],
         "summary": {"num_candidates": 1},
     }
-    eligibility = payload["candidates"][0]["analysis_eligibility"]
-    eligibility["eligible"] = analysis_eligible
-    if not analysis_eligible:
-        eligibility["reason_codes"] = ["execution_mode_not_native"]
     if manifest_revision is not None:
         payload["source_revision"] = manifest_revision
     manifest_path = tmp_path / "search_manifest.json"
@@ -899,7 +893,7 @@ def test_gallery_excludes_source_runtime_fallback_even_if_manifest_says_availabl
     tmp_path: Path,
     execution_mode: str,
 ) -> None:
-    manifest = _source_manifest(tmp_path, execution_mode=execution_mode, analysis_eligible=True)
+    manifest = _source_manifest(tmp_path, execution_mode=execution_mode)
     payload = json.loads(manifest.read_text(encoding="utf-8"))
     episode_path = Path(payload["candidates"][0]["episode_record_path"])
     episode = _episode(execution_mode=execution_mode)
@@ -2124,7 +2118,7 @@ def test_gallery_rejects_runtime_fallback_marker_even_when_row_matches(
 def test_gallery_keeps_adapter_and_mixed_runtime_fallback_unavailable(
     tmp_path: Path, monkeypatch: Any, execution_mode: str
 ) -> None:
-    manifest = _source_manifest(tmp_path, execution_mode=execution_mode, analysis_eligible=True)
+    manifest = _source_manifest(tmp_path, execution_mode=execution_mode)
     summary = _runner_summary(execution_mode=execution_mode)
     summary["algorithm_metadata_contract"]["planner_runtime"] = {"fallback_used": True}
     summary["benchmark_availability"] = availability_payload(summary)
@@ -2158,7 +2152,7 @@ def test_gallery_keeps_adapter_and_mixed_fallback_or_degraded_preflight_unavaila
     preflight_status: str,
     expected_error: str,
 ) -> None:
-    manifest = _source_manifest(tmp_path, execution_mode=execution_mode, analysis_eligible=True)
+    manifest = _source_manifest(tmp_path, execution_mode=execution_mode)
     summary = _runner_summary(preflight_status=preflight_status, execution_mode=execution_mode)
     _install_fake_replay(
         monkeypatch,
@@ -2179,10 +2173,12 @@ def test_gallery_keeps_adapter_and_mixed_fallback_or_degraded_preflight_unavaila
 def test_gallery_replays_supported_adapter_and_mixed_modes(
     tmp_path: Path, monkeypatch: Any, execution_mode: str
 ) -> None:
-    """Exercise replay compatibility with a synthetic independently eligible source receipt."""
-    manifest = _source_manifest(tmp_path, execution_mode=execution_mode, analysis_eligible=True)
+    """Replay native-only-ineligible adapter and mixed rows for diagnostics only."""
+    manifest = _source_manifest(tmp_path, execution_mode=execution_mode)
     source_payload = json.loads(manifest.read_text(encoding="utf-8"))
-    assert source_payload["candidates"][0]["analysis_eligibility"]["eligible"] is True
+    source_eligibility = source_payload["candidates"][0]["analysis_eligibility"]
+    assert source_eligibility["eligible"] is False
+    assert source_eligibility["reason_codes"] == ["execution_mode_not_native"]
     summary = _runner_summary(execution_mode=execution_mode)
     _install_fake_replay(
         monkeypatch,
@@ -2212,7 +2208,7 @@ def test_gallery_rejects_replay_summary_mode_mismatch(
     source_mode: str,
     replay_mode: str,
 ) -> None:
-    manifest = _source_manifest(tmp_path, execution_mode=source_mode, analysis_eligible=True)
+    manifest = _source_manifest(tmp_path, execution_mode=source_mode)
     summary = _runner_summary(execution_mode=replay_mode)
     _install_fake_replay(
         monkeypatch,
@@ -2231,7 +2227,7 @@ def test_gallery_rejects_replay_summary_mode_mismatch(
 
 
 def test_gallery_rejects_replay_episode_mode_mismatch(tmp_path: Path, monkeypatch: Any) -> None:
-    manifest = _source_manifest(tmp_path, execution_mode="adapter", analysis_eligible=True)
+    manifest = _source_manifest(tmp_path, execution_mode="adapter")
     summary = _runner_summary(execution_mode="adapter")
     _install_fake_replay(
         monkeypatch,
@@ -2272,7 +2268,7 @@ def test_replay_availability_rejects_unknown_or_unsupported_mode(
 def test_gallery_rejects_misreported_adapter_readiness(
     tmp_path: Path,
 ) -> None:
-    manifest = _source_manifest(tmp_path, execution_mode="adapter", analysis_eligible=True)
+    manifest = _source_manifest(tmp_path, execution_mode="adapter")
     payload = json.loads(manifest.read_text(encoding="utf-8"))
     payload["candidates"][0]["failure_attribution"]["details"]["readiness_status"] = "native"
     manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
@@ -2288,7 +2284,7 @@ def test_gallery_rejects_misreported_adapter_readiness(
 def test_gallery_rejects_adapter_source_episode_with_native_metadata(
     tmp_path: Path,
 ) -> None:
-    manifest = _source_manifest(tmp_path, execution_mode="adapter", analysis_eligible=True)
+    manifest = _source_manifest(tmp_path, execution_mode="adapter")
     payload = json.loads(manifest.read_text(encoding="utf-8"))
     episode_path = Path(payload["candidates"][0]["episode_record_path"])
     episode_path.write_text(json.dumps(_episode()) + "\n", encoding="utf-8")
@@ -2304,7 +2300,7 @@ def test_gallery_rejects_adapter_source_episode_with_native_metadata(
 def test_gallery_requires_analysis_eligibility_mode_to_match_source_mode(
     tmp_path: Path,
 ) -> None:
-    manifest = _source_manifest(tmp_path, execution_mode="adapter", analysis_eligible=True)
+    manifest = _source_manifest(tmp_path, execution_mode="adapter")
     payload = json.loads(manifest.read_text(encoding="utf-8"))
     payload["candidates"][0]["analysis_eligibility"]["execution_mode"] = "mixed"
     manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
@@ -2315,23 +2311,6 @@ def test_gallery_requires_analysis_eligibility_mode_to_match_source_mode(
 
     assert result["summary"]["selected_case_count"] == 0
     assert result["summary"]["dispositions"]["source_execution_mode_mismatch"] == 1
-
-
-def test_gallery_does_not_override_native_only_adapter_analysis_exclusion(
-    tmp_path: Path,
-) -> None:
-    manifest = _source_manifest(tmp_path, execution_mode="adapter")
-    payload = json.loads(manifest.read_text(encoding="utf-8"))
-    eligibility = payload["candidates"][0]["analysis_eligibility"]
-    assert eligibility["eligible"] is False
-    assert eligibility["reason_codes"] == ["execution_mode_not_native"]
-
-    result = replay_gallery.build_replay_gallery(
-        manifest, tmp_path / "output" / "gallery", render=False, video=False
-    )
-
-    assert result["summary"]["selected_case_count"] == 0
-    assert result["summary"]["dispositions"]["analysis_ineligible"] == 1
 
 
 def test_gallery_keeps_adapter_native_only_analysis_exclusions_fail_closed(
@@ -2348,7 +2327,76 @@ def test_gallery_keeps_adapter_native_only_analysis_exclusions_fail_closed(
     )
 
     assert result["summary"]["selected_case_count"] == 0
-    assert result["summary"]["dispositions"]["analysis_ineligible"] == 1
+    assert result["summary"]["dispositions"]["source_analysis_eligibility_reasons_mismatch"] == 1
+
+
+def test_gallery_rejects_adapter_receipt_marked_eligible_with_native_only_reason(
+    tmp_path: Path,
+) -> None:
+    manifest = _source_manifest(tmp_path, execution_mode="adapter")
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["candidates"][0]["analysis_eligibility"]["eligible"] = True
+    manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "output" / "gallery", render=False, video=False
+    )
+
+    assert result["summary"]["selected_case_count"] == 0
+    assert result["summary"]["dispositions"]["source_analysis_eligibility_status_mismatch"] == 1
+
+
+def test_gallery_rejects_unsupported_analysis_eligibility_schema(
+    tmp_path: Path,
+) -> None:
+    manifest = _source_manifest(tmp_path, execution_mode="adapter")
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["candidates"][0]["analysis_eligibility"]["schema_version"] = (
+        "search_analysis_eligibility.v2"
+    )
+    manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "output" / "gallery", render=False, video=False
+    )
+
+    assert result["summary"]["selected_case_count"] == 0
+    assert result["summary"]["dispositions"]["source_analysis_eligibility_schema_unsupported"] == 1
+
+
+def test_gallery_rejects_malformed_analysis_eligibility_reason_list(
+    tmp_path: Path,
+) -> None:
+    manifest = _source_manifest(tmp_path, execution_mode="adapter")
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["candidates"][0]["analysis_eligibility"]["reason_codes"] = "execution_mode_not_native"
+    manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "output" / "gallery", render=False, video=False
+    )
+
+    assert result["summary"]["selected_case_count"] == 0
+    assert result["summary"]["dispositions"]["source_analysis_eligibility_reasons_malformed"] == 1
+
+
+def test_gallery_rejects_mixed_analysis_eligibility_reasons(
+    tmp_path: Path,
+) -> None:
+    manifest = _source_manifest(tmp_path, execution_mode="mixed")
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["candidates"][0]["analysis_eligibility"]["reason_codes"] = [
+        "execution_mode_not_native",
+        "objective_unscored",
+    ]
+    manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "output" / "gallery", render=False, video=False
+    )
+
+    assert result["summary"]["selected_case_count"] == 0
+    assert result["summary"]["dispositions"]["source_analysis_eligibility_reasons_mismatch"] == 1
 
 
 @pytest.mark.parametrize(
@@ -2363,12 +2411,7 @@ def test_gallery_rejects_unknown_or_unsupported_source_execution_mode(
     execution_mode: str,
     expected_disposition: str,
 ) -> None:
-    manifest = _source_manifest(tmp_path, execution_mode=execution_mode, analysis_eligible=True)
-    payload = json.loads(manifest.read_text(encoding="utf-8"))
-    eligibility = payload["candidates"][0]["analysis_eligibility"]
-    eligibility["eligible"] = True
-    eligibility["reason_codes"] = []
-    manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    manifest = _source_manifest(tmp_path, execution_mode=execution_mode)
 
     result = replay_gallery.build_replay_gallery(
         manifest, tmp_path / "output" / "gallery", render=False, video=False
@@ -2382,7 +2425,7 @@ def test_gallery_rejects_unknown_or_unsupported_source_execution_mode(
 def test_gallery_rejects_fallback_marker_in_replay_episode_row(
     tmp_path: Path, monkeypatch: Any, execution_mode: str
 ) -> None:
-    manifest = _source_manifest(tmp_path, execution_mode=execution_mode, analysis_eligible=True)
+    manifest = _source_manifest(tmp_path, execution_mode=execution_mode)
     _install_fake_replay(monkeypatch, replay_execution_mode=execution_mode)
     fake_run_batch = replay_gallery.run_batch
 

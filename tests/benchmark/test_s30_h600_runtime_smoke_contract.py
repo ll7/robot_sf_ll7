@@ -42,7 +42,7 @@ RUNTIME_SMOKE_V04_MANIFEST_PATH = REPO_ROOT / (
 )
 PINNED_V03_CONFIG_SHA256 = "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4"
 PINNED_V03_MANIFEST_SHA256 = "d6f3047adaacfb8cad2cc12430ee5ce7331f11b0777ac522209fd1e5af019241"
-CAMPAIGN_TEMPLATE_SHA256 = "e84cd899c8e54f6d854849b8d3f51c52f0158c43869fb65619ed2c16661a9d75"
+CAMPAIGN_TEMPLATE_SHA256 = "7dc9a2dd9df8585593c9bc8ecc001bed0d2ddff4ebb3803dfb92e8dad8762881"
 
 EXPECTED_PLANNER_KEYS = [
     "prediction_planner",
@@ -319,6 +319,14 @@ def test_runtime_smoke_v0_4_matches_campaign_template_and_preserves_v0_3() -> No
     assert smoke["release_tag"] == "paper-matrix-v2-h600-s30-runtime-smoke-v0_4"
     assert smoke["planners"][2]["algo_config"] == (
         "configs/algos/social_force_resolution_independent_v2.yaml"
+    )
+    # Issues #9727/#9746 (#9668 ruling): the socnav_sampling key binds bounded_v2
+    # only through this explicit versioned config.
+    assert smoke["planners"][5]["key"] == "socnav_sampling"
+    assert smoke["planners"][5]["algo_config"] == "configs/algos/socnav_sampling_bounded_v2.yaml"
+    assert (
+        _load_yaml(REPO_ROOT / smoke["planners"][5]["algo_config"])["socnav_sampling_version"]
+        == "bounded_v2"
     )
 
     expected_config_differences = {

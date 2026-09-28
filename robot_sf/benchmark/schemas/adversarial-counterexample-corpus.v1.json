@@ -239,11 +239,12 @@
                   "input_binding",
                   "classifier_result",
                   "classifier_result_sha256",
+                  "raw_classifier_artifact",
                   "binding_sha256"
                 ],
                 "properties": {
                   "schema_version": {
-                    "const": "adversarial-case-scenario-admissibility-receipt.v1"
+                    "const": "adversarial-case-scenario-admissibility-receipt.v2"
                   },
                   "case_id": {"type": "string", "minLength": 1},
                   "effective_scenario_sha256": {

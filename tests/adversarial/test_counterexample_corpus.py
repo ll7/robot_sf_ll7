@@ -6,6 +6,7 @@ import copy
 import hashlib
 import json
 import shutil
+import subprocess
 import tempfile
 import uuid
 from collections.abc import Iterator
@@ -70,6 +71,17 @@ _ISSUE9656_SOURCE_REVISION = "f7ebdcae2375d085e925213197a75a386e26a79c"
 _ISSUE9656_REPLAY_REVISION = "5cccee50be333adceee4c978b54bf63d32454cc9"
 _ISSUE9656_SOURCE_MATRIX = "configs/scenarios/classic_interactions_francis2023.yaml"
 _ISSUE9656_SOURCE_MATRIX_SHA256 = "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5"
+
+
+def _current_git_revision() -> str:
+    completed = subprocess.run(
+        ["git", "-C", str(_REPO_ROOT), "rev-parse", "--verify", "HEAD^{commit}"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+    return completed.stdout.strip()
 
 
 def _issue9656_candidate_fixture(
@@ -673,12 +685,25 @@ def _seed_bound_test_case(corpus: dict[str, object], corpus_root: Path) -> None:
         scenario_artifact_path=corpus_root / case["inputs"]["scenario_path"],
         scenario_id=case["scenario_id"],
     ).to_dict()
+    case_id = case["case_id"]
+    raw_classifier_relative = f"cases/{case['case_id']}/source_evidence/scenario_admissibility.json"
+    raw_classifier_artifact = corpus_root / raw_classifier_relative
+    raw_classifier_artifact.write_text(
+        json.dumps(classifier_result, sort_keys=True) + "\n", encoding="utf-8"
+    )
     case["admissibility"]["classifier_receipt"] = (
         counterexample_corpus.create_case_scenario_admissibility_receipt(
-            case, classifier_result, corpus_root=corpus_root
+            case,
+            classifier_result,
+            corpus_root=corpus_root,
+            raw_classifier_artifact_path=raw_classifier_relative,
+            source_revision=_current_git_revision(),
         )
     )
-    case_id = case["case_id"]
+    counterexample_corpus._attach_case_external_artifact_references(case)
+    case["source_evidence"]["corpus_files"] = counterexample_corpus._case_file_inventory(
+        corpus_root / "cases" / case_id, corpus_root
+    )
     case["replay_receipt"]["artifact_receipts"] = [
         {"artifact_path": f"cases/{case_id}/source_evidence/replay_{index}.jsonl"}
         for index in (1, 2)
@@ -743,7 +768,7 @@ def _attach_unknown_classifier_sidecar(case: dict[str, object], corpus_root: Pat
             result,
             corpus_root=corpus_root,
             raw_classifier_artifact_path=raw_relative,
-            source_revision="a" * 40,
+            source_revision=_current_git_revision(),
             artifact_root=corpus_root,
             evidence_root=corpus_root,
         )
@@ -1861,6 +1886,20 @@ def test_unknown_feasibility_requires_digest_bound_classifier_receipt(tmp_path: 
     with pytest.raises(CorpusError, match="classifier_receipt"):
         validate_corpus(missing_receipt, corpus_root=corpus_root)
 
+    missing_raw_result = copy.deepcopy(corpus)
+    missing_raw_result["cases"][0]["admissibility"]["classifier_receipt"].pop(
+        "raw_classifier_artifact"
+    )
+    with pytest.raises(CorpusError, match="raw_classifier_artifact"):
+        validate_corpus(missing_raw_result, corpus_root=corpus_root)
+
+    unpinned_producer = copy.deepcopy(corpus)
+    unpinned_producer["cases"][0]["admissibility"]["classifier_receipt"]["raw_classifier_artifact"][
+        "source_revision"
+    ] = "not-a-revision"
+    with pytest.raises(CorpusError, match="source_revision"):
+        validate_corpus(unpinned_producer, corpus_root=corpus_root)
+
     tampered_result = copy.deepcopy(corpus)
     classifier_receipt = tampered_result["cases"][0]["admissibility"]["classifier_receipt"]
     classifier_receipt["classifier_result"]["reason_codes"].append("forged_reason")
@@ -1892,6 +1931,86 @@ def test_unknown_feasibility_requires_digest_bound_classifier_receipt(tmp_path: 
     ).hexdigest()
     with pytest.raises(CorpusError, match="explicitly excludes"):
         validate_corpus(excluded, corpus_root=corpus_root)
+
+
+def test_unknown_feasibility_rejects_mismatched_full_runtime_input_closure(
+    tmp_path: Path,
+) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    tampered = copy.deepcopy(corpus)
+    case = tampered["cases"][0]
+    receipt = case["admissibility"]["classifier_receipt"]
+    result = receipt["classifier_result"]
+    scenario_identity = result["evidence"]["scenario_artifact_identity"]
+    runtime_files = scenario_identity["effective_input_files"]
+    for item in runtime_files:
+        if item["role"] == "route_overrides_file":
+            item["sha256"] = "1" * 64
+        elif item["role"] == "map_file":
+            item["sha256"] = "2" * 64
+    digest_fields = ("role", "scenario_id", "sha256", "map_id", "parser")
+    identity_payload = {
+        "schema_version": "scenario_runtime_input_identity.v1",
+        "files": [
+            {key: item[key] for key in digest_fields if key in item} for item in runtime_files
+        ],
+    }
+    scenario_identity["effective_input_sha256"] = hashlib.sha256(
+        json.dumps(identity_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    raw_reference = receipt["raw_classifier_artifact"]
+    raw_path = corpus_root / raw_reference["path"]
+    raw_path.write_text(json.dumps(result, sort_keys=True) + "\n", encoding="utf-8")
+    raw_reference["sha256"] = hashlib.sha256(raw_path.read_bytes()).hexdigest()
+    receipt["classifier_result_sha256"] = hashlib.sha256(
+        counterexample_corpus._stable_json(result).encode("utf-8")
+    ).hexdigest()
+    receipt["binding_sha256"] = hashlib.sha256(
+        counterexample_corpus._stable_json(
+            {key: value for key, value in receipt.items() if key != "binding_sha256"}
+        ).encode("utf-8")
+    ).hexdigest()
+    counterexample_corpus._attach_case_external_artifact_references(case)
+    case_root = corpus_root / "cases" / case["case_id"]
+    case["source_evidence"]["corpus_files"] = counterexample_corpus._case_file_inventory(
+        case_root, corpus_root
+    )
+
+    with pytest.raises(CorpusError, match="full runtime input closure"):
+        validate_corpus(tampered, corpus_root=corpus_root)
+
+
+@pytest.mark.parametrize(
+    ("source_key", "reference_key"),
+    [
+        ("archive", "historical_search_archive"),
+        ("source_run_report", "historical_search_report"),
+    ],
+)
+def test_historical_no_run_references_require_retained_archive_and_report_bytes(
+    tmp_path: Path, source_key: str, reference_key: str
+) -> None:
+    corpus, _receipt, corpus_root = _import(tmp_path)
+    case = copy.deepcopy(corpus["cases"][0])
+    source_reference = case["discovery"]["search_source"][source_key]
+    source_path = corpus_root / source_reference["path"]
+    assert source_path.is_file()
+    assert hashlib.sha256(source_path.read_bytes()).hexdigest() == source_reference["sha256"]
+
+    source_reference["path"] = (
+        f"cases/{case['case_id']}/source_evidence/unretained_{source_key}.json"
+    )
+    source_reference["sha256"] = "0" * 64
+    case["source_evidence"]["case_artifact_references"][reference_key] = {
+        "path": source_reference["path"],
+        "sha256": source_reference["sha256"],
+        "role": "historical-search-reference",
+    }
+    tampered = copy.deepcopy(corpus)
+    tampered["cases"] = [case]
+
+    with pytest.raises(CorpusError, match=reference_key):
+        validate_corpus(tampered, corpus_root=corpus_root)
 
 
 def test_discovery_requires_round_and_persisted_search_run_or_explicit_history(
@@ -4079,6 +4198,7 @@ def test_issue9645_search_run_fields_are_recomputed_from_pinned_packet(tmp_path:
     renamed_run["run_id"] = "renamed_run"
     renamed_run["source_issue"] = 999
     renamed_run["new_counterexamples_discovered"] = 1
+    renamed_run.pop("new_counterexamples_admitted")
     with pytest.raises(CorpusError, match="#9645 search-run identity or evidence root"):
         validate_corpus(renamed_pilot, corpus_root=corpus_root)
     orphaned_packet = copy.deepcopy(corpus)
@@ -4104,7 +4224,12 @@ def test_issue9645_search_run_fields_are_recomputed_from_pinned_packet(tmp_path:
     for field, value in mutations.items():
         tampered = copy.deepcopy(corpus)
         tampered["search_runs"][0][field] = value
-        with pytest.raises(CorpusError, match="differs from pinned source evidence"):
+        expected_error = (
+            "invalid corpus at search_runs/0/new_counterexamples_admitted"
+            if field == "new_counterexamples_admitted"
+            else "differs from pinned source evidence"
+        )
+        with pytest.raises(CorpusError, match=expected_error):
             validate_corpus(tampered, corpus_root=corpus_root)
 
     # Loading a persisted record must enforce the same source reconciliation as direct

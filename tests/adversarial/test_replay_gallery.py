@@ -2186,9 +2186,8 @@ def test_gallery_replays_supported_adapter_and_mixed_modes(
         replay_execution_mode=execution_mode,
     )
 
-    result = replay_gallery.build_replay_gallery(
-        manifest, tmp_path / "output" / "gallery", video=False
-    )
+    gallery_dir = tmp_path / "output" / "gallery"
+    result = replay_gallery.build_replay_gallery(manifest, gallery_dir, video=False)
 
     case = result["cases"][0]
     assert result["summary"]["selected_case_count"] == 1
@@ -2196,6 +2195,9 @@ def test_gallery_replays_supported_adapter_and_mixed_modes(
     assert case["replay"]["benchmark_availability"]["execution_mode"] == execution_mode
     assert case["replay"]["benchmark_availability"]["readiness_status"] == "adapter"
     assert case["execution_mode_claim_boundary"] == "diagnostic_only"
+    readme = (gallery_dir / "README.md").read_text(encoding="utf-8")
+    assert f"- Execution mode: source `{execution_mode}`; replay `{execution_mode}`" in readme
+    assert "- Claim boundary: `diagnostic_only`" in readme
 
 
 @pytest.mark.parametrize(

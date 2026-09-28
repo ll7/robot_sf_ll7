@@ -3967,12 +3967,31 @@ def _write_gallery_readme(
             "No candidates met the required provenance, certificate, and replay-input checks."
         )
     for case in cases:
+        attribution = case.get("failure_attribution")
+        attribution_details = attribution.get("details") if isinstance(attribution, dict) else None
+        source_execution_mode = (
+            attribution_details.get("execution_mode")
+            if isinstance(attribution_details, dict)
+            else None
+        )
+        replay = case.get("replay")
+        replay_availability = (
+            replay.get("benchmark_availability") if isinstance(replay, dict) else None
+        )
+        replay_execution_mode = (
+            replay_availability.get("execution_mode")
+            if isinstance(replay_availability, dict)
+            else None
+        )
         lines.extend(
             [
                 f"## {case['case_id']}",
                 "",
                 f"- Replay match: `{case['replay_match']}`",
                 f"- Verification: `{case['verification_status']}`",
+                f"- Execution mode: source `{source_execution_mode or 'unknown'}`; "
+                f"replay `{replay_execution_mode or 'unknown'}`",
+                f"- Claim boundary: `{case.get('execution_mode_claim_boundary', 'unknown')}`",
                 f"- Objective: `{case['objective']['source_value']}` → "
                 f"`{(case.get('replay') or {}).get('objective_value')}`",
                 f"- Feasibility: `{case['feasibility_verdict']['status']}`",

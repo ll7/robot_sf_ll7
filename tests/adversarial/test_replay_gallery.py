@@ -242,9 +242,7 @@ def _bind_effective_scenario_hash(
     scenario: dict[str, Any],
     route_overrides: dict[str, Any] | None = None,
 ) -> str:
-    effective_hash = replay_gallery.compute_effective_scenario_hash(
-        scenario, route_overrides or {}
-    )
+    effective_hash = replay_gallery.compute_effective_scenario_hash(scenario, route_overrides or {})
     candidate_row["effective_scenario_hash"] = effective_hash
     candidate_row["analysis_eligibility"]["effective_scenario_hash"] = effective_hash
     return effective_hash

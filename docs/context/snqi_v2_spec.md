@@ -54,8 +54,14 @@ semantics. V2 adds `metrics.snqi_v2` and `metrics.snqi_v2_terms`.
 
 ## Calibration before evaluation
 
-Use `configs/benchmarks/snqi_v2/calibration.dev101_102.yaml`: the frozen 14-arm
-release roster, all 48 scenarios, development seeds 101/102, horizon 600 and dt .1.
+The candidate `configs/benchmarks/snqi_v2/calibration.dev101_102.yaml` covers the
+14 arm slots, all 48 scenarios, development seeds 101/102, horizon 600 and dt .1.
+Its current Social Force and socnav sampling selectors match the tracked 0.0.8
+template, but this is an interim parity check, not a release freeze. Before any
+calibration acquisition, #9751 must select the four v4 replacement identities,
+#9764 must land the versioned corrected kernel selector, and the three-profile
+parity check must pass again at the selected source head. The runtime smoke's
+seed-111 embargo decision is also pending on #9850/#9668.
 The config preserves planner/checkpoint references, requires force recording,
 and disallows prerequisite fallback. V2 scoring is disabled for acquisition.
 The canonical preflight and checkpoint staging gates must pass before submission.

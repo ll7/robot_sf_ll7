@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import replace
+from dataclasses import asdict, replace
+from functools import cache
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from robot_sf.benchmark.camera_ready._config import load_campaign_config
+from robot_sf.benchmark.camera_ready._config_types import PlannerSpec
 from robot_sf.benchmark.camera_ready._preflight import _load_campaign_scenarios
+from robot_sf.benchmark.policy_search_manifest import resolve_candidate_manifest_runtime
 from robot_sf.benchmark.release_parameter_freeze import (
     ARM_SLOTS_0_0_7_TO_0_0_8,
     COMPARISON_IMPLEMENTATION_REPLACED,
@@ -32,6 +35,7 @@ SMOKE_MANIFEST_PATH = REPO_ROOT / (
 CAMPAIGN_TEMPLATE_PATH = REPO_ROOT / (
     "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
 )
+CALIBRATION_CONFIG_PATH = REPO_ROOT / "configs/benchmarks/snqi_v2/calibration.dev101_102.yaml"
 RUNTIME_SMOKE_V03_CONFIG_PATH = REPO_ROOT / (
     "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_3.yaml"
 )
@@ -92,6 +96,70 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+@cache
+def _algo_config(root: Path, path: str) -> dict[str, Any]:
+    return _load_yaml(root / path)
+
+
+def _resolved_arm_identity(
+    planner: PlannerSpec, scenario: dict[str, Any], *, root: Path = REPO_ROOT
+) -> dict[str, Any]:
+    """Resolve an arm's per-scenario candidate inheritance and inputs."""
+    spec = asdict(planner)
+    algo_path = planner.algo_config_path
+    spec["algo_config_path"] = str(algo_path.relative_to(root)) if algo_path else None
+    manifest = _algo_config(root, spec["algo_config_path"]) if algo_path else {}
+
+    def load_base(path: object) -> dict[str, Any]:
+        return _algo_config(root, str(path)) if path else {}
+
+    algo, effective = resolve_candidate_manifest_runtime(
+        default_algo=planner.algo,
+        manifest=manifest,
+        scenario=scenario,
+        load_config=load_base,
+    )
+    return {
+        "planner": spec,
+        "effective_algo": algo,
+        "effective_config": effective,
+        "algo_config_sha256": _sha256(algo_path) if algo_path else None,
+    }
+
+
+def test_resolved_arm_identity_detects_inherited_inputs_behind_the_same_key(tmp_path: Path) -> None:
+    """A shared arm key cannot conceal changed model, kernel or scenario overrides."""
+    (tmp_path / "base-a.yaml").write_text(
+        "checkpoint: models/a.pt\nkernel_version: legacy\nspeed: 1\n", encoding="utf-8"
+    )
+    (tmp_path / "base-b.yaml").write_text(
+        "checkpoint: models/b.pt\nkernel_version: corrected_v2\nspeed: 1\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "candidate-a.yaml").write_text(
+        "base_config_path: base-a.yaml\nscenario_overrides:\n  corner:\n    speed: 2\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "candidate-b.yaml").write_text(
+        "base_config_path: base-b.yaml\nscenario_overrides:\n  corner:\n    speed: 3\n",
+        encoding="utf-8",
+    )
+    planner_a = PlannerSpec(
+        key="shared-key",
+        algo="hybrid_rule_local_planner",
+        algo_config_path=tmp_path / "candidate-a.yaml",
+    )
+    planner_b = replace(planner_a, algo_config_path=tmp_path / "candidate-b.yaml")
+    actual = _resolved_arm_identity(planner_a, {"name": "corner"}, root=tmp_path)
+    expected = _resolved_arm_identity(planner_b, {"name": "corner"}, root=tmp_path)
+    assert actual["planner"]["key"] == expected["planner"]["key"]
+    assert {
+        "effective_config.checkpoint",
+        "effective_config.kernel_version",
+        "effective_config.speed",
+    } <= _diff_paths(actual, expected)
 
 
 def _diff_paths(source: Any, target: Any, prefix: str = "") -> set[str]:
@@ -386,6 +454,68 @@ def test_runtime_smoke_v0_4_matches_campaign_template_and_preserves_v0_3() -> No
 
     assert _sha256(RUNTIME_SMOKE_V03_CONFIG_PATH) == PINNED_V03_CONFIG_SHA256
     assert _sha256(RUNTIME_SMOKE_V03_MANIFEST_PATH) == PINNED_V03_MANIFEST_SHA256
+
+
+def test_calibration_smoke_and_template_resolve_the_same_arm_inputs() -> None:
+    """All 14 arms share effective inputs across the three campaign profiles (#9850)."""
+    paths = (CALIBRATION_CONFIG_PATH, RUNTIME_SMOKE_V04_CONFIG_PATH, CAMPAIGN_TEMPLATE_PATH)
+    raw = [_load_yaml(path) for path in paths]
+    configs = [load_campaign_config(path) for path in paths]
+    scenarios = [
+        {row["name"]: row for row in _load_campaign_scenarios(config)} for config in configs
+    ]
+    calibration, _, template = raw
+    allowed_calibration_differences = {
+        "arm_isolation",  # execution resource policy
+        "export_publication_bundle",  # publication identity
+        "name",  # publication identity
+        "paper_facing",  # publication identity
+        "seed_policy.mode",
+        "seed_policy.seed_set",
+        "seed_policy.seeds",
+        "workers",  # execution resource policy
+    }
+    assert _diff_paths(calibration, template) - {"planners"} <= (allowed_calibration_differences)
+    assert set(scenarios[0]) == set(scenarios[2])
+    assert set(scenarios[1]) <= set(scenarios[2])
+    assert len(scenarios[0]) == len(scenarios[2]) == 48
+    assert len(scenarios[1]) == 1
+    assert len(configs[0].planners) == len(configs[1].planners) == len(configs[2].planners) == 14
+    assert {101, 102}.isdisjoint(range(111, 141))
+    assert {seed for row in scenarios[0].values() for seed in row["seeds"]} == {101, 102}
+    assert {seed for row in scenarios[2].values() for seed in row["seeds"]} == set(range(111, 141))
+
+    mismatches: list[str] = []
+    for index, label in ((0, "calibration"), (1, "smoke")):
+        left, right = configs[index], configs[2]
+        for field in ("horizon", "dt", "kinematics_matrix"):
+            if getattr(left, field) != getattr(right, field):
+                mismatches.append(
+                    f"{label}.{field}: {getattr(left, field)!r} != {getattr(right, field)!r}"
+                )
+        for name, scenario in scenarios[index].items():
+            reference = scenarios[2][name]
+            left_scenario = dict(scenario)
+            right_scenario = dict(reference)
+            left_scenario.pop("seeds", None)
+            right_scenario.pop("seeds", None)
+            if left_scenario != right_scenario:
+                mismatches.append(
+                    f"{label}.{name}.scenario: {_diff_paths(left_scenario, right_scenario)}"
+                )
+            map_file = scenario.get("map_file")
+            if map_file:
+                map_path = REPO_ROOT / map_file
+                assert map_path.is_file(), f"{label}.{name}.map_file missing: {map_file}"
+                assert _sha256(map_path) == _sha256(REPO_ROOT / reference["map_file"])
+            for planner, template_planner in zip(left.planners, right.planners, strict=True):
+                actual = _resolved_arm_identity(planner, scenario)
+                expected = _resolved_arm_identity(template_planner, reference)
+                if actual != expected:
+                    mismatches.append(
+                        f"{label}.{name}.{planner.key}: {sorted(_diff_paths(actual, expected))}"
+                    )
+    assert not mismatches, "Resolved profile drift:\n" + "\n".join(mismatches[:30])
 
 
 def test_runtime_smoke_v0_4_manifest_is_source_bound_and_refused_until_v4_freeze() -> None:

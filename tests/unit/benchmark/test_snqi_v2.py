@@ -70,24 +70,31 @@ FROZEN_007_PLANNER_CONFIG_SHA256 = {
 }
 
 
-def test_development_calibration_matches_frozen_007_campaign_identity():
-    """Only development seeds and execution/publication metadata may differ from 0.0.7."""
+def test_development_calibration_matches_candidate_and_preserves_frozen_007():
+    """Calibrate the candidate inputs while keeping 0.0.7 comparison bytes pinned."""
     frozen_bytes = FROZEN_007_CAMPAIGN.read_bytes()
     assert hashlib.sha256(frozen_bytes).hexdigest() == FROZEN_007_CAMPAIGN_SHA256
     frozen = yaml.safe_load(frozen_bytes)
     calibration = yaml.safe_load((ASSETS / "calibration.dev101_102.yaml").read_bytes())
+    template = yaml.safe_load(
+        (
+            ROOT
+            / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+        ).read_bytes()
+    )
 
     assert len(calibration["planners"]) == 14
     assert calibration["seed_policy"] == {
         "mode": "fixed-list",
         "seeds": [101, 102],
-        "seed_sets_path": frozen["seed_policy"]["seed_sets_path"],
+        "seed_sets_path": template["seed_policy"]["seed_sets_path"],
     }
     assert calibration["name"] == "snqi_v2_calibration_dev101_102"
     assert calibration["paper_facing"] is False
     assert calibration["workers"] == 16
     assert calibration["export_publication_bundle"] is False
     assert calibration["arm_isolation"] == "subprocess"
+    assert calibration["planners"] == template["planners"]
 
     allowed_deviations = {
         "name",
@@ -98,7 +105,7 @@ def test_development_calibration_matches_frozen_007_campaign_identity():
         "arm_isolation",
     }
     assert {key: value for key, value in calibration.items() if key not in allowed_deviations} == {
-        key: value for key, value in frozen.items() if key not in allowed_deviations
+        key: value for key, value in template.items() if key not in allowed_deviations
     }
     assert hashlib.sha256((ROOT / frozen["scenario_matrix"]).read_bytes()).hexdigest() == (
         FROZEN_007_SCENARIO_SHA256
@@ -108,7 +115,7 @@ def test_development_calibration_matches_frozen_007_campaign_identity():
     ).hexdigest() == (FROZEN_007_SEED_SETS_SHA256)
     assert {
         arm["key"]: hashlib.sha256((ROOT / arm["algo_config"]).read_bytes()).hexdigest()
-        for arm in calibration["planners"]
+        for arm in frozen["planners"]
         if "algo_config" in arm
     } == FROZEN_007_PLANNER_CONFIG_SHA256
 

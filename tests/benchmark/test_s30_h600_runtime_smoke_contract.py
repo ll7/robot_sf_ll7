@@ -11,6 +11,10 @@ import yaml
 
 from robot_sf.benchmark.camera_ready._config import load_campaign_config
 from robot_sf.benchmark.camera_ready._preflight import _load_campaign_scenarios
+from robot_sf.benchmark.release_parameter_freeze import (
+    ARM_SLOTS_0_0_7_TO_0_0_8,
+    COMPARISON_IMPLEMENTATION_REPLACED,
+)
 from robot_sf.benchmark.release_protocol import load_release_manifest, validate_release_manifest
 from robot_sf.benchmark.runtime_smoke_admission import RUNTIME_SMOKE_PLANNER_KEYS
 
@@ -42,7 +46,7 @@ RUNTIME_SMOKE_V04_MANIFEST_PATH = REPO_ROOT / (
 )
 PINNED_V03_CONFIG_SHA256 = "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4"
 PINNED_V03_MANIFEST_SHA256 = "d6f3047adaacfb8cad2cc12430ee5ce7331f11b0777ac522209fd1e5af019241"
-CAMPAIGN_TEMPLATE_SHA256 = "7dc9a2dd9df8585593c9bc8ecc001bed0d2ddff4ebb3803dfb92e8dad8762881"
+CAMPAIGN_TEMPLATE_SHA256 = "f453b7c824fdd47298cbc66dae3afc1fffcd7eedf57ee4bb87cd1c67b4feb1d7"
 
 EXPECTED_PLANNER_KEYS = [
     "prediction_planner",
@@ -59,6 +63,14 @@ EXPECTED_PLANNER_KEYS = [
     "guarded_ppo",
     "predictive_mppi",
     "risk_dwa",
+]
+# Issue #9751: the 0.0.8 template (and the v0_4 smoke that mirrors it) replaces the
+# four hybrid slots with v4-named keys; every other slot keeps its 0.0.7 key.
+EXPECTED_0_0_8_PLANNER_KEYS = [slot.key_0_0_8 for slot in ARM_SLOTS_0_0_7_TO_0_0_8]
+REPLACED_V4_KEYS = [
+    slot.key_0_0_8
+    for slot in ARM_SLOTS_0_0_7_TO_0_0_8
+    if slot.comparison == COMPARISON_IMPLEMENTATION_REPLACED
 ]
 BLIND_CORNER_HYBRID_CONFIGS = [
     "configs/policy_search/candidates/"
@@ -298,8 +310,11 @@ def test_runtime_smoke_v0_4_matches_campaign_template_and_preserves_v0_3() -> No
         "config_sha256": CAMPAIGN_TEMPLATE_SHA256,
     }
     assert smoke["planners"] == template["planners"]
-    assert [row["key"] for row in smoke["planners"]] == EXPECTED_PLANNER_KEYS
+    assert [row["key"] for row in smoke["planners"]] == EXPECTED_0_0_8_PLANNER_KEYS
+    # The canonical runtime-smoke admission roster stays the 0.0.7 (v0_2) roster;
+    # the 0.0.8 keys are its slot-for-slot successors.
     assert list(RUNTIME_SMOKE_PLANNER_KEYS) == EXPECTED_PLANNER_KEYS
+    assert [slot.key_0_0_7 for slot in ARM_SLOTS_0_0_7_TO_0_0_8] == EXPECTED_PLANNER_KEYS
     assert len(smoke["planners"]) == 14
     for row in smoke["planners"]:
         if row.get("algo_config"):
@@ -373,20 +388,26 @@ def test_runtime_smoke_v0_4_matches_campaign_template_and_preserves_v0_3() -> No
     assert _sha256(RUNTIME_SMOKE_V03_MANIFEST_PATH) == PINNED_V03_MANIFEST_SHA256
 
 
-def test_runtime_smoke_v0_4_manifest_is_source_bound_and_valid() -> None:
-    """The v0_4 manifest binds its smoke config and current campaign template."""
+def test_runtime_smoke_v0_4_manifest_is_source_bound_and_refused_until_v4_freeze() -> None:
+    """The v0_4 manifest binds its smoke config and template; unfrozen v4 slots block it."""
     template = _load_yaml(CAMPAIGN_TEMPLATE_PATH)
     manifest_payload = _load_yaml(RUNTIME_SMOKE_V04_MANIFEST_PATH)
     manifest = load_release_manifest(RUNTIME_SMOKE_V04_MANIFEST_PATH)
     validation = validate_release_manifest(manifest)
 
-    assert validation == {
-        "manifest_path": "configs/benchmarks/releases/"
-        "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_4.yaml",
-        "status": "valid",
-        "problem_count": 0,
-        "problems": [],
-    }
+    # Issue #9751: the four v4 slots bind unfrozen placeholders until #9748, so the
+    # smoke manifest is refused with exactly those four blockers and nothing else.
+    assert validation["manifest_path"] == (
+        "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_4.yaml"
+    )
+    assert validation["status"] == "invalid"
+    assert validation["problem_count"] == len(REPLACED_V4_KEYS) == 4
+    for key in REPLACED_V4_KEYS:
+        assert any(
+            problem.startswith(f"planner {key}: release parameters are not frozen")
+            and "ll7/robot_sf_ll7#9748" in problem
+            for problem in validation["problems"]
+        ), key
     assert manifest_payload["canonical_campaign_config"] == (
         "../paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_4.yaml"
     )
@@ -395,7 +416,7 @@ def test_runtime_smoke_v0_4_manifest_is_source_bound_and_valid() -> None:
         "config": "../paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
         "config_sha256": CAMPAIGN_TEMPLATE_SHA256,
     }
-    assert manifest_payload["planners"]["keys"] == EXPECTED_PLANNER_KEYS
+    assert manifest_payload["planners"]["keys"] == EXPECTED_0_0_8_PLANNER_KEYS
     assert manifest_payload["planners"]["groups"] == {
         row["key"]: row["planner_group"] for row in template["planners"]
     }
@@ -408,7 +429,7 @@ def test_runtime_smoke_v0_4_manifest_is_source_bound_and_valid() -> None:
     }
     assert manifest_payload["release_status"] == "runtime-smoke-only"
     assert manifest.expected_paper_interpretation_profile == ("runtime-smoke-advisory-no-ranking")
-    assert manifest.planner_keys == tuple(EXPECTED_PLANNER_KEYS)
+    assert manifest.planner_keys == tuple(EXPECTED_0_0_8_PLANNER_KEYS)
     assert manifest.seed_policy["mode"] == "fixed-list"
     assert manifest.seed_policy["seeds"] == [111]
     assert manifest.expected_kinematics_matrix == ("differential_drive",)

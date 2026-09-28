@@ -73,6 +73,7 @@ BLOCKING_LABELS = frozenset(
         "invalid",
         "needs-triage",
         "state:blocked",
+        "state:blocked-dependency",
         "state:hold",
         "state:blocked-no-code-slice",
         "state:parked",

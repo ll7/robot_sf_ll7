@@ -112,8 +112,18 @@ def _consistent_boolean_alias(outcome: dict[str, Any], *names: str) -> bool | No
     return present[0]
 
 
-def _safety_evidence(outcome: dict[str, Any], metrics: dict[str, Any]) -> bool | None:
-    """Combine collision and intrusion evidence without hiding contradictions."""
+def _safety_evidence(
+    outcome: dict[str, Any],
+    metrics: dict[str, Any],
+    *,
+    require_complete_safety: bool = False,
+) -> bool | None:
+    """Combine collision and intrusion evidence without hiding contradictions.
+
+    The frozen v1 mode preserves its historical partial-evidence reduction. V2
+    uses three-valued OR: a known positive wins, but a negative result requires
+    explicit negative evidence for both collision and severe intrusion.
+    """
     collision_names = ("collision", "collision_event")
     intrusion_names = ("severe_intrusion", "severe_intrusion_event")
     collision = _consistent_boolean_alias(outcome, *collision_names)
@@ -139,17 +149,38 @@ def _safety_evidence(outcome: dict[str, Any], metrics: dict[str, Any]) -> bool |
     ) or (intrusion is not None and metric_intrusion is not None and intrusion != metric_intrusion):
         return None
 
+    collision_evidence = collision if collision is not None else metric_collision
+    intrusion_evidence = intrusion if intrusion is not None else metric_intrusion
+    if require_complete_safety:
+        if collision_evidence is True or intrusion_evidence is True:
+            return True
+        if collision_evidence is False and intrusion_evidence is False:
+            return False
+        return None
+
     evidence = (collision, intrusion, metric_collision, metric_intrusion)
     present = [value for value in evidence if value is not None]
     return any(present) if present else None
 
 
 def constraints_first_outcome_projection(record: dict[str, Any]) -> dict[str, Any]:
-    """Project one episode record into the strict constraints-first outcome vector.
+    """Project an episode with the frozen v1 safety-evidence semantics."""
+    return _constraints_first_outcome_projection(record, require_complete_safety=False)
+
+
+def constraints_first_outcome_projection_v2(record: dict[str, Any]) -> dict[str, Any]:
+    """Project an episode, keeping incomplete collision/intrusion evidence unknown."""
+    return _constraints_first_outcome_projection(record, require_complete_safety=True)
+
+
+def _constraints_first_outcome_projection(
+    record: dict[str, Any], *, require_complete_safety: bool
+) -> dict[str, Any]:
+    """Project one episode record into a constraints-first outcome vector.
 
     Missing containers or non-boolean outcome flags are unavailable rather than
-    being coerced into a liveness failure.  This keeps the search objective and
-    the diagnostic row writer aligned when an episode record is malformed.
+    being coerced into a liveness failure. ``require_complete_safety`` preserves
+    the corrected v2 rule that a negative safety result needs both components.
     """
     if not isinstance(record, dict):
         return _unavailable_constraints_first_outcome()
@@ -180,7 +211,9 @@ def constraints_first_outcome_projection(record: dict[str, Any]) -> dict[str, An
         if value is not None and not isinstance(value, bool):
             return _unavailable_constraints_first_outcome()
 
-    collision_or_intrusion = _safety_evidence(outcome, metrics)
+    collision_or_intrusion = _safety_evidence(
+        outcome, metrics, require_complete_safety=require_complete_safety
+    )
     if collision_or_intrusion is None:
         return _unavailable_constraints_first_outcome()
 
@@ -248,6 +281,10 @@ def constraints_first_lexicographic_score(outcome: dict[str, Any]) -> float | No
 def constraints_first_lexicographic_v1(evaluation: CandidateEvaluation) -> float | None:
     """Score adversarial outcomes with bounded, constraints-first tiers.
 
+    This frozen v1 behavior is retained for historical contracts. It can score a
+    row when one safety component is absent; new studies should use v2, which
+    preserves that component as unknown.
+
     The search API accepts a scalar objective, so this encodes the frozen
     lexicographic ordering in disjoint score bands: collision/severe intrusion
     (``[4, 5)``), liveness failure (``[2, 3)``), then bounded
@@ -264,8 +301,26 @@ def constraints_first_lexicographic_v1(evaluation: CandidateEvaluation) -> float
     return constraints_first_lexicographic_score(projection)
 
 
+def constraints_first_lexicographic_v2(evaluation: CandidateEvaluation) -> float | None:
+    """Score with constraints-first tiers and fail-closed safety evidence.
+
+    Unlike the frozen v1 contract, v2 returns no score when one safety component
+    is absent and the other is observed negative. A known positive collision or
+    intrusion still establishes the safety-failure tier.
+    """
+    record = read_first_jsonl_record(evaluation.episode_record_path)
+    if record is None:
+        return None
+
+    projection = constraints_first_outcome_projection_v2(record)
+    if projection["status"] != "observed":
+        return None
+    return constraints_first_lexicographic_score(projection)
+
+
 _OBJECTIVES: dict[str, ObjectiveFn] = {
     "constraints_first_lexicographic_v1": constraints_first_lexicographic_v1,
+    "constraints_first_lexicographic_v2": constraints_first_lexicographic_v2,
     "minimize_episode_min_robot_distance": minimize_episode_min_robot_distance,
     "worst_case_snqi": worst_case_snqi,
     "temporal_robustness": temporal_robustness_objective,

@@ -436,6 +436,10 @@ _FAST_FILES = {
     "test_pedestrian_removal.py",
     "test_planner_unit_consistency.py",
     "test_replay_determinism.py",
+    # Issue #9759 map-reflection and route-waypoint checks use in-memory maps and
+    # synthetic grids; keep their changed transform/planner branches in fast shards.
+    "test_release_map_mirror.py",
+    "test_grid_route.py",
     # Adversarial evidence packet and gallery tests are deterministic fixture
     # contracts for replay provenance, materialization, and report schemas.
     "test_replay_gallery.py",

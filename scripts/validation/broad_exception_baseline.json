@@ -8,12 +8,13 @@
       "robot_sf/benchmark/forecast/forecast_lane_inventory.py": 1,
       "robot_sf/benchmark/helper_catalog.py": 2,
       "robot_sf/benchmark/issue_6412_real_reexport.py": 2,
-      "robot_sf/benchmark/last_avoidable_replay.py": 6,
+      "robot_sf/benchmark/last_avoidable_replay.py": 2,
       "robot_sf/benchmark/learned_predictor_capability_inventory.py": 1,
       "robot_sf/benchmark/map_runner/map_runner.py": 2,
       "robot_sf/benchmark/map_runner/map_runner_batch_runner.py": 3,
       "robot_sf/benchmark/map_runner/map_runner_env.py": 1,
       "robot_sf/benchmark/published_release_audit.py": 6,
+      "robot_sf/benchmark/release_map_mirror.py": 2,
       "robot_sf/benchmark/runner.py": 9,
       "robot_sf/benchmark/scenario_generation/portfolio_selector.py": 1,
       "robot_sf/benchmark/simulator_counterfactual_adapter.py": 2,
@@ -25,6 +26,7 @@
       "scripts/analysis/compare_trace_vs_live_replay_issue_2790.py": 1,
       "scripts/analyze_feature_extractors.py": 2,
       "scripts/benchmark/build_horizon_timestep_ablation_report.py": 1,
+      "scripts/benchmark/issue_9759_hybrid_mirror_diagnostic.py": 4,
       "scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py": 1,
       "scripts/benchmark/run_cv_forecast_eval.py": 1,
       "scripts/benchmark/run_forecast_baseline_comparison.py": 1,
@@ -111,7 +113,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 199
+    "total": 201
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -120,7 +122,7 @@
       "context": "_execute_campaign_planner_batch",
       "fingerprint": "e53eb792397aafba",
       "handler": "Exception",
-      "lineno": 578,
+      "lineno": 601,
       "path": "robot_sf/benchmark/camera_ready/campaign.py",
       "source": "except Exception as exc:  # noqa: BLE001 - campaign fault isolation: failed arm, not crash"
     },
@@ -201,7 +203,7 @@
       "context": "assemble_real_reexport_package",
       "fingerprint": "e482a729a95515cf",
       "handler": "Exception",
-      "lineno": 662,
+      "lineno": 655,
       "path": "robot_sf/benchmark/issue_6412_real_reexport.py",
       "source": "except Exception:  # cleanup boundary: remove staging on any failure, then re-raise (#6690)"
     },
@@ -210,7 +212,7 @@
       "context": "export_compact_evidence",
       "fingerprint": "b60ae64b3e9907fc",
       "handler": "Exception",
-      "lineno": 969,
+      "lineno": 962,
       "path": "robot_sf/benchmark/issue_6412_real_reexport.py",
       "source": "except Exception:  # cleanup boundary: remove staging on any failure, then re-raise (#6690)"
     },
@@ -222,42 +224,6 @@
       "lineno": 693,
       "path": "robot_sf/benchmark/last_avoidable_replay.py",
       "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 4,
-      "context": "_model_metadata",
-      "fingerprint": "33da90e8b20b01c4",
-      "handler": "Exception",
-      "lineno": 693,
-      "path": "robot_sf/benchmark/last_avoidable_replay.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 4,
-      "context": "_model_metadata",
-      "fingerprint": "33da90e8b20b01c4",
-      "handler": "Exception",
-      "lineno": 693,
-      "path": "robot_sf/benchmark/last_avoidable_replay.py",
-      "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 4,
-      "context": "_snapshot_state_is_complete",
-      "fingerprint": "1d3761ff964b79fb",
-      "handler": "Exception",
-      "lineno": 718,
-      "path": "robot_sf/benchmark/last_avoidable_replay.py",
-      "source": "except Exception:  # noqa: BLE001 - completeness failure must fail closed."
-    },
-    {
-      "col_offset": 4,
-      "context": "_snapshot_state_is_complete",
-      "fingerprint": "1d3761ff964b79fb",
-      "handler": "Exception",
-      "lineno": 718,
-      "path": "robot_sf/benchmark/last_avoidable_replay.py",
-      "source": "except Exception:  # noqa: BLE001 - completeness failure must fail closed."
     },
     {
       "col_offset": 4,
@@ -282,7 +248,7 @@
       "context": "_preflight_policy",
       "fingerprint": "7a3a2d000b9eb0a0",
       "handler": "Exception",
-      "lineno": 909,
+      "lineno": 910,
       "path": "robot_sf/benchmark/map_runner/map_runner.py",
       "source": "except Exception as exc:  # socnav prereq policy boundary: skip, fallback, or re-raise (#6690)"
     },
@@ -291,7 +257,7 @@
       "context": "_preflight_policy",
       "fingerprint": "e1451027dc4d2b28",
       "handler": "Exception",
-      "lineno": 939,
+      "lineno": 940,
       "path": "robot_sf/benchmark/map_runner/map_runner.py",
       "source": "except Exception as fallback_exc:  # wrap any fallback build error, re-raise (#6690)"
     },
@@ -327,7 +293,7 @@
       "context": "representative_metric_affecting_config",
       "fingerprint": "e0bcbde65fb074f0",
       "handler": "Exception",
-      "lineno": 84,
+      "lineno": 89,
       "path": "robot_sf/benchmark/map_runner/map_runner_env.py",
       "source": "except Exception as exc:  # noqa: BLE001 - provenance must never break a benchmark run."
     },
@@ -387,10 +353,28 @@
     },
     {
       "col_offset": 4,
+      "context": "_transform_single_pedestrian",
+      "fingerprint": "22db9ac515b15043",
+      "handler": "Exception",
+      "lineno": 450,
+      "path": "robot_sf/benchmark/release_map_mirror.py",
+      "source": "except Exception as exc:  # Normalize caller-defined metadata deepcopy failures."
+    },
+    {
+      "col_offset": 8,
+      "context": "_transform_social_groups",
+      "fingerprint": "17f4752f3d9840b5",
+      "handler": "Exception",
+      "lineno": 567,
+      "path": "robot_sf/benchmark/release_map_mirror.py",
+      "source": "except Exception as exc:  # Normalize caller-defined metadata deepcopy failures."
+    },
+    {
+      "col_offset": 4,
       "context": "_planner_foresight_diagnostics",
       "fingerprint": "b01bac98938ef3e3",
       "handler": "Exception",
-      "lineno": 369,
+      "lineno": 387,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - diagnostics must not break execution"
     },
@@ -399,7 +383,7 @@
       "context": "_planner_step_worker",
       "fingerprint": "9e9cfa53c3234921",
       "handler": "Exception",
-      "lineno": 456,
+      "lineno": 474,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as exc:  # noqa: BLE001 - child worker must send structured init errors"
     },
@@ -408,7 +392,7 @@
       "context": "_planner_step_worker",
       "fingerprint": "36fb8c6067433ca9",
       "handler": "Exception",
-      "lineno": 478,
+      "lineno": 496,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as exc:  # pragma: no cover  # noqa: BLE001 - planner step isolation"
     },
@@ -417,7 +401,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "bcf5aab6fcdc5686",
       "handler": "Exception",
-      "lineno": 2637,
+      "lineno": 2661,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -426,7 +410,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "3e85dca65fdc0caf",
       "handler": "Exception",
-      "lineno": 2639,
+      "lineno": 2663,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as e:  # pragma: no cover - batch job isolation; fail_fast re-raises"
     },
@@ -435,7 +419,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "bcf5aab6fcdc5686",
       "handler": "Exception",
-      "lineno": 2655,
+      "lineno": 2679,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -444,7 +428,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "e79143095eea18a4",
       "handler": "Exception",
-      "lineno": 2742,
+      "lineno": 2766,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -453,7 +437,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "83f25d3b1aad5e1e",
       "handler": "Exception",
-      "lineno": 2744,
+      "lineno": 2768,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as e:  # pragma: no cover - batch job isolation; fail_fast re-raises"
     },
@@ -462,7 +446,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "e79143095eea18a4",
       "handler": "Exception",
-      "lineno": 2760,
+      "lineno": 2784,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -621,6 +605,42 @@
     },
     {
       "col_offset": 8,
+      "context": "_build_config_with_axis",
+      "fingerprint": "0e7407a267d48e81",
+      "handler": "Exception",
+      "lineno": 451,
+      "path": "scripts/benchmark/issue_9759_hybrid_mirror_diagnostic.py",
+      "source": "except Exception as exc:  # Preserve source-map provenance for every transform failure."
+    },
+    {
+      "col_offset": 12,
+      "context": "preflight_maps",
+      "fingerprint": "b6cf7db8d3ac639f",
+      "handler": "Exception",
+      "lineno": 547,
+      "path": "scripts/benchmark/issue_9759_hybrid_mirror_diagnostic.py",
+      "source": "except Exception as exc:  # noqa: BLE001 - retain every preflight failure."
+    },
+    {
+      "col_offset": 4,
+      "context": "_run_episode_job",
+      "fingerprint": "16239721b6ee95f1",
+      "handler": "Exception",
+      "lineno": 776,
+      "path": "scripts/benchmark/issue_9759_hybrid_mirror_diagnostic.py",
+      "source": "except Exception as exc:  # noqa: BLE001 - retain every episode failure as a row."
+    },
+    {
+      "col_offset": 16,
+      "context": "_iter_worker_results",
+      "fingerprint": "d4a5cf59165732ae",
+      "handler": "Exception",
+      "lineno": 1214,
+      "path": "scripts/benchmark/issue_9759_hybrid_mirror_diagnostic.py",
+      "source": "except Exception as exc:  # noqa: BLE001 - convert process-future failures into per-job rows."
+    },
+    {
+      "col_offset": 8,
       "context": "run_campaign",
       "fingerprint": "82abbbc68ff4ae7f",
       "handler": "Exception",
@@ -750,7 +770,7 @@
       "context": "main",
       "fingerprint": "54d81d337d560e63",
       "handler": "Exception",
-      "lineno": 538,
+      "lineno": 517,
       "path": "scripts/dev/compact_ci_snapshot.py",
       "source": "except Exception as exc:"
     },
@@ -768,7 +788,7 @@
       "context": "_child_parser_info",
       "fingerprint": "75845c09ff34289e",
       "handler": "Exception",
-      "lineno": 869,
+      "lineno": 886,
       "path": "scripts/dev/generate_cli_reference.py",
       "source": "except Exception:  # noqa: BLE001 - arbitrary parser factories stay child-bounded"
     },
@@ -777,7 +797,7 @@
       "context": "_child_import_target",
       "fingerprint": "613aca5b680219b1",
       "handler": "Exception",
-      "lineno": 948,
+      "lineno": 965,
       "path": "scripts/dev/generate_cli_reference.py",
       "source": "except Exception as exc:  # noqa: BLE001 - arbitrary import failures stay child-bounded"
     },
@@ -786,7 +806,7 @@
       "context": "_child_takes_argv",
       "fingerprint": "7871babfdccd4684",
       "handler": "Exception",
-      "lineno": 958,
+      "lineno": 975,
       "path": "scripts/dev/generate_cli_reference.py",
       "source": "except Exception:  # noqa: BLE001 - custom signatures stay child-bounded"
     },
@@ -795,7 +815,7 @@
       "context": "_child_invoke",
       "fingerprint": "65bedcaa1dada86c",
       "handler": "Exception",
-      "lineno": 974,
+      "lineno": 991,
       "path": "scripts/dev/generate_cli_reference.py",
       "source": "except Exception as exc:  # noqa: BLE001 - arbitrary help failures stay fail-closed"
     },
@@ -813,7 +833,7 @@
       "context": "main",
       "fingerprint": "49eef50940c10a67",
       "handler": "Exception",
-      "lineno": 2068,
+      "lineno": 2172,
       "path": "scripts/dev/stale_worktree_reaper.py",
       "source": "except Exception as exc:"
     },
@@ -822,7 +842,7 @@
       "context": "_build_drift_sample",
       "fingerprint": "5fe2ee87d360b97b",
       "handler": "Exception",
-      "lineno": 189,
+      "lineno": 205,
       "path": "scripts/dev/watch_pr_ci_status.py",
       "source": "except Exception as exc:"
     },
@@ -831,7 +851,7 @@
       "context": "main",
       "fingerprint": "bd0954b161462b79",
       "handler": "Exception",
-      "lineno": 1760,
+      "lineno": 1815,
       "path": "scripts/dev/worktree_hygiene_snapshot.py",
       "source": "except Exception as exc:"
     },
@@ -957,7 +977,7 @@
       "context": "aggregate_all_results",
       "fingerprint": "eebb4a691873a945",
       "handler": "Exception",
-      "lineno": 229,
+      "lineno": 230,
       "path": "scripts/run_social_navigation_benchmark.py",
       "source": "except Exception as exc:  # pragma: no cover - defensive"
     },
@@ -966,7 +986,7 @@
       "context": "log_manual_visualization_steps",
       "fingerprint": "da94b5d8b07b674b",
       "handler": "Exception",
-      "lineno": 304,
+      "lineno": 305,
       "path": "scripts/run_social_navigation_benchmark.py",
       "source": "except Exception as e:"
     },
@@ -1515,7 +1535,7 @@
       "context": "_init_wandb",
       "fingerprint": "c69862f1d86e1c9c",
       "handler": "Exception",
-      "lineno": 1505,
+      "lineno": 1573,
       "path": "scripts/training/train_ppo.py",
       "source": "except Exception as exc:  # pragma: no cover - optional dependency"
     },
@@ -1524,7 +1544,7 @@
       "context": "_collect_scenario_coverage",
       "fingerprint": "3b3a0ef3ccea6c5c",
       "handler": "Exception",
-      "lineno": 1938,
+      "lineno": 2012,
       "path": "scripts/training/train_ppo.py",
       "source": "except Exception:  # pragma: no cover - best effort across vec env types"
     },
@@ -1533,7 +1553,7 @@
       "context": "_upload_wandb_best_checkpoint_artifact",
       "fingerprint": "a37b06c9172d6e1c",
       "handler": "Exception",
-      "lineno": 2288,
+      "lineno": 2362,
       "path": "scripts/training/train_ppo.py",
       "source": "except Exception as exc:  # pragma: no cover - optional dependency"
     },

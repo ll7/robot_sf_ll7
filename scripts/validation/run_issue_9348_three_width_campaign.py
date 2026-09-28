@@ -182,9 +182,10 @@ def _valid_spawn_evidence(row: dict[str, Any] | None) -> bool:
     if row is None:
         return True
     spawn = row.get("spawn_validity")
+    # v1 is retained for historical traces; current benchmark rows use v2.
     return (
         isinstance(spawn, dict)
-        and spawn.get("schema_version") == "spawn_validity.v1"
+        and spawn.get("schema_version") in {"spawn_validity.v1", "spawn_validity.v2"}
         and spawn.get("reset_clearance_status") == "available"
         and isinstance(spawn.get("reset_clearance"), dict)
         and spawn["reset_clearance"].get("overlap") is False

@@ -435,6 +435,15 @@ def test_actor_present_confirmation_rejects_fallback_and_custody_faults() -> Non
         )
 
     assert assess(rows)["admit_h400"] is True
+    current_spawn_schema = deepcopy(rows)
+    current_spawn_schema[0]["spawn_validity"]["schema_version"] = "spawn_validity.v2"
+    assert assess(current_spawn_schema)["admit_h400"] is True
+    unsupported_spawn_schema = deepcopy(rows)
+    unsupported_spawn_schema[0]["spawn_validity"]["schema_version"] = "spawn_validity.v3"
+    assert (
+        "invalid_or_unknown_spawn_validity"
+        in assess(unsupported_spawn_schema)["rows"][0]["blockers"]
+    )
     fallback = deepcopy(rows)
     fallback[0]["algorithm_metadata"]["planner_decision_trace"]["steps"][0]["fallback_used"] = True
     assert assess(fallback)["admit_h400"] is False
@@ -454,6 +463,7 @@ def test_actor_present_confirmation_rejects_fallback_and_custody_faults() -> Non
     missing_spawn[0].pop("spawn_validity")
     assert "invalid_or_unknown_spawn_validity" in assess(missing_spawn)["rows"][0]["blockers"]
     unknown_spawn = deepcopy(rows)
+    unknown_spawn[0]["spawn_validity"]["schema_version"] = "spawn_validity.v2"
     unknown_spawn[0]["spawn_validity"]["reset_clearance_status"] = "unavailable"
     assert "invalid_or_unknown_spawn_validity" in assess(unknown_spawn)["rows"][0]["blockers"]
     overlapping_spawn = deepcopy(rows)

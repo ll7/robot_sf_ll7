@@ -64,7 +64,8 @@ uv run python scripts/validation/run_issue_9348_three_width_campaign.py \
 The producer runs the geometry/oracle preflight, then a separate actor-present
 H10 confirmation over all 18 planner/seed/width cells. H400 starts only if
 every short probe follows its declared baseline command route, has a nonempty
-simulation/action trace and valid typed spawn clearance, is fallback-free,
+simulation/action trace and valid typed spawn clearance (`spawn_validity.v1`
+or `.v2` with available, non-overlapping reset evidence), is fallback-free,
 and is paired by reset and RNG receipts. The oracle's exact `slow_speed_tier`
 finding stays diagnostic
 and cannot clear this gate. A red confirmation writes a failure receipt and

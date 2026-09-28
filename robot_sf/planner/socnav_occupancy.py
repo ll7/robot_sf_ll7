@@ -158,10 +158,12 @@ class OccupancyAwarePlannerMixin:
             indices = np.asarray(raw_array, dtype=float)
         except (OverflowError, TypeError, ValueError):
             return None
+        # Occupancy metadata uses exactly -1 for a channel that is absent;
+        # every present channel must still be an integral in-range index.
         if (
             not np.all(np.isfinite(indices))
             or not np.all(np.equal(indices, np.floor(indices)))
-            or np.any(indices < 0.0)
+            or np.any(indices < -1.0)
             or np.any(indices >= float(channel_count))
         ):
             return None

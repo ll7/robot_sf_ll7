@@ -1653,6 +1653,35 @@ def test_social_force_obstacle_no_grid_returns_zero():
 
 
 @_sf_available
+@pytest.mark.parametrize("channel_indices", ([0, 1, -1, 2], [0, 1, -1, -1]))
+def test_social_force_accepts_missing_channel_sentinel_without_fallback(channel_indices):
+    """Canonical absent-channel sentinels preserve obstacle extraction and force output."""
+    adapter = SocialForcePlannerAdapter(SocNavPlannerConfig())
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0)),
+        obstacle_cells=[(2, 3)],
+    )
+    obs["occupancy_grid_meta_channel_indices"] = np.asarray(channel_indices, dtype=np.int32)
+    robot_pos = np.array([0.0, 0.0], dtype=float)
+
+    force = adapter._compute_obstacle_force(
+        obs,
+        robot_pos,
+        0.0,
+        np.zeros(2, dtype=float),
+        obs["robot"],
+    )
+
+    metadata = adapter.diagnostics()["obstacle_force_law"]
+    assert np.all(np.isfinite(force))
+    assert np.linalg.norm(force) > 0.0
+    assert metadata["applied"] is True
+    assert metadata["fallback"] is False
+    assert metadata["fallback_count"] == 0
+    assert metadata["parameters"]["obstacle_channel_index"] == 0
+
+
+@_sf_available
 @pytest.mark.parametrize(
     ("metadata_key", "metadata_value"),
     [
@@ -1664,6 +1693,9 @@ def test_social_force_obstacle_no_grid_returns_zero():
         ("channel_indices", np.array([np.inf, 1.0, 2.0, 3.0], dtype=np.float32)),
         ("channel_indices", np.array([0.5, 1.0, 2.0, 3.0], dtype=np.float32)),
         ("channel_indices", np.array([-0.5, 1.0, 2.0, 3.0], dtype=np.float32)),
+        ("channel_indices", np.array([-2.0, 1.0, 2.0, 3.0], dtype=np.float32)),
+        ("channel_indices", np.array([True, False, False, False], dtype=bool)),
+        ("channel_indices", np.array([0.0, 1.0, 2.0, 4.0], dtype=np.float32)),
     ],
 )
 def test_social_force_malformed_grid_metadata_fails_closed(metadata_key, metadata_value):
@@ -1893,6 +1925,23 @@ def test_obstacle_payload_records_reason_for_nonfinite_channel_indices() -> None
 
     assert harness._obstacle_grid_payload(obs) is None
     assert harness._obstacle_grid_payload_failure_reason == _PAYLOAD_FAILURE_REASON
+
+
+@pytest.mark.parametrize("channel_indices", ([0, 1, -1, 2], [0, 1, -1, -1]))
+def test_obstacle_payload_accepts_canonical_missing_channel_sentinel(channel_indices) -> None:
+    """Canonical/default metadata remains a valid obstacle-grid payload."""
+    harness = _payload_harness()
+    obs = _with_occupancy_grid(_make_obs(), obstacle_cells=[(2, 3)])
+    obs["occupancy_grid_meta_channel_indices"] = np.asarray(channel_indices, dtype=np.int32)
+
+    payload = harness._obstacle_grid_payload(obs)
+
+    assert payload is not None
+    grid, _meta, channel_idx, resolution = payload
+    assert channel_idx == 0
+    assert grid[channel_idx, 2, 3] == pytest.approx(1.0)
+    assert resolution == pytest.approx(1.0)
+    assert harness._obstacle_grid_payload_failure_reason is None
 
 
 def test_obstacle_payload_records_reason_for_unresolvable_channel_indices() -> None:

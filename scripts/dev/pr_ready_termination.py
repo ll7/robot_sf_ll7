@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
 import os
 import signal
+import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -15,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = "pr_ready_termination.v1"
+LANE_TERMINAL_SCHEMA_VERSION = "pr_ready_lane_terminal.v1"
 MAX_TEXT_LENGTH = 200
 READ_LIMIT_BYTES = 8192
 CGROUP_ROOT = Path("/sys/fs/cgroup")
@@ -237,6 +241,214 @@ def _signal_details(signal_number: int) -> dict[str, int | str | None]:
     return {"name": signal_name, "number": signal_number, "exit_code": exit_code}
 
 
+def _source_sha(value: object) -> str | None:
+    """Normalize a full Git object ID, leaving unavailable or invalid IDs null."""
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower()
+    return (
+        normalized
+        if len(normalized) in (40, 64)
+        and all(character in "0123456789abcdef" for character in normalized)
+        else None
+    )
+
+
+def _repository_fingerprint(repo_root: str | Path) -> str | None:
+    """Return an opaque fingerprint for the repository's common Git directory."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=repo_root,
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=2,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    common_dir = result.stdout.strip()
+    if not common_dir:
+        return None
+    return hashlib.sha256(os.fsencode(os.path.realpath(common_dir))).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class LaneTerminalContext:
+    """Observed process and timing values for one readiness lane."""
+
+    lane: str
+    repo_root: str | Path
+    source_sha: object
+    started_at_utc: object
+    elapsed_seconds: object
+    exit_status: object
+    supervisor_pid: object = None
+    child_pid: object = None
+    child_process_group_id: object = None
+    supervisor_signal_number: object = None
+
+
+def _validate_lane_outcome(receipt: dict[str, Any]) -> None:
+    outcome = receipt["outcome"]
+    exit_status = receipt["exit_status"]
+    supervisor_signal = receipt["signal"]["supervisor"]
+    if supervisor_signal is not None and outcome != "terminated":
+        raise ValueError("an observed supervisor signal requires terminated outcome")
+    if supervisor_signal is None and exit_status is None and outcome != "unknown":
+        raise ValueError("an unknown exit status requires unknown outcome")
+    if supervisor_signal is None and exit_status == 0 and outcome != "completed":
+        raise ValueError("zero exit status requires completed outcome")
+    if supervisor_signal is None and exit_status not in (None, 0) and outcome != "failed":
+        raise ValueError("nonzero exit status requires failed outcome")
+
+
+def _validate_lane_signal(signal: object) -> None:
+    if not isinstance(signal, dict) or set(signal) != {"supervisor", "child"}:
+        raise ValueError("lane terminal receipt signal fields are invalid")
+    supervisor_signal = signal["supervisor"]
+    if supervisor_signal is not None and (
+        not isinstance(supervisor_signal, dict)
+        or not isinstance(supervisor_signal.get("name"), str)
+        or not isinstance(supervisor_signal.get("number"), int)
+        or supervisor_signal.get("sender_pid") is not None
+    ):
+        raise ValueError("observed supervisor signal must have an unknown sender")
+    if signal["child"] is not None:
+        raise ValueError("child signal cannot be inferred from its exit status")
+
+
+def _validate_lane_repository(repository: object) -> None:
+    if not isinstance(repository, dict):
+        raise ValueError("lane terminal receipt repository identity is invalid")
+    repository_id = repository.get("id_sha256")
+    if repository_id is not None and (
+        not isinstance(repository_id, str)
+        or len(repository_id) != 64
+        or any(character not in "0123456789abcdef" for character in repository_id)
+    ):
+        raise ValueError("lane terminal receipt repository identity is invalid")
+    source_sha = repository.get("source_sha")
+    if source_sha is not None and _source_sha(source_sha) != source_sha:
+        raise ValueError("lane terminal receipt repository identity is invalid")
+
+
+def _validate_lane_timing(timing: object) -> None:
+    if not isinstance(timing, dict):
+        raise ValueError("lane terminal receipt timing is invalid")
+    elapsed = timing.get("elapsed_seconds")
+    if elapsed is not None and (
+        isinstance(elapsed, bool) or not isinstance(elapsed, (int, float)) or elapsed < 0
+    ):
+        raise ValueError("lane terminal receipt elapsed time must be null or nonnegative")
+
+
+def validate_lane_terminal_receipt(receipt: object) -> None:
+    """Reject malformed or contradictory per-lane terminal records."""
+    if not isinstance(receipt, dict):
+        raise ValueError("lane terminal receipt must be a JSON object")
+    if receipt.get("schema") != LANE_TERMINAL_SCHEMA_VERSION:
+        raise ValueError("lane terminal receipt schema is unsupported")
+    if not isinstance(receipt.get("lane"), str) or not receipt["lane"].strip():
+        raise ValueError("lane terminal receipt must identify a lane")
+    if receipt.get("status") != "terminal":
+        raise ValueError("lane terminal receipt status must be terminal")
+    if receipt.get("outcome") not in {"completed", "failed", "terminated", "unknown"}:
+        raise ValueError("lane terminal receipt outcome is invalid")
+    exit_status = receipt.get("exit_status")
+    if exit_status is not None and (
+        isinstance(exit_status, bool)
+        or not isinstance(exit_status, int)
+        or not 0 <= exit_status <= 255
+    ):
+        raise ValueError("lane terminal receipt exit status must be null or 0..255")
+    _validate_lane_signal(receipt.get("signal"))
+    _validate_lane_outcome(receipt)
+    _validate_lane_repository(receipt.get("repository"))
+    _validate_lane_timing(receipt.get("timing"))
+    if "command" in receipt or "arguments" in receipt or "environment" in receipt:
+        raise ValueError("lane terminal receipt must not contain commands or environment")
+
+
+def _optional_exit_status(value: object) -> int | None:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    try:
+        parsed = int(str(value))
+    except (TypeError, ValueError):
+        return None
+    return parsed if 0 <= parsed <= 255 else None
+
+
+def _optional_elapsed_seconds(value: object) -> float | None:
+    try:
+        parsed = float(str(value))
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 and math.isfinite(parsed) else None
+
+
+def _optional_signal_number(value: object) -> int | None:
+    if value is None:
+        return None
+    try:
+        parsed = int(str(value))
+    except (TypeError, ValueError):
+        return None
+    return parsed if 1 <= parsed <= 127 else None
+
+
+def build_lane_terminal_receipt(context: LaneTerminalContext) -> dict[str, Any]:
+    """Build a credential-free terminal record for one started readiness lane."""
+    status_value = _optional_exit_status(context.exit_status)
+    elapsed_value = _optional_elapsed_seconds(context.elapsed_seconds)
+    observed_signal_number = _optional_signal_number(context.supervisor_signal_number)
+    supervisor_signal = (
+        {**_signal_details(observed_signal_number), "sender_pid": None}
+        if observed_signal_number is not None
+        else None
+    )
+    if supervisor_signal is not None:
+        outcome = "terminated"
+    elif status_value is None:
+        outcome = "unknown"
+    elif status_value == 0:
+        outcome = "completed"
+    else:
+        # In particular, status 143 alone does not identify a SIGTERM sender.
+        outcome = "failed"
+    receipt = {
+        "schema": LANE_TERMINAL_SCHEMA_VERSION,
+        "status": "terminal",
+        "outcome": outcome,
+        "recorded_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+        "lane": _bounded_text(context.lane),
+        "repository": {
+            "id_sha256": _repository_fingerprint(context.repo_root),
+            "source_sha": _source_sha(context.source_sha),
+        },
+        "timing": {
+            "started_at_utc": (
+                _bounded_text(context.started_at_utc) if context.started_at_utc else None
+            ),
+            "ended_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+            "elapsed_seconds": elapsed_value,
+        },
+        "exit_status": status_value,
+        "signal": {"supervisor": supervisor_signal, "child": None},
+        "process": {
+            "supervisor_pid": _positive_int(context.supervisor_pid),
+            "child_pid": _positive_int(context.child_pid),
+            "child_process_group_id": _positive_int(context.child_process_group_id),
+        },
+        "security": {"command_line_included": False, "environment_included": False},
+    }
+    validate_lane_terminal_receipt(receipt)
+    return receipt
+
+
 @dataclass(frozen=True, slots=True)
 class TerminationContext:
     """Signal-path context supplied by the readiness shell wrapper."""
@@ -386,7 +598,8 @@ def _parser() -> argparse.ArgumentParser:
     """Build the receipt writer command-line parser."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--signal-number", type=int, required=True)
+    parser.add_argument("--lane-terminal", action="store_true")
+    parser.add_argument("--signal-number", type=int)
     parser.add_argument("--phase", default="unknown")
     parser.add_argument("--lane", default="none")
     parser.add_argument("--last-progress", default="unknown")
@@ -397,27 +610,55 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--child-pid")
     parser.add_argument("--child-pgid")
     parser.add_argument("--child-registration-state", default="unknown")
+    parser.add_argument("--repo-root", type=Path)
+    parser.add_argument("--source-sha")
+    parser.add_argument("--started-at-utc")
+    parser.add_argument("--elapsed-seconds")
+    parser.add_argument("--exit-status")
+    parser.add_argument("--supervisor-signal-number", type=int)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     """Write a termination receipt and report its path."""
     args = _parser().parse_args(argv)
-    receipt = build_receipt(
-        TerminationContext(
-            signal_number=args.signal_number,
-            phase=args.phase,
-            lane=args.lane,
-            last_progress=args.last_progress,
-            last_progress_at_utc=args.last_progress_at_utc,
-            cleanup_status=args.cleanup_status,
-            mode=args.mode,
-            controller_pid=args.controller_pid,
-            child_pid=args.child_pid,
-            child_process_group_id=args.child_pgid,
-            child_registration_state=args.child_registration_state,
+    if args.lane_terminal:
+        if args.repo_root is None:
+            print("ERROR: lane terminal receipt requires --repo-root", file=sys.stderr)
+            return 2
+        receipt = build_lane_terminal_receipt(
+            LaneTerminalContext(
+                lane=args.lane,
+                repo_root=args.repo_root,
+                source_sha=args.source_sha,
+                started_at_utc=args.started_at_utc,
+                elapsed_seconds=args.elapsed_seconds,
+                exit_status=args.exit_status,
+                supervisor_pid=args.controller_pid,
+                child_pid=args.child_pid,
+                child_process_group_id=args.child_pgid,
+                supervisor_signal_number=args.supervisor_signal_number,
+            )
         )
-    )
+    else:
+        if args.signal_number is None:
+            print("ERROR: termination receipt requires --signal-number", file=sys.stderr)
+            return 2
+        receipt = build_receipt(
+            TerminationContext(
+                signal_number=args.signal_number,
+                phase=args.phase,
+                lane=args.lane,
+                last_progress=args.last_progress,
+                last_progress_at_utc=args.last_progress_at_utc,
+                cleanup_status=args.cleanup_status,
+                mode=args.mode,
+                controller_pid=args.controller_pid,
+                child_pid=args.child_pid,
+                child_process_group_id=args.child_pgid,
+                child_registration_state=args.child_registration_state,
+            )
+        )
     try:
         path = write_receipt(receipt, args.output)
     except (OSError, ValueError) as exc:

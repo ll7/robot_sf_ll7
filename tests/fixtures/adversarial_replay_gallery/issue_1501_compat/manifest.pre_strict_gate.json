@@ -1,0 +1,88 @@
+{
+  "candidates": [
+    {
+      "analysis_eligibility": {
+        "certificate_ok": true,
+        "eligible": true,
+        "execution_mode": "native",
+        "objective_scored": true,
+        "reason_codes": [],
+        "schema_version": "search_analysis_eligibility.v1"
+      },
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 7.288956756845657,
+          "y": 2.807913333960939
+        },
+        "pedestrian_delay_s": 1.1762080853167522,
+        "pedestrian_speed_mps": 0.9460388097685773,
+        "scenario_seed": 320,
+        "spawn_time_s": 0.6205390536891795,
+        "start": {
+          "theta": 0.0,
+          "x": 2.3119256556477077,
+          "y": 2.5992335516140495
+        }
+      },
+      "certification_status": {
+        "details": {
+          "certificates": [
+            {
+              "benchmark_eligibility": "eligible",
+              "classification": "hard_but_solvable",
+              "reasons": [
+                "low_static_clearance_margin"
+              ],
+              "scenario_id": "crossing_ttc_template_adversarial_0008"
+            }
+          ]
+        },
+        "reason": "current static route certificate; dynamic feasibility remains unknown",
+        "schema_version": "scenario_cert.v1",
+        "status": "passed"
+      },
+      "effective_scenario_hash": "e28dcdc58b944d7f64f22fb49379505468825a570c20e242b7ccfc0dacddec9f",
+      "episode_record_path": "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/source_episode.jsonl",
+      "failure_attribution": {
+        "details": {
+          "availability_status": "available",
+          "execution_mode": "native",
+          "outcome": {
+            "collision_event": true,
+            "route_complete": false,
+            "timeout_event": false
+          },
+          "readiness_status": "native",
+          "status": "collision",
+          "termination_reason": "collision"
+        },
+        "primary_failure": "collision",
+        "reasons": [
+          "episode outcome reports a collision"
+        ],
+        "status": "attributed"
+      },
+      "objective_value": 4.833333333333333,
+      "scenario_yaml_path": "tests/fixtures/adversarial_replay_gallery/issue_1501_compat/scenario.yaml"
+    }
+  ],
+  "config": {
+    "budget": 32,
+    "objective": "constraints_first_lexicographic_v1",
+    "policy": "goal",
+    "record_forces": true,
+    "search_method": "optuna",
+    "seed": 42
+  },
+  "historical_compatibility_smoke": {
+    "claim_boundary": "compatibility smoke wrapper around a tracked #1501 replay fixture; not a persisted search manifest or new discovery",
+    "dynamic_feasibility": "unknown",
+    "origin_archive_id": "failure_0002",
+    "origin_issue": 1501,
+    "origin_search_revision": "4bd5fb412d2bf023d26f674833dd379aedf8c17e",
+    "source_replay_revision": "58e516aa4f69ff3098bf518199f483006589758c"
+  },
+  "schema_version": "adversarial-search-manifest.v1",
+  "source_revision": "58e516aa4f69ff3098bf518199f483006589758c"
+}

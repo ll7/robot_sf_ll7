@@ -25,6 +25,7 @@ EXPECTED_CAPABILITY_IDS = {
     "robot_sf.protocol.release_manifest.v0",
     "robot_sf.schema.aggregate.v1",
     "robot_sf.schema.episode.v1",
+    "robot_sf.schema.episode_runtime_input_identity.v1",
     "robot_sf.schema.evidence_bundle.v1",
     "robot_sf.schema.release_assurance_case.v1",
     "robot_sf.schema.report_metadata.v1",

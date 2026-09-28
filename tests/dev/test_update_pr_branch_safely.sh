@@ -313,11 +313,16 @@ cat > "${MOCK_DIR}/git" <<'EOF'
 set -euo pipefail
 printf '%s\n' "$*" >> "${MOCK_DIR}/git_calls"
 case "$*" in
+  "rev-parse --path-format=absolute --git-common-dir")
+    mkdir -p "${MOCK_DIR}/git-common"
+    printf '%s\n' "${MOCK_DIR}/git-common"
+    ;;
   "rev-parse --git-common-dir")
     mkdir -p "${MOCK_DIR}/git-common"
     printf '%s\n' "${MOCK_DIR}/git-common"
     ;;
-  "rev-parse --show-toplevel") printf '%s\n' "${REPO_ROOT}";;
+  "rev-parse --show-toplevel") printf '%s\n' "${MOCK_DIR}";;
+  "rev-parse --git-path index.lock") printf '.git/index.lock';;
   "rev-parse --abbrev-ref HEAD") printf 'feature';;
   "rev-parse HEAD")
     if [[ -f "${MOCK_DIR}/rebased" ]]; then printf 'newhead'; else printf 'headsha'; fi
@@ -441,15 +446,31 @@ mkdir -p "$GUARD_DIR"
 cat > "${GUARD_DIR}/gate_worktree_guard.py" <<'EOF'
 #!/usr/bin/env python3
 import json, sys
-# Mock of the gate worktree guard's `verify` subcommand.
-assert sys.argv[1] == "verify", sys.argv
+# Mock of the gate worktree guard's read-only `preflight` command.
+assert sys.argv[1] == "preflight", sys.argv
 path = sys.argv[sys.argv.index("--path") + 1]
+packet = {
+    "worktree_path": path,
+    "index_lock_path": None,
+    "lock_exists": None,
+    "lock_mtime_utc": None,
+    "lock_age_seconds": None,
+    "lock_size_bytes": None,
+    "dirty_state": "unavailable",
+    "owner_classification": "unavailable",
+    "owner_pids": [],
+    "next_action": "restore_or_reselect_the_worktree_then_rerun_preflight",
+}
 print(json.dumps({
-    "schema": "gate_worktree_guard.v1",
-    "path": path,
-    "exists": False,
-    "classification": "missing",
-    "cleanup_owner": "owner=auto-smart-routing; pr=#5819; gate=gate-5819",
+    "schema": "gate_worktree_preflight.v1",
+    "status": "worktree_missing",
+    "worktree_health": {
+        "path": path,
+        "exists": False,
+        "cleanup_owner": "owner=auto-smart-routing; pr=#5819; gate=gate-5819",
+    },
+    "index_lock": {"worktree_path": path, "owner_classification": "unavailable"},
+    "recovery_packet": packet,
 }))
 sys.exit(1)
 EOF
@@ -529,6 +550,129 @@ else
   echo "FAIL: malformed guard output did not report a deterministic error"
   FAIL=$((FAIL + 1))
 fi
+
+# 8a. The actual local fallback worktree is preflighted even when the optional
+#     --gate-worktree-path was omitted. Every present-lock ownership result
+#     blocks before fetch/rebase/push and returns the structured recovery packet.
+LOCK_GUARD_DIR="${MOCK_DIR}/index-lock-guard"
+mkdir -p "$LOCK_GUARD_DIR"
+cat > "${LOCK_GUARD_DIR}/gate_worktree_guard.py" <<'EOF'
+#!/usr/bin/env python3
+import json
+import os
+import sys
+
+assert sys.argv[1] == "preflight", sys.argv
+path = sys.argv[sys.argv.index("--path") + 1]
+owner = os.environ["MOCK_PREFLIGHT_OWNER"]
+lock_path = os.path.join(path, ".git", "index.lock")
+packet = {
+    "worktree_path": path,
+    "index_lock_path": lock_path,
+    "lock_exists": True,
+    "lock_mtime_utc": "2026-09-27T10:00:00Z",
+    "lock_age_seconds": 45.0,
+    "lock_size_bytes": 8,
+    "dirty_state": "dirty",
+    "owner_classification": owner,
+    "owner_pids": [123] if owner == "active" else [],
+    "ownership_error": "synthetic uncertainty" if owner in {"ambiguous", "unavailable"} else None,
+    "inspection_error": None,
+    "next_action": "preserve_lock_and_worktree_then_request_manual_recovery_review",
+}
+with open(os.path.join(os.environ["MOCK_DIR"], "preflight_calls"), "a") as calls:
+    calls.write(" ".join(sys.argv[1:]) + "\n")
+print(json.dumps({
+    "schema": "gate_worktree_preflight.v1",
+    "status": "index_lock_present",
+    "worktree_health": {"path": path, "exists": True, "cleanup_owner": None},
+    "index_lock": {"worktree_path": path, "owner_classification": owner},
+    "recovery_packet": packet,
+}, separators=(",", ":")))
+raise SystemExit(1)
+EOF
+chmod +x "${LOCK_GUARD_DIR}/gate_worktree_guard.py"
+cp "$SCRIPT" "${MOCK_DIR}/update_pr_branch_safely_index_lock.sh"
+python3 - "${LOCK_GUARD_DIR}" "${MOCK_DIR}" <<'PY'
+import sys
+
+guard_dir, mock_dir = sys.argv[1:]
+script_path = f"{mock_dir}/update_pr_branch_safely_index_lock.sh"
+source = open(script_path, encoding="utf-8").read()
+source = source.replace(
+    'GUARD_HELPER="${SCRIPT_DIR}/gate_worktree_guard.py"',
+    f'GUARD_HELPER="{guard_dir}/gate_worktree_guard.py"',
+)
+open(script_path, "w", encoding="utf-8").write(source)
+PY
+chmod +x "${MOCK_DIR}/update_pr_branch_safely_index_lock.sh"
+mkdir -p "${MOCK_DIR}/current-worktree/.git"
+printf 'locked\n' > "${MOCK_DIR}/current-worktree/.git/index.lock"
+for OWNER in active proven_orphan ambiguous unavailable; do
+  make_gh
+  cat > "${MOCK_DIR}/git" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${MOCK_DIR}/git_calls"
+case "$*" in
+  "ls-remote --heads origin feature") printf 'headsha\trefs/heads/feature\n';;
+  "rev-parse --show-toplevel") printf '%s\n' "${MOCK_DIR}/current-worktree";;
+  *) echo "git mock: refusing local mutation $*" >&2; exit 1;;
+esac
+EOF
+  chmod +x "${MOCK_DIR}/git"
+  : > "${MOCK_DIR}/git_calls"
+  : > "${MOCK_DIR}/preflight_calls"
+  LOCK_BEFORE="$(<"${MOCK_DIR}/current-worktree/.git/index.lock")"
+  RC=0
+  OUT="$(MOCK_PREFLIGHT_OWNER="$OWNER" PATH="${MOCK_DIR}:$PATH" \
+    bash "${MOCK_DIR}/update_pr_branch_safely_index_lock.sh" --pr 1 --repo owner/repo \
+      --expected-head-sha headsha 2>/dev/null)" || RC=$?
+  assert_fail "${OWNER} index-lock owner blocks local fallback without an explicit gate path" "$RC"
+  assert_json "${OWNER} index-lock result is valid JSON" "$OUT"
+  if LOCK_PREFLIGHT_RESULT="$OUT" python3 - "$OWNER" \
+    "${MOCK_DIR}/current-worktree/.git/index.lock" <<'PY'
+import json
+import os
+import sys
+
+expected_owner, expected_path = sys.argv[1:]
+payload = json.loads(os.environ["LOCK_PREFLIGHT_RESULT"])
+packet = payload["recovery_packet"]
+assert payload["status"] == "index_lock_present"
+assert packet["owner_classification"] == expected_owner
+assert packet["index_lock_path"] == expected_path
+assert packet["lock_exists"] is True
+assert packet["next_action"]
+PY
+  then
+    echo "PASS: ${OWNER} recovery packet preserves lock identity and next action"
+    PASS=$((PASS + 1))
+  else
+    echo "FAIL: ${OWNER} recovery packet is incomplete"
+    FAIL=$((FAIL + 1))
+  fi
+  if grep -q "${MOCK_DIR}/current-worktree" "${MOCK_DIR}/preflight_calls"; then
+    echo "PASS: ${OWNER} preflight resolved the caller's current worktree"
+    PASS=$((PASS + 1))
+  else
+    echo "FAIL: ${OWNER} preflight did not resolve the caller's current worktree"
+    FAIL=$((FAIL + 1))
+  fi
+  if grep -Eq '^(fetch|rebase|push) ' "${MOCK_DIR}/git_calls"; then
+    echo "FAIL: ${OWNER} lock-present fallback attempted a local Git mutation"
+    FAIL=$((FAIL + 1))
+  else
+    echo "PASS: ${OWNER} lock-present fallback attempted no local Git mutation"
+    PASS=$((PASS + 1))
+  fi
+  if [[ "$(<"${MOCK_DIR}/current-worktree/.git/index.lock")" == "$LOCK_BEFORE" ]]; then
+    echo "PASS: ${OWNER} lock-present fallback preserved index.lock bytes"
+    PASS=$((PASS + 1))
+  else
+    echo "FAIL: ${OWNER} lock-present fallback changed index.lock"
+    FAIL=$((FAIL + 1))
+  fi
+done
 
 # 9. Deleted PR source ref restore (issue #6689): when the head branch is
 #    missing on the remote, the wrapper restores refs/heads/<head-ref> with a

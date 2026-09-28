@@ -1,0 +1,33 @@
+{
+  "version": "SNQI-v2.0",
+  "weights": {
+    "w_S": {
+      "value": 1.0,
+      "rationale": "Unit reward for reaching the goal."
+    },
+    "w_C": {
+      "value": 2.0,
+      "rationale": "Strictly exceeds success plus all quality penalties, preserving collision strata."
+    },
+    "w_T": {
+      "value": 0.25,
+      "rationale": "Efficiency equals one pedestrian-side term; failures incur no additional time penalty."
+    },
+    "w_N": {
+      "value": 0.25,
+      "rationale": "Threshold exposure to close clearance; equal priority to continuous robot force."
+    },
+    "w_F": {
+      "value": 0.25,
+      "rationale": "Continuous robot-attributable force; equal priority to close-clearance exposure."
+    },
+    "w_J": {
+      "value": 0.1,
+      "rationale": "Robot motion quality proxy, subordinate to pedestrian-side effects."
+    },
+    "w_K": {
+      "value": 0.1,
+      "rationale": "Explicit curvature penalty; geometry partly determines turning, so equal low weight to jerk."
+    }
+  }
+}

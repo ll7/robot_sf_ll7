@@ -45,6 +45,12 @@ arm wrote six episodes; both completed without run failures. Scenario and metric
 except for the selector-dependent algorithm-config hash and kernel-version field. Every episode row
 records the expected source commit and kernel selector.
 
+The source commit predates PR-base refresh and is not in the current PR ancestry. Its implementation,
+config, scenario, and test files were compared with current-base implementation commit
+`1340824b69d8cc6c059e2f0de41865bfb60310bb`; all compared files are byte-identical. The focused
+regression suite was rerun after that transplant on PR head
+`d1c83ea367aaf9b950b0dc7907fccc58aee69309` (85 passed, 1 expected xfail).
+
 | Scenario | Seed | Legacy | Wrapped | Steps (legacy/wrapped) | Maximum recorded position difference |
 |---|---:|---|---|---:|---:|
 | `classic_group_crossing_medium` | 111 | success | success | 183/183 | 0.0666880473 m |

@@ -718,6 +718,9 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         points, normals, distances = self._visible_obstacle_points(
             observation, robot_pos, robot_heading
         )
+        failure_reason = getattr(self, "_obstacle_grid_payload_failure_reason", None)
+        if isinstance(failure_reason, str) and failure_reason:
+            self._record_obstacle_force_fallback(failure_reason)
         robot_radius = float(self._as_1d_float(robot_state.get("radius", [0.0]), pad=1)[0])
         strength = float(self.config.social_force_obstacle_v2_strength)
         length = max(float(self.config.social_force_obstacle_v2_length), self._EPS)

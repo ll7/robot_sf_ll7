@@ -790,6 +790,92 @@ def test_runtime_fallback_marker_allows_nested_empty_reason_with_explicit_false_
     )
 
 
+def test_runtime_fallback_marker_accepts_unused_diagnostic_receipt() -> None:
+    """Diagnostic receipt fallback state is distinct from runtime status telemetry."""
+    assert (
+        runtime_fallback_or_degraded_marker(
+            {
+                "obstacle_force_law": {
+                    "sites": {
+                        "fast_pysf": {
+                            "diagnostic_receipt": {
+                                "fallback": {
+                                    "used": False,
+                                    "count": 0,
+                                    "first_reason": None,
+                                    "reasons": {},
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        )
+        is None
+    )
+
+
+def test_runtime_fallback_marker_rejects_used_diagnostic_receipt() -> None:
+    """Used diagnostic fallback remains inadmissible even without legacy aliases."""
+    assert runtime_fallback_or_degraded_marker(
+        {
+            "diagnostic_receipt": {
+                "fallback": {
+                    "used": True,
+                    "count": 1,
+                    "first_reason": "malformed_grid",
+                    "reasons": {"malformed_grid": 1},
+                }
+            }
+        }
+    ) == ("diagnostic_receipt.fallback.used", "true")
+
+
+def test_runtime_fallback_marker_rejects_malformed_diagnostic_receipt() -> None:
+    """Malformed structured receipt state fails closed rather than being ignored."""
+    assert runtime_fallback_or_degraded_marker(
+        {
+            "diagnostic_receipt": {
+                "fallback": {
+                    "used": False,
+                    "count": 1,
+                    "first_reason": None,
+                    "reasons": {},
+                }
+            }
+        }
+    ) == ("diagnostic_receipt.fallback", "invalid")
+
+
+def test_runtime_fallback_marker_accepts_unused_receipt_alias_projection() -> None:
+    """The receipt's lossless false aliases remain neutral runtime metadata."""
+    assert (
+        runtime_fallback_or_degraded_marker(
+            {
+                "fallback": False,
+                "fallback_triggered": False,
+                "fallback_count": 0,
+                "fallback_reason": None,
+                "fallback_reasons": {},
+            }
+        )
+        is None
+    )
+
+
+def test_runtime_fallback_marker_rejects_positive_receipt_alias_projection() -> None:
+    """A positive receipt alias still blocks benchmark admission."""
+    assert runtime_fallback_or_degraded_marker(
+        {
+            "fallback": True,
+            "fallback_triggered": True,
+            "fallback_count": 1,
+            "fallback_reason": "malformed_grid",
+            "fallback_reasons": {"malformed_grid": 1},
+        }
+    ) == ("fallback", "true")
+
+
 def test_summarize_benchmark_availability_rejects_runtime_fallback_marker() -> None:
     """Runtime fallback metadata must prevent a successful benchmark classification."""
     summary = {

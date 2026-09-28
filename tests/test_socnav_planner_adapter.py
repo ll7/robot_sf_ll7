@@ -15,6 +15,7 @@ from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_mark
 from robot_sf.planner import socnav as _socnav_module
 from robot_sf.planner import socnav_social_force as _social_force_module
 from robot_sf.planner.socnav import (
+    SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2,
     HRVOPlannerAdapter,
     ORCAPlannerAdapter,
     PredictionPlannerAdapter,
@@ -1795,6 +1796,86 @@ def test_social_force_malformed_metadata_records_degraded_fallback_after_valid_s
     assert metadata["fallback_count"] == 1
     assert metadata["fallback_reasons"] == {"malformed_or_nonfinite_occupancy_grid_metadata": 1}
     json.dumps(metadata, allow_nan=False)
+
+
+@_sf_available
+def test_social_force_v2_malformed_grid_metadata_records_degraded_fallback():
+    """The resolution-independent obstacle path preserves malformed-grid provenance."""
+    adapter = SocialForcePlannerAdapter(
+        SocNavPlannerConfig(
+            social_force_planner_version=SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2
+        )
+    )
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0)),
+        obstacle_cells=[(2, 3)],
+    )
+    obs["occupancy_grid_meta_resolution"] = np.array([np.nan], dtype=np.float32)
+
+    force = adapter._compute_obstacle_force(
+        obs,
+        np.array([0.0, 0.0]),
+        0.0,
+        np.zeros(2, dtype=float),
+        obs["robot"],
+    )
+
+    metadata = adapter.diagnostics()["obstacle_force_law"]
+    assert np.array_equal(force, np.zeros(2))
+    assert metadata["applied"] is False
+    assert metadata["fallback"] is True
+    assert metadata["fallback_count"] == 1
+    assert metadata["fallback_reason"] == ("malformed_or_nonfinite_occupancy_grid_metadata")
+    assert metadata["fallback_reasons"] == {"malformed_or_nonfinite_occupancy_grid_metadata": 1}
+
+
+@_sf_available
+@pytest.mark.parametrize(
+    ("planner_version", "metadata_key", "metadata_value"),
+    [
+        (None, "origin", np.array([[0.0, 0.0]], dtype=np.float32)),
+        (None, "resolution", np.array([[1.0]], dtype=np.float32)),
+        (
+            SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2,
+            "origin",
+            np.array([[0.0, 0.0]], dtype=np.float32),
+        ),
+        (
+            SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2,
+            "resolution",
+            np.array([[1.0]], dtype=np.float32),
+        ),
+    ],
+)
+def test_social_force_shaped_grid_metadata_fails_closed(
+    planner_version, metadata_key, metadata_value
+):
+    """Size-valid but shaped metadata must take the structured degraded path."""
+    config = (
+        SocNavPlannerConfig()
+        if planner_version is None
+        else SocNavPlannerConfig(social_force_planner_version=planner_version)
+    )
+    adapter = SocialForcePlannerAdapter(config)
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0)),
+        obstacle_cells=[(2, 3)],
+    )
+    obs[f"occupancy_grid_meta_{metadata_key}"] = metadata_value
+
+    force = adapter._compute_obstacle_force(
+        obs,
+        np.array([0.0, 0.0]),
+        0.0,
+        np.zeros(2, dtype=float),
+        obs["robot"],
+    )
+
+    metadata = adapter.diagnostics()["obstacle_force_law"]
+    assert np.array_equal(force, np.zeros(2))
+    assert metadata["fallback"] is True
+    assert metadata["fallback_count"] == 1
+    assert metadata["fallback_reason"] == ("malformed_or_nonfinite_occupancy_grid_metadata")
 
 
 @_sf_available

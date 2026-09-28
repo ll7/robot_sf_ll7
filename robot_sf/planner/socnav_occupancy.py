@@ -287,11 +287,14 @@ class OccupancyAwarePlannerMixin:
             self._obstacle_grid_payload_failure_reason = self._OBSTACLE_GRID_METADATA_FAILURE_REASON
             return None
         if (
-            resolution_arr.size != 1
+            resolution_arr.ndim != 1
+            or resolution_arr.size != 1
             or not np.all(np.isfinite(resolution_arr))
             or resolution_arr[0] <= 0.0
+            or origin_arr.ndim != 1
             or origin_arr.size != 2
             or not np.all(np.isfinite(origin_arr))
+            or use_ego_arr.ndim != 1
             or use_ego_arr.size != 1
             or not np.all(np.isfinite(use_ego_arr))
         ):

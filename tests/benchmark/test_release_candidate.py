@@ -14,6 +14,7 @@ import yaml
 
 from robot_sf.benchmark import release_candidate, spawn_preflight
 from robot_sf.benchmark.release_candidate import (
+    _APPROVED_008_HYBRID_CONFIGS,
     _APPROVED_008_PLANNER_KEYS,
     CANDIDATE_SCHEMA,
     _expected_input_paths,
@@ -49,6 +50,8 @@ def candidate_repo(tmp_path: Path) -> tuple[Path, Path, dict]:
     config["scenario_matrix"] = MATRIX.relative_to(SOURCE_ROOT).as_posix()
     for planner, approved_key in zip(config["planners"], _APPROVED_008_PLANNER_KEYS, strict=True):
         planner["key"] = approved_key
+        if approved_key in _APPROVED_008_HYBRID_CONFIGS:
+            planner["algo_config"] = _APPROVED_008_HYBRID_CONFIGS[approved_key]
     scenarios = load_scenarios_for_validation(MATRIX, base_dir=SOURCE_ROOT)
     assert scenarios.load_error is None and not scenarios.load_issues and not scenarios.entry_issues
     rows = [dict(row) for row in scenarios.scenarios]
@@ -162,6 +165,44 @@ def test_candidate_rejects_missing_input_pin(candidate_repo) -> None:
         load_prepublication_candidate(path, repository_root=root)
 
 
+@pytest.mark.parametrize(
+    "nested_path",
+    [
+        "configs/algos/hybrid_rule_v4_clearance_braking.yaml",
+        "configs/algos/issue707_orca_tuned.yaml",
+    ],
+)
+def test_candidate_pins_nested_policy_search_configs(candidate_repo, nested_path: str) -> None:
+    root, path, payload = candidate_repo
+    assert nested_path in payload["sha256_files"]
+    del payload["sha256_files"][nested_path]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="pin exactly the input closure"):
+        load_prepublication_candidate(path, repository_root=root)
+
+
+def test_candidate_rejects_changed_nested_policy_search_config(candidate_repo) -> None:
+    root, path, payload = candidate_repo
+    nested_path = "configs/algos/hybrid_rule_v4_clearance_braking.yaml"
+    with (root / nested_path).open("a", encoding="utf-8") as stream:
+        stream.write("\n# changed after candidate creation\n")
+    _git(root, "add", nested_path)
+    _git(
+        root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "changed nested planner config",
+    )
+    payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="sha256_files hash mismatch"):
+        load_prepublication_candidate(path, repository_root=root)
+
+
 def test_candidate_rejects_roster_and_publication_coordinates(candidate_repo) -> None:
     root, path, payload = candidate_repo
     changed = copy.deepcopy(payload)
@@ -200,6 +241,62 @@ def test_candidate_rejects_jointly_rewritten_planner_key(candidate_repo) -> None
     payload["source_commit"] = _git(root, "rev-parse", "HEAD")
     path.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(ValueError, match="approved 0.0.8 14-slot roster"):
+        load_prepublication_candidate(path, repository_root=root)
+
+
+def test_candidate_rejects_v4_key_bound_to_historical_v3_config(candidate_repo) -> None:
+    root, path, payload = candidate_repo
+    config_path = root / payload["canonical_campaign_config"]
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["planners"][7]["algo_config"] = (
+        "configs/policy_search/candidates/"
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_s30_h600_release.yaml"
+    )
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    payload["sha256_files"][payload["canonical_campaign_config"]] = hashlib.sha256(
+        config_path.read_bytes()
+    ).hexdigest()
+    _git(root, "add", payload["canonical_campaign_config"])
+    _git(
+        root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "misbound v4 planner key",
+    )
+    payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="must bind its v4 config path"):
+        load_prepublication_candidate(path, repository_root=root)
+
+
+def test_candidate_rejects_v4_config_bound_to_historical_v3_base(candidate_repo) -> None:
+    root, path, payload = candidate_repo
+    config_path = _APPROVED_008_HYBRID_CONFIGS[
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4"
+    ]
+    manifest_path = root / config_path
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    manifest["base_config_path"] = "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml"
+    manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+    payload["sha256_files"][config_path] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    _git(root, "add", config_path)
+    _git(
+        root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "misbound v4 planner base",
+    )
+    payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="must bind the v4 base config"):
         load_prepublication_candidate(path, repository_root=root)
 
 

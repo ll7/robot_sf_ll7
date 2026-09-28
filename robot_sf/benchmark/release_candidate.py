@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.policy_search_manifest import is_candidate_manifest
+from robot_sf.benchmark.release_acceptance import _full_release_nested_config_path
 from robot_sf.benchmark.release_protocol import (
     BenchmarkReleaseManifest,
     _load_mapping,
@@ -54,6 +56,24 @@ _APPROVED_008_PLANNER_KEYS = (
     "predictive_mppi",
     "risk_dwa",
 )
+_APPROVED_008_HYBRID_CONFIGS = {
+    "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": (
+        "configs/policy_search/candidates/"
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release.yaml"
+    ),
+    "scenario_adaptive_hybrid_orca_v2_collision_guard_v4": (
+        "configs/policy_search/candidates/"
+        "scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release.yaml"
+    ),
+    "hybrid_rule_v4_fast_progress_static_escape": (
+        "configs/policy_search/candidates/"
+        "hybrid_rule_v4_fast_progress_static_escape_s30_h600_release.yaml"
+    ),
+    "hybrid_rule_v4_fast_progress_static_escape_continuous": (
+        "configs/policy_search/candidates/"
+        "hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release.yaml"
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -104,6 +124,47 @@ def _verify_source_checkout(root: Path, source_sha: str) -> None:
         raise ValueError("candidate source checkout must have no tracked changes")
 
 
+def _planner_config_paths(root: Path, config_path: Path) -> set[Path]:
+    """Collect a policy-search manifest and its runtime base configs.
+
+    Returns:
+        Source files whose bytes the candidate must pin.
+    """
+    paths = {config_path}
+    manifest = _load_mapping(config_path)
+    if not is_candidate_manifest(manifest):
+        return paths
+
+    if "base_config_path" in manifest:
+        paths.add(
+            _full_release_nested_config_path(
+                manifest["base_config_path"],
+                config_anchor=config_path.parent,
+                source_repository_root=root,
+                label="candidate planner base_config_path",
+            )
+        )
+    overrides = manifest.get("scenario_algo_overrides")
+    if overrides is not None:
+        if not isinstance(overrides, dict):
+            raise ValueError("candidate planner scenario_algo_overrides must be a mapping")
+        for scenario_id, override in overrides.items():
+            if not isinstance(override, dict):
+                raise ValueError(
+                    f"candidate planner scenario_algo_overrides[{scenario_id!r}] must be a mapping"
+                )
+            if "base_config_path" in override:
+                paths.add(
+                    _full_release_nested_config_path(
+                        override["base_config_path"],
+                        config_anchor=config_path.parent,
+                        source_repository_root=root,
+                        label=f"candidate planner scenario_algo_overrides[{scenario_id!r}].base_config_path",
+                    )
+                )
+    return paths
+
+
 def _expected_input_paths(
     root: Path,
     config_path: Path,
@@ -133,7 +194,16 @@ def _expected_input_paths(
     paths.add(seed_sets_path)
     for planner in planners:
         if planner.get("algo_config"):
-            paths.add(_root_file(root, planner["algo_config"], "planner.algo_config"))
+            config_path = _root_file(root, planner["algo_config"], "planner.algo_config")
+            if planner["key"] in _APPROVED_008_HYBRID_CONFIGS:
+                manifest = _load_mapping(config_path)
+                if manifest.get("base_config_path") != (
+                    "configs/algos/hybrid_rule_v4_clearance_braking.yaml"
+                ):
+                    raise ValueError(
+                        f"v4 hybrid slot {planner['key']} must bind the v4 base config"
+                    )
+            paths.update(_planner_config_paths(root, config_path))
     for scenario in scenarios:
         if scenario.get("map_id"):
             raise ValueError("candidate scenarios must resolve to explicit map_file paths")
@@ -199,6 +269,10 @@ def _candidate_planners(
         raise ValueError("planners.keys must equal the 14 ordered enabled campaign arms")
     if observed_keys != _APPROVED_008_PLANNER_KEYS:
         raise ValueError("campaign planner keys differ from the approved 0.0.8 14-slot roster")
+    for row in enabled:
+        expected_config = _APPROVED_008_HYBRID_CONFIGS.get(row["key"])
+        if expected_config is not None and row.get("algo_config") != expected_config:
+            raise ValueError(f"v4 hybrid slot {row['key']} must bind its v4 config path")
     return observed_keys, enabled
 
 

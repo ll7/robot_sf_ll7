@@ -773,6 +773,31 @@ def _native_outcome_status(
     return SUCCESS_STATUS
 
 
+def _expected_row_provenance(
+    expected: Mapping[str, Any], *, source_commit: str, manifest_hash: str, status: str
+) -> dict[str, Any]:
+    """Preserve the validated identity contract even when execution is incomplete."""
+    return {
+        "provenance_status": "expected_identity_only",
+        "identity_key": expected["identity_key"],
+        "scenario_id": expected["scenario_id"],
+        "scenario_source_sha256": expected["scenario_source_sha256"],
+        "regime_id": expected["regime_id"],
+        "planner_id": expected["planner_id"],
+        "planner_config_sha256": expected["planner_config_sha256"],
+        "seed": expected["seed"],
+        "horizon_steps": expected["horizon_steps"],
+        "dt_seconds": expected["dt_seconds"],
+        "robot_speed_cap_m_s": expected["robot_speed_cap_m_s"],
+        "runtime_controls": dict(expected["runtime_controls"]),
+        "execution_mode": expected["execution_mode"],
+        "protocol_semantic_hash": EXPECTED_PROTOCOL_SEMANTIC_HASH,
+        "manifest_hash": manifest_hash,
+        "source_commit": source_commit,
+        "terminal_status": status,
+    }
+
+
 def _normalize_outcome(
     expected: Mapping[str, Any],
     outcome: Mapping[str, Any],
@@ -794,6 +819,13 @@ def _normalize_outcome(
         if isinstance(supplied_provenance, Mapping):
             _assert_no_transient_state(supplied_provenance, "row.provenance")
             row["provenance"] = dict(supplied_provenance)
+        else:
+            row["provenance"] = _expected_row_provenance(
+                expected,
+                source_commit=source_commit,
+                manifest_hash=manifest_hash,
+                status=terminal_status,
+            )
         return row
 
     if not isinstance(status, str) or status not in TERMINAL_STATUSES:
@@ -849,6 +881,12 @@ def account_production_rows(
                     "terminal_status": "missing",
                     "missingness": "missing",
                     "reason": "executor emitted no outcome for this identity",
+                    "provenance": _expected_row_provenance(
+                        expected,
+                        source_commit=source_commit,
+                        manifest_hash=str(manifest["manifest_hash"]),
+                        status="missing",
+                    ),
                 }
             )
         elif len(observed) != 1:
@@ -858,6 +896,12 @@ def account_production_rows(
                     "terminal_status": "duplicate",
                     "missingness": "duplicate",
                     "reason": "executor emitted multiple outcomes for this identity",
+                    "provenance": _expected_row_provenance(
+                        expected,
+                        source_commit=source_commit,
+                        manifest_hash=str(manifest["manifest_hash"]),
+                        status="duplicate",
+                    ),
                 }
             )
         else:

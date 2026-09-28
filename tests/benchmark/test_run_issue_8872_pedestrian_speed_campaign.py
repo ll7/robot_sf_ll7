@@ -191,6 +191,7 @@ def test_fake_native_runtime_accounts_all_rows_once() -> None:
     assert report["terminal_status_counts"] == {campaign.SUCCESS_STATUS: campaign.EXPECTED_ROWS}
     assert len(report["rows"]) == campaign.EXPECTED_ROWS
     assert all(row["missingness"] is None for row in report["rows"])
+    assert all("provenance" in row for row in report["rows"])
 
 
 def test_fallback_row_is_recorded_but_never_admitted() -> None:

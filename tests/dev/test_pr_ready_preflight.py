@@ -257,6 +257,10 @@ def _write_evidence_preflight_transport(repo: Path, *, ratchet_exit: int = 0) ->
     checker.write_text(
         "# Fake transport target; never run a real evidence scan.\n", encoding="utf-8"
     )
+    docs_checker = repo / "scripts" / "dev" / "check_docs_evidence_integrity.py"
+    docs_checker.write_text(
+        "# Fake transport target; never run a real docs-evidence scan.\n", encoding="utf-8"
+    )
     python = repo / "bin" / "python"
     fallback = python.read_text(encoding="utf-8").split("\n", 1)[1]
     python.write_text(
@@ -280,6 +284,259 @@ def _write_evidence_preflight_transport(repo: Path, *, ratchet_exit: int = 0) ->
     _git(repo, "commit", "-q", "-m", "evidence transport fixture")
     _git(repo, "branch", "preflight-base")
     return trace
+
+
+def _write_docs_evidence_preflight_transport(
+    repo: Path, *, checker_exit: int = 0, run_real_checker: bool = False
+) -> Path:
+    """Record docs-evidence checker, formatter, and test-lane boundaries."""
+    _make_fake_bin(repo, fail=False)
+    trace = _write_lane_logging_stub(repo)
+    scripts_dir = repo / "scripts" / "dev"
+    checker = scripts_dir / "check_docs_evidence_integrity.py"
+    if run_real_checker:
+        shutil.copy2(SCRIPTS_DEV / checker.name, checker)
+    else:
+        checker.write_text(
+            "# Fake transport target; never run a real integrity scan.\n", encoding="utf-8"
+        )
+    # Existing evidence paths also pass through the registry preflight. Keep
+    # that prerequisite present while the fake Python transport records only
+    # the checker owned by these tests.
+    (scripts_dir / "evidence_registry_ratchet.py").write_text(
+        "# Fake transport target; never run a real evidence scan.\n", encoding="utf-8"
+    )
+    python = repo / "bin" / "python"
+    fallback = python.read_text(encoding="utf-8").split("\n", 1)[1]
+    if run_real_checker:
+        docs_checker_transport = (
+            '    printf "docs %s %s\\n" "$2" "$3" >> "$PWD/lane.log"\n'
+            f'exec "{sys.executable}" "$@" ;;\n'
+        )
+    else:
+        docs_checker_transport = (
+            '    printf "docs %s %s\\n" "$2" "$3" >> "$PWD/lane.log"\n'
+            '    printf "fixture docs-evidence diagnostic\\n" >&2\n'
+            f"    exit {checker_exit} ;;\n"
+        )
+    python.write_text(
+        "#!/usr/bin/env bash\n"
+        'case "${1##*/}" in\n'
+        "  check_docs_evidence_integrity.py)\n"
+        + docs_checker_transport
+        + "  pr_ready_freshness.py)\n"
+        '    printf "stamp\\n" >> "$PWD/lane.log" ;;\n'
+        "esac\n" + fallback,
+        encoding="utf-8",
+    )
+    formatter = scripts_dir / "ruff_fix_format.sh"
+    formatter.write_text(
+        '#!/usr/bin/env bash\nprintf "format\\n" >> "$PWD/lane.log"\n',
+        encoding="utf-8",
+    )
+    formatter.chmod(0o755)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "docs-evidence transport fixture")
+    _git(repo, "branch", "preflight-base")
+    return trace
+
+
+def _hosted_docs_evidence_input_examples() -> list[str]:
+    """Exercise each current hosted docs-evidence path filter locally."""
+    workflow = REPO_ROOT / ".github/workflows/docs-evidence-integrity.yml"
+    payload = yaml.load(workflow.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+    return [
+        pattern.replace("**", "sample").replace("*", "sample")
+        for pattern in payload["on"]["pull_request"]["paths"]
+    ]
+
+
+@pytest.mark.parametrize("changed_path", _hosted_docs_evidence_input_examples())
+def test_final_docs_evidence_preflight_matches_every_hosted_filter(
+    preflight_repo: Path, changed_path: str
+) -> None:
+    """Each hosted path filter must invoke the same checker in final readiness."""
+    trace = _write_docs_evidence_preflight_transport(preflight_repo)
+    path = preflight_repo / changed_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("changed fixture\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "change hosted docs-evidence input")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = trace.read_text(encoding="utf-8").splitlines()
+    assert calls[0] == "docs --base-ref preflight-base"
+    assert "core --lane core" in calls
+    assert calls[-1] == "stamp"
+
+
+def test_final_docs_evidence_preflight_skips_code_only_changes(
+    preflight_repo: Path,
+) -> None:
+    """Code-only changes outside the hosted filters keep the checker skipped."""
+    trace = _write_docs_evidence_preflight_transport(preflight_repo)
+    code = preflight_repo / "scripts/code_only.py"
+    code.parent.mkdir(parents=True, exist_ok=True)
+    code.write_text("code-only fixture\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "code-only change")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert trace.read_text(encoding="utf-8").splitlines() == [
+        "format",
+        "core --lane core",
+        "stamp",
+    ]
+
+
+def test_final_docs_evidence_preflight_passes_selected_base_to_checker(
+    preflight_repo: Path,
+) -> None:
+    """The checker receives the exact BASE_REF selected for readiness."""
+    trace = _write_docs_evidence_preflight_transport(preflight_repo)
+    docs = preflight_repo / "docs/guide.md"
+    docs.parent.mkdir(parents=True)
+    docs.write_text("doc fixture\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "change docs")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert trace.read_text(encoding="utf-8").splitlines()[0] == "docs --base-ref preflight-base"
+
+
+def test_final_docs_evidence_checker_failure_stops_before_formatting_and_tests(
+    preflight_repo: Path,
+) -> None:
+    """The checker status is returned unchanged before any expensive lane starts."""
+    trace = _write_docs_evidence_preflight_transport(preflight_repo, checker_exit=73)
+    docs = preflight_repo / "docs/guide.md"
+    docs.parent.mkdir(parents=True)
+    docs.write_text("doc fixture\n", encoding="utf-8")
+    code = preflight_repo / "changed.py"
+    code.write_text("pass\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "change docs and code")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == 73, result.stdout + result.stderr
+    assert "fixture docs-evidence diagnostic" in result.stderr
+    assert trace.read_text(encoding="utf-8").splitlines() == ["docs --base-ref preflight-base"]
+
+
+def test_final_docs_evidence_scope_git_failure_is_not_an_empty_success(
+    preflight_repo: Path,
+) -> None:
+    """A failed docs-path producer stops before its checker or test lanes."""
+    trace = _write_docs_evidence_preflight_transport(preflight_repo)
+    docs = preflight_repo / "docs/guide.md"
+    docs.parent.mkdir(parents=True)
+    docs.write_text("doc fixture\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "change docs")
+    git = preflight_repo / "bin/git"
+    git.write_text(
+        "#!/usr/bin/env bash\n"
+        'for arg in "$@"; do\n'
+        '  if [[ "$arg" == "--no-renames" ]]; then\n'
+        '    count_file="$HOME/no-renames-count"\n'
+        "    count=0\n"
+        '    [[ ! -f "$count_file" ]] || read -r count < "$count_file"\n'
+        "    count=$((count + 1))\n"
+        '    printf "%s\\n" "$count" > "$count_file"\n'
+        '    if [[ "$count" -eq 2 ]]; then\n'
+        '      printf "fixture docs Git enumeration failed\\n" >&2\n'
+        "      exit 128\n"
+        "    fi\n"
+        "  fi\n"
+        "done\n"
+        f'exec "{shutil.which("git")}" "$@"\n',
+        encoding="utf-8",
+    )
+    git.chmod(0o755)
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == 128, result.stdout + result.stderr
+    assert "fixture docs Git enumeration failed" in result.stderr
+    assert "Cannot resolve final docs-evidence integrity input scope" in result.stderr
+    assert not trace.exists()
+
+
+def test_final_docs_evidence_preflight_preserves_embedded_newline_path(
+    preflight_repo: Path,
+) -> None:
+    """NUL-framed changed paths classify names containing embedded newlines."""
+    trace = _write_docs_evidence_preflight_transport(preflight_repo)
+    path = preflight_repo / "docs/context/new\nmanifest.json"
+    path.parent.mkdir(parents=True)
+    path.write_text("{}\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "change newline docs path")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert trace.read_text(encoding="utf-8").splitlines()[0] == "docs --base-ref preflight-base"
+
+
+def test_final_docs_evidence_unregistered_file_fails_with_real_checker(
+    preflight_repo: Path,
+) -> None:
+    """An unregistered evidence addition fails the canonical entry point before test lanes."""
+    registered = preflight_repo / "docs/context/evidence/registered/README.md"
+    registered.parent.mkdir(parents=True)
+    registered.write_text("Registered fixture.\n", encoding="utf-8")
+    catalog = preflight_repo / "docs/context/catalog.yaml"
+    catalog.parent.mkdir(parents=True, exist_ok=True)
+    catalog.write_text(
+        "version: 1\n"
+        "status_values:\n  evidence: Evidence pointer.\n"
+        "freshness_values:\n  evidence: Evidence pointer.\n"
+        "entries:\n"
+        "  - path: docs/context/evidence/registered\n"
+        "    status: evidence\n"
+        "    freshness: evidence\n",
+        encoding="utf-8",
+    )
+    trace = _write_docs_evidence_preflight_transport(preflight_repo, run_real_checker=True)
+    unregistered = preflight_repo / "docs/context/evidence/issue_9710_unregistered.json"
+    unregistered.write_text("{}\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "add unregistered evidence")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "issue_9710_unregistered.json: evidence file is not registered" in result.stderr
+    assert trace.read_text(encoding="utf-8").splitlines() == ["docs --base-ref preflight-base"]
 
 
 @pytest.mark.parametrize("ratchet_exit", [1, 2])

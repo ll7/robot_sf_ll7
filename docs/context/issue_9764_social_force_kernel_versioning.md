@@ -46,40 +46,56 @@ that contact behavior after the angle-wrap correction, the existing deterministi
 and 1.3 m/s crossing rollouts now also run with both `surface_v3` and `wrapped_v2` selected. At both
 `dt=0.1 s` and `dt=0.05 s`, the tests require swept clearance above 0.05 m; all four wrapped-kernel
 cases pass. The focused kernel, planner, simulator, benchmark-registry, and metamorphic command
-passes 180 tests with one expected strict xfail tracked under #9733. The exact-head run log is
-preserved under `.git/codex-agent-runs/issue-9764-social-force-final/`.
+passes 180 tests with one strict xfail tracked under #9733. The exact code-tree run log is preserved
+under `.git/codex-agent-runs/issue-9764-social-force-final/wrapped-kernel-recheck-5e197930/`.
 
 This is a narrow compatibility recheck of those two fixtures, not the reviewer's complete six-case
-probe set or evidence of general contact safety. The #9764 paired diagnostic above used the default
-legacy pedestrian term and recorded one collision in each kernel arm. Its referenced private bundle
-was not present in the current task artifact directory, so those raw rows were not reanalyzed here.
-The candidate matrix selects `wrapped_v2` but does not select `surface_v3`; this recheck does not
-change that release input or claim that the kernel wrap fixes the separate pedestrian-force defect.
+probe set or evidence of general contact safety. The paired diagnostic below retains the legacy
+pedestrian-force term. The candidate matrix selects `wrapped_v2` but does not select `surface_v3`;
+this recheck does not change that release input or claim that the kernel wrap fixes the separate
+pedestrian-force defect.
 
-## Quarantine and replacement diagnostic — 2026-09-28
+## Reproduced paired diagnostic — 2026-09-28
 
-The earlier paired runs on seeds 111–113 used the reserved #9668 evaluation range. Their episode
-records, comparison, interaction counts, and #9758 recheck are **quarantined and uncited**. They
-remain in the private host bundle `issue9764-social-force-kernel-paired-diagnostic-450ca42b` for
-custody only, with a `QUARANTINED.md` marker. No report should cite those values. The FIX review
-classified this as a process slip, with no #9668 exception needed after replacement.
+Earlier paired runs on seeds 111–113 used the reserved #9668 evaluation range. Their outputs remain
+quarantined and uncited in the private host bundle `issue9764-social-force-kernel-paired-diagnostic-450ca42b`,
+which carries a `QUARANTINED.md` marker. No values from that run are used below. The previous safe
+103–105 bundle was not retrievable from this checkout, so this is a fresh replacement run rather
+than a reanalysis of that unavailable bundle. Both selector arms ran on
+source commit `ca1b5f1d33ebfa3d466f384f2636bb001dccf23f` (tree
+`437db28eb434038bac9aa8c9e3341e5c97dc343b`) with the paired scenario and planner configs, seeds
+103–105, 600-step horizon, 0.1 s step, one worker, recorded forces, and recorded simulation-step
+traces. All 12 episode jobs completed without runner failures. The raw records verified the intended
+kernel selector in both simulator and planner metadata, and all six pairs used the same map identity.
 
-The paired diagnostic input files now select seeds 103–105 for the same two scenarios. The rerun
-uses the committed source `cb5399fcedcb8b968f3ea74fe6b24fd5d16eeda8`, 600 steps, 0.1 s
-step time, one worker, recorded forces and simulation-step traces. Its private bundle key is
-`issue9764-social-force-kernel-paired-diagnostic-safe-103-105-cb5399fc`.
+The analyzer compares robot-attributable pedestrian-force vectors by the simulator's pedestrian
+row index. A changed interaction is one paired vector whose L2 difference exceeds `1e-9 m/s²`.
+The episode schema does not attach actor IDs to each force sample, so these counts are not attributed
+to named pedestrians. Trajectory differences use aligned trace step/time and pedestrian actor IDs.
+For pairs with different episode lengths, force and trajectory comparisons use the common prefix.
 
-Both arms completed six episodes, all with terminal status and the expected selector and source
-commit in each row. The paired analyzer verified equal scenario and metric parameters apart from
-selector-dependent provenance, matched map identity, aligned trace times, and six matching terminal
-outcomes. Five pairs ended in success in both arms; one pair ended in collision in both arms. The
-largest same-index recorded robot or pedestrian position difference over common trace prefixes was
-0.675855495 m. Several metrics changed. These observations are bounded to these six pairs.
+Across the six pairs, 555 of 4,898 compared robot-attributable force samples changed above the
+threshold; 565 legacy samples and 560 wrapped samples were nonzero. The largest force-vector
+difference was `0.580119708 m/s²`. Maximum same-index trajectory differences were `0.103352465 m`
+for the robot and `0.675855495 m` for a pedestrian. Terminal outcomes matched in all six pairs: five
+successes and one collision. The `classic_head_on_corridor_medium` seed 104 pair had 310 legacy
+versus 309 wrapped trace/force samples; both ended in success and 309 common samples were compared.
 
-The private bundle contains the raw episode rows, provenance receipts, logs, analyzer, comparison,
-manifest, and `SHA256SUMS` for all ten files. The legacy and wrapped episode files have SHA-256
-`ef231fb80c23b24a1e01f2d80ec4661c93687e2fd37ab91c4d098ad6f5b79a21` and
-`4b139f40bd5a3bf6ac1683d989e04643e4dfbf0366f31e437a48b2f8410bb02e`; the comparison
-has SHA-256 `e5cd2d275608a33f5dbc165e861f912e276e8118291e7b9e6a954fadf2bd0a6c`.
-`sha256sum -c SHA256SUMS` passed for the new bundle. This remains diagnostic-only, with no
-release-row equivalence or paper-facing claim.
+| Scenario | Seed | Legacy outcome | Wrapped outcome | Changed force samples / compared | Robot max Δ (m) | Pedestrian max Δ (m) |
+|---|---:|---|---|---:|---:|---:|
+| `classic_group_crossing_medium` | 103 | success | success | 55 / 534 | 0.036253987 | 0.015236386 |
+| `classic_group_crossing_medium` | 104 | success | success | 79 / 495 | 0.003812179 | 0.351632257 |
+| `classic_group_crossing_medium` | 105 | collision | collision | 30 / 237 | 0.038425055 | 0.006943980 |
+| `classic_head_on_corridor_medium` | 103 | success | success | 132 / 1,200 | 0.000062811 | 0.000041281 |
+| `classic_head_on_corridor_medium` | 104 | success | success | 131 / 1,236 | 0.103352465 | 0.675855495 |
+| `classic_head_on_corridor_medium` | 105 | success | success | 128 / 1,196 | 0.000019849 | 0.000043048 |
+
+The checksummed private bundle is under
+`.git/codex-agent-runs/issue-9764-social-force-final/paired-diagnostic-current-ca1b5f1/`.
+`SHA256SUMS` verified. The legacy and wrapped raw episode files have SHA-256
+`8cfe0536863d6e23487ea6bcd10d64eac604ab0a03a188858e61fef0977cc760` and
+`774029187e6a46ce7d0c64d2d02f708dff84c9194a0b3cca2dd4dec48bf73a3e`; the comparison report has
+SHA-256 `761f6c4d0b4f587497789fc17a9611af7dca47e0b0737d9d6c08d8019e62881f`, the run manifest has
+`b161db170ce5c0596527ba550118338628126a8691281dada551b6a71d963990`, and the `SHA256SUMS` file
+has `c772ea4c8823f5068f8d12c161fba35f3410909170ee547e36c1f7d47a5d8242`. This diagnostic makes
+no release-row equivalence or paper-facing claim.

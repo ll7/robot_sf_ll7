@@ -84,35 +84,31 @@ def _canonical_0_0_7_campaign() -> Path:
 
 
 def _implementation_identity(row: dict[str, Any]) -> tuple[list[str], int | None]:
-    """Return the version-bearing identity strings of a row and its hybrid core version.
+    """Return resolved runtime version fields and the hybrid core version.
 
     Returns:
-        Identity strings (config path, config name, version fields) and the hybrid core
-        version (``None`` for non-hybrid rows).
+        Runtime version fields and the hybrid core version (``None`` for
+        non-hybrid rows).
     """
     algo_config = row.get("algo_config")
     if not algo_config:
         return [], None
     manifest = _load_yaml(algo_config)
-    identities = [str(algo_config), str(manifest.get("name", ""))]
     freeze = manifest.get(RELEASE_PARAMETER_FREEZE_KEY)
-    if isinstance(freeze, dict):
-        # Placeholder: the identity is the declared implementation family.
-        family = str(freeze["implementation_family"])
-        identities.append(family)
-        runtime: dict[str, Any] = {"planner_variant": family}
-    else:
-        _algo, runtime = resolve_candidate_manifest_runtime(
-            default_algo=str(row["algo"]),
-            manifest=manifest,
-            scenario={"name": "__default__"},
-            load_config=_load_base_config,
-        )
-    identities.extend(
+    if isinstance(freeze, dict) and "unfrozen_candidate" in freeze:
+        # Placeholders cannot run; inspect the candidate that would be frozen.
+        manifest = _load_yaml(freeze["unfrozen_candidate"])
+    _algo, runtime = resolve_candidate_manifest_runtime(
+        default_algo=str(row["algo"]),
+        manifest=manifest,
+        scenario={"name": "__default__"},
+        load_config=_load_base_config,
+    )
+    identities = [
         str(value)
         for key, value in runtime.items()
         if key == "planner_variant" or key.endswith("_version")
-    )
+    ]
     core = None
     if row["algo"] == HYBRID_ALGO:
         match = _HYBRID_RULE_CORE.search(str(runtime.get("planner_variant", "")))
@@ -126,8 +122,8 @@ def version_naming_violations(rows: list[dict[str, Any]]) -> list[str]:
 
     Two rules, applied to every row:
 
-    * every ``vN`` token in a key must appear in the row's implementation identity
-      (config path, config name, ``planner_variant`` or ``*_version`` fields);
+    * every runtime-version ``vN`` token in a key must appear in the resolved
+      ``planner_variant`` or ``*_version`` fields;
     * for hybrid arms, the hybrid core version named by the key (``hybrid_rule_vN`` or
       the ``_vN`` suffix of a scenario-adaptive key) must equal the core actually run,
       and a key that names no core may only run the frozen 0.0.7 core.
@@ -139,7 +135,12 @@ def version_naming_violations(rows: list[dict[str, Any]]) -> list[str]:
     for row in rows:
         key = str(row["key"])
         identities, core = _implementation_identity(row)
-        for token in _VERSION_TOKEN.findall(key):
+        tokens = _VERSION_TOKEN.findall(key)
+        if key.startswith("scenario_adaptive_hybrid_orca_v2_"):
+            # The first v2 names this historical adaptation family, not the
+            # hybrid core. The trailing vN (if present) names the core.
+            tokens = tokens[1:]
+        for token in tokens:
             if not any(re.search(rf"(?:^|[_/]){token}(?=_|\.|$)", ident) for ident in identities):
                 violations.append(f"{key}: names {token} but runs {identities}")
         if core is None:
@@ -227,6 +228,14 @@ def test_version_naming_check_rejects_relabelled_arms(key: str, algo_config: str
     """The generic check catches a silent relabel in either direction."""
     row = {"key": key, "algo": HYBRID_ALGO, "algo_config": algo_config}
     assert version_naming_violations([row])
+
+
+def test_version_naming_ignores_v2_filename_when_runtime_is_v3(tmp_path: Path) -> None:
+    """A v2 name cannot certify a runtime config whose planner variant is v3."""
+    config = tmp_path / "example_v2.yaml"
+    config.write_text("name: example_v2\nplanner_variant: example_v3\n", encoding="utf-8")
+    row = {"key": "example_v2", "algo": "example", "algo_config": str(config)}
+    assert version_naming_violations([row]) == ["example_v2: names v2 but runs ['example_v3']"]
 
 
 def test_v4_slots_bind_placeholders_for_real_v4_twins() -> None:
@@ -336,7 +345,37 @@ def test_release_roster_admission_blocks_exactly_the_four_unfrozen_slots() -> No
     ids=["frozen", "unfrozen", "missing_status", "malformed"],
 )
 def test_freeze_guard_admits_only_an_explicit_frozen_status(block: object, blocked: bool) -> None:
-    """Only ``status: frozen`` passes; configs without the block are not governed."""
+    """Status governs generic configs; configs without a block are not governed."""
     config = {"algo": HYBRID_ALGO, RELEASE_PARAMETER_FREEZE_KEY: block}
     assert (release_parameter_freeze_blocker(config, label="x") is not None) is blocked
     assert release_parameter_freeze_blocker({"algo": HYBRID_ALGO}, label="x") is None
+
+
+def test_freeze_guard_permanently_rejects_placeholder_marker() -> None:
+    """Changing only placeholder status to frozen cannot make it runnable."""
+    placeholder = _load_yaml(_placeholder_paths()[0])
+    placeholder[RELEASE_PARAMETER_FREEZE_KEY]["status"] = "frozen"
+    assert "unfrozen_candidate" in release_parameter_freeze_blocker(placeholder, label="x")
+    with pytest.raises(UnfrozenReleaseParametersError, match="unfrozen_candidate"):
+        resolve_candidate_manifest_runtime(
+            default_algo=HYBRID_ALGO,
+            manifest=placeholder,
+            scenario={"name": "__default__"},
+            load_config=_load_base_config,
+        )
+
+
+def test_frozen_v4_slot_requires_resolved_v4_variant() -> None:
+    """A status edit plus missing base would otherwise run the default v0."""
+    config = {
+        "algo": HYBRID_ALGO,
+        RELEASE_PARAMETER_FREEZE_KEY: {
+            "status": "frozen",
+            "implementation_family": "hybrid_rule_v4_clearance_braking",
+        },
+    }
+    assert "planner_variant=None" in release_parameter_freeze_blocker(config, label="x")
+    config["base_config_path"] = "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml"
+    assert "hybrid_rule_v3_teb_like_rollout" in release_parameter_freeze_blocker(config, label="x")
+    config["base_config_path"] = "configs/algos/hybrid_rule_v4_clearance_braking.yaml"
+    assert release_parameter_freeze_blocker(config, label="x") is None

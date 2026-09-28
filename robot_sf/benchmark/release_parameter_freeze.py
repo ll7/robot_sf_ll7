@@ -29,6 +29,7 @@ import yaml
 
 RELEASE_PARAMETER_FREEZE_KEY = "release_parameter_freeze"
 FROZEN_STATUS = "frozen"
+V4_HYBRID_VARIANT = "hybrid_rule_v4_clearance_braking"
 
 COMPARISON_PAIRED = "paired"
 COMPARISON_IMPLEMENTATION_REPLACED = "implementation replaced"
@@ -38,12 +39,45 @@ class UnfrozenReleaseParametersError(ValueError):
     """Raised when an algorithm config declares release parameters that are not frozen."""
 
 
+def _frozen_v4_variant_blocker(config: Mapping[str, Any], *, label: str) -> str | None:
+    """Check the effective base and parameter override of a frozen v4 slot.
+
+    Returns:
+        A blocker when the variant differs from v4, otherwise ``None``.
+    """
+    variant = config.get("planner_variant")
+    base_path = config.get("base_config_path")
+    if base_path is not None:
+        if not isinstance(base_path, str) or not base_path.strip():
+            return f"{label}: frozen v4 slot has an invalid base_config_path"
+        base = Path(base_path)
+        if not base.is_absolute():
+            base = Path(__file__).resolve().parents[2] / base
+        try:
+            base_config = yaml.safe_load(base.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError) as exc:
+            return f"{label}: frozen v4 slot cannot load base config: {exc}"
+        if not isinstance(base_config, Mapping):
+            return f"{label}: frozen v4 slot base config must be a mapping"
+        variant = base_config.get("planner_variant")
+    params = config.get("params")
+    if isinstance(params, Mapping) and "planner_variant" in params:
+        variant = params["planner_variant"]
+    if variant != V4_HYBRID_VARIANT:
+        return (
+            f"{label}: frozen v4 slot resolves planner_variant={variant!r}; "
+            f"expected {V4_HYBRID_VARIANT!r}"
+        )
+    return None
+
+
 def release_parameter_freeze_blocker(config: Mapping[str, Any], *, label: str) -> str | None:
     """Return a blocker message when ``config`` declares unfrozen release parameters.
 
     A config without a ``release_parameter_freeze`` block is not governed by this
-    guard and yields ``None``. A declared block must carry ``status: frozen``;
-    any other status, a missing status, or a malformed block is a blocker.
+    guard and yields ``None``. A declared block must carry ``status: frozen``
+    without the ``unfrozen_candidate`` marker. Frozen v4 slots must resolve to
+    the v4 hybrid planner variant.
 
     Returns:
         Human-readable blocker message, or ``None`` when the config may run.
@@ -55,6 +89,10 @@ def release_parameter_freeze_blocker(config: Mapping[str, Any], *, label: str) -
         return f"{label}: {RELEASE_PARAMETER_FREEZE_KEY} must be a mapping"
     status = str(block.get("status") or "").strip()
     if status == FROZEN_STATUS:
+        if "unfrozen_candidate" in block:
+            return f"{label}: unfrozen_candidate marks a placeholder that cannot run"
+        if block.get("implementation_family") == V4_HYBRID_VARIANT:
+            return _frozen_v4_variant_blocker(config, label=label)
         return None
     gate = str(block.get("required_gate") or "unspecified gate").strip()
     return (

@@ -324,24 +324,26 @@ def discrete_tail_metrics(
         zip(values, weights, stable_ids, strict=True), key=lambda item: (item[0], item[2])
     )
     cumulative = 0.0
-    var = ascending[-1][0]
+    var = next(loss for loss, probability, _ in reversed(ascending) if probability > 0.0)
     for loss, probability, _ in ascending:
-        cumulative += probability
-        if cumulative + tolerance >= alpha:
+        cumulative = math.fsum((cumulative, probability))
+        if cumulative >= alpha:
             var = loss
             break
     descending = sorted(
         zip(values, weights, stable_ids, strict=True), key=lambda item: (-item[0], item[2])
     )
-    remaining = 1.0 - float(alpha)
+    tail_mass = 1.0 - float(alpha)
+    remaining = tail_mass
     tail_loss = 0.0
     for loss, probability, _ in descending:
+        # Zero-mass atoms take nothing; only a fully consumed tail stops the loop.
         taken = min(probability, remaining)
-        tail_loss += loss * taken
+        tail_loss = math.fsum((tail_loss, loss * taken))
         remaining -= taken
-        if remaining <= tolerance:
+        if remaining == 0.0:
             break
-    cvar = float(tail_loss / (1.0 - float(alpha)))
+    cvar = float(tail_loss / tail_mass)
     return expected, float(var), cvar, float(max(values))
 
 

@@ -1295,6 +1295,14 @@ if [[ ${#pr_ready_uncovered_test_roots[@]} -gt 0 ]]; then
       printf '  A PR body must not claim full-suite or benchmark/validation/map coverage from this run.\n'
     fi
   } | tee -a "$lane_coverage_dir/lane_coverage.txt" >&2
+  if [[ "$pr_ready_final" == "1" && -n "$PR_READY_PR_BODY_FILE" ]]; then
+    # The pre-lane contract check cannot inspect this run's receipt yet. Check
+    # the completed lane summary before a passing final stamp is recorded.
+    uv run python "$SCRIPT_DIR/../ci/pr_contract_check.py" \
+      --base-ref "$BASE_REF" \
+      --pr-body-file "$PR_READY_PR_BODY_FILE" \
+      --readiness-receipt-file "$lane_coverage_dir/lane_coverage.txt"
+  fi
 fi
 mark_pr_ready_progress "post_lane_checks" "none" "running post-lane readiness checks"
 "$SCRIPT_DIR/check_changed_coverage.sh"

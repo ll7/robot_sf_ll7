@@ -33,6 +33,10 @@ KNOWN_HISTORICAL_MAIN_CI_CLOSING_GUARD_HITS = {8440: {"8414"}}
 # must keep flagging these historical bodies while future PRs stay clean.
 KNOWN_HISTORICAL_GITHUB_PARITY_HITS = {9565: {"9489"}, 9569: {"9489"}}
 
+# PR #9785 closed #9754 while its v2 contract still assigned residual work to
+# #9754. Issue #9852 introduces the guard for this already merged regression.
+KNOWN_HISTORICAL_CLOSE_DEFERRED_HITS = {9785: {"9754"}}
+
 
 # Keep this mapping deliberately narrow: entries must identify one merged PR,
 # one linked issue, and the immutable GitHub file-stat totals that prove the
@@ -2328,6 +2332,12 @@ def test_regression_last_20_merged_prs() -> None:
                 "github-closing-parity" in blocker and f"#{issue}" in blocker
                 for blocker in blockers
             ), f"PR #{number} no longer exposes its known historical parity hit"
+        expected_deferred_issues = KNOWN_HISTORICAL_CLOSE_DEFERRED_HITS.get(number, set())
+        for issue in expected_deferred_issues:
+            assert any(
+                "[close-while-deferred]" in blocker and f"#{issue}" in blocker
+                for blocker in blockers
+            ), f"PR #{number} no longer exposes its known historical deferred-work hit"
         unexpected_blockers = [
             blocker
             for blocker in blockers
@@ -2335,6 +2345,10 @@ def test_regression_last_20_merged_prs() -> None:
             and not any(
                 "github-closing-parity" in blocker and f"#{issue}" in blocker
                 for issue in expected_parity_issues
+            )
+            and not any(
+                "[close-while-deferred]" in blocker and f"#{issue}" in blocker
+                for issue in expected_deferred_issues
             )
             and not _is_expected_historical_budget_blocker(historical_evidence, body, blocker)
         ]

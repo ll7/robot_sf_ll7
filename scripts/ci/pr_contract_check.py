@@ -44,6 +44,12 @@ from robot_sf.evidence.distance_convention import (  # noqa: E402
 from scripts.ci.check_evidence_writer_usage import (  # noqa: E402
     check_changed_files as check_evidence_writer_usage,
 )
+from scripts.ci.pr_contract_claims import (  # noqa: E402
+    CLOSE_WHILE_DEFERRED_TAG,
+    READINESS_CLAIM_TAG,
+    check_close_while_deferred,
+    check_readiness_claims,
+)
 from scripts.dev.check_issue_line_budget import (  # noqa: E402
     evaluate_budget,
     has_declared_cap,
@@ -1330,7 +1336,7 @@ def check_placeholder_docstrings(base_ref: str, repo_root: str | None = None) ->
     return blockers
 
 
-def run_all_checks(
+def run_all_checks(  # noqa: PLR0913 - independent CLI and GitHub evidence inputs
     title: str,
     body: str,
     changed_files: list[str],
@@ -1339,8 +1345,9 @@ def run_all_checks(
     pr_number: str | None,
     added_files: set[str] | None = None,
     historical_numstat: object = _UNSET_NUMSTAT,
+    readiness_receipt: str | None = None,
 ) -> tuple[list[str], list[str], list[str]]:
-    """Run all 10 contract checks."""
+    """Run PR contract checks, including readiness claims and residual ownership."""
     blockers = []
     warnings = []
     infos = []
@@ -1358,6 +1365,8 @@ def run_all_checks(
         commit_messages_checked=commit_messages_checked,
     )
     blockers.extend(closes_blockers)
+    blockers.extend(check_close_while_deferred(body, repo))
+    blockers.extend(check_readiness_claims(body, readiness_receipt))
 
     # 1b. GitHub closing-keyword parity (issue #9566): negated prose closing
     # mentions auto-close on merge even though the repo parser excuses them.
@@ -1452,6 +1461,16 @@ def build_comment_body(
         f"{get_status_str(any('exceeds the budget declared' in b.lower() for b in blockers))} | "
         f"Enforce declared caps unless 'budget-override: <reason>' is present |"
     )
+    rows.append(
+        f"| 11. Readiness claims | "
+        f"{get_status_str(any(READINESS_CLAIM_TAG in b for b in blockers))} | "
+        "Reject global test-pass claims unsupported by the readiness lane receipt |"
+    )
+    rows.append(
+        f"| 12. Close while deferred | "
+        f"{get_status_str(any(CLOSE_WHILE_DEFERRED_TAG in b for b in blockers))} | "
+        "Require a different open owner for residual work when closing an issue |"
+    )
 
     comment = [
         "<!-- pr-contract-check-signature -->",
@@ -1537,6 +1556,9 @@ def main() -> int:  # noqa: C901
     )
     parser.add_argument("--pr-body-file", type=Path, help="PR body file for local run/test.")
     parser.add_argument("--pr-title", type=str, help="PR title for local run/test.")
+    parser.add_argument(
+        "--readiness-receipt-file", type=Path, help="Lane coverage receipt from pr_ready_check.sh."
+    )
     parser.add_argument("--pr-number", type=str, help="PR number for local run/test.")
     parser.add_argument("--repo", type=str, default="ll7/robot_sf_ll7", help="Repo name.")
     parser.add_argument("--base-ref", type=str, default="origin/main", help="Git base branch ref.")
@@ -1574,10 +1596,24 @@ def main() -> int:  # noqa: C901
 
     changed_files = get_changed_files(args.changed_files_file, args.base_ref)
     added_files = get_added_files(args.added_files_file)
+    readiness_receipt = None
+    if args.readiness_receipt_file is not None:
+        try:
+            readiness_receipt = args.readiness_receipt_file.read_text(encoding="utf-8")
+        except OSError as exc:
+            print(f"Cannot read readiness lane receipt: {exc}", file=sys.stderr)
+            return 1
 
     # Run checks
     blockers, warnings, infos = run_all_checks(
-        pr_title, pr_body, changed_files, repo, args.base_ref, pr_number, added_files
+        pr_title,
+        pr_body,
+        changed_files,
+        repo,
+        args.base_ref,
+        pr_number,
+        added_files,
+        readiness_receipt=readiness_receipt,
     )
 
     # Build status

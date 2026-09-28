@@ -19,8 +19,10 @@ from robot_sf.nav.free_space_sampling import sample_free_points_in_bounds
 from robot_sf.nav.map_config import (
     GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1,
     GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1,
+    ROBOT_GOAL_SAMPLING_FOOTPRINT_CLEARANCE_V1,
     MapDefinition,
     normalize_goal_completion_policy,
+    normalize_robot_goal_sampling_policy,
 )
 from robot_sf.nav.spawn_clearance import robot_start_exclusions
 from robot_sf.ped_npc.ped_zone import sample_zone
@@ -30,6 +32,8 @@ from robot_sf.planner.visibility_planner import PlanningFailedError
 _PLANNER_RETRY_ATTEMPTS = 5
 #: Candidate budget for clearance-aware robot start sampling before failing loudly.
 _ROBOT_START_MAX_ATTEMPTS = 400
+# Keep the corrected final-target rejection bounded and fail closed as starts do.
+_ROBOT_GOAL_MAX_ATTEMPTS = 400
 _DEGENERATE_SEGMENT_LENGTH_TOLERANCE = 1e-9
 _DEGENERATE_SEGMENT_LENGTH_SQ_TOLERANCE = _DEGENERATE_SEGMENT_LENGTH_TOLERANCE**2
 
@@ -325,10 +329,39 @@ def _sample_robot_start(
         ) from exc
 
 
+def _sample_robot_goal(
+    goal_zone,
+    obstacles: list[PreparedGeometry],
+    goal_exclusions: list[PreparedGeometry] | None,
+) -> Vec2D:
+    """Sample a final target under the selected versioned footprint policy.
+
+    Returns:
+        Vec2D: A sampled target that satisfies the selected clearance rule.
+    """
+    if goal_exclusions is None:
+        return sample_zone(goal_zone, 1, obstacle_polygons=obstacles)[0]
+    try:
+        return sample_zone(
+            goal_zone,
+            1,
+            obstacle_polygons=obstacles,
+            max_attempts_per_point=_ROBOT_GOAL_MAX_ATTEMPTS,
+            exclusions=goal_exclusions,
+        )[0]
+    except RuntimeError as exc:
+        raise RuntimeError(
+            f"No robot goal with wall clearance found in goal zone {goal_zone!r} after "
+            f"{_ROBOT_GOAL_MAX_ATTEMPTS} candidates; fix the versioned goal zone "
+            "or its map geometry (issue #9859)."
+        ) from exc
+
+
 def _sample_start_goal_from_routes(
     routes_for_spawn: list,
     obstacles: list[PreparedGeometry],
     start_exclusions: list[PreparedGeometry] | None = None,
+    goal_exclusions: list[PreparedGeometry] | None = None,
 ) -> tuple[Vec2D, Vec2D, object]:
     """Sample start/goal from route spawn/goal zones.
 
@@ -337,7 +370,7 @@ def _sample_start_goal_from_routes(
     """
     route_choice = sample(routes_for_spawn, k=1)[0]
     start = _sample_robot_start(route_choice.spawn_zone, obstacles, start_exclusions)
-    goal = sample_zone(route_choice.goal_zone, 1, obstacle_polygons=obstacles)[0]
+    goal = _sample_robot_goal(route_choice.goal_zone, obstacles, goal_exclusions)
     return start, goal, route_choice
 
 
@@ -348,6 +381,7 @@ def _plan_with_planner(
     global_sampling: bool,
     prepared_obstacles: list[PreparedGeometry],
     start_exclusions: list[PreparedGeometry] | None = None,
+    goal_exclusions: list[PreparedGeometry] | None = None,
 ) -> tuple[SampledRoute | None, int]:
     """Attempt to plan using the configured planner; return route or None plus chosen spawn_id.
 
@@ -382,7 +416,7 @@ def _plan_with_planner(
             )
             if global_sampling
             else _sample_start_goal_from_routes(
-                routes_for_spawn, prepared_obstacles, start_exclusions
+                routes_for_spawn, prepared_obstacles, start_exclusions, goal_exclusions
             )
         )
         if sampled is None:
@@ -642,6 +676,7 @@ def sample_route(
     *,
     completion_policy: str | None = None,
     robot_radius: float | None = None,
+    robot_goal_sampling_policy: str | None = None,
 ) -> SampledRoute:
     """Sample a concrete waypoint route for a robot spawn.
 
@@ -652,6 +687,8 @@ def sample_route(
         robot_radius: Optional robot collision radius. When given, the start is sampled
             only where the robot footprint plus a margin clears every wall and map bound
             (issue #9725); ``None`` keeps the legacy centre-only obstacle check.
+        robot_goal_sampling_policy: Optional explicit versioned final-goal sampler.
+            ``None`` preserves historical centre-only goal sampling.
 
     Returns:
         SampledRoute: Waypoints including sampled spawn and goal positions, with
@@ -666,6 +703,16 @@ def sample_route(
         if completion_policy is not None
         else getattr(map_def, "goal_completion_policy", None)
     )
+    resolved_goal_sampling_policy = normalize_robot_goal_sampling_policy(robot_goal_sampling_policy)
+    clearance_aware_goal = (
+        resolved_goal_sampling_policy == ROBOT_GOAL_SAMPLING_FOOTPRINT_CLEARANCE_V1
+    )
+    if clearance_aware_goal and robot_radius is None:
+        raise ValueError("footprint_clearance_v1 robot_goal_sampling_policy requires robot_radius")
+    if clearance_aware_goal and global_sampling:
+        raise ValueError(
+            "footprint_clearance_v1 robot_goal_sampling_policy requires predefined goal zones"
+        )
     if resolved_completion_policy == GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1 and global_sampling:
         raise ValueError(
             "goal_zone_entry_v1 requires a predefined route bound to a goal zone; "
@@ -675,6 +722,7 @@ def sample_route(
     start_exclusions = (
         robot_start_exclusions(map_def, float(robot_radius)) if robot_radius is not None else None
     )
+    goal_exclusions = start_exclusions if clearance_aware_goal else None
     chosen_spawn = spawn_id
 
     if use_planner and planner is not None:
@@ -685,6 +733,7 @@ def sample_route(
             global_sampling,
             prepared_obstacles,
             start_exclusions,
+            goal_exclusions,
         )
         if planned_route is not None:
             return planned_route
@@ -708,7 +757,7 @@ def sample_route(
 
     # Sample an initial spawn and a final goal from the route's spawn and goal zones
     initial_spawn = _sample_robot_start(route.spawn_zone, prepared_obstacles, start_exclusions)
-    final_goal = sample_zone(route.goal_zone, 1, obstacle_polygons=prepared_obstacles)[0]
+    final_goal = _sample_robot_goal(route.goal_zone, prepared_obstacles, goal_exclusions)
 
     # Construct the route with optional noise on intermediate waypoints only.
     settings = _resolve_navigation_settings(map_def)

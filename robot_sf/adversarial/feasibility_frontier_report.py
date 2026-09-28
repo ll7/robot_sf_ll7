@@ -208,6 +208,7 @@ def build_frontier_report(
         eval_summary["held_out"]["optimization_independence_status"] = optimizer_split_status
         _add_cohort_comparability(eval_summary, round_data, round_reports)
         candidates = round_data["falsification"]["candidates"]
+        candidate_records = _validated_search_candidate_projection(candidates)
         (
             verified_case_ids,
             repeated_verified_case_ids,
@@ -333,7 +334,7 @@ def build_frontier_report(
                     "historical_counterexamples_confirmed_this_round_case_ids": sorted(
                         historical_confirmed_this_round
                     ),
-                    "candidate_records": candidates,
+                    "candidate_records": candidate_records,
                     "no_verified_counterexample_statement": no_discovery_statement,
                     "artifact": falsification["artifact"],
                 },
@@ -2319,6 +2320,14 @@ def _source_projection(rows: Any, fields: tuple[str, ...]) -> list[dict[str, Any
     return [{field: row.get(field) for field in fields} for row in rows]
 
 
+def _validated_search_candidate_projection(rows: Any) -> list[dict[str, Any]]:
+    """Return only the candidate fields bound by the checksummed search artifact."""
+    projection = _source_projection(rows, _SEARCH_CANDIDATE_SOURCE_FIELDS)
+    if projection is None:
+        raise FrontierReportError("validated search candidates could not be projected")
+    return projection
+
+
 def _same_text_identity(left: Any, right: Any) -> bool:
     return isinstance(left, str) and isinstance(right, str) and left.lower() == right.lower()
 
@@ -2432,7 +2441,17 @@ def _validate_artifact(  # noqa: C901, PLR0912 - preserve path/hash/schema findi
     if posix_path.is_absolute() or ".." in posix_path.parts:
         errors.append(f"{prefix}.path must stay relative to the evidence bundle")
         return None
-    actual_path = (evidence_root / Path(*posix_path.parts)).resolve()
+    candidate_path = evidence_root / Path(*posix_path.parts)
+    try:
+        actual_path = candidate_path.resolve(strict=True)
+    except FileNotFoundError:
+        errors.append(f"{prefix}.path does not exist: {relative_path}")
+        return None
+    except (OSError, RuntimeError) as exc:
+        errors.append(
+            f"{prefix}.path could not be resolved: {relative_path} ({type(exc).__name__})"
+        )
+        return None
     try:
         actual_path.relative_to(evidence_root)
     except ValueError:

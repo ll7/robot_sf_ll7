@@ -2024,6 +2024,22 @@ def test_frontier_report_rejects_search_candidate_rows_not_bound_to_source(
         build_frontier_report(payload, evidence_root=tmp_path)
 
 
+def test_frontier_report_emits_only_checksummed_candidate_projection(tmp_path: Path) -> None:
+    """Unbound outer candidate fields do not leak into the report ledger."""
+    payload = _evidence(tmp_path)
+    round_data = payload["rounds"][0]
+    candidate = round_data["falsification"]["candidates"][0]
+    candidate["unbound_failure_annotation"] = "not present in the checksummed search source"
+
+    report = build_frontier_report(payload, evidence_root=tmp_path)
+
+    search_artifact = round_data["falsification"]["artifact"]
+    search_source = json.loads((tmp_path / search_artifact["path"]).read_text(encoding="utf-8"))
+    emitted = report["rounds"][0]["falsification"]["candidate_records"][0]
+    assert emitted == search_source["candidate_records"][0]
+    assert "unbound_failure_annotation" not in emitted
+
+
 def test_frontier_report_binds_evaluation_metrics_and_ids_to_checksums(tmp_path: Path) -> None:
     """Same-size row substitutions and metric edits cannot pass count-only accounting."""
     payload = _evidence(tmp_path)
@@ -2761,6 +2777,30 @@ def test_frontier_report_rejects_path_escape_and_noncanonical_admissibility(tmp_
     )
     with pytest.raises(FrontierReportError, match="admissibility_verdict is unsupported"):
         build_frontier_report(payload, evidence_root=tmp_path)
+
+
+def test_frontier_report_symlink_loop_has_structured_error_before_publication(
+    tmp_path: Path,
+) -> None:
+    """A symlink loop is reported as invalid evidence before any report output is created."""
+    evidence_root = tmp_path / "evidence"
+    evidence_root.mkdir()
+    payload = _evidence(evidence_root)
+    input_path = evidence_root / "round-evidence.json"
+    input_path.write_text(json.dumps(payload), encoding="utf-8")
+    artifact_ref = payload["rounds"][0]["falsification"]["artifact"]
+    artifact_path = evidence_root / artifact_ref["path"]
+    artifact_path.unlink()
+    artifact_path.symlink_to(artifact_path.name)
+    output_dir = tmp_path / "report"
+
+    with pytest.raises(
+        FrontierReportError,
+        match=r"falsification\.artifact\.path could not be resolved.*(?:OSError|RuntimeError)",
+    ):
+        write_frontier_report(input_path, output_dir)
+
+    assert not output_dir.exists()
 
 
 def test_frontier_report_requires_admissibility_evidence_for_confirmed_observations(

@@ -234,3 +234,79 @@ def test_ego_grid_obstacle_extraction_and_forward_probe_contract() -> None:
         goal_direction_world=goal_direction,
         observation=observation,
     )
+
+
+def _rotated_scene_observation(
+    *,
+    angle: float,
+    robot: tuple[float, float] = (0.0, 0.0),
+    heading: float = 0.0,
+    goal: tuple[float, float] = (5.0, 0.0),
+    ped_positions: list[tuple[float, float]] | None = None,
+    ped_ego_velocities: list[tuple[float, float]] | None = None,
+) -> dict:
+    """Build a nested observation for the world rotated by ``angle``.
+
+    Positions, goal, and heading rotate with the world. Pedestrian velocities
+    are ego-frame sensor readings: they are invariant under a joint rotation
+    of the world and the robot (rotating observation velocity fields directly
+    is a test-construction error, not planner input).
+    """
+    cos_a, sin_a = float(np.cos(angle)), float(np.sin(angle))
+
+    def rot(point: tuple[float, float]) -> list[float]:
+        x, y = point
+        return [cos_a * x - sin_a * y, sin_a * x + cos_a * y]
+
+    ped_positions = [] if ped_positions is None else ped_positions
+    ped_ego_velocities = [] if ped_ego_velocities is None else ped_ego_velocities
+    return {
+        "robot": {
+            "position": np.array(rot(robot), dtype=float),
+            "heading": np.array([heading + angle], dtype=float),
+            "speed": np.array([0.0], dtype=float),
+            "radius": np.array([0.3], dtype=float),
+        },
+        "goal": {
+            "current": np.array(rot(goal), dtype=float),
+            "next": np.array(rot(goal), dtype=float),
+        },
+        "pedestrians": {
+            "positions": np.asarray([rot(p) for p in ped_positions], dtype=float),
+            "velocities": np.asarray(ped_ego_velocities, dtype=float).reshape(-1, 2),
+            "count": np.array([float(len(ped_positions))], dtype=float),
+            "radius": 0.35,
+        },
+        "sim": {"timestep": [0.1]},
+    }
+
+
+def test_orca_plan_is_invariant_under_joint_scene_rotation() -> None:
+    """ORCA commands must be identical after a joint world rotation (issue #9845).
+
+    The encounter is the same in the robot frame, so ``(v, w)`` must match for
+    several rotation angles with a moving pedestrian present.
+    """
+    ped_positions = [(3.0, 2.5)]
+    ped_ego_velocities = [(0.3, 0.0)]
+    base = orca.ORCAPlannerAdapter().plan(
+        _rotated_scene_observation(
+            angle=0.0, ped_positions=ped_positions, ped_ego_velocities=ped_ego_velocities
+        )
+    )
+    for angle in (0.3, np.pi / 2, np.pi):
+        rotated = orca.ORCAPlannerAdapter().plan(
+            _rotated_scene_observation(
+                angle=angle, ped_positions=ped_positions, ped_ego_velocities=ped_ego_velocities
+            )
+        )
+        assert np.allclose(base, rotated, atol=1e-9), (angle, base, rotated)
+    # Guard against vacuity: pedestrian motion must influence the command.
+    static_command = orca.ORCAPlannerAdapter().plan(
+        _rotated_scene_observation(
+            angle=0.0,
+            ped_positions=ped_positions,
+            ped_ego_velocities=[(0.0, 0.0)],
+        )
+    )
+    assert not np.allclose(base, static_command, atol=1e-6), (base, static_command)

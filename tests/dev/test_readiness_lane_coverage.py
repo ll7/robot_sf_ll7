@@ -122,6 +122,9 @@ def test_readiness_reports_lane_coverage_including_omissions() -> None:
     assert "NOT COVERED by this readiness run" in text, (
         "the summary must name roots this run did not cover, not just the lanes that ran"
     )
+    assert 'lane_coverage_dir="${REPO_ROOT}/output/validation/pr_ready"' in text
+    assert 'mkdir -p "$lane_coverage_dir"' in text
+    assert 'tee -a "$lane_coverage_dir/lane_coverage.txt"' in text
 
 
 def test_extended_lane_triggers_on_shipped_code_changes() -> None:

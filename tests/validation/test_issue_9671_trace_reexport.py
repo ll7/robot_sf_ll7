@@ -14,7 +14,9 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.utils import _config_hash
+from scripts.validation import check_issue_9671_force_bundle as bundle_checker
 from scripts.validation import check_issue_9671_trace_reexport as checker
+from scripts.validation import issue_9671_force_observer_sitecustomize as observer
 from scripts.validation.check_issue_9671_trace_reexport import SOURCE_SHA, check
 
 
@@ -69,6 +71,51 @@ def _row(seed: int, status: str, *, trace: bool) -> dict:
             },
         },
     }
+
+
+def test_canonical_hash_policy_is_shared_by_all_three_consumers() -> None:
+    row = _row(113, "collision", trace=False)
+    row["metrics"] = {"min_separation_corrupted_m": float("inf")}
+    row["algorithm_metadata"]["tracking_precision"] = {"min_separation_corrupted_m": float("inf")}
+    original_values = (
+        row["metrics"]["min_separation_corrupted_m"],
+        row["algorithm_metadata"]["tracking_precision"]["min_separation_corrupted_m"],
+    )
+
+    digests = {
+        observer.canonical_episode_record_sha256(row),
+        checker._canonical_row_sha(row),
+        bundle_checker._canonical_row_sha(row),
+    }
+
+    assert len(digests) == 1
+    assert original_values == (float("inf"), float("inf"))
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("metrics", "min_separation_corrupted_m"), float("nan")),
+        (("metrics", "min_separation_corrupted_m"), float("-inf")),
+        (("metrics", "unrelated"), float("inf")),
+    ],
+)
+def test_all_canonical_hash_consumers_reject_unsupported_non_finite_values(
+    path: tuple[str, ...], value: float
+) -> None:
+    row = _row(113, "collision", trace=False)
+    parent = row
+    for key in path[:-1]:
+        parent = parent.setdefault(key, {})
+    parent[path[-1]] = value
+
+    for hash_row in (
+        observer.canonical_episode_record_sha256,
+        checker._canonical_row_sha,
+        bundle_checker._canonical_row_sha,
+    ):
+        with pytest.raises(ValueError, match="non-finite"):
+            hash_row(row)
 
 
 def _archive(path: Path, rows: list[dict]) -> None:

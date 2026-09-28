@@ -106,9 +106,7 @@ def _label(name: str, path: Path, campaign_root: Path) -> str:
 
 
 def _canonical_row_sha(row: dict[str, Any]) -> str:
-    return hashlib.sha256(
-        json.dumps(row, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
-    ).hexdigest()
+    return trace_checker._canonical_row_sha(row)
 
 
 def _rows(paths: list[Path]) -> dict[tuple[str, str, int], dict[str, Any]]:

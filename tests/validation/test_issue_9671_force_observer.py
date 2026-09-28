@@ -1,6 +1,8 @@
 """Fail-closed identity tests for the separately staged 0.0.7 force observer."""
 
+import hashlib
 import importlib.util
+import json
 import sys
 import threading
 from pathlib import Path
@@ -69,6 +71,101 @@ def _capture() -> dict:
             }
         ],
     }
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("metrics", "min_separation_corrupted_m"),
+        (
+            "algorithm_metadata",
+            "tracking_precision",
+            "min_separation_corrupted_m",
+        ),
+    ],
+)
+def test_binds_frozen_positive_infinity_diagnostic_sentinel(path: tuple[str, ...]) -> None:
+    row = _row()
+    parent = row
+    for key in path[:-1]:
+        parent = parent.setdefault(key, {})
+    parent[path[-1]] = float("inf")
+    expected_finite_or_sentinel_hash = observer.canonical_episode_record_sha256(row)
+
+    bound = observer.bind_episode(_capture(), row)
+
+    assert bound["episode_record_canonical_sha256"] == expected_finite_or_sentinel_hash
+    assert parent[path[-1]] == float("inf")
+
+
+def test_finite_row_canonical_bytes_are_unchanged() -> None:
+    row = _row()
+    legacy_bytes = json.dumps(row, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+
+    assert observer.canonical_episode_record_bytes(row) == legacy_bytes
+    assert observer.canonical_episode_record_sha256(row) == hashlib.sha256(legacy_bytes).hexdigest()
+
+
+def test_reserved_infinity_token_cannot_alias_a_raw_diagnostic_object() -> None:
+    row = _row()
+    row["metrics"] = {"min_separation_corrupted_m": dict(observer._CANONICAL_POSITIVE_INFINITY)}
+
+    with pytest.raises(ValueError, match="reserved canonical infinity token"):
+        observer.canonical_episode_record_sha256(row)
+
+
+def test_importing_observer_as_a_module_does_not_install_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ISSUE9671_OBSERVER_OUTPUT", str(tmp_path / "sidecars"))
+    monkeypatch.setenv(
+        "ISSUE9671_OBSERVER_SHA256", hashlib.sha256(OBSERVER.read_bytes()).hexdigest()
+    )
+    spec = importlib.util.spec_from_file_location("issue_9671_observer_import_test", OBSERVER)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module._OBSERVER is None
+    assert not (tmp_path / "sidecars").exists()
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("metrics", "min_separation_corrupted_m"), float("nan")),
+        (("metrics", "min_separation_corrupted_m"), float("-inf")),
+        (("metrics", "other_diagnostic"), float("inf")),
+        (
+            (
+                "algorithm_metadata",
+                "simulation_step_trace",
+                "steps",
+                0,
+                "planner",
+                "ammv",
+                "pedestrian_force_vectors",
+                0,
+                0,
+            ),
+            float("inf"),
+        ),
+    ],
+)
+def test_rejects_other_non_finite_episode_values(path: tuple[str | int, ...], value: float) -> None:
+    row = _row()
+    parent = row
+    for key in path[:-1]:
+        parent = parent.setdefault(key, {}) if isinstance(parent, dict) else parent[key]
+    parent[path[-1]] = value
+
+    with pytest.raises(ValueError, match="non-finite"):
+        observer.canonical_episode_record_sha256(row)
+
+
+def test_force_vectors_remain_finite_checked() -> None:
+    with pytest.raises(observer.ObserverIdentityError, match="non-finite vector"):
+        observer._vectors([[float("inf"), 0.0]])
 
 
 def test_records_full_clean_frozen_source_state(

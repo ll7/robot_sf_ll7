@@ -464,6 +464,10 @@ _FAST_FILES = {
     # Force-residual predictor tests are deterministic synthetic contracts and
     # must cover the changed planner-visible prediction module in PR shards.
     "test_force_residual_intent_predictor.py",
+    # Guarded-PPO and Risk-DWA planner tests use synthetic observations and
+    # adapters; keep their planner contracts and frame checks in PR shards.
+    "test_guarded_ppo.py",
+    "test_risk_dwa.py",
     # Surface-distance pedestrian-term contracts include deterministic rollout
     # and construction-validation checks; keep changed lines in PR shards.
     "test_socnav_ped_surface_v3.py",

@@ -90,7 +90,7 @@ run_container() {
   fi
   cd /home/runner
   cp -a /opt/robot-sf-runner/. /home/runner/
-  ./config.sh --unattended --ephemeral --disableupdate \
+  ./config.sh --unattended --ephemeral --disableupdate --replace \
     --url "https://github.com/$repo" --token "$token" \
     --name "$runner_name" --labels "$label" --work _work
   unset token

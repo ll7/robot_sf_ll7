@@ -1586,11 +1586,8 @@ class TestDependencyBlockedStateLabel:
             "state:deferred",
         ):
             assert label in issue_implementability.BLOCKING_LABELS, label
-        for label in ("state:blocked-external-input", "state:blocked-human-decision"):
-            assert label in issue_implementability.BLOCKING_LABELS or label in {
-                "state:blocked-external-input",
-                "state:blocked-human-decision",
-            }, label
+        assert "state:blocked-external-input" in issue_implementability.EXTERNAL_LABELS
+        assert "state:blocked-human-decision" in issue_implementability.HUMAN_DECISION_LABELS
 
     def test_dependency_only_label_is_not_missing_an_execution_state_conflict(self) -> None:
         """A qualifier alone must not be reported as a missing execution state."""

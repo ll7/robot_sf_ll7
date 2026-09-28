@@ -92,7 +92,7 @@ entries:
 - path: docs/context/artifact_evidence_vocabulary.md
   status: current
   freshness: policy
-  area: planner
+  area: benchmark_evidence
 - path: docs/context/artifact_retention_and_cleanup.md
   status: current
   freshness: policy
@@ -7673,8 +7673,8 @@ entries:
   area: predictive_planner
 - path: docs/context/pedestrian_goal_force_prediction_research.md
   status: current
-  freshness: policy
-  area: workflow_policy
+  freshness: maintained
+  area: research_contract
 - path: docs/context/policy_search/contracts/learned_local_policy_eligibility.md
   status: current
   freshness: policy
@@ -7781,8 +7781,8 @@ entries:
   area: context_archive
 - path: robot_sf/benchmark/schemas/mechanism_trace.schema.v1.json
   status: current
-  freshness: policy
-  area: workflow_policy
+  freshness: maintained
+  area: benchmark_release
 - path: tests/benchmark/fixtures/mechanism_trace.v1.example.json
   status: current
   freshness: maintained

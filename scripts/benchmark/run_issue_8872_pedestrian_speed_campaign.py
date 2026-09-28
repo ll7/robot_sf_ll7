@@ -991,6 +991,20 @@ def _validate_journal_success_provenance(
         JOURNAL_DIAGNOSTIC_SCALARS.issubset(diagnostics),
         "journal native terminal row activation diagnostics are incomplete",
     )
+    required_diagnostic_maps = JOURNAL_DIAGNOSTIC_VECTOR_MAPS | {JOURNAL_DIAGNOSTIC_SPEED_MAP}
+    _require(
+        all(
+            isinstance(diagnostics.get(field), Mapping) and bool(diagnostics[field])
+            for field in required_diagnostic_maps
+        ),
+        "journal native terminal row trajectory diagnostics are incomplete",
+    )
+    if expected["regime_id"] != "legacy_default":
+        for field in JOURNAL_DIAGNOSTIC_SCALARS:
+            _finite_metric(
+                diagnostics.get(field),
+                f"journal native terminal row activation diagnostic {field}",
+            )
     checkpoint_provenance = provenance.get("checkpoint_provenance")
     _require(
         isinstance(checkpoint_provenance, list) and bool(checkpoint_provenance),

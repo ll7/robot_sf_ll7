@@ -836,6 +836,59 @@ def test_success_journal_row_rejects_empty_required_provenance(
         campaign._journal_row_payload(outcome)
 
 
+def test_success_journal_row_rejects_all_null_treated_activation_scalars() -> None:
+    packet = _packet()
+    identity = next(
+        item for item in packet["identities"] if item["regime_id"] == "slow_distributed"
+    )
+    outcome = _fake_native_outcome(packet, identity)
+    outcome["provenance"]["diagnostics"].update(dict.fromkeys(campaign.JOURNAL_DIAGNOSTIC_SCALARS))
+
+    with pytest.raises(campaign.CampaignAdapterError, match="activation diagnostic"):
+        campaign._journal_row_payload(outcome)
+
+
+@pytest.mark.parametrize("value", (float("nan"), float("inf"), -float("inf")))
+def test_success_journal_row_rejects_nonfinite_treated_activation_scalars(
+    value: float,
+) -> None:
+    packet = _packet()
+    identity = next(
+        item for item in packet["identities"] if item["regime_id"] == "slow_distributed"
+    )
+    outcome = _fake_native_outcome(packet, identity)
+    outcome["provenance"]["diagnostics"]["desired_speed_activation_fraction"] = value
+
+    with pytest.raises(campaign.CampaignAdapterError, match="finite numeric"):
+        campaign._journal_row_payload(outcome)
+
+
+@pytest.mark.parametrize(
+    "field",
+    (
+        "runtime_max_speed_m_s_by_pedestrian",
+        "initial_spawn_velocity_xy_by_pedestrian",
+        "final_post_integration_velocity_xy_by_pedestrian",
+    ),
+)
+@pytest.mark.parametrize("mutation", ("omitted", "empty"))
+def test_success_journal_row_rejects_missing_or_empty_trajectory_maps(
+    field: str, mutation: str
+) -> None:
+    packet = _packet()
+    identity = next(
+        item for item in packet["identities"] if item["regime_id"] == "slow_distributed"
+    )
+    outcome = _fake_native_outcome(packet, identity)
+    if mutation == "omitted":
+        outcome["provenance"]["diagnostics"].pop(field)
+    else:
+        outcome["provenance"]["diagnostics"][field] = {}
+
+    with pytest.raises(campaign.CampaignAdapterError, match="trajectory diagnostics"):
+        campaign._journal_row_payload(outcome)
+
+
 def test_reconcile_rejects_success_provenance_without_identity_context(tmp_path: Any) -> None:
     identity_key = campaign._compiled_manifest()["identities"][0]["identity_key"]
     metrics = _protocol_metrics()

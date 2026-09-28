@@ -483,7 +483,10 @@ def test_terminal_journal_preserves_metrics_and_reconcile_hides_path(tmp_path: A
                     "missingness": None,
                     "reason": None,
                     "metrics": _protocol_metrics(),
-                    "provenance": {"source_commit": SOURCE_COMMIT},
+                    "provenance": {
+                        "identity_key": identity_key,
+                        "source_commit": SOURCE_COMMIT,
+                    },
                 }
             ),
         )
@@ -494,6 +497,7 @@ def test_terminal_journal_preserves_metrics_and_reconcile_hides_path(tmp_path: A
     assert summary["journal_reference"] == "run.jsonl"
     assert summary["complete"] is True
     assert summary["rows"][0]["identity_key"] == identity_key
+    assert summary["rows"][0]["provenance"]["identity_key"] == identity_key
     assert summary["rows"][0]["metrics"] == _protocol_metrics()
     assert str(journal) not in campaign.json.dumps(summary, sort_keys=True)
 
@@ -535,6 +539,63 @@ def test_reconcile_rejects_malformed_terminal_identity_without_echo(tmp_path: An
         campaign.reconcile_execution_journal(journal, expected_rows=1)
 
     assert bad_identity not in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "bad_identity",
+    ("../../private/cluster/secret-token", TOKEN),
+)
+def test_reconcile_rejects_malformed_nested_identity_without_echo(
+    tmp_path: Any, bad_identity: str
+) -> None:
+    identity_key = campaign._compiled_manifest()["identities"][0]["identity_key"]
+    journal = tmp_path / "run.jsonl"
+    journal.write_text(
+        campaign.json.dumps(
+            {
+                "event": "row_finished",
+                "identity_key": identity_key,
+                "terminal_status": "failed",
+                "provenance": {"identity_key": bad_identity},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        campaign.CampaignAdapterError, match="journal row identity is invalid"
+    ) as exc_info:
+        campaign.reconcile_execution_journal(journal, expected_rows=1)
+
+    assert bad_identity not in str(exc_info.value)
+
+
+def test_reconcile_rejects_mismatched_compiled_nested_identity(tmp_path: Any) -> None:
+    identities = campaign._compiled_manifest()["identities"]
+    identity_key = identities[0]["identity_key"]
+    other_identity_key = identities[1]["identity_key"]
+    journal = tmp_path / "run.jsonl"
+    journal.write_text(
+        campaign.json.dumps(
+            {
+                "event": "row_finished",
+                "identity_key": identity_key,
+                "terminal_status": "failed",
+                "provenance": {"identity_key": other_identity_key},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        campaign.CampaignAdapterError,
+        match="journal provenance identity does not match row identity",
+    ) as exc_info:
+        campaign.reconcile_execution_journal(journal, expected_rows=1)
+
+    assert other_identity_key not in str(exc_info.value)
 
 
 def test_self_minted_authorization_cannot_enter_production_runner(tmp_path: Any) -> None:

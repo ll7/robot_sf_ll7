@@ -1708,6 +1708,12 @@ def reconcile_execution_journal(
         provenance = None
         if event.get("provenance") is not None:
             provenance = _mapping(event.get("provenance"), "journal.row_finished.provenance")
+            if "identity_key" in provenance:
+                provenance_identity_key = _journal_identity_key(provenance["identity_key"])
+                _require(
+                    provenance_identity_key == identity_key,
+                    "journal provenance identity does not match row identity",
+                )
             if "metrics" in provenance:
                 provenance["metrics"] = _finite_protocol_metrics(
                     provenance.get("metrics"),

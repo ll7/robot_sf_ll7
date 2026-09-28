@@ -3,7 +3,7 @@
 
 Why this exists
 ---------------
-Both the ``PR Contract Check`` and ``PR body contracts`` workflows used an inline
+The ``PR Contract Check`` and former ``PR body contracts`` workflows used an inline
 ``gh api --paginate "repos/$REPO/pulls/$PR/files?per_page=100"`` call to gather
 the changed-file list. When GitHub returns a transient HTML 502/503/504/429 page,
 the CLI writes that HTML to stdout, the ``--jq`` filter fails with
@@ -11,7 +11,8 @@ the CLI writes that HTML to stdout, the ``--jq`` filter fails with
 red *before* its real checker ever runs (issue #5918). A transient GitHub API
 blip must not look like a body/contract failure.
 
-This helper is the shared retrying collector used by both workflows. It pages the
+This helper is the retrying collector used by the consolidated contract workflow
+and by CI path selection. It pages the
 ``repos/{owner}/{repo}/pulls/{number}/files`` endpoint one page at a time so each
 page can be retried independently. HTTP 429/5xx responses, connection failures,
 and non-JSON HTML error pages are retried with exponential delay + jitter;

@@ -16,6 +16,7 @@ on:
       - "scripts/dev/sphinx_strict_build.sh"
       - ".github/workflows/publish-docs-site.yml"
   pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
     paths:
       - "docs/**"
       - "site/**"
@@ -33,6 +34,7 @@ concurrency:
 
 jobs:
   build-site:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:

@@ -8,6 +8,7 @@ on:
       - "**/*.md"
       - "docs/**"
   pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
     paths-ignore:
       - "**/*.md"
       - "docs/**"
@@ -55,6 +56,10 @@ jobs:
       cancel-in-progress: false
     outputs:
       run_full_ci: ${{ steps.decision.outputs.run_full_ci }}
+      compat_os: ${{ steps.paths.outputs.compat_os }}
+      examples_smoke: ${{ steps.paths.outputs.examples_smoke }}
+      notebooks_smoke: ${{ steps.paths.outputs.notebooks_smoke }}
+      xdist_scratch_isolation: ${{ steps.paths.outputs.xdist_scratch_isolation }}
     steps:
       - name: Checkout gate source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -69,6 +74,10 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${GITHUB_EVENT_NAME}" != "workflow_dispatch" ]]; then
+            if [[ "${{ github.event_name == 'pull_request' && github.event.pull_request.draft }}" == "true" ]]; then
+              echo "run_full_ci=false" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
             echo "run_full_ci=true" >> "${GITHUB_OUTPUT}"
             exit 0
           fi
@@ -87,6 +96,54 @@ jobs:
             --current-run-id "${GITHUB_RUN_ID}" \
             --github-output "${GITHUB_OUTPUT}" \
             "${retry_args[@]}"
+
+      - name: Set up pinned uv for draft feedback
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.21"
+
+      - name: Lint and run small CI-helper subset on drafts
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft
+        run: |
+          set -euo pipefail
+          uvx --from ruff==0.16.7 ruff check .
+          uvx --from ruff==0.16.7 ruff format --check .
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --no-project --with pytest==9.1.1 \
+            python -m pytest tests/dev/test_ci_heavy_paths.py tests/ci/test_collect_pr_files.py \
+            --noconftest -q -o addopts=''
+
+      - name: Collect ready PR changed files
+        if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: >-
+          python scripts/ci/collect_pr_files.py
+          --repo "$GITHUB_REPOSITORY" --pr-number "$PR_NUMBER"
+          --out-changed-files "$RUNNER_TEMP/pr_changed_files.txt"
+          --out-files-status "$RUNNER_TEMP/pr_files_status.tsv"
+
+      - name: Select heavy PR jobs
+        id: paths
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            python scripts/dev/ci_heavy_paths.py \
+              --changed-files "$RUNNER_TEMP/pr_changed_files.txt" \
+              --files-status "$RUNNER_TEMP/pr_files_status.tsv" \
+              --github-output "$GITHUB_OUTPUT"
+          else
+            {
+              echo 'compat_os=["ubuntu-latest","macos-latest"]'
+              echo 'examples_smoke=true'
+              echo 'notebooks_smoke=true'
+              echo 'xdist_scratch_isolation=true'
+            } >> "$GITHUB_OUTPUT"
+          fi
+        if: github.event_name != 'pull_request' || !github.event.pull_request.draft
 
   fast-feedback:
     needs: dispatch-ownership
@@ -375,7 +432,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: ${{ fromJSON(needs.dispatch-ownership.outputs.compat_os) }}
         python: ["3.11", "3.13"]
     steps:
       - name: Checkout
@@ -553,8 +610,8 @@ jobs:
     # GitHub-hosted state. Reconcile only that exact job identity; keep the
     # hosted-state repair diagnostic-only and outside the ci aggregate.
     if: >-
-      ${{ always() && (github.event_name == 'pull_request' ||
-      github.event_name == 'workflow_dispatch') }}
+      ${{ always() && needs.reproducibility-check.result == 'success' &&
+      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') }}
     needs: [reproducibility-check]
     continue-on-error: true
     permissions:
@@ -588,7 +645,9 @@ jobs:
 
   xdist-scratch-isolation:
     needs: dispatch-ownership
-    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
+    if: >-
+      needs.dispatch-ownership.outputs.run_full_ci == 'true' &&
+      (github.event_name != 'pull_request' || needs.dispatch-ownership.outputs.xdist_scratch_isolation == 'true')
     runs-on: ubuntu-latest
     # Shared all-extras setup can take ~19 minutes before the guard runs (#8631).
     timeout-minutes: 30
@@ -643,7 +702,9 @@ jobs:
 
   examples-smoke:
     needs: dispatch-ownership
-    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
+    if: >-
+      needs.dispatch-ownership.outputs.run_full_ci == 'true' &&
+      (github.event_name != 'pull_request' || needs.dispatch-ownership.outputs.examples_smoke == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -697,7 +758,9 @@ jobs:
 
   notebooks-smoke:
     needs: dispatch-ownership
-    if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
+    if: >-
+      needs.dispatch-ownership.outputs.run_full_ci == 'true' &&
+      (github.event_name != 'pull_request' || needs.dispatch-ownership.outputs.notebooks_smoke == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -873,17 +936,27 @@ jobs:
           needs.dispatch-ownership.outputs.run_full_ci == 'true') }}
         env:
           CI_NEEDS_JSON: ${{ toJSON(needs) }}
+          CI_LANE_OUTPUTS: ${{ toJSON(needs.dispatch-ownership.outputs) }}
         run: |
           python scripts/dev/check_ci_needs.py \
             --event-name "${{ github.event_name }}" \
             --treat-cancelled-as-superseded \
+            --lane-outputs "$CI_LANE_OUTPUTS" \
             --results "$CI_NEEDS_JSON"
 
       - name: Record observed exact-head verdict
         if: >-
           ${{ always() && needs.dispatch-ownership.result == 'success' &&
-          needs.dispatch-ownership.outputs.run_full_ci == 'false' }}
+          needs.dispatch-ownership.outputs.run_full_ci == 'false' &&
+          github.event_name == 'workflow_dispatch' }}
         run: echo "The dispatch gate observed a decisive exact-head CI run; no duplicate matrix launched."
+
+      - name: Record draft feedback result
+        if: >-
+          ${{ always() && needs.dispatch-ownership.result == 'success' &&
+          needs.dispatch-ownership.outputs.run_full_ci == 'false' &&
+          github.event_name == 'pull_request' }}
+        run: echo "Draft lint and small helper tests passed; full CI starts on ready_for_review."
 
       - name: Download test-duration shards
         if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_ci_source.outcome == 'success' }}

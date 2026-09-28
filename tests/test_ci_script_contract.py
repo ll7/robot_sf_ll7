@@ -60,7 +60,7 @@ RUN_XDIST_RACE_VALIDATION = ROOT / "scripts" / "dev" / "run_xdist_race_validatio
 RUN_CI_LOCAL = ROOT / "scripts" / "dev" / "run_ci_local.sh"
 LOCAL_SIGNOFF = ROOT / "scripts" / "dev" / "local_signoff.sh"
 PR_READY_CHECK = ROOT / "scripts" / "dev" / "pr_ready_check.sh"
-PR_BODY_CONTRACTS_WORKFLOW = ROOT / ".github" / "workflows" / "pr-body-contracts.yml"
+PR_BODY_CONTRACTS_WORKFLOW = ROOT / ".github" / "workflows" / "pr-contract-check.yml"
 RUN_WORKTREE_SHARED_VENV = ROOT / "scripts" / "dev" / "run_worktree_shared_venv.sh"
 COMMON_SETUP = ROOT / "scripts" / "dev" / "common_setup.sh"
 RUFF_FIX_FORMAT = ROOT / "scripts" / "dev" / "ruff_fix_format.sh"
@@ -1525,8 +1525,8 @@ def test_pr_ready_check_final_mode_runs_evidence_hygiene_contract() -> None:
     assert 0 < followups_index < contract_index
 
 
-def test_pr_body_contracts_workflow_runs_strict_pr_body_checker() -> None:
-    """The live PR workflow should enforce body, follow-up, and domain-review contracts."""
+def test_pr_contract_workflow_runs_advisory_pr_body_checker() -> None:
+    """The consolidated PR workflow retains advisory body and follow-up checks."""
     workflow_text = PR_BODY_CONTRACTS_WORKFLOW.read_text(encoding="utf-8")
 
     assert "pull_request:" in workflow_text
@@ -1535,6 +1535,7 @@ def test_pr_body_contracts_workflow_runs_strict_pr_body_checker() -> None:
     assert "gh api --paginate" not in workflow_text
     assert "pr_changed_files.txt" in workflow_text
     assert "scripts/dev/check_pr_followups.py" in workflow_text
+    assert "--advisory" in workflow_text
     for flag in (
         "--github-event-path",
         "--changed-files-file",

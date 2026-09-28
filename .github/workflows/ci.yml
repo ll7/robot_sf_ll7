@@ -903,6 +903,7 @@ jobs:
             -q
 
   ci:
+    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'ci-draft' || 'ci' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:

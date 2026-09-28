@@ -7,7 +7,7 @@ benchmark semantics, provenance, or publication behavior.
 ## Hosted draft and ready PR checks
 
 A draft PR push runs only the CI `dispatch-ownership` job (Ruff lint, format, and a small
-CI-helper test subset) and the aggregate `ci` job. Other PR jobs skip drafts. The
+CI-helper test subset) and the `ci-draft` feedback job. Other PR jobs skip drafts. The
 `ready_for_review` event starts the full PR checks, including the four fast-feedback
 shards and exact-head changed coverage. Main pushes and merge groups keep the full
 matrix. The separate `pull_request_target` review-bot workflow retains its write

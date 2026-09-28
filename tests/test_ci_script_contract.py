@@ -474,6 +474,15 @@ def test_required_check_identities_bind_to_aggregate_ci_contract() -> None:
     assert required_check_identities() == REQUIRED_JOBS
 
 
+def test_draft_feedback_uses_a_distinct_aggregate_check_name() -> None:
+    """Draft feedback must not publish the full-run check identity."""
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    assert workflow["jobs"][AGGREGATE_JOB]["name"] == (
+        "${{ github.event_name == 'pull_request' && github.event.pull_request.draft "
+        "&& 'ci-draft' || 'ci' }}"
+    )
+
+
 def test_ci_paths_ignore_manifest_matches_workflow_triggers() -> None:
     """The checked-in ignore manifest must match both CI skip declarations."""
     workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))

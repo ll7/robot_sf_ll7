@@ -21,8 +21,10 @@ SHARED = (
 )
 PATHS = {
     "compat_macos": SHARED + ("robot_sf/", "fast-pysf/", "tests/", "scripts/", "configs/"),
-    "examples_smoke": SHARED + ("examples/", "robot_sf/", "tests/examples/"),
-    "notebooks_smoke": SHARED + ("notebooks/", "robot_sf/", "tests/notebooks/"),
+    "examples_smoke": SHARED
+    + ("examples/", "robot_sf/", "tests/examples/", "scripts/validation/run_examples_smoke.py"),
+    "notebooks_smoke": SHARED
+    + ("notebooks/", "robot_sf/", "tests/notebooks/", "scripts/validation/run_notebooks_smoke.py"),
     "xdist_scratch_isolation": SHARED
     + (
         "robot_sf/",

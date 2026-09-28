@@ -30,6 +30,19 @@ def test_unrelated_script_keeps_specialized_jobs_off() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("path", "lane"),
+    [
+        ("scripts/validation/run_examples_smoke.py", "examples_smoke"),
+        ("scripts/validation/run_notebooks_smoke.py", "notebooks_smoke"),
+    ],
+)
+def test_smoke_runner_change_selects_its_lane(path: str, lane: str) -> None:
+    selected = select_lanes([path])
+    assert selected[lane]
+    assert selected["compat_macos"]
+
+
 @pytest.mark.parametrize("lane", LANES)
 def test_each_lane_has_a_relevant_path(lane: str) -> None:
     examples = {

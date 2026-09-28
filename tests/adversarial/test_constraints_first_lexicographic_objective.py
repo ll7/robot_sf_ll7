@@ -177,6 +177,144 @@ def test_constraints_first_v2_keeps_partial_negative_safety_evidence_unknown(
     assert constraints_first_lexicographic_v1(evaluation) is not None
 
 
+@pytest.mark.parametrize(
+    "record",
+    (
+        None,
+        {"outcome": [], "metrics": {}},
+        {
+            "outcome": {"route_complete": True, "timeout": False},
+            "metrics": {"success": True, "collisions": 0},
+        },
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout": False,
+                "timeout_event": True,
+            },
+            "metrics": {"success": True, "collisions": 0, "near_misses": 0},
+        },
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {"success": False, "collisions": 0, "near_misses": 0},
+        },
+    ),
+    ids=(
+        "non-object",
+        "malformed-fields",
+        "missing-route",
+        "conflicting-timeout",
+        "success-mismatch",
+    ),
+)
+def test_constraints_first_v2_projection_rejects_incomplete_records(record: object) -> None:
+    """Malformed and contradictory episode rows stay unavailable to the objective."""
+    assert constraints_first_outcome_projection_v2(record) == {
+        "status": "not_available",
+        "collision_or_severe_intrusion": None,
+        "liveness_or_goal_completion": None,
+        "comfort_and_efficiency": None,
+    }
+
+
+@pytest.mark.parametrize(
+    ("metric_name", "metric_value"),
+    (("collisions", -1), ("near_misses", -1), ("snqi", "invalid"), ("path_efficiency", 1.1)),
+)
+def test_constraints_first_v2_projection_rejects_invalid_metrics(
+    metric_name: str, metric_value: object
+) -> None:
+    """Invalid criticality or comfort values cannot silently become planner scores."""
+    record: dict[str, object] = {
+        "outcome": {
+            "route_complete": True,
+            "collision_event": False,
+            "severe_intrusion_event": False,
+            "timeout_event": False,
+        },
+        "metrics": {
+            "success": True,
+            "collisions": 0,
+            "severe_intrusion": False,
+            "near_misses": 0,
+            "snqi": 0.0,
+            "path_efficiency": 1.0,
+        },
+    }
+    metrics = record["metrics"]
+    assert isinstance(metrics, dict)
+    metrics[metric_name] = metric_value
+
+    assert constraints_first_outcome_projection_v2(record)["status"] == "not_available"
+
+
+def test_constraints_first_v2_projection_rejects_conflicting_safety_sources() -> None:
+    """Outcome aliases and independent safety metrics must agree when both exist."""
+    records = (
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {"success": True, "collisions": 1, "severe_intrusion": False},
+        },
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {
+                "success": True,
+                "collisions": 0,
+                "severe_intrusion": False,
+                "severe_intrusion_event": True,
+            },
+        },
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {
+                "success": True,
+                "collisions": 0,
+                "severe_intrusion": "false",
+            },
+        },
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {
+                "success": True,
+                "collisions": 0,
+                "severe_intrusion": True,
+            },
+        },
+    )
+
+    assert all(
+        constraints_first_outcome_projection_v2(record)["status"] == "not_available"
+        for record in records
+    )
+
+
 def test_constraints_first_v2_requires_both_negative_safety_components(
     tmp_path: Path,
 ) -> None:
@@ -301,8 +439,14 @@ def test_constraints_first_v2_does_not_score_fallback_or_unavailable_execution(
     assert constraints_first_lexicographic_v2(evaluation) is None
 
 
-def test_constraints_first_v2_accepts_available_adapter_execution(tmp_path: Path) -> None:
-    """A declared available adapter execution remains eligible for search feedback."""
+@pytest.mark.parametrize(
+    ("execution_mode", "readiness_status"),
+    (("adapter", "adapter"), ("mixed", "native")),
+)
+def test_constraints_first_v2_accepts_available_adapter_or_mixed_execution(
+    tmp_path: Path, execution_mode: str, readiness_status: str
+) -> None:
+    """Declared adapter or mixed executions remain eligible when available."""
     evaluation = _evaluation(
         tmp_path,
         "adapter_collision",
@@ -322,8 +466,8 @@ def test_constraints_first_v2_accepts_available_adapter_execution(tmp_path: Path
             primary_failure="collision",
             reasons=["episode reports a collision"],
             details={
-                "execution_mode": "adapter",
-                "readiness_status": "adapter",
+                "execution_mode": execution_mode,
+                "readiness_status": readiness_status,
                 "availability_status": "available",
             },
         ),
@@ -332,6 +476,60 @@ def test_constraints_first_v2_accepts_available_adapter_execution(tmp_path: Path
     score = constraints_first_lexicographic_v2(evaluation)
 
     assert score is not None and 4.0 <= score < 5.0
+
+
+@pytest.mark.parametrize(
+    "failure_kind",
+    ("error", "missing-attribution", "wrong-status", "malformed-details", "missing-record"),
+)
+def test_constraints_first_v2_skips_failed_or_unbound_evaluations(
+    tmp_path: Path, failure_kind: str
+) -> None:
+    """Failed or provenance-incomplete evaluation rows are preserved without a score."""
+    evaluation = _evaluation(
+        tmp_path,
+        f"ineligible_{failure_kind}",
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {
+                "success": True,
+                "collisions": 0,
+                "near_misses": 0,
+                "snqi": 0.0,
+                "path_efficiency": 1.0,
+            },
+        },
+    )
+    if failure_kind == "error":
+        evaluation = replace(evaluation, error="simulator error")
+    elif failure_kind == "missing-attribution":
+        evaluation = replace(evaluation, failure_attribution=None)
+    elif failure_kind == "wrong-status":
+        evaluation = replace(
+            evaluation,
+            failure_attribution=FailureAttribution(
+                status="unattributed", primary_failure=None, reasons=[], details={}
+            ),
+        )
+    elif failure_kind == "malformed-details":
+        evaluation = replace(
+            evaluation,
+            failure_attribution=FailureAttribution(
+                status="attributed",
+                primary_failure=None,
+                reasons=[],
+                details=[],  # type: ignore[arg-type]
+            ),
+        )
+    elif failure_kind == "missing-record":
+        evaluation = replace(evaluation, episode_record_path=None)
+
+    assert constraints_first_lexicographic_v2(evaluation) is None
 
 
 def test_constraints_first_v2_positive_component_survives_other_component_conflict(

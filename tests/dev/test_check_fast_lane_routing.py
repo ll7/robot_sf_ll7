@@ -184,6 +184,13 @@ def test_trajectory_mode_risk_contract_tests_are_registered_in_fast_lane() -> No
     assert policy.is_fast("tests/dev/test_check_fast_lane_routing.py")
 
 
+def test_multimodal_arbitration_contract_tests_are_registered_in_fast_lane() -> None:
+    """Arbitration contracts provide changed-line coverage for issue #8062."""
+    policy = load_fast_lane_policy(Path("tests/conftest.py").read_text(encoding="utf-8"))
+
+    assert policy.is_fast("tests/test_multimodal_trajectory_arbitration.py")
+
+
 def test_release_checkpoint_producer_tests_are_registered_in_fast_lane() -> None:
     """Release-smoke producer coverage must reach the hosted changed-line combiner."""
     policy = load_fast_lane_policy(Path("tests/conftest.py").read_text(encoding="utf-8"))

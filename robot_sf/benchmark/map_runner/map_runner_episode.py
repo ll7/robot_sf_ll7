@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import math
 import time
 from collections import Counter
@@ -53,6 +54,7 @@ from robot_sf.benchmark.map_runner.map_runner_identity import (
     _compute_map_episode_id,
     _scenario_identity_payload,
     _scenario_with_episode_seed_defaults,
+    selected_map_identity_from_runtime_inputs,
 )
 from robot_sf.benchmark.map_runner.map_runner_metrics import (
     floor_collision_metrics_from_flags as _floor_collision_metrics_from_flags,
@@ -203,6 +205,7 @@ from robot_sf.benchmark.utils import (
     normalize_track_field,
 )
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.gym_env.reset_metadata import resolve_map_id
 from robot_sf.gym_env.unified_config import RobotSimulationConfig  # noqa: TC001
 from robot_sf.planner.safety_shield import shield_metrics_from_stats
 from robot_sf.robot.safety_wrapper import DeadlockRecoveryMonitor  # noqa: TC001
@@ -212,6 +215,10 @@ from robot_sf.sim.spawn_validation import reset_spawn_clearance
 # legacy plain-dict metadata to ``AlgoMeta`` after enrichment.
 PolicyBuilder = Callable[..., tuple[Any, AlgoMeta | dict[str, Any]]]
 PedestrianControlTraceLabelBuilder = Callable[[int], list[dict[str, Any]]]
+# The runner deliberately treats paired-reset custody as an opaque callback boundary:
+# the callback owns the environment and observation representations, while the runner
+# only persists its mapping payload in algorithm metadata.
+_PairResetHook = Callable[[object, object], Mapping[str, str]]
 _OBSTACLE_FORCE_LAW_RUNTIME_RECORD_SCHEMA = "obstacle_force_law_runtime_record.v1"
 _PAIRED_EFFECT_NATIVE_TRACE_SCHEMA = "paired_effect_native_trace.v1"
 
@@ -1307,6 +1314,26 @@ class _EpisodeRunContext:
     policy_cfg: dict[str, Any]
 
 
+def _accepts_runtime_input_records(builder: Callable[..., Any]) -> bool:
+    """Return whether an environment builder supports runtime-input capture.
+
+    Returns:
+        ``True`` for the canonical builder contract or a compatible wrapper.
+    """
+    try:
+        parameters = inspect.signature(builder).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(
+        (
+            parameter.name == "runtime_input_records"
+            and parameter.kind is not inspect.Parameter.POSITIONAL_ONLY
+        )
+        or parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters
+    )
+
+
 def _resolve_episode_run_context(  # noqa: PLR0913
     *,
     scenario: dict[str, Any],
@@ -1330,6 +1357,7 @@ def _resolve_episode_run_context(  # noqa: PLR0913
     latency_stress_profile: dict[str, Any] | None,
     safety_wrapper: dict[str, Any] | None,
     cbf_safety_filter: dict[str, Any] | None,
+    runtime_input_records: list[dict[str, str]] | None = None,
 ) -> _EpisodeRunContext:
     """Normalize episode inputs, build the env config, and resolve the policy cfg.
 
@@ -1375,7 +1403,17 @@ def _resolve_episode_run_context(  # noqa: PLR0913
             "safety_wrapper and cbf_safety_filter cannot both be enabled in #3948 first slice"
         )
     safety_wrapper_deadlock_monitor = make_deadlock_recovery_monitor(safety_wrapper_runtime)
-    config = _build_env_config(scenario, scenario_path=scenario_path)
+    if runtime_input_records is not None and _accepts_runtime_input_records(_build_env_config):
+        config = _build_env_config(
+            scenario,
+            scenario_path=scenario_path,
+            runtime_input_records=runtime_input_records,
+        )
+    else:
+        # Keep legacy monkeypatched builders usable. Their missing capture support
+        # leaves the row's input identity unavailable, which downstream evidence
+        # consumers already treat as unknown.
+        config = _build_env_config(scenario, scenario_path=scenario_path)
     max_steps = int(scenario.get("simulation_config", {}).get("max_episode_steps", 0) or 0)
     horizon_val = int(horizon) if horizon and horizon > 0 else max_steps
     if horizon_val <= 0:
@@ -2089,6 +2127,7 @@ class _StepLoopSetupArgs:
     pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None
     expected_population_size: int | None
     hybrid_source_field: str | None
+    pair_reset_hook: _PairResetHook | None = None
 
 
 @dataclass(slots=True)
@@ -3490,6 +3529,10 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
             expected_population_size=args.expected_population_size,
             pedestrian_control_trace_label_builder=args.pedestrian_control_trace_label_builder,
         )
+        if args.pair_reset_hook is not None:
+            # Opt-in doorway custody: restore and verify the paired reset before the
+            # first planner command. Ordinary benchmark episodes never enter this path.
+            args.algo_meta["doorway_pair_receipt"] = dict(args.pair_reset_hook(env, obs))
         state = _init_step_loop_state(
             obs=obs,
             env=env,
@@ -3568,6 +3611,7 @@ def _run_episode_step_loop(  # noqa: PLR0913
     single_pedestrian_vru_metadata: list[dict[str, object] | None],
     pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None = None,
     expected_population_size: int | None = None,
+    pair_reset_hook: _PairResetHook | None = None,
 ) -> _EpisodeStepLoopResult:
     """Run the env reset, the per-step episode loop, and planner/env teardown.
 
@@ -3606,6 +3650,7 @@ def _run_episode_step_loop(  # noqa: PLR0913
             pedestrian_control_trace_label_builder=pedestrian_control_trace_label_builder,
             expected_population_size=expected_population_size,
             hybrid_source_field=hybrid_source_field,
+            pair_reset_hook=pair_reset_hook,
         )
     )
 
@@ -5246,9 +5291,11 @@ def run_map_episode(  # noqa: PLR0913
     cbf_safety_filter: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
+    pair_reset_hook: _PairResetHook | None = None,
     pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None = None,
     close_policy: bool = True,
     policy_builder: PolicyBuilder,
+    runtime_input_records: list[dict[str, str]] | None = None,
 ) -> EpisodeRecordDict:
     """Run one scenario/seed episode and return a benchmark JSONL record.
 
@@ -5277,6 +5324,7 @@ def run_map_episode(  # noqa: PLR0913
         latency_stress_profile=latency_stress_profile,
         safety_wrapper=safety_wrapper,
         cbf_safety_filter=cbf_safety_filter,
+        runtime_input_records=runtime_input_records,
     )
     scenario = ctx.scenario
     telemetry_profile = telemetry_from_scenario(scenario)
@@ -5370,6 +5418,7 @@ def run_map_episode(  # noqa: PLR0913
         single_pedestrian_vru_metadata=policy_contract.single_pedestrian_vru_metadata,
         pedestrian_control_trace_label_builder=pedestrian_control_trace_label_builder,
         expected_population_size=expected_population_size,
+        pair_reset_hook=pair_reset_hook,
     )
     post_loop = _compute_post_loop_metrics(
         robot_positions=loop_result.robot_positions,
@@ -5398,7 +5447,7 @@ def run_map_episode(  # noqa: PLR0913
         ped_impact_radius_m=ped_impact_radius_m,
         ped_impact_window_steps=ped_impact_window_steps,
     )
-    return _finalize_episode_record(
+    episode_record = _finalize_episode_record(
         ctx=ctx,
         loop_result=loop_result,
         post_loop=post_loop,
@@ -5420,6 +5469,15 @@ def run_map_episode(  # noqa: PLR0913
         record_simulation_step_trace=record_simulation_step_trace,
         paired_wrapper_off_record=paired_wrapper_off_record,
     )
+    realized_map_id = (
+        resolve_map_id(ctx.config, loop_result.map_def) if loop_result.map_def is not None else None
+    )
+    episode_record["selected_map_identity"] = selected_map_identity_from_runtime_inputs(
+        realized_map_id,
+        runtime_input_records or [],
+        scenario_id=ctx.scenario_id,
+    )
+    return episode_record
 
 
 __all__ = ["run_map_episode"]

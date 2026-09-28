@@ -14,8 +14,61 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 9431
-latest_reviewed_date: 2026-09-23
+latest_reconciliation_issue: 9647
+latest_reviewed_date: 2026-09-27
+latest_reviewed_by: Codex #9647 delivery lane; exact-byte sidecar audit only, no additional human sign-off is claimed.
+evidence_tree_refresh_addenda:
+  - issue: 9647
+    reviewed_date: 2026-09-26
+    previous:
+      count: 2442
+      sha256: a1acca979b7f839b93dcc20296d6c7d33ba07f6952344bdddf3f265351d49ee9
+    candidate:
+      count: 2456
+      sha256: eeb2c9c4b87aac65506d53a8b839bda869d90b15bcd3c070857a9c2615cb7e21
+    files_added: 14
+    finding_delta: none
+    decision: >-
+      Reviewed the seven new #9647 smoke-bundle members and their seven exact-byte review sidecars.
+      The bundle now declares that files[].path entries resolve under its tracked payload/ directory;
+      the adjacent checksum gate verifies those payload bytes. The generated candidate retains 438
+      findings with no new or increased finding and updates only the evidence-tree manifest.
+  - issue: 9647
+    reviewed_date: 2026-09-26
+    previous:
+      count: 2456
+      sha256: eeb2c9c4b87aac65506d53a8b839bda869d90b15bcd3c070857a9c2615cb7e21
+    candidate:
+      count: 2462
+      sha256: d76bed17284d321a99cc2fd51e19c5d0e32de11af9f3c49b8e5ebd3b1007a29f
+    files_added: 6
+    finding_delta: none
+    decision: >-
+      Reviewed the six newly tracked #9647 visual-evidence paths: the compact recorded trace,
+      trace provenance, render-only provenance, and one exact-byte review sidecar for each. Their
+      bytes are bound by the refreshed bundle manifest and checksums; the generated baseline still
+      has 438 findings and this refresh changes only the evidence-tree path inventory. The compact
+      trace and both provenance documents were cross-checked against the local source row and
+      source-sidecar digests; the full ignored JSONL and output tree were intentionally not promoted.
+      Those source artifacts remain available only in ignored local output in this checkout and are
+      not preserved by the tracked bundle. The render-only claims remain limited to byte-reproducible
+      figures from stored trace samples; no simulator, replay, search, or campaign result is asserted.
+  - issue: 9647
+    reviewed_date: 2026-09-27
+    previous:
+      count: 2462
+      sha256: d76bed17284d321a99cc2fd51e19c5d0e32de11af9f3c49b8e5ebd3b1007a29f
+    candidate:
+      count: 2465
+      sha256: 7253f1cc2eb98da8e6ddd3acdab31c59efaf534968f782c69933c89232132dd0
+    files_added: 3
+    finding_delta: none
+    decision: >-
+      Reviewed the three new exact-byte review sidecars for the tracked #9647 gallery-demo figures.
+      Each sidecar's artifact path matches its adjacent PNG and its SHA-256 matches the unchanged PNG
+      bytes. The sidecars mark AI-generated images as needing review; this addendum makes no new
+      interpretation or benchmark claim. The refreshed machine baseline retains 438 findings and
+      changes only the evidence-tree manifest for these three tracked files.
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
@@ -157,6 +210,16 @@ decision_summary: >-
   across 98 files, and records the 40-file evidence-tree addition: 38 diagnostic trace files plus
   two SHA-bound `evidence-review-marker.v1` sidecars. The sidecars bind the root README and
   campaign provenance bytes without modifying either artifact.
+  Replay-gallery addendum (issue #9647; 2026-09-25): the current strict-gate demo records one
+  selected #1501 compatibility row, one changed-revision outcome replay, and three tracked figures.
+  Its complete `scenario_cert.v1` certificate was generated post-hoc from tracked static route
+  inputs; dynamic task feasibility remains unknown. Two earlier smoke receipts are retained as
+  pre-strict run history. The exact old fixture manifest bytes are preserved as
+  `manifest.pre_strict_gate.json`, so the historical receipt hash remains bound without implying
+  current-gate acceptance. Explicit location markers distinguish ignored local replay outputs from
+  the compact tracked bundle, resolving 23 prior missing-location findings. The seven-file demo
+  bundle adds no current evidence-registry findings. The machine baseline drops from 461 findings
+  across 102 files to 438 across 98 files; the result remains diagnostic plumbing evidence only.
 #8237 disposition: remediate. The E_release_checklist digest in the
 #4683 assurance-case example was recomputed against the exact final-head
 # docs/RELEASE.md bytes and is already current at this head. No

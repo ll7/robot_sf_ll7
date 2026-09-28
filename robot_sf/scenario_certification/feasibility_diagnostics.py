@@ -179,12 +179,16 @@ def make_actor_free_scenario(scenario: Mapping[str, Any]) -> dict[str, Any]:
     mutated = deepcopy(dict(scenario))
     sim_cfg = dict(mutated.get("simulation_config") or {})
     sim_cfg["ped_density"] = 0.0
+    sim_cfg.pop("population_size", None)
     sim_cfg.pop("single_pedestrians", None)
     sim_cfg.pop("pedestrian_flows", None)
     sim_cfg.pop("social_groups", None)
     mutated["simulation_config"] = sim_cfg
+    mutated.pop("generated_replay", None)
+    mutated.pop("pedestrian_flows", None)
     mutated["single_pedestrians"] = []
     mutated["social_groups"] = []
+    mutated["_diagnostic_remove_pedestrian_actors"] = True
     metadata = dict(mutated.get("metadata") or {})
     metadata["diagnostic_variant"] = "actor_free"
     metadata["diagnostic_claim_boundary"] = DIAGNOSTIC_CLAIM_BOUNDARY

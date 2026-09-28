@@ -10,7 +10,7 @@ import os
 import sys
 import threading
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import atan2, pi
 from pathlib import Path
 from typing import Any
@@ -88,6 +88,37 @@ def resolve_social_force_planner_version(value: Any = None) -> str:
         supported = ", ".join(sorted(SOCIAL_FORCE_PLANNER_VERSIONS))
         raise ValueError(
             f"unsupported social-force planner version {resolved!r}; expected one of {supported}"
+        )
+    return resolved
+
+
+# Pedestrian-term versions (issue #9758).  ``legacy_kernel`` is the historical
+# ped-ped kernel evaluated at centre distance and stays the default so frozen
+# campaigns replay bit-identically.  ``surface_v3`` is opt-in through
+# ``social_force_ped_version``; see ``robot_sf.planner.socnav_social_force``
+# for what it changes and why.
+SOCIAL_FORCE_PED_LEGACY_KERNEL = "legacy_kernel"
+SOCIAL_FORCE_PED_SURFACE_V3 = "surface_v3"
+SOCIAL_FORCE_PED_VERSIONS = frozenset({SOCIAL_FORCE_PED_LEGACY_KERNEL, SOCIAL_FORCE_PED_SURFACE_V3})
+
+
+def resolve_social_force_ped_version(value: Any = None) -> str:
+    """Resolve the social-force pedestrian-term version selector.
+
+    Returns:
+        str: Canonical ped-term version; ``None`` or blank selects the legacy kernel.
+    """
+    if value is None:
+        return SOCIAL_FORCE_PED_LEGACY_KERNEL
+    if not isinstance(value, str):
+        raise TypeError("social-force ped version must be a string or None")
+    resolved = value.strip()
+    if not resolved:
+        return SOCIAL_FORCE_PED_LEGACY_KERNEL
+    if resolved not in SOCIAL_FORCE_PED_VERSIONS:
+        supported = ", ".join(sorted(SOCIAL_FORCE_PED_VERSIONS))
+        raise ValueError(
+            f"unsupported social-force ped version {resolved!r}; expected one of {supported}"
         )
     return resolved
 
@@ -386,6 +417,13 @@ class SocNavPlannerConfig:
     social_force_obstacle_v2_length: float = 0.6
     social_force_obstacle_v2_max_terms: int = 8
     social_force_obstacle_v2_min_separation_deg: float = 30.0
+    # Issue #9758: opt-in surface-distance pedestrian term.  The fields below
+    # are read only when ``social_force_ped_version == "surface_v3"``; see
+    # ``socnav_social_force`` for the derivation of the defaults.
+    social_force_ped_version: Any = field(default=None, kw_only=True)
+    social_force_ped_v3_strength: float = field(default=6.0, kw_only=True)
+    social_force_ped_v3_length: float = field(default=0.5, kw_only=True)
+    social_force_ped_v3_default_ped_radius: float = field(default=0.4, kw_only=True)
     # Issues #9727/#9746: opt-in bounded sampling heuristic.  The fields below are
     # read only when ``socnav_sampling_version == "bounded_v2"``.
     socnav_sampling_version: Any = None
@@ -428,6 +466,9 @@ class SocNavPlannerConfig:
             return
         if name == "socnav_sampling_version":
             object.__setattr__(self, name, resolve_socnav_sampling_version(value))
+            return
+        if name == "social_force_ped_version":
+            object.__setattr__(self, name, resolve_social_force_ped_version(value))
             return
         if name == "social_force_obstacle_law":
             resolved, mode = resolve_obstacle_force_law_with_mode(value)

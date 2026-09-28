@@ -14,6 +14,10 @@ Public surface:
 - :func:`~robot_sf.research.collision_risk.estimators.segment_min_distance` (canonical contact geometry)
 - :func:`~robot_sf.research.collision_risk.estimators.pedestrian_arrays` (matched actor-state extractor)
 - :class:`~robot_sf.research.collision_risk.schema.ActionConditionedRiskEstimate`
+- :class:`~robot_sf.research.collision_risk.schema.TrajectoryModeRiskInput`,
+  :class:`~robot_sf.research.collision_risk.schema.TrajectoryModeRiskEstimate`, and
+  :func:`~robot_sf.research.collision_risk.estimators.estimate_trajectory_mode_risk`
+  (discrete supplied-marginal mode scoring)
 
 Status: API + baseline fixture evidence, not a calibrated benchmark risk claim.
 Hard guards remain authoritative; no ``safe`` label is emitted.
@@ -25,11 +29,15 @@ from robot_sf.research.collision_risk.estimators import (
     ESTIMATOR_ID,
     FORECAST_MODEL_ID,
     GEOMETRY_VERSION,
+    TRAJECTORY_MODE_ESTIMATOR_ID,
+    TRAJECTORY_MODE_FORECAST_MODEL_ID,
+    TRAJECTORY_MODE_GEOMETRY_VERSION,
     CandidateAction,
     CollisionRiskInputError,
     RiskEstimatorConfig,
     action_from_constant_velocity,
     estimate_action_conditioned_risk,
+    estimate_trajectory_mode_risk,
     pedestrian_arrays,
     segment_min_distance,
 )
@@ -37,12 +45,17 @@ from robot_sf.research.collision_risk.schema import (
     DETERMINISTIC_FIELD_LABEL,
     GUARD_AUTHORITY_NOTE,
     RISK_SCHEMA_VERSION,
+    TRAJECTORY_MODE_RISK_CLAIM_BOUNDARY,
+    TRAJECTORY_MODE_RISK_SCHEMA_VERSION,
     ActionConditionedRiskEstimate,
     DeterministicRiskFields,
     LatencySummary,
     PerActorContribution,
     RiskProvenance,
     RiskSchemaError,
+    TrajectoryModeRiskEstimate,
+    TrajectoryModeRiskInput,
+    TrajectoryModeRiskProvenance,
     UncertaintyState,
     latency_summary_from_samples,
 )
@@ -54,6 +67,11 @@ __all__ = [
     "GEOMETRY_VERSION",
     "GUARD_AUTHORITY_NOTE",
     "RISK_SCHEMA_VERSION",
+    "TRAJECTORY_MODE_ESTIMATOR_ID",
+    "TRAJECTORY_MODE_FORECAST_MODEL_ID",
+    "TRAJECTORY_MODE_GEOMETRY_VERSION",
+    "TRAJECTORY_MODE_RISK_CLAIM_BOUNDARY",
+    "TRAJECTORY_MODE_RISK_SCHEMA_VERSION",
     "ActionConditionedRiskEstimate",
     "CandidateAction",
     "CollisionRiskInputError",
@@ -63,9 +81,13 @@ __all__ = [
     "RiskEstimatorConfig",
     "RiskProvenance",
     "RiskSchemaError",
+    "TrajectoryModeRiskEstimate",
+    "TrajectoryModeRiskInput",
+    "TrajectoryModeRiskProvenance",
     "UncertaintyState",
     "action_from_constant_velocity",
     "estimate_action_conditioned_risk",
+    "estimate_trajectory_mode_risk",
     "latency_summary_from_samples",
     "pedestrian_arrays",
     "segment_min_distance",

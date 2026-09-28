@@ -5,6 +5,11 @@ safety strata, development-only calibration, mandatory weight-family diagnostics
 and the boundary against human-comfort or deployment claims:
 [snqi_v2_spec.md](snqi_v2_spec.md).
 
+Issue #9762 versioned goal-zone route-margin successors: historical SVG, registry,
+waiver, and 0.0.7 input bytes remain unchanged; the future matrix verifies robot-radius
+margins through the scenario loader:
+[issue_9762_goal_zone_route_margin.md](issue_9762_goal_zone_route_margin.md).
+
 Issue relationship contract and migration audit:
 [issue_relationships.md](issue_relationships.md).
 

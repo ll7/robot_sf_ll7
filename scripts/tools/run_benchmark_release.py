@@ -379,6 +379,11 @@ def _assert_spawn_preflight_report_identity(campaign_root: Path, summary: dict[s
             )
 
 
+def _assert_publication_spawn_preflight_identity(bundle_dir: Path, summary: dict[str, Any]) -> None:
+    """Read back the copied reports inside the bundle's payload directory."""
+    _assert_spawn_preflight_report_identity(bundle_dir / "payload", summary)
+
+
 def _admit_release_resume(
     *,
     args: Any,
@@ -1930,7 +1935,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
             result["publication_bundle"] = publication_payload
             _assert_no_historical_release_identity(Path(publication_payload["bundle_dir"]))
             try:
-                _assert_spawn_preflight_report_identity(
+                _assert_publication_spawn_preflight_identity(
                     Path(publication_payload["bundle_dir"]), spawn_preflight_summary
                 )
             except ReleaseArtifactIdentityError as exc:

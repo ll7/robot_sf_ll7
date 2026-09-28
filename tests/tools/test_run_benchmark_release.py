@@ -20,6 +20,9 @@ from scripts.tools import rebuild_campaign_reports_from_rows, run_benchmark_rele
 _ASSERT_SPAWN_PREFLIGHT_REPORT_IDENTITY = (
     run_benchmark_release._assert_spawn_preflight_report_identity
 )
+_ASSERT_PUBLICATION_SPAWN_PREFLIGHT_IDENTITY = (
+    run_benchmark_release._assert_publication_spawn_preflight_identity
+)
 
 
 @pytest.fixture(autouse=True)
@@ -54,15 +57,25 @@ def _default_spawn_matrix_preflight_passes(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(
         run_benchmark_release, "_assert_spawn_preflight_report_identity", lambda *_args: None
     )
+    monkeypatch.setattr(
+        run_benchmark_release, "_assert_publication_spawn_preflight_identity", lambda *_args: None
+    )
 
 
+@pytest.mark.parametrize("bundle_layout", [False, True])
 @pytest.mark.parametrize("tampered_report", ["json", "markdown"])
 def test_spawn_preflight_report_readback_rejects_tampered_bytes(
-    tmp_path: Path, tampered_report: str
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, tampered_report: str, bundle_layout: bool
 ) -> None:
     """A release result cannot retain a valid digest after either report changes."""
-    reports = tmp_path / "reports"
-    reports.mkdir()
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_assert_spawn_preflight_report_identity",
+        _ASSERT_SPAWN_PREFLIGHT_REPORT_IDENTITY,
+    )
+    report_root = tmp_path / "payload" if bundle_layout else tmp_path
+    reports = report_root / "reports"
+    reports.mkdir(parents=True)
     json_path = reports / "spawn_matrix_preflight.v1.json"
     markdown_path = reports / "spawn_matrix_preflight.v1.md"
     json_path.write_text('{"status":"valid"}\n', encoding="utf-8")
@@ -73,14 +86,19 @@ def test_spawn_preflight_report_readback_rejects_tampered_bytes(
         "markdown_path": "reports/spawn_matrix_preflight.v1.md",
         "markdown_sha256": run_benchmark_release.sha256_file(markdown_path),
     }
-    _ASSERT_SPAWN_PREFLIGHT_REPORT_IDENTITY(tmp_path, summary)
+    assert_identity = (
+        _ASSERT_PUBLICATION_SPAWN_PREFLIGHT_IDENTITY
+        if bundle_layout
+        else _ASSERT_SPAWN_PREFLIGHT_REPORT_IDENTITY
+    )
+    assert_identity(tmp_path, summary)
 
     path = json_path if tampered_report == "json" else markdown_path
     path.write_text(path.read_text(encoding="utf-8") + "tampered\n", encoding="utf-8")
     with pytest.raises(
         run_benchmark_release.ReleaseArtifactIdentityError, match="report digest changed"
     ):
-        _ASSERT_SPAWN_PREFLIGHT_REPORT_IDENTITY(tmp_path, summary)
+        assert_identity(tmp_path, summary)
 
 
 def _write_json(path: Path, payload: dict) -> None:

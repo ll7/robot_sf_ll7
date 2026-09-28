@@ -1,0 +1,126 @@
+{
+  "checks": [
+    "spawn_validity",
+    "release_row_anomalies"
+  ],
+  "claim_boundary": "Fixture-level checker sensitivity only; no nominal release or planner-behaviour claim.",
+  "evidence_tier": "diagnostic_fixture_only",
+  "matrix": {
+    "collision_total_doubled": {
+      "release_row_anomalies": "missed",
+      "spawn_validity": "not_applicable"
+    },
+    "reset_pedestrian_overlap": {
+      "release_row_anomalies": "not_applicable",
+      "spawn_validity": "detected"
+    },
+    "respawn_onto_robot": {
+      "release_row_anomalies": "not_applicable",
+      "spawn_validity": "detected"
+    },
+    "robot_start_inside_wall_radius": {
+      "release_row_anomalies": "not_applicable",
+      "spawn_validity": "detected"
+    }
+  },
+  "missed": [
+    "collision_total_doubled"
+  ],
+  "not_injected": [
+    "per_cell_wall_force_sum",
+    "centre_distance_threshold_and_wrong_braking",
+    "infeasible_gap",
+    "planner_only_radius_halved",
+    "planner_goal_direction_flipped",
+    "pedestrian_robot_force_disabled"
+  ],
+  "results": [
+    {
+      "check": "spawn_validity",
+      "control": {
+        "invalid_run": false,
+        "overlap": false
+      },
+      "detected": true,
+      "fault": "reset_pedestrian_overlap",
+      "mutant": {
+        "invalid_run": true,
+        "obstacle_overlap": false,
+        "overlap": true,
+        "pedestrian_overlap": true,
+        "respawn_overlap_collisions": 0
+      }
+    },
+    {
+      "check": "spawn_validity",
+      "control": {
+        "invalid_run": false,
+        "overlap": false
+      },
+      "detected": true,
+      "fault": "respawn_onto_robot",
+      "mutant": {
+        "invalid_run": true,
+        "obstacle_overlap": false,
+        "overlap": false,
+        "pedestrian_overlap": false,
+        "respawn_overlap_collisions": 1
+      }
+    },
+    {
+      "check": "spawn_validity",
+      "control": {
+        "invalid_run": false,
+        "overlap": false
+      },
+      "detected": true,
+      "fault": "robot_start_inside_wall_radius",
+      "mutant": {
+        "invalid_run": true,
+        "obstacle_overlap": true,
+        "overlap": true,
+        "pedestrian_overlap": false,
+        "respawn_overlap_collisions": 0
+      }
+    },
+    {
+      "check": "release_row_anomalies",
+      "control": {
+        "finding_ids": [],
+        "gate_blocked": false,
+        "total_collision_count": 1.0
+      },
+      "detected": false,
+      "fault": "collision_total_doubled",
+      "mutant": {
+        "component_sum": 1.0,
+        "finding_ids": [],
+        "gate_blocked": false,
+        "total_collision_count": 2.0
+      },
+      "proposed_check": "Recompute total_collision_count and collisions from typed component counts and the event ledger; block any mismatch before release aggregation."
+    }
+  ],
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "issue_9735_fault_injection.v1",
+  "selected_faults": [
+    "reset_pedestrian_overlap",
+    "respawn_onto_robot",
+    "robot_start_inside_wall_radius",
+    "collision_total_doubled"
+  ],
+  "sensitivity": {
+    "detected": 3,
+    "fraction": 0.75,
+    "injected": 4
+  },
+  "source": {
+    "sha256": {
+      "maps/svg_maps/classic_head_on_corridor.svg": "89f439ac1f04561e0cd550c16be01a9674dc6fe80ba196f0dcc8f8f3c641f11b",
+      "robot_sf/analysis_workbench/release_row_anomalies.py": "049ed97cd5c388cc743bfbb130c1c9dcb2c73752adaa8b699613849b0f9e2759",
+      "robot_sf/benchmark/spawn_validity.py": "14974ade8ff94b0422230af910d43da9e66a99a123b894f913a71d4b512f1a77",
+      "robot_sf/sim/spawn_validation.py": "fe211644ab9e7f80d65e4c97230c0d880c1d6ed62db6588103ac52d9deedd13b",
+      "scripts/validation/run_issue_9735_fault_injection.py": "8948341b41f07cf5702604f3591007a2dac826ad99f462fa158b3ff8b50b61bd"
+    }
+  }
+}

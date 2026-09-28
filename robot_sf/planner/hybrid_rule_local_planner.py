@@ -1001,7 +1001,14 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             float(current_speed) + linear_accel * period,
         )
         v_min = min(v_min, v_max)
-        last_w = float(self._last_command[1])
+        # V4 rollout prediction starts from the last realized drive rate. Keep
+        # its reachable command window anchored to that same state; the frozen
+        # v3 path remains anchored to the previous command as before.
+        last_w = (
+            float(self._v4_angular_estimate)
+            if self._v4_clearance_braking
+            else float(self._last_command[1])
+        )
         w_delta = self._max_angular_accel() * period
         w_min = max(-self._max_angular_speed(), last_w - w_delta)
         w_max = min(self._max_angular_speed(), last_w + w_delta)
@@ -2948,6 +2955,12 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         """
         start_dist = ctx["start_dist"]
         hard_static_clearance = ctx["hard_static_clearance"]
+        recovery_nearest_ped = float(nearest_ped)
+        if self._v4_clearance_braking:
+            surface_clearances = self._v4_surface_clearances(state)
+            recovery_nearest_ped = (
+                float(np.min(surface_clearances)) if surface_clearances.size else float("inf")
+            )
         stalled_progress = float(progress_windows.get("3s", 0.0)) <= float(
             self.config.deadlock_progress_threshold
         )
@@ -2956,7 +2969,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             if bool(self.config.recovery_enabled)
             and stalled_progress
             and start_dist > float(self.config.goal_far_distance)
-            and nearest_ped >= float(self.config.slow_distance_human)
+            and recovery_nearest_ped >= float(self.config.slow_distance_human)
             and candidate.linear <= float(self.config.freezing_speed_threshold)
             and abs(candidate.angular) >= float(self.config.deadlock_rotation_threshold)
             else 0.0
@@ -2968,7 +2981,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             hard_static_clearance=hard_static_clearance,
             stalled_progress=stalled_progress,
             start_dist=start_dist,
-            nearest_ped=nearest_ped,
+            nearest_ped=recovery_nearest_ped,
         )
         route_guide_commitment = self._route_guide_commitment_term(
             candidate=candidate,
@@ -3534,10 +3547,10 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             speed_cap = self._v4_human_speed_cap(state)
         else:
             speed_cap = self._human_speed_cap(nearest_ped)
-        # v4 compares the corridor-subgoal, route-trace-recovery and static-
-        # recovery pedestrian gates with surface clearance; v3 keeps centre
-        # distance. The near-human turn limit keeps centre distance (see the
-        # v4 base config for the reasoning).
+        # V4 compares corridor-subgoal, route-trace-recovery, and recovery-score
+        # pedestrian gates with surface clearance; v3 keeps centre distance.
+        # The near-human turn limit keeps centre distance (see the v4 base
+        # config for the reasoning).
         gate_ped = nearest_ped
         if self._v4_clearance_braking:
             clearances = self._v4_surface_clearances(state)
@@ -3778,7 +3791,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "surface_clearance_gates": [
                 "corridor_subgoal_min_nearest_ped_distance",
                 "route_trace_recovery_min_nearest_ped_distance",
-                "slow_distance_human (static recovery)",
+                "slow_distance_human (deadlock escape and static recenter)",
             ],
             "centre_distance_gates": ["near_human_angular_limit_distance"],
         }

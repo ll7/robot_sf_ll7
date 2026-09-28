@@ -59,14 +59,24 @@ pedestrian-force defect.
 
 Earlier paired runs on seeds 111–113 used the reserved #9668 evaluation range. Their outputs remain
 quarantined and uncited in the private host bundle `issue9764-social-force-kernel-paired-diagnostic-450ca42b`,
-which carries a `QUARANTINED.md` marker. No values from that run are used below. The previous safe
-103–105 bundle was not retrievable from this checkout, so this is a fresh replacement run rather
-than a reanalysis of that unavailable bundle. Both selector arms ran on
-source commit `ca1b5f1d33ebfa3d466f384f2636bb001dccf23f` (tree
-`437db28eb434038bac9aa8c9e3341e5c97dc343b`) with the paired scenario and planner configs, seeds
+which carries a `QUARANTINED.md` marker. No values from those runs are used below. The corrected
+103–105 record below uses the final checksummed rerun, not the earlier safe bundle.
+
+Both selector arms ran on source commit `d2b6ac4e41c33290dfed477f1a1cb716009f07d2` (tree
+`4bea8cfe50034a9d2cf2d81451b57382892f8283`) with the paired scenario and planner configs, seeds
 103–105, 600-step horizon, 0.1 s step, one worker, recorded forces, and recorded simulation-step
 traces. All 12 episode jobs completed without runner failures. The raw records verified the intended
 kernel selector in both simulator and planner metadata, and all six pairs used the same map identity.
+
+The exact legacy planner config is
+`configs/algos/social_force_resolution_independent_v2_kernel_legacy_v1.yaml` (SHA-256
+`82b769f2b4b19533339288aff1b8c02abea7427b708bd61bb520b5b069073c65`); its scenario config is
+`configs/scenarios/issue_9764_kernel_paired_legacy_v1.yaml` (SHA-256
+`142c15d3f61477644c754897bbae43732a7e7c2e1ea79b16f458307bc11c0aea`). The wrapped planner config
+is `configs/algos/social_force_resolution_independent_v2_kernel_wrapped_v2.yaml` (SHA-256
+`43e1e61d6fc50b22a95bbb698d612a63cf229052c043c1d2347c2d7271567c35`); its scenario config is
+`configs/scenarios/issue_9764_kernel_paired_wrapped_v2.yaml` (SHA-256
+`1014b8cbeaa529301128726637d92d2feb9fddde7baf604d43374172e11d6c62`).
 
 The analyzer compares robot-attributable pedestrian-force vectors by the simulator's pedestrian
 row index. A changed interaction is one paired vector whose L2 difference exceeds `1e-9 m/s²`.
@@ -91,11 +101,12 @@ versus 309 wrapped trace/force samples; both ended in success and 309 common sam
 | `classic_head_on_corridor_medium` | 105 | success | success | 128 / 1,196 | 0.000019849 | 0.000043048 |
 
 The checksummed private bundle is under
-`.git/codex-agent-runs/issue-9764-social-force-final/paired-diagnostic-current-ca1b5f1/`.
+`.git/codex-agent-runs/issue-9764-social-force-final/paired-diagnostic-final-d2b6ac4e/`.
 `SHA256SUMS` verified. The legacy and wrapped raw episode files have SHA-256
-`8cfe0536863d6e23487ea6bcd10d64eac604ab0a03a188858e61fef0977cc760` and
-`774029187e6a46ce7d0c64d2d02f708dff84c9194a0b3cca2dd4dec48bf73a3e`; the comparison report has
-SHA-256 `761f6c4d0b4f587497789fc17a9611af7dca47e0b0737d9d6c08d8019e62881f`, the run manifest has
-`b161db170ce5c0596527ba550118338628126a8691281dada551b6a71d963990`, and the `SHA256SUMS` file
-has `c772ea4c8823f5068f8d12c161fba35f3410909170ee547e36c1f7d47a5d8242`. This diagnostic makes
-no release-row equivalence or paper-facing claim.
+`4f425b031f6126b66c08d2ce6becacb428340232dc0adf297cbf287c4857720b` and
+`d4f12e5f074d55083aa476eca088afa4d371ba81c073110552bb4083ec9ce15f`; the comparison report has
+SHA-256 `f8fe389828e103f6e3e732b43cae0d224ee226ab5ec2f69dd08fc63631da12a2`, the run manifest has
+`949db1eded2a758d3578b8bd0069cf14d19df6428a03d4c6e185f0ec03e5830e`, and the `SHA256SUMS` file
+has `3f385cac7f6cf11647e34947f27685c47ee9b5cf65051661c418b679d4fd2411`. The bundle remains
+host-local and classified as diagnostic evidence; it makes no release-row equivalence, general
+planner-safety, or paper-facing claim.

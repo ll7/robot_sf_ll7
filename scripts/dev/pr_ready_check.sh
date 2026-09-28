@@ -997,23 +997,39 @@ while IFS= read -r changed_file; do
   else
     core_changed_files+=("$changed_file")
   fi
-  # A change to shipped behavior (robot_sf/, configs/, maps/) or to a test root
-  # that no lane covers can break the uncovered roots, so they must run.
-  case "$changed_file" in
-    robot_sf/*|configs/*|maps/*)
+done < <(git diff --name-only --diff-filter=ACMRT "$BASE_REF...HEAD")
+
+# Impact routing needs deleted paths and both rename endpoints. Keep it separate
+# from changed_files, whose surviving paths may be handed to pytest/formatting.
+# The uncovered validation/map tests call scripts/validation directly; fast-pysf
+# is exercised by the fixed core fast-pysf/tests path and does not trigger them.
+pr_ready_impact_files=()
+while IFS= read -r -d '' change_status; do
+  IFS= read -r -d '' change_path || break
+  pr_ready_impact_files+=("$change_path")
+  case "$change_status" in
+    R*|C*)
+      IFS= read -r -d '' change_path || break
+      pr_ready_impact_files+=("$change_path")
+      ;;
+  esac
+done < <(git diff --name-status -z --find-renames --diff-filter=ACDMRT "$BASE_REF...HEAD")
+for impact_file in "${pr_ready_impact_files[@]}"; do
+  case "$impact_file" in
+    robot_sf/*|configs/*|maps/*|scripts/validation/*)
       pr_ready_extended_required=1
-      pr_ready_extended_trigger_files+=("$changed_file")
+      pr_ready_extended_trigger_files+=("$impact_file")
       ;;
   esac
   for pr_ready_uncovered_root in "${pr_ready_uncovered_test_roots[@]}"; do
-    case "$changed_file" in
+    case "$impact_file" in
       "${pr_ready_uncovered_root}"/*)
         pr_ready_extended_required=1
-        pr_ready_extended_trigger_files+=("$changed_file")
+        pr_ready_extended_trigger_files+=("$impact_file")
         ;;
     esac
   done
-done < <(git diff --name-only --diff-filter=ACMRT "$BASE_REF...HEAD")
+done
 
 # Validate that every changed test file under tests/ or fast-pysf/tests/ is classified
 # and covered by the optional test allowlist if classified as optional.
@@ -1271,7 +1287,7 @@ if [[ ${#pr_ready_uncovered_test_roots[@]} -gt 0 ]]; then
       "$SCRIPT_DIR/run_tests_parallel.sh" --lane core "${pr_ready_uncovered_test_roots[@]}"
     pr_ready_extended_ran=1
   else
-    printf 'Extended readiness lane not required: no robot_sf/, configs/, maps/ or uncovered-root change.\n' >&2
+    printf 'Extended readiness lane not required: no impact-root change.\n' >&2
   fi
   mark_pr_ready_progress "lane_coverage_summary" "none" "reporting readiness lane coverage"
   lane_coverage_dir="${REPO_ROOT}/output/validation/pr_ready"
@@ -1288,6 +1304,7 @@ if [[ ${#pr_ready_uncovered_test_roots[@]} -gt 0 ]]; then
       printf '  uncovered roots: none\n'
     elif [[ "$pr_ready_extended_ran" -eq 1 ]]; then
       printf '  extended lane:  ran (%s)\n' "${pr_ready_uncovered_test_roots[*]}"
+      printf '  extended triggers: %s\n' "${pr_ready_extended_trigger_files[*]}"
       printf '  uncovered roots: none remaining\n'
     else
       printf '  extended lane:  NOT RUN\n'

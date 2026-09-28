@@ -1439,9 +1439,9 @@ performance:
         ),
     )
     for field, mutated_evidence in identity_mutations:
-        assert not _is_expected_historical_malformed_v2_blocker(
-            mutated_evidence, body, blocker
-        ), field
+        assert not _is_expected_historical_malformed_v2_blocker(mutated_evidence, body, blocker), (
+            field
+        )
 
 
 def test_historical_pr_evidence_rejects_malformed_identity_and_file_binding() -> None:

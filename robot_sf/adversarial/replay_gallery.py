@@ -467,7 +467,7 @@ def _prepare_candidate(  # noqa: C901, PLR0912, PLR0915 - keep ordered validatio
     if candidate_payload.get("error"):
         return None, _accounting_row(index, candidate_payload, "evaluation_failed")
     eligibility = candidate_payload.get("analysis_eligibility")
-    if not _gallery_analysis_eligible(candidate_payload, eligibility):
+    if not isinstance(eligibility, dict) or eligibility.get("eligible") is not True:
         return None, _accounting_row(index, candidate_payload, "analysis_ineligible")
     objective_value = _finite_number(candidate_payload.get("objective_value"))
     if objective_value is None:
@@ -1031,6 +1031,11 @@ def _initial_case_result(
             "absolute_tolerance": context.tolerance,
         },
         "failure_attribution": selected["failure_attribution"],
+        "execution_mode_claim_boundary": (
+            "diagnostic_only"
+            if selected["source_execution_mode"] in {"adapter", "mixed"}
+            else "source_replay_comparison"
+        ),
         "feasibility_verdict": _feasibility_verdict(
             selected["candidate_payload"].get("certification_status"),
             validated_certificate=selected.get("validated_certificate"),
@@ -3013,36 +3018,6 @@ def _source_availability_problem(
     if _runtime_algorithm_fallback_marker(record) is not None:
         return "source_runtime_fallback_or_degraded"
     return None
-
-
-def _gallery_analysis_eligible(candidate_payload: dict[str, Any], eligibility: Any) -> bool:
-    """Honor normal eligibility and the exact native-only exclusion for adapter replays.
-
-    Search analysis eligibility intentionally admits only native execution for optimizer-facing
-    analysis. The gallery may still replay an adapter or mixed source that was excluded solely by
-    that rule, because it independently rechecks source availability, readiness, episode metadata,
-    and the matching replay before exposing a case.
-    """
-    if not isinstance(eligibility, dict):
-        return False
-    if eligibility.get("eligible") is True:
-        return True
-    if eligibility.get("eligible") is not False:
-        return False
-
-    attribution = candidate_payload.get("failure_attribution")
-    details = attribution.get("details") if isinstance(attribution, dict) else None
-    execution_mode = details.get("execution_mode") if isinstance(details, dict) else None
-    return (
-        eligibility.get("schema_version") == "search_analysis_eligibility.v1"
-        and isinstance(execution_mode, str)
-        and execution_mode in {"adapter", "mixed"}
-        and eligibility.get("execution_mode") == execution_mode
-        and eligibility.get("reason_codes") == ["execution_mode_not_native"]
-        and eligibility.get("certificate_ok") is True
-        and eligibility.get("trace_present") is True
-        and eligibility.get("objective_scored") is True
-    )
 
 
 def _runtime_algorithm_fallback_marker(record: dict[str, Any]) -> tuple[str, str] | None:

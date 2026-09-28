@@ -45,7 +45,9 @@ The #9758 fix in merged PR #9788 is an explicit `surface_v3` pedestrian-term sel
 that contact behavior after the angle-wrap correction, the existing deterministic standing-pedestrian
 and 1.3 m/s crossing rollouts now also run with both `surface_v3` and `wrapped_v2` selected. At both
 `dt=0.1 s` and `dt=0.05 s`, the tests require swept clearance above 0.05 m; all four wrapped-kernel
-cases pass. The full focused set for this worktree passes 98 tests.
+cases pass. The focused kernel, planner, simulator, benchmark-registry, and metamorphic command
+passes 180 tests with one expected strict xfail tracked under #9733. The exact-head run log is
+preserved under `.git/codex-agent-runs/issue-9764-social-force-final/`.
 
 This is a narrow compatibility recheck of those two fixtures, not the reviewer's complete six-case
 probe set or evidence of general contact safety. The #9764 paired diagnostic above used the default

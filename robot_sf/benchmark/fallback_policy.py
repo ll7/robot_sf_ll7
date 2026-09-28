@@ -8,6 +8,11 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from robot_sf.benchmark.obstacle_force_diagnostic_receipt import (
+    ObstacleForceDiagnosticReceiptError,
+    validate_obstacle_force_diagnostic_receipt,
+)
+
 
 @dataclass(frozen=True)
 class BenchmarkAvailability:
@@ -124,50 +129,27 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901, PLR0915
         algorithm_metadata, expected_algorithm=expected_algorithm
     )
 
-    def _diagnostic_receipt_marker(  # noqa: C901
-        item: Any, item_path: str
-    ) -> tuple[str, str] | None:
-        """Validate the receipt fallback projection without treating it as status telemetry.
+    def _diagnostic_receipt_marker(item: Any, item_path: str) -> tuple[str, str] | None:
+        """Validate a complete receipt without treating its false fallback as telemetry.
 
         Obstacle-force diagnostic receipts intentionally use a structured ``fallback`` object,
         while this scanner's historical runtime contract uses boolean ``fallback`` markers. A
-        valid unused receipt is neutral; a used or malformed receipt remains fail-closed.
+        complete, valid, unused receipt is neutral; a used or malformed receipt remains
+        fail-closed. The producer-side validator is repeated here because this scanner admits
+        untrusted persisted metadata and must not let unknown receipt fields hide runtime flags.
 
         Returns:
             A path/value marker for malformed or used fallback state, otherwise ``None``.
         """
         if not isinstance(item, Mapping):
             return item_path, "invalid"
-        fallback = item.get("fallback")
-        if not isinstance(fallback, Mapping):
-            return f"{item_path}.fallback", "invalid"
-        used = fallback.get("used")
-        count = fallback.get("count")
-        first_reason = fallback.get("first_reason")
-        reasons = fallback.get("reasons")
-        if not isinstance(used, bool):
-            return f"{item_path}.fallback.used", "invalid"
-        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
-            return f"{item_path}.fallback.count", "invalid"
-        if first_reason is not None and (
-            not isinstance(first_reason, str) or not first_reason.strip()
-        ):
-            return f"{item_path}.fallback.first_reason", "invalid"
-        if not isinstance(reasons, Mapping):
-            return f"{item_path}.fallback.reasons", "invalid"
-        for reason, reason_count in reasons.items():
-            if not isinstance(reason, str) or not reason.strip():
-                return f"{item_path}.fallback.reasons", "invalid"
-            if (
-                isinstance(reason_count, bool)
-                or not isinstance(reason_count, int)
-                or reason_count < 0
-            ):
-                return f"{item_path}.fallback.reasons.{reason}", "invalid"
-        if used:
+        try:
+            normalized = validate_obstacle_force_diagnostic_receipt(item)
+        except ObstacleForceDiagnosticReceiptError:
+            return item_path, "invalid"
+        fallback = normalized["fallback"]
+        if fallback["used"]:
             return f"{item_path}.fallback.used", "true"
-        if count != 0 or first_reason is not None or reasons:
-            return f"{item_path}.fallback", "invalid"
         return None
 
     def _counter_marker(item: Any, item_path: str) -> tuple[str, str] | None:

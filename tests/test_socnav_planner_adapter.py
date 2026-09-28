@@ -1835,6 +1835,7 @@ def test_social_force_v2_malformed_grid_metadata_records_degraded_fallback():
     [
         (None, "origin", np.array([[0.0, 0.0]], dtype=np.float32)),
         (None, "resolution", np.array([[1.0]], dtype=np.float32)),
+        (None, "use_ego_frame", np.array([[1.0]], dtype=np.float32)),
         (
             SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2,
             "origin",
@@ -1843,6 +1844,11 @@ def test_social_force_v2_malformed_grid_metadata_records_degraded_fallback():
         (
             SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2,
             "resolution",
+            np.array([[1.0]], dtype=np.float32),
+        ),
+        (
+            SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2,
+            "use_ego_frame",
             np.array([[1.0]], dtype=np.float32),
         ),
     ],

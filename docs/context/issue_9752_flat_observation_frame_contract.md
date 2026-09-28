@@ -53,11 +53,13 @@ Risk-DWA and the Guarded-PPO world-frame safety path now perform the missing
 ego-to-world conversion for both nested and flat observations. The PPO policy
 input remains in its training frame.
 
-Hybrid v3 flat-observation pass-through is intentionally unchanged so the
-historical 0.0.7 comparison remains reproducible. It is the known 0.0.7 frame
-defect and is carried into the 0.0.8 draft note. The two hybrid v3 trace
-relations remain characterized as existing behavior, including their known
-rotation/selection limitation.
+The historical hybrid v3 flat-observation pass-through remains unchanged in
+this PR and is the known 0.0.7 frame defect. Under the new #9668 ruling, a
+corrected, explicitly versioned hybrid path must be selected and validated for
+each affected 0.0.8 release arm before release admission. The historical v3
+path remains available for the required 0.0.7 comparison. The two hybrid v3
+trace relations characterize existing behavior, including their known
+rotation/selection limitation; they do not validate the corrected path.
 
 The focused tests provide adapter-level frame evidence and bounded deterministic
 metamorphic coverage. Stochastic learned policies and sampling arms do not

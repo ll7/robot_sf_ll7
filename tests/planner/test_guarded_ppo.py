@@ -696,6 +696,37 @@ def test_guarded_ppo_reshapes_flattened_pedestrian_payloads() -> None:
     assert ped_pos.tolist() == [[1.0, 2.0], [3.0, 4.0]]
 
 
+def test_guarded_ppo_trims_padded_velocities_before_world_conversion() -> None:
+    """A count-limited payload retains its matching velocity instead of zeroing it."""
+    guard = GuardedPPOAdapter(fallback_adapter=_FallbackAdapter((0.0, 0.0)))
+    obs = _obs(
+        heading=float(np.pi / 2.0),
+        ped_positions=[(1.0, 0.5), (9.0, 9.0)],
+        ped_velocities=[(1.25, -0.5), (8.0, 8.0)],
+        ped_count=1,
+    )
+
+    _robot_pos, _heading, _goal, ped_pos, ped_vel = guard._extract_state(obs)
+
+    assert ped_pos.shape == (1, 2)
+    np.testing.assert_allclose(ped_vel, [[0.5, 1.25]], rtol=0.0, atol=1e-12)
+
+
+def test_guarded_ppo_malformed_flat_velocity_is_zeroed() -> None:
+    """Odd-length flattened velocities do not crash the safety rollout."""
+    guard = GuardedPPOAdapter(fallback_adapter=_FallbackAdapter((0.0, 0.0)))
+    obs = _obs(
+        ped_positions=[(1.0, 0.5)],
+        ped_velocities=[1.0, 2.0, 3.0],
+        ped_count=1,
+    )
+
+    _robot_pos, _heading, _goal, ped_pos, ped_vel = guard._extract_state(obs)
+
+    assert ped_pos.shape == (1, 2)
+    np.testing.assert_array_equal(ped_vel, [[0.0, 0.0]])
+
+
 @pytest.mark.parametrize("flat", [False, True], ids=["structured", "flat"])
 def test_guarded_ppo_observation_rotates_pedestrian_velocity_to_world(flat: bool) -> None:
     """The world-frame safety rollout converts SOCNAV ego velocities first."""

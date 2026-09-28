@@ -338,6 +338,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             and ped_count is not None
             and ped_count > 0
             and ped_pos.size >= ped_count * 2
+            and ped_pos.size % 2 == 0
         ):
             ped_pos = ped_pos.reshape(-1, 2)[:ped_count]
         if (
@@ -345,16 +346,19 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             and ped_count is not None
             and ped_count > 0
             and ped_vel.size >= ped_count * 2
+            and ped_vel.size % 2 == 0
         ):
             ped_vel = ped_vel.reshape(-1, 2)[:ped_count]
         if ped_pos.ndim != 2 or ped_pos.shape[-1] != 2:
             ped_pos = np.zeros((0, 2), dtype=float)
         elif ped_count is not None:
             ped_pos = ped_pos[: min(ped_count, ped_pos.shape[0])]
-        if ped_vel.ndim != 2 or ped_vel.shape[-1] != 2 or ped_vel.shape[0] != ped_pos.shape[0]:
+        if ped_vel.ndim != 2 or ped_vel.shape[-1] != 2:
             ped_vel = np.zeros_like(ped_pos)
         elif ped_count is not None:
             ped_vel = ped_vel[: min(ped_count, ped_vel.shape[0])]
+        if ped_vel.shape[0] != ped_pos.shape[0]:
+            ped_vel = np.zeros_like(ped_pos)
         ped_vel = _ego_velocity_to_world(ped_vel, heading)
         return robot_pos, heading, goal, ped_pos, ped_vel
 

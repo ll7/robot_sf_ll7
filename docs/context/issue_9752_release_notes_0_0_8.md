@@ -18,11 +18,13 @@ results or per-arm release acceptance claims.
   scene-rotation test; Guarded PPO is tested at the safety-input boundary because
   its learned primary policy is not an exact trace oracle.
 
-## Compatibility and known limitation
+## Pending hybrid correction
 
-Hybrid v3 flat-observation velocity pass-through remains unchanged for
-comparison with 0.0.7. That path retains the known
-0.0.7 frame defect and is not presented as fixed by this draft.
+The historical hybrid v3 flat-observation path retains the 0.0.7 frame defect.
+The 0.0.8 release is blocked until a corrected, explicitly versioned hybrid
+path is selected and validated for each affected release arm. Historical v3
+bytes remain available for the mandatory 0.0.7 comparison; an attributed
+result change from the correction is permitted by the #9668 ruling.
 
 ## Evidence boundary
 

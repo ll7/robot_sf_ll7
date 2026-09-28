@@ -25,6 +25,25 @@ SMOKE_CONFIG_PATH = (
 SMOKE_MANIFEST_PATH = REPO_ROOT / (
     "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml"
 )
+CAMPAIGN_TEMPLATE_PATH = REPO_ROOT / (
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+)
+RUNTIME_SMOKE_V03_CONFIG_PATH = REPO_ROOT / (
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_3.yaml"
+)
+RUNTIME_SMOKE_V03_MANIFEST_PATH = REPO_ROOT / (
+    "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_3.yaml"
+)
+RUNTIME_SMOKE_V04_CONFIG_PATH = REPO_ROOT / (
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_4.yaml"
+)
+RUNTIME_SMOKE_V04_MANIFEST_PATH = REPO_ROOT / (
+    "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_4.yaml"
+)
+PINNED_V03_CONFIG_SHA256 = "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4"
+PINNED_V03_MANIFEST_SHA256 = "d6f3047adaacfb8cad2cc12430ee5ce7331f11b0777ac522209fd1e5af019241"
+CAMPAIGN_TEMPLATE_SHA256 = "e84cd899c8e54f6d854849b8d3f51c52f0158c43869fb65619ed2c16661a9d75"
+
 EXPECTED_PLANNER_KEYS = [
     "prediction_planner",
     "goal",
@@ -61,6 +80,20 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _diff_paths(source: Any, target: Any, prefix: str = "") -> set[str]:
+    """Return leaf paths that differ between two nested campaign configs."""
+    if isinstance(source, dict) and isinstance(target, dict):
+        differences: set[str] = set()
+        for key in source.keys() | target.keys():
+            path = f"{prefix}.{key}" if prefix else str(key)
+            if key not in source or key not in target:
+                differences.add(path)
+            else:
+                differences.update(_diff_paths(source[key], target[key], path))
+        return differences
+    return set() if source == target else {prefix}
 
 
 def test_runtime_smoke_is_one_scenario_one_seed_at_h600() -> None:
@@ -245,6 +278,128 @@ def test_runtime_smoke_manifest_validates_against_config_and_assets() -> None:
         "problem_count": 0,
         "problems": [],
     }
+    assert manifest.planner_keys == tuple(EXPECTED_PLANNER_KEYS)
+    assert manifest.seed_policy["mode"] == "fixed-list"
+    assert manifest.seed_policy["seeds"] == [111]
+    assert manifest.expected_kinematics_matrix == ("differential_drive",)
+
+
+def test_runtime_smoke_v0_4_matches_campaign_template_and_preserves_v0_3() -> None:
+    """The new smoke uses the template's full ordered arm rows and leaves v0_3 pinned."""
+    template = _load_yaml(CAMPAIGN_TEMPLATE_PATH)
+    smoke = _load_yaml(RUNTIME_SMOKE_V04_CONFIG_PATH)
+    cfg = load_campaign_config(RUNTIME_SMOKE_V04_CONFIG_PATH)
+    scenarios = _load_campaign_scenarios(cfg)
+
+    assert _sha256(CAMPAIGN_TEMPLATE_PATH) == CAMPAIGN_TEMPLATE_SHA256
+    assert smoke["derived_from"] == {
+        "config": "configs/benchmarks/"
+        "paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
+        "config_sha256": CAMPAIGN_TEMPLATE_SHA256,
+    }
+    assert smoke["planners"] == template["planners"]
+    assert [row["key"] for row in smoke["planners"]] == EXPECTED_PLANNER_KEYS
+    assert list(RUNTIME_SMOKE_PLANNER_KEYS) == EXPECTED_PLANNER_KEYS
+    assert len(smoke["planners"]) == 14
+    for row in smoke["planners"]:
+        if row.get("algo_config"):
+            assert (REPO_ROOT / row["algo_config"]).is_file()
+
+    assert smoke["release_kind"] == "benchmark-data"
+    assert smoke["release_status"] == "runtime-smoke-only"
+    assert smoke["claim_boundary"] == {
+        "evidence_class": "runtime-smoke",
+        "benchmark_data_release": True,
+        "software_release": False,
+        "snqi": "advisory-no-ranking",
+        "full_benchmark_evidence": False,
+    }
+    assert smoke["paper_interpretation_profile"] == "runtime-smoke-advisory-no-ranking"
+    assert smoke["name"] == "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_4"
+    assert smoke["release_tag"] == "paper-matrix-v2-h600-s30-runtime-smoke-v0_4"
+    assert smoke["planners"][2]["algo_config"] == (
+        "configs/algos/social_force_resolution_independent_v2.yaml"
+    )
+
+    expected_config_differences = {
+        "artifact_provenance",
+        "bootstrap_samples",
+        "claim_boundary",
+        "derived_from",
+        "doi",
+        "export_publication_bundle",
+        "name",
+        "overwrite_publication_bundle",
+        "paper_interpretation_profile",
+        "release_kind",
+        "release_status",
+        "release_tag",
+        "resume",
+        "scenario_matrix",
+        "seed_policy.mode",
+        "seed_policy.seed_set",
+        "seed_policy.seeds",
+        "snqi_contract.calibration_trials",
+        "zenodo",
+    }
+    assert _diff_paths(template, smoke) == expected_config_differences
+    assert smoke["record_forces"] is True
+    assert smoke["checkpoint_provenance_enforcement"] == "error"
+    assert smoke["resume"] is False
+    assert smoke["bootstrap_samples"] == 100 < template["bootstrap_samples"]
+    assert smoke["snqi_contract"]["calibration_trials"] == 600
+    assert smoke["export_publication_bundle"] is False
+    assert smoke["overwrite_publication_bundle"] is False
+
+    assert cfg.horizon == 600
+    assert cfg.dt == 0.1
+    assert cfg.workers == 32
+    assert cfg.kinematics_matrix == ("differential_drive",)
+    assert cfg.resume is False
+    assert cfg.stop_on_failure is True
+    assert len(scenarios) == 1
+    assert scenarios[0]["name"] == "francis2023_blind_corner"
+    assert list(scenarios[0]["seeds"]) == [111]
+
+    assert _sha256(RUNTIME_SMOKE_V03_CONFIG_PATH) == PINNED_V03_CONFIG_SHA256
+    assert _sha256(RUNTIME_SMOKE_V03_MANIFEST_PATH) == PINNED_V03_MANIFEST_SHA256
+
+
+def test_runtime_smoke_v0_4_manifest_is_source_bound_and_valid() -> None:
+    """The v0_4 manifest binds its smoke config and current campaign template."""
+    template = _load_yaml(CAMPAIGN_TEMPLATE_PATH)
+    manifest_payload = _load_yaml(RUNTIME_SMOKE_V04_MANIFEST_PATH)
+    manifest = load_release_manifest(RUNTIME_SMOKE_V04_MANIFEST_PATH)
+    validation = validate_release_manifest(manifest)
+
+    assert validation == {
+        "manifest_path": "configs/benchmarks/releases/"
+        "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_4.yaml",
+        "status": "valid",
+        "problem_count": 0,
+        "problems": [],
+    }
+    assert manifest_payload["canonical_campaign_config"] == (
+        "../paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_4.yaml"
+    )
+    assert manifest_payload["campaign_config_sha256"] == _sha256(RUNTIME_SMOKE_V04_CONFIG_PATH)
+    assert manifest_payload["derived_from"] == {
+        "config": "../paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
+        "config_sha256": CAMPAIGN_TEMPLATE_SHA256,
+    }
+    assert manifest_payload["planners"]["keys"] == EXPECTED_PLANNER_KEYS
+    assert manifest_payload["planners"]["groups"] == {
+        row["key"]: row["planner_group"] for row in template["planners"]
+    }
+    assert manifest_payload["claim_boundary"] == {
+        "evidence_class": "runtime-smoke",
+        "snqi": "advisory-no-ranking",
+        "benchmark_data_release": True,
+        "software_release": False,
+        "full_benchmark_evidence": False,
+    }
+    assert manifest_payload["release_status"] == "runtime-smoke-only"
+    assert manifest.expected_paper_interpretation_profile == ("runtime-smoke-advisory-no-ranking")
     assert manifest.planner_keys == tuple(EXPECTED_PLANNER_KEYS)
     assert manifest.seed_policy["mode"] == "fixed-list"
     assert manifest.seed_policy["seeds"] == [111]

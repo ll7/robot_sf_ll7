@@ -1572,6 +1572,9 @@ def test_pr_ready_check_final_mode_preflights_analytics_dependencies(
         "\n".join(
             [
                 "#!/usr/bin/env bash",
+                'if [[ "$1" == "run" && "$2" == "python" && "${3##*/}" == "pr_ready_freshness.py" ]]; then',
+                "  exit 0",
+                "fi",
                 'if [[ "$1" == "run" && "$2" == "python" ]]; then',
                 "  echo 'duckdb, pyarrow, pandas'",
                 "  exit 1",
@@ -1638,7 +1641,16 @@ def test_pr_ready_check_rejects_process_substitution_body_paths(tmp_path: Path) 
 
     fake_uv = fake_bin / "uv"
     fake_uv.write_text(
-        "#!/usr/bin/env bash\necho 'duckdb, pyarrow, pandas' >&2\nexit 1\n",
+        "\n".join(
+            [
+                "#!/usr/bin/env bash",
+                'if [[ "$1" == "run" && "$2" == "python" && "${3##*/}" == "pr_ready_freshness.py" ]]; then',
+                "  exit 0",
+                "fi",
+                "echo 'duckdb, pyarrow, pandas' >&2",
+                "exit 1",
+            ]
+        ),
         encoding="utf-8",
     )
     fake_uv.chmod(0o755)

@@ -12,6 +12,8 @@ network_gateway="172.30.244.1"
 network_bridge="br-robot-sf-ci"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 host="$(hostname -s)"
+# imech036 and imech039 report the short hostname with an "auxme-" prefix.
+host="${host#auxme-}"
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/robot-sf-ci-runners"
 
 usage() {

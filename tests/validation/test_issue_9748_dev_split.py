@@ -269,8 +269,11 @@ def test_campaign_config_rejects_wrong_or_missing_planner_algo(mutation: str) ->
     "mutation,match",
     [
         ("missing", "missing frozen provenance fields"),
+        ("wrong_source_commit", "must match the current checked-out source commit"),
         ("wrong_campaign_hash", "campaign_config_sha256 does not match"),
+        ("wrong_scenario_hash", "scenario_manifest_sha256 does not match"),
         ("wrong_candidate_hash", "candidate config hash"),
+        ("wrong_candidate_path", "provenance candidate .* must name"),
         ("unknown_candidate", "unknown=.*candidate"),
     ],
 )
@@ -280,12 +283,20 @@ def test_tuning_log_requires_frozen_provenance_and_known_candidates(
     payload = _valid_log_payload()
     if mutation == "missing":
         del payload["provenance"]["scenario_manifest_sha256"]
+    elif mutation == "wrong_source_commit":
+        payload["provenance"]["source_commit"] = "0" * 40
     elif mutation == "wrong_campaign_hash":
         payload["provenance"]["campaign_config_sha256"] = "0" * 64
+    elif mutation == "wrong_scenario_hash":
+        payload["provenance"]["scenario_manifest_sha256"] = "0" * 64
     elif mutation == "wrong_candidate_hash":
         payload["provenance"]["candidate_configs"][sorted(CHECKER.EXPECTED_PLANNER_CONFIGS)[0]][
             "sha256"
         ] = "0" * 64
+    elif mutation == "wrong_candidate_path":
+        payload["provenance"]["candidate_configs"][sorted(CHECKER.EXPECTED_PLANNER_CONFIGS)[0]][
+            "path"
+        ] = "configs/policy_search/candidates/other.yaml"
     else:
         payload["provenance"]["candidate_configs"]["unknown_candidate"] = {
             "path": "configs/policy_search/candidates/unknown.yaml",

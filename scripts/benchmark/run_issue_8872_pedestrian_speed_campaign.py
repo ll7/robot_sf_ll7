@@ -925,6 +925,10 @@ def _validate_journal_success_provenance(
         JOURNAL_SUCCESS_PROVENANCE_FIELDS.issubset(provenance),
         "journal native terminal row provenance is incomplete",
     )
+    _require(
+        set(provenance) == JOURNAL_SUCCESS_PROVENANCE_FIELDS,
+        "journal native terminal row provenance contains contradictory semantic fields",
+    )
     expected = _compiled_identity_rows()[identity_key]
     for field in (
         "identity_key",
@@ -970,6 +974,34 @@ def _validate_journal_success_provenance(
         and provenance.get("fallback") is False
         and provenance.get("degraded") is False,
         "journal native terminal row execution mode is invalid",
+    )
+    expected_intervention_status = (
+        "not_applicable" if expected["regime_id"] == "legacy_default" else "activated"
+    )
+    _require(
+        provenance.get("intervention_status") == expected_intervention_status,
+        "journal native terminal row activation status is invalid",
+    )
+    diagnostics = provenance.get("diagnostics")
+    _require(
+        isinstance(diagnostics, Mapping) and bool(diagnostics),
+        "journal native terminal row diagnostics are incomplete",
+    )
+    _require(
+        JOURNAL_DIAGNOSTIC_SCALARS.issubset(diagnostics),
+        "journal native terminal row activation diagnostics are incomplete",
+    )
+    checkpoint_provenance = provenance.get("checkpoint_provenance")
+    _require(
+        isinstance(checkpoint_provenance, list) and bool(checkpoint_provenance),
+        "journal native terminal row checkpoint provenance is incomplete",
+    )
+    _require(
+        all(
+            isinstance(item, Mapping) and set(item) == JOURNAL_CHECKPOINT_FIELDS
+            for item in checkpoint_provenance
+        ),
+        "journal native terminal row checkpoint provenance is incomplete",
     )
     _validated_protocol_metrics(
         provenance.get("metrics"),
@@ -2305,11 +2337,18 @@ def reconcile_execution_journal(
             isinstance(terminal_status, str) and terminal_status in TERMINAL_STATUSES,
             "journal row terminal status is invalid",
         )
+        missingness = _journal_missingness(event.get("missingness"))
+        reason = _journal_reason(event.get("reason"))
+        if terminal_status == SUCCESS_STATUS:
+            _require(
+                missingness is None and reason is None,
+                "journal native terminal success has contradictory missingness or reason",
+            )
         row: dict[str, Any] = {
             "identity_key": identity_key,
             "terminal_status": terminal_status,
-            "missingness": _journal_missingness(event.get("missingness")),
-            "reason": _journal_reason(event.get("reason")),
+            "missingness": missingness,
+            "reason": reason,
         }
         provenance = None
         if event.get("provenance") is not None:
@@ -2416,6 +2455,13 @@ def _journal_row_payload(row: Mapping[str, Any]) -> dict[str, Any]:
         isinstance(terminal_status, str) and terminal_status in TERMINAL_STATUSES,
         "journal row terminal status is invalid",
     )
+    missingness = _journal_missingness(row.get("missingness"))
+    reason = _journal_reason(row.get("reason"))
+    if terminal_status == SUCCESS_STATUS:
+        _require(
+            missingness is None and reason is None,
+            "journal native terminal success has contradictory missingness or reason",
+        )
     provenance = row.get("provenance")
     metrics = row.get("metrics")
     if metrics is not None:
@@ -2436,8 +2482,8 @@ def _journal_row_payload(row: Mapping[str, Any]) -> dict[str, Any]:
     payload = {
         "identity_key": identity_key,
         "terminal_status": terminal_status,
-        "missingness": _journal_missingness(row.get("missingness")),
-        "reason": _journal_reason(row.get("reason")),
+        "missingness": missingness,
+        "reason": reason,
         "metrics": metrics,
         "provenance": provenance,
     }

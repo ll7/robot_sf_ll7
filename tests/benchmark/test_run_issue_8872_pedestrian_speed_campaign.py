@@ -158,6 +158,18 @@ def _protocol_metrics() -> dict[str, float]:
     }
 
 
+def _checkpoint_provenance() -> list[dict[str, Any]]:
+    return [
+        {
+            "model_id": "predictive_proxy_selected_v2_full",
+            "path_label": "models/predictive_proxy_selected_v2_full.pt",
+            "sha256": "c" * 64,
+            "size_bytes": 1,
+            "expected_sha256": "c" * 64,
+        }
+    ]
+
+
 def _native_outcome(identity: dict[str, Any], packet: dict[str, Any]) -> dict[str, Any]:
     metrics = _protocol_metrics()
     return {
@@ -383,6 +395,18 @@ def _fake_native_record(*, preferred_speed: float = 0.65) -> dict[str, Any]:
     }
 
 
+def _fake_native_outcome(packet: dict[str, Any], identity: dict[str, Any]) -> dict[str, Any]:
+    return campaign._native_outcome_from_record(
+        identity,
+        _fake_native_record(),
+        source_commit=packet["source_commit"],
+        manifest_hash=packet["manifest_hash"],
+        planner_algorithm="fake-native-planner",
+        robot_speed_cap_m_s=2.0,
+        checkpoint_provenance=_checkpoint_provenance(),
+    )
+
+
 def test_fixed_native_record_adapter_uses_trace_not_executor_flag() -> None:
     packet = _packet()
     identity = next(
@@ -395,7 +419,7 @@ def test_fixed_native_record_adapter_uses_trace_not_executor_flag() -> None:
         manifest_hash=packet["manifest_hash"],
         planner_algorithm="fake-native-planner",
         robot_speed_cap_m_s=2.0,
-        checkpoint_provenance=[],
+        checkpoint_provenance=_checkpoint_provenance(),
     )
     assert outcome["terminal_status"] == campaign.SUCCESS_STATUS
     assert outcome["provenance"]["runtime_controls"] == identity["runtime_controls"]
@@ -435,7 +459,7 @@ def test_native_record_projects_established_raw_metric_contract() -> None:
         manifest_hash=packet["manifest_hash"],
         planner_algorithm="fake-native-planner",
         robot_speed_cap_m_s=2.0,
-        checkpoint_provenance=[],
+        checkpoint_provenance=_checkpoint_provenance(),
     )
 
     assert outcome["terminal_status"] == campaign.SUCCESS_STATUS
@@ -470,7 +494,7 @@ def test_native_record_rejects_non_finite_protocol_metric() -> None:
         manifest_hash=packet["manifest_hash"],
         planner_algorithm="fake-native-planner",
         robot_speed_cap_m_s=2.0,
-        checkpoint_provenance=[],
+        checkpoint_provenance=_checkpoint_provenance(),
     )
 
     assert outcome["terminal_status"] == "provenance_invalid"
@@ -746,7 +770,7 @@ def test_reconcile_accepts_protocol_provenance_fields(tmp_path: Any) -> None:
         manifest_hash=packet["manifest_hash"],
         planner_algorithm="fake-native-planner",
         robot_speed_cap_m_s=2.0,
-        checkpoint_provenance=[],
+        checkpoint_provenance=_checkpoint_provenance(),
     )
     assert outcome["terminal_status"] == campaign.SUCCESS_STATUS
     journal = tmp_path / "run.jsonl"
@@ -767,6 +791,49 @@ def test_reconcile_accepts_protocol_provenance_fields(tmp_path: Any) -> None:
         summary["rows"][0]["provenance"]["diagnostics"]["runtime_max_speed_m_s_by_pedestrian"]["p0"]
         == 0.65
     )
+
+
+def test_success_journal_row_rejects_contradictory_semantic_fields() -> None:
+    packet = _packet()
+    treated_identity = next(
+        item for item in packet["identities"] if item["regime_id"] == "slow_distributed"
+    )
+    outcome = _fake_native_outcome(packet, treated_identity)
+    outcome["provenance"]["terminal_status"] = "failed"
+
+    with pytest.raises(campaign.CampaignAdapterError, match="contradictory semantic fields"):
+        campaign._journal_row_payload(outcome)
+
+
+@pytest.mark.parametrize(
+    ("regime_id", "invalid_status"),
+    (("slow_distributed", "not_activated"), ("legacy_default", "activated")),
+)
+def test_success_journal_row_enforces_frozen_activation_status(
+    regime_id: str, invalid_status: str
+) -> None:
+    packet = _packet()
+    identity = next(item for item in packet["identities"] if item["regime_id"] == regime_id)
+    outcome = _fake_native_outcome(packet, identity)
+    outcome["provenance"]["intervention_status"] = invalid_status
+
+    with pytest.raises(campaign.CampaignAdapterError, match="activation status is invalid"):
+        campaign._journal_row_payload(outcome)
+
+
+@pytest.mark.parametrize("field", ("diagnostics", "checkpoint_provenance"))
+def test_success_journal_row_rejects_empty_required_provenance(
+    field: str,
+) -> None:
+    packet = _packet()
+    identity = next(
+        item for item in packet["identities"] if item["regime_id"] == "slow_distributed"
+    )
+    outcome = _fake_native_outcome(packet, identity)
+    outcome["provenance"][field] = {} if field == "diagnostics" else []
+
+    with pytest.raises(campaign.CampaignAdapterError, match="incomplete"):
+        campaign._journal_row_payload(outcome)
 
 
 def test_reconcile_rejects_success_provenance_without_identity_context(tmp_path: Any) -> None:

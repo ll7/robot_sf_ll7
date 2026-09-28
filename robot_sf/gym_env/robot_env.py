@@ -135,6 +135,10 @@ def _stable_config_hash(cfg: EnvSettings) -> str:
     """
     try:
         config_payload = asdict(cfg) if is_dataclass(cfg) else cfg.__dict__
+        sim_config = getattr(cfg, "sim_config", None)
+        selector_overrides = getattr(sim_config, "_config_hash_overrides", None)
+        if callable(selector_overrides):
+            config_payload["sim_config"].update(selector_overrides())
         payload = json.dumps(
             _hash_payload_without_default_goal_policy(config_payload),
             sort_keys=True,

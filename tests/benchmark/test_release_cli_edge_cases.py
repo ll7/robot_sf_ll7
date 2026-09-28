@@ -19,6 +19,7 @@ ERRATUM_CONTRACT_PATH = Path(
     "configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json"
 )
 RELEASE_MANIFEST_PATH = Path("configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml")
+_EXPECTED_OPERATIONAL_METADATA = {"version": "0.0.7", "publication_date": "2026-09-24"}
 
 
 def _args(mode: str, tmp_path: Path) -> argparse.Namespace:
@@ -96,7 +97,14 @@ def test_release_cli_dispatches_each_zenodo_mode(
     args = _args(mode, tmp_path)
     if mode in {"upload", "publish", "verify"}:
         args.manifest = tmp_path / "manifest.yaml"
-        expected_binding = {"release_tag": "v1", "metadata_sha256": "a" * 64}
+        expected_binding = {
+            "release_tag": "v1",
+            "metadata_sha256": "a" * 64,
+            "manifest_schema_version": "benchmark-release-manifest.v0.2",
+        }
+        if mode in {"publish", "verify"}:
+            args.expected_version = "0.0.7"
+            args.expected_publication_date = "2026-09-24"
         monkeypatch.setattr(
             release_cli,
             "_load_release_binding",
@@ -118,6 +126,7 @@ def test_release_cli_dispatches_each_zenodo_mode(
         assert metadata_calls == [
             {"expected_source_tag": "v1", "expected_metadata_sha256": "a" * 64}
         ]
+        assert operation_kwargs["expected_operational_metadata"] == _EXPECTED_OPERATIONAL_METADATA
     elif mode == "reserve":
         assert metadata_calls == [{}]
     else:
@@ -252,6 +261,7 @@ def test_release_cli_dispatches_repair_draft_metadata_with_repository_root(
         version="0.0.7",
         publication_date="2026-09-24",
         expected_remote_metadata_sha256="b" * 64,
+        expected_operational_metadata_sha256="e" * 64,
         expected_remote_source_tag=(
             "https://github.com/ll7/robot_sf_ll7/releases/tag/previous-candidate"
         ),
@@ -325,6 +335,7 @@ def test_release_cli_dispatches_repair_draft_metadata_with_repository_root(
             "bootstrap_metadata_sha256": bootstrap_digest,
             "expected_bootstrap_metadata_sha256": bootstrap_digest,
             "expected_remote_metadata_sha256": "b" * 64,
+            "expected_operational_metadata_sha256": "e" * 64,
             "expected_remote_source_tag": (
                 "https://github.com/ll7/robot_sf_ll7/releases/tag/previous-candidate"
             ),
@@ -368,6 +379,8 @@ def test_release_cli_parser_exposes_repair_draft_metadata_arguments() -> None:
             "d" * 64,
             "--expected-remote-metadata-sha256",
             "c" * 64,
+            "--expected-operational-metadata-sha256",
+            "e" * 64,
             "--expected-remote-source-tag",
             "https://github.com/ll7/robot_sf_ll7/releases/tag/previous-candidate",
             "--expected-remote-source-sha",
@@ -386,6 +399,7 @@ def test_release_cli_parser_exposes_repair_draft_metadata_arguments() -> None:
     assert args.bootstrap_metadata == Path("bootstrap.json")
     assert args.expected_bootstrap_metadata_sha256 == "d" * 64
     assert args.expected_remote_metadata_sha256 == "c" * 64
+    assert args.expected_operational_metadata_sha256 == "e" * 64
     assert (
         args.expected_remote_source_tag
         == "https://github.com/ll7/robot_sf_ll7/releases/tag/previous-candidate"
@@ -489,6 +503,7 @@ def test_release_cli_keeps_legacy_v02_manifest_binding() -> None:
     assert binding["metadata_sha256"] == manifest.metadata_sha256
     assert binding["concept_doi"] == manifest.concept_doi
     assert binding["version_doi"] == manifest.version_doi
+    assert binding["manifest_schema_version"] == "benchmark-release-manifest.v0.2"
 
 
 @pytest.mark.parametrize(
@@ -589,6 +604,34 @@ def test_release_cli_rejects_unbound_post_reservation_before_session(
     assert release_cli.handle(args) == 2
     output = capsys.readouterr().out
     assert "validated release manifest" in output
+
+
+def test_release_cli_requires_v02_operational_pair_before_session(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A v0.2 verification needs both operational pins before client construction."""
+    args = _args("verify", tmp_path)
+    args.manifest = tmp_path / "manifest.yaml"
+    monkeypatch.setattr(
+        release_cli,
+        "_load_release_binding",
+        lambda value: (
+            SimpleNamespace(),
+            {"manifest_schema_version": "benchmark-release-manifest.v0.2"},
+        ),
+    )
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "build_session",
+        lambda path: (_ for _ in ()).throw(
+            AssertionError("missing v0.2 operational pins must fail before session construction")
+        ),
+    )
+
+    assert release_cli.handle(args) == 2
+    assert "--expected-version" in capsys.readouterr().out
 
 
 def test_release_cli_recovers_without_loading_state_or_reserving(

@@ -21,7 +21,11 @@ from robot_sf.benchmark.release_erratum import (
     ReleaseErratumError,
     load_erratum_contract,
 )
-from robot_sf.benchmark.release_protocol import load_release_manifest, validate_release_manifest
+from robot_sf.benchmark.release_protocol import (
+    RELEASE_MANIFEST_SCHEMA_VERSION_V0_2,
+    load_release_manifest,
+    validate_release_manifest,
+)
 from robot_sf.common.artifact_paths import get_repository_root
 
 if TYPE_CHECKING:
@@ -189,6 +193,7 @@ def build_subparser(subparsers: Any) -> None:  # noqa: PLR0915
             )
             parser.add_argument("--expected-bootstrap-metadata-sha256")
             parser.add_argument("--expected-remote-metadata-sha256")
+            parser.add_argument("--expected-operational-metadata-sha256")
             parser.add_argument("--expected-remote-source-tag")
             parser.add_argument("--expected-remote-source-sha")
             parser.add_argument("--expected-remote-base-sha")
@@ -373,7 +378,9 @@ def _release_metadata_kwargs(binding: dict[str, Any] | None) -> dict[str, str]:
     }
 
 
-def _operational_metadata_kwargs(args: argparse.Namespace) -> dict[str, Any]:
+def _operational_metadata_kwargs(
+    args: argparse.Namespace, *, required: bool = False
+) -> dict[str, Any]:
     """Require both Zenodo-only publication fields when either is requested.
 
     Returns:
@@ -382,6 +389,11 @@ def _operational_metadata_kwargs(args: argparse.Namespace) -> dict[str, Any]:
     version = getattr(args, "expected_version", None)
     publication_date = getattr(args, "expected_publication_date", None)
     if version is None and publication_date is None:
+        if required:
+            raise zenodo_publisher.ZenodoPublisherError(
+                "v0.2 release verify/publish requires --expected-version and "
+                "--expected-publication-date"
+            )
         return {}
     if version is None or publication_date is None:
         raise zenodo_publisher.ZenodoPublisherError(
@@ -436,6 +448,9 @@ def _handle_repair_draft_metadata(
             args, "expected_bootstrap_metadata_sha256", None
         ),
         expected_remote_metadata_sha256=args.expected_remote_metadata_sha256,
+        expected_operational_metadata_sha256=getattr(
+            args, "expected_operational_metadata_sha256", None
+        ),
         expected_remote_source_tag=args.expected_remote_source_tag,
         expected_remote_source_sha=args.expected_remote_source_sha,
         expected_remote_base_sha=args.expected_remote_base_sha,
@@ -638,6 +653,16 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901, PLR0912, PLR0915
                 f"Zenodo {args.zenodo_mode} requires a validated release manifest or erratum "
                 "contract"
             )
+        operational_metadata_kwargs: dict[str, Any] = {}
+        if args.zenodo_mode in {"publish", "verify"}:
+            operational_metadata_kwargs = _operational_metadata_kwargs(
+                args,
+                required=(
+                    release_binding is not None
+                    and release_binding.get("manifest_schema_version")
+                    == RELEASE_MANIFEST_SCHEMA_VERSION_V0_2
+                ),
+            )
         if args.zenodo_mode == "new-version":
             _validate_erratum_new_version_arguments(args, release_definition)
         session = zenodo_publisher.build_session(args.token_file)
@@ -717,7 +742,7 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901, PLR0912, PLR0915
                 state,
                 metadata,
                 api_base=args.api_base,
-                **_operational_metadata_kwargs(args),
+                **operational_metadata_kwargs,
                 **operation_kwargs,
             )
             zenodo_publisher.write_state(args.state, state)
@@ -733,7 +758,7 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901, PLR0912, PLR0915
             state,
             metadata,
             api_base=args.api_base,
-            **_operational_metadata_kwargs(args),
+            **operational_metadata_kwargs,
             **operation_kwargs,
         )
         if report.get("status") == "pass":

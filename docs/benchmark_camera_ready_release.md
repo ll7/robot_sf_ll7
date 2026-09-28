@@ -394,7 +394,8 @@ uv run robot-sf release zenodo repair-draft-metadata \
   --publication-date "$PUBLICATION_DATE"
 
 # Apply only after reviewing the complete DOI-token description diff, the
-# version/date overlay, all source identity values, and both metadata hashes.
+# version/date overlay, all source identity values, the remote metadata hash,
+# and the operational-overlay hash emitted by the preview.
 # Any unrelated drift or non-empty draft is a stop.
 uv run robot-sf release zenodo repair-draft-metadata \
   --token-file "$ZENODO_TOKEN_FILE" \
@@ -407,6 +408,7 @@ uv run robot-sf release zenodo repair-draft-metadata \
   --publication-date "$PUBLICATION_DATE" \
   --expected-bootstrap-metadata-sha256 <reviewed-bootstrap-metadata-sha256> \
   --expected-remote-metadata-sha256 <reviewed-preview-digest> \
+  --expected-operational-metadata-sha256 <reviewed-preview-operational-metadata-sha256> \
   --expected-remote-source-tag <reviewed-preview-source-tag> \
   --expected-remote-source-sha <reviewed-preview-source-sha> \
   --expected-remote-base-sha <reviewed-preview-base-sha> \
@@ -464,11 +466,15 @@ For a new bootstrap-reserved draft, repair may replace only the paired
 `{{concept_doi}}` and `{{version_doi}}` tokens with the exact DOIs frozen in the
 resolved identity, plus the Zenodo-only `version` and `publication_date`
 overlay. It requires the bootstrap file SHA-256, remote metadata preview SHA-256,
-and reviewed source tag/SHA/base values; all other metadata keys, description
-prose, relation inventory, deposition identity, unpublished state, and empty
-file inventory must match exactly before any PUT. The update response and a
-fresh GET must then match the resolved metadata and overlay exactly. It does not
-edit the resolved metadata file or its copy inside the immutable archive.
+the canonical SHA-256 of the exact version/date overlay shown in that preview,
+and reviewed source tag/SHA/base values; the apply arguments must reproduce the
+previewed version and date exactly. All other metadata keys, description prose,
+relation inventory, deposition identity, unpublished state, and empty file
+inventory must match exactly before any PUT. The update response and a fresh
+GET must then match the resolved metadata and overlay exactly. It does not edit
+the resolved metadata file or its copy inside the immutable archive. For a v0.2
+manifest, both pre-publication and post-publication `verify` and `publish` also
+require the explicit expected version and publication date.
 Keep draft editing exclusive to this operator through the apply/readback step;
 the fresh pre-write read and PUT are separate remote requests.
 

@@ -17,6 +17,7 @@ from robot_sf.benchmark.zenodo_publisher import (
     ZENODO_STATE_SCHEMA,
     ZENODO_VERIFICATION_SCHEMA,
     ZenodoPublisherError,
+    _operational_metadata_sha256,
     _seal_state,
     _verify_integrity,
     build_release_binding,
@@ -33,6 +34,10 @@ from robot_sf.benchmark.zenodo_publisher import (
 
 _MANIFEST_PATH = Path("configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml")
 _OLD_SOURCE_TAG = "https://github.com/ll7/robot_sf_ll7/releases/tag/previous-candidate"
+_EXPECTED_OPERATIONAL_METADATA = {
+    "version": "0.0.7",
+    "publication_date": "2026-09-24",
+}
 
 
 class _Response:
@@ -306,6 +311,7 @@ def test_all_zenodo_modes_preserve_manifest_binding(tmp_path: Path) -> None:
     remote_draft["metadata"] = {
         **metadata,
         "prereserve_doi": {"doi": binding["version_doi"]},
+        **_EXPECTED_OPERATIONAL_METADATA,
     }
     remote_draft["files"] = [
         {
@@ -322,7 +328,13 @@ def test_all_zenodo_modes_preserve_manifest_binding(tmp_path: Path) -> None:
         _Response(remote_draft),
         _Response({}, content=bundle.read_bytes()),
     ]
-    report = verify(session, state, metadata, release_binding=binding)
+    report = verify(
+        session,
+        state,
+        metadata,
+        release_binding=binding,
+        expected_operational_metadata=_EXPECTED_OPERATIONAL_METADATA,
+    )
     assert report["status"] == "pass", report
     assert state["verification_receipt"]["release_binding"] == state["release_binding"]
     assert state["verification_receipt"]["manifest_metadata_sha256"] == binding["metadata_sha256"]
@@ -331,7 +343,13 @@ def test_all_zenodo_modes_preserve_manifest_binding(tmp_path: Path) -> None:
         _Response(remote_draft),
         _Response({}, content=bundle.read_bytes()),
     ]
-    state = publish(session, state, metadata, release_binding=binding)
+    state = publish(
+        session,
+        state,
+        metadata,
+        release_binding=binding,
+        expected_operational_metadata=_EXPECTED_OPERATIONAL_METADATA,
+    )
     assert state["submitted"] is True
     assert state["release_binding"]["version_doi"] == binding["version_doi"]
 
@@ -373,6 +391,11 @@ def test_recover_restores_manifest_bound_state_for_upload_and_verify(tmp_path: P
     state = upload(session, state, [bundle], release_binding=binding)
 
     remote_draft = dict(draft)
+    remote_draft["metadata"] = {
+        **metadata,
+        "prereserve_doi": {"doi": binding["version_doi"]},
+        **_EXPECTED_OPERATIONAL_METADATA,
+    }
     remote_draft["files"] = [
         {
             "filename": bundle.name,
@@ -388,8 +411,57 @@ def test_recover_restores_manifest_bound_state_for_upload_and_verify(tmp_path: P
         _Response(remote_draft),
         _Response({}, content=bundle.read_bytes()),
     ]
-    report = verify(session, state, metadata, release_binding=binding)
+    report = verify(
+        session,
+        state,
+        metadata,
+        release_binding=binding,
+        expected_operational_metadata=_EXPECTED_OPERATIONAL_METADATA,
+    )
     assert report["status"] == "pass", report
+
+
+@pytest.mark.parametrize("operation", ["verify", "publish"])
+def test_v02_manifest_requires_operational_metadata_pair_before_remote_access(
+    operation: str,
+) -> None:
+    """A v0.2 release cannot verify or publish with unpinned Zenodo-only fields."""
+    binding, metadata = _binding_and_metadata()
+    assert binding["manifest_schema_version"] == "benchmark-release-manifest.v0.2"
+    state = _unbound_state(binding)
+    session = _Session()
+
+    with pytest.raises(
+        ZenodoPublisherError, match="requires expected version and publication_date"
+    ):
+        if operation == "verify":
+            verify(session, state, metadata, release_binding=binding)
+        else:
+            publish(session, state, metadata, release_binding=binding)
+
+    assert session.calls == []
+    assert session.posts == []
+
+
+@pytest.mark.parametrize("invalid_schema_version", [{"version": "v0.2"}, ["v0.2"]])
+def test_release_binding_rejects_unhashable_schema_version(
+    invalid_schema_version: Any,
+) -> None:
+    """Malformed schema types fail closed with the publisher's domain error."""
+    binding, metadata = _binding_and_metadata()
+    binding["manifest_schema_version"] = invalid_schema_version
+    session = _Session()
+
+    with pytest.raises(ZenodoPublisherError, match="manifest schema version is invalid"):
+        verify(
+            session,
+            _unbound_state(binding),
+            metadata,
+            release_binding=binding,
+            expected_operational_metadata=_EXPECTED_OPERATIONAL_METADATA,
+        )
+
+    assert session.calls == []
 
 
 @pytest.mark.parametrize(
@@ -646,6 +718,7 @@ def test_bootstrap_repair_previews_and_applies_only_doi_resolution_and_publicati
         bootstrap_metadata_sha256=bootstrap_digest,
         expected_bootstrap_metadata_sha256=preview["bootstrap_metadata_sha256"],
         expected_remote_metadata_sha256=preview["remote_metadata_sha256_before"],
+        expected_operational_metadata_sha256=preview["operational_metadata_sha256"],
         expected_remote_source_tag=preview["remote_source_tag_before"],
         expected_remote_source_sha=preview["remote_source_sha_before"],
         expected_remote_base_sha=preview["remote_base_sha_before"],
@@ -778,6 +851,9 @@ def test_bootstrap_repair_apply_requires_matching_bootstrap_digest_and_source_re
             bootstrap_metadata_sha256=bootstrap_digest,
             expected_bootstrap_metadata_sha256="0" * 64,
             expected_remote_metadata_sha256="1" * 64,
+            expected_operational_metadata_sha256=_operational_metadata_sha256(
+                _EXPECTED_OPERATIONAL_METADATA
+            ),
             expected_remote_source_tag=binding["release_tag"],
             expected_remote_source_sha="a" * 40,
             expected_remote_base_sha="b" * 40,
@@ -830,6 +906,7 @@ def test_bootstrap_repair_rejects_changed_reserved_doi_hint_on_put_readback(
             bootstrap_metadata_sha256=bootstrap_digest,
             expected_bootstrap_metadata_sha256=preview["bootstrap_metadata_sha256"],
             expected_remote_metadata_sha256=preview["remote_metadata_sha256_before"],
+            expected_operational_metadata_sha256=preview["operational_metadata_sha256"],
             expected_remote_source_tag=preview["remote_source_tag_before"],
             expected_remote_source_sha=preview["remote_source_sha_before"],
             expected_remote_base_sha=preview["remote_base_sha_before"],
@@ -890,6 +967,7 @@ def test_repair_draft_metadata_previews_get_first_then_puts_and_verifies_exact_r
         publication_date="2026-09-24",
         release_binding=binding,
         expected_remote_metadata_sha256=expected_digest,
+        expected_operational_metadata_sha256=preview["operational_metadata_sha256"],
         expected_remote_source_tag=_OLD_SOURCE_TAG,
         apply=True,
     )
@@ -904,6 +982,64 @@ def test_repair_draft_metadata_previews_get_first_then_puts_and_verifies_exact_r
     assert [call[0] for call in apply_session.calls] == ["GET", "PUT", "GET"]
     assert apply_session.calls[1][2]["json"] == {"metadata": target_metadata}
     assert apply_session.gets == []
+
+
+def test_repair_draft_metadata_apply_rejects_changed_operational_overlay_before_remote_read() -> (
+    None
+):
+    """The apply target must be the same version/date pair reviewed in preview."""
+    binding, metadata = _binding_and_metadata()
+    remote = _repair_remote(binding, metadata)
+    preview_session = _Session()
+    preview_session.gets = [_Response(remote)]
+    preview = repair_draft_metadata(
+        preview_session,
+        int(binding["version_doi"].rsplit(".", 1)[-1]),
+        metadata,
+        version="0.0.7",
+        publication_date="2026-09-24",
+        release_binding=binding,
+    )
+    apply_session = _Session()
+
+    with pytest.raises(ZenodoPublisherError, match="operational metadata changed since"):
+        repair_draft_metadata(
+            apply_session,
+            int(binding["version_doi"].rsplit(".", 1)[-1]),
+            metadata,
+            version="9.9.9",
+            publication_date="2099-01-01",
+            release_binding=binding,
+            expected_remote_metadata_sha256=preview["remote_metadata_sha256_before"],
+            expected_operational_metadata_sha256=preview["operational_metadata_sha256"],
+            expected_remote_source_tag=preview["remote_source_tag_before"],
+            apply=True,
+        )
+
+    assert apply_session.calls == []
+    assert apply_session.puts == []
+
+
+def test_repair_draft_metadata_apply_requires_operational_overlay_preview_hash() -> None:
+    """Apply fails before network access when the previewed target overlay is not pinned."""
+    binding, metadata = _binding_and_metadata()
+    session = _Session()
+
+    with pytest.raises(ZenodoPublisherError, match="preview operational metadata SHA-256"):
+        repair_draft_metadata(
+            session,
+            int(binding["version_doi"].rsplit(".", 1)[-1]),
+            metadata,
+            version="0.0.7",
+            publication_date="2026-09-24",
+            release_binding=binding,
+            expected_remote_metadata_sha256="a" * 64,
+            expected_remote_source_tag=_OLD_SOURCE_TAG,
+            apply=True,
+        )
+
+    assert session.calls == []
+    assert session.puts == []
 
 
 def test_repair_draft_metadata_reviews_exact_two_link_provenance_before_apply(
@@ -956,6 +1092,7 @@ def test_repair_draft_metadata_reviews_exact_two_link_provenance_before_apply(
         publication_date="2026-09-24",
         release_binding=binding,
         expected_remote_metadata_sha256=preview["remote_metadata_sha256_before"],
+        expected_operational_metadata_sha256=preview["operational_metadata_sha256"],
         expected_remote_source_tag=preview["remote_source_tag_before"],
         expected_remote_source_sha=preview["remote_source_sha_before"],
         expected_remote_base_sha=preview["remote_base_sha_before"],
@@ -1083,6 +1220,7 @@ def test_repair_draft_metadata_apply_requires_review_of_each_changed_provenance_
             publication_date="2026-09-24",
             release_binding=binding,
             expected_remote_metadata_sha256=preview["remote_metadata_sha256_before"],
+            expected_operational_metadata_sha256=preview["operational_metadata_sha256"],
             expected_remote_source_tag=preview["remote_source_tag_before"],
             expected_remote_source_sha=expected_source_sha,
             expected_remote_base_sha=expected_base_sha,
@@ -1109,6 +1247,9 @@ def test_repair_draft_metadata_stale_remote_digest_blocks_put() -> None:
             publication_date="2026-09-24",
             release_binding=binding,
             expected_remote_metadata_sha256="0" * 64,
+            expected_operational_metadata_sha256=_operational_metadata_sha256(
+                _EXPECTED_OPERATIONAL_METADATA
+            ),
             expected_remote_source_tag=_OLD_SOURCE_TAG,
             apply=True,
         )
@@ -1133,6 +1274,9 @@ def test_repair_draft_metadata_apply_requires_and_checks_reviewed_source_tag() -
             publication_date="2026-09-24",
             release_binding=binding,
             expected_remote_metadata_sha256="a" * 64,
+            expected_operational_metadata_sha256=_operational_metadata_sha256(
+                _EXPECTED_OPERATIONAL_METADATA
+            ),
             apply=True,
         )
     assert missing_tag_session.calls == []
@@ -1159,6 +1303,7 @@ def test_repair_draft_metadata_apply_requires_and_checks_reviewed_source_tag() -
             publication_date="2026-09-24",
             release_binding=binding,
             expected_remote_metadata_sha256=preview["remote_metadata_sha256_before"],
+            expected_operational_metadata_sha256=preview["operational_metadata_sha256"],
             expected_remote_source_tag="https://github.com/ll7/robot_sf_ll7/releases/tag/other",
             apply=True,
         )
@@ -1358,7 +1503,13 @@ def test_publish_failure_preserves_bound_caller_state(
 
     expected_error = "verification receipt" if receipt_kind == "missing" else "integrity"
     with pytest.raises(ZenodoPublisherError, match=expected_error):
-        publish(session, state, metadata, release_binding=binding)
+        publish(
+            session,
+            state,
+            metadata,
+            release_binding=binding,
+            expected_operational_metadata=_EXPECTED_OPERATIONAL_METADATA,
+        )
 
     assert state == state_before
     assert session.gets == []
@@ -1395,7 +1546,13 @@ def test_bound_verify_failure_preserves_unbound_caller_state() -> None:
     session.gets = [_Response({}, status_code=503)]
 
     with pytest.raises(ZenodoPublisherError, match="verify request failed"):
-        verify(session, state, metadata, release_binding=binding)
+        verify(
+            session,
+            state,
+            metadata,
+            release_binding=binding,
+            expected_operational_metadata=_EXPECTED_OPERATIONAL_METADATA,
+        )
 
     assert json.dumps(state, sort_keys=True) == state_before
     assert "release_binding" not in state

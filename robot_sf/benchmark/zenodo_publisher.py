@@ -281,6 +281,18 @@ def _validated_operational_metadata(
     return {"version": version, "publication_date": publication_date}
 
 
+def _operational_metadata_sha256(value: Mapping[str, Any] | None) -> str:
+    """Hash the exact validated Zenodo-only version/date overlay.
+
+    Returns:
+        Lowercase hexadecimal SHA-256 digest.
+    """
+    normalized = _validated_operational_metadata(value)
+    if not normalized:
+        raise ZenodoPublisherError("Zenodo operational metadata overlay is missing")
+    return hashlib.sha256(_canonical_bytes(normalized)).hexdigest()
+
+
 def _remote_metadata_contract_sha256(payload: Mapping[str, Any]) -> str:
     """Hash the credential-free metadata contract in a remote deposition payload.
 
@@ -757,6 +769,21 @@ def _binding_value(binding: Any, key: str) -> Any:
     return getattr(binding, key, None)
 
 
+def _release_manifest_schema_version(binding: Any) -> str | None:
+    """Return the validated manifest schema version from a public binding."""
+    schema_version = _binding_value(binding, "manifest_schema_version")
+    if schema_version is None:
+        schema_version = _binding_value(binding, "schema_version")
+    if schema_version is None:
+        return None
+    if not isinstance(schema_version, str) or schema_version not in {
+        "benchmark-release-manifest.v0.1",
+        "benchmark-release-manifest.v0.2",
+    }:
+        raise ZenodoPublisherError("Zenodo release binding manifest schema version is invalid")
+    return schema_version
+
+
 def _normalize_release_binding(binding: Any) -> dict[str, Any]:
     """Normalize and validate the public fields needed to bind a Zenodo release.
 
@@ -790,7 +817,8 @@ def _normalize_release_binding(binding: Any) -> dict[str, Any]:
         raise ZenodoPublisherError("Zenodo release binding version_doi is invalid")
     if concept_doi == version_doi:
         raise ZenodoPublisherError("Zenodo release binding concept and version DOI must differ")
-    return {
+    manifest_schema_version = _release_manifest_schema_version(binding)
+    normalized = {
         "metadata_path": metadata_path,
         "metadata_sha256": metadata_sha256,
         "release_tag": release_tag,
@@ -798,6 +826,27 @@ def _normalize_release_binding(binding: Any) -> dict[str, Any]:
         "concept_doi": concept_doi,
         "version_doi": version_doi,
     }
+    if manifest_schema_version is not None:
+        normalized["manifest_schema_version"] = manifest_schema_version
+    return normalized
+
+
+def _require_v02_operational_metadata(
+    binding: Mapping[str, Any] | None,
+    operational_metadata: Mapping[str, str],
+    *,
+    operation: str,
+) -> None:
+    """Require the reviewed version/date pair for manifest-v0.2 operations."""
+    if (
+        binding is not None
+        and binding.get("manifest_schema_version") == "benchmark-release-manifest.v0.2"
+        and set(operational_metadata) != {"version", "publication_date"}
+    ):
+        raise ZenodoPublisherError(
+            f"Zenodo {operation} with a v0.2 release manifest requires expected version "
+            "and publication_date"
+        )
 
 
 def build_release_binding(manifest: Any) -> dict[str, Any]:
@@ -3188,6 +3237,7 @@ def repair_draft_metadata(  # noqa: C901, PLR0912, PLR0913, PLR0915
     bootstrap_metadata_sha256: str | None = None,
     expected_bootstrap_metadata_sha256: str | None = None,
     expected_remote_metadata_sha256: str | None = None,
+    expected_operational_metadata_sha256: str | None = None,
     expected_remote_source_tag: str | None = None,
     expected_remote_source_sha: str | None = None,
     expected_remote_base_sha: str | None = None,
@@ -3216,6 +3266,7 @@ def repair_draft_metadata(  # noqa: C901, PLR0912, PLR0913, PLR0915
     overlay = _validated_operational_metadata(
         {"version": version, "publication_date": publication_date}
     )
+    overlay_sha256 = _operational_metadata_sha256(overlay)
     if set(frozen_metadata) & set(overlay):
         raise ZenodoPublisherError(
             "Zenodo operational metadata fields are already part of the frozen metadata"
@@ -3227,8 +3278,21 @@ def repair_draft_metadata(  # noqa: C901, PLR0912, PLR0913, PLR0915
         or _SHA256_RE.fullmatch(expected_remote_metadata_sha256) is None
     ):
         raise ZenodoPublisherError("Zenodo expected remote metadata SHA-256 is invalid")
+    if expected_operational_metadata_sha256 is not None and (
+        not isinstance(expected_operational_metadata_sha256, str)
+        or _SHA256_RE.fullmatch(expected_operational_metadata_sha256) is None
+    ):
+        raise ZenodoPublisherError("Zenodo expected operational metadata SHA-256 is invalid")
     if apply and expected_remote_metadata_sha256 is None:
         raise ZenodoPublisherError("Zenodo metadata repair requires a preview metadata SHA-256")
+    if apply and expected_operational_metadata_sha256 is None:
+        raise ZenodoPublisherError(
+            "Zenodo metadata repair requires a preview operational metadata SHA-256"
+        )
+    if expected_operational_metadata_sha256 is not None and (
+        expected_operational_metadata_sha256 != overlay_sha256
+    ):
+        raise ZenodoPublisherError("Zenodo operational metadata changed since the repair preview")
     if apply and not expected_remote_source_tag:
         raise ZenodoPublisherError("Zenodo metadata repair requires the reviewed remote source tag")
     bootstrap_contract: dict[str, Any] | None = None
@@ -3350,6 +3414,7 @@ def repair_draft_metadata(  # noqa: C901, PLR0912, PLR0913, PLR0915
         "changed_fields": changed_fields,
         "operational_metadata_before": {key: remote_metadata.get(key) for key in overlay},
         "operational_metadata_after": overlay,
+        "operational_metadata_sha256": overlay_sha256,
         **(
             {"bootstrap_metadata_sha256": bootstrap_metadata_sha256}
             if bootstrap_contract is not None
@@ -3671,6 +3736,7 @@ def publish(  # noqa: C901, PLR0912, PLR0915
     normalized_metadata = _validate_metadata(metadata)
     operational_metadata = _validated_operational_metadata(expected_operational_metadata)
     binding = _normalize_release_binding(release_binding) if release_binding is not None else None
+    _require_v02_operational_metadata(binding, operational_metadata, operation="publish")
     file_metadata = (
         _validate_release_binding_metadata(normalized_metadata, binding)
         if binding is not None
@@ -3790,6 +3856,7 @@ def verify(  # noqa: C901, PLR0912, PLR0915
     normalized_metadata = _validate_metadata(metadata)
     operational_metadata = _validated_operational_metadata(expected_operational_metadata)
     binding = _normalize_release_binding(release_binding) if release_binding is not None else None
+    _require_v02_operational_metadata(binding, operational_metadata, operation="verify")
     file_metadata = (
         _validate_release_binding_metadata(normalized_metadata, binding)
         if binding is not None

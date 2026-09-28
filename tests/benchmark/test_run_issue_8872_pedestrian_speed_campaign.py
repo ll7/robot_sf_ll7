@@ -471,13 +471,14 @@ def test_non_success_reason_redacts_private_exception_detail() -> None:
 def test_terminal_journal_preserves_metrics_and_reconcile_hides_path(tmp_path: Any) -> None:
     journal = tmp_path / "private" / "run.jsonl"
     journal.parent.mkdir()
+    identity_key = campaign._compiled_manifest()["identities"][0]["identity_key"]
     with journal.open("w", encoding="utf-8") as handle:
         campaign._append_journal_event(
             handle,
             "row_finished",
             **campaign._journal_row_payload(
                 {
-                    "identity_key": "identity-1",
+                    "identity_key": identity_key,
                     "terminal_status": campaign.SUCCESS_STATUS,
                     "missingness": None,
                     "reason": None,
@@ -491,8 +492,49 @@ def test_terminal_journal_preserves_metrics_and_reconcile_hides_path(tmp_path: A
 
     assert summary["journal_path"] == "run.jsonl"
     assert summary["journal_reference"] == "run.jsonl"
+    assert summary["complete"] is True
+    assert summary["rows"][0]["identity_key"] == identity_key
     assert summary["rows"][0]["metrics"] == _protocol_metrics()
     assert str(journal) not in campaign.json.dumps(summary, sort_keys=True)
+
+
+def test_reconcile_rejects_malformed_in_flight_identity_without_echo(tmp_path: Any) -> None:
+    bad_identity = "../../private/cluster/secret-token"
+    journal = tmp_path / "run.jsonl"
+    journal.write_text(
+        campaign.json.dumps({"event": "row_started", "identity_key": bad_identity}) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        campaign.CampaignAdapterError, match="journal row identity is invalid"
+    ) as exc_info:
+        campaign.reconcile_execution_journal(journal, expected_rows=1)
+
+    assert bad_identity not in str(exc_info.value)
+
+
+def test_reconcile_rejects_malformed_terminal_identity_without_echo(tmp_path: Any) -> None:
+    bad_identity = "/private/cluster/secret-token"
+    journal = tmp_path / "run.jsonl"
+    journal.write_text(
+        campaign.json.dumps(
+            {
+                "event": "row_finished",
+                "identity_key": bad_identity,
+                "terminal_status": "failed",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        campaign.CampaignAdapterError, match="journal row identity is invalid"
+    ) as exc_info:
+        campaign.reconcile_execution_journal(journal, expected_rows=1)
+
+    assert bad_identity not in str(exc_info.value)
 
 
 def test_self_minted_authorization_cannot_enter_production_runner(tmp_path: Any) -> None:
@@ -643,10 +685,14 @@ def test_cli_summary_uses_safe_output_reference() -> None:
 
 def test_existing_journal_refuses_retry(tmp_path: Any) -> None:
     journal = tmp_path / "run.jsonl"
-    journal.write_text('{"event":"row_started","identity_key":"x"}\n', encoding="utf-8")
+    identity_key = campaign._compiled_manifest()["identities"][0]["identity_key"]
+    journal.write_text(
+        campaign.json.dumps({"event": "row_started", "identity_key": identity_key}) + "\n",
+        encoding="utf-8",
+    )
     summary = campaign.reconcile_execution_journal(journal, expected_rows=2160)
     assert summary["retry_allowed"] is False
-    assert summary["in_flight_identity_keys"] == ["x"]
+    assert summary["in_flight_identity_keys"] == [identity_key]
     with pytest.raises(campaign.CampaignAdapterError, match="automatic retry is forbidden"):
         campaign._prepare_execution_paths(tmp_path / "receipt.json", journal, tmp_path / "run.lock")
 

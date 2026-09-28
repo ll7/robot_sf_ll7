@@ -164,6 +164,7 @@ AUTHORIZATION_KEYS = frozenset(
     }
 )
 SAFE_JOURNAL_REFERENCE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+SAFE_IDENTITY_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$")
 SAFE_REASON_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 SAFE_DECISION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
@@ -473,6 +474,26 @@ def _compiled_manifest(
         "compiled production manifest hash drifted",
     )
     return manifest
+
+
+@lru_cache(maxsize=1)
+def _compiled_identity_keys() -> frozenset[str]:
+    """Return the only identity keys a production journal may expose."""
+    return frozenset(
+        str(identity["identity_key"]) for identity in _compiled_manifest()["identities"]
+    )
+
+
+def _journal_identity_key(value: Any) -> str:
+    """Validate a journal identity before copying it into a public summary."""
+    _require(
+        isinstance(value, str)
+        and bool(SAFE_IDENTITY_KEY.fullmatch(value))
+        and ".." not in value
+        and value in _compiled_identity_keys(),
+        "journal row identity is invalid",
+    )
+    return value
 
 
 def _packet_binding_hash(manifest: Mapping[str, Any], source_commit: str) -> str:
@@ -1661,17 +1682,16 @@ def reconcile_execution_journal(
     _require(path.is_file(), "execution journal does not exist")
     events = _read_journal(path)
     started = [
-        str(event.get("identity_key")) for event in events if event.get("event") == "row_started"
+        _journal_identity_key(event.get("identity_key"))
+        for event in events
+        if event.get("event") == "row_started"
     ]
     terminal_rows: list[dict[str, Any]] = []
     finished: list[str] = []
     for event in events:
         if event.get("event") != "row_finished":
             continue
-        identity_key = event.get("identity_key")
-        _require(
-            isinstance(identity_key, str) and bool(identity_key), "journal row identity is invalid"
-        )
+        identity_key = _journal_identity_key(event.get("identity_key"))
         terminal_status = event.get("terminal_status")
         _require(
             isinstance(terminal_status, str) and terminal_status in TERMINAL_STATUSES,

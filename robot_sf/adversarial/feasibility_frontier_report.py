@@ -1003,6 +1003,7 @@ def _validate_evidence(  # noqa: C901 - preserve independent top-level evidence 
             and isinstance(item.get("case_id"), str)
         }
 
+    _validate_bundle_source_revision(evidence.get("source_revision"), rounds, errors)
     _validate_case_dispositions(rounds, errors)
     _validate_case_observation_origins(rounds, round_candidates, round_search_artifacts, errors)
     _validate_admitted_candidate_observations(rounds, errors)
@@ -1023,6 +1024,32 @@ def _validate_evidence(  # noqa: C901 - preserve independent top-level evidence 
     if errors:
         raise FrontierReportError("invalid frontier evidence:\n- " + "\n- ".join(errors))
     return optimization_tuning_identities
+
+
+def _validate_bundle_source_revision(
+    bundle_source_revision: Any, rounds: list[Any], errors: list[str]
+) -> None:
+    """Require the bundle revision to identify every validated round source.
+
+    The report exposes one source revision for the input bundle. Each round and
+    its checksummed source artifacts already carry a revision of their own, so a
+    bundle-level revision that differs from any round would make the report's
+    provenance output ambiguous. A future schema that permits mixed revisions
+    should model that explicitly instead of silently selecting the top-level
+    value.
+    """
+    if not isinstance(bundle_source_revision, str) or not _GIT_SHA.fullmatch(
+        bundle_source_revision
+    ):
+        return
+    for index, round_data in enumerate(rounds):
+        if not isinstance(round_data, dict):
+            continue
+        round_source_revision = round_data.get("source_revision")
+        if not _same_text_identity(bundle_source_revision, round_source_revision):
+            errors.append(
+                f"evidence.source_revision does not match rounds[{index}].source_revision"
+            )
 
 
 def _validate_admitted_candidate_observations(rounds: list[Any], errors: list[str]) -> None:

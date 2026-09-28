@@ -1966,6 +1966,18 @@ def test_frontier_report_rejects_missing_provenance_and_artifact_digest_mismatch
         build_frontier_report(payload, evidence_root=tmp_path)
 
 
+def test_frontier_report_rejects_bundle_source_revision_mismatch(tmp_path: Path) -> None:
+    """The emitted bundle revision must be bound to every round revision."""
+    payload = _evidence(tmp_path)
+    payload["source_revision"] = "f" * 40
+
+    with pytest.raises(
+        FrontierReportError,
+        match=r"evidence\.source_revision does not match rounds\[0\]\.source_revision",
+    ):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
 @pytest.mark.parametrize(
     ("artifact_kind", "payload_field", "message"),
     [

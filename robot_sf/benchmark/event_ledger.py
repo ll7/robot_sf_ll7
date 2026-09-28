@@ -266,11 +266,7 @@ def _contact_provenance(
             step_index = None
         event_time = _finite_float(event.get("collision_time"))
         partner_type = str(event.get("collision_partner_type") or "")
-        partners = {
-            str(partner)
-            for partner in (event.get("contact_partner_ids") or [event.get("collision_partner_id")])
-            if partner is not None
-        }
+        partners = _contact_partner_ids(event)
         matched = next(
             (
                 match
@@ -340,8 +336,25 @@ def _sorted_contact_sources(
     """
     return sorted(
         collision_events or [],
-        key=lambda event: (event.get("collision_time"), event.get("collision_partner_type")),
+        key=lambda event: (
+            _finite_float(event.get("collision_time"))
+            if _finite_float(event.get("collision_time")) is not None
+            else math.inf,
+            str(event.get("collision_partner_type")),
+        ),
     )
+
+
+def _contact_partner_ids(event: Mapping[str, Any]) -> set[str]:
+    """Use typed contact IDs or the canonical nearest partner as fallback.
+
+    Returns:
+        Set of pedestrian row identifiers supplied by the saved event.
+    """
+    partner_values = event.get("contact_partner_ids")
+    if not isinstance(partner_values, list):
+        partner_values = [event.get("collision_partner_id")]
+    return {str(partner) for partner in partner_values if partner is not None}
 
 
 def _contact_classification_status(
@@ -700,6 +713,8 @@ def _contact_source_violations(
         violations.append(f"{prefix} step index differs from saved collision source")
     if contact.get("robot_speed_measurement_window") != "simulation_step":
         violations.append(f"{prefix} robot speed measurement window is missing")
+    if "contact_partner_ids" in event and not isinstance(event["contact_partner_ids"], list):
+        violations.append(f"{prefix} saved contact partner IDs must be a list")
     return violations
 
 

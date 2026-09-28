@@ -194,3 +194,20 @@ def test_opt_in_row_rejects_missing_block_and_unknown_version() -> None:
         "unsupported collision_attribution_version" in issue
         for issue in validate_record_event_ledger(record)
     )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected"),
+    [
+        ("contact_partner_ids", 3, "saved contact partner IDs must be a list"),
+        ("collision_time", "bad", "collision_time must be finite"),
+    ],
+)
+def test_corrupt_saved_event_returns_violations(field: str, value: object, expected: str) -> None:
+    """Malformed opt-in rows fail validation without crashing its recomputation."""
+    record = _record()
+    record["event_ledger"] = build_event_ledger(
+        record, collision_events=[_step_event(np.array([1.0, 0.0]))]
+    )
+    record["event_ledger"]["collision_events"][0][field] = value
+    assert any(expected in issue for issue in validate_record_event_ledger(record))

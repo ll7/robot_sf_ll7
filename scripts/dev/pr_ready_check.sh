@@ -1140,6 +1140,8 @@ if [[ ${#pr_ready_uncovered_test_roots[@]} -gt 0 ]]; then
     printf 'Extended readiness lane not required: no robot_sf/, configs/, maps/ or uncovered-root change.\n' >&2
   fi
   mark_pr_ready_progress "lane_coverage_summary" "none" "reporting readiness lane coverage"
+  lane_coverage_dir="${REPO_ROOT}/output/validation/pr_ready"
+  mkdir -p "$lane_coverage_dir"
   {
     printf 'Readiness lane coverage summary (issue #9754)\n'
     printf '  core lane:      ran\n'
@@ -1158,7 +1160,7 @@ if [[ ${#pr_ready_uncovered_test_roots[@]} -gt 0 ]]; then
       printf '  NOT COVERED by this readiness run: %s\n' "${pr_ready_uncovered_test_roots[*]}"
       printf '  A PR body must not claim full-suite or benchmark/validation/map coverage from this run.\n'
     fi
-  } | tee -a "${REPO_ROOT}/output/validation/pr_ready/lane_coverage.txt" >&2
+  } | tee -a "$lane_coverage_dir/lane_coverage.txt" >&2
 fi
 mark_pr_ready_progress "post_lane_checks" "none" "running post-lane readiness checks"
 "$SCRIPT_DIR/check_changed_coverage.sh"

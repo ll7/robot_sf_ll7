@@ -652,6 +652,86 @@ def test_stop_to_follow_requires_clear_persistence_and_avoids_one_step_chatter()
     assert second.release_reason == TransitionReason.CLEAR_PERSISTENCE.value
 
 
+def test_stop_maximum_duration_cannot_bypass_interaction_clear_persistence() -> None:
+    config = ManeuverCommitmentConfig(
+        min_dwell_steps_by_state={ManeuverState.STOP: 0},
+        max_duration_steps_by_state={ManeuverState.STOP: 1},
+        clear_persistence_steps=2,
+    )
+    manager, candidates = _prime(
+        ManeuverState.STOP,
+        config=config,
+        observation=CommitmentObservation(interaction_id="track-a", interaction_present=True),
+    )
+    interacting_values = _evaluations(
+        candidates,
+        by_state={
+            state: {"risk_bucket": 1}
+            for state in (
+                ManeuverState.FOLLOW,
+                ManeuverState.PASS_LEFT,
+                ManeuverState.PASS_RIGHT,
+                ManeuverState.YIELD,
+            )
+        },
+    )
+
+    # The moving candidates remain in a worse safety class while the
+    # interaction persists. The STOP timer has already expired, but it must
+    # not open the portfolio or permit ROUTE_FOLLOW to escape the stop.
+    for step in (1, 2):
+        context = _context(
+            manager,
+            candidates,
+            interacting_values,
+            step,
+            CommitmentObservation(interaction_id="track-a", interaction_present=True),
+        )
+        assert context.release_reason is None
+        assert set(context.allowed_candidate_ids) == {
+            candidate.candidate_id
+            for candidate in candidates
+            if _state_for(candidate) is ManeuverState.STOP
+        }
+        _select(
+            manager, context, _candidate_for(candidates, ManeuverState.STOP), interacting_values
+        )
+
+    # Once a moving candidate is safe for the configured clear window, the
+    # contract-approved path releases STOP and permits ROUTE_FOLLOW.
+    clear_values = _evaluations(candidates)
+    for step in (3, 4):
+        context = _context(
+            manager,
+            candidates,
+            clear_values,
+            step,
+            CommitmentObservation(interaction_id="track-a", interaction_present=False),
+        )
+        if step == 3:
+            assert context.release_reason is None
+            _select(manager, context, _candidate_for(candidates, ManeuverState.STOP), clear_values)
+        else:
+            assert context.release_reason == TransitionReason.CLEAR_PERSISTENCE.value
+            _select(
+                manager, context, _candidate_for(candidates, ManeuverState.FOLLOW), clear_values
+            )
+    assert manager.state.active is ManeuverState.FOLLOW
+
+
+def test_stop_explicit_infeasibility_can_release_before_duration() -> None:
+    config = ManeuverCommitmentConfig(
+        min_dwell_steps_by_state={ManeuverState.STOP: 0},
+        max_duration_steps_by_state={ManeuverState.STOP: 0},
+        clear_persistence_steps=3,
+    )
+    manager, candidates = _prime(ManeuverState.STOP, config=config)
+    values = _evaluations(candidates, by_state={ManeuverState.STOP: {"hard_feasible": False}})
+    context = _context(manager, candidates, values, 1)
+    assert context.release_reason == TransitionReason.ACTIVE_HARD_INFEASIBLE.value
+    assert len(context.allowed_candidate_ids) == len(candidates)
+
+
 def test_maximum_duration_releases_only_to_reevaluation() -> None:
     config = ManeuverCommitmentConfig(
         min_dwell_steps_by_state={ManeuverState.PASS_LEFT: 0},
@@ -681,6 +761,49 @@ def test_stagnation_uses_measured_route_progress_only() -> None:
     _select(manager, second, _candidate_for(candidates, ManeuverState.FOLLOW), values)
     third = _context(manager, candidates, values, 3)
     assert third.projected_no_progress_steps == 2
+
+
+def test_zero_step_thresholds_have_defined_immediate_diagnostic_semantics() -> None:
+    clear_manager, candidates = _prime(
+        ManeuverState.YIELD,
+        config=ManeuverCommitmentConfig(
+            min_dwell_steps_by_state={ManeuverState.YIELD: 0},
+            clear_persistence_steps=0,
+        ),
+    )
+    clear_context = _context(clear_manager, candidates, _evaluations(candidates), 1)
+    assert clear_context.release_reason == TransitionReason.CLEAR_PERSISTENCE.value
+    assert len(clear_context.allowed_candidate_ids) == len(candidates)
+
+    stagnation_manager, candidates = _prime(
+        ManeuverState.FOLLOW,
+        config=ManeuverCommitmentConfig(stagnation_steps=0),
+    )
+    stagnation_context = _context(
+        stagnation_manager,
+        candidates,
+        _evaluations(candidates),
+        1,
+        CommitmentObservation(route_progress_m=1.0),
+    )
+    assert stagnation_context.release_reason == TransitionReason.STAGNATION_REEVALUATION.value
+    assert len(stagnation_context.allowed_candidate_ids) == len(candidates)
+
+    transition_manager = ManeuverCommitmentManager(
+        ManeuverCommitmentConfig(max_state_transitions_per_episode=0)
+    )
+    transition_candidates = _candidates()
+    transition_values = _evaluations(transition_candidates)
+    transition_context = _context(transition_manager, transition_candidates, transition_values, 0)
+    transition = _select(
+        transition_manager,
+        transition_context,
+        _candidate_for(transition_candidates, ManeuverState.FOLLOW),
+        transition_values,
+    )
+    assert transition.transition_performed
+    assert transition.transition_limit_reached
+    assert transition_manager.state.active is ManeuverState.FOLLOW
 
 
 def test_route_fingerprint_change_releases_and_resets_interaction() -> None:
@@ -783,7 +906,7 @@ def test_candidate_set_requires_one_aligned_timestamp_and_time_grid() -> None:
 
 
 def test_configuration_rejects_boolean_counts_and_non_config_manager_input() -> None:
-    with pytest.raises(ValueError, match="positive integer"):
+    with pytest.raises(ValueError, match="non-negative integer"):
         ManeuverCommitmentConfig(max_state_transitions_per_episode=True)
     with pytest.raises(TypeError, match="ManeuverCommitmentConfig"):
         ManeuverCommitmentManager(False)  # type: ignore[arg-type]

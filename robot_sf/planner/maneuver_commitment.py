@@ -185,15 +185,22 @@ def _validate_count_config(config: ManeuverCommitmentConfig) -> None:
         "max_state_transitions_per_episode",
     ):
         value = getattr(config, name)
-        if type(value) is not int or value < 1:
-            raise ValueError(f"{name} must be a positive integer")
+        if type(value) is not int or value < 0:
+            raise ValueError(f"{name} must be a non-negative integer")
     if config.unsupported_recovery_policy != "reject":
         raise ValueError("unsupported_recovery_policy must remain 'reject'")
 
 
 @dataclass(frozen=True, slots=True)
 class ManeuverCommitmentConfig:
-    """Validated, bounded thresholds and costs for the state machine."""
+    """Validated, bounded thresholds and costs for the state machine.
+
+    A zero ``clear_persistence_steps`` uses the current clear observation
+    without requiring history, while zero ``stagnation_steps`` requests an
+    immediate reevaluation. A zero transition budget is a diagnostic guard:
+    every performed transition is marked as beyond budget, but safety
+    transitions are never suppressed by the budget.
+    """
 
     min_dwell_steps_by_state: Mapping[ManeuverState | str, int] = field(
         default_factory=_default_min_dwell
@@ -951,11 +958,16 @@ class ManeuverCommitmentManager:
         completed = self._completion_release_reason(active, step, observation, clear_steps)
         if completed is not None:
             return completed
-        duration = self.config.max_duration(active)
-        if duration is not None and self._active_age(step) >= duration:
-            return TransitionReason.MAXIMUM_DURATION.value
-        if no_progress_steps >= self.config.stagnation_steps:
-            return TransitionReason.STAGNATION_REEVALUATION.value
+        # STOP may leave only through the clear-persistence path above or an
+        # explicit safety release returned by _immediate_release_reason.
+        # Generic timers must not turn a still-interacting stop into a moving
+        # candidate merely because a timer expired.
+        if active is not ManeuverState.STOP:
+            duration = self.config.max_duration(active)
+            if duration is not None and self._active_age(step) >= duration:
+                return TransitionReason.MAXIMUM_DURATION.value
+            if no_progress_steps >= self.config.stagnation_steps:
+                return TransitionReason.STAGNATION_REEVALUATION.value
         return None
 
     def _immediate_release_reason(
@@ -1020,10 +1032,12 @@ class ManeuverCommitmentManager:
                 >= self.config.pass_complete_route_margin_m
             ):
                 return TransitionReason.PASS_COMPLETE.value
-            if clear_steps >= self.config.clear_persistence_steps:
+            required_clear_steps = max(1, self.config.clear_persistence_steps)
+            if clear_steps >= required_clear_steps:
                 return TransitionReason.INTERACTION_CLEAR.value
         if active in {ManeuverState.YIELD, ManeuverState.STOP}:
-            if clear_steps >= self.config.clear_persistence_steps and self._active_age(
+            required_clear_steps = max(1, self.config.clear_persistence_steps)
+            if clear_steps >= required_clear_steps and self._active_age(
                 step
             ) >= self.config.min_dwell(active):
                 return TransitionReason.CLEAR_PERSISTENCE.value

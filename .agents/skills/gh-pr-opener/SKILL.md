@@ -86,7 +86,9 @@ Remote-state check (issues #6916 and #7515):
   It fetches the current refs and uses ordinary Git merge operations without resetting or deleting
   local state. Resolve any conflict, rerun readiness for the integrated head, push that exact head,
   capture a new baseline, and run the final check again. Do not treat sync's self-comparison receipt
-  as publication proof. If `check` instead reports blocked ancestry, preserve that signal and
+  as publication proof. A disjoint changed-file inventory does not transfer readiness from the old
+  base/head pair: rerun every final-readiness lane selected by the current change classification on
+  the integrated exact head. If `check` instead reports blocked ancestry, preserve that signal and
   reconstruct only the intended commits on current `origin/main`; merging main can hide inherited
   parent commits and is not valid remediation.
 

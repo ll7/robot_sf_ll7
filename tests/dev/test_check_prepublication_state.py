@@ -1984,7 +1984,7 @@ def test_refresh_requires_all_verified_conditions(
 def test_real_git_main_fast_forward_keeps_unchanged_head_refresh_required(
     real_git_repo, monkeypatch
 ) -> None:
-    """Clean capture -> main fast-forward -> unchanged feature head returns refresh."""
+    """Disjoint main drift still invalidates readiness for the unchanged feature head."""
     worker = real_git_repo.worker
     monkeypatch.chdir(worker)
     subprocess.run(["git", "checkout", "-b", "feature/verified"], cwd=worker, check=True)
@@ -2015,6 +2015,28 @@ def test_real_git_main_fast_forward_keeps_unchanged_head_refresh_required(
     new_main_sha = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=worker, capture_output=True, text=True, check=True
     ).stdout.strip()
+
+    feature_paths = set(
+        subprocess.run(
+            ["git", "diff", "--name-only", real_git_repo.initial_main_sha, feature_head],
+            cwd=worker,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.splitlines()
+    )
+    main_paths = set(
+        subprocess.run(
+            ["git", "diff", "--name-only", real_git_repo.initial_main_sha, new_main_sha],
+            cwd=worker,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.splitlines()
+    )
+    assert feature_paths == {"feature.txt"}
+    assert main_paths == {"base.txt"}
+    assert feature_paths.isdisjoint(main_paths)
 
     current = _snapshot(
         base_sha=new_main_sha,

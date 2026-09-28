@@ -67,6 +67,12 @@ The local fallback in `scripts/dev/update_pr_branch_safely.sh` runs this preflig
 before its fetch, rebase, or push; callers that supply `--gate-worktree-path` must identify the same
 worktree used by the local Git commands.
 
+Final readiness evidence is bound to its exact base/head pair. A changed-file inventory that shows
+no overlap between the feature branch and a later `origin/main` change is diagnostic only; it does
+not make readiness from the old pair reusable. After integrating the current base, rerun every
+final-readiness lane selected by the current change classification on the integrated exact head,
+then capture and check a fresh pre-publication baseline.
+
 Read-only review worktrees or passes record target/base/head SHAs and inspect or fetch as needed.
 Never merge `origin/main` into the implementation branch or push to it during review. Ordinary Git
 invocations use the machine guard (`scripts/dev/review_worktree_guard.py`, issue #8321); deliberate

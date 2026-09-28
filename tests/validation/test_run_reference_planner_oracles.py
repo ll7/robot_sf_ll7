@@ -12,6 +12,7 @@ from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
 from robot_sf.benchmark.reference_oracle_report import (
     _outcome_facts,
     _validate_canonical_episode,
+    evaluate_oracles,
 )
 from scripts.validation.run_reference_planner_oracles import (
     EPISODE_SCHEMA,
@@ -89,6 +90,11 @@ def test_stand_still_batch_preserves_policy_contract_when_resumed(tmp_path: Path
     assert second["written"] == 0
     assert len(rows) == 1
     assert rows[0]["algo"] == "stand_still"
+    assert rows[0]["scenario_params"]["reference_population_capture_version"] == "v1"
+    assert rows[0]["algorithm_metadata"]["reference_population"] == {
+        "schema_version": "v1",
+        "instantiated_population_size": 0,
+    }
     row_errors: list[str] = []
     _validate_canonical_episode(rows[0], row_errors)
     _outcome_facts(rows[0], row_errors)
@@ -97,3 +103,56 @@ def test_stand_still_batch_preserves_policy_contract_when_resumed(tmp_path: Path
         rows[0]["algorithm_metadata"]["planner_contract"]["observation_contract"]["required_inputs"]
         == []
     )
+
+
+def test_density_spawned_stationary_row_enters_oracle_contact_denominator(tmp_path: Path) -> None:
+    """Measure actual pedestrians for an original-population oracle cell."""
+    config, scenarios = load_contract(CONFIG)
+    source = next(s for s in scenarios if s["name"] == "classic_cross_trap_low")
+    scenario = _scenario_arm([source], [111], "original")
+    assert scenario[0]["simulation_config"].get("population_size") is None
+    matrix_path = ROOT / config["_resolved"]["matrix_path"]
+    output = tmp_path / "stationary.jsonl"
+    result = run_map_batch(
+        scenario,
+        output,
+        EPISODE_SCHEMA,
+        scenario_path=matrix_path,
+        provenance_scenario_path=matrix_path,
+        horizon=1,
+        dt=0.1,
+        record_forces=False,
+        algo="stand_still",
+        workers=1,
+        resume=False,
+    )
+    rows = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
+    assert result["written"] == 1
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["scenario_params"]["reference_population_capture_version"] == "v1"
+    assert row["algorithm_metadata"]["reference_population"]["instantiated_population_size"] > 0
+    report = evaluate_oracles(
+        release_id="vv2-one-cell-diagnostic",
+        scenario_ids=[source["name"]],
+        seeds=[111],
+        rows_by_arm={"goal": [], "stationary": [row], "aware": []},
+        goal_key="goal",
+        stationary_key="stationary",
+        aware_keys=["aware"],
+        probe_scenario_ids=[],
+        thresholds={
+            "max_goal_failure_count": 0,
+            "max_stationary_contact_rate": 1.0,
+            "max_dominance_regressions": 0,
+        },
+        source_sha=row["git_hash"],
+        expected_algorithms_by_arm={
+            "goal": "goal",
+            "stationary": "stand_still",
+            "aware": "social_force",
+        },
+    )
+    assert report["coverage"]["stationary"]["valid_cell_count"] == 1
+    assert report["stationary_contact"]["denominator"] == 1
+    assert report["gate"]["status"] == "fail"  # Other two arms are intentionally absent.

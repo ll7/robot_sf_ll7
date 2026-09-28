@@ -47,6 +47,8 @@ def _row(
     }
     if population_mode is not None:
         params["reference_population_mode"] = population_mode
+    if stationary:
+        params["reference_population_capture_version"] = "v1"
     return {
         "version": "v1",
         "episode_id": f"{arm}-{scenario_id}-{seed}",
@@ -62,6 +64,16 @@ def _row(
         },
         "integrity": {"contradictions": []},
         "execution_mode": execution_mode,
+        "algorithm_metadata": (
+            {
+                "reference_population": {
+                    "schema_version": "v1",
+                    "instantiated_population_size": 5,
+                }
+            }
+            if stationary
+            else {}
+        ),
         "git_hash": source_sha,
         "provenance": {"git_hash": source_sha},
         "scenario_params": params,
@@ -227,6 +239,9 @@ def test_declared_stationary_no_pedestrian_scenario_is_covered_but_excluded_from
             if role == "stationary":
                 row["scenario_params"]["simulation_config"]["population_size"] = 0
                 row["scenario_params"]["simulation_config"]["instantiated_population_size"] = 0
+                row["algorithm_metadata"]["reference_population"][
+                    "instantiated_population_size"
+                ] = 0
                 row["interaction_exposure"]["interaction_exposure_status"] = (
                     "not_derivable_no_pedestrians"
                 )
@@ -403,6 +418,23 @@ def test_stationary_pedestrian_contact_requires_collision_outcome() -> None:
     )
 
 
+def test_stationary_population_capture_marker_and_runtime_telemetry_are_required() -> None:
+    inputs = _inputs()
+    marker_row, telemetry_row = inputs["rows_by_arm"]["stationary"][:2]
+    del marker_row["scenario_params"]["reference_population_capture_version"]
+    del telemetry_row["algorithm_metadata"]["reference_population"]
+
+    report = evaluate_oracles(**inputs)
+
+    assert report["gate"]["status"] == "fail"
+    invalid = report["coverage"]["stationary"]["invalid_cells"]
+    assert len(invalid) == 2
+    assert any("reference_population_capture_version=v1" in error for error in invalid[0]["errors"])
+    assert any(
+        "algorithm_metadata.reference_population v1" in error for error in invalid[1]["errors"]
+    )
+
+
 @pytest.mark.parametrize("invalid_population", [0, 0.5])
 def test_invalid_actual_stationary_population_cannot_enter_contact_denominator(
     invalid_population: float,
@@ -410,7 +442,9 @@ def test_invalid_actual_stationary_population_cannot_enter_contact_denominator(
     inputs = _inputs()
     row = inputs["rows_by_arm"]["stationary"][0]
     row["scenario_params"] = deepcopy(row["scenario_params"])
-    row["scenario_params"]["simulation_config"]["instantiated_population_size"] = invalid_population
+    row["algorithm_metadata"]["reference_population"]["instantiated_population_size"] = (
+        invalid_population
+    )
 
     report = evaluate_oracles(**inputs)
 

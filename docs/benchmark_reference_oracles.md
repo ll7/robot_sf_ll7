@@ -13,6 +13,11 @@ instantiated count against zero before recording an episode. The **stand-still**
 arm uses the original pedestrian population and always commands `(0, 0)`.
 Its command and observation metadata lives beside the policy because a frozen
 adversarial campaign pins the shared `algorithm_metadata.py` bytes.
+The derived stationary scenario carries `reference_population_capture_version=v1`;
+after reset, the runner records the actual pedestrian count in
+`algorithm_metadata.reference_population`. This runtime field does not change
+the scenario identity used for safe resume. The gate requires the version marker
+and count on every stationary row.
 The source release matrix deliberately has no pedestrians in
 `classic_bottleneck_low`; its 30 rows remain required for coverage but are
 listed separately and excluded from the contact-rate denominator. The config

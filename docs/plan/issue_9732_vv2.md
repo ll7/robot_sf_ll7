@@ -28,6 +28,7 @@ Implement issue #9732 for the 48-scenario release matrix and seeds 111–140: a 
 - Probe exemptions must be explicit in config and remain listed in the report. Failures in probes remain diagnostic findings.
 - Route acceptance or local smoke is not benchmark evidence. The cluster result requires complete rows, provenance, and recoverable artifacts before a release claim.
 - Saved rows must pass the canonical episode schema and have one consistent terminal event. Error or contradictory rows are diagnostic and block the gate. Stationary rows counted in the pedestrian-present contact denominator must prove positive instantiated population.
+- Original stationary scenarios use a versioned post-reset runtime population count in algorithm metadata, leaving scenario identity stable for resume. Missing telemetry blocks the denominator.
 - The c551b586 cluster report is red diagnostic evidence tied to that exact source. Any repaired head needs a fresh complete cluster run and custody receipt before release admission.
 
 ## Validation and recovery

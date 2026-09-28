@@ -1119,12 +1119,22 @@ def _validate_stationary_population(
         return
     if scenario_params.get("reference_population_mode") == "pedestrian_free_v1":
         errors.append("stationary rows must retain the original pedestrian population")
-    simulation_config = scenario_params.get("simulation_config")
-    instantiated = (
-        simulation_config.get("instantiated_population_size")
-        if isinstance(simulation_config, Mapping)
+    if scenario_params.get("reference_population_capture_version") != "v1":
+        errors.append("stationary rows require reference_population_capture_version=v1")
+    algorithm_metadata = row.get("algorithm_metadata")
+    runtime_population = (
+        algorithm_metadata.get("reference_population")
+        if isinstance(algorithm_metadata, Mapping)
         else None
     )
+    if (
+        not isinstance(runtime_population, Mapping)
+        or runtime_population.get("schema_version") != "v1"
+    ):
+        errors.append("stationary rows require algorithm_metadata.reference_population v1")
+        instantiated = None
+    else:
+        instantiated = runtime_population.get("instantiated_population_size")
     if isinstance(instantiated, bool) or not isinstance(instantiated, int):
         errors.append("stationary instantiated_population_size must be an integer")
     elif (no_pedestrians and instantiated != 0) or (not no_pedestrians and instantiated <= 0):

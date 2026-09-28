@@ -177,6 +177,11 @@ def _scenario_arm(
             if not isinstance(simulation, dict):
                 raise ValueError(f"Scenario {scenario['name']} has invalid simulation_config")
             simulation["population_size"] = 0
+        elif population == "original":
+            # Ask the native runner to record the population after reset. The
+            # source matrix uses density-based spawning, so it has no forced
+            # population_size to trigger the ordinary count record.
+            scenario["reference_population_capture_version"] = "v1"
     return derived
 
 

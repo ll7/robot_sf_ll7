@@ -267,6 +267,9 @@ def _sampler_label(value: str) -> str:
 def _candidate_failure(item: dict[str, Any]) -> str | None:
     attribution = item.get("failure_attribution")
     if isinstance(attribution, dict):
+        status = attribution.get("status")
+        if not isinstance(status, str) or status.strip().lower() != "attributed":
+            return None
         value = attribution.get("primary_failure")
         if isinstance(value, str) and value.strip():
             return value.strip()

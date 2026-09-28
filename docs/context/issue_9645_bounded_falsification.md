@@ -59,8 +59,10 @@ The implementation now provides `constraints_first_lexicographic_v2` in
 `robot_sf.adversarial.objectives_v2` for future searches. It uses
 three-valued OR: known collision or intrusion evidence establishes a safety failure, both components
 must be explicitly false to establish a negative safety result, and otherwise the objective returns
-no score. Conflicts within one component make only that component unknown; a confirmed positive in
-the other component still establishes the safety-failure tier. A score also requires resolved,
+no score. Within each tier its soft degradation score uses near-miss count, SNQI, and path
+inefficiency (`1 - path_efficiency`) when those metrics are available. Conflicts within one
+component make only that component unknown; a confirmed positive in the other component still
+establishes the safety-failure tier. A score also requires resolved,
 available execution provenance (`execution_mode` native, adapter, or mixed; `readiness_status`
 native or adapter; and `availability_status` available). Fallback, degraded, unavailable, failed,
 or missing execution status remains recorded but cannot steer an optimizer. The frozen v1

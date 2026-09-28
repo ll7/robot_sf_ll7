@@ -191,6 +191,25 @@ def test_conflicting_collision_evidence_remains_unknown(tmp_path: Path) -> None:
     assert evaluation["critical"] is True
 
 
+def test_unattributed_primary_failure_cannot_establish_criticality(tmp_path: Path) -> None:
+    def add_unattributed_failure(manifest: dict[str, Any]) -> None:
+        candidate = manifest["candidates"][0]
+        attribution = candidate["failure_attribution"]
+        attribution["status"] = "unattributed"
+        attribution["primary_failure"] = "collision"
+        attribution["details"]["outcome"] = {"collision_event": False}
+
+    report = _report_with_manifest(tmp_path, row_index=2, mutate=add_unattributed_failure)
+    random_2202 = next(
+        run for run in report["runs"] if run["sampler"] == "random" and run["seed"] == 2202
+    )
+    evaluation = random_2202["evaluations"][0]
+
+    assert evaluation["collision_intrusion_tier"]["status"] == "unknown"
+    assert evaluation["criticality_status"] == "unknown"
+    assert evaluation["critical"] is None
+
+
 @pytest.mark.parametrize(
     ("safety_evidence", "expected_reason"),
     [

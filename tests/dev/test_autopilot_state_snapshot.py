@@ -414,6 +414,49 @@ def test_route_manifest_snapshot_exposes_failed_route_without_acceptance(tmp_pat
     assert row["next_action"] == "inspect_parent_diff_and_run_local_validation"
 
 
+def test_route_manifest_snapshot_treats_auth_as_failed_inconclusive_route(
+    tmp_path: Path,
+) -> None:
+    """Auth terminal evidence is valid route data, but never usable worker output."""
+    manifest_path = tmp_path / "routing_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "routed_worker_manifest.v2",
+                "route_evidence_only": True,
+                "chosen_route": {"provider": "luna"},
+                "chosen_run_dir": None,
+                "chosen_terminal_state": "auth",
+                "attempted_routes": [
+                    {
+                        "attempt_index": 0,
+                        "route": {"provider": "luna"},
+                        "returncode": 1,
+                        "failure_class": "startup_auth",
+                        "terminal_state": "auth",
+                        "run_dir": None,
+                        "compact_artifacts": {
+                            "result_json": {"present": False, "reason": "not-run"},
+                            "result_md": {"present": False, "reason": "not-run"},
+                            "validation": {"present": False, "reason": "not-run"},
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    row = snapshot.route_manifest_snapshot(manifest_path)
+
+    assert row["status"] == "ok"
+    assert row["chosen_terminal_state"] == "auth"
+    assert row["failed_attempts"][0]["terminal_state"] == "auth"
+    assert row["aggregation"] == "inconclusive"
+    assert row["aggregation_reason"] == "terminal_state:auth"
+    assert row["acceptance_state"] == "not_established"
+
+
 def test_route_manifest_snapshot_overrides_false_confirmed_aggregation(tmp_path: Path) -> None:
     """A reported confirmed aggregate must be downgraded when output evidence is empty."""
     manifest_path = tmp_path / "routing_manifest.json"

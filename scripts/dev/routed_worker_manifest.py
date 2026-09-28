@@ -85,6 +85,8 @@ _AUTH_FAILURE_CLASSES = frozenset(
         "invalid_service_api_credential",
         "worker_auth",
         "worker_startup_auth",
+        "startup_auth",
+        "worker_task_auth",
     }
 )
 _AUTH_TEXT_MARKERS = (
@@ -129,13 +131,18 @@ def classify_terminal_state(
     ``MISSING_ARTIFACT``; non-zero returncode or known failure classes map to
     their respective terminal states.
     """
+    normalized_failure_class = (
+        failure_class.strip().lower() if isinstance(failure_class, str) else failure_class
+    )
+    if normalized_failure_class in _AUTH_FAILURE_CLASSES:
+        return TerminalFailure.AUTH
     if not has_run_dir:
         return TerminalFailure.ROUTE_NOT_STARTED
-    if failure_class == "auth" or failure_class in _AUTH_FAILURE_CLASSES:
-        return TerminalFailure.AUTH
-    if failure_class == "timeout" or returncode == 124:
+    if normalized_failure_class == "timeout" or returncode == 124:
         return TerminalFailure.TIMEOUT
-    if failure_class in {"exception", "error"} or (returncode is not None and returncode < 0):
+    if normalized_failure_class in {"exception", "error"} or (
+        returncode is not None and returncode < 0
+    ):
         return TerminalFailure.EXCEPTION
     if returncode is not None and returncode != 0:
         return TerminalFailure.NON_ZERO_EXIT
@@ -147,9 +154,9 @@ def classify_terminal_state(
         ]
         if required_missing:
             return TerminalFailure.MISSING_ARTIFACT
-    if failure_class not in {None, "none", "success"}:
+    if normalized_failure_class not in {None, "none", "success"}:
         return TerminalFailure.UNAVAILABLE
-    if returncode is None and failure_class is None:
+    if returncode is None and normalized_failure_class is None:
         return TerminalFailure.UNAVAILABLE
     return TerminalFailure.NONE
 
@@ -1088,6 +1095,12 @@ def build_routing_manifest(
     target_worktree = validate_target_worktree(repo_root)
     manifest_attempts: list[dict[str, Any]] = []
     for index, attempt in enumerate(attempts):
+        delegation = classify_delegation_attempt(attempt)
+        normalized_failure_class = attempt.get("failure_class")
+        if delegation["classification"] in {"startup_auth", "worker_task_auth"}:
+            # Keep terminal-state evidence aligned with the normalized delegation
+            # classification, including startup failures with no run directory.
+            normalized_failure_class = "auth"
         run_dir = attempt.get("run_dir")
         scope_check: ScopeCheck | None = None
         path_contract: dict[str, Any] | None = None
@@ -1119,7 +1132,7 @@ def build_routing_manifest(
                 }
                 terminal_state = classify_terminal_state(
                     returncode=attempt.get("returncode"),
-                    failure_class=attempt.get("failure_class"),
+                    failure_class=normalized_failure_class,
                     artifact_presence=artifact_presence,
                     has_run_dir=True,
                 )
@@ -1143,7 +1156,7 @@ def build_routing_manifest(
             )
             terminal_state = classify_terminal_state(
                 returncode=attempt.get("returncode"),
-                failure_class=attempt.get("failure_class"),
+                failure_class=normalized_failure_class,
                 has_run_dir=False,
             )
         scope_dict = asdict(scope_check) if scope_check is not None else None
@@ -1152,7 +1165,6 @@ def build_routing_manifest(
             terminal_state=terminal_state,
             compact_artifacts=compact_artifacts,
         )
-        delegation = classify_delegation_attempt(attempt)
         manifest_attempts.append(
             {
                 "attempt_index": index,

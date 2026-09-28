@@ -53,6 +53,7 @@ ROUTE_TERMINAL_FAILURES = frozenset(
         "route_not_started",
         "scope_violation",
         "unavailable",
+        "auth",
     }
 )
 ROUTE_TERMINAL_STATES = ROUTE_TERMINAL_FAILURES | {"none"}

@@ -224,6 +224,39 @@ def test_classify_terminal_state_route_not_started() -> None:
     assert state == manifest.TerminalFailure.ROUTE_NOT_STARTED
 
 
+def test_classify_terminal_state_auth_precedes_missing_run_dir() -> None:
+    """An auth blocker remains distinct even when startup produced no run directory."""
+    state = manifest.classify_terminal_state(failure_class="auth", has_run_dir=False)
+    assert state == manifest.TerminalFailure.AUTH
+
+
+@pytest.mark.parametrize("http_status", [401, 403])
+def test_build_manifest_classifies_startup_auth_without_run_dir(
+    tmp_path: Path, http_status: int
+) -> None:
+    """Startup HTTP auth failures must not collapse into route_not_started."""
+    repo = _init_repo(tmp_path / f"repo-{http_status}")
+    data = manifest.build_routing_manifest(
+        [
+            {
+                "route": {"provider": "luna"},
+                "worker_started": False,
+                "run_dir": None,
+                "returncode": 1,
+                "http_status": http_status,
+            }
+        ],
+        chosen_index=0,
+        target_repo=repo,
+    )
+
+    attempt = data["attempted_routes"][0]
+    assert attempt["delegation"]["classification"] == "startup_auth"
+    assert attempt["terminal_state"] == "auth"
+    assert data["chosen_terminal_state"] == "auth"
+    assert data["aggregation"] == "inconclusive"
+
+
 def test_classify_terminal_state_unavailable_when_details_are_absent() -> None:
     """Missing terminal metadata must not be inferred as success."""
     state = manifest.classify_terminal_state()

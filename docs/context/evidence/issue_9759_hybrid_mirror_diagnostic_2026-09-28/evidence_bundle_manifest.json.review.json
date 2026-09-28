@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_9759_hybrid_mirror_diagnostic_2026-09-28/evidence_bundle_manifest.json",
+  "artifact_sha256": "809b1ac8a6fb6fb55f59d87b462ccdb988ab2bee87cdd9e50b3f909e9559b431",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

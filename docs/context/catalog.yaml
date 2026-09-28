@@ -7747,3 +7747,27 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_9759_hybrid_mirror_diagnostic_2026-09-28/checksums.sha256.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9759_hybrid_mirror_diagnostic_2026-09-28/evidence_bundle_manifest.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9759_hybrid_mirror_diagnostic_2026-09-28/payload/agent_run_manifest.yaml.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9759_hybrid_mirror_diagnostic_2026-09-28/payload/private_artifact_hashes.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9759_hybrid_mirror_diagnostic_2026-09-28/payload/report.md.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9759_hybrid_mirror_diagnostic_2026-09-28/payload/summary.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

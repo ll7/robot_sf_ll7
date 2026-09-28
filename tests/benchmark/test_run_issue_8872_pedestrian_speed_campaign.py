@@ -111,10 +111,29 @@ def _packet() -> dict[str, Any]:
     return campaign.build_production_packet(source_commit=SOURCE_COMMIT, **_receipts())
 
 
+def _protocol_metrics() -> dict[str, float]:
+    return {
+        "success_rate": 1.0,
+        "collision_rate": 0.0,
+        "near_miss_rate": 0.0,
+        "time_to_goal_norm": 0.5,
+        "total_exposure_seconds": 1.25,
+        "travel_distance_m": 12.0,
+        "mean_clearance_m": 1.5,
+        "min_clearance_m": 0.8,
+        "ped_collision_rate": 0.0,
+        "obstacle_collision_rate": 0.0,
+        "agent_collision_rate": 0.0,
+        "unclassified_collision_rate": 0.0,
+    }
+
+
 def _native_outcome(identity: dict[str, Any], packet: dict[str, Any]) -> dict[str, Any]:
+    metrics = _protocol_metrics()
     return {
         "identity_key": identity["identity_key"],
         "terminal_status": campaign.SUCCESS_STATUS,
+        "metrics": metrics,
         "provenance": {
             "identity_key": identity["identity_key"],
             "scenario_id": identity["scenario_id"],
@@ -137,6 +156,7 @@ def _native_outcome(identity: dict[str, Any], packet: dict[str, Any]) -> dict[st
             "intervention_status": (
                 "not_applicable" if identity["regime_id"] == "legacy_default" else "activated"
             ),
+            "metrics": metrics,
         },
     }
 
@@ -150,6 +170,9 @@ def test_packet_binds_exact_compiled_manifest_and_all_gates() -> None:
     assert packet["manifest_hash"] == campaign.PRODUCTION_MANIFEST_HASH
     assert packet["execution_boundary"]["public_repo_submits"] is False
     assert campaign.validate_production_packet(packet)["manifest_hash"] == packet["manifest_hash"]
+    readiness = campaign.inspect_packet(packet)
+    assert readiness["ready"] is False
+    assert "authenticated authorization" in readiness["reason"]
 
 
 def test_packet_rejects_non_passing_activation_receipt() -> None:
@@ -192,6 +215,7 @@ def test_fake_native_runtime_accounts_all_rows_once() -> None:
     assert len(report["rows"]) == campaign.EXPECTED_ROWS
     assert all(row["missingness"] is None for row in report["rows"])
     assert all("provenance" in row for row in report["rows"])
+    assert all(row["metrics"] == _protocol_metrics() for row in report["rows"])
 
 
 def test_fallback_row_is_recorded_but_never_admitted() -> None:
@@ -256,6 +280,7 @@ def test_intervention_not_activated_cannot_be_native_success() -> None:
 
 def _fake_native_record(*, preferred_speed: float = 0.65) -> dict[str, Any]:
     return {
+        "metrics": _protocol_metrics(),
         "algorithm_metadata": {
             "status": "ok",
             "planner_kinematics": {"execution_mode": "native"},
@@ -276,7 +301,7 @@ def _fake_native_record(*, preferred_speed: float = 0.65) -> dict[str, Any]:
                     }
                 ],
             },
-        }
+        },
     }
 
 
@@ -297,7 +322,145 @@ def test_fixed_native_record_adapter_uses_trace_not_executor_flag() -> None:
     assert outcome["terminal_status"] == campaign.SUCCESS_STATUS
     assert outcome["provenance"]["runtime_controls"] == identity["runtime_controls"]
     assert outcome["provenance"]["diagnostics"]["desired_speed_activation_fraction"] == 1.0
+    assert outcome["metrics"] == _protocol_metrics()
+    assert outcome["provenance"]["metrics"] == _protocol_metrics()
     assert "executor_flag" not in outcome["provenance"]
+
+
+def test_native_record_projects_established_raw_metric_contract() -> None:
+    packet = _packet()
+    identity = next(
+        item for item in packet["identities"] if item["regime_id"] == "slow_distributed"
+    )
+    record = _fake_native_record()
+    record["metrics"] = {
+        "success": True,
+        "collisions": 0.0,
+        "near_misses": 1.0,
+        "ped_collision_count": 0.0,
+        "obstacle_collision_count": 0.0,
+        "agent_collision_count": 0.0,
+        "time_to_goal_norm": 0.4,
+        "socnavbench_path_length": 9.0,
+        "mean_clearance": 1.2,
+        "min_clearance": 0.7,
+    }
+    record["interaction_exposure"] = {
+        "interaction_exposure_share": 0.25,
+        "interaction_exposure_denominator_steps": 20.0,
+    }
+
+    outcome = campaign._native_outcome_from_record(
+        identity,
+        record,
+        source_commit=packet["source_commit"],
+        manifest_hash=packet["manifest_hash"],
+        planner_algorithm="fake-native-planner",
+        robot_speed_cap_m_s=2.0,
+        checkpoint_provenance=[],
+    )
+
+    assert outcome["terminal_status"] == campaign.SUCCESS_STATUS
+    assert outcome["metrics"] == {
+        "success_rate": 1.0,
+        "collision_rate": 0.0,
+        "near_miss_rate": 1.0,
+        "time_to_goal_norm": 0.4,
+        "total_exposure_seconds": 0.5,
+        "travel_distance_m": 9.0,
+        "mean_clearance_m": 1.2,
+        "min_clearance_m": 0.7,
+        "ped_collision_rate": 0.0,
+        "obstacle_collision_rate": 0.0,
+        "agent_collision_rate": 0.0,
+        "unclassified_collision_rate": 0.0,
+    }
+
+
+def test_native_record_rejects_non_finite_protocol_metric() -> None:
+    packet = _packet()
+    identity = next(
+        item for item in packet["identities"] if item["regime_id"] == "slow_distributed"
+    )
+    record = _fake_native_record()
+    record["metrics"]["collision_rate"] = float("nan")
+
+    outcome = campaign._native_outcome_from_record(
+        identity,
+        record,
+        source_commit=packet["source_commit"],
+        manifest_hash=packet["manifest_hash"],
+        planner_algorithm="fake-native-planner",
+        robot_speed_cap_m_s=2.0,
+        checkpoint_provenance=[],
+    )
+
+    assert outcome["terminal_status"] == "provenance_invalid"
+    assert outcome["reason"] == "metric_contract_nonfinite:collision_rate"
+    campaign.json.dumps(outcome, allow_nan=False)
+
+
+def test_non_success_reason_redacts_private_exception_detail() -> None:
+    identity = campaign._compiled_manifest()["identities"][0]
+    row = campaign._normalize_outcome(
+        identity,
+        {
+            "identity_key": identity["identity_key"],
+            "terminal_status": "failed",
+            "reason": "RuntimeError: /private/cluster/checkpoints/model.zip",
+        },
+        source_commit=SOURCE_COMMIT,
+        manifest_hash=campaign.PRODUCTION_MANIFEST_HASH,
+    )
+
+    assert row["reason"] == "reason:unsafe_detail_redacted"
+    assert "/private/cluster" not in str(row)
+    assert campaign._exception_reason(RuntimeError("/private/cluster")) == (
+        "exception:RuntimeError"
+    )
+
+
+def test_terminal_journal_preserves_metrics_and_reconcile_hides_path(tmp_path: Any) -> None:
+    journal = tmp_path / "private" / "run.jsonl"
+    journal.parent.mkdir()
+    with journal.open("w", encoding="utf-8") as handle:
+        campaign._append_journal_event(
+            handle,
+            "row_finished",
+            **campaign._journal_row_payload(
+                {
+                    "identity_key": "identity-1",
+                    "terminal_status": campaign.SUCCESS_STATUS,
+                    "missingness": None,
+                    "reason": None,
+                    "metrics": _protocol_metrics(),
+                    "provenance": {"source_commit": SOURCE_COMMIT},
+                }
+            ),
+        )
+
+    summary = campaign.reconcile_execution_journal(journal, expected_rows=1)
+
+    assert summary["journal_path"] == "run.jsonl"
+    assert summary["journal_reference"] == "run.jsonl"
+    assert summary["rows"][0]["metrics"] == _protocol_metrics()
+    assert str(journal) not in campaign.json.dumps(summary, sort_keys=True)
+
+
+def test_self_minted_authorization_cannot_enter_production_runner(tmp_path: Any) -> None:
+    packet = _packet()
+
+    with pytest.raises(campaign.CampaignAdapterError, match="authenticated authorization"):
+        campaign.run_production(
+            packet,
+            TOKEN,
+            checkpoint_root=tmp_path / "checkpoints",
+            output_path=tmp_path / "receipt.json",
+            journal_path=tmp_path / "run.jsonl",
+            lock_path=tmp_path / "run.lock",
+        )
+    assert not (tmp_path / "run.jsonl").exists()
+    assert not (tmp_path / "receipt.json").exists()
 
 
 def test_fixed_executor_fake_runner_receives_bound_native_identity(
@@ -371,6 +534,28 @@ def test_token_is_bound_to_packet_and_not_self_authenticated() -> None:
     )
     with pytest.raises(campaign.CampaignAdapterError, match="bound to this exact packet"):
         campaign._validate_token_binding(packet["production_authorization"], "f" * 64, TOKEN)
+
+
+def test_receipts_reject_raw_tokens_and_unknown_authorization_keys() -> None:
+    for field, key in (
+        ("production_authorization", "token"),
+        ("speed_integrity_receipt", "execution_token"),
+    ):
+        packet = _packet()
+        packet[field][key] = TOKEN
+        packet["packet_sha256"] = campaign._canonical_hash(campaign._packet_core(packet))
+
+        with pytest.raises(campaign.CampaignAdapterError, match="secret material"):
+            campaign.validate_production_packet(packet)
+
+
+def test_cli_summary_uses_safe_output_reference() -> None:
+    private_output = "/private/cluster/receipts/issue-8872.json"
+    summary = campaign._summary("smoke", {}, output=campaign.Path(private_output))
+
+    rendered = campaign.json.dumps(summary, sort_keys=True)
+    assert summary["output"] == "issue-8872.json"
+    assert private_output not in rendered
 
 
 def test_existing_journal_refuses_retry(tmp_path: Any) -> None:

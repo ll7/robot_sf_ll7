@@ -53,9 +53,16 @@ must equal the packet source SHA, artifact references are restricted to durable 
 an exclusive campaign lock, an append-only fsynced journal, interrupted-run reconciliation, and an
 atomic final receipt; an existing journal or receipt refuses an automatic retry or duplicate run.
 
-`run-production` has no scheduler submission capability. It requires an ephemeral private-ops token;
-only its digest and a digest of `token:packet_binding_hash` enter the packet, and the token itself
-is never written to a receipt or log. The current #8871 receipt is `invalid_transient`, so
-`render-production` and `run-production` remain fail-closed. Smoke packets are three disjoint,
-unregistered diagnostic identities and carry `scientific_evidence: false`; they cannot enter the
-production runner.
+`run-production` has no scheduler submission capability. Its current public implementation is
+explicitly disabled until private-ops supplies a verifiable authenticated authorization contract;
+a caller-supplied issuer, decision id, and token digests are not treated as authority. The current
+#8871 receipt is `invalid_transient`, so `render-production` and `run-production` remain fail-closed.
+Smoke packets are three disjoint, unregistered diagnostic identities and carry
+`scientific_evidence: false`; they cannot enter the production runner.
+
+Each accepted native episode row retains exactly the finite metrics declared by the frozen
+`metric_contract` (primary, exposure, and typed-collision fields) in both the normalized receipt
+row and its durable journal terminal event. The journal is append-only and fsynced; reconciliation
+returns the validated terminal rows without permitting retry. Public receipts and CLI summaries
+carry only safe journal/output basenames, never private absolute paths, and exception diagnostics
+are reduced to stable class/code tokens.

@@ -40,6 +40,7 @@ import argparse
 import fcntl
 import hashlib
 import json
+import math
 import os
 import re
 import subprocess
@@ -47,6 +48,7 @@ import tempfile
 from collections import Counter, defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -107,17 +109,30 @@ FORBIDDEN_SUCCESS_STATUSES = frozenset(
         "intervention_not_activated",
     }
 )
-FORBIDDEN_TRANSIENT_KEYS = frozenset(
+FORBIDDEN_SECRET_KEYS = frozenset(
     {
-        "host",
-        "hostname",
-        "job_id",
-        "queue",
-        "scheduler",
-        "scratch_path",
-        "target_host",
-        "worktree",
+        "access_token",
+        "credential",
+        "private_key",
+        "raw_token",
+        "secret",
+        "token",
     }
+)
+FORBIDDEN_TRANSIENT_KEYS = (
+    frozenset(
+        {
+            "host",
+            "hostname",
+            "job_id",
+            "queue",
+            "scheduler",
+            "scratch_path",
+            "target_host",
+            "worktree",
+        }
+    )
+    | FORBIDDEN_SECRET_KEYS
 )
 SAFE_ARTIFACT_REFERENCE = re.compile(r"^(?:artifact|wandb)://[A-Za-z0-9._/-]+(?::v[0-9]+)?$")
 HEX_COMMIT = re.compile(r"^[0-9a-f]{40}$")
@@ -125,6 +140,31 @@ JOURNAL_SCHEMA_VERSION = "robot_sf.issue_8872_pedestrian_speed_execution_journal
 RECEIPT_SCHEMA_VERSION = "robot_sf.issue_8872_pedestrian_speed_execution_receipt.v1"
 PRODUCTION_TOKEN_ENV = "ROBOT_SF_8872_EXECUTION_TOKEN"
 ROBOT_SPEED_CAP_M_S = 2.0
+PRODUCTION_EXECUTION_DISABLED_REASON = (
+    "run-production is disabled until private-ops authenticated authorization verification "
+    "is configured"
+)
+AUTHORIZATION_VERIFICATION_CONTRACT = "private_ops_authenticated_signer_required"
+PROTOCOL_METRIC_SECTIONS = (
+    "primary_metrics",
+    "exposure_metrics",
+    "typed_collision_metrics",
+)
+AUTHORIZATION_KEYS = frozenset(
+    {
+        "decision_id",
+        "issuer",
+        "issue",
+        "packet_binding_hash",
+        "schema_version",
+        "scope",
+        "source_commit",
+        "token_binding_sha256",
+        "token_sha256",
+    }
+)
+SAFE_JOURNAL_REFERENCE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+SAFE_REASON_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 
 
 class CampaignAdapterError(ValueError):
@@ -170,6 +210,104 @@ def _require_nonempty_string(value: Any, field: str) -> str:
     return value
 
 
+def _sanitize_reason(value: Any, *, fallback: str = "reason:unspecified") -> str:
+    """Keep terminal diagnostics stable without copying arbitrary exception text."""
+    if not isinstance(value, str) or not value.strip():
+        return fallback
+    raw = value.strip()
+    if (
+        "\x00" in raw
+        or "/" in raw
+        or "\\" in raw
+        or ".." in raw
+        or raw.startswith(("~", "file:", "ssh:"))
+    ):
+        return "reason:unsafe_detail_redacted"
+    token = re.sub(r"[^A-Za-z0-9_.:-]+", "_", raw).strip("_")
+    if not token or not SAFE_REASON_TOKEN.fullmatch(token):
+        return "reason:unstructured_detail_redacted"
+    return f"reason:{token}"
+
+
+def _exception_reason(exc: BaseException) -> str:
+    """Return exception class only; never expose its message or traceback details."""
+    class_name = type(exc).__qualname__
+    if not SAFE_REASON_TOKEN.fullmatch(class_name):
+        class_name = "UnknownException"
+    return f"exception:{class_name}"
+
+
+@lru_cache(maxsize=1)
+def _protocol_metric_names() -> tuple[str, ...]:
+    """Resolve the exact metric names declared by the frozen protocol."""
+    contract = _mapping(
+        load_protocol(DEFAULT_PROTOCOL_CONFIG).get("metric_contract"), "metric_contract"
+    )
+    names: list[str] = []
+    for section in PROTOCOL_METRIC_SECTIONS:
+        values = contract.get(section)
+        _require(isinstance(values, list), f"metric_contract.{section} must be a list")
+        _require(
+            all(isinstance(name, str) and bool(name.strip()) for name in values),
+            f"metric_contract.{section} contains an invalid name",
+        )
+        names.extend(str(name) for name in values)
+    _require(len(names) == len(set(names)), "metric_contract contains duplicate metric names")
+    return tuple(names)
+
+
+def _finite_metric(value: Any, field: str) -> float:
+    _require(
+        isinstance(value, (int, float)) and not isinstance(value, bool),
+        f"{field} must be a finite numeric value",
+    )
+    try:
+        number = float(value)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise CampaignAdapterError(f"{field} must be a finite numeric value") from exc
+    _require(math.isfinite(number), f"{field} must be a finite numeric value")
+    return number
+
+
+def _finite_protocol_metrics(value: Any, *, field: str = "metrics") -> dict[str, float]:
+    """Project a mapping onto protocol metrics, retaining only finite values."""
+    if not isinstance(value, Mapping):
+        return {}
+    result: dict[str, float] = {}
+    for name in _protocol_metric_names():
+        if name not in value:
+            continue
+        try:
+            result[name] = _finite_metric(value[name], f"{field}.{name}")
+        except CampaignAdapterError:
+            continue
+    return result
+
+
+def _validated_protocol_metrics(
+    value: Any, *, field: str = "metrics", require_complete: bool
+) -> dict[str, float]:
+    """Validate one complete protocol metric mapping without accepting extras."""
+    _require(isinstance(value, Mapping), f"{field} must be a mapping")
+    names = _protocol_metric_names()
+    result = _finite_protocol_metrics(value, field=field)
+    _require(
+        set(result) == set(names) if require_complete else True,
+        f"{field} must contain every frozen protocol metric",
+    )
+    return result
+
+
+def _safe_journal_reference(path: str | Path) -> str:
+    """Expose only a safe basename, never a private host path, in public output."""
+    reference = Path(path).name
+    _require(
+        bool(SAFE_JOURNAL_REFERENCE.fullmatch(reference)) and ".." not in reference,
+        "journal reference is not safe",
+    )
+    return reference
+
+
 def _validate_artifact_reference(value: Any, path: str) -> None:
     _require(isinstance(value, str), f"{path} must be a string reference")
     _require(
@@ -201,9 +339,17 @@ def _assert_safe_public_value(value: Any, path: str = "receipt", key: str = "") 
     if isinstance(value, Mapping):
         for child_key, child in value.items():
             child_name = str(child_key)
+            lower_child_name = child_name.lower()
+            secret_key = lower_child_name in FORBIDDEN_SECRET_KEYS or (
+                "token" in lower_child_name and not lower_child_name.endswith("_sha256")
+            )
             _require(
-                child_name.lower() not in FORBIDDEN_TRANSIENT_KEYS,
-                f"{path}.{child_name} contains private transient state",
+                lower_child_name not in FORBIDDEN_TRANSIENT_KEYS and not secret_key,
+                (
+                    f"{path}.{child_name} contains secret material"
+                    if secret_key
+                    else f"{path}.{child_name} contains private transient state"
+                ),
             )
             _assert_safe_public_value(child, f"{path}.{child_name}", child_name)
     elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
@@ -519,6 +665,10 @@ def _validate_authorization(
         value.get("schema_version") == AUTHORIZATION_RECEIPT_SCHEMA_VERSION,
         "production authorization schema drifted",
     )
+    _require(
+        set(value) == AUTHORIZATION_KEYS,
+        "production authorization contains unknown or secret-bearing keys",
+    )
     _require(value.get("issue") == 8872, "production authorization must be for issue 8872")
     _require("authorized" not in value, "self-authenticated authorization flag is forbidden")
     _require(value.get("scope") == "run-production", "production authorization scope drifted")
@@ -601,6 +751,14 @@ def _validate_packet_structure(
         boundary.get("production_token_required") is True,
         "production token gate is missing",
     )
+    _require(
+        boundary.get("production_execution_disabled") is True,
+        "production execution must remain disabled until authenticated authorization exists",
+    )
+    _require(
+        boundary.get("authorization_verification") == AUTHORIZATION_VERIFICATION_CONTRACT,
+        "authorization verification contract drifted",
+    )
     accounting = _mapping(value.get("row_accounting"), "row_accounting")
     _require(
         accounting.get("one_terminal_status_per_identity") is True,
@@ -657,10 +815,10 @@ def inspect_packet(
             "reason": str(exc),
         }
     return {
-        "ready": True,
+        "ready": False,
         "manifest_hash": manifest["manifest_hash"],
         "expected_rows": EXPECTED_ROWS,
-        "reason": None,
+        "reason": PRODUCTION_EXECUTION_DISABLED_REASON,
     }
 
 
@@ -714,6 +872,8 @@ def build_production_packet(
             "default_mode": "validate",
             "production_token_required": True,
             "production_token_source": "private-ops-ephemeral-environment",
+            "production_execution_disabled": True,
+            "authorization_verification": AUTHORIZATION_VERIFICATION_CONTRACT,
         },
         "row_accounting": {
             "one_terminal_status_per_identity": True,
@@ -769,6 +929,14 @@ def _native_outcome_status(
         provenance.get(field) != expected_value for field, expected_value in expected_fields.items()
     ):
         return "provenance_invalid"
+    try:
+        _validated_protocol_metrics(
+            provenance.get("metrics"),
+            field="row.provenance.metrics",
+            require_complete=True,
+        )
+    except CampaignAdapterError:
+        return "provenance_invalid"
     _assert_no_transient_state(provenance, "row.provenance")
     return SUCCESS_STATUS
 
@@ -798,7 +966,7 @@ def _expected_row_provenance(
     }
 
 
-def _normalize_outcome(
+def _normalize_outcome(  # noqa: C901
     expected: Mapping[str, Any],
     outcome: Mapping[str, Any],
     *,
@@ -814,11 +982,23 @@ def _normalize_outcome(
             "identity_key": identity_key,
             "terminal_status": terminal_status,
             "missingness": terminal_status,
-            "reason": reason,
+            "reason": _sanitize_reason(reason),
         }
+        supplied_metrics = outcome.get("metrics")
         if isinstance(supplied_provenance, Mapping):
-            _assert_no_transient_state(supplied_provenance, "row.provenance")
-            row["provenance"] = dict(supplied_provenance)
+            provenance = dict(supplied_provenance)
+            if supplied_metrics is None:
+                supplied_metrics = provenance.get("metrics")
+            if supplied_metrics is not None:
+                safe_metrics = _finite_protocol_metrics(
+                    supplied_metrics,
+                    field="row.provenance.metrics",
+                )
+                provenance["metrics"] = safe_metrics
+                if safe_metrics:
+                    row["metrics"] = safe_metrics
+            _assert_no_transient_state(provenance, "row.provenance")
+            row["provenance"] = provenance
         else:
             row["provenance"] = _expected_row_provenance(
                 expected,
@@ -826,6 +1006,13 @@ def _normalize_outcome(
                 manifest_hash=manifest_hash,
                 status=terminal_status,
             )
+            if supplied_metrics is not None:
+                safe_metrics = _finite_protocol_metrics(
+                    supplied_metrics,
+                    field="row.metrics",
+                )
+                if safe_metrics:
+                    row["metrics"] = safe_metrics
         return row
 
     if not isinstance(status, str) or status not in TERMINAL_STATUSES:
@@ -844,12 +1031,18 @@ def _normalize_outcome(
         )
     if status != SUCCESS_STATUS:
         return _row_base(status, status)
+    metrics = _validated_protocol_metrics(
+        provenance.get("metrics"),
+        field="row.provenance.metrics",
+        require_complete=True,
+    )
     return {
         "identity_key": identity_key,
         "terminal_status": SUCCESS_STATUS,
         "missingness": None,
         "reason": None,
         "provenance": dict(provenance),
+        "metrics": metrics,
     }
 
 
@@ -1014,6 +1207,211 @@ def _safe_checkpoint_provenance(
     ]
 
 
+def _record_metric_sources(record: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Return metric envelopes in precedence order without copying arbitrary fields."""
+    sources: list[Mapping[str, Any]] = []
+    metrics = record.get("metrics")
+    if isinstance(metrics, Mapping):
+        sources.append(metrics)
+        nested = metrics.get("metric_values")
+        if isinstance(nested, Mapping):
+            sources.append(nested)
+    for key in ("metric_values",):
+        value = record.get(key)
+        if isinstance(value, Mapping):
+            sources.append(value)
+    sources.append(record)
+    return sources
+
+
+def _record_metric_value(
+    metrics: Mapping[str, Any], *names: str, field: str
+) -> tuple[float | None, str | None]:
+    """Read one finite raw metric, returning a stable missingness code."""
+    for name in names:
+        if name in metrics:
+            try:
+                return _finite_metric(metrics[name], f"record.{field}"), None
+            except CampaignAdapterError:
+                return None, f"metric_contract_nonfinite:{field}"
+    return None, f"metric_contract_missing:{field}"
+
+
+def _record_binary_metric(
+    metrics: Mapping[str, Any], *names: str, field: str
+) -> tuple[float | None, str | None]:
+    """Convert an established count/flag source to a per-episode binary metric."""
+    for name in names:
+        if name not in metrics:
+            continue
+        value = metrics[name]
+        if isinstance(value, bool):
+            return (1.0 if value else 0.0), None
+        number, error = _record_metric_value(metrics, name, field=field)
+        if error is not None:
+            return None, error
+        return (1.0 if number > 0.0 else 0.0), None
+    return None, f"metric_contract_missing:{field}"
+
+
+def _extract_protocol_metrics(  # noqa: C901, PLR0912, PLR0915
+    record: Mapping[str, Any], identity: Mapping[str, Any]
+) -> tuple[dict[str, float], str | None]:
+    """Extract the frozen row metric contract from a native episode record.
+
+    Direct protocol-named fields are preferred.  When the map runner emits its
+    established raw episode fields, the projection mirrors the reviewed #5578
+    adapter: binary event rates come from counts/flags and exposure seconds come
+    from the recorded interaction-exposure denominator.  No default or synthetic
+    value is introduced.
+    """
+    names = _protocol_metric_names()
+    values: dict[str, float] = {}
+    sources = _record_metric_sources(record)
+    present: set[str] = set()
+    for name in names:
+        for source in sources:
+            if name in source:
+                present.add(name)
+                try:
+                    values[name] = _finite_metric(source[name], f"record.metrics.{name}")
+                except CampaignAdapterError:
+                    return values, f"metric_contract_nonfinite:{name}"
+                break
+
+    raw_metrics = record.get("metrics")
+    raw_metrics = raw_metrics if isinstance(raw_metrics, Mapping) else {}
+
+    def _set_if_missing(name: str, value: float | None, error: str | None) -> str | None:
+        if name in present:
+            return None
+        if error is not None or value is None:
+            return error or f"metric_contract_missing:{name}"
+        values[name] = value
+        return None
+
+    success, error = _record_binary_metric(raw_metrics, "success", field="success_rate")
+    failure = _set_if_missing("success_rate", success, error)
+    if failure:
+        return values, failure
+
+    total_collision, total_error = _record_metric_value(
+        raw_metrics,
+        "total_collision_count",
+        "collisions",
+        field="collision_count",
+    )
+    if "total_collision_count" in raw_metrics and "collisions" in raw_metrics:
+        alternate_collision, alternate_error = _record_metric_value(
+            raw_metrics,
+            "collisions",
+            field="collision_count",
+        )
+        if total_error is None and alternate_error is None:
+            total_collision = max(total_collision, alternate_collision)
+        elif total_error is None:
+            return values, alternate_error
+        else:
+            return values, total_error
+    collision = None if total_collision is None else (1.0 if total_collision > 0.0 else 0.0)
+    failure = _set_if_missing("collision_rate", collision, total_error)
+    if failure:
+        return values, failure
+
+    near_miss, error = _record_binary_metric(raw_metrics, "near_misses", field="near_miss_rate")
+    failure = _set_if_missing("near_miss_rate", near_miss, error)
+    if failure:
+        return values, failure
+
+    typed_counts: dict[str, float] = {}
+    for metric_name, raw_name in (
+        ("ped_collision_rate", "ped_collision_count"),
+        ("obstacle_collision_rate", "obstacle_collision_count"),
+        ("agent_collision_rate", "agent_collision_count"),
+    ):
+        count, error = _record_metric_value(raw_metrics, raw_name, field=raw_name)
+        if error is not None:
+            if metric_name in present:
+                continue
+            return values, error
+        typed_counts[metric_name] = count
+        failure = _set_if_missing(
+            metric_name,
+            1.0 if count > 0.0 else 0.0,
+            None,
+        )
+        if failure:
+            return values, failure
+
+    if "unclassified_collision_rate" not in present:
+        if total_collision is None or len(typed_counts) != 3:
+            return values, "metric_contract_missing:unclassified_collision_rate"
+        typed_total = sum(typed_counts.values())
+        values["unclassified_collision_rate"] = 1.0 if total_collision > typed_total + 1e-9 else 0.0
+
+    time_to_goal, error = _record_metric_value(
+        raw_metrics,
+        "time_to_goal_norm",
+        field="time_to_goal_norm",
+    )
+    failure = _set_if_missing("time_to_goal_norm", time_to_goal, error)
+    if failure:
+        return values, failure
+
+    exposure = record.get("interaction_exposure")
+    if "total_exposure_seconds" not in present:
+        if not isinstance(exposure, Mapping):
+            return values, "metric_contract_missing:total_exposure_seconds"
+        exposure_share, error = _record_metric_value(
+            exposure,
+            "interaction_exposure_share",
+            field="interaction_exposure_share",
+        )
+        if error is not None:
+            return values, "metric_contract_missing:total_exposure_seconds"
+        exposure_steps, error = _record_metric_value(
+            exposure,
+            "interaction_exposure_denominator_steps",
+            field="interaction_exposure_denominator_steps",
+        )
+        if error is not None:
+            return values, "metric_contract_missing:total_exposure_seconds"
+        dt_seconds = _finite_metric(identity.get("dt_seconds"), "identity.dt_seconds")
+        total_exposure = exposure_share * exposure_steps * dt_seconds
+        if not math.isfinite(total_exposure):
+            return values, "metric_contract_nonfinite:total_exposure_seconds"
+        values["total_exposure_seconds"] = total_exposure
+
+    travel_distance, error = _record_metric_value(
+        raw_metrics,
+        "socnavbench_path_length",
+        field="travel_distance_m",
+    )
+    failure = _set_if_missing("travel_distance_m", travel_distance, error)
+    if failure:
+        return values, failure
+
+    mean_clearance, error = _record_metric_value(
+        raw_metrics,
+        "mean_clearance",
+        field="mean_clearance_m",
+    )
+    failure = _set_if_missing("mean_clearance_m", mean_clearance, error)
+    if failure:
+        return values, failure
+
+    min_clearance, error = _record_metric_value(
+        raw_metrics,
+        "min_clearance",
+        field="min_clearance_m",
+    )
+    failure = _set_if_missing("min_clearance_m", min_clearance, error)
+    if failure:
+        return values, failure
+
+    return values, None
+
+
 def _native_outcome_from_record(
     identity: Mapping[str, Any],
     record: Mapping[str, Any],
@@ -1030,19 +1428,33 @@ def _native_outcome_from_record(
     )
 
     disposition, reason = _execution_disposition(record)
+    metrics, metric_error = _extract_protocol_metrics(record, identity)
     if disposition != "native":
-        return {
+        outcome = {
             "identity_key": identity["identity_key"],
             "terminal_status": "degraded" if disposition == "degraded" else "failed",
-            "reason": reason or disposition,
+            "reason": _sanitize_reason(reason or disposition),
         }
+        if metrics:
+            outcome["metrics"] = metrics
+        return outcome
     metadata = record.get("algorithm_metadata")
     kinematics = metadata.get("planner_kinematics") if isinstance(metadata, Mapping) else None
     if not isinstance(kinematics, Mapping) or kinematics.get("execution_mode") != "native":
-        return {
+        outcome = {
             "identity_key": identity["identity_key"],
             "terminal_status": "non_native",
             "reason": "map-runner did not report native planner execution",
+        }
+        if metrics:
+            outcome["metrics"] = metrics
+        return outcome
+    if metric_error is not None:
+        return {
+            "identity_key": identity["identity_key"],
+            "terminal_status": "provenance_invalid",
+            "reason": metric_error,
+            "metrics": metrics,
         }
     from scripts.benchmark.run_issue_8871_pedestrian_speed_canary import (
         extract_activation_diagnostics,
@@ -1083,6 +1495,7 @@ def _native_outcome_from_record(
             record.get("algorithm_metadata", {}).get("simulation_step_trace")
         ),
         "checkpoint_provenance": [dict(item) for item in checkpoint_provenance],
+        "metrics": metrics,
     }
     _assert_no_transient_state(provenance, "row.provenance")
     if not activated:
@@ -1092,11 +1505,13 @@ def _native_outcome_from_record(
             "missingness": "intervention_not_activated",
             "reason": "native trace failed the frozen activation rule",
             "provenance": provenance,
+            "metrics": metrics,
         }
     return {
         "identity_key": identity["identity_key"],
         "terminal_status": SUCCESS_STATUS,
         "provenance": provenance,
+        "metrics": metrics,
     }
 
 
@@ -1208,7 +1623,7 @@ def _read_journal(path: Path) -> list[dict[str, Any]]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError as exc:
-        raise CampaignAdapterError(f"cannot read existing execution journal: {exc}") from exc
+        raise CampaignAdapterError("cannot read existing execution journal") from exc
     events: list[dict[str, Any]] = []
     for line_number, line in enumerate(lines, 1):
         try:
@@ -1230,27 +1645,86 @@ def reconcile_execution_journal(
 ) -> dict[str, Any]:
     """Summarize an interrupted journal; this function never authorizes a retry."""
     path = Path(journal_path)
-    _require(path.is_file(), f"execution journal does not exist: {path}")
+    _require(path.is_file(), "execution journal does not exist")
     events = _read_journal(path)
     started = [
         str(event.get("identity_key")) for event in events if event.get("event") == "row_started"
     ]
-    finished = [
-        str(event.get("identity_key")) for event in events if event.get("event") == "row_finished"
-    ]
+    terminal_rows: list[dict[str, Any]] = []
+    finished: list[str] = []
+    for event in events:
+        if event.get("event") != "row_finished":
+            continue
+        identity_key = event.get("identity_key")
+        _require(
+            isinstance(identity_key, str) and bool(identity_key), "journal row identity is invalid"
+        )
+        terminal_status = event.get("terminal_status")
+        _require(
+            isinstance(terminal_status, str) and terminal_status in TERMINAL_STATUSES,
+            "journal row terminal status is invalid",
+        )
+        row: dict[str, Any] = {
+            "identity_key": identity_key,
+            "terminal_status": terminal_status,
+            "missingness": event.get("missingness"),
+            "reason": (
+                None if event.get("reason") is None else _sanitize_reason(event.get("reason"))
+            ),
+        }
+        provenance = None
+        if event.get("provenance") is not None:
+            provenance = _mapping(event.get("provenance"), "journal.row_finished.provenance")
+            if "metrics" in provenance:
+                provenance["metrics"] = _finite_protocol_metrics(
+                    provenance.get("metrics"),
+                    field="journal.row_finished.provenance.metrics",
+                )
+        metric_value = event.get("metrics")
+        if metric_value is None and isinstance(provenance, Mapping):
+            metric_value = provenance.get("metrics")
+        if terminal_status == SUCCESS_STATUS:
+            _require(
+                isinstance(provenance, Mapping),
+                "journal native terminal row is missing provenance",
+            )
+            _validated_protocol_metrics(
+                metric_value,
+                field="journal.row_finished.metrics",
+                require_complete=True,
+            )
+        if metric_value is not None:
+            row["metrics"] = _finite_protocol_metrics(
+                metric_value,
+                field="journal.row_finished.metrics",
+            )
+        if provenance is not None:
+            _assert_no_transient_state(provenance, "journal.row_finished.provenance")
+            row["provenance"] = provenance
+        _assert_no_transient_state(row, "journal.row_finished")
+        finished.append(identity_key)
+        terminal_rows.append(row)
     started_set = set(started)
     finished_set = set(finished)
+    journal_reference = _safe_journal_reference(path)
     return {
         "schema_version": JOURNAL_SCHEMA_VERSION,
-        "journal_path": str(path),
+        "journal_path": journal_reference,
+        "journal_reference": journal_reference,
         "started_rows": len(started),
         "finished_rows": len(finished),
+        "rows": terminal_rows,
         "in_flight_identity_keys": sorted(started_set - finished_set),
         "duplicate_finished_identity_keys": sorted(
             key for key, count in Counter(finished).items() if count > 1
         ),
         "expected_rows": expected_rows,
-        "complete": expected_rows is not None and len(finished) == expected_rows,
+        "complete": (
+            expected_rows is not None
+            and len(finished) == expected_rows
+            and len(finished_set) == expected_rows
+            and not any(count > 1 for count in Counter(finished).values())
+        ),
         "retry_allowed": False,
         "resolution": "preserve journal and issue a new campaign identity after review",
     }
@@ -1276,6 +1750,20 @@ def _append_journal_event(handle: Any, event: str, **payload: Any) -> None:
     handle.write(json.dumps(record, sort_keys=True, allow_nan=False) + "\n")
     handle.flush()
     os.fsync(handle.fileno())
+
+
+def _journal_row_payload(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a complete, already-normalized terminal row for the durable journal."""
+    payload = {
+        "identity_key": row.get("identity_key"),
+        "terminal_status": row.get("terminal_status"),
+        "missingness": row.get("missingness"),
+        "reason": row.get("reason"),
+        "metrics": row.get("metrics"),
+        "provenance": row.get("provenance"),
+    }
+    _assert_no_transient_state(payload, "journal.row_finished")
+    return payload
 
 
 def _atomic_write_json(path: Path, value: Mapping[str, Any]) -> None:
@@ -1311,6 +1799,7 @@ def run_production(
 ) -> dict[str, Any]:
     """Run the fixed native executor with durable, no-retry accounting."""
     manifest = validate_production_packet(packet, config_path=config_path)
+    raise CampaignAdapterError(PRODUCTION_EXECUTION_DISABLED_REASON)
     _validate_token_binding(
         packet["production_authorization"],
         str(packet["packet_binding_hash"]),
@@ -1398,14 +1887,19 @@ def run_production(
                     outcome = {
                         "identity_key": identity["identity_key"],
                         "terminal_status": "failed",
-                        "reason": f"{type(exc).__name__}: {exc}",
+                        "reason": _exception_reason(exc),
                     }
-                outcomes.append(outcome)
+                normalized = _normalize_outcome(
+                    identity,
+                    outcome,
+                    source_commit=str(packet["source_commit"]),
+                    manifest_hash=str(packet["manifest_hash"]),
+                )
+                outcomes.append(normalized)
                 _append_journal_event(
                     journal,
                     "row_finished",
-                    identity_key=identity["identity_key"],
-                    terminal_status=outcome.get("terminal_status"),
+                    **_journal_row_payload(normalized),
                 )
         finally:
             for policy, _meta in policy_cache.values():
@@ -1422,7 +1916,9 @@ def run_production(
     report["execution_boundary"] = "fixed_native_map_runner; no scheduler submission"
     report["preparation_status"] = PREPARATION_STATUS
     report["scientific_evidence"] = False
-    report["journal_path"] = str(journal_path)
+    journal_reference = _safe_journal_reference(journal_path)
+    report["journal_path"] = journal_reference
+    report["journal_reference"] = journal_reference
     report["receipt_schema_version"] = RECEIPT_SCHEMA_VERSION
     _atomic_write_json(output_path, report)
     return report
@@ -1491,7 +1987,7 @@ def _summary(mode: str, value: Mapping[str, Any], *, output: Path | None = None)
         if field in value:
             result[field] = value[field]
     if output is not None:
-        result["output"] = str(output)
+        result["output"] = _safe_journal_reference(output)
     return result
 
 

@@ -14,9 +14,14 @@ per-cell metric denominators, raw paired differences, paired seed bootstrap
 intervals, explicit degenerate binary-pair handling, and trace references.
 Any missing or unequal reset receipt, changed source/config/asset digest, or
 failed or unknown required preflight check stops the run. An expected unavailable
-`slow_speed_tier` distributional metric may remain an explicit H1
-fallback/degraded diagnostic after a successful, identity-stable rollout; it is
-outside the confirmation matrix and never success evidence. Raw rows, source/config/asset hashes, the report
+`slow_speed_tier` distributional metric may remain an explicit actor-free H1
+fallback/degraded diagnostic after a successful, identity-stable rollout. The
+H400 producer runs a separate actor-present, 18-cell H10 confirmation over the
+frozen planners, seeds and widths. It requires native execution and readiness,
+nonempty traces, no fallback/degraded runtime marker, exact source/config
+identity, and six matching reset/RNG receipt groups. These H10 rows are setup
+diagnostics only; a red row blocks H400 before its first episode. Raw rows,
+source/config/asset hashes, the report
 and checksums go to an explicit durable result root; the private operations
 queue owns Slurm submission, retrieval and preservation. No H1 smoke is a
 confirmation result. Validate with focused synthetic report tests and a
@@ -122,9 +127,10 @@ Secondary measures are clearance, contact/near-miss exposure, time and
 distance, and pedestrian delay or impairment. Time for failures is censored
 at termination, not imputed as a successful arrival time. Execution errors,
 fallback, degraded rows and unavailable cells are counted separately. H1
-execution/binding readiness may record the expected unavailable distributional
-metric, but the H400 producer refuses any non-empty
-`oracle_expected_fallbacks` list before dispatch, even when H1 `go` is true.
+execution/binding readiness may record the exact expected unavailable
+distributional metric. The actor-free finding cannot itself admit H400; the
+separate actor-present H10 gate rejects fallback, degraded, missing-trace,
+non-native, or incomplete planner probes.
 
 The three seed IDs alone do **not** prove paired realizations. Before campaign
 submission, each width cell records SHA-256 receipts for the initial
@@ -165,7 +171,9 @@ classifications. The 3.6 m nominal oracle completed with
 `slow_speed_tier` distributional metric remained an explicit fallback/degraded
 diagnostic. H1 readiness was true, but
 `confirmation_oracle_fallbacks_clear=false` and `confirmation_ready` remained
-false; the H400 producer refuses this preflight. No row is success evidence.
+false under the previous structural gate. The separate H10 gate now classifies
+actor-present planner execution without relabelling that oracle finding. No
+row is success evidence.
 These smokes do not claim a width comparison or H400 result; they are diagnostic
 custody only and must not be substituted for the H400 campaign.
 Later closed-loop pedestrian paths may diverge naturally. The full H400

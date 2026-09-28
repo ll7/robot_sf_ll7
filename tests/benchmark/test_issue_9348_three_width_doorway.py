@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import xml.etree.ElementTree as ET
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -73,20 +74,106 @@ def test_campaign_failure_keeps_error_and_seals_receipt(
     assert "run_failure.json" in (output_root / "SHA256SUMS").read_text(encoding="utf-8")
 
 
-def test_h400_confirmation_rejects_h1_oracle_fallback() -> None:
-    """H1 readiness cannot authorize confirmation with an expected fallback."""
-    with pytest.raises(ValueError, match="refuses oracle_expected_fallbacks"):
-        doorway_campaign._require_confirmation_preflight(
-            {
-                "go": True,
-                "checks": {"oracle_expected_fallbacks": [{"variant_id": "gap_3p60"}]},
+def test_campaign_blocks_h400_before_first_episode_on_red_confirmation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The actor-present gate is consumed by the producer before H400 dispatch."""
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest_path.write_text("test: true\n", encoding="utf-8")
+    monkeypatch.setattr(doorway_campaign, "_source_identity", lambda: "a" * 40)
+    monkeypatch.setattr(
+        doorway_campaign,
+        "load_three_width_manifest",
+        lambda _path: {
+            "_resolved": {
+                "planner_configs": {"goal": {}, "social_force": {}},
+                "planner_config_hashes": {
+                    "goal": "44136fa355b3678a",
+                    "social_force": "44136fa355b3678a",
+                },
             }
-        )
-    doorway_campaign._require_confirmation_preflight(
-        {"go": True, "checks": {"oracle_expected_fallbacks": []}}
+        },
     )
+    preflight = _bounded_h1_preflight()
+    preflight["variants"] = [
+        {
+            "variant_id": f"gap_{width}",
+            "geometry": {"gap_width_m": width},
+            "assets": {
+                "scenario_path": "unused",
+                "map_sha256": "a" * 64,
+                "scenario_sha256": "b" * 64,
+            },
+        }
+        for width in (2.2, 2.8, 3.6)
+    ]
+    monkeypatch.setattr(
+        doorway_campaign, "run_three_width_preflight", lambda *_args, **_kwargs: preflight
+    )
+    monkeypatch.setattr(
+        doorway_campaign,
+        "_run_actor_present_confirmation",
+        lambda *_args, **_kwargs: {
+            "schema_version": "issue_9348_confirmation_preflight.v1",
+            "admit_h400": False,
+        },
+    )
+    monkeypatch.setattr(
+        doorway_campaign,
+        "_run_map_episode",
+        lambda *_args, **_kwargs: pytest.fail("H400 episode ran before confirmation"),
+    )
+    output_root = tmp_path / "blocked-campaign"
+    with pytest.raises(ValueError, match="actor-present confirmation"):
+        doorway_campaign.run_campaign(manifest_path, output_root)
+    assert not (output_root / "episodes.jsonl").exists()
+    assert (output_root / "run_failure.json").is_file()
+
+
+def _bounded_h1_preflight() -> dict[str, Any]:
+    return {
+        "go": True,
+        "checks": {
+            "oracle_expected_fallbacks": [
+                {
+                    "variant_id": "gap_3p60__depth_1p00",
+                    "reason": "expected_distributional_metric_unavailable",
+                    "marker": (
+                        "metrics.distributional_disruption.missing_data."
+                        "slow_speed_tier.status=unavailable"
+                    ),
+                }
+            ],
+            "baseline_passes": True,
+            "all_widths_positive_clearance": True,
+            "oracle_available_for_every_variant": True,
+            "oracle_required_checks_known": True,
+            "h1_execution_binding_ready": True,
+            "planner_records_are_not_run": True,
+            "no_campaign_evidence": True,
+            "variant_count": 3,
+        },
+    }
+
+
+def test_h400_confirmation_separates_h1_diagnostic_from_actor_present_gate() -> None:
+    """Only the precisely bounded oracle marker may remain diagnostic."""
+    preflight = _bounded_h1_preflight()
+    confirmation = {"schema_version": "issue_9348_confirmation_preflight.v1", "admit_h400": True}
+    doorway_campaign._require_confirmation_preflight(preflight, confirmation)
+    with pytest.raises(ValueError, match="actor-present confirmation"):
+        doorway_campaign._require_confirmation_preflight(
+            preflight, {**confirmation, "admit_h400": False}
+        )
+    with pytest.raises(ValueError, match="actor-present confirmation report is unavailable"):
+        doorway_campaign._require_confirmation_preflight(preflight, {})
+    preflight["checks"]["oracle_expected_fallbacks"][0]["marker"] = "other_fallback"
+    with pytest.raises(ValueError, match="undeclared fallback"):
+        doorway_campaign._require_confirmation_preflight(preflight, confirmation)
+    preflight["checks"]["oracle_expected_fallbacks"] = []
+    doorway_campaign._require_confirmation_preflight(preflight, confirmation)
     with pytest.raises(ValueError, match="fallback admission check is unavailable"):
-        doorway_campaign._require_confirmation_preflight({"go": True, "checks": {}})
+        doorway_campaign._require_confirmation_preflight({"go": True, "checks": {}}, confirmation)
 
 
 def _sha256(path: Path) -> str:
@@ -255,6 +342,48 @@ def _complete_synthetic_campaign() -> tuple[
                 cell = next(c for c in pair["cells"] if c["gap_width_m"] == asset["gap_width_m"])
                 cell.update(receipt)
     return rows, cells, pairs
+
+
+def test_actor_present_confirmation_rejects_fallback_and_custody_faults() -> None:
+    """All 18 short rows must be native, paired, exact-source, and trace-backed."""
+    rows, cells, pairs = _complete_synthetic_campaign()
+    for row in rows:
+        row["horizon"] = 10
+        row["steps"] = 5
+        row["status"] = "failure"  # short-horizon timeout is not a success claim
+        row["termination_reason"] = "max_steps"
+
+    def assess(candidate_rows: list[dict[str, Any]], candidate_pairs: dict[str, Any] = pairs):
+        return doorway_campaign.assess_confirmation_rows(
+            candidate_rows,
+            cells,
+            candidate_pairs,
+            source_sha="d" * 40,
+            manifest_sha256="manifest",
+        )
+
+    assert assess(rows)["admit_h400"] is True
+    fallback = deepcopy(rows)
+    fallback[0]["algorithm_metadata"]["planner_decision_trace"]["steps"][0]["fallback_used"] = True
+    assert assess(fallback)["admit_h400"] is False
+    assert "fallback_or_degraded_planner_step" in assess(fallback)["rows"][0]["blockers"]
+    absent_axes = deepcopy(rows)
+    absent_axes[0].pop("execution_mode")
+    assert "non_native_execution_mode:None" in assess(absent_axes)["rows"][0]["blockers"]
+    wrong_source = deepcopy(rows)
+    wrong_source[0]["git_hash"] = "e" * 40
+    assert "source_commit_mismatch" in assess(wrong_source)["rows"][0]["blockers"]
+    wrong_receipt = deepcopy(rows)
+    wrong_receipt[0]["algorithm_metadata"]["doorway_pair_receipt"]["map_sha256"] = "x" * 64
+    assert "paired_reset_receipt_mismatch" in assess(wrong_receipt)["rows"][0]["blockers"]
+    wrong_horizon = deepcopy(rows)
+    wrong_horizon[0]["horizon"] = 400
+    assert "episode_identity_or_horizon_mismatch" in assess(wrong_horizon)["rows"][0]["blockers"]
+    with pytest.raises(ValueError, match="all 18 frozen identities"):
+        assess(rows[:-1])
+    wrong_pairs = deepcopy(pairs)
+    wrong_pairs["pairs"][0]["cells"][0]["external_rng_state_sha256"] = "x" * 64
+    assert assess(rows, wrong_pairs)["admit_h400"] is False
 
 
 def _assert_paired_report_fields(report: dict[str, Any]) -> None:
@@ -846,11 +975,36 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
         cell["line_sha256"] = hashlib.sha256(line.encode()).hexdigest()
     write_json(tmp_path / "pair_manifest.json", pairs)
     write_json(tmp_path / "report.json", report)
+    confirmation_rows = deepcopy(rows)
+    confirmation_cells = deepcopy(cells)
+    for row in confirmation_rows:
+        row["horizon"] = 10
+        row["steps"] = 5
+        row["status"] = "failure"
+        row["termination_reason"] = "max_steps"
+    confirmation_lines = [json.dumps(row, sort_keys=True) + "\n" for row in confirmation_rows]
+    confirmation_raw = tmp_path / "confirmation_episodes.jsonl"
+    confirmation_raw.write_text("".join(confirmation_lines), encoding="utf-8")
+    for cell, line in zip(confirmation_cells, confirmation_lines, strict=True):
+        cell["line_sha256"] = hashlib.sha256(line.encode()).hexdigest()
+    confirmation_pairs = deepcopy(pairs)
+    confirmation_pairs["manifest_sha256"] = _sha256(inputs / "application_manifest.yaml")
+    write_json(tmp_path / "confirmation_pair_manifest.json", confirmation_pairs)
+    confirmation = doorway_campaign.assess_confirmation_rows(
+        confirmation_rows,
+        confirmation_cells,
+        confirmation_pairs,
+        source_sha="d" * 40,
+        manifest_sha256=_sha256(inputs / "application_manifest.yaml"),
+    )
+    assert confirmation["admit_h400"] is True
+    confirmation["cells"] = confirmation_cells
+    confirmation["episodes_jsonl_sha256"] = _sha256(confirmation_raw)
+    write_json(tmp_path / "confirmation_preflight.json", confirmation)
     write_json(
         tmp_path / "preflight.json",
         {
-            "go": True,
-            "checks": {"oracle_expected_fallbacks": []},
+            **_bounded_h1_preflight(),
             "variants": [
                 {
                     "variant_id": asset["variant_id"],
@@ -879,6 +1033,16 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
     )
     _write_checksums(tmp_path)
     assert verify_campaign_bundle(tmp_path)["native_rows"] == 18
+    confirmation_path = tmp_path / "confirmation_preflight.json"
+    confirmation_payload = json.loads(confirmation_path.read_text(encoding="utf-8"))
+    confirmation_payload["admit_h400"] = False
+    write_json(confirmation_path, confirmation_payload)
+    _write_checksums(tmp_path)
+    with pytest.raises(ValueError, match="confirmation report differs from sealed raw probes"):
+        verify_campaign_bundle(tmp_path)
+    write_json(confirmation_path, confirmation)
+    _write_checksums(tmp_path)
+    assert verify_campaign_bundle(tmp_path)["native_rows"] == 18
     preflight_path = tmp_path / "preflight.json"
     preflight = json.loads(preflight_path.read_text(encoding="utf-8"))
     preflight["checks"].pop("oracle_expected_fallbacks")
@@ -894,9 +1058,11 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
     preflight["checks"]["oracle_expected_fallbacks"] = [{"variant_id": "gap_3p60"}]
     write_json(preflight_path, preflight)
     _write_checksums(tmp_path)
-    with pytest.raises(ValueError, match="refuses oracle_expected_fallbacks"):
+    with pytest.raises(ValueError, match="undeclared fallback"):
         verify_campaign_bundle(tmp_path)
-    preflight["checks"]["oracle_expected_fallbacks"] = []
+    preflight["checks"]["oracle_expected_fallbacks"] = _bounded_h1_preflight()["checks"][
+        "oracle_expected_fallbacks"
+    ]
     preflight["go"] = False
     write_json(preflight_path, preflight)
     _write_checksums(tmp_path)

@@ -45,6 +45,7 @@ _WIDTHS = (2.2, 2.8, 3.6)
 _PLANNERS = ("goal", "social_force")
 _SEEDS = (225, 226, 227)
 _HORIZON = 400
+_CONFIRMATION_HORIZON = 10
 _DT = 0.1
 _BOOTSTRAP_DRAWS = 10000
 _BOOTSTRAP_SEED = 9348
@@ -250,20 +251,245 @@ def _row_inventory_item(
     }
 
 
-def _require_confirmation_preflight(preflight: dict[str, Any]) -> None:
-    """Admit H400 only after H1 diagnostics are clear for confirmation."""
+def _require_h1_preflight(preflight: dict[str, Any]) -> None:
+    """Require bounded H1 geometry/binding evidence, retaining its oracle diagnostic."""
     checks = preflight.get("checks")
     if not isinstance(checks, dict):
         raise ValueError("doorway confirmation preflight checks are unavailable")
     expected_fallbacks = checks.get("oracle_expected_fallbacks")
     if not isinstance(expected_fallbacks, list):
         raise ValueError("doorway confirmation fallback admission check is unavailable")
-    if expected_fallbacks:
-        raise ValueError(
-            "doorway H400 confirmation refuses oracle_expected_fallbacks from H1 preflight"
-        )
+    if expected_fallbacks not in (
+        [],
+        [
+            {
+                "variant_id": "gap_3p60__depth_1p00",
+                "reason": "expected_distributional_metric_unavailable",
+                "marker": (
+                    "metrics.distributional_disruption.missing_data."
+                    "slow_speed_tier.status=unavailable"
+                ),
+            }
+        ],
+    ):
+        raise ValueError("doorway H1 oracle has an undeclared fallback or degraded diagnostic")
     if preflight.get("go") is not True:
         raise ValueError("doorway geometry/oracle preflight did not admit policy execution")
+    for field in (
+        "baseline_passes",
+        "all_widths_positive_clearance",
+        "oracle_available_for_every_variant",
+        "oracle_required_checks_known",
+        "h1_execution_binding_ready",
+        "planner_records_are_not_run",
+        "no_campaign_evidence",
+    ):
+        if checks.get(field) is not True:
+            raise ValueError(f"doorway H1 preflight lacks required check: {field}")
+    if checks.get("variant_count") != 3:
+        raise ValueError("doorway H1 preflight must retain three widths")
+
+
+def _confirmation_row_blockers(
+    row: dict[str, Any],
+    cell: dict[str, Any],
+    receipt: dict[str, Any] | None,
+    *,
+    source_sha: str,
+) -> list[str]:
+    """Reject any short probe without native planner and exact reset custody."""
+    planner, seed = cell["planner"], cell["seed"]
+    metadata = row.get("algorithm_metadata")
+    reasons = []
+    if not isinstance(metadata, dict):
+        reasons.append("missing_algorithm_metadata")
+        metadata = {}
+    expected_hash = {"goal": GOAL_PLANNER_CONFIG_HASH, "social_force": EMPTY_PLANNER_CONFIG_HASH}[
+        planner
+    ]
+    if metadata.get("config_hash") != expected_hash:
+        reasons.append("planner_config_hash_mismatch")
+    if (row.get("algo"), row.get("seed"), row.get("scenario_id"), row.get("horizon")) != (
+        planner,
+        seed,
+        cell.get("scenario_id"),
+        _CONFIRMATION_HORIZON,
+    ):
+        reasons.append("episode_identity_or_horizon_mismatch")
+    if row.get("git_hash") != source_sha:
+        reasons.append("source_commit_mismatch")
+    observed = metadata.get("doorway_pair_receipt")
+    if (
+        not isinstance(receipt, dict)
+        or not isinstance(observed, dict)
+        or any(
+            observed.get(key) != receipt.get(key)
+            for key in (
+                "map_sha256",
+                "initial_actor_state_sha256",
+                "external_rng_state_sha256",
+                "non_width_config_sha256",
+            )
+        )
+    ):
+        reasons.append("paired_reset_receipt_mismatch")
+    if not isinstance(row.get("steps"), int) or not 1 <= row["steps"] <= _CONFIRMATION_HORIZON:
+        reasons.append("invalid_confirmation_step_count")
+    reasons.extend(_trace_exclusion_reasons(metadata, row=row, expected_algorithm=planner))
+    if metadata.get("status") != "ok":
+        reasons.append("planner_status_not_ok")
+    if row.get("status") not in {"success", "collision", "failure"}:
+        reasons.append("unknown_episode_status")
+    if isinstance(row.get("integrity"), dict) and row["integrity"].get("contradictions"):
+        reasons.append("episode_integrity_contradiction")
+    return sorted(set(reasons))
+
+
+def assess_confirmation_rows(
+    rows: list[dict[str, Any]],
+    cells: list[dict[str, Any]],
+    pair_manifest: dict[str, Any],
+    *,
+    source_sha: str,
+    manifest_sha256: str,
+) -> dict[str, Any]:
+    """Classify a separate actor-present H10 probe before H400 dispatch."""
+    expected = {(p, s, w) for p in _PLANNERS for s in _SEEDS for w in _WIDTHS}
+    identities = [(c.get("planner"), c.get("seed"), c.get("gap_width_m")) for c in cells]
+    if (
+        len(rows) != 18
+        or len(cells) != 18
+        or set(identities) != expected
+        or len(set(identities)) != 18
+    ):
+        raise ValueError("confirmation probe requires all 18 frozen identities")
+    pair_errors = check_pair_receipts(pair_manifest)
+    if pair_manifest.get("manifest_sha256") != manifest_sha256:
+        raise ValueError("confirmation pair manifest checksum identity mismatch")
+    receipts = {
+        (pair["planner"], pair["seed"], cell["gap_width_m"]): cell
+        for pair in pair_manifest["pairs"]
+        for cell in pair["cells"]
+    }
+    inventory = []
+    for row, cell, identity in zip(rows, cells, identities, strict=True):
+        planner, seed, width = identity
+        reasons = _confirmation_row_blockers(
+            row, cell, receipts.get(identity), source_sha=source_sha
+        )
+        inventory.append(
+            {
+                "planner": planner,
+                "seed": seed,
+                "gap_width_m": width,
+                "status": "native" if not reasons else "diagnostic",
+                "blockers": sorted(set(reasons)),
+            }
+        )
+    return {
+        "schema_version": "issue_9348_confirmation_preflight.v1",
+        "claim_boundary": "actor-present H10 probe only; no H400 outcome or width effect",
+        "source_commit": source_sha,
+        "application_manifest_sha256": manifest_sha256,
+        "planner_config_hashes": {
+            "goal": GOAL_PLANNER_CONFIG_HASH,
+            "social_force": EMPTY_PLANNER_CONFIG_HASH,
+        },
+        "probe_horizon_steps": _CONFIRMATION_HORIZON,
+        "planned_rows": 18,
+        "pair_errors": pair_errors,
+        "rows": inventory,
+        "admit_h400": not pair_errors and all(item["status"] == "native" for item in inventory),
+    }
+
+
+def _require_confirmation_preflight(
+    preflight: dict[str, Any], confirmation: dict[str, Any]
+) -> None:
+    """Keep actor-free oracle findings outside a strict actor-present gate."""
+    _require_h1_preflight(preflight)
+    if confirmation.get("schema_version") != "issue_9348_confirmation_preflight.v1":
+        raise ValueError("doorway actor-present confirmation report is unavailable")
+    if confirmation.get("admit_h400") is not True:
+        raise ValueError(
+            "doorway actor-present confirmation has fallback, degraded, or incomplete rows"
+        )
+
+
+def _run_actor_present_confirmation(
+    manifest: dict[str, Any],
+    assets: list[dict[str, Any]],
+    output_root: Path,
+    *,
+    source_sha: str,
+    manifest_sha256: str,
+) -> dict[str, Any]:
+    """Run and preserve 18 short planner probes with independent pair receipts."""
+    session = DoorwayPairingSession()
+    schema = load_schema(_SCHEMA)
+    rows: list[dict[str, Any]] = []
+    cells: list[dict[str, Any]] = []
+    raw_path = output_root / "confirmation_episodes.jsonl"
+    configs = manifest["_resolved"]["planner_configs"]
+    hashes = manifest["_resolved"]["planner_config_hashes"]
+    with raw_path.open("x", encoding="utf-8") as handle:
+        for planner in _PLANNERS:
+            for seed in _SEEDS:
+                for asset in assets:
+                    scenario_path = Path(asset["scenario_path"])
+                    scenario = load_scenarios(scenario_path)[0]
+                    receipt_hook = session.hook(
+                        planner=planner,
+                        seed=seed,
+                        map_sha256=asset["map_sha256"],
+                        non_width_config_sha256=non_width_config_sha256(
+                            scenario, planner=planner, planner_config_hash=hashes[planner]
+                        ),
+                    )
+                    row = _run_map_episode(
+                        scenario,
+                        seed,
+                        horizon=_CONFIRMATION_HORIZON,
+                        dt=_DT,
+                        record_forces=True,
+                        snqi_weights=None,
+                        snqi_baseline=None,
+                        algo=planner,
+                        scenario_path=scenario_path,
+                        algo_config=dict(configs[planner]),
+                        algo_config_path=None,
+                        record_planner_decision_trace=True,
+                        record_simulation_step_trace=True,
+                        pair_reset_hook=receipt_hook,
+                    )
+                    serialized = io.StringIO()
+                    write_validated_to_handle(serialized, schema, row)
+                    line = serialized.getvalue()
+                    handle.write(line)
+                    handle.flush()
+                    rows.append(row)
+                    cells.append(
+                        {
+                            "planner": planner,
+                            "seed": seed,
+                            "gap_width_m": asset["gap_width_m"],
+                            "variant_id": asset["variant_id"],
+                            "scenario_id": scenario["name"],
+                            "scenario_sha256": asset["scenario_sha256"],
+                            "map_sha256": asset["map_sha256"],
+                            "line_number": len(rows),
+                            "line_sha256": hashlib.sha256(line.encode()).hexdigest(),
+                        }
+                    )
+    pairs = session.fill_pair_manifest(build_pair_manifest(assets, _SEEDS, manifest_sha256))
+    write_json(output_root / "confirmation_pair_manifest.json", pairs)
+    report = assess_confirmation_rows(
+        rows, cells, pairs, source_sha=source_sha, manifest_sha256=manifest_sha256
+    )
+    report["cells"] = cells
+    report["episodes_jsonl_sha256"] = sha256_file(raw_path)
+    write_json(output_root / "confirmation_preflight.json", report)
+    return report
 
 
 def _contrast_endpoint(
@@ -459,6 +685,39 @@ def _verify_generated_assets(root: Path, cells: list[dict[str, Any]]) -> None:
             raise ValueError("doorway generated asset digest differs from row custody")
 
 
+def _verify_confirmation_files(
+    root: Path, *, source_sha: str, manifest_sha256: str
+) -> dict[str, Any]:
+    """Rebuild short-probe admission from raw rows and sealed pair receipts."""
+    report = _json(root / "confirmation_preflight.json")
+    cells = report.get("cells")
+    if not isinstance(cells, list) or len(cells) != 18:
+        raise ValueError("doorway confirmation cell custody is incomplete")
+    _verify_generated_assets(root, cells)
+    raw_path = root / "confirmation_episodes.jsonl"
+    if sha256_file(raw_path) != report.get("episodes_jsonl_sha256"):
+        raise ValueError("doorway confirmation raw episode checksum mismatch")
+    lines = raw_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    if len(lines) != 18 or any(
+        cell.get("line_number") != number
+        or hashlib.sha256(line.encode()).hexdigest() != cell.get("line_sha256")
+        for number, (line, cell) in enumerate(zip(lines, cells, strict=True), start=1)
+    ):
+        raise ValueError("doorway confirmation line identity or digest mismatch")
+    rebuilt = assess_confirmation_rows(
+        [json.loads(line) for line in lines],
+        cells,
+        _json(root / "confirmation_pair_manifest.json"),
+        source_sha=source_sha,
+        manifest_sha256=manifest_sha256,
+    )
+    rebuilt["cells"] = cells
+    rebuilt["episodes_jsonl_sha256"] = sha256_file(raw_path)
+    if report != {"review_marker": review_marker_json(), **rebuilt}:
+        raise ValueError("doorway confirmation report differs from sealed raw probes")
+    return rebuilt
+
+
 def verify_campaign_bundle(root: Path) -> dict[str, Any]:
     """Read back every produced file and row against sealed SHA-256 receipts.
 
@@ -504,7 +763,12 @@ def verify_campaign_bundle(root: Path) -> dict[str, Any]:
         or (root / "inputs/social_force.yaml").exists()
     ):
         raise ValueError("doorway copied scientific input digest mismatch")
-    _require_confirmation_preflight(_json(root / "preflight.json"))
+    confirmation = _verify_confirmation_files(
+        root,
+        source_sha=run_manifest["source_commit"],
+        manifest_sha256=run_manifest["application_manifest_sha256"],
+    )
+    _require_confirmation_preflight(_json(root / "preflight.json"), confirmation)
     pair_manifest = _json(root / "pair_manifest.json")
     raw_path = root / "episodes.jsonl"
     if sha256_file(raw_path) != run_manifest.get("episodes_jsonl_sha256"):
@@ -548,7 +812,7 @@ def run_campaign(manifest_path: Path, output_root: Path) -> Path:
         shutil.copy2(manifest_path, output_root / "inputs/application_manifest.yaml")
         preflight = run_three_width_preflight(manifest_path, output_dir=output_root / "assets")
         write_json(output_root / "preflight.json", preflight)
-        _require_confirmation_preflight(preflight)
+        _require_h1_preflight(preflight)
         assets = [
             record["assets"]
             | {"variant_id": record["variant_id"], "gap_width_m": record["geometry"]["gap_width_m"]}
@@ -558,6 +822,14 @@ def run_campaign(manifest_path: Path, output_root: Path) -> Path:
         planner_configs = manifest["_resolved"]["planner_configs"]
         planner_config_hashes = manifest["_resolved"]["planner_config_hashes"]
         shutil.copy2(_SCHEMA, output_root / "inputs/episode.schema.v1.json")
+        confirmation = _run_actor_present_confirmation(
+            manifest,
+            assets,
+            output_root,
+            source_sha=source_sha,
+            manifest_sha256=sha256_file(manifest_path),
+        )
+        _require_confirmation_preflight(preflight, confirmation)
         schema = load_schema(_SCHEMA)
         rows: list[dict[str, Any]] = []
         cells: list[dict[str, Any]] = []

@@ -61,11 +61,17 @@ uv run python scripts/validation/run_issue_9348_three_width_campaign.py \
   --mode verify --output-root "$RETRIEVED_CAMPAIGN_ROOT"
 ```
 
-The producer runs the geometry/oracle preflight, then the 18 H400 episodes
-serially with one paired-reset session. It writes validated raw episode JSONL,
+The producer runs the geometry/oracle preflight, then a separate actor-present
+H10 confirmation over all 18 planner/seed/width cells. H400 starts only if
+every short probe is native, trace-backed, fallback-free and paired by reset
+and RNG receipts. The oracle's exact `slow_speed_tier` finding stays diagnostic
+and cannot clear this gate. A red confirmation writes a failure receipt and
+stops before H400. The producer then runs the 18 H400 episodes serially with
+one paired-reset session. It writes validated raw episode JSONL,
 line and file SHA-256 digests, copied scientific inputs, generated maps and
 scenarios, a six-pair receipt manifest, a report, and full-tree `SHA256SUMS`.
-The verify mode checks the retrieved bundle without modifying it. A failed
+The verify mode rebuilds H10 admission from the preserved raw probes before
+checking the H400 report, without modifying the bundle. A failed
 run writes `run_failure.json` and returns nonzero; it is not confirmation
 evidence. The private launcher must also preserve startup, producer exit,
 scheduler, retrieval, and cold-readback receipts outside the hashed producer

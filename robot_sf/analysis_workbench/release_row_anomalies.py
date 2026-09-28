@@ -88,7 +88,10 @@ COLLISION_METRIC_FIELDS = (
     "total_collision_count",
     "collisions",
 )
-COLLISION_COUNT_TOLERANCE = 1e-12
+COLLISION_COUNT_TOLERANCE = 0.0
+# Floats above this bound cannot represent every adjacent integer. Keep large
+# JSON integer counts exact, but reject large float counts in the strict gate.
+MAX_EXACT_FLOAT_COLLISION_COUNT = 2**53 - 1
 COLLISION_CONFIG_KEYS = frozenset(
     {"collision_metric_contract", "collision_roster_status", "collision_expected_arm_count"}
 )
@@ -374,7 +377,25 @@ def _invalid_run(row: Mapping[str, Any]) -> bool | None:
     return value if type(value) is bool else None
 
 
-def _typed_ledger_collision_problems(row: Mapping[str, Any], total: float | None) -> list[str]:
+def _collision_integer_count(value: object) -> tuple[int | None, str | None]:
+    """Validate a sampled count without rounding an integer through float.
+
+    Returns:
+        The exact nonnegative integer count or a named domain problem.
+    """
+
+    if type(value) is int:
+        return (value, None) if value >= 0 else (None, "invalid_count_domain")
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return None, "missing_or_nonfinite"
+        if value < 0 or not value.is_integer() or value > MAX_EXACT_FLOAT_COLLISION_COUNT:
+            return None, "invalid_count_domain"
+        return int(value), None
+    return None, "missing_or_nonfinite"
+
+
+def _typed_ledger_collision_problems(row: Mapping[str, Any], total: int | None) -> list[str]:
     """Check equivalent typed-ledger fields without counting exact events.
 
     Returns:
@@ -392,12 +413,10 @@ def _typed_ledger_collision_problems(row: Mapping[str, Any], total: float | None
     if not isinstance(reconciliation, Mapping):
         problems.append("missing_collision_reconciliation")
     else:
-        ledger_value = _finite(reconciliation.get("collision_metric_value"))
+        ledger_value, _ = _collision_integer_count(reconciliation.get("collision_metric_value"))
         if ledger_value is None:
             problems.append("missing_ledger_collision_metric_value")
-        elif total is not None and not math.isclose(
-            ledger_value, total, rel_tol=0.0, abs_tol=COLLISION_COUNT_TOLERANCE
-        ):
+        elif total is not None and ledger_value != total:
             problems.append("ledger_collision_metric_mismatch")
         if reconciliation.get("collision_metric_source") != "metrics.total_collision_count":
             problems.append("ledger_collision_metric_source_mismatch")
@@ -416,26 +435,19 @@ def _collision_metric_problems(row: Mapping[str, Any]) -> tuple[list[str], dict[
     """
 
     metrics = row["metrics"]
-    values = {field: _finite(metrics.get(field)) for field in COLLISION_METRIC_FIELDS}
-    problems = [f"missing_or_nonfinite_{field}" for field, value in values.items() if value is None]
-    for field, value in values.items():
-        if value is not None and (value < 0 or not value.is_integer()):
-            problems.append(f"invalid_count_domain_{field}")
+    values: dict[str, int | None] = {}
+    problems: list[str] = []
+    for field in COLLISION_METRIC_FIELDS:
+        values[field], problem = _collision_integer_count(metrics.get(field))
+        if problem is not None:
+            problems.append(f"{problem}_{field}")
     total = values["total_collision_count"]
     alias = values["collisions"]
     components = [values[field] for field in COLLISION_METRIC_FIELDS[:3]]
     component_sum = sum(components) if all(value is not None for value in components) else None
-    if (
-        total is not None
-        and alias is not None
-        and not math.isclose(total, alias, rel_tol=0.0, abs_tol=COLLISION_COUNT_TOLERANCE)
-    ):
+    if total is not None and alias is not None and total != alias:
         problems.append("collision_alias_mismatch")
-    if (
-        total is not None
-        and component_sum is not None
-        and not math.isclose(total, component_sum, rel_tol=0.0, abs_tol=COLLISION_COUNT_TOLERANCE)
-    ):
+    if total is not None and component_sum is not None and total != component_sum:
         problems.append("collision_component_sum_mismatch")
 
     problems.extend(_typed_ledger_collision_problems(row, total))

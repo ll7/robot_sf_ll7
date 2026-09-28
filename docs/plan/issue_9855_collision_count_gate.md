@@ -9,13 +9,16 @@ that total. The 0.0.8 release-row anomaly gate uses an explicit
 `release_0_0_8` config and checks all five fields
 on every execution-eligible row. It emits `collision_metric_inconsistent` for a missing,
 nonfinite, noninteger, negative, or inconsistent value. The detector blocks the
-gate even when the general unannotated-finding threshold is raised. It compares
-stored numeric values with `rel_tol=0` and `abs_tol=1e-12`; no value is repaired
-or imputed.
+gate even when the general unannotated-finding threshold is raised. Counts
+must be nonnegative integers and are compared by exact integer equality; no
+value is repaired or imputed. JSON integer values stay integers even beyond
+`2**53`. Integral float values are accepted only through `2**53 - 1`, where
+adjacent integers remain representable; larger floats block as ambiguous.
 
 For a typed `EpisodeEventLedger.v2`, the gate checks that the ledger's recorded
 collision metric value equals `metrics.total_collision_count`, its source names
 that field, and its exact collision boolean matches `outcome.collision_event`.
+The ledger value follows the same exact-integer rule.
 An unsupported typed-ledger schema blocks 0.0.8 admission. The number of exact
 contact-event records is **not** equated to sampled collision counts; they have
 different collection semantics. A legacy partial ledger with no schema version

@@ -310,6 +310,8 @@ checks equivalent fields in a typed event ledger. Exact contact-event records
 and sampled collision counts use different collection semantics, so the gate
 does not equate their counts. Missing or unversioned ledgers are reported as
 `typed_collision_ledger_unavailable`; a separate provenance gate must establish
-ledger completeness. This command is a release gate only after the
-bundle and preflight inputs are pinned and verified; the example paths above
-are placeholders.
+ledger completeness. Count arithmetic uses exact integers, including JSON
+integers above `2**53`; integral floats above `2**53 - 1` block because
+adjacent counts cannot be distinguished. This command is a release gate only
+after the bundle and preflight inputs are pinned and verified; the example
+paths above are placeholders.

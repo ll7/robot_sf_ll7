@@ -207,6 +207,84 @@ def test_collision_metric_gate_blocks_vv5_double_total_and_missing_components() 
     assert "collision_roster_manifest_mismatch" in wrong_roster["gate"]["reasons"]
 
 
+def test_collision_metric_gate_preserves_large_integer_count_arithmetic() -> None:
+    """Adjacent counts beyond float precision must never compare equal."""
+
+    count = 2**53
+    rows = [
+        _row("large-count", 111, "goal", steps=100, success=True, timeout=False),
+        _row("large-count", 111, "social_force", steps=100, collision=True, timeout=False),
+    ]
+    rows[0]["status"] = "success"
+    rows[1]["status"] = "collision"
+    rows[1]["metrics"].update(
+        ped_collision_count=count,
+        total_collision_count=count,
+        collisions=count,
+    )
+    source = _source("goal", "social_force")
+    clean = analyze_release_rows(rows, config=CANDIDATE_CONFIG, source=source)
+    assert clean["gate"]["blocked"] is False
+    assert not _findings(clean, "collision_metric_inconsistent")
+
+    small_integral_float = deepcopy(rows)
+    small_integral_float[1]["metrics"].update(
+        ped_collision_count=1.0,
+        total_collision_count=1.0,
+        collisions=1.0,
+    )
+    assert (
+        analyze_release_rows(small_integral_float, config=CANDIDATE_CONFIG, source=source)["gate"][
+            "blocked"
+        ]
+        is False
+    )
+
+    mutant = deepcopy(rows)
+    mutant[1]["metrics"].update(total_collision_count=count + 1, collisions=count + 1)
+    report = analyze_release_rows(mutant, config=CANDIDATE_CONFIG, source=source)
+    findings = _findings(report, "collision_metric_inconsistent")
+    assert report["gate"]["blocked"] is True
+    assert len(findings) == 1
+    assert findings[0]["measured"]["component_sum"] == count
+    assert findings[0]["measured"]["problems"] == ["collision_component_sum_mismatch"]
+
+    typed = deepcopy(rows)
+    typed[1]["event_ledger"] = {
+        "schema_version": EPISODE_EVENT_LEDGER_SCHEMA_VERSION,
+        "exact_events": {"collision": True, "invalid_run": False},
+        "reconciliation": {
+            "collision_metric_value": count,
+            "collision_metric_source": "metrics.total_collision_count",
+        },
+    }
+    assert (
+        analyze_release_rows(typed, config=CANDIDATE_CONFIG, source=source)["gate"]["blocked"]
+        is False
+    )
+    typed[1]["event_ledger"]["reconciliation"]["collision_metric_value"] = count + 1
+    result = analyze_release_rows(typed, config=CANDIDATE_CONFIG, source=source)
+    assert result["gate"]["blocked"] is True
+    assert (
+        "ledger_collision_metric_mismatch"
+        in _findings(result, "collision_metric_inconsistent")[0]["measured"]["problems"]
+    )
+
+    for bad_value, expected_problem in (
+        (True, "missing_or_nonfinite_ped_collision_count"),
+        (float("nan"), "missing_or_nonfinite_ped_collision_count"),
+        (-1, "invalid_count_domain_ped_collision_count"),
+        (1.5, "invalid_count_domain_ped_collision_count"),
+        (float(count), "invalid_count_domain_ped_collision_count"),
+    ):
+        malformed = deepcopy(rows)
+        malformed[1]["metrics"]["ped_collision_count"] = bad_value
+        result = analyze_release_rows(malformed, config=CANDIDATE_CONFIG, source=source)
+        findings = _findings(result, "collision_metric_inconsistent")
+        assert result["gate"]["blocked"] is True
+        assert expected_problem in findings[0]["measured"]["problems"]
+
+
 def test_collision_metric_gate_reconciles_typed_ledger_without_counting_events() -> None:
     """Exact events and sampled counts retain distinct meanings."""
 

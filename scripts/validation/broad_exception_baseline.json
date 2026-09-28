@@ -19,6 +19,7 @@
       "robot_sf/benchmark/scenario_generation/portfolio_selector.py": 1,
       "robot_sf/benchmark/simulator_counterfactual_adapter.py": 2,
       "robot_sf/benchmark/snqi/cli.py": 3,
+      "robot_sf/benchmark/spawn_preflight.py": 3,
       "robot_sf/benchmark/typed_snapshot.py": 2,
       "scripts/analysis/amv_timeout_trace_analyzer.py": 1,
       "scripts/analysis/build_signalized_crossing_failure_pack_issue_2754.py": 2,
@@ -113,7 +114,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 201
+    "total": 204
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -503,6 +504,33 @@
       "lineno": 322,
       "path": "robot_sf/benchmark/snqi/cli.py",
       "source": "except Exception:  # noqa: BLE001 - CLI fail-closed boundary: log and exit nonzero (#6690)"
+    },
+    {
+      "col_offset": 16,
+      "context": "_check_release_scenario",
+      "fingerprint": "13fc7b52e6a3a1a2",
+      "handler": "Exception",
+      "lineno": 633,
+      "path": "robot_sf/benchmark/spawn_preflight.py",
+      "source": "except Exception as exc:  # noqa: BLE001"
+    },
+    {
+      "col_offset": 8,
+      "context": "_check_release_scenario",
+      "fingerprint": "13fc7b52e6a3a1a2",
+      "handler": "Exception",
+      "lineno": 664,
+      "path": "robot_sf/benchmark/spawn_preflight.py",
+      "source": "except Exception as exc:  # noqa: BLE001"
+    },
+    {
+      "col_offset": 4,
+      "context": "run_manifest_preflight",
+      "fingerprint": "8294b89b899cb6f6",
+      "handler": "Exception",
+      "lineno": 949,
+      "path": "robot_sf/benchmark/spawn_preflight.py",
+      "source": "except Exception as exc:  # noqa: BLE001"
     },
     {
       "col_offset": 4,

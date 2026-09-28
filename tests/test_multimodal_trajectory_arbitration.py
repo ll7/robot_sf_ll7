@@ -12,6 +12,7 @@ import pytest
 import robot_sf.planner.multimodal_trajectory_arbitrator as arb_module
 from robot_sf.benchmark.actuator_feasibility import ActuatorLimitsConfig
 from robot_sf.nav.predictive_types import MultimodalPrediction, PedestrianForecast, TrajectoryMode
+from robot_sf.planner.maneuver_candidates import ManeuverCandidate, ManeuverId
 from robot_sf.planner.multimodal_trajectory_arbitrator import (
     ARBITRATION_CLAIM_BOUNDARY,
     MultimodalArbitrationConfig,
@@ -70,6 +71,24 @@ def _action(action_id: str, velocity: tuple[float, float] = (0.0, 0.0)) -> Candi
         action_id, (0.0, 0.0), velocity, horizon_steps=HORIZON, dt_s=DT_S
     )
     return _FixtureCandidateAction(action.action_id, action.waypoints, action.representation)
+
+
+def _maneuver_candidate(action_id: str, metadata: dict[str, object]) -> ManeuverCandidate:
+    """Build a producer-owned candidate fixture with immutable aligned states."""
+    action = _action(action_id)
+    positions = action.as_array(horizon_steps=HORIZON)
+    states = np.zeros((HORIZON + 1, 5), dtype=float)
+    states[:, :2] = positions
+    return ManeuverCandidate(
+        candidate_id=action_id,
+        maneuver=ManeuverId.ROUTE_FOLLOW,
+        action=action,
+        controls=((0.0, 0.0),) * HORIZON,
+        states=states,
+        generation_source="test_fixture",
+        generation_rank=0,
+        metadata=metadata,
+    )
 
 
 def _mode(
@@ -777,6 +796,115 @@ def test_caps_fail_before_dropping_candidates_or_modes() -> None:
     assert "max_total_contact_samples" in (work_cap.no_selection_reason or "")
     with pytest.raises(ValueError, match="max_total_contact_samples"):
         MultimodalArbitrationConfig(max_total_contact_samples=0)
+    with pytest.raises(ValueError, match="conservative_clearance_m"):
+        MultimodalArbitrationConfig(conservative_clearance_m=-0.01)
+
+
+def test_candidate_cap_diagnostics_are_permutation_invariant() -> None:
+    """An over-cap portfolio keeps stable diagnostic ordering regardless of input order."""
+    empty = MultimodalPrediction({}, HORIZON * DT_S, DT_S, timestamp=0.0, metadata={"step": 0})
+    config = MultimodalArbitrationConfig(max_candidates=1)
+    forward = _arbitrate([_action("z"), _action("a")], empty, arbitration_config=config)
+    reversed_result = _arbitrate([_action("a"), _action("z")], empty, arbitration_config=config)
+
+    assert forward.status == reversed_result.status == "evaluation_error"
+    assert forward.ordered_candidate_ids == reversed_result.ordered_candidate_ids == ("a", "z")
+    assert tuple(item.candidate_id for item in forward.evaluations) == ("a", "z")
+
+
+def test_generation_only_candidates_require_producer_owned_type() -> None:
+    """Duck-typed candidates cannot claim the #8057 generated-candidate contract."""
+
+    class _UntrustedGeneratedAction(_FixtureCandidateAction):
+        metadata = {**_FixtureCandidateAction.metadata, "generation_mode": "generation_only"}
+
+    fixture_action = _action("untrusted-action")
+    untrusted_action = _UntrustedGeneratedAction(
+        fixture_action.action_id, fixture_action.waypoints, fixture_action.representation
+    )
+    untrusted_duck = SimpleNamespace(
+        candidate_id="untrusted-duck",
+        action=_action("untrusted-duck"),
+        maneuver="route_follow",
+        states=np.zeros((HORIZON + 1, 5), dtype=float),
+        generation_rank=0,
+        metadata={
+            "generation_mode": "generation_only",
+            "timestamp_s": 0.0,
+            "dt_s": DT_S,
+            "horizon_steps": HORIZON,
+            "robot_radius_m": 0.2,
+            "static_feasible": True,
+        },
+    )
+    empty = MultimodalPrediction({}, HORIZON * DT_S, DT_S, timestamp=0.0, metadata={"step": 0})
+
+    result = _arbitrate([untrusted_duck, untrusted_action], empty)
+
+    assert result.status == "evaluation_error"
+    assert result.selected_candidate_id is None
+    assert all("producer-owned" in item.hard_reasons[0] for item in result.evaluations)
+
+
+def test_static_gate_runs_before_risk_and_survives_risk_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Risk errors retain the already-computed hard-gate result and reasons."""
+
+    class _BlockedCandidateAction(_FixtureCandidateAction):
+        metadata = {**_FixtureCandidateAction.metadata, "static_feasible": False}
+
+    base = _action("static-blocked")
+    candidate = _BlockedCandidateAction(base.action_id, base.waypoints, base.representation)
+    events: list[str] = []
+    original_gate = arb_module._multimodal_hard_gate
+
+    def observed_gate(*args: object, **kwargs: object):
+        result = original_gate(*args, **kwargs)
+        events.append("hard_gate")
+        return result
+
+    def failed_risk(*args: object, **kwargs: object):
+        events.append("risk")
+        raise ValueError("synthetic risk-estimator failure")
+
+    monkeypatch.setattr(arb_module, "_multimodal_hard_gate", observed_gate)
+    monkeypatch.setattr(arb_module, "_candidate_track_summaries", failed_risk)
+    forecast = _forecast(30, (_mode("clear", (8.0, 5.0)),))
+
+    result = _arbitrate([candidate], forecast)
+
+    evaluation = result.evaluations[0]
+    assert events == ["hard_gate", "risk"]
+    assert result.status == "evaluation_error"
+    assert evaluation.hard_feasible is False
+    assert evaluation.hard_gate is not None
+    assert any("static feasibility" in reason for reason in evaluation.hard_reasons)
+    assert any("synthetic risk-estimator failure" in reason for reason in evaluation.hard_reasons)
+
+
+def test_actuator_gate_receives_geometry_only_clearance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Covariance support remains in the risk envelope, not actuator geometry input."""
+    candidate = _action("geometry-clearance", (0.5, 0.0))
+    forecast = _forecast(31, (_mode("uncertain", (8.0, 5.0), covariance=0.25),))
+    observed: list[float] = []
+    original_actuator = arb_module.evaluate_actuator_feasibility
+
+    def record_clearance(**kwargs: object):
+        observed.append(float(kwargs["hazard_clearance_m"]))
+        return original_actuator(**kwargs)
+
+    monkeypatch.setattr(arb_module, "evaluate_actuator_feasibility", record_clearance)
+    result = _arbitrate([candidate], forecast)
+    robot_positions = candidate.as_array(horizon_steps=HORIZON)
+    expected_geometry = float(
+        np.min(np.linalg.norm(robot_positions - np.asarray((8.0, 5.0)), axis=1)) - 0.4
+    )
+
+    assert observed == pytest.approx([expected_geometry])
+    assert result.evaluations[0].robust_min_clearance_m < observed[0]
 
 
 def test_invalid_route_context_is_not_replaced_by_a_default() -> None:
@@ -850,14 +978,9 @@ def test_nonfinite_candidate_is_retained_as_evaluation_error() -> None:
 
 def test_generated_candidate_radius_must_match_risk_config() -> None:
     """The #8057 footprint metadata must agree with the estimator footprint."""
-    action = _action("radius")
-    candidate = SimpleNamespace(
-        candidate_id="radius",
-        action=action,
-        maneuver="route_follow",
-        states=None,
-        generation_rank=0,
-        metadata={
+    candidate = _maneuver_candidate(
+        "radius",
+        {
             "generation_mode": "generation_only",
             "dt_s": DT_S,
             "horizon_steps": HORIZON,
@@ -899,14 +1022,16 @@ def test_malformed_candidate_with_recoverable_id_is_retained() -> None:
 
 def test_candidate_cycle_timestamp_must_match_forecast() -> None:
     """A candidate from another planning cycle cannot be evaluated or selected."""
-    annotated = _action("stale-cycle")
-    stale = SimpleNamespace(
-        candidate_id="stale-cycle",
-        action=annotated,
-        maneuver="route_follow",
-        states=None,
-        generation_rank=0,
-        metadata={"timestamp_s": 1.0, "static_feasible": True},
+    stale = _maneuver_candidate(
+        "stale-cycle",
+        {
+            "generation_mode": "generation_only",
+            "timestamp_s": 1.0,
+            "dt_s": DT_S,
+            "horizon_steps": HORIZON,
+            "robot_radius_m": 0.2,
+            "static_feasible": True,
+        },
     )
     empty = MultimodalPrediction({}, HORIZON * DT_S, DT_S, timestamp=0.0, metadata={"step": 0})
 
@@ -918,13 +1043,9 @@ def test_candidate_cycle_timestamp_must_match_forecast() -> None:
 
 def test_generated_candidate_requires_explicit_common_grid_metadata() -> None:
     """A generated path cannot hide its temporal spacing behind matching shape."""
-    candidate = SimpleNamespace(
-        candidate_id="missing-grid",
-        action=_action("missing-grid"),
-        maneuver="route_follow",
-        states=None,
-        generation_rank=0,
-        metadata={
+    candidate = _maneuver_candidate(
+        "missing-grid",
+        {
             "generation_mode": "generation_only",
             "timestamp_s": 0.0,
             "robot_radius_m": 0.2,
@@ -937,6 +1058,28 @@ def test_generated_candidate_requires_explicit_common_grid_metadata() -> None:
 
     assert result.status == "evaluation_error"
     assert "horizon_steps metadata" in result.evaluations[0].hard_reasons[0]
+
+
+def test_producer_owned_generated_candidate_with_contract_is_selectable() -> None:
+    """A complete immutable #8057 candidate crosses the consumer contract."""
+    candidate = _maneuver_candidate(
+        "producer-owned",
+        {
+            "generation_mode": "generation_only",
+            "timestamp_s": 0.0,
+            "dt_s": DT_S,
+            "horizon_steps": HORIZON,
+            "robot_radius_m": 0.2,
+            "static_min_clearance_m": 1.0,
+            "static_feasible": True,
+        },
+    )
+    empty = MultimodalPrediction({}, HORIZON * DT_S, DT_S, timestamp=0.0, metadata={"step": 0})
+
+    result = _arbitrate([candidate], empty)
+
+    assert result.status == "selected"
+    assert result.selected_candidate_id == "producer-owned"
 
 
 def test_braking_predicate_is_a_hard_decision_class(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -957,4 +1100,26 @@ def test_braking_predicate_is_a_hard_decision_class(monkeypatch: pytest.MonkeyPa
     assert evaluation.hard_gate is not None
     assert any(
         "braking_infeasible" in predicate for predicate in evaluation.hard_gate.violated_predicates
+    )
+
+
+def test_fallback_brake_without_predicates_is_still_hard_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A verifier brake decision cannot become eligible when diagnostics are empty."""
+    forecast = _forecast(32, (_mode("only", (8.0, 5.0)),))
+    monkeypatch.setattr(
+        arb_module,
+        "verify_trajectory",
+        lambda **_: SimpleNamespace(decision="fallback_brake", violated_predicates=()),
+    )
+
+    result = _arbitrate([_action("empty-brake-reasons")], forecast)
+
+    evaluation = result.evaluations[0]
+    assert result.status == "all_hard_invalid"
+    assert evaluation.hard_feasible is False
+    assert evaluation.braking_feasible is False
+    assert any(
+        "fallback_brake without violated predicates" in reason for reason in evaluation.hard_reasons
     )

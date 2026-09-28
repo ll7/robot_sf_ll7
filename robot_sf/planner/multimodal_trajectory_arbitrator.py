@@ -31,6 +31,7 @@ from robot_sf.benchmark.trajectory_verifier import (
     verify_trajectory,
 )
 from robot_sf.nav.predictive_types import MultimodalPrediction, PedestrianForecast, TrajectoryMode
+from robot_sf.planner.maneuver_candidates import ManeuverCandidate
 from robot_sf.planner.risk_aware_trajectory_ranker import HardGateResult
 from robot_sf.planner.scenario_belief_adapter import (
     BeliefAwarePlannerInput,
@@ -133,8 +134,8 @@ class MultimodalArbitrationConfig:
             value = float(getattr(self, name))
             if not math.isfinite(value) or value <= 0.0:
                 raise ValueError(f"{name} must be finite and > 0")
-        if not math.isfinite(self.conservative_clearance_m):
-            raise ValueError("conservative_clearance_m must be finite")
+        if not math.isfinite(self.conservative_clearance_m) or self.conservative_clearance_m < 0.0:
+            raise ValueError("conservative_clearance_m must be finite and >= 0")
         for name in ("uncertainty_base_radius_m",):
             value = float(getattr(self, name))
             if not math.isfinite(value) or value < 0.0:
@@ -441,46 +442,49 @@ class _PreparedCandidates:
     collection_error: str | None = None
 
 
-def _coerce_candidate(candidate: object, *, horizon_steps: int) -> _CandidateInput:
-    """Adapt a #8057 candidate or a canonical #6567 action without copying semantics.
+def _coerce_candidate_action(action: CandidateAction, *, horizon_steps: int) -> _CandidateInput:
+    """Adapt a canonical #6567 action without copying its trajectory semantics.
 
     Returns:
         A normalized internal candidate record.
     """
-    if isinstance(candidate, CandidateAction):
-        action = candidate
-        if not isinstance(action.action_id, str) or not action.action_id.strip():
-            raise ValueError("candidate action_id must be a non-empty string")
-        raw_metadata = getattr(action, "metadata", {})
-        if not isinstance(raw_metadata, Mapping):
-            raise ValueError("candidate metadata must be a mapping")
-        action.as_array(horizon_steps=horizon_steps)
-        return _CandidateInput(
-            candidate_id=str(action.action_id),
-            action=action,
-            maneuver="unknown",
-            metadata=dict(raw_metadata),
-            generation_rank=0,
-            states=None,
-        )
-    action = getattr(candidate, "action", None)
-    candidate_id = getattr(candidate, "candidate_id", None)
-    if (
-        not isinstance(action, CandidateAction)
-        or not isinstance(candidate_id, str)
-        or not candidate_id.strip()
-    ):
-        raise ValueError("candidate must be CandidateAction or #8057 ManeuverCandidate")
-    metadata = getattr(candidate, "metadata", {})
-    if not isinstance(metadata, Mapping):
+    if not isinstance(action.action_id, str) or not action.action_id.strip():
+        raise ValueError("candidate action_id must be a non-empty string")
+    raw_metadata = getattr(action, "metadata", {})
+    if not isinstance(raw_metadata, Mapping):
         raise ValueError("candidate metadata must be a mapping")
+    if raw_metadata.get("generation_mode") == "generation_only":
+        raise ValueError(
+            "generation-only candidates must use the producer-owned ManeuverCandidate type"
+        )
     action.as_array(horizon_steps=horizon_steps)
-    if metadata.get("generation_mode") == "generation_only":
-        if "robot_radius_m" not in metadata:
-            raise ValueError("maneuver candidate is missing its robot_radius_m contract")
-    raw_states = getattr(candidate, "states", None)
-    states = None if raw_states is None else np.asarray(raw_states, dtype=float)
-    if states is not None and (
+    return _CandidateInput(
+        candidate_id=str(action.action_id),
+        action=action,
+        maneuver="unknown",
+        metadata=dict(raw_metadata),
+        generation_rank=0,
+        states=None,
+    )
+
+
+def _coerce_maneuver_candidate(
+    candidate: ManeuverCandidate, *, horizon_steps: int
+) -> _CandidateInput:
+    """Adapt an immutable producer-owned #8057 candidate.
+
+    Returns:
+        A normalized internal candidate record with its immutable state grid.
+    """
+    action = candidate.action
+    metadata = candidate.metadata
+    if metadata.get("generation_mode") != "generation_only":
+        raise ValueError("ManeuverCandidate is missing its generation_only producer contract")
+    action.as_array(horizon_steps=horizon_steps)
+    if "robot_radius_m" not in metadata:
+        raise ValueError("maneuver candidate is missing its robot_radius_m contract")
+    states = np.asarray(candidate.states, dtype=float)
+    if (
         states.ndim != 2
         or states.shape[0] != horizon_steps + 1
         or states.shape[1] < 5
@@ -489,13 +493,26 @@ def _coerce_candidate(candidate: object, *, horizon_steps: int) -> _CandidateInp
     ):
         raise ValueError("candidate state and action grids do not agree")
     return _CandidateInput(
-        candidate_id=candidate_id,
+        candidate_id=candidate.candidate_id,
         action=action,
-        maneuver=getattr(candidate, "maneuver", "unknown"),
+        maneuver=candidate.maneuver,
         metadata=dict(metadata),
-        generation_rank=int(getattr(candidate, "generation_rank", 0)),
+        generation_rank=candidate.generation_rank,
         states=states,
     )
+
+
+def _coerce_candidate(candidate: object, *, horizon_steps: int) -> _CandidateInput:
+    """Adapt a #8057 candidate or canonical #6567 action.
+
+    Returns:
+        A normalized internal candidate record.
+    """
+    if isinstance(candidate, CandidateAction):
+        return _coerce_candidate_action(candidate, horizon_steps=horizon_steps)
+    if isinstance(candidate, ManeuverCandidate):
+        return _coerce_maneuver_candidate(candidate, horizon_steps=horizon_steps)
+    raise ValueError("candidate must be CandidateAction or producer-owned #8057 ManeuverCandidate")
 
 
 def _candidate_id_hint(candidate: object, *, index: int) -> str:
@@ -522,6 +539,8 @@ def _invalid_candidate_evaluation(
     maneuver: object = "unknown",
     reason: str,
     risk_bucket: int,
+    hard_gate: HardGateResult | None = None,
+    braking_feasible: bool = False,
 ) -> CandidateEvaluation:
     """Build a deterministic retained diagnostic for a candidate that cannot run.
 
@@ -529,19 +548,35 @@ def _invalid_candidate_evaluation(
         A fail-closed evaluation record retaining the candidate identity.
     """
     diagnostic = f"evaluation_error: {reason}"
-    hard_gate = HardGateResult(
-        eligible=False,
-        verifier_decision="not_evaluated",
-        actuator_verdict="not_evaluated",
-        violated_predicates=(diagnostic,),
-        violated_limits=(),
-        ineligibility_reason=diagnostic,
+    if hard_gate is None:
+        invalid_gate = HardGateResult(
+            eligible=False,
+            verifier_decision="not_evaluated",
+            actuator_verdict="not_evaluated",
+            violated_predicates=(diagnostic,),
+            violated_limits=(),
+            ineligibility_reason=diagnostic,
+        )
+    else:
+        predicates = tuple(dict.fromkeys((*hard_gate.violated_predicates, diagnostic)))
+        limits = hard_gate.violated_limits
+        invalid_gate = HardGateResult(
+            eligible=False,
+            verifier_decision=hard_gate.verifier_decision,
+            actuator_verdict=hard_gate.actuator_verdict,
+            violated_predicates=predicates,
+            violated_limits=limits,
+            ineligibility_reason="; ".join(dict.fromkeys((*predicates, *limits))),
+        )
+        braking_feasible = not any("brak" in value.lower() for value in (*predicates, *limits))
+    hard_reasons = tuple(
+        dict.fromkeys((*invalid_gate.violated_predicates, *invalid_gate.violated_limits))
     )
     return CandidateEvaluation(
         candidate_id=candidate_id,
         maneuver=maneuver,
         hard_feasible=False,
-        hard_reasons=(diagnostic,),
+        hard_reasons=hard_reasons,
         raw_dynamic_risk=1.0,
         conservative_dynamic_risk=1.0,
         max_track_risk=1.0,
@@ -556,10 +591,10 @@ def _invalid_candidate_evaluation(
         decision_key=(2, 2, 1, risk_bucket, float("inf"), 1.0, 1.0, candidate_id),
         robust_min_clearance_m=float("-inf"),
         uncertainty_margin=1.0,
-        braking_feasible=False,
+        braking_feasible=braking_feasible,
         risk_limit_ok=False,
         rejection_reason=diagnostic,
-        hard_gate=hard_gate,
+        hard_gate=invalid_gate,
     )
 
 
@@ -1164,13 +1199,18 @@ def _candidate_cap_result(
     """
     reason = "candidate portfolio exceeds max_candidates"
     invalid = tuple(
-        _invalid_candidate_evaluation(
-            _candidate_id_hint(item, index=index),
-            reason=reason,
-            risk_bucket=len(arbitration_config.risk_bucket_edges) - 1,
-            maneuver=getattr(item, "maneuver", "unknown"),
+        sorted(
+            (
+                _invalid_candidate_evaluation(
+                    _candidate_id_hint(item, index=index),
+                    reason=reason,
+                    risk_bucket=len(arbitration_config.risk_bucket_edges) - 1,
+                    maneuver=getattr(item, "maneuver", "unknown"),
+                )
+                for index, item in enumerate(candidates)
+            ),
+            key=lambda item: item.candidate_id,
         )
-        for index, item in enumerate(candidates)
     )
     risk_config_hash = risk_config.config_hash()
     return ArbitrationResult(
@@ -1708,10 +1748,16 @@ def _verify_retained_modes(
         )
         decisions.append(result.decision)
         if result.decision == DECISION_FALLBACK_BRAKE:
-            hard_predicates.extend(
-                f"track {item.belief_track.track_id} mode {item.mode.mode_id}: {predicate}"
-                for predicate in result.violated_predicates
-            )
+            if result.violated_predicates:
+                hard_predicates.extend(
+                    f"track {item.belief_track.track_id} mode {item.mode.mode_id}: {predicate}"
+                    for predicate in result.violated_predicates
+                )
+            else:
+                hard_predicates.append(
+                    "trajectory verifier returned fallback_brake without violated predicates "
+                    f"for track {item.belief_track.track_id} mode {item.mode.mode_id}"
+                )
     return tuple(hard_predicates), tuple(decisions)
 
 
@@ -1753,13 +1799,37 @@ def _verifier_decision(mode_inputs: Sequence[_ModeInput], decisions: Sequence[st
     return "accept"
 
 
+def _geometry_only_min_clearance_m(
+    mode_inputs: Sequence[_ModeInput],
+    robot_positions: np.ndarray,
+    *,
+    risk_config: RiskEstimatorConfig,
+) -> float:
+    """Return mean-path clearance without covariance or other uncertainty margins.
+
+    Returns:
+        Minimum sampled center-distance clearance over existent forecast modes,
+        or positive infinity when no dynamic hazard is present.
+    """
+    clearances = (
+        float(
+            np.min(np.linalg.norm(robot_positions - item.points, axis=1))
+            - risk_config.robot_radius_m
+            - item.risk_input.actor_radius_m
+        )
+        for item in mode_inputs
+        if item.forecast_track.existence_probability > 0.0
+    )
+    return min(clearances, default=float("inf"))
+
+
 def _multimodal_hard_gate(
     candidate: _CandidateInput,
     mode_inputs: Sequence[_ModeInput],
     *,
     robot_positions: np.ndarray,
     robot_velocities: np.ndarray,
-    robust_min_clearance_m: float,
+    geometry_only_min_clearance_m: float,
     risk_config: RiskEstimatorConfig,
     verifier_config: TrajectoryVerifierConfig | None,
     actuator_config: ActuatorLimitsConfig | None,
@@ -1780,7 +1850,7 @@ def _multimodal_hard_gate(
     hard_predicates = list(dynamic_reasons) + list(static_reasons)
 
     resolved_actuator = actuator_config if actuator_config is not None else ActuatorLimitsConfig()
-    hazard_clearance = float(robust_min_clearance_m)
+    hazard_clearance = float(geometry_only_min_clearance_m)
     if static_clearance is not None:
         hazard_clearance = min(hazard_clearance, static_clearance)
     if not math.isfinite(hazard_clearance):
@@ -2041,13 +2111,43 @@ def _evaluate_multimodal_candidate(
         candidate, risk_config=risk_config, arbitration_config=arbitration_config
     )
     robot_velocities = _candidate_robot_velocities(candidate, positions, dt_s=risk_config.dt_s)
-    per_track = _candidate_track_summaries(
-        candidate,
+    geometry_clearance = _geometry_only_min_clearance_m(
         context.mode_inputs,
         positions,
         risk_config=risk_config,
-        arbitration_config=arbitration_config,
     )
+    hard_gate = _multimodal_hard_gate(
+        candidate,
+        context.mode_inputs,
+        robot_positions=positions,
+        robot_velocities=robot_velocities,
+        geometry_only_min_clearance_m=geometry_clearance,
+        risk_config=risk_config,
+        verifier_config=context.verifier_config,
+        actuator_config=context.actuator_config,
+    )
+    braking_feasible = not any(
+        "brak" in value.lower()
+        for value in (*hard_gate.violated_predicates, *hard_gate.violated_limits)
+    )
+    try:
+        per_track = _candidate_track_summaries(
+            candidate,
+            context.mode_inputs,
+            positions,
+            risk_config=risk_config,
+            arbitration_config=arbitration_config,
+        )
+        aggregate = _aggregate_candidate_risk(per_track, config=arbitration_config)
+    except (TypeError, ValueError, FloatingPointError) as exc:
+        return _invalid_candidate_evaluation(
+            candidate.candidate_id,
+            maneuver=candidate.maneuver,
+            reason=f"dynamic risk evaluation failed: {exc}",
+            risk_bucket=len(arbitration_config.risk_bucket_edges) - 1,
+            hard_gate=hard_gate,
+            braking_feasible=braking_feasible,
+        )
     route_value = _candidate_route_progress(
         candidate, context.route_progress, candidate_index=candidate_index
     )
@@ -2064,24 +2164,9 @@ def _evaluate_multimodal_candidate(
         stopped_duration_s=context.stopped_duration_s,
         config=arbitration_config,
     )
-    aggregate = _aggregate_candidate_risk(per_track, config=arbitration_config)
-    hard_gate = _multimodal_hard_gate(
-        candidate,
-        context.mode_inputs,
-        robot_positions=positions,
-        robot_velocities=robot_velocities,
-        robust_min_clearance_m=aggregate.robust_clearance,
-        risk_config=risk_config,
-        verifier_config=context.verifier_config,
-        actuator_config=context.actuator_config,
-    )
     hard_reasons = list(hard_gate.violated_predicates) + list(hard_gate.violated_limits)
     if not aggregate.risk_limit_ok:
         hard_reasons.append("conservative risk or clearance limit exceeded")
-    braking_feasible = not any(
-        "brak" in value.lower()
-        for value in (*hard_gate.violated_predicates, *hard_gate.violated_limits)
-    )
     decision_key: tuple[object, ...] = (
         0 if hard_gate.eligible else 1,
         0 if braking_feasible else 1,
@@ -2270,6 +2355,10 @@ def arbitrate_multimodal_trajectories(  # noqa: PLR0913
                 reason=reason,
                 risk_bucket=len(arbitration_config.risk_bucket_edges) - 1,
             )
+        evaluation_error = evaluation_error or (
+            evaluation.rejection_reason is not None
+            and evaluation.rejection_reason.startswith("evaluation_error:")
+        )
         evaluations.append(evaluation)
 
     evaluations.sort(key=lambda item: item.decision_key)

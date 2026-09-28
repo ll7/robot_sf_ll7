@@ -393,3 +393,22 @@ def load_preflight_input(
     if payload.get("schema_version") == CANDIDATE_SCHEMA:
         return load_prepublication_candidate(manifest_path, repository_root=repository_root)
     return load_release_manifest(manifest_path, repository_root=repository_root)
+
+
+def verify_prepublication_candidate_after_preflight(
+    candidate: PrepublicationCandidate,
+    *,
+    manifest_sha256: str,
+    repository_root: Path | None = None,
+) -> None:
+    """Reject any source or input drift observed after matrix preflight.
+
+    The preflight report carries the original candidate digest. Re-loading the
+    candidate rechecks the exact source HEAD, clean tree, all input hashes, and
+    the complete scenario/config closure.
+    """
+    if sha256_file(candidate.path) != manifest_sha256:
+        raise ValueError("prepublication candidate changed while preflight was running")
+    current = load_prepublication_candidate(candidate.path, repository_root=repository_root)
+    if current != candidate:
+        raise ValueError("prepublication candidate inputs changed while preflight was running")

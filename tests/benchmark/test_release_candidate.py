@@ -18,6 +18,7 @@ from robot_sf.benchmark.release_candidate import (
     create_prepublication_candidate,
     load_preflight_input,
     load_prepublication_candidate,
+    verify_prepublication_candidate_after_preflight,
 )
 from robot_sf.benchmark.release_protocol import load_release_manifest
 from robot_sf.training.scenario_loader import load_scenarios_for_validation
@@ -221,4 +222,19 @@ def test_builder_creates_ignored_valid_candidate_without_doi(candidate_repo) -> 
             candidate_id="0.0.8-diagnostic-fixture",
             output=output,
             repository_root=root,
+        )
+
+
+def test_post_preflight_readback_rejects_candidate_digest_drift(candidate_repo) -> None:
+    root, path, payload = candidate_repo
+    candidate = load_prepublication_candidate(path, repository_root=root)
+    original_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    verify_prepublication_candidate_after_preflight(
+        candidate, manifest_sha256=original_digest, repository_root=root
+    )
+    payload["candidate_id"] = "changed-after-run"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="changed while preflight"):
+        verify_prepublication_candidate_after_preflight(
+            candidate, manifest_sha256=original_digest, repository_root=root
         )

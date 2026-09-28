@@ -937,3 +937,118 @@ def test_manifest_path_contract_findings_do_not_change_aggregation(tmp_path: Pat
     assert data["chosen_path_contract"]["findings"][0]["kind"] == "stale_reference"
     assert data["chosen_terminal_state"] == "none"
     assert data["aggregation"] == "confirmed"
+
+
+class TestAuthCredentialFailureClassification:
+    """An authentication failure is an actionable blocker, not a generic route failure (#9780)."""
+
+    def test_startup_401_is_distinct_actionable_and_not_retryable(self) -> None:
+        result = manifest.classify_delegation_attempt(
+            {
+                "worker_started": False,
+                "http_status": 401,
+                "stderr": "HTTP 401 from backend-api/codex/responses",
+            }
+        )
+
+        assert result["classification"] == "startup_auth"
+        assert result["signature"] == "worker_startup_auth_http_401"
+        assert result["retryable"] is False
+        assert result["review_evidence_status"] == "none"
+        assert "credential" in result["reason"]
+
+    def test_startup_403_is_classified_as_auth(self) -> None:
+        result = manifest.classify_delegation_attempt({"worker_started": False, "http_status": 403})
+
+        assert result["classification"] == "startup_auth"
+        assert result["signature"] == "worker_startup_auth_http_403"
+        assert result["retryable"] is False
+
+    def test_auth_never_earns_a_bounded_retry_recommendation(self) -> None:
+        recovery = manifest.build_delegation_recovery(
+            [
+                {
+                    "worker_started": False,
+                    "http_status": 401,
+                    "stderr": "unauthorized",
+                }
+            ]
+        )
+
+        assert recovery["retry_recommended"] is False
+        assert recovery["next_action"] == "manual_or_local_review_required"
+        assert recovery["fallback"]["required"] is True
+        assert recovery["fallback"]["mode"] == "manual_or_local_review"
+        assert recovery["fallback"]["independent_review_authorized"] is False
+
+    def test_transient_statuses_remain_retryable(self) -> None:
+        """The auth classification must not swallow transient startup failures."""
+        for status in sorted(manifest._TRANSIENT_STARTUP_STATUSES):
+            result = manifest.classify_delegation_attempt(
+                {"worker_started": False, "http_status": status}
+            )
+            assert result["classification"] == "startup_transient", status
+            assert result["retryable"] is True, status
+
+    def test_backend_404_still_earns_its_bounded_retry(self) -> None:
+        result = manifest.classify_delegation_attempt(
+            {
+                "worker_started": False,
+                "http_status": 404,
+                "stderr": "backend-api/codex/responses not found",
+            }
+        )
+
+        assert result["classification"] == "startup_backend_404"
+        assert result["retryable"] is True
+
+    def test_task_phase_401_is_classified_and_denies_review_evidence(self) -> None:
+        result = manifest.classify_delegation_attempt(
+            {
+                "worker_started": True,
+                "returncode": 1,
+                "http_status": 401,
+                "stderr": "invalid service api credential",
+            }
+        )
+
+        assert result["phase"] == "worker_task"
+        assert result["classification"] == "worker_task_auth"
+        assert result["signature"] == "worker_task_auth_http_401"
+        assert result["retryable"] is False
+        assert result["review_evidence_status"] == "none"
+
+    def test_unrelated_prose_mentioning_unauthorized_is_not_promoted(self) -> None:
+        """Free text alone must not fabricate a credential blocker."""
+        result = manifest.classify_delegation_attempt(
+            {
+                "worker_started": True,
+                "returncode": 1,
+                "stderr": "assertion failed: expected unauthorized request to be rejected",
+            }
+        )
+
+        assert result["classification"] == "worker_task_failure"
+
+    def test_terminal_state_records_auth_distinctly(self) -> None:
+        assert (
+            manifest.classify_terminal_state(returncode=1, failure_class="auth")
+            is manifest.TerminalFailure.AUTH
+        )
+        assert (
+            manifest.classify_terminal_state(returncode=1, failure_class="authentication_error")
+            is manifest.TerminalFailure.AUTH
+        )
+
+    def test_auth_reason_never_echoes_credential_material(self) -> None:
+        secret = "sk-live-abcdef0123456789"
+        result = manifest.classify_delegation_attempt(
+            {
+                "worker_started": False,
+                "http_status": 401,
+                "stderr": f"invalid service api credential: {secret}",
+            }
+        )
+
+        assert secret not in result["reason"]
+        assert secret not in result["signature"]

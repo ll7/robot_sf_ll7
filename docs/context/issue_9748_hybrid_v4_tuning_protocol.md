@@ -50,10 +50,11 @@ not decide which v4 twins replace the four hybrid release slots.
 
 The scenario identities, parameter values, and seed list are frozen by the
 tracked v1 manifests before tuning begins. At the pre-tuning gate, record the
-SHA-256 of both manifests, the source commit, and the exact candidate config
-SHAs in the tuning log. Any change to a scenario, seed, candidate config, or
-loader after that point requires a new protocol version and a fresh review.
-This implementation intentionally records no run hash or tuning result.
+SHA-256 of the development campaign config and scenario manifest, the source
+commit, and the exact candidate config path/hash mapping in the tuning log.
+Any change to a scenario, seed, candidate config, or loader after that point
+requires a new protocol version and a fresh review. This implementation
+intentionally records no run hash or tuning result.
 
 ## Structured tuning-log contract
 
@@ -61,8 +62,20 @@ Each tuning log must be YAML or JSON with the following top-level shape:
 
 ```yaml
 schema_version: issue_9748.tuning_log.v1
+provenance:
+  source_commit: "<current frozen 40-character commit SHA>"
+  campaign_config_sha256: "<SHA-256 of issue_9748_hybrid_v4_dev_split_v1.yaml>"
+  scenario_manifest_sha256: "<SHA-256 of issue_9748_hybrid_v4_dev_variants_v1.yaml>"
+  candidate_configs:
+    hybrid_rule_v4_fast_progress_static_escape_s30_h600_release:
+      path: configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release.yaml
+      sha256: "<SHA-256 of the exact candidate file>"
+    hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release:
+      path: configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release.yaml
+      sha256: "<SHA-256 of the exact candidate file>"
 entries:
   - candidate: hybrid_rule_v4_fast_progress_static_escape_s30_h600_release
+    candidate_config_sha256: "<matching candidate_configs hash>"
     scenario_ids:
       - issue_9748_dev_classic_doorway_medium
     seeds: [1001, 1002]
@@ -70,6 +83,15 @@ entries:
     # resolved_seeds, scenario_id, or scenario_ids.
     notes: "Free-form rationale may mention the held-out range."
 ```
+
+When a tuning log is supplied, `provenance` is mandatory. Its source commit
+must match the current checked-out source, both development files are hashed,
+and `candidate_configs` must contain exactly the two approved candidate IDs,
+paths, and SHA-256 values. Every entry must name one approved candidate and
+repeat its matching candidate-config hash. A log is therefore bound to the
+frozen source and current tracked inputs; an unknown candidate or mismatched
+hash fails closed. The validator still accepts no tuning log because no trial
+is authorized or recorded by this protocol.
 
 The validator inspects typed values under the seed fields (`seed`, `seeds`,
 `scenario_seed`, `scenario_seeds`, `seed_range`, `resolved_seeds`, and

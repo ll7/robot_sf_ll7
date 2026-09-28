@@ -2,15 +2,19 @@
 
 The checker validates the checked-in campaign through the same camera-ready
 campaign and scenario loaders used by the benchmark. When a structured tuning
-log is supplied, only typed fields in the ``issue_9748.tuning_log.v1`` schema
-are inspected for seed and scenario admission. Free-form strings such as a
-rationale mentioning the held-out range are intentionally not scanned.
+log is supplied, its frozen source/config provenance and only typed fields in
+the ``issue_9748.tuning_log.v1`` schema are inspected for admission. Free-form
+strings such as a rationale mentioning the held-out range are intentionally
+not scanned.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
+import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -26,6 +30,7 @@ DEFAULT_CONFIG = ROOT / "configs/benchmarks/issue_9748_hybrid_v4_dev_split_v1.ya
 DEFAULT_RELEASE_MATRIX = ROOT / "configs/scenarios/classic_interactions_francis2023.yaml"
 EXPECTED_DEV_SEEDS = tuple(range(1001, 1031))
 RELEASE_SEEDS = frozenset(range(111, 141))
+EXPECTED_PLANNER_ALGO = "hybrid_rule_local_planner"
 EXPECTED_VARIANTS = {
     "issue_9748_dev_classic_doorway_medium": {
         "source_file": "configs/scenarios/archetypes/classic_doorway.yaml",
@@ -69,6 +74,8 @@ EXPECTED_PLANNER_CONFIGS = {
     ),
 }
 TUNING_LOG_SCHEMA = "issue_9748.tuning_log.v1"
+SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
+SOURCE_COMMIT_PATTERN = re.compile(r"[0-9a-f]{40}")
 
 
 class ValidationError(ValueError):
@@ -95,6 +102,56 @@ def _load_mapping(path: Path, *, label: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValidationError(f"{label} must be a YAML mapping: {path}")
     return payload
+
+
+def _sha256(path: Path, *, label: str) -> str:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError as exc:
+        raise ValidationError(f"could not hash {label}: {path}: {exc}") from exc
+
+
+def _current_source_commit() -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ValidationError(f"could not resolve the current source commit: {exc}") from exc
+    commit = result.stdout.strip()
+    if not SOURCE_COMMIT_PATTERN.fullmatch(commit):
+        raise ValidationError("current source commit is not a 40-character hexadecimal SHA")
+    return commit
+
+
+def _require_sha256(raw: Any, *, label: str) -> str:
+    if not isinstance(raw, str) or not SHA256_PATTERN.fullmatch(raw):
+        raise ValidationError(f"{label} must be a lowercase 64-character SHA-256")
+    return raw
+
+
+def _require_source_commit(raw: Any) -> str:
+    if not isinstance(raw, str) or not SOURCE_COMMIT_PATTERN.fullmatch(raw):
+        raise ValidationError(
+            "provenance.source_commit must be a lowercase 40-character source commit SHA"
+        )
+    current = _current_source_commit()
+    if raw != current:
+        raise ValidationError(
+            f"provenance.source_commit must match the current checked-out source commit {current}"
+        )
+    return raw
+
+
+def _repo_relative_path(path: Path, *, label: str) -> str:
+    try:
+        return path.resolve().relative_to(ROOT).as_posix()
+    except ValueError as exc:
+        raise ValidationError(f"{label} must be inside the repository: {path}") from exc
 
 
 def _scenario_id(scenario: Mapping[str, Any], *, label: str) -> str:
@@ -208,6 +265,8 @@ def _validate_planner_spec(
     if key in seen:
         raise ValidationError(f"duplicate planner key: {key}")
     seen.add(key)
+    if planner.get("algo") != EXPECTED_PLANNER_ALGO:
+        raise ValidationError(f"planner {key} must declare algo: {EXPECTED_PLANNER_ALGO}")
     config_raw = planner.get("algo_config")
     if not isinstance(config_raw, str):
         raise ValidationError(f"planner {key} must declare algo_config")
@@ -485,7 +544,126 @@ def _validate_tuning_log_scenarios(
     return _validate_typed_scenario_ids(payload, label="structured tuning log")
 
 
-def _validate_tuning_log(path: Path) -> dict[str, Any]:
+def _validate_candidate_provenance(raw: Any) -> dict[str, dict[str, str]]:
+    if not isinstance(raw, Mapping):
+        raise ValidationError("provenance.candidate_configs must be a mapping")
+    expected_keys = set(EXPECTED_PLANNER_CONFIGS)
+    actual_keys = set(raw)
+    if actual_keys != expected_keys:
+        missing_candidates = sorted(str(key) for key in expected_keys - actual_keys)
+        unknown_candidates = sorted(str(key) for key in actual_keys - expected_keys)
+        raise ValidationError(
+            "provenance.candidate_configs must map exactly the approved candidates; "
+            f"missing={missing_candidates!r}, unknown={unknown_candidates!r}"
+        )
+
+    normalized_candidates: dict[str, dict[str, str]] = {}
+    for key, expected_path in EXPECTED_PLANNER_CONFIGS.items():
+        record = raw[key]
+        if not isinstance(record, Mapping) or set(record) != {"path", "sha256"}:
+            raise ValidationError(
+                f"provenance.candidate_configs[{key!r}] must contain exactly path and sha256"
+            )
+        expected_path_string = _repo_relative_path(expected_path, label=f"candidate {key}")
+        if record["path"] != expected_path_string:
+            raise ValidationError(f"provenance candidate {key} must name {expected_path_string!r}")
+        recorded_hash = _require_sha256(
+            record["sha256"],
+            label=f"provenance.candidate_configs[{key!r}].sha256",
+        )
+        expected_hash = _sha256(expected_path, label=f"candidate config {key}")
+        if recorded_hash != expected_hash:
+            raise ValidationError(
+                f"provenance candidate config hash for {key} does not match the current "
+                f"tracked file ({expected_hash})"
+            )
+        normalized_candidates[key] = {
+            "path": expected_path_string,
+            "sha256": recorded_hash,
+        }
+    return normalized_candidates
+
+
+def _validate_frozen_provenance(
+    payload: Mapping[str, Any],
+    *,
+    config_path: Path,
+    scenario_matrix_path: Path,
+) -> dict[str, Any]:
+    provenance = payload.get("provenance")
+    if not isinstance(provenance, Mapping):
+        raise ValidationError("structured tuning log must declare a frozen provenance mapping")
+
+    required = {
+        "source_commit",
+        "campaign_config_sha256",
+        "scenario_manifest_sha256",
+        "candidate_configs",
+    }
+    missing = sorted(required - provenance.keys())
+    if missing:
+        raise ValidationError(
+            "structured tuning log is missing frozen provenance fields: " + ", ".join(missing)
+        )
+
+    source_commit = _require_source_commit(provenance["source_commit"])
+    campaign_hash = _require_sha256(
+        provenance["campaign_config_sha256"],
+        label="provenance.campaign_config_sha256",
+    )
+    expected_campaign_hash = _sha256(config_path, label="development campaign config")
+    if campaign_hash != expected_campaign_hash:
+        raise ValidationError(
+            "provenance.campaign_config_sha256 does not match the current development "
+            f"campaign config ({expected_campaign_hash})"
+        )
+
+    scenario_hash = _require_sha256(
+        provenance["scenario_manifest_sha256"],
+        label="provenance.scenario_manifest_sha256",
+    )
+    expected_scenario_hash = _sha256(scenario_matrix_path, label="development scenario manifest")
+    if scenario_hash != expected_scenario_hash:
+        raise ValidationError(
+            "provenance.scenario_manifest_sha256 does not match the current development "
+            f"scenario manifest ({expected_scenario_hash})"
+        )
+
+    normalized_candidates = _validate_candidate_provenance(provenance["candidate_configs"])
+
+    return {
+        "source_commit": source_commit,
+        "campaign_config_sha256": campaign_hash,
+        "scenario_manifest_sha256": scenario_hash,
+        "candidate_configs": normalized_candidates,
+    }
+
+
+def _validate_tuning_log_candidates(
+    entries: Sequence[Mapping[str, Any]], provenance: Mapping[str, Any]
+) -> None:
+    candidate_configs = provenance["candidate_configs"]
+    for index, entry in enumerate(entries):
+        candidate = entry.get("candidate")
+        if not isinstance(candidate, str) or candidate not in EXPECTED_PLANNER_CONFIGS:
+            raise ValidationError(
+                f"structured tuning-log entry {index} must name an approved candidate"
+            )
+        candidate_hash = entry.get("candidate_config_sha256")
+        expected_hash = candidate_configs[candidate]["sha256"]
+        if candidate_hash != expected_hash:
+            raise ValidationError(
+                f"structured tuning-log entry {index} has an unknown or mismatched "
+                f"candidate config hash for {candidate}"
+            )
+
+
+def _validate_tuning_log(
+    path: Path,
+    *,
+    config_path: Path = DEFAULT_CONFIG,
+    scenario_matrix_path: Path | None = None,
+) -> dict[str, Any]:
     payload = _load_mapping(path, label="structured tuning log")
     if payload.get("schema_version") != TUNING_LOG_SCHEMA:
         raise ValidationError(
@@ -496,8 +674,21 @@ def _validate_tuning_log(path: Path) -> dict[str, Any]:
         raise ValidationError("structured tuning log entries must be a non-empty list")
     if any(not isinstance(entry, Mapping) for entry in entries):
         raise ValidationError("structured tuning log entries must be mappings")
+    config_path = config_path.resolve()
+    if scenario_matrix_path is None:
+        config_payload = _load_mapping(config_path, label="development campaign config")
+        scenario_raw = config_payload.get("scenario_matrix")
+        if not isinstance(scenario_raw, str) or not scenario_raw.strip():
+            raise ValidationError("development campaign must declare scenario_matrix")
+        scenario_matrix_path = _repo_path(scenario_raw, relative_to=config_path.parent)
+    provenance = _validate_frozen_provenance(
+        payload,
+        config_path=config_path,
+        scenario_matrix_path=scenario_matrix_path.resolve(),
+    )
     typed_seed_count = _validate_tuning_log_seeds(payload)
     typed_scenario_count = _validate_tuning_log_scenarios(payload, entries)
+    _validate_tuning_log_candidates(entries, provenance)
 
     return {
         "path": str(path),
@@ -507,6 +698,7 @@ def _validate_tuning_log(path: Path) -> dict[str, Any]:
         "typed_scenario_count": typed_scenario_count,
         "release_seed_overlap": [],
         "release_scenario_overlap": [],
+        "provenance": provenance,
     }
 
 
@@ -517,8 +709,17 @@ def validate(
     tuning_logs: Sequence[Path] = (),
 ) -> dict[str, Any]:
     """Validate the checked-in development split and optional tuning logs."""
-    summary = _validate_campaign_config(config_path.resolve(), release_matrix_path.resolve())
-    summary["tuning_logs"] = [_validate_tuning_log(path.resolve()) for path in tuning_logs]
+    config_path = config_path.resolve()
+    summary = _validate_campaign_config(config_path, release_matrix_path.resolve())
+    scenario_matrix_path = Path(summary["scenario_matrix"])
+    summary["tuning_logs"] = [
+        _validate_tuning_log(
+            path.resolve(),
+            config_path=config_path,
+            scenario_matrix_path=scenario_matrix_path,
+        )
+        for path in tuning_logs
+    ]
     summary["ok"] = True
     summary["status"] = "development_protocol_validated_not_benchmark_evidence"
     return summary

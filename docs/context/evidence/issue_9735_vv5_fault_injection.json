@@ -43,6 +43,7 @@
       },
       "detected": true,
       "fault": "reset_pedestrian_overlap",
+      "fixture_mechanism": "Synthetic reset geometry supplied to reset_spawn_clearance.",
       "mutant": {
         "invalid_run": true,
         "obstacle_overlap": false,
@@ -59,6 +60,7 @@
       },
       "detected": true,
       "fault": "respawn_onto_robot",
+      "fixture_mechanism": "Synthetic respawn event and matching collision event supplied to build_spawn_validity; no simulator respawn placement is executed.",
       "mutant": {
         "invalid_run": true,
         "obstacle_overlap": false,
@@ -75,6 +77,7 @@
       },
       "detected": true,
       "fault": "robot_start_inside_wall_radius",
+      "fixture_mechanism": "Synthetic reset geometry supplied to reset_spawn_clearance.",
       "mutant": {
         "invalid_run": true,
         "obstacle_overlap": true,
@@ -102,6 +105,20 @@
     }
   ],
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "review_residuals": [
+    {
+      "boundary": "The exercised reset-overlap fixture has route_complete=False.",
+      "case": "reset_pedestrian_overlap_with_completed_route",
+      "issue": 9861,
+      "status": "not_injected"
+    },
+    {
+      "boundary": "No reset-clearance error or missing-measurement fixture was exercised.",
+      "case": "reset_clearance_unavailable",
+      "issue": 9861,
+      "status": "not_injected"
+    }
+  ],
   "schema_version": "issue_9735_fault_injection.v1",
   "selected_faults": [
     "reset_pedestrian_overlap",
@@ -120,7 +137,7 @@
       "robot_sf/analysis_workbench/release_row_anomalies.py": "049ed97cd5c388cc743bfbb130c1c9dcb2c73752adaa8b699613849b0f9e2759",
       "robot_sf/benchmark/spawn_validity.py": "14974ade8ff94b0422230af910d43da9e66a99a123b894f913a71d4b512f1a77",
       "robot_sf/sim/spawn_validation.py": "fe211644ab9e7f80d65e4c97230c0d880c1d6ed62db6588103ac52d9deedd13b",
-      "scripts/validation/run_issue_9735_fault_injection.py": "8948341b41f07cf5702604f3591007a2dac826ad99f462fa158b3ff8b50b61bd"
+      "scripts/validation/run_issue_9735_fault_injection.py": "80c267edfe642fc193552092ec2adc6d66727c5e9d617ecdd24dce78fec5ebc4"
     }
   }
 }

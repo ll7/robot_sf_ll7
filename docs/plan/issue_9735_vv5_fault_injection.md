@@ -32,6 +32,12 @@ these fixtures. The collision-total miss is tracked as release-blocking #9855. T
 should use versioned throwaway simulation fixtures for the planner, geometry, and
 pedestrian-force faults.
 
+Independent review also found an untested reset-overlap case with `route_complete=True` that
+passes spawn validity. It is tracked as release-blocking #9861. The implemented reset-overlap
+fixture has `route_complete=False`; its detection does not establish outcome-independent validity.
+An unavailable reset-clearance measurement can also leave `invalid_run=False`; #9861 owns that
+fail-closed gap. Neither residual was injected or counted in this packet's denominator.
+
 ## Recovery
 
 The generator is read-only with respect to production inputs. Reports are regenerated from

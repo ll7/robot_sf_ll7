@@ -19,8 +19,15 @@ def test_fault_matrix_requires_clean_controls_and_records_metric_miss() -> None:
     assert report["sensitivity"] == {"detected": 3, "injected": 4, "fraction": 0.75}
     assert report["missed"] == ["collision_total_doubled"]
     assert len(report["not_injected"]) == 6
+    assert report["review_residuals"][0]["issue"] == 9861
+    assert report["review_residuals"][0]["status"] == "not_injected"
+    assert {item["case"] for item in report["review_residuals"]} == {
+        "reset_pedestrian_overlap_with_completed_route",
+        "reset_clearance_unavailable",
+    }
     assert all(not result["control"].get("invalid_run", False) for result in report["results"])
     assert report["matrix"]["robot_start_inside_wall_radius"]["spawn_validity"] == "detected"
+    assert "no simulator respawn placement" in report["results"][1]["fixture_mechanism"]
     metric = report["results"][-1]
     assert metric["control"]["gate_blocked"] is False
     assert metric["mutant"]["gate_blocked"] is False

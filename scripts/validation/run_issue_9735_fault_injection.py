@@ -105,6 +105,12 @@ def _spawn_fault(fault: str, map_def: Any) -> dict[str, Any]:
     return {
         "fault": fault,
         "check": "spawn_validity",
+        "fixture_mechanism": (
+            "Synthetic respawn event and matching collision event supplied to build_spawn_validity; "
+            "no simulator respawn placement is executed."
+            if fault == "respawn_onto_robot"
+            else "Synthetic reset geometry supplied to reset_spawn_clearance."
+        ),
         "control": {
             "overlap": clean["overlap"],
             "invalid_run": clean_blocked,
@@ -224,6 +230,20 @@ def build_report(selected_faults: tuple[str, ...] = FAULTS) -> dict[str, Any]:
         "results": results,
         "missed": [result["fault"] for result in results if not result["detected"]],
         "not_injected": list(DEFERRED_FAULTS),
+        "review_residuals": [
+            {
+                "case": "reset_pedestrian_overlap_with_completed_route",
+                "issue": 9861,
+                "status": "not_injected",
+                "boundary": "The exercised reset-overlap fixture has route_complete=False.",
+            },
+            {
+                "case": "reset_clearance_unavailable",
+                "issue": 9861,
+                "status": "not_injected",
+                "boundary": "No reset-clearance error or missing-measurement fixture was exercised.",
+            },
+        ],
     }
 
 
@@ -253,6 +273,19 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"- `{result['fault']}`: {result.get('proposed_check', 'investigate checker gap')}"
             )
     lines.append("- The collision-total miss is tracked as release-blocking issue #9855.")
+    lines.append(
+        "- A separate untested reset-overlap case with `route_complete=True` can pass "
+        "spawn validity; release-blocking issue #9861 owns that outcome-independent gate. "
+        "The exercised reset-overlap fixture uses `route_complete=False`."
+    )
+    lines.append(
+        "- Unavailable reset clearance can also leave `invalid_run=False`; #9861 owns "
+        "fail-closed handling for unmeasured starts. This packet did not inject that error."
+    )
+    lines.append(
+        "- `respawn_onto_robot` supplies a synthetic respawn event and matching collision "
+        "event to `build_spawn_validity`; it tests attribution, not simulator respawn placement."
+    )
     lines.append(
         "- The six remaining issue faults were not injected in this packet: "
         + ", ".join(f"`{fault}`" for fault in report["not_injected"])

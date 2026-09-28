@@ -77,6 +77,7 @@ pr_ready_previous_async_pid=""
 pr_ready_parent_pgid=""
 pr_ready_cleanup_status="no_child_active"
 pr_ready_evidence_scope_file=""
+pr_ready_docs_scope_file=""
 pr_ready_termination_receipt="${PR_READY_TERMINATION_RECEIPT:-}"
 if [[ -z "$pr_ready_termination_receipt" ]]; then
   pr_ready_termination_stamp="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || printf 'unknown')"
@@ -326,6 +327,9 @@ pr_ready_exit_without_coverage() {
   fi
   if [[ -n "$pr_ready_evidence_scope_file" ]]; then
     rm -f -- "$pr_ready_evidence_scope_file" || true
+  fi
+  if [[ -n "$pr_ready_docs_scope_file" ]]; then
+    rm -f -- "$pr_ready_docs_scope_file" || true
   fi
   release_pr_ready_lock || true
   return "$exit_code"
@@ -590,6 +594,43 @@ preflight_check_evidence_registry() {
     --report-output output/evidence/ratchet-report.json
 }
 
+preflight_check_docs_evidence_integrity() {
+  [[ "$pr_ready_final" == "1" ]] || return 0
+  mark_pr_ready_progress "docs_evidence_scope" "none" "resolving docs-evidence integrity inputs"
+  local changed_path relevant=0 scope_status=0
+  pr_ready_docs_scope_file="$(mktemp "${TMPDIR:-/tmp}/pr-ready-docs-evidence-scope.XXXXXX")"
+  # NUL framing preserves whitespace and embedded newlines. Disabling rename
+  # detection exposes both paths so moves into or out of a filtered tree trigger
+  # the same checker as the hosted pull_request.paths filters.
+  if git diff --name-only --no-renames -z "$BASE_REF...HEAD" > "$pr_ready_docs_scope_file"; then
+    while IFS= read -r -d '' changed_path; do
+      case "$changed_path" in
+        *.md|*.markdown|docs/*|*.json|*.yaml|*.yml|\
+        .github/ISSUE_TEMPLATE/*|AGENTS.md|CLAUDE.md)
+          relevant=1 ;;
+      esac
+    done < "$pr_ready_docs_scope_file"
+  else
+    scope_status=$?
+  fi
+  rm -f -- "$pr_ready_docs_scope_file"
+  pr_ready_docs_scope_file=""
+  if [[ "$scope_status" -ne 0 ]]; then
+    printf 'Cannot resolve final docs-evidence integrity input scope; refusing to start test lanes.\n' >&2
+    return "$scope_status"
+  fi
+  [[ "$relevant" == "1" ]] || return 0
+
+  if [[ ! -f "$SCRIPT_DIR/check_docs_evidence_integrity.py" ]]; then
+    printf 'Required docs-evidence integrity checker is missing: %s\n' \
+      "$SCRIPT_DIR/check_docs_evidence_integrity.py" >&2
+    return 2
+  fi
+  printf 'Checking docs-evidence integrity before formatting and test lanes.\n' >&2
+  run_pr_ready_lane docs_evidence_integrity uv run python \
+    "$SCRIPT_DIR/check_docs_evidence_integrity.py" --base-ref "$BASE_REF"
+}
+
 is_optional_readiness_path() {
   # Code paths and test directory patterns that require optional extras
   case "$1" in
@@ -814,6 +855,7 @@ fi
 mark_pr_ready_progress "base_resolution" "none" "resolving readiness base reference"
 resolve_base_ref
 preflight_check_evidence_registry
+preflight_check_docs_evidence_integrity
 
 if [[ "$pr_ready_final" != "1" && "$(worktree_state)" != "clean" ]]; then
   dirty_paths=()

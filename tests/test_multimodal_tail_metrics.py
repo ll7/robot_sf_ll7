@@ -54,6 +54,7 @@ def _fraction_reference(
         ([1.0, 0.5], [0.0, 1.0], 0.9999999999),
         ([1.0, 0.5], [1.0e-12, 0.999999999999], 0.9999999999),
         ([0.0, 0.5, 1.0], [0.0, 1.0, 0.0], math.nextafter(1.0, 0.0)),
+        ([1.0e-308], [1.0], math.nextafter(1.0, 0.0)),
     ),
 )
 def test_near_one_tail_consumes_full_mass(

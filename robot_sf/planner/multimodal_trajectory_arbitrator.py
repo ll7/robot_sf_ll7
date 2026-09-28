@@ -335,15 +335,17 @@ def discrete_tail_metrics(
     )
     tail_mass = 1.0 - float(alpha)
     remaining = tail_mass
-    tail_loss = 0.0
+    normalized_tail_losses: list[float] = []
     for loss, probability, _ in descending:
         # Zero-mass atoms take nothing; only a fully consumed tail stops the loop.
         taken = min(probability, remaining)
-        tail_loss = math.fsum((tail_loss, loss * taken))
+        # Normalize each taken mass before multiplying by loss. Multiplying first
+        # can underflow for a finite, tiny loss and a near-one confidence level.
+        normalized_tail_losses.append(loss * (taken / tail_mass))
         remaining -= taken
         if remaining == 0.0:
             break
-    cvar = float(tail_loss / tail_mass)
+    cvar = float(math.fsum(normalized_tail_losses))
     return expected, float(var), cvar, float(max(values))
 
 

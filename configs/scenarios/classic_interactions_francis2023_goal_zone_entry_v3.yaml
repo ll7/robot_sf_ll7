@@ -1,0 +1,142 @@
+# Successor route-margin matrix for issue #9762.
+# The 0.0.7 v1 matrix and all original SVGs remain byte-identical. The doorway-width slice in
+# issue #9348 continues to generate variants from its pinned original 2 m map.
+# Successor maps use map_file with map_id cleared because the registry intentionally pins v1 maps.
+includes:
+- classic_interactions_francis2023_goal_zone_entry_v2.yaml
+map_search_paths:
+- ../../maps/svg_maps
+- ../../maps/successor_svg_maps
+scenario_overrides_by_name:
+  classic_bottleneck_low:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_bottleneck_goal_zone_entry_v2.svg
+  classic_bottleneck_medium:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_bottleneck_medium_goal_zone_entry_v2.svg
+  classic_bottleneck_high:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_bottleneck_high_goal_zone_entry_v2.svg
+  classic_doorway_low:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg
+  classic_doorway_medium:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg
+  classic_doorway_high:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg
+  classic_group_crossing_low:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_group_crossing_goal_zone_entry_v2.svg
+  classic_group_crossing_medium:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_group_crossing_goal_zone_entry_v2.svg
+  classic_group_crossing_high:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_group_crossing_goal_zone_entry_v2.svg
+  classic_head_on_corridor_low:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_head_on_corridor_goal_zone_entry_v2.svg
+  classic_head_on_corridor_medium:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_head_on_corridor_goal_zone_entry_v2.svg
+  classic_merging_low:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_merging_goal_zone_entry_v2.svg
+  classic_merging_medium:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_merging_goal_zone_entry_v2.svg
+  classic_overtaking_low:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_overtaking_goal_zone_entry_v2.svg
+  classic_overtaking_medium:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_overtaking_goal_zone_entry_v2.svg
+  classic_t_intersection_low:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_t_intersection_goal_zone_entry_v2.svg
+  classic_t_intersection_medium:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_t_intersection_goal_zone_entry_v2.svg
+  francis2023_frontal_approach:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_frontal_approach_goal_zone_entry_v2.svg
+  francis2023_pedestrian_obstruction:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_ped_obstruction_goal_zone_entry_v2.svg
+  francis2023_pedestrian_overtaking:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_ped_overtaking_goal_zone_entry_v2.svg
+  francis2023_robot_overtaking:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_robot_overtaking_goal_zone_entry_v2.svg
+  francis2023_down_path:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_down_path_goal_zone_entry_v2.svg
+  francis2023_intersection_no_gesture:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2.svg
+  francis2023_blind_corner:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_blind_corner_goal_zone_entry_v2.svg
+  francis2023_narrow_hallway:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_narrow_hallway_goal_zone_entry_v2.svg
+  francis2023_narrow_doorway:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_narrow_doorway_goal_zone_entry_v2.svg
+  francis2023_exiting_room:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_exiting_room_goal_zone_entry_v2.svg
+  francis2023_exiting_elevator:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_exiting_elevator_goal_zone_entry_v2.svg
+  francis2023_intersection_wait:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2.svg
+  francis2023_intersection_proceed:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_intersection_no_gesture_goal_zone_entry_v2.svg
+  francis2023_following_human:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_down_path_goal_zone_entry_v2.svg
+  francis2023_leading_human:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_down_path_goal_zone_entry_v2.svg
+  francis2023_accompanying_peer:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_down_path_goal_zone_entry_v2.svg
+  francis2023_join_group:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_join_group_goal_zone_entry_v2.svg
+  francis2023_leave_group:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_leave_group_goal_zone_entry_v2.svg
+  francis2023_crowd_navigation:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_crowd_navigation_goal_zone_entry_v2.svg
+  francis2023_parallel_traffic:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_parallel_traffic_goal_zone_entry_v2.svg
+  francis2023_perpendicular_traffic:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_perpendicular_traffic_goal_zone_entry_v2.svg
+  francis2023_circular_crossing:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_circular_crossing_goal_zone_entry_v2.svg
+  francis2023_robot_crowding:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_francis2023_robot_crowding_goal_zone_entry_v2.svg
+  classic_station_platform_medium:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/classic_station_platform_v2.svg
+  classic_cross_trap_low:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg
+  classic_cross_trap_medium:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg
+  classic_cross_trap_high:
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg

@@ -1,15 +1,13 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!-- Classical Interaction Map: Overtaking Slower Pedestrian (Rescaled to width=60) -->
-
-<!-- Original size 260x120. Scale factor s = 60/260 ≈ 0.23077, height≈27.69 -->
+<!-- Classical Interaction Map: Head-On Corridor Passing -->
 
 <svg
-   width="60"
-   height="27.69"
-   viewBox="0 0 60 27.69"
+   width="32"
+   height="40"
+   viewBox="0 0 32 40"
    version="1.1"
    id="svg9"
-   sodipodi:docname="classic_overtaking.svg"
+   sodipodi:docname="classic_head_on_corridor.svg"
    inkscape:version="1.4 (e7c3feb1, 2024-10-09)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -26,65 +24,48 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="32.621214"
-     inkscape:cx="24.661866"
-     inkscape:cy="11.403622"
-     inkscape:window-width="2560"
+     inkscape:zoom="28.588929"
+     inkscape:cx="10.703444"
+     inkscape:cy="20.112681"
+     inkscape:window-width="3440"
      inkscape:window-height="1353"
      inkscape:window-x="0"
-     inkscape:window-y="92"
+     inkscape:window-y="31"
      inkscape:window-maximized="0"
-     inkscape:current-layer="routes" />
+     inkscape:current-layer="svg9" />
   <g
      id="obstacles"
      inkscape:label="Obstacles">
-    <!-- Top & bottom borders -->
     <rect
        x="0"
        y="0"
-       width="60"
-       height="1.15"
+       width="32"
+       height="2"
        fill="#000"
        inkscape:label="obstacle"
        id="rect1" />
     <rect
-       x="58.523918"
-       y="0.0032515661"
-       width="1.4798012"
-       height="27.482559"
-       fill="#000000"
-       inkscape:label="obstacle"
-       id="rect1-7" />
-    <rect
-       x="-0.01068022"
-       y="0.19786395"
-       width="1.4798012"
-       height="27.482559"
-       fill="#000000"
-       inkscape:label="obstacle"
-       id="rect1-7-3" />
-    <rect
        x="0"
-       y="26.54"
-       width="60"
-       height="1.15"
+       y="38"
+       width="32"
+       height="2"
        fill="#000"
        inkscape:label="obstacle"
        id="rect2" />
-    <!-- Gentle chicane to require lateral maneuver (scaled) -->
+    <!-- Narrow corridor side walls (scaled) -->
     <rect
-       x="20.77"
-       y="1.15"
-       width="4.62"
-       height="9.23"
+       x="0"
+       y="2"
+       width="2"
+       height="36"
        fill="#000"
        inkscape:label="obstacle"
        id="rect3" />
     <rect
-       x="34.62"
-       y="17.31"
-       width="4.62"
-       height="9.23"
+       x="30"
+       y="2"
+       width="2"
+       height="36"
        fill="#000"
        inkscape:label="obstacle"
        id="rect4" />
@@ -93,18 +74,18 @@
      id="robot"
      inkscape:label="Robot">
     <rect
-       x="14.398912"
-       y="3.6078129"
-       width="4.6199999"
-       height="4.6199999"
+       x="12.324901"
+       y="2.8169494"
+       width="4"
+       height="4"
        fill="#ffd800"
        inkscape:label="robot_spawn_zone"
        id="rect5" />
     <rect
-       x="40.837814"
-       y="21.288258"
-       width="4.6199999"
-       height="4.6199999"
+       x="17.109221"
+       y="33.043137"
+       width="4"
+       height="4"
        fill="#ff7f2a"
        inkscape:label="robot_goal_zone"
        id="rect6" />
@@ -113,18 +94,18 @@
      id="pedestrians"
      inkscape:label="Pedestrians">
     <rect
-       x="7.6241803"
-       y="2.5122435"
-       width="4.6199999"
-       height="4.6199999"
+       x="11.8352"
+       y="33.008156"
+       width="4"
+       height="4"
        fill="#23ff00"
        inkscape:label="ped_spawn_zone"
        id="rect7" />
     <rect
-       x="46.171768"
-       y="21.234955"
-       width="4.6199999"
-       height="4.6199999"
+       x="17.249134"
+       y="2.9218853"
+       width="4"
+       height="4"
        fill="#107400"
        inkscape:label="ped_goal_zone"
        id="rect8" />
@@ -133,20 +114,20 @@
      id="routes"
      inkscape:label="Routes">
     <path
-       d="M 17.005462,9.098491 20.456654,12.5264 39.899761,15.94626 42.62668,19.79705"
+       d="M 14.254944,8.2798287 19.109221,35.043137"
        stroke="#0300d5"
        stroke-width="1"
        fill="none"
        inkscape:label="robot_route_0_0"
        id="path8"
-       sodipodi:nodetypes="cccc" />
+       sodipodi:nodetypes="cc" />
     <path
-       d="M 10.997102,8.1461963 15.746408,12.174533 38.819198,16.217471 47.807357,20.285536"
+       d="M 13.870179,31.965021 19.389049,8.6645927"
        stroke="#c40202"
        stroke-width="1"
        fill="none"
        inkscape:label="ped_route_0_0"
        id="path9"
-       sodipodi:nodetypes="cccc" />
+       sodipodi:nodetypes="cc" />
   </g>
 </svg>

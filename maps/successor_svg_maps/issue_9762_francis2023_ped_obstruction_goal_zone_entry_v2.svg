@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!-- Francis 2023 (d): Robot Overtaking -->
+<!-- Francis 2023 (b): Pedestrian Obstruction -->
 <svg
   width="40"
   height="10"
@@ -16,14 +16,14 @@
   <g inkscape:label="robot">
     <rect x="3" y="4" width="2" height="2" fill="#ffdf00" inkscape:label="robot_spawn_zone" />
     <rect x="36" y="4" width="2" height="2" fill="#ff6c00" inkscape:label="robot_goal_zone" />
-    <path d="M 7 5 L 35.5 5" stroke="#0300d5" stroke-width="0.3" fill="none" inkscape:label="robot_route_0_0" />
+    <path d="M 7 5 L 37 5" stroke="#0300d5" stroke-width="0.3" fill="none" inkscape:label="robot_route_0_0" />
   </g>
   <g inkscape:label="pedestrians">
-    <circle cx="10" cy="4" r="0.6" fill="#7fa7ff" stroke="#3a5edb" stroke-width="0.2"
+    <circle cx="22" cy="5" r="0.6" fill="#7fa7ff" stroke="#3a5edb" stroke-width="0.2"
       inkscape:label="single_ped_h1_start" />
-    <circle cx="10" cy="4" r="0.4" fill="none" stroke="#8c4bff" stroke-width="0.2" class="poi" id="poi_h1_start" inkscape:label="poi_h1_start" />
-    <circle cx="35" cy="4" r="0.6" fill="none" stroke="#3a5edb" stroke-width="0.2"
+    <circle cx="22" cy="5" r="0.4" fill="none" stroke="#8c4bff" stroke-width="0.2" class="poi" id="poi_h1_start" inkscape:label="poi_h1_start" />
+    <circle cx="35" cy="5" r="0.6" fill="none" stroke="#3a5edb" stroke-width="0.2"
       inkscape:label="single_ped_h1_goal" />
-    <circle cx="35" cy="4" r="0.4" fill="none" stroke="#8c4bff" stroke-width="0.2" class="poi" id="poi_h1_goal" inkscape:label="poi_h1_goal" />
+    <circle cx="35" cy="5" r="0.4" fill="none" stroke="#8c4bff" stroke-width="0.2" class="poi" id="poi_h1_goal" inkscape:label="poi_h1_goal" />
   </g>
 </svg>

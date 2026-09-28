@@ -104,6 +104,57 @@
        id="rect6c" />
   </g>
   <g
+     inkscape:label="single_pedestrians">
+    <circle
+       cx="19"
+       cy="6"
+       r="0.6"
+       fill="#7fa7ff"
+       stroke="#3a5edb"
+       stroke-width="0.2"
+       inkscape:label="single_ped_h1_start" />
+    <circle
+       cx="19"
+       cy="34"
+       r="0.6"
+       fill="none"
+       stroke="#3a5edb"
+       stroke-width="0.2"
+       inkscape:label="single_ped_h1_goal" />
+    <circle
+       cx="20"
+       cy="6"
+       r="0.6"
+       fill="#7fa7ff"
+       stroke="#3a5edb"
+       stroke-width="0.2"
+       inkscape:label="single_ped_h2_start" />
+    <circle
+       cx="20"
+       cy="34"
+       r="0.6"
+       fill="none"
+       stroke="#3a5edb"
+       stroke-width="0.2"
+       inkscape:label="single_ped_h2_goal" />
+    <circle
+       cx="21"
+       cy="6"
+       r="0.6"
+       fill="#7fa7ff"
+       stroke="#3a5edb"
+       stroke-width="0.2"
+       inkscape:label="single_ped_h3_start" />
+    <circle
+       cx="21"
+       cy="34"
+       r="0.6"
+       fill="none"
+       stroke="#3a5edb"
+       stroke-width="0.2"
+       inkscape:label="single_ped_h3_goal" />
+  </g>
+  <g
      id="robot"
      inkscape:label="Robot">
     <rect
@@ -124,7 +175,7 @@
        id="rect8" />
     <!-- Added minimal robot route from spawn (index 0) to goal (index 0) -->
     <path
-       d="M 20.024044,29.206724 19.984361,21.539634 20.015639,10.650377"
+       d="M 20.024044,29.206724 19.984361,21.539634 20.015638,7.872545"
        stroke="#0300d5"
        stroke-width="1"
        fill="none"

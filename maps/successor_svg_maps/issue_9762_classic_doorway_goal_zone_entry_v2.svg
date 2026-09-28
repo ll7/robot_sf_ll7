@@ -135,7 +135,7 @@
      inkscape:label="Routes">
     <!-- Robot route from spawn center (30,30) to goal center (190,110) -->
     <path
-       d="M 26.510532,15.380786 18.697841,12.460218"
+       d="M 26.510532,15.380786 16.440092,11.410842"
        stroke="#0300d5"
        stroke-width="1"
        fill="none"

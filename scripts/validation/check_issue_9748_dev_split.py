@@ -305,6 +305,7 @@ _SCENARIO_FIELD_NAMES = frozenset(
         "scenarios",
     }
 )
+_ENTRY_SCENARIO_FIELD_NAMES = frozenset({"scenario_id", "scenario_ids"})
 
 
 def _typed_values(value: Any) -> list[int]:
@@ -366,22 +367,39 @@ def _validate_tuning_log_seeds(payload: Mapping[str, Any]) -> int:
     return len(seed_values)
 
 
-def _validate_tuning_log_scenarios(payload: Mapping[str, Any]) -> int:
-    scenario_values: list[str] = []
-    for field, raw in _collect_typed_fields(payload, field_names=_SCENARIO_FIELD_NAMES):
-        if isinstance(raw, str):
-            values: list[Any] = [raw]
-        elif isinstance(raw, list):
-            values = raw
-        else:
+def _typed_scenario_values(field: str, raw: Any) -> list[str]:
+    if isinstance(raw, str):
+        values: list[Any] = [raw]
+    elif isinstance(raw, list):
+        values = raw
+    else:
+        raise ValidationError(f"structured tuning-log field {field!r} must contain scenario IDs")
+    if any(not isinstance(value, str) or not value.strip() for value in values):
+        raise ValidationError(
+            f"structured tuning-log field {field!r} contains invalid scenario IDs"
+        )
+    return [value.strip() for value in values]
+
+
+def _validate_tuning_log_scenarios(
+    payload: Mapping[str, Any], entries: Sequence[Mapping[str, Any]]
+) -> int:
+    scenario_values = [
+        scenario_id
+        for field, raw in _collect_typed_fields(payload, field_names=_SCENARIO_FIELD_NAMES)
+        for scenario_id in _typed_scenario_values(field, raw)
+    ]
+    for index, entry in enumerate(entries):
+        entry_values = [
+            scenario_id
+            for field, raw in _collect_typed_fields(entry, field_names=_ENTRY_SCENARIO_FIELD_NAMES)
+            for scenario_id in _typed_scenario_values(field, raw)
+        ]
+        if not entry_values:
             raise ValidationError(
-                f"structured tuning-log field {field!r} must contain scenario IDs"
+                f"structured tuning-log entry {index} must contain a non-empty typed "
+                "scenario_id or scenario_ids field"
             )
-        if any(not isinstance(value, str) or not value.strip() for value in values):
-            raise ValidationError(
-                f"structured tuning-log field {field!r} contains invalid scenario IDs"
-            )
-        scenario_values.extend(value.strip() for value in values)
     unexpected_scenarios = sorted(set(scenario_values) - EXPECTED_SCENARIO_IDS)
     if unexpected_scenarios:
         raise ValidationError(
@@ -403,7 +421,7 @@ def _validate_tuning_log(path: Path) -> dict[str, Any]:
     if any(not isinstance(entry, Mapping) for entry in entries):
         raise ValidationError("structured tuning log entries must be mappings")
     typed_seed_count = _validate_tuning_log_seeds(payload)
-    typed_scenario_count = _validate_tuning_log_scenarios(payload)
+    typed_scenario_count = _validate_tuning_log_scenarios(payload, entries)
 
     return {
         "path": str(path),

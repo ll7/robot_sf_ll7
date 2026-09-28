@@ -61,7 +61,9 @@ The validator inspects typed values under the seed fields (`seed`, `seeds`,
 `scenario_seed`, `scenario_seeds`, `seed_range`, `resolved_seeds`, and
 `tuning_seeds`) and under the scenario identity fields. It requires typed seeds
 to belong to 1001–1030 and rejects any 111–140 value. It requires structured
-scenario IDs to belong to the four development identities. Free-form strings
+scenario IDs to belong to the four development identities, and every tuning-log
+entry must contain a nonempty typed `scenario_id` or `scenario_ids` field.
+Free-form strings
 such as `notes`, `rationale`, and `claim_boundary` are not parsed as seed
 admissions, so stating the held-out range does not create a false violation.
 Malformed logs, missing typed seed fields, and non-string structured scenario

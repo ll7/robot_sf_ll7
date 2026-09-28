@@ -100,6 +100,19 @@ def test_tuning_log_rejects_release_scenario_id(tmp_path: Path) -> None:
         CHECKER._validate_tuning_log(path)
 
 
+def test_tuning_log_rejects_seeds_only_entry(tmp_path: Path) -> None:
+    path = _write_log(
+        tmp_path,
+        {
+            "schema_version": CHECKER.TUNING_LOG_SCHEMA,
+            "entries": [{"candidate": "v4", "seeds": [1001]}],
+        },
+    )
+
+    with pytest.raises(CHECKER.ValidationError, match="entry 0.*scenario_id"):
+        CHECKER._validate_tuning_log(path)
+
+
 def test_tuning_log_accepts_dev_fields_and_held_out_prose(tmp_path: Path) -> None:
     path = _write_log(
         tmp_path,
@@ -111,7 +124,12 @@ def test_tuning_log_accepts_dev_fields_and_held_out_prose(tmp_path: Path) -> Non
                     "seed": 1001,
                     "scenario_id": "issue_9748_dev_classic_doorway_medium",
                     "notes": "Hold out release seeds 111–140 for evaluation.",
-                }
+                },
+                {
+                    "candidate": "v4-continuous",
+                    "seeds": [1002],
+                    "scenario_ids": ["issue_9748_dev_francis2023_crowd_navigation"],
+                },
             ],
             "rationale": "This prose may mention 111–140 without admitting those seeds.",
         },
@@ -120,3 +138,4 @@ def test_tuning_log_accepts_dev_fields_and_held_out_prose(tmp_path: Path) -> Non
     summary = CHECKER._validate_tuning_log(path)
     assert summary["release_seed_overlap"] == []
     assert summary["release_scenario_overlap"] == []
+    assert summary["typed_scenario_count"] == 2

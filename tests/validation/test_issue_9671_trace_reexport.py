@@ -557,20 +557,26 @@ def test_rejects_missing_paired_release_row(tmp_path: Path) -> None:
         _check(archive, traces, tmp_path, [113, 114])
 
 
-def test_accepts_separately_pinned_observer_campaign_id(tmp_path: Path) -> None:
+def test_accepts_separately_pinned_observer_campaign_ids(tmp_path: Path) -> None:
     archive = tmp_path / "release.tar.gz"
     _archive(archive, [_row(113, "collision", trace=False)])
     configs, manifests, digests, effective = _bindings(tmp_path, [113])
     trace = _producer_trace(tmp_path, [_row(113, "collision", trace=True)])
-    old_id = checker.CAMPAIGN_ID["headon_group"]
-    new_id = "issue9671-observer-headon-test"
-    campaign = json.loads(manifests["headon_group"].read_text())
-    campaign["campaign_id"] = new_id
-    campaign["invoked_command"] = campaign["invoked_command"].replace(old_id, new_id)
-    manifests["headon_group"].write_text(json.dumps(campaign))
+    new_ids = {
+        "headon_group": "issue9671-observer-headon-test",
+        "doorway": "issue9671-observer-doorway-test",
+    }
+    for name, new_id in new_ids.items():
+        old_id = checker.CAMPAIGN_ID[name]
+        campaign = json.loads(manifests[name].read_text())
+        campaign["campaign_id"] = new_id
+        campaign["invoked_command"] = campaign["invoked_command"].replace(old_id, new_id)
+        manifests[name].write_text(json.dumps(campaign))
     producer_path = trace.with_name(trace.name + ".provenance.json")
     producer = json.loads(producer_path.read_text())
-    producer["run"]["invocation"] = producer["run"]["invocation"].replace(old_id, new_id)
+    producer["run"]["invocation"] = producer["run"]["invocation"].replace(
+        checker.CAMPAIGN_ID["headon_group"], new_ids["headon_group"]
+    )
     producer_path.write_text(json.dumps(producer))
     report = check(
         archive,
@@ -581,9 +587,53 @@ def test_accepts_separately_pinned_observer_campaign_id(tmp_path: Path) -> None:
         expected_archive_sha256=None,
         expected_config_sha256=digests,
         expected_effective_hash=effective,
-        expected_campaign_ids={**checker.CAMPAIGN_ID, "headon_group": new_id},
+        expected_campaign_ids=new_ids,
     )
     assert report["comparison_counts"] == {"match": 1, "mismatch": 0, "no_release_row": 0}
+
+
+@pytest.mark.parametrize("campaign_id", [None, "", "  "])
+def test_rejects_missing_or_empty_expected_campaign_id(tmp_path: Path, campaign_id: object) -> None:
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [_row(113, "collision", trace=False)])
+    configs, manifests, digests, effective = _bindings(tmp_path, [113])
+    trace = _producer_trace(tmp_path, [_row(113, "collision", trace=True)])
+    campaign_ids: dict[str, str | None] = dict(checker.CAMPAIGN_ID)
+    campaign_ids["headon_group"] = campaign_id if isinstance(campaign_id, str) else None
+    with pytest.raises(ValueError, match="campaign IDs.*non-empty"):
+        check(
+            archive,
+            [trace],
+            configs,
+            manifests,
+            expected={("ppo", "classic_doorway_medium", 113)},
+            expected_archive_sha256=None,
+            expected_config_sha256=digests,
+            expected_effective_hash=effective,
+            expected_campaign_ids=campaign_ids,
+        )
+
+
+def test_rejects_expected_campaign_id_mismatch(tmp_path: Path) -> None:
+    archive = tmp_path / "release.tar.gz"
+    _archive(archive, [_row(113, "collision", trace=False)])
+    configs, manifests, digests, effective = _bindings(tmp_path, [113])
+    trace = _producer_trace(tmp_path, [_row(113, "collision", trace=True)])
+    campaign_ids = dict(checker.CAMPAIGN_ID)
+    campaign_ids["headon_group"] = "issue9671-wrong-campaign"
+
+    with pytest.raises(ValueError, match="campaign manifest identity mismatch"):
+        check(
+            archive,
+            [trace],
+            configs,
+            manifests,
+            expected={("ppo", "classic_doorway_medium", 113)},
+            expected_archive_sha256=None,
+            expected_config_sha256=digests,
+            expected_effective_hash=effective,
+            expected_campaign_ids=campaign_ids,
+        )
 
 
 def test_rejects_parameter_drift(tmp_path: Path) -> None:
@@ -768,7 +818,13 @@ def test_cli_keeps_report_and_exits_nonzero_on_outcome_mismatch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     report = {"comparison_counts": {"mismatch": 1}, "comparisons": [{"comparison": "mismatch"}]}
-    monkeypatch.setattr(checker, "check", lambda *_args, **_kwargs: report)
+    observed: dict[str, object] = {}
+
+    def fake_check(*_args: object, **kwargs: object) -> dict[str, object]:
+        observed.update(kwargs)
+        return report
+
+    monkeypatch.setattr(checker, "check", fake_check)
     output = tmp_path / "comparison.json"
     monkeypatch.setattr(
         sys,
@@ -793,3 +849,47 @@ def test_cli_keeps_report_and_exits_nonzero_on_outcome_mismatch(
     )
     assert checker.main() == 2
     assert json.loads(output.read_text()) == report
+    assert observed["expected_campaign_ids"] == checker.CAMPAIGN_ID
+
+
+def test_cli_passes_selected_campaign_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    report = {"comparison_counts": {"mismatch": 0}, "comparisons": []}
+    observed: dict[str, object] = {}
+
+    def fake_check(*_args: object, **kwargs: object) -> dict[str, object]:
+        observed.update(kwargs)
+        return report
+
+    monkeypatch.setattr(checker, "check", fake_check)
+    output = tmp_path / "comparison.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "check_issue_9671_trace_reexport.py",
+            "--release-archive",
+            "unused.tar.gz",
+            "--traces",
+            "unused.jsonl",
+            "--headon-config",
+            "unused-headon.yaml",
+            "--doorway-config",
+            "unused-doorway.yaml",
+            "--headon-manifest",
+            "unused-headon.json",
+            "--doorway-manifest",
+            "unused-doorway.json",
+            "--headon-campaign-id",
+            "issue9671-headon-new",
+            "--doorway-campaign-id",
+            "issue9671-doorway-new",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert checker.main() == 0
+    assert observed["expected_campaign_ids"] == {
+        "headon_group": "issue9671-headon-new",
+        "doorway": "issue9671-doorway-new",
+    }

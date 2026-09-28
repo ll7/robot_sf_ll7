@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
+from robot_sf.adversarial.attribution import FailureAttribution
 from robot_sf.adversarial.certification import passed_status
 from robot_sf.adversarial.config import CandidateEvaluation, CandidateSpec, Pose2D
 from robot_sf.adversarial.objectives import (
@@ -31,7 +35,16 @@ def _evaluation(tmp_path: Path, name: str, record: dict[str, object]) -> Candida
         ),
         certification_status=passed_status(),
         objective_value=None,
-        failure_attribution=None,
+        failure_attribution=FailureAttribution(
+            status="attributed",
+            primary_failure="success",
+            reasons=[],
+            details={
+                "execution_mode": "native",
+                "readiness_status": "native",
+                "availability_status": "available",
+            },
+        ),
         episode_record_path=episode_path,
         trajectory_csv_path=None,
         scenario_yaml_path=None,
@@ -234,6 +247,91 @@ def test_constraints_first_v2_keeps_known_positive_safety_evidence_critical(
 
     assert collision_score is not None and 4.0 <= collision_score < 5.0
     assert intrusion_score is not None and 4.0 <= intrusion_score < 5.0
+
+
+@pytest.mark.parametrize(
+    "details",
+    (
+        {
+            "execution_mode": "native",
+            "readiness_status": "fallback",
+            "availability_status": "not_available",
+        },
+        {
+            "execution_mode": "adapter",
+            "readiness_status": "degraded",
+            "availability_status": "not_available",
+        },
+        {
+            "execution_mode": "unknown",
+            "readiness_status": "degraded",
+            "availability_status": "failed",
+        },
+        {"execution_mode": "native", "readiness_status": "native"},
+    ),
+    ids=("fallback", "degraded", "unknown", "missing-availability"),
+)
+def test_constraints_first_v2_does_not_score_fallback_or_unavailable_execution(
+    tmp_path: Path,
+    details: dict[str, str],
+) -> None:
+    """Episode failures cannot steer search when planner execution is not eligible."""
+    evaluation = _evaluation(
+        tmp_path,
+        "fallback_collision",
+        {
+            "outcome": {
+                "route_complete": False,
+                "collision_event": True,
+                "timeout_event": False,
+            },
+            "metrics": {"success": False, "collisions": 1, "near_misses": 0},
+        },
+    )
+    evaluation = replace(
+        evaluation,
+        failure_attribution=FailureAttribution(
+            status="attributed",
+            primary_failure="collision",
+            reasons=["episode reports a collision"],
+            details=details,
+        ),
+    )
+
+    assert constraints_first_lexicographic_v2(evaluation) is None
+
+
+def test_constraints_first_v2_accepts_available_adapter_execution(tmp_path: Path) -> None:
+    """A declared available adapter execution remains eligible for search feedback."""
+    evaluation = _evaluation(
+        tmp_path,
+        "adapter_collision",
+        {
+            "outcome": {
+                "route_complete": False,
+                "collision_event": True,
+                "timeout_event": False,
+            },
+            "metrics": {"success": False, "collisions": 1, "near_misses": 0},
+        },
+    )
+    evaluation = replace(
+        evaluation,
+        failure_attribution=FailureAttribution(
+            status="attributed",
+            primary_failure="collision",
+            reasons=["episode reports a collision"],
+            details={
+                "execution_mode": "adapter",
+                "readiness_status": "adapter",
+                "availability_status": "available",
+            },
+        ),
+    )
+
+    score = constraints_first_lexicographic_v2(evaluation)
+
+    assert score is not None and 4.0 <= score < 5.0
 
 
 def test_constraints_first_v2_positive_component_survives_other_component_conflict(

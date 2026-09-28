@@ -60,9 +60,12 @@ The implementation now provides `constraints_first_lexicographic_v2` in
 three-valued OR: known collision or intrusion evidence establishes a safety failure, both components
 must be explicitly false to establish a negative safety result, and otherwise the objective returns
 no score. Conflicts within one component make only that component unknown; a confirmed positive in
-the other component still establishes the safety-failure tier. The frozen v1 implementation remains
-available for exact reproduction of existing contracts. This code correction does not authorize
-another campaign or change the current NO-GO for
+the other component still establishes the safety-failure tier. A score also requires resolved,
+available execution provenance (`execution_mode` native, adapter, or mixed; `readiness_status`
+native or adapter; and `availability_status` available). Fallback, degraded, unavailable, failed,
+or missing execution status remains recorded but cannot steer an optimizer. The frozen v1
+implementation remains available for exact reproduction of existing contracts. This code
+correction does not authorize another campaign or change the current NO-GO for
 scaling #9648. A future bounded pilot would need v2, complete intrusion metrics, a domain containing
 known hard cases, and multiple simulator seeds before it could reconsider that gate.
 

@@ -183,13 +183,14 @@ for retention classes, preservation proof, and cleanup-eligibility workflows.
   parameters and replayed twice at its recorded regeneration revision; exact binding to the
   historical execution remains unknown, so the candidate is not admitted to the corpus. It also
   preserves the #9646 convergence report, candidate accounting, provenance, selected replay
-  traces, and all 64 path-normalized, producer-hash-bound pilot candidate episode-record copies
-  (1.63 MB total); only five bundle artifacts are exact producer-byte copies. The retained
-  candidate copies are sufficient to verify the candidate-level source evidence, with route-path
-  rewrites explicitly recorded. The rebuilt convergence report verifies a consistent source
-  revision, while severe-intrusion evidence is still absent and all pilot criticality remains
-  unknown. Explicit unknown-feasibility and claim-boundary caveats remain. This is not a planner
-  ranking, paper-facing benchmark result, or safety result.
+  traces, and five producer-exact comparison/manifest outputs. Separately, all 64 pilot candidate
+  episode records are retained as exact producer-byte copies under `payload/source_episode_records/`
+  and as path-normalized report inputs under `payload/path_normalized_episode_records/` (1.63 MB
+  total); the producer and normalized digests are both bound. Route-path rewrites are explicitly
+  recorded. The rebuilt convergence report verifies a consistent source revision, while
+  severe-intrusion evidence is still absent and all pilot criticality remains unknown. Explicit
+  unknown-feasibility and claim-boundary caveats remain. This is not a planner ranking,
+  paper-facing benchmark result, or safety result.
   `payload/metadata.json` declares the mixed conventions in `candidate_evaluations.csv`:
   `distance_to_human_min_m` is center-to-center distance, while `min_clearance_m` is
   surface clearance after subtracting the robot and pedestrian radii. Entries in

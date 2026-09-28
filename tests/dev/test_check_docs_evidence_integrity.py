@@ -341,6 +341,45 @@ def test_evidence_bundle_v1_resolves_checksum_entries_under_payload(tmp_path: Pa
     assert problems == []
 
 
+def test_evidence_bundle_v1_resolves_bundle_root_payload_paths(tmp_path: Path) -> None:
+    """Canonical publisher checksum entries work from the bundle root."""
+    bundle = tmp_path / "docs/context/evidence/issue_9647_root_relative_bundle"
+    payload_dir = bundle / "payload"
+    payload_dir.mkdir(parents=True)
+    summary = payload_dir / "summary.json"
+    summary.write_text('{"status": "diagnostic"}\n', encoding="utf-8")
+    (bundle / "evidence_bundle_manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "evidence_bundle.v1",
+                "files": [
+                    {
+                        "path": "summary.json",
+                        "size_bytes": summary.stat().st_size,
+                        "sha256": _sha256(summary),
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    checksums = bundle / "checksums.sha256"
+    checksums.write_text(f"{_sha256(summary)}  payload/summary.json\n", encoding="utf-8")
+    _write_catalog(
+        tmp_path,
+        [
+            bundle.relative_to(tmp_path).as_posix() + "/evidence_bundle_manifest.json",
+            checksums.relative_to(tmp_path).as_posix(),
+            summary.relative_to(tmp_path).as_posix(),
+        ],
+    )
+
+    problems = check_files([checksums.relative_to(tmp_path).as_posix()], root=tmp_path)
+
+    assert problems == []
+
+
 def test_changed_evidence_bundle_payload_file_checks_root_manifest(tmp_path: Path) -> None:
     """Changing one payload file finds and validates its bundle-root checksums."""
     bundle = tmp_path / "docs/context/evidence/issue_9647_changed_payload"

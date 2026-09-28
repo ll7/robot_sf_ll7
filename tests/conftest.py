@@ -1007,6 +1007,9 @@ _FAST_FILES = {
     # both focused files in the exact-head fast lane.
     "test_maneuver_candidates.py",
     "test_maneuver_candidates_counterexamples.py",
+    # Multimodal arbitration tests are deterministic planner/risk contracts and
+    # cover the issue #8062 selector in exact-head changed-line shards.
+    "test_multimodal_trajectory_arbitration.py",
     # Versioned obstacle-force dispatch tests are deterministic contract
     # coverage for the planner, simulator, and wrapper seams; keep their
     # top-level modules in PR shards so changed coverage cannot exclude them as

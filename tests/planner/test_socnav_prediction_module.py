@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from typing import Any
 
+import numpy as np
 import pytest
 
 from robot_sf.planner import socnav
@@ -158,3 +159,41 @@ def test_extracted_module_runs_unpatched_prediction_contract(
 ) -> None:
     """Existing deterministic prediction behavior remains covered in the optional lane."""
     contract()
+
+
+def test_flat_observation_pedestrian_velocity_stays_ego_native_in_model_input() -> None:
+    """A flat map-runner observation's ego velocity reaches the predictor unconverted.
+
+    The predictor's documented input frame is robot-ego, so the flat
+    ``pedestrians_velocities`` leaves must reach ``_build_model_input`` byte-for-byte
+    at a non-zero heading: no world rotation, and no robot translation subtracted
+    (issue #9845). The existing anchors for this arm are nested-only.
+    """
+    heading = 0.5 * np.pi
+    ego_velocity = np.array([[0.6, -0.35]])
+    flat_observation = {
+        "robot_position": np.array([0.0, 0.0]),
+        "robot_heading": np.array([heading]),
+        "robot_speed": np.array([0.0]),
+        "robot_radius": np.array([0.3]),
+        "goal_current": np.array([4.0, 0.0]),
+        "goal_next": np.array([4.0, 0.0]),
+        "pedestrians_positions": np.array([[2.0, 1.0]]),
+        "pedestrians_velocities": ego_velocity,
+        "pedestrians_count": np.array([1.0]),
+        "pedestrians_radius": 0.35,
+        "sim_timestep": 0.1,
+    }
+    adapter = prediction.PredictionPlannerAdapter(
+        config=prediction.SocNavPlannerConfig(), allow_fallback=True
+    )
+
+    state, mask, _robot_pos, robot_heading = adapter._build_model_input(flat_observation)
+
+    assert robot_heading == pytest.approx(heading)
+    assert mask.reshape(-1)[0] == 1.0
+    # The first agent row is [x_ego, y_ego, vx_ego, vy_ego]: velocity must be verbatim.
+    np.testing.assert_allclose(state[0, 2:], ego_velocity[0], rtol=0.0, atol=1e-6)
+    # ... and must not have been rotated into world frame.
+    rotated = np.array([-ego_velocity[0, 1], ego_velocity[0, 0]])
+    assert not np.allclose(state[0, 2:], rotated, atol=1e-6)

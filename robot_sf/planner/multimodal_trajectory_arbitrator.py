@@ -2618,7 +2618,10 @@ def _replace_switch_cost_tie_break(
         if decision_key[-1] != evaluation.candidate_id:
             raise ValueError("base evaluation decision_key must end with its candidate ID")
         raise ValueError("base evaluation decision_key has no numeric switch-cost component")
-    updated_key = decision_key[:-2] + (float(switch_cost) / switch_cost_scale,) + decision_key[-1:]
+    scaled_switch_cost = float(switch_cost) / switch_cost_scale
+    if not math.isfinite(scaled_switch_cost):
+        raise ValueError("scaled switch cost must be finite")
+    updated_key = decision_key[:-2] + (scaled_switch_cost,) + decision_key[-1:]
     return replace(evaluation, switch_cost=float(switch_cost), decision_key=updated_key)
 
 

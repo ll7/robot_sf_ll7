@@ -821,6 +821,20 @@ def test_reorder_rejects_duplicate_unknown_and_incomplete_cost_inputs() -> None:
         reorder_multimodal_trajectories(base, ["a"], complete, switch_cost_scale=0.0)
 
 
+def test_reorder_rejects_switch_cost_scaling_overflow() -> None:
+    """Finite inputs must not create an infinite tie-break decision value."""
+    empty = MultimodalPrediction({}, HORIZON * DT_S, DT_S, timestamp=0.0, metadata={"step": 0})
+    base = _evaluate_base([_action("route")], empty)
+
+    with pytest.raises(ValueError, match="scaled switch cost must be finite"):
+        reorder_multimodal_trajectories(
+            base,
+            ["route"],
+            {"route": 1e308},
+            switch_cost_scale=1e-308,
+        )
+
+
 def test_reorder_preserves_fail_closed_non_selected_status() -> None:
     """Reordering cannot upgrade an invalid base result into a selection."""
     empty = MultimodalPrediction({}, HORIZON * DT_S, DT_S, timestamp=0.0, metadata={"step": 0})

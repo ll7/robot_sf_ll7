@@ -39,6 +39,21 @@ Focused regression tests cover both kernel implementations, the explicit selecto
 default behavior, and metadata omission when the selector is absent. No general planner, pedestrian,
 or dissertation claim follows from those tests.
 
+## Separate #9758 recheck with `wrapped_v2` — 2026-09-28
+
+The #9758 fix in merged PR #9788 is an explicit `surface_v3` pedestrian-term selector. To recheck
+that contact behavior after the angle-wrap correction, the existing deterministic standing-pedestrian
+and 1.3 m/s crossing rollouts now also run with both `surface_v3` and `wrapped_v2` selected. At both
+`dt=0.1 s` and `dt=0.05 s`, the tests require swept clearance above 0.05 m; all four wrapped-kernel
+cases pass. The full focused set for this worktree passes 98 tests.
+
+This is a narrow compatibility recheck of those two fixtures, not the reviewer's complete six-case
+probe set or evidence of general contact safety. The #9764 paired diagnostic above used the default
+legacy pedestrian term and recorded one collision in each kernel arm. Its referenced private bundle
+was not present in the current task artifact directory, so those raw rows were not reanalyzed here.
+The candidate matrix selects `wrapped_v2` but does not select `surface_v3`; this recheck does not
+change that release input or claim that the kernel wrap fixes the separate pedestrian-force defect.
+
 ## Quarantine and replacement diagnostic — 2026-09-28
 
 The earlier paired runs on seeds 111–113 used the reserved #9668 evaluation range. Their episode

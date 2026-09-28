@@ -997,14 +997,16 @@ def _static_and_actuator_check(
     *,
     static_verifier: Callable[..., object] | None,
     config: ManeuverPortfolioConfig,
-) -> tuple[bool, str | None, float | None]:
+) -> tuple[bool, str | None, float | None, bool | None]:
     """Apply static and canonical actuator gates to one rollout.
 
     Returns:
-        Feasibility, stable rejection reason, and optional clearance.
+        Feasibility, stable rejection reason, optional clearance, and whether
+        static geometry was explicitly checked.
     """
 
     static_result = _StaticCheck(True, None)
+    static_verified = static_verifier is not None
     if static_verifier is not None:
         static_result = _invoke_static_verifier(
             static_verifier,
@@ -1013,7 +1015,7 @@ def _static_and_actuator_check(
             clearance_margin_m=config.static_clearance_margin_m,
         )
         if not static_result.feasible:
-            return False, "static_collision", static_result.min_clearance_m
+            return False, "static_collision", static_result.min_clearance_m, static_verified
 
     headings = states[:, 2]
     velocities = np.column_stack((states[:, 3] * np.cos(headings), states[:, 3] * np.sin(headings)))
@@ -1030,7 +1032,7 @@ def _static_and_actuator_check(
         config=config.actuator_limits,
     )
     if report.verdict != VERDICT_ACTUATOR_FEASIBLE:
-        return False, "actuator_limit", static_result.min_clearance_m
+        return False, "actuator_limit", static_result.min_clearance_m, static_verified
     # Jerk is not a field in the canonical feasibility schema, so retain this
     # one additional hard check for the explicit portfolio contract.
     linear_accel = np.diff(states[:, 3]) / config.dt_s
@@ -1039,10 +1041,10 @@ def _static_and_actuator_check(
         linear_jerk = np.diff(np.concatenate(([0.0], linear_accel))) / config.dt_s
         angular_jerk = np.diff(np.concatenate(([0.0], angular_accel))) / config.dt_s
         if np.max(np.abs(linear_jerk)) > config.max_jerk_mps3 + 1.0e-8:
-            return False, "actuator_limit", static_result.min_clearance_m
+            return False, "actuator_limit", static_result.min_clearance_m, static_verified
         if np.max(np.abs(angular_jerk)) > config.angular_jerk_limit + 1.0e-8:
-            return False, "actuator_limit", static_result.min_clearance_m
-    return True, None, static_result.min_clearance_m
+            return False, "actuator_limit", static_result.min_clearance_m, static_verified
+    return True, None, static_result.min_clearance_m, static_verified
 
 
 def _attempt_metadata(
@@ -1051,6 +1053,7 @@ def _attempt_metadata(
     route: RouteGeometry,
     local_goal: tuple[float, float] | None,
     stop_complete: bool,
+    timestamp_s: float | None,
     **extra: JSONScalar,
 ) -> dict[str, JSONScalar]:
     """Build bounded JSON-safe candidate metadata.
@@ -1063,6 +1066,8 @@ def _attempt_metadata(
         "schema_version": MANEUVER_CANDIDATE_SCHEMA_VERSION,
         "dt_s": float(config.dt_s),
         "horizon_steps": int(config.horizon_steps),
+        "robot_radius_m": float(config.robot_radius_m),
+        "timestamp_s": timestamp_s,
         "route_hash": route.route_hash,
         "local_goal_x": local_goal[0] if local_goal is not None else None,
         "local_goal_y": local_goal[1] if local_goal is not None else None,
@@ -1109,6 +1114,7 @@ def generate_maneuver_candidates(  # noqa: C901, PLR0912, PLR0913, PLR0915
     initial_state: RobotDynamicsState | Sequence[float] | Mapping[str, object],
     *,
     config: ManeuverPortfolioConfig | None = None,
+    timestamp_s: float | None = None,
     local_goal: Sequence[float] | None = None,
     projection_hint: RouteProjectionHint | None = None,
     crowd_density: float = 0.0,
@@ -1125,6 +1131,7 @@ def generate_maneuver_candidates(  # noqa: C901, PLR0912, PLR0913, PLR0915
         initial_state: Canonical ``RobotDynamicsState`` or finite five/six-value
             ``(x, y, heading, linear_speed, angular_speed[, steering_angle])``.
         config: Portfolio bounds and canonical actuator configuration.
+        timestamp_s: Optional finite planning-cycle timestamp copied into candidate metadata.
         local_goal: Optional explicit route-relative goal.  When omitted, the
             canonical adaptive local-goal helper selects one.
         projection_hint: Optional route-branch continuity hint for the initial
@@ -1147,6 +1154,10 @@ def generate_maneuver_candidates(  # noqa: C901, PLR0912, PLR0913, PLR0915
 
     started = time.perf_counter()
     cfg = config if config is not None else ManeuverPortfolioConfig()
+    if timestamp_s is not None and (
+        not math.isfinite(float(timestamp_s)) or float(timestamp_s) < 0.0
+    ):
+        raise ValueError("timestamp_s must be finite and non-negative when supplied")
     try:
         if not isinstance(route, RouteGeometry):
             raise TypeError("route must be a RouteGeometry")
@@ -1298,7 +1309,7 @@ def generate_maneuver_candidates(  # noqa: C901, PLR0912, PLR0913, PLR0915
             ):
                 rejections["pass_side_mismatch"] += 1
                 return
-        feasible, reason, min_clearance = _static_and_actuator_check(
+        feasible, reason, min_clearance, static_verified = _static_and_actuator_check(
             states, static_verifier=static_checker, config=cfg
         )
         if not feasible:
@@ -1307,6 +1318,7 @@ def generate_maneuver_candidates(  # noqa: C901, PLR0912, PLR0913, PLR0915
             rejections[reason or "static_collision"] += 1
             return
         attempt_metadata = dict(metadata)
+        attempt_metadata["static_feasible"] = static_verified
         if maneuver is ManeuverId.CONTROLLED_STOP:
             attempt_metadata["stop_complete_within_horizon"] = bool(
                 states[-1, 3] <= 1.0e-9 and abs(states[-1, 4]) <= 1.0e-9
@@ -1358,6 +1370,7 @@ def generate_maneuver_candidates(  # noqa: C901, PLR0912, PLR0913, PLR0915
             route=route,
             local_goal=selected_goal,
             stop_complete=stop_complete,
+            timestamp_s=timestamp_s,
             stop_deceleration_mps2=float(cfg.stop_deceleration_mps2),
             braking_latency_s=float(cfg.actuator_limits.brake_latency_s),
             command_latency_s=float(cfg.actuator_limits.command_latency_s),
@@ -1399,6 +1412,7 @@ def generate_maneuver_candidates(  # noqa: C901, PLR0912, PLR0913, PLR0915
                     route=route,
                     local_goal=selected_goal,
                     stop_complete=False,
+                    timestamp_s=timestamp_s,
                     route_heading_rad=float(route_heading),
                     heading_offset_rad=float(heading_offset),
                     target_speed_mps=float(speed),
@@ -1448,6 +1462,7 @@ def generate_maneuver_candidates(  # noqa: C901, PLR0912, PLR0913, PLR0915
                         route=route,
                         local_goal=selected_goal,
                         stop_complete=False,
+                        timestamp_s=timestamp_s,
                         lateral_offset_m=float(offset),
                         pass_rejoin_fraction=float(cfg.pass_rejoin_fraction),
                     ),
@@ -1473,6 +1488,7 @@ def generate_maneuver_candidates(  # noqa: C901, PLR0912, PLR0913, PLR0915
                     route=route,
                     local_goal=selected_goal,
                     stop_complete=False,
+                    timestamp_s=timestamp_s,
                     creep_speed_mps=float(cfg.creep_speed_mps),
                     yield_deceleration_mps2=float(cfg.yield_deceleration_mps2),
                 ),

@@ -169,6 +169,22 @@ def test_short_horizon_reports_incomplete_stop() -> None:
 
     assert stop.states[-1, 3] > 0.0
     assert stop.metadata["stop_complete_within_horizon"] is False
+    assert stop.metadata["robot_radius_m"] == pytest.approx(config.robot_radius_m)
+
+
+def test_generated_candidates_retain_cycle_and_static_verification_metadata() -> None:
+    """The arbitration seam receives the generator's cycle and geometry evidence."""
+    result = generate_maneuver_candidates(_route(), _state(), static_geometry=(), timestamp_s=12.5)
+
+    assert result
+    assert all(candidate.metadata["timestamp_s"] == pytest.approx(12.5) for candidate in result)
+    assert all(candidate.metadata["static_feasible"] is True for candidate in result)
+
+
+def test_generated_candidate_timestamp_must_be_nonnegative_and_finite() -> None:
+    """Malformed cycle timestamps cannot be embedded in candidate metadata."""
+    with pytest.raises(ValueError, match="timestamp_s"):
+        generate_maneuver_candidates(_route(), _state(), timestamp_s=float("nan"))
 
 
 def test_stop_completion_requires_linear_and_angular_rest() -> None:

@@ -58,8 +58,10 @@ claim. The recorded source and results are not rewritten or re-scored.
 The implementation now provides `constraints_first_lexicographic_v2` for future searches. It uses
 three-valued OR: known collision or intrusion evidence establishes a safety failure, both components
 must be explicitly false to establish a negative safety result, and otherwise the objective returns
-no score. The frozen v1 implementation remains available for exact reproduction of existing
-contracts. This code correction does not authorize another campaign or change the current NO-GO for
+no score. Conflicts within one component make only that component unknown; a confirmed positive in
+the other component still establishes the safety-failure tier. The frozen v1 implementation remains
+available for exact reproduction of existing contracts. This code correction does not authorize
+another campaign or change the current NO-GO for
 scaling #9648. A future bounded pilot would need v2, complete intrusion metrics, a domain containing
 known hard cases, and multiple simulator seeds before it could reconsider that gate.
 

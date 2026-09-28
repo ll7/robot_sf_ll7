@@ -115,15 +115,8 @@ def _consistent_boolean_alias(outcome: dict[str, Any], *names: str) -> bool | No
 def _safety_evidence(
     outcome: dict[str, Any],
     metrics: dict[str, Any],
-    *,
-    require_complete_safety: bool = False,
 ) -> bool | None:
-    """Combine collision and intrusion evidence without hiding contradictions.
-
-    The frozen v1 mode preserves its historical partial-evidence reduction. V2
-    uses three-valued OR: a known positive wins, but a negative result requires
-    explicit negative evidence for both collision and severe intrusion.
-    """
+    """Combine collision and intrusion evidence under the frozen v1 semantics."""
     collision_names = ("collision", "collision_event")
     intrusion_names = ("severe_intrusion", "severe_intrusion_event")
     collision = _consistent_boolean_alias(outcome, *collision_names)
@@ -149,18 +142,61 @@ def _safety_evidence(
     ) or (intrusion is not None and metric_intrusion is not None and intrusion != metric_intrusion):
         return None
 
-    collision_evidence = collision if collision is not None else metric_collision
-    intrusion_evidence = intrusion if intrusion is not None else metric_intrusion
-    if require_complete_safety:
-        if collision_evidence is True or intrusion_evidence is True:
-            return True
-        if collision_evidence is False and intrusion_evidence is False:
-            return False
-        return None
-
     evidence = (collision, intrusion, metric_collision, metric_intrusion)
     present = [value for value in evidence if value is not None]
     return any(present) if present else None
+
+
+def _collision_component_v2(outcome: dict[str, Any], metrics: dict[str, Any]) -> bool | None:
+    """Read collision evidence independently, preserving malformed/conflicting state as unknown."""
+    names = ("collision", "collision_event")
+    outcome_value = _consistent_boolean_alias(outcome, *names)
+    if outcome_value is None and any(name in outcome for name in names):
+        return None
+
+    raw_metric = metrics.get("collisions")
+    metric_value: bool | None = None
+    if raw_metric is not None:
+        if not _valid_constraints_metric("collisions", raw_metric):
+            return None
+        metric_value = raw_metric > 0
+
+    if outcome_value is not None and metric_value is not None and outcome_value != metric_value:
+        return None
+    return outcome_value if outcome_value is not None else metric_value
+
+
+def _intrusion_component_v2(outcome: dict[str, Any], metrics: dict[str, Any]) -> bool | None:
+    """Read severe-intrusion evidence independently from collision evidence."""
+    names = ("severe_intrusion", "severe_intrusion_event")
+    outcome_value = _consistent_boolean_alias(outcome, *names)
+    if outcome_value is None and any(name in outcome for name in names):
+        return None
+
+    metric_values = [
+        metrics[name] for name in names if name in metrics and metrics[name] is not None
+    ]
+    if metric_values and (
+        not all(isinstance(value, bool) for value in metric_values)
+        or any(value != metric_values[0] for value in metric_values[1:])
+    ):
+        return None
+    metric_value = metric_values[0] if metric_values else None
+
+    if outcome_value is not None and metric_value is not None and outcome_value != metric_value:
+        return None
+    return outcome_value if outcome_value is not None else metric_value
+
+
+def _safety_evidence_v2(outcome: dict[str, Any], metrics: dict[str, Any]) -> bool | None:
+    """Combine independently validated components with three-valued OR semantics."""
+    collision = _collision_component_v2(outcome, metrics)
+    intrusion = _intrusion_component_v2(outcome, metrics)
+    if collision is True or intrusion is True:
+        return True
+    if collision is False and intrusion is False:
+        return False
+    return None
 
 
 def constraints_first_outcome_projection(record: dict[str, Any]) -> dict[str, Any]:
@@ -171,6 +207,22 @@ def constraints_first_outcome_projection(record: dict[str, Any]) -> dict[str, An
 def constraints_first_outcome_projection_v2(record: dict[str, Any]) -> dict[str, Any]:
     """Project an episode, keeping incomplete collision/intrusion evidence unknown."""
     return _constraints_first_outcome_projection(record, require_complete_safety=True)
+
+
+def _constraints_metrics_valid(metrics: dict[str, Any], *, require_complete_safety: bool) -> bool:
+    """Validate non-safety metrics and apply v1 safety-field checks when required."""
+    for name in ("collisions", "success", "near_misses", "snqi", "path_efficiency"):
+        if require_complete_safety and name == "collisions":
+            continue
+        if not _valid_constraints_metric(name, metrics.get(name)):
+            return False
+
+    if not require_complete_safety:
+        for name in ("severe_intrusion", "severe_intrusion_event"):
+            value = metrics.get(name)
+            if value is not None and not isinstance(value, bool):
+                return False
+    return True
 
 
 def _constraints_first_outcome_projection(
@@ -199,20 +251,13 @@ def _constraints_first_outcome_projection(
     ):
         return _unavailable_constraints_first_outcome()
 
-    for name in ("collisions", "success", "near_misses", "snqi", "path_efficiency"):
-        value = metrics.get(name)
-        # ``post_process_metrics`` emits the canonical success metric as a bool;
-        # the other scalar metrics must remain numeric so malformed records do
-        # not get coerced into a clean outcome.
-        if not _valid_constraints_metric(name, value):
-            return _unavailable_constraints_first_outcome()
-    for name in ("severe_intrusion", "severe_intrusion_event"):
-        value = metrics.get(name)
-        if value is not None and not isinstance(value, bool):
-            return _unavailable_constraints_first_outcome()
+    if not _constraints_metrics_valid(metrics, require_complete_safety=require_complete_safety):
+        return _unavailable_constraints_first_outcome()
 
-    collision_or_intrusion = _safety_evidence(
-        outcome, metrics, require_complete_safety=require_complete_safety
+    collision_or_intrusion = (
+        _safety_evidence_v2(outcome, metrics)
+        if require_complete_safety
+        else _safety_evidence(outcome, metrics)
     )
     if collision_or_intrusion is None:
         return _unavailable_constraints_first_outcome()

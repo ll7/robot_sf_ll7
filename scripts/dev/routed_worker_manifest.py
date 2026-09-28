@@ -326,6 +326,22 @@ def classify_delegation_attempt(attempt: dict[str, Any]) -> dict[str, Any]:
             "reason": "worker did not start; no independent review evidence exists",
         }
 
+    # A worker-started HTTP credential failure is authoritative even when the
+    # wrapper did not capture a terminal return code or reported zero. Check it
+    # before the missing/zero-returncode success handling so auth cannot be
+    # misclassified as unavailable or successful route evidence.
+    if _auth_failure(attempt, status, text):
+        return {
+            "phase": "worker_task",
+            "classification": "worker_task_auth",
+            "signature": f"worker_task_auth_http_{status}"
+            if status in _AUTH_STATUSES
+            else "worker_task_auth",
+            "retryable": False,
+            "review_evidence_status": "none",
+            "reason": _AUTH_REMEDY,
+        }
+
     returncode = attempt.get("returncode")
     if returncode is None:
         return {
@@ -337,17 +353,6 @@ def classify_delegation_attempt(attempt: dict[str, Any]) -> dict[str, Any]:
             "reason": "worker terminal status is missing; success cannot be inferred",
         }
     if returncode != 0 or failure_class not in {"", "none", "success"}:
-        if _auth_failure(attempt, status, text):
-            return {
-                "phase": "worker_task",
-                "classification": "worker_task_auth",
-                "signature": f"worker_task_auth_http_{status}"
-                if status in _AUTH_STATUSES
-                else "worker_task_auth",
-                "retryable": False,
-                "review_evidence_status": "none",
-                "reason": _AUTH_REMEDY,
-            }
         return {
             "phase": "worker_task",
             "classification": "worker_task_failure",

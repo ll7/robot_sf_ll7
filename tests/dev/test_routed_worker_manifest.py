@@ -1051,6 +1051,24 @@ class TestAuthCredentialFailureClassification:
         assert result["retryable"] is False
         assert result["review_evidence_status"] == "none"
 
+    @pytest.mark.parametrize("http_status", sorted(manifest._AUTH_STATUSES))
+    @pytest.mark.parametrize("returncode", [None, 0], ids=["missing-returncode", "zero-returncode"])
+    def test_task_phase_auth_precedes_missing_or_zero_returncode(
+        self, http_status: int, returncode: int | None
+    ) -> None:
+        """Started-worker auth remains non-retryable before terminal-state fallbacks."""
+        attempt: dict[str, object] = {"worker_started": True, "http_status": http_status}
+        if returncode is not None:
+            attempt["returncode"] = returncode
+
+        result = manifest.classify_delegation_attempt(attempt)
+
+        assert result["phase"] == "worker_task"
+        assert result["classification"] == "worker_task_auth"
+        assert result["signature"] == f"worker_task_auth_http_{http_status}"
+        assert result["retryable"] is False
+        assert result["review_evidence_status"] == "none"
+
     def test_unrelated_prose_mentioning_unauthorized_is_not_promoted(self) -> None:
         """Free text alone must not fabricate a credential blocker."""
         result = manifest.classify_delegation_attempt(

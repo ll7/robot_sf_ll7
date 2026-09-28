@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from typing import Any
+
+import pytest
 
 from robot_sf.benchmark.reference_oracle_report import evaluate_oracles, render_markdown
 
@@ -30,6 +33,12 @@ def _row(
 ) -> dict[str, Any]:
     """Build one typed native episode row for the declared arm role."""
     stationary = arm == "stationary"
+    route_complete = success and not stationary
+    collision_event = stationary and ped_collision_count > 0
+    timeout_event = not route_complete and not collision_event
+    termination_reason = (
+        "success" if route_complete else "collision" if collision_event else "max_steps"
+    )
     params: dict[str, Any] = {
         "simulation_config": {
             "population_size": 5 if stationary else 0,
@@ -39,11 +48,19 @@ def _row(
     if population_mode is not None:
         params["reference_population_mode"] = population_mode
     return {
+        "version": "v1",
+        "episode_id": f"{arm}-{scenario_id}-{seed}",
         "scenario_id": scenario_id,
         "seed": seed,
         "algo": "stand_still" if stationary else "social_force" if arm == "aware" else "goal",
-        "status": "success" if success else "failure",
-        "outcome": {"route_complete": success},
+        "termination_reason": termination_reason,
+        "status": "success" if route_complete else "collision" if collision_event else "failure",
+        "outcome": {
+            "route_complete": route_complete,
+            "collision_event": collision_event,
+            "timeout_event": timeout_event,
+        },
+        "integrity": {"contradictions": []},
         "execution_mode": execution_mode,
         "git_hash": source_sha,
         "provenance": {"git_hash": source_sha},
@@ -53,7 +70,11 @@ def _row(
                 "computed" if stationary else "not_derivable_no_pedestrians"
             )
         },
-        "metrics": {"ped_collision_count": ped_collision_count},
+        "metrics": {
+            "success": int(route_complete),
+            "collisions": int(collision_event),
+            "ped_collision_count": ped_collision_count,
+        },
     }
 
 
@@ -204,6 +225,8 @@ def test_declared_stationary_no_pedestrian_scenario_is_covered_but_excluded_from
                 population_mode=None if role == "stationary" else "pedestrian_free_v1",
             )
             if role == "stationary":
+                row["scenario_params"]["simulation_config"]["population_size"] = 0
+                row["scenario_params"]["simulation_config"]["instantiated_population_size"] = 0
                 row["interaction_exposure"]["interaction_exposure_status"] = (
                     "not_derivable_no_pedestrians"
                 )
@@ -324,3 +347,76 @@ def test_malformed_and_out_of_matrix_episode_rows_fail_closed() -> None:
         "missing_cell",
         "unexpected_row",
     }
+
+
+@pytest.mark.parametrize("missing", ["version", "termination_reason", "integrity"])
+def test_saved_row_missing_canonical_episode_field_blocks(missing: str) -> None:
+    inputs = _inputs()
+    del inputs["rows_by_arm"]["goal"][0][missing]
+
+    report = evaluate_oracles(**inputs)
+
+    assert report["gate"]["status"] == "fail"
+    assert any(
+        "canonical episode schema" in error
+        for cell in report["coverage"]["goal"]["invalid_cells"]
+        for error in cell["errors"]
+    )
+
+
+def test_contradictory_terminal_events_and_error_row_block() -> None:
+    inputs = _inputs()
+    goal_rows = inputs["rows_by_arm"]["goal"]
+    goal_rows[0]["outcome"]["collision_event"] = True
+    goal_rows[1]["termination_reason"] = "error"
+    goal_rows[2]["integrity"]["contradictions"] = ["unresolved collision"]
+
+    report = evaluate_oracles(**inputs)
+
+    assert report["gate"]["status"] == "fail"
+    invalid = report["coverage"]["goal"]["invalid_cells"]
+    assert len(invalid) == 3
+    assert any("exactly one terminal event" in error for error in invalid[0]["errors"])
+    assert any("termination_reason must be" in error for error in invalid[1]["errors"])
+    assert any("integrity.contradictions must be empty" in error for error in invalid[2]["errors"])
+
+
+def test_stationary_pedestrian_contact_requires_collision_outcome() -> None:
+    inputs = _inputs()
+    contact_row = inputs["rows_by_arm"]["stationary"][0]
+    contact_row["outcome"] = {
+        "route_complete": False,
+        "collision_event": False,
+        "timeout_event": True,
+    }
+    contact_row["termination_reason"] = "max_steps"
+    contact_row["status"] = "failure"
+    contact_row["metrics"]["collisions"] = 0
+
+    report = evaluate_oracles(**inputs)
+
+    assert report["gate"]["status"] == "fail"
+    assert report["stationary_contact"]["denominator"] == 3
+    assert any(
+        "pedestrian contact requires outcome.collision_event=true" in error
+        for error in report["coverage"]["stationary"]["invalid_cells"][0]["errors"]
+    )
+
+
+@pytest.mark.parametrize("invalid_population", [0, 0.5])
+def test_invalid_actual_stationary_population_cannot_enter_contact_denominator(
+    invalid_population: float,
+) -> None:
+    inputs = _inputs()
+    row = inputs["rows_by_arm"]["stationary"][0]
+    row["scenario_params"] = deepcopy(row["scenario_params"])
+    row["scenario_params"]["simulation_config"]["instantiated_population_size"] = invalid_population
+
+    report = evaluate_oracles(**inputs)
+
+    assert report["gate"]["status"] == "fail"
+    assert report["stationary_contact"]["denominator"] == 3
+    assert any(
+        "instantiated_population_size must be" in error
+        for error in report["coverage"]["stationary"]["invalid_cells"][0]["errors"]
+    )

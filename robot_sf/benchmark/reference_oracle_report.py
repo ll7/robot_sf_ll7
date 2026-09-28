@@ -8,13 +8,26 @@ declared input matrix; it does not by itself establish release or paper evidence
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
+from jsonschema import Draft202012Validator
+
+from robot_sf.benchmark.termination_reason import (
+    outcome_contradictions,
+    status_from_termination_reason,
+)
+
 REPORT_SCHEMA_VERSION = "reference_oracle_report.v1"
+_EPISODE_SCHEMA = json.loads(
+    (Path(__file__).parent / "schemas/episode.schema.v1.json").read_text(encoding="utf-8")
+)
+_EPISODE_VALIDATOR = Draft202012Validator(_EPISODE_SCHEMA)
 _THRESHOLD_KEYS = frozenset(
     {
         "max_goal_failure_count",
@@ -277,6 +290,7 @@ def evaluate_oracles(  # noqa: C901, PLR0912, PLR0913, PLR0915
             if seed is not None and seed not in expected_seed_set:
                 row_errors.append(f"seed {seed} is outside the declared seed set")
 
+            _validate_canonical_episode(raw_row, row_errors)
             outcome = _outcome_facts(raw_row, row_errors)
             mode = _execution_mode(raw_row, row_errors)
             mode_counts[mode or "missing"] += 1
@@ -305,6 +319,15 @@ def evaluate_oracles(  # noqa: C901, PLR0912, PLR0913, PLR0915
             )
             if role == "stationary" and ped_collision_count is None:
                 row_errors.append("metrics.ped_collision_count must be finite and non-negative")
+            elif (
+                role == "stationary"
+                and ped_collision_count is not None
+                and ped_collision_count > 0
+                and outcome["collision_event"] is not True
+            ):
+                row_errors.append(
+                    "stationary pedestrian contact requires outcome.collision_event=true"
+                )
 
             has_valid_identity = scenario_id is not None and seed is not None
             expected_identity = (
@@ -880,6 +903,54 @@ def _nonempty_string(value: Any) -> str | None:
     return normalized or None
 
 
+def _validate_canonical_episode(row: Mapping[str, Any], errors: list[str]) -> None:
+    """Reject saved rows that bypassed the map runner's canonical writer."""
+    schema_error = next(_EPISODE_VALIDATOR.iter_errors(row), None)
+    if schema_error is not None:
+        location = ".".join(str(part) for part in schema_error.absolute_path)
+        errors.append(f"canonical episode schema {location or '<root>'}: {schema_error.message}")
+    integrity = row.get("integrity")
+    if isinstance(integrity, Mapping) and integrity.get("contradictions") != []:
+        errors.append("integrity.contradictions must be empty")
+
+
+def _validate_terminal_partition(
+    row: Mapping[str, Any],
+    outcome: Mapping[str, Any],
+    flags: Mapping[str, bool | None],
+    status: str | None,
+    errors: list[str],
+) -> None:
+    """Bind the VV-2 runner's exclusive terminal event to its reason."""
+    termination_reason = _nonempty_string(row.get("termination_reason"))
+    # Error, partial, and other generic-schema rows remain visible but cannot count.
+    terminal_flags = {
+        "success": "route_complete",
+        "collision": "collision_event",
+        "max_steps": "timeout_event",
+    }
+    if termination_reason not in terminal_flags:
+        errors.append("termination_reason must be success, collision, or max_steps")
+    elif status != status_from_termination_reason(termination_reason):
+        errors.append("status and termination_reason disagree")
+    if not all(value is not None for value in flags.values()):
+        return
+    active_flags = [key for key, value in flags.items() if value]
+    if len(active_flags) != 1:
+        errors.append("outcome must contain exactly one terminal event")
+    elif (
+        termination_reason in terminal_flags
+        and active_flags[0] != terminal_flags[termination_reason]
+    ):
+        errors.append("termination_reason and outcome terminal event disagree")
+    contradictions = outcome_contradictions(
+        termination_reason=termination_reason or "",
+        outcome=outcome,
+        metrics=row.get("metrics") if isinstance(row.get("metrics"), Mapping) else None,
+    )
+    errors.extend(f"episode outcome contradiction: {item}" for item in contradictions)
+
+
 def _outcome_facts(row: Mapping[str, Any], errors: list[str]) -> dict[str, Any]:
     outcome = row.get("outcome")
     if not isinstance(outcome, Mapping):
@@ -887,14 +958,19 @@ def _outcome_facts(row: Mapping[str, Any], errors: list[str]) -> dict[str, Any]:
         return {
             "status": _nonempty_string(row.get("status")),
             "route_complete": None,
+            "collision_event": None,
             "success": False,
             "is_failure": False,
         }
 
-    route_complete = outcome.get("route_complete")
-    if not isinstance(route_complete, bool):
-        errors.append("outcome.route_complete must be a boolean")
-        route_complete = None
+    flags: dict[str, bool | None] = {}
+    for key in ("route_complete", "collision_event", "timeout_event"):
+        value = outcome.get(key)
+        if not isinstance(value, bool):
+            errors.append(f"outcome.{key} must be a boolean")
+            value = None
+        flags[key] = value
+    route_complete = flags["route_complete"]
     status = _nonempty_string(row.get("status"))
     if status is None:
         errors.append("status is missing or invalid")
@@ -902,6 +978,7 @@ def _outcome_facts(row: Mapping[str, Any], errors: list[str]) -> dict[str, Any]:
         status = status.lower()
         if status not in _ALLOWED_STATUSES:
             errors.append(f"status {status!r} is not a supported episode status")
+    _validate_terminal_partition(row, outcome, flags, status, errors)
     success = status == "success" and route_complete is True
     if route_complete is not None and status in _ALLOWED_STATUSES:
         if (status == "success") != route_complete:
@@ -910,6 +987,7 @@ def _outcome_facts(row: Mapping[str, Any], errors: list[str]) -> dict[str, Any]:
     return {
         "status": status,
         "route_complete": route_complete,
+        "collision_event": flags["collision_event"],
         "success": success,
         "is_failure": is_failure,
     }
@@ -1041,6 +1119,17 @@ def _validate_stationary_population(
         return
     if scenario_params.get("reference_population_mode") == "pedestrian_free_v1":
         errors.append("stationary rows must retain the original pedestrian population")
+    simulation_config = scenario_params.get("simulation_config")
+    instantiated = (
+        simulation_config.get("instantiated_population_size")
+        if isinstance(simulation_config, Mapping)
+        else None
+    )
+    if isinstance(instantiated, bool) or not isinstance(instantiated, int):
+        errors.append("stationary instantiated_population_size must be an integer")
+    elif (no_pedestrians and instantiated != 0) or (not no_pedestrians and instantiated <= 0):
+        expected = "zero" if no_pedestrians else "positive"
+        errors.append(f"stationary instantiated_population_size must be {expected}")
     interaction_exposure = row.get("interaction_exposure")
     if not isinstance(interaction_exposure, Mapping):
         errors.append("interaction_exposure must be an object for stationary rows")

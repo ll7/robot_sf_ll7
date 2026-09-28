@@ -9,6 +9,10 @@ import pytest
 
 from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
+from robot_sf.benchmark.reference_oracle_report import (
+    _outcome_facts,
+    _validate_canonical_episode,
+)
 from scripts.validation.run_reference_planner_oracles import (
     EPISODE_SCHEMA,
     ROOT,
@@ -85,6 +89,10 @@ def test_stand_still_batch_preserves_policy_contract_when_resumed(tmp_path: Path
     assert second["written"] == 0
     assert len(rows) == 1
     assert rows[0]["algo"] == "stand_still"
+    row_errors: list[str] = []
+    _validate_canonical_episode(rows[0], row_errors)
+    _outcome_facts(rows[0], row_errors)
+    assert row_errors == []
     assert (
         rows[0]["algorithm_metadata"]["planner_contract"]["observation_contract"]["required_inputs"]
         == []

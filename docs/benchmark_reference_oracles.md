@@ -51,12 +51,26 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run python \
 ```
 
 The gate requires one valid row for every scenario and seed in every configured
-arm. It lists all goal failures, including probes; only explicitly declared
+arm. Saved rows must pass the canonical episode schema, have an empty integrity
+contradiction list, and contain exactly one terminal event consistent with the
+status and termination reason. This VV-2 runner admits `success`, `collision`,
+and `max_steps` terminal reasons; `error`, partial, and other terminal rows are
+retained as diagnostic failures and cannot enter the threshold denominators.
+It lists all goal failures, including probes; only explicitly declared
 probes are exempt from the goal-failure threshold. Stationary contact rate is
 the fraction of episodes with pedestrians present and
 `metrics.ped_collision_count > 0`;
-missing typed contact data blocks the gate. Dominance is paired by scenario
+missing typed contact data or zero actual instantiated pedestrians in a
+pedestrian-present row blocks the gate. The explicitly declared empty-population
+scenario must have zero instantiated pedestrians and is excluded from the
+conditional contact denominator. A positive pedestrian-contact count must also
+have a collision terminal event. Dominance is paired by scenario
 and seed: an aware arm fails when its goal-completion outcome is worse than the
 blind goal arm. Missing, duplicated, degraded, or source-mismatched rows block
 the gate. The thresholds are in YAML; this diagnostic does not alter the
 pedestrian model or admit a benchmark or paper claim by itself.
+
+The earlier c551b586 cluster report remains a red diagnostic for that exact
+source. A changed gate head requires a new complete run and artifact receipt
+on a host permitted to submit the jobs; that report cannot be promoted by
+rechecking it with newer code.

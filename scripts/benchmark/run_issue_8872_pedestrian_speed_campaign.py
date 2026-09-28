@@ -66,12 +66,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CANARY_CONFIG = REPO_ROOT / "configs/benchmarks/issue_8871_pedestrian_speed_canary_v1.yaml"
 PRODUCTION_MANIFEST_HASH = "371f1a0160ec7faf1ade531691f104e2a1c92f7c34857e887ba1ba539e1b5238"
 ROBOT_SPEED_MANIFEST_HASH = "e32ce197149af62bf366f5ca95abbb42215b379fe7916d916ccdd544dce8666f"
-PACKET_SCHEMA_VERSION = "robot_sf.issue_8872_pedestrian_speed_campaign_packet.v1"
+PACKET_SCHEMA_VERSION = "robot_sf.issue_8872_pedestrian_speed_campaign_packet.v2"
 ROW_ACCOUNTING_SCHEMA_VERSION = "robot_sf.issue_8872_pedestrian_speed_row_accounting.v1"
 SMOKE_SCHEMA_VERSION = "robot_sf.issue_8872_pedestrian_speed_smoke.v1"
 ACTIVATION_RECEIPT_SCHEMA_VERSION = "robot_sf.issue_8871_activation_receipt.v1"
 SPEED_INTEGRITY_RECEIPT_SCHEMA_VERSION = "robot_sf.issue_6102_integrity_receipt.v1"
-NATIVE_PREFLIGHT_RECEIPT_SCHEMA_VERSION = "robot_sf.issue_8872_native_preflight_receipt.v1"
+NATIVE_PREFLIGHT_RECEIPT_SCHEMA_VERSION = "robot_sf.issue_8872_native_preflight_receipt.v2"
 PRIVATE_ADMISSION_RECEIPT_SCHEMA_VERSION = "robot_sf.issue_8872_private_admission_receipt.v1"
 AUTHORIZATION_RECEIPT_SCHEMA_VERSION = "robot_sf.issue_8872_production_authorization.v1"
 EXPECTED_ROWS = 2160
@@ -222,7 +222,7 @@ PUBLIC_RECEIPT_SCHEMAS = {
         "fallback": None,
         "degraded": None,
         "planner_ids": None,
-        "checkpoint_provenance_complete": None,
+        "checkpoint_manifest_sha256": None,
         "protocol_semantic_hash": None,
         "manifest_hash": None,
         "source_commit": None,
@@ -701,6 +701,49 @@ def _compiled_manifest(
     return manifest
 
 
+@lru_cache(maxsize=2)
+def _compiled_checkpoint_manifest(
+    config_path: str | Path = DEFAULT_PROTOCOL_CONFIG,
+) -> dict[str, list[dict[str, str]]]:
+    """Compile the exact planner-to-checkpoint identities from frozen configs."""
+    from robot_sf.models.registry import get_registry_entry
+    from scripts.benchmark.run_issue_8871_pedestrian_speed_canary import (
+        _load_planner_specs,
+        _required_model_ids,
+    )
+
+    planner_specs = _load_planner_specs(load_protocol(config_path))
+    planner_ids = [str(spec["planner_id"]) for spec in planner_specs]
+    _require(
+        planner_ids == list(EXPECTED_PLANNERS),
+        "planner roster drifted while compiling checkpoint identities",
+    )
+    checkpoint_manifest: dict[str, list[dict[str, str]]] = {}
+    for spec in planner_specs:
+        planner_id = str(spec["planner_id"])
+        expected_checkpoints: list[dict[str, str]] = []
+        for model_id in sorted(_required_model_ids([spec])):
+            try:
+                entry = get_registry_entry(model_id, REPO_ROOT / "model/registry.yaml")
+            except (FileNotFoundError, KeyError, TypeError, ValueError) as exc:
+                raise CampaignAdapterError(
+                    f"checkpoint registry entry is unavailable for {model_id}"
+                ) from exc
+            release = entry.get("github_release")
+            expected_sha256 = release.get("sha256") if isinstance(release, Mapping) else None
+            expected_checkpoints.append(
+                {
+                    "model_id": model_id,
+                    "expected_sha256": _require_digest(
+                        expected_sha256,
+                        f"checkpoint registry SHA-256 for {model_id}",
+                    ),
+                }
+            )
+        checkpoint_manifest[planner_id] = expected_checkpoints
+    return checkpoint_manifest
+
+
 @lru_cache(maxsize=1)
 def _compiled_identity_rows() -> dict[str, dict[str, Any]]:
     """Return the compiled production identity contract keyed by identity."""
@@ -1007,7 +1050,7 @@ def _validate_journal_success_provenance(
             )
     checkpoint_provenance = provenance.get("checkpoint_provenance")
     _require(
-        isinstance(checkpoint_provenance, list) and bool(checkpoint_provenance),
+        isinstance(checkpoint_provenance, list),
         "journal native terminal row checkpoint provenance is incomplete",
     )
     _require(
@@ -1017,6 +1060,25 @@ def _validate_journal_success_provenance(
         ),
         "journal native terminal row checkpoint provenance is incomplete",
     )
+    if packet_context is not None:
+        checkpoint_manifest = _mapping(
+            packet_context.get("checkpoint_manifest"), "packet.checkpoint_manifest"
+        )
+        expected_checkpoints = checkpoint_manifest.get(provenance["planner_id"])
+        _require(
+            isinstance(expected_checkpoints, list),
+            "packet has no checkpoint identities for the row planner",
+        )
+        expected_checkpoint_ids = [item["model_id"] for item in expected_checkpoints]
+        actual_checkpoint_ids = [item["model_id"] for item in checkpoint_provenance]
+        _require(
+            actual_checkpoint_ids == expected_checkpoint_ids
+            and all(
+                item["sha256"] == item["expected_sha256"] == expected["expected_sha256"]
+                for item, expected in zip(checkpoint_provenance, expected_checkpoints, strict=True)
+            ),
+            "journal native terminal row checkpoint identities differ from the packet",
+        )
     _validated_protocol_metrics(
         provenance.get("metrics"),
         field="journal.row_finished.provenance.metrics",
@@ -1037,7 +1099,12 @@ def _journal_reason(value: Any) -> str | None:
     return None if value is None else _sanitize_reason(value)
 
 
-def _packet_binding_hash(manifest: Mapping[str, Any], source_commit: str) -> str:
+def _packet_binding_hash(
+    manifest: Mapping[str, Any],
+    source_commit: str,
+    checkpoint_manifest: Mapping[str, Sequence[Mapping[str, str]]] | None = None,
+) -> str:
+    checkpoint_manifest = checkpoint_manifest or _compiled_checkpoint_manifest()
     return _canonical_hash(
         {
             "schema_version": PACKET_SCHEMA_VERSION,
@@ -1046,6 +1113,7 @@ def _packet_binding_hash(manifest: Mapping[str, Any], source_commit: str) -> str
             "protocol_semantic_hash": EXPECTED_PROTOCOL_SEMANTIC_HASH,
             "manifest_hash": manifest["manifest_hash"],
             "identities": manifest["identities"],
+            "checkpoint_manifest": checkpoint_manifest,
         }
     )
 
@@ -1160,7 +1228,10 @@ def _validate_speed_integrity_receipt(
 
 
 def _validate_native_preflight(
-    receipt: Mapping[str, Any], binding_hash: str, source_commit: str
+    receipt: Mapping[str, Any],
+    binding_hash: str,
+    source_commit: str,
+    checkpoint_manifest: Mapping[str, Sequence[Mapping[str, str]]],
 ) -> None:
     value = _mapping(receipt, "native_preflight")
     _require(
@@ -1182,9 +1253,13 @@ def _validate_native_preflight(
         tuple(value.get("planner_ids", ())) == tuple(EXPECTED_PLANNERS),
         "native preflight planner roster drifted",
     )
+    _require_digest(
+        value.get("checkpoint_manifest_sha256"),
+        "native_preflight.checkpoint_manifest_sha256",
+    )
     _require(
-        value.get("checkpoint_provenance_complete") is True,
-        "native checkpoint provenance is incomplete",
+        value.get("checkpoint_manifest_sha256") == _canonical_hash(checkpoint_manifest),
+        "native preflight checkpoint identities do not match the frozen checkpoint manifest",
     )
     _require(
         value.get("protocol_semantic_hash") == EXPECTED_PROTOCOL_SEMANTIC_HASH,
@@ -1289,6 +1364,11 @@ def _validate_packet_structure(
         value.get("source_commit") == source_commit,
         "production packet source commit drifted",
     )
+    checkpoint_manifest = value.get("checkpoint_manifest")
+    _require(
+        checkpoint_manifest == _compiled_checkpoint_manifest(),
+        "production packet checkpoint identities drifted from the frozen planner/config registry",
+    )
     _require(
         value.get("expected_rows") == EXPECTED_ROWS,
         "production packet expected row count drifted",
@@ -1307,7 +1387,7 @@ def _validate_packet_structure(
         value.get("unique_identity_count") == EXPECTED_ROWS,
         "production packet uniqueness drifted",
     )
-    binding_hash = _packet_binding_hash(manifest, source_commit)
+    binding_hash = _packet_binding_hash(manifest, source_commit, checkpoint_manifest)
     _require(
         value.get("packet_binding_hash") == binding_hash,
         "production packet binding hash drifted",
@@ -1375,7 +1455,12 @@ def validate_production_packet(
     _validate_speed_integrity_receipt(
         packet["speed_integrity_receipt"], binding_hash, source_commit
     )
-    _validate_native_preflight(packet["native_preflight"], binding_hash, source_commit)
+    _validate_native_preflight(
+        packet["native_preflight"],
+        binding_hash,
+        source_commit,
+        packet["checkpoint_manifest"],
+    )
     _validate_private_admission(packet["private_admission"], binding_hash, source_commit)
     _validate_authorization(packet["production_authorization"], binding_hash, source_commit)
     return manifest
@@ -1417,7 +1502,11 @@ def build_production_packet(
     """Build one digest-bound production packet after all receipts pass."""
     _require_digest(source_commit, "source_commit", length=40)
     manifest = _compiled_manifest(config_path)
-    binding_hash = _packet_binding_hash(manifest, source_commit)
+    checkpoint_manifest = {
+        planner_id: [dict(item) for item in checkpoints]
+        for planner_id, checkpoints in _compiled_checkpoint_manifest(config_path).items()
+    }
+    binding_hash = _packet_binding_hash(manifest, source_commit, checkpoint_manifest)
     receipts = {
         "activation_receipt": _project_public_receipt(activation_receipt, "activation_receipt"),
         "speed_integrity_receipt": _project_public_receipt(
@@ -1434,7 +1523,9 @@ def build_production_packet(
     _validate_speed_integrity_receipt(
         receipts["speed_integrity_receipt"], binding_hash, source_commit
     )
-    _validate_native_preflight(receipts["native_preflight"], binding_hash, source_commit)
+    _validate_native_preflight(
+        receipts["native_preflight"], binding_hash, source_commit, checkpoint_manifest
+    )
     _validate_private_admission(receipts["private_admission"], binding_hash, source_commit)
     _validate_authorization(receipts["production_authorization"], binding_hash, source_commit)
     packet: dict[str, Any] = {
@@ -1445,6 +1536,7 @@ def build_production_packet(
         "protocol_semantic_hash": EXPECTED_PROTOCOL_SEMANTIC_HASH,
         "source_commit": source_commit,
         "manifest_hash": manifest["manifest_hash"],
+        "checkpoint_manifest": checkpoint_manifest,
         "packet_binding_hash": binding_hash,
         "expected_rows": EXPECTED_ROWS,
         "identity_count": manifest["identity_count"],
@@ -1471,19 +1563,30 @@ def build_production_packet(
     return packet
 
 
-def _native_outcome_status(
-    expected: Mapping[str, Any],
-    provenance: Mapping[str, Any],
-    *,
-    source_commit: str,
-    manifest_hash: str,
-) -> str:
+def _execution_exclusion_status(provenance: Mapping[str, Any]) -> str | None:
+    """Classify execution modes that can never count as native success."""
     if provenance.get("fallback") is True:
         return "fallback"
     if provenance.get("degraded") is True:
         return "degraded"
     if provenance.get("execution_mode") != "native" or provenance.get("native") is not True:
         return "non_native"
+    return None
+
+
+def _native_outcome_status(
+    expected: Mapping[str, Any],
+    provenance: Mapping[str, Any],
+    *,
+    source_commit: str,
+    manifest_hash: str,
+    packet_context: Mapping[str, Any] | None = None,
+) -> str:
+    exclusion_status = _execution_exclusion_status(provenance)
+    if exclusion_status is not None:
+        return exclusion_status
+    if packet_context is None:
+        return "provenance_invalid"
     if expected["regime_id"] == "legacy_default":
         if provenance.get("intervention_status") != "not_applicable":
             return "intervention_not_activated"
@@ -1522,6 +1625,7 @@ def _native_outcome_status(
                 "source_commit": source_commit,
                 "manifest_hash": manifest_hash,
                 "protocol_semantic_hash": EXPECTED_PROTOCOL_SEMANTIC_HASH,
+                "checkpoint_manifest": packet_context["checkpoint_manifest"],
             },
         )
     except CampaignAdapterError:
@@ -1569,6 +1673,7 @@ def _normalize_outcome(  # noqa: C901
     *,
     source_commit: str,
     manifest_hash: str,
+    packet_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     identity_key = str(expected["identity_key"])
     status = outcome.get("terminal_status")
@@ -1625,6 +1730,7 @@ def _normalize_outcome(  # noqa: C901
             provenance,
             source_commit=source_commit,
             manifest_hash=manifest_hash,
+            packet_context=packet_context,
         )
     if status != SUCCESS_STATUS:
         return _row_base(status, status)
@@ -1651,6 +1757,10 @@ def account_production_rows(
 ) -> dict[str, Any]:
     """Account outcomes into exactly one terminal row per compiled identity."""
     expected_rows = list(manifest["identities"])
+    try:
+        packet_context = _validate_journal_packet(manifest)
+    except CampaignAdapterError:
+        packet_context = None
     expected_by_key = {str(row["identity_key"]): row for row in expected_rows}
     grouped: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     unexpected_count = 0
@@ -1701,6 +1811,7 @@ def account_production_rows(
                     observed[0],
                     source_commit=source_commit,
                     manifest_hash=str(manifest["manifest_hash"]),
+                    packet_context=packet_context,
                 )
             )
     statuses = Counter(row["terminal_status"] for row in rows)
@@ -2220,6 +2331,7 @@ def _execute_native_identity(  # noqa: PLR0913
     from scripts.benchmark.run_issue_8871_pedestrian_speed_canary import (
         _bind_checkpoint_paths,
         _repo_path,
+        _required_model_ids,
         _runtime_binding_context,
         _runtime_controls,
         _sha256,
@@ -2233,6 +2345,12 @@ def _execute_native_identity(  # noqa: PLR0913
     _require(base is not None, f"scenario {scenario_id} was not loaded")
     _require(planner_id in planner_specs, f"planner {planner_id} was not loaded")
     spec = planner_specs[planner_id]
+    planner_checkpoint_ids = sorted(_required_model_ids([spec]))
+    _require(
+        all(model_id in checkpoints for model_id in planner_checkpoint_ids),
+        "required planner checkpoint is missing from the preflight set",
+    )
+    planner_checkpoints = {model_id: checkpoints[model_id] for model_id in planner_checkpoint_ids}
     _require(
         spec.get("config_sha256") == identity.get("planner_config_sha256"),
         "planner config digest does not match identity",
@@ -2249,7 +2367,7 @@ def _execute_native_identity(  # noqa: PLR0913
         algo_config=raw_config,
         scenario=base,
     )
-    effective_config = _bind_checkpoint_paths(resolved_algo, effective_config, checkpoints)
+    effective_config = _bind_checkpoint_paths(resolved_algo, effective_config, planner_checkpoints)
     scenario = build_execution_scenario(base, identity)
     controls = _runtime_controls(identity)
     runner = episode_runner or map_runner_episode.run_map_episode
@@ -2285,7 +2403,7 @@ def _execute_native_identity(  # noqa: PLR0913
         manifest_hash=manifest_hash,
         planner_algorithm=resolved_algo,
         robot_speed_cap_m_s=observed_cap,
-        checkpoint_provenance=_safe_checkpoint_provenance(checkpoints),
+        checkpoint_provenance=_safe_checkpoint_provenance(planner_checkpoints),
     )
 
 
@@ -2380,7 +2498,12 @@ def _validate_journal_header(
         "execution journal header manifest_hash is not the frozen production manifest",
     )
     _require(
-        header_binding_hash == _packet_binding_hash(_compiled_manifest(), header_source_commit),
+        header_binding_hash
+        == _packet_binding_hash(
+            _compiled_manifest(),
+            header_source_commit,
+            packet_context["checkpoint_manifest"],
+        ),
         "execution journal header packet binding is invalid",
     )
     header_expected_rows = header.get("expected_rows")
@@ -2561,7 +2684,9 @@ def _append_journal_event(handle: Any, event: str, **payload: Any) -> None:
     os.fsync(handle.fileno())
 
 
-def _journal_row_payload(row: Mapping[str, Any]) -> dict[str, Any]:
+def _journal_row_payload(
+    row: Mapping[str, Any], *, packet_context: Mapping[str, Any] | None = None
+) -> dict[str, Any]:
     """Return a complete, already-normalized terminal row for the durable journal."""
     identity_key = _journal_identity_key(row.get("identity_key"))
     terminal_status = row.get("terminal_status")
@@ -2587,7 +2712,11 @@ def _journal_row_payload(row: Mapping[str, Any]) -> dict[str, Any]:
     if provenance is not None:
         provenance = _journal_provenance(provenance, identity_key)
         if terminal_status == SUCCESS_STATUS:
-            _validate_journal_success_provenance(provenance, identity_key)
+            _validate_journal_success_provenance(
+                provenance,
+                identity_key,
+                packet_context=packet_context,
+            )
         if metrics is not None and "metrics" in provenance:
             _require(
                 metrics == provenance["metrics"],
@@ -2740,12 +2869,13 @@ def run_production(
                     outcome,
                     source_commit=str(packet["source_commit"]),
                     manifest_hash=str(packet["manifest_hash"]),
+                    packet_context=packet,
                 )
                 outcomes.append(normalized)
                 _append_journal_event(
                     journal,
                     "row_finished",
-                    **_journal_row_payload(normalized),
+                    **_journal_row_payload(normalized, packet_context=packet),
                 )
         finally:
             for policy, _meta in policy_cache.values():
@@ -2753,7 +2883,7 @@ def run_production(
                 if callable(close):
                     close()
     report = account_production_rows(
-        manifest,
+        packet,
         outcomes,
         source_commit=str(packet["source_commit"]),
     )

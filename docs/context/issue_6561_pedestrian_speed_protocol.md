@@ -66,3 +66,8 @@ row and its durable journal terminal event. The journal is append-only and fsync
 returns the validated terminal rows without permitting retry. Public receipts and CLI summaries
 carry only safe journal/output basenames, never private absolute paths, and exception diagnostics
 are reduced to stable class/code tokens.
+
+The production packet also binds the compiled planner-to-checkpoint manifest. The native preflight
+receipt carries its digest, and each row's checkpoint IDs and SHA-256 values must equal the packet's
+exact set for that planner; model-free planners bind an empty set. This prevents a structurally valid
+but substituted global checkpoint list from being accepted as row provenance.

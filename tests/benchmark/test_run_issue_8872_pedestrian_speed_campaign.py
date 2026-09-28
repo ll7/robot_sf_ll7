@@ -79,7 +79,9 @@ def _receipts() -> dict[str, dict[str, Any]]:
             "fallback": False,
             "degraded": False,
             "planner_ids": list(campaign.EXPECTED_PLANNERS),
-            "checkpoint_provenance_complete": True,
+            "checkpoint_manifest_sha256": campaign._canonical_hash(
+                campaign._compiled_checkpoint_manifest()
+            ),
             "protocol_semantic_hash": campaign.EXPECTED_PROTOCOL_SEMANTIC_HASH,
             "manifest_hash": campaign.PRODUCTION_MANIFEST_HASH,
             "source_commit": SOURCE_COMMIT,
@@ -158,15 +160,18 @@ def _protocol_metrics() -> dict[str, float]:
     }
 
 
-def _checkpoint_provenance() -> list[dict[str, Any]]:
+def _checkpoint_provenance(
+    packet: dict[str, Any], identity: dict[str, Any]
+) -> list[dict[str, Any]]:
     return [
         {
-            "model_id": "predictive_proxy_selected_v2_full",
-            "path_label": "models/predictive_proxy_selected_v2_full.pt",
-            "sha256": "c" * 64,
+            "model_id": item["model_id"],
+            "path_label": f"models/{item['model_id']}.pt",
+            "sha256": item["expected_sha256"],
             "size_bytes": 1,
-            "expected_sha256": "c" * 64,
+            "expected_sha256": item["expected_sha256"],
         }
+        for item in packet["checkpoint_manifest"][identity["planner_id"]]
     ]
 
 
@@ -219,7 +224,7 @@ def _native_outcome(identity: dict[str, Any], packet: dict[str, Any]) -> dict[st
             ),
             "diagnostics": diagnostics,
             "trace_sha256": "d" * 64,
-            "checkpoint_provenance": _checkpoint_provenance(),
+            "checkpoint_provenance": _checkpoint_provenance(packet, identity),
             "metrics": metrics,
         },
     }
@@ -234,9 +239,31 @@ def test_packet_binds_exact_compiled_manifest_and_all_gates() -> None:
     assert packet["manifest_hash"] == campaign.PRODUCTION_MANIFEST_HASH
     assert packet["execution_boundary"]["public_repo_submits"] is False
     assert campaign.validate_production_packet(packet)["manifest_hash"] == packet["manifest_hash"]
+    assert packet["checkpoint_manifest"] == campaign._compiled_checkpoint_manifest()
     readiness = campaign.inspect_packet(packet)
     assert readiness["ready"] is False
     assert "authenticated authorization" in readiness["reason"]
+
+
+def test_packet_rejects_checkpoint_manifest_substitution() -> None:
+    packet = _packet()
+    planner_id = next(
+        planner for planner, checkpoints in packet["checkpoint_manifest"].items() if checkpoints
+    )
+    packet["checkpoint_manifest"][planner_id][0]["expected_sha256"] = "0" * 64
+    packet["packet_sha256"] = campaign._canonical_hash(campaign._packet_core(packet))
+
+    with pytest.raises(campaign.CampaignAdapterError, match="checkpoint identities drifted"):
+        campaign.validate_production_packet(packet)
+
+
+def test_native_preflight_binds_checkpoint_manifest_to_packet() -> None:
+    packet = _packet()
+    packet["native_preflight"]["checkpoint_manifest_sha256"] = "0" * 64
+    packet["packet_sha256"] = campaign._canonical_hash(campaign._packet_core(packet))
+
+    with pytest.raises(campaign.CampaignAdapterError, match="checkpoint identities do not match"):
+        campaign.validate_production_packet(packet)
 
 
 @pytest.mark.parametrize(
@@ -347,6 +374,26 @@ def test_accounting_rejects_native_success_without_complete_provenance(
     assert report["terminal_status_counts"]["provenance_invalid"] == 1
 
 
+@pytest.mark.parametrize("tampered_field", ("model_id", "sha256"))
+def test_accounting_rejects_checkpoint_substitution(tampered_field: str) -> None:
+    packet = _packet()
+    identity = next(
+        row for row in packet["identities"] if packet["checkpoint_manifest"][row["planner_id"]]
+    )
+    outcomes = [_native_outcome(row, packet) for row in packet["identities"]]
+    outcome = next(row for row in outcomes if row["identity_key"] == identity["identity_key"])
+    checkpoint = outcome["provenance"]["checkpoint_provenance"][0]
+    checkpoint[tampered_field] = "unknown_checkpoint" if tampered_field == "model_id" else "0" * 64
+
+    report = campaign.account_production_rows(
+        packet, outcomes, source_commit=packet["source_commit"]
+    )
+
+    assert report["admissible"] is False
+    row = next(item for item in report["rows"] if item["identity_key"] == identity["identity_key"])
+    assert row["terminal_status"] == "provenance_invalid"
+
+
 def test_fallback_row_is_recorded_but_never_admitted() -> None:
     packet = _packet()
     outcomes = [_native_outcome(identity, packet) for identity in packet["identities"]]
@@ -447,7 +494,7 @@ def _fake_native_outcome(packet: dict[str, Any], identity: dict[str, Any]) -> di
         manifest_hash=packet["manifest_hash"],
         planner_algorithm="fake-native-planner",
         robot_speed_cap_m_s=2.0,
-        checkpoint_provenance=_checkpoint_provenance(),
+        checkpoint_provenance=_checkpoint_provenance(packet, identity),
     )
 
 
@@ -463,7 +510,7 @@ def test_fixed_native_record_adapter_uses_trace_not_executor_flag() -> None:
         manifest_hash=packet["manifest_hash"],
         planner_algorithm="fake-native-planner",
         robot_speed_cap_m_s=2.0,
-        checkpoint_provenance=_checkpoint_provenance(),
+        checkpoint_provenance=_checkpoint_provenance(packet, identity),
     )
     assert outcome["terminal_status"] == campaign.SUCCESS_STATUS
     assert outcome["provenance"]["runtime_controls"] == identity["runtime_controls"]
@@ -496,7 +543,7 @@ def test_native_record_rejects_spawn_or_trace_actor_contract_drift(
             manifest_hash=packet["manifest_hash"],
             planner_algorithm="fake-native-planner",
             robot_speed_cap_m_s=2.0,
-            checkpoint_provenance=_checkpoint_provenance(),
+            checkpoint_provenance=_checkpoint_provenance(packet, identity),
         )
 
 
@@ -530,7 +577,7 @@ def test_native_record_projects_established_raw_metric_contract() -> None:
         manifest_hash=packet["manifest_hash"],
         planner_algorithm="fake-native-planner",
         robot_speed_cap_m_s=2.0,
-        checkpoint_provenance=_checkpoint_provenance(),
+        checkpoint_provenance=_checkpoint_provenance(packet, identity),
     )
 
     assert outcome["terminal_status"] == campaign.SUCCESS_STATUS
@@ -565,7 +612,7 @@ def test_native_record_rejects_non_finite_protocol_metric() -> None:
         manifest_hash=packet["manifest_hash"],
         planner_algorithm="fake-native-planner",
         robot_speed_cap_m_s=2.0,
-        checkpoint_provenance=_checkpoint_provenance(),
+        checkpoint_provenance=_checkpoint_provenance(packet, identity),
     )
 
     assert outcome["terminal_status"] == "provenance_invalid"
@@ -841,7 +888,7 @@ def test_reconcile_accepts_protocol_provenance_fields(tmp_path: Any) -> None:
         manifest_hash=packet["manifest_hash"],
         planner_algorithm="fake-native-planner",
         robot_speed_cap_m_s=2.0,
-        checkpoint_provenance=_checkpoint_provenance(),
+        checkpoint_provenance=_checkpoint_provenance(packet, identity),
     )
     assert outcome["terminal_status"] == campaign.SUCCESS_STATUS
     journal = tmp_path / "run.jsonl"
@@ -898,13 +945,60 @@ def test_success_journal_row_rejects_empty_required_provenance(
 ) -> None:
     packet = _packet()
     identity = next(
-        item for item in packet["identities"] if item["regime_id"] == "slow_distributed"
+        item
+        for item in packet["identities"]
+        if item["regime_id"] == "slow_distributed"
+        and (field != "checkpoint_provenance" or packet["checkpoint_manifest"][item["planner_id"]])
     )
     outcome = _fake_native_outcome(packet, identity)
     outcome["provenance"][field] = {} if field == "diagnostics" else []
 
-    with pytest.raises(campaign.CampaignAdapterError, match="incomplete"):
-        campaign._journal_row_payload(outcome)
+    with pytest.raises(
+        campaign.CampaignAdapterError,
+        match="incomplete|checkpoint identities differ",
+    ):
+        campaign._journal_row_payload(outcome, packet_context=packet)
+
+
+def test_reconcile_rejects_checkpoint_substitution(tmp_path: Any) -> None:
+    packet = _packet()
+    identity = next(
+        item for item in packet["identities"] if packet["checkpoint_manifest"][item["planner_id"]]
+    )
+    outcome = _native_outcome(identity, packet)
+    row_payload = campaign._journal_row_payload(outcome)
+    row_payload["provenance"]["checkpoint_provenance"][0]["sha256"] = "0" * 64
+    journal = tmp_path / "checkpoint-substitution.jsonl"
+    with journal.open("w", encoding="utf-8") as handle:
+        campaign._append_journal_event(
+            handle,
+            **_journal_header(expected_rows=campaign.EXPECTED_ROWS, packet=packet),
+        )
+        campaign._append_journal_event(
+            handle,
+            "row_started",
+            identity_key=identity["identity_key"],
+        )
+        campaign._append_journal_event(handle, "row_finished", **row_payload)
+
+    with pytest.raises(campaign.CampaignAdapterError, match="checkpoint identities differ"):
+        _reconcile(
+            journal,
+            expected_rows=campaign.EXPECTED_ROWS,
+            packet=packet,
+        )
+
+
+def test_journal_row_rejects_incomplete_checkpoint_item() -> None:
+    packet = _packet()
+    identity = next(
+        item for item in packet["identities"] if packet["checkpoint_manifest"][item["planner_id"]]
+    )
+    outcome = _native_outcome(identity, packet)
+    outcome["provenance"]["checkpoint_provenance"][0].pop("model_id")
+
+    with pytest.raises(campaign.CampaignAdapterError, match="checkpoint provenance is incomplete"):
+        campaign._journal_row_payload(outcome, packet_context=packet)
 
 
 def test_success_journal_row_rejects_all_null_treated_activation_scalars() -> None:

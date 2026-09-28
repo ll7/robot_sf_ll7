@@ -66,6 +66,7 @@ _TITLE_ISSUE_RE = re.compile(
 )
 _BRANCH_ISSUE_RE = re.compile(r"(?i)(?:^|[/._-])issue-(?P<number>\d+)(?:[/._-]|$|\b)")
 _SAFE_BRANCH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
+_FULL_COMMIT_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 _REPO_COMPONENT_RE = re.compile(r"^[^/\s]+$")
 DEFAULT_TIMEOUT_SECONDS = 120
 GRAPHQL_FALLBACK_MARKERS = ("graphql:", "graphql ", "api rate limit")
@@ -1407,6 +1408,37 @@ def _prepare_stale_source(request: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _validated_replacement_commit_records(
+    replacement_facts: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Validate replacement ancestry records before reading their commit IDs."""
+    records = replacement_facts.get("commit_records")
+    if not isinstance(records, list) or not records:
+        raise GateError("replacement ancestry records are unavailable")
+
+    commits = replacement_facts.get("commits")
+    if not isinstance(commits, list) or len(records) != len(commits):
+        raise GateError("replacement ancestry records are incomplete")
+
+    for index, record in enumerate(records):
+        if not isinstance(record, dict):
+            raise GateError(f"replacement ancestry record {index} is not an object")
+        sha = record.get("sha")
+        parents = record.get("parents")
+        subject = record.get("subject")
+        if not isinstance(sha, str) or _FULL_COMMIT_SHA_RE.fullmatch(sha) is None:
+            raise GateError(f"replacement ancestry record {index} has an invalid SHA")
+        if not isinstance(parents, list) or any(
+            not isinstance(parent, str) or _FULL_COMMIT_SHA_RE.fullmatch(parent) is None
+            for parent in parents
+        ):
+            raise GateError(f"replacement ancestry record {index} has invalid parents")
+        if not isinstance(subject, str):
+            raise GateError(f"replacement ancestry record {index} has an invalid subject")
+
+    return records
+
+
 def _verify_reconstruction(plan: dict[str, Any]) -> dict[str, Any]:
     """Verify exact source/main refs, clean state, linear replay ancestry, and patch IDs."""
     source_branch = str(plan["source_branch"])
@@ -1430,6 +1462,7 @@ def _verify_reconstruction(plan: dict[str, Any]) -> dict[str, Any]:
     )
     if replacement_error or replacement_facts is None:
         raise GateError(replacement_error or "cannot verify replacement ancestry")
+    replacement_records = _validated_replacement_commit_records(replacement_facts)
     replacement_state = ancestry_state(
         head_sha=replacement_head,
         base_ref="main",
@@ -1438,11 +1471,9 @@ def _verify_reconstruction(plan: dict[str, Any]) -> dict[str, Any]:
         commits=replacement_facts["commits"],
         issue_number=int(plan["issue"]),
         merge_base_is_ancestor_of_main=replacement_facts.get("merge_base_is_ancestor_of_main"),
-        commit_records=replacement_facts.get("commit_records"),
+        commit_records=replacement_records,
     )
-    replacement_commits = [
-        str(record["sha"]) for record in replacement_facts.get("commit_records", [])
-    ]
+    replacement_commits = [str(record["sha"]) for record in replacement_records]
     replacement_patch_ids = [_stable_patch_id(commit) for commit in replacement_commits]
     if replacement_patch_ids != plan["source_patch_ids"]:
         raise GateError("ordered stable patch IDs changed during replay")

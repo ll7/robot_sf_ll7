@@ -1878,6 +1878,53 @@ def test_reconstruct_conflict_rolls_back_replacement_and_restores_source(
     assert _git_test(worker, "status", "--porcelain") == ""
 
 
+def test_reconstruct_unavailable_replacement_ancestry_rolls_back_and_preserves_source(
+    real_git_repo, monkeypatch, capsys
+) -> None:
+    """Missing replacement ancestry after branch creation must roll back safely."""
+    worker = real_git_repo.worker
+    monkeypatch.chdir(worker)
+    source_sha = _make_stale_issue_branch(
+        worker,
+        source_messages=[("issue.txt", "issue work\n", "fix: issue work (#9393)")],
+    )
+
+    original_collect = gate.collect_ancestry_facts
+    calls = 0
+
+    def collect_with_unavailable_replacement(**kwargs):
+        nonlocal calls
+        calls += 1
+        facts, error = original_collect(**kwargs)
+        if calls == 2 and facts is not None:
+            facts = {**facts, "commit_records": None}
+        return facts, error
+
+    monkeypatch.setattr(gate, "collect_ancestry_facts", collect_with_unavailable_replacement)
+
+    exit_code = gate.main(
+        [
+            "reconstruct",
+            "--issue",
+            "9393",
+            "--source-branch",
+            "issue-9393-source",
+            "--new-branch",
+            "issue-9393-reconstructed",
+        ]
+    )
+
+    result = json.loads(capsys.readouterr().out)
+    assert exit_code == gate.EXIT_CODES["blocked"]
+    assert "replacement ancestry records are unavailable" in result["error"]
+    assert "rollback" in result["error"]
+    assert calls == 2
+    assert _git_test(worker, "branch", "--show-current") == "issue-9393-source"
+    assert _git_test(worker, "rev-parse", "refs/heads/issue-9393-source") == source_sha
+    assert "issue-9393-reconstructed" not in _git_test(worker, "branch", "--list")
+    assert _git_test(worker, "status", "--porcelain") == ""
+
+
 def test_real_git_unpushed_branch_sync_integrates_main_and_is_ready(
     real_git_repo, monkeypatch, capsys
 ) -> None:

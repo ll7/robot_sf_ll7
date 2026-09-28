@@ -460,6 +460,29 @@ def _typed_values(value: Any) -> list[int]:
     return []
 
 
+def _require_typed_seed_values(value: Any, *, label: str) -> list[int]:
+    """Return seed leaves while rejecting malformed typed seed fields."""
+    if isinstance(value, bool):
+        raise ValidationError(f"{label} must contain only typed integer seeds")
+    if isinstance(value, int):
+        return [value]
+    if isinstance(value, Mapping):
+        if not value:
+            raise ValidationError(f"{label} must contain at least one typed integer seed")
+        values: list[int] = []
+        for nested in value.values():
+            values.extend(_require_typed_seed_values(nested, label=label))
+        return values
+    if isinstance(value, (list, tuple)):
+        if not value:
+            raise ValidationError(f"{label} must contain at least one typed integer seed")
+        values = []
+        for nested in value:
+            values.extend(_require_typed_seed_values(nested, label=label))
+        return values
+    raise ValidationError(f"{label} must contain only typed integer seeds")
+
+
 def _collect_typed_fields(value: Any, *, field_names: frozenset[str]) -> list[tuple[str, Any]]:
     found: list[tuple[str, Any]] = []
     if isinstance(value, Mapping):
@@ -475,13 +498,25 @@ def _collect_typed_fields(value: Any, *, field_names: frozenset[str]) -> list[tu
 
 
 def _validate_tuning_log_seeds(payload: Mapping[str, Any]) -> int:
+    entries = payload.get("entries")
+    if isinstance(entries, list):
+        for index, entry in enumerate(entries):
+            if not isinstance(entry, Mapping):
+                raise ValidationError(f"structured tuning-log entry {index} must be a mapping")
+            entry_fields = _collect_typed_fields(entry, field_names=_SEED_FIELD_NAMES)
+            if not entry_fields:
+                raise ValidationError(
+                    f"structured tuning-log entry {index} must contain at least one typed seed field"
+                )
+            for field, raw in entry_fields:
+                _require_typed_seed_values(
+                    raw,
+                    label=f"structured tuning-log entry {index} field {field!r}",
+                )
+
     seed_values: list[int] = []
     for field, raw in _collect_typed_fields(payload, field_names=_SEED_FIELD_NAMES):
-        values = _typed_values(raw)
-        if not values:
-            raise ValidationError(
-                f"structured tuning-log field {field!r} has no typed integer seeds"
-            )
+        values = _require_typed_seed_values(raw, label=f"structured tuning-log field {field!r}")
         seed_values.extend(values)
     if not seed_values:
         raise ValidationError("structured tuning log must contain at least one typed seed field")

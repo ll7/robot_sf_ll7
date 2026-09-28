@@ -200,6 +200,27 @@ def test_tuning_log_rejects_seeds_only_entry(tmp_path: Path) -> None:
         CHECKER._validate_tuning_log(path)
 
 
+def test_tuning_log_requires_seed_on_each_entry(tmp_path: Path) -> None:
+    payload = _valid_log_payload()
+    payload["entries"][0].pop("seeds")
+    payload["seed"] = 1001
+    path = _write_log(tmp_path, payload)
+
+    with pytest.raises(CHECKER.ValidationError, match="entry 0.*typed seed field"):
+        CHECKER._validate_tuning_log(path)
+
+
+@pytest.mark.parametrize("malformed_seed", [True, "1001", [1001, "1002"]])
+def test_tuning_log_rejects_malformed_entry_seed(tmp_path: Path, malformed_seed: object) -> None:
+    payload = _valid_log_payload()
+    payload["entries"][0]["seeds"] = malformed_seed
+    payload["seed"] = 1002
+    path = _write_log(tmp_path, payload)
+
+    with pytest.raises(CHECKER.ValidationError, match="entry 0.*typed integer seeds"):
+        CHECKER._validate_tuning_log(path)
+
+
 def test_tuning_log_requires_string_scalar_or_list_scenario_ids(tmp_path: Path) -> None:
     payload = _valid_log_payload()
     payload["entries"][0]["scenario_ids"] = "issue_9748_dev_classic_doorway_medium"
@@ -332,3 +353,28 @@ def test_tuning_log_accepts_dev_fields_and_held_out_prose(tmp_path: Path) -> Non
     assert summary["release_seed_overlap"] == []
     assert summary["release_scenario_overlap"] == []
     assert summary["typed_scenario_count"] == 2
+
+
+def test_tuning_log_accepts_independent_seed_bindings(tmp_path: Path) -> None:
+    payload = _valid_log_payload()
+    provenance = payload["provenance"]
+    first_candidate, second_candidate = sorted(CHECKER.EXPECTED_PLANNER_CONFIGS)
+    payload["entries"] = [
+        {
+            "candidate": first_candidate,
+            "candidate_config_sha256": provenance["candidate_configs"][first_candidate]["sha256"],
+            "seed": 1001,
+            "scenario_id": "issue_9748_dev_classic_doorway_medium",
+        },
+        {
+            "candidate": second_candidate,
+            "candidate_config_sha256": provenance["candidate_configs"][second_candidate]["sha256"],
+            "seeds": [1002, 1003],
+            "scenario_ids": ["issue_9748_dev_francis2023_crowd_navigation"],
+        },
+    ]
+    path = _write_log(tmp_path, payload)
+
+    summary = CHECKER._validate_tuning_log(path)
+
+    assert summary["typed_seed_count"] == 3

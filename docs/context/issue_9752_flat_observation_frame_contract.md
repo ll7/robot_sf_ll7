@@ -3,11 +3,13 @@
 This crosswalk was verified against the 14-arm roster reached through
 `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml::canonical_campaign_config`,
 which points to
-`configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`.
-The roster is unchanged between main `5d7aba11f7ae34fc88cd99620ba179d0ebfec635` and the PR base
-`5634639ba5a3ead8323462355c5d7dc0efa00d0d`. Candidate arms point to their own files under
+`configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`. The roster
+and four candidate files below were checked against current main
+`6fb2cfdd9fdad68858c9559de0170a0e7aca5e3f`; these files are unchanged since main
+`5d7aba11f7ae34fc88cd99620ba179d0ebfec635`. Candidate arms point to their own files under
 `configs/policy_search/candidates/`. Source symbols and focused test anchors below were checked
-against the combined PR branch; they provide implementation-integrity evidence only.
+against the combined PR branch with current main merged; they provide implementation-integrity
+evidence only.
 
 ## Producer contract
 
@@ -155,7 +157,12 @@ They establish a matching feature-frame contract, not checkpoint provenance or a
 
 The required focused command over `tests/metamorphic/test_mirror_symmetry.py`,
 `tests/planner/test_risk_dwa.py`, and `tests/planner/test_guarded_ppo.py` reported 216 passed and
-3 expected xfails. Fourteen additional producer, frame-boundary, Goal, hybrid-v3, sampling, and
-replay nodes passed. Ruff check and format passed for all changed Python files; all 33 crosswalk
-paths and 83 source/test anchors resolved against the checkout, as did the 14-arm roster, four
-candidate configs, and their override keys. These are implementation-integrity/smoke results.
+3 expected xfails on the merged head. The prediction, SACADRL, and sampling test modules reported
+70 passed; eight additional producer, normalizer, Goal, hybrid-v3 characterization, PPO, and replay
+anchors reported 8 passed. Ruff check and format passed for all changed Python files, and
+`git diff --check` passed. The PR readiness command stopped during collection because the worktree
+environment lacks `imageio_ffmpeg` for the unrelated
+`tests/analysis_workbench/test_audit_materialize.py`; full readiness did not complete. These are
+implementation-integrity/smoke results, not campaign evidence. All 34 referenced paths and 83 exact
+source/config/test anchors resolved; the 14 roster arms and 12 candidate override keys also
+resolved against the current checkout.

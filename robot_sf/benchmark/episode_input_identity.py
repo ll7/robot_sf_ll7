@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -12,7 +11,7 @@ from typing import Any
 from robot_sf.training.scenario_loader import (
     RouteOverrideSnapshot,
     capture_route_override_snapshot,
-    resolve_map_id,
+    resolve_map_id_with_registry_identity,
     resolve_route_override_path,
 )
 
@@ -164,14 +163,12 @@ def _capture_map_assets(
     reasons: list[str] = []
     map_path: Path | None = None
     registry_path: Path | None = None
+    registry_digest: str | None = None
     if isinstance(map_id, str) and map_id.strip():
         try:
-            map_path = resolve_map_id(map_id, source=source)
-            registry = _map_registry_path()
-            if registry is None:
-                reasons.append("map_registry_unavailable")
-            else:
-                registry_path = registry.resolve(strict=True)
+            map_path, registry_path, registry_digest = resolve_map_id_with_registry_identity(
+                map_id, source=source
+            )
         except (OSError, RuntimeError, ValueError):
             reasons.append("registered_map_unavailable")
     elif isinstance(map_reference, str) and map_reference.strip():
@@ -184,8 +181,8 @@ def _capture_map_assets(
     assets: list[dict[str, str]] = []
     if map_path is not None:
         _append_asset_digest(assets, reasons, role="map", path=map_path)
-    if registry_path is not None:
-        _append_asset_digest(assets, reasons, role="map_registry", path=registry_path)
+    if registry_path is not None and registry_digest is not None:
+        assets.append({"role": "map_registry", "sha256": registry_digest})
     return sorted(assets, key=lambda item: item["role"]), reasons
 
 
@@ -196,14 +193,6 @@ def _append_asset_digest(
         assets.append({"role": role, "sha256": _sha256_file(path.resolve(strict=True))})
     except (OSError, RuntimeError, ValueError):
         reasons.append(f"{role}_asset_unavailable")
-
-
-def _map_registry_path() -> Path | None:
-    """Return the configured registry path used by the canonical scenario loader."""
-    override = os.getenv("ROBOT_SF_MAP_REGISTRY")
-    if override:
-        return Path(override).expanduser()
-    return Path(__file__).resolve().parents[2] / "maps/registry.yaml"
 
 
 def _sha256_file(path: Path) -> str:

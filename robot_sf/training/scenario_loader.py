@@ -1061,16 +1061,15 @@ def _validate_catalog_header(data: Mapping[str, Any], *, registry_path: Path) ->
 
 
 @lru_cache(maxsize=4)
-def _load_map_registry(path: Path | None = None) -> dict[str, _MapRegistryEntry]:
-    """Load map registry entries, returning map_id -> catalog entry.
+def _parse_map_registry_snapshot(
+    registry_path: Path, registry_bytes: bytes
+) -> dict[str, _MapRegistryEntry]:
+    """Parse one exact registry byte snapshot, caching by path and content.
 
     Returns:
-        dict[str, _MapRegistryEntry]: Map registry map_id to resolved catalog entries.
+        dict[str, _MapRegistryEntry]: Parsed map IDs and resolved catalog entries.
     """
-    registry_path = path or _resolve_map_registry_path()
-    if registry_path is None or not registry_path.exists():
-        return {}
-    data = yaml.safe_load(registry_path.read_text(encoding="utf-8")) or {}
+    data = yaml.safe_load(registry_bytes.decode("utf-8")) or {}
     if not isinstance(data, Mapping):
         raise ValueError(f"Map registry '{registry_path}' must contain a mapping.")
     _validate_catalog_header(data, registry_path=registry_path)
@@ -1083,6 +1082,61 @@ def _load_map_registry(path: Path | None = None) -> dict[str, _MapRegistryEntry]
             registry_path=registry_path,
         )
     return registry
+
+
+def _load_map_registry(path: Path | None = None) -> dict[str, _MapRegistryEntry]:
+    """Load map registry entries, returning map_id -> catalog entry.
+
+    The cache is keyed by the exact registry bytes, so edits made during a
+    long-lived process cannot leave map resolution bound to an older catalog.
+
+    Returns:
+        dict[str, _MapRegistryEntry]: Map registry map_id to resolved catalog entries.
+    """
+    registry_path = path or _resolve_map_registry_path()
+    if registry_path is None or not registry_path.exists():
+        return {}
+    registry_bytes = registry_path.read_bytes()
+    return _parse_map_registry_snapshot(registry_path, registry_bytes)
+
+
+def _clear_map_registry_cache() -> None:
+    """Clear parsed registry snapshots for tests and explicit cache invalidation."""
+    _parse_map_registry_snapshot.cache_clear()
+
+
+# Preserve the private cache-clear hook used by existing callers and tests.
+_load_map_registry.cache_clear = _clear_map_registry_cache  # type: ignore[attr-defined]
+
+
+def resolve_map_id_with_registry_identity(
+    map_id: str,
+    *,
+    source: str | Path,
+    required_profile: str = _DEFAULT_MAP_PROFILE,
+) -> tuple[Path, Path, str]:
+    """Resolve a map ID and return the exact registry path and content digest used.
+
+    Returns:
+        tuple[Path, Path, str]: Resolved map path, registry path, and SHA-256
+        digest of the registry bytes used to resolve the map.
+    """
+    registry_path = _resolve_map_registry_path()
+    if registry_path is None or not registry_path.exists():
+        raise ValueError(
+            f"Scenario in '{source}' references map_id '{map_id}', but the map registry is empty."
+        )
+    registry_path = registry_path.resolve(strict=True)
+    registry_bytes = registry_path.read_bytes()
+    registry = _parse_map_registry_snapshot(registry_path, registry_bytes)
+    map_path = _resolve_map_id(
+        map_id.strip(),
+        map_registry=registry,
+        source=Path(source),
+        required_profile=required_profile,
+    )
+    registry_digest = hashlib.sha256(registry_bytes).hexdigest()
+    return map_path, registry_path, registry_digest
 
 
 def _resolve_map_id(

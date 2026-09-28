@@ -49,6 +49,28 @@ def test_terminated_machine_result_cannot_be_reconciled_as_passed(
     assert "readiness_status_disagreement" in result["reason_codes"]
 
 
+def test_lane_terminal_receipt_cannot_stand_in_for_readiness_success(
+    tmp_path: Path,
+) -> None:
+    """A completed lane is not evidence that the full readiness run passed."""
+    machine = tmp_path / "pr_ready_lane_terminal.json"
+    _write_json(
+        machine,
+        {
+            "schema": "pr_ready_lane_terminal.v1",
+            "status": "terminal",
+            "outcome": "completed",
+            "exit_status": 0,
+        },
+    )
+
+    result = reconcile_readiness_artifacts([machine])
+
+    assert result["status"] == "unavailable"
+    assert result["passed"] is False
+    assert "machine_status_missing:pr_ready_lane_terminal.json" in result["reason_codes"]
+
+
 def test_matching_machine_summary_and_log_are_passed(tmp_path: Path) -> None:
     """A complete, consistently reported readiness run can still pass."""
     machine = tmp_path / "pr_ready.json"

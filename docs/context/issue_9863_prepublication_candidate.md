@@ -27,3 +27,14 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/benchmark/build
 ```
 
 The builder requires a clean tracked checkout and refuses to overwrite an existing candidate. The loader checks the exact HEAD, ordered 14-arm and 48-scenario roster, seeds 111–140, H600/20,160 cells, template publication slots, and the SHA-256 closure of matrix includes, effective maps, planner configs, and other referenced inputs. The distinct schema is rejected by `load_release_manifest`; a candidate cannot act as a tagged release manifest. Keep the printed candidate digest with the preflight report and copy both to durable custody.
+
+Run the pinned setup preflight with the resulting path as `--manifest`, supplying unique JSON and Markdown output paths:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- uv run python -m robot_sf.benchmark.spawn_preflight \
+  --manifest output/release_candidate/<source-short-sha>.json \
+  --json-output output/release_candidate/<source-short-sha>.preflight.json \
+  --markdown-output output/release_candidate/<source-short-sha>.preflight.md
+```
+
+The CLI exits nonzero for blocked or invalid inputs. A zero exit means only that the setup matrix passed its checks; the report is still diagnostic, and the remaining release gates decide whether nominal evaluation may start.

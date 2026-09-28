@@ -26,7 +26,7 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/benchmark/build
   --output output/release_candidate/<source-short-sha>.json
 ```
 
-The builder requires a clean tracked checkout and refuses to overwrite an existing candidate. The loader checks the exact HEAD, ordered 14-arm and 48-scenario roster, seeds 111–140, H600/20,160 cells, template publication slots, and the SHA-256 closure of matrix includes, effective maps, planner configs, and other referenced inputs. The distinct schema is rejected by `load_release_manifest`; a candidate cannot act as a tagged release manifest. Keep the printed candidate digest with the preflight report and copy both to durable custody.
+The builder requires a clean tracked checkout and refuses to overwrite an existing candidate. The loader checks the exact HEAD, ordered 14-arm roster against an explicit 0.0.8 mapping, and the 48 scenario identities against the byte-pinned 0.0.7 identity matrix. It also checks seeds 111–140, H600/20,160 cells, template publication slots, and the SHA-256 closure of matrix includes, effective maps, planner configs, and other referenced inputs. Reconcile the four successor planner keys with #9751's final reviewed head before admitting a physical candidate. The distinct schema is rejected by `load_release_manifest`; a candidate cannot act as a tagged release manifest. Keep the printed candidate digest with the preflight report and copy both to durable custody.
 
 Run the pinned setup preflight with the resulting path as `--manifest`, supplying unique JSON and Markdown output paths:
 

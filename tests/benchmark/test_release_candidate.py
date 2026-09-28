@@ -14,6 +14,7 @@ import yaml
 
 from robot_sf.benchmark import release_candidate, spawn_preflight
 from robot_sf.benchmark.release_candidate import (
+    _APPROVED_008_PLANNER_KEYS,
     CANDIDATE_SCHEMA,
     _expected_input_paths,
     create_prepublication_candidate,
@@ -46,6 +47,8 @@ def candidate_repo(tmp_path: Path) -> tuple[Path, Path, dict]:
     """Build a small committed checkout with a real 48-scenario source closure."""
     config = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
     config["scenario_matrix"] = MATRIX.relative_to(SOURCE_ROOT).as_posix()
+    for planner, approved_key in zip(config["planners"], _APPROVED_008_PLANNER_KEYS, strict=True):
+        planner["key"] = approved_key
     scenarios = load_scenarios_for_validation(MATRIX, base_dir=SOURCE_ROOT)
     assert scenarios.load_error is None and not scenarios.load_issues and not scenarios.entry_issues
     rows = [dict(row) for row in scenarios.scenarios]
@@ -170,6 +173,64 @@ def test_candidate_rejects_roster_and_publication_coordinates(candidate_repo) ->
     changed["publication"] = {"version_doi": "10.5281/zenodo.123"}
     path.write_text(json.dumps(changed), encoding="utf-8")
     with pytest.raises(ValueError, match="must omit publication"):
+        load_prepublication_candidate(path, repository_root=root)
+
+
+def test_candidate_rejects_jointly_rewritten_planner_key(candidate_repo) -> None:
+    root, path, payload = candidate_repo
+    config_path = root / payload["canonical_campaign_config"]
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config["planners"][0]["key"] = "arbitrary_extra_planner"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    payload["planners"]["keys"][0] = "arbitrary_extra_planner"
+    payload["sha256_files"][payload["canonical_campaign_config"]] = hashlib.sha256(
+        config_path.read_bytes()
+    ).hexdigest()
+    _git(root, "add", payload["canonical_campaign_config"])
+    _git(
+        root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "changed roster",
+    )
+    payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="approved 0.0.8 14-slot roster"):
+        load_prepublication_candidate(path, repository_root=root)
+
+
+def test_candidate_rejects_jointly_rewritten_scenario_identity(candidate_repo) -> None:
+    root, path, payload = candidate_repo
+    matrix_path = root / payload["scenario"]["matrix_path"]
+    matrix = yaml.safe_load(matrix_path.read_text(encoding="utf-8"))
+    matrix["scenario_overrides_by_name"]["classic_bottleneck_low"]["name"] = (
+        "classic_bottleneck_low_alternate"
+    )
+    matrix_path.write_text(yaml.safe_dump(matrix, sort_keys=False), encoding="utf-8")
+    changed = load_scenarios_for_validation(matrix_path, base_dir=root)
+    assert changed.load_error is None and not changed.load_issues and not changed.entry_issues
+    payload["scenario"]["identities"] = [row["name"] for row in changed.scenarios]
+    payload["sha256_files"][payload["scenario"]["matrix_path"]] = hashlib.sha256(
+        matrix_path.read_bytes()
+    ).hexdigest()
+    _git(root, "add", payload["scenario"]["matrix_path"])
+    _git(
+        root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "changed identity",
+    )
+    payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="48 frozen 0.0.7 identities"):
         load_prepublication_candidate(path, repository_root=root)
 
 

@@ -29,6 +29,31 @@ CANDIDATE_SCHEMA = "benchmark-release-prepublication-candidate.v1"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 _EXPECTED_SEEDS = tuple(range(111, 141))
+_HISTORICAL_SCENARIO_MATRIX = (
+    "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml"
+)
+_HISTORICAL_SCENARIO_MATRIX_SHA256 = (
+    "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c"
+)
+# The four v4 keys replace the historical keys at the same slot positions.
+# Reconcile this explicit roster with #9751's final reviewed head before admitting
+# a physical 0.0.8 candidate; arbitrary jointly edited config/candidate keys fail.
+_APPROVED_008_PLANNER_KEYS = (
+    "prediction_planner",
+    "goal",
+    "social_force",
+    "orca",
+    "ppo",
+    "socnav_sampling",
+    "sacadrl",
+    "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "hybrid_rule_v4_fast_progress_static_escape",
+    "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "guarded_ppo",
+    "predictive_mppi",
+    "risk_dwa",
+)
 
 
 @dataclass(frozen=True)
@@ -88,7 +113,11 @@ def _expected_input_paths(
     seed_policy: dict[str, Any],
     planners: list[dict[str, Any]],
 ) -> set[Path]:
-    paths = {config_path, matrix_path}
+    paths = {
+        config_path,
+        matrix_path,
+        _root_file(root, _HISTORICAL_SCENARIO_MATRIX, "historical scenario matrix"),
+    }
     paths.update(_scenario_matrix_include_paths(matrix_path, repository_root=root))
     for field in (
         "comparability_mapping",
@@ -124,6 +153,15 @@ def _candidate_scenarios(
         raise ValueError("candidate scenario matrix does not load without validation issues")
     scenarios = [dict(row) for row in result.scenarios]
     observed_ids = tuple(str(row.get("name") or "") for row in scenarios)
+    historical_path = _root_file(root, _HISTORICAL_SCENARIO_MATRIX, "historical scenario matrix")
+    if sha256_file(historical_path) != _HISTORICAL_SCENARIO_MATRIX_SHA256:
+        raise ValueError("frozen 0.0.7 scenario matrix bytes changed")
+    historical = load_scenarios_for_validation(historical_path, base_dir=root)
+    if historical.load_error or historical.load_issues or historical.entry_issues:
+        raise ValueError("frozen 0.0.7 scenario matrix does not load without validation issues")
+    historical_ids = tuple(str(row.get("name") or "") for row in historical.scenarios)
+    if observed_ids != historical_ids:
+        raise ValueError("candidate scenario identities differ from the 48 frozen 0.0.7 identities")
     declared_ids = section.get("identities")
     if (
         not isinstance(declared_ids, list)
@@ -159,6 +197,8 @@ def _candidate_planners(
         or len(set(observed_keys)) != 14
     ):
         raise ValueError("planners.keys must equal the 14 ordered enabled campaign arms")
+    if observed_keys != _APPROVED_008_PLANNER_KEYS:
+        raise ValueError("campaign planner keys differ from the approved 0.0.8 14-slot roster")
     return observed_keys, enabled
 
 

@@ -201,7 +201,7 @@ def test_constraints_first_v2_requires_both_negative_safety_components(
 def test_constraints_first_v2_keeps_known_positive_safety_evidence_critical(
     tmp_path: Path,
 ) -> None:
-    """Either observed safety failure remains critical if the other is unknown."""
+    """A confirmed safety failure remains critical if the other component is unknown."""
     collision = _evaluation(
         tmp_path,
         "collision_intrusion_unknown",
@@ -232,6 +232,72 @@ def test_constraints_first_v2_keeps_known_positive_safety_evidence_critical(
 
     assert collision_score is not None and 4.0 <= collision_score < 5.0
     assert intrusion_score is not None and 4.0 <= intrusion_score < 5.0
+
+
+def test_constraints_first_v2_positive_component_survives_other_component_conflict(
+    tmp_path: Path,
+) -> None:
+    """A conflict local to one component cannot hide independent positive evidence."""
+    confirmed_collision = _evaluation(
+        tmp_path,
+        "collision_with_malformed_intrusion",
+        {
+            "outcome": {
+                "route_complete": False,
+                "collision_event": True,
+                "severe_intrusion": False,
+                "severe_intrusion_event": True,
+                "timeout_event": False,
+            },
+            "metrics": {
+                "success": False,
+                "collisions": 1,
+                "severe_intrusion": True,
+                "near_misses": 1,
+            },
+        },
+    )
+    confirmed_intrusion = _evaluation(
+        tmp_path,
+        "intrusion_with_conflicting_collision",
+        {
+            "outcome": {
+                "route_complete": False,
+                "collision": False,
+                "collision_event": True,
+                "severe_intrusion_event": True,
+                "timeout_event": False,
+            },
+            "metrics": {"success": False, "severe_intrusion": True, "near_misses": 1},
+        },
+    )
+
+    collision_score = constraints_first_lexicographic_v2(confirmed_collision)
+    intrusion_score = constraints_first_lexicographic_v2(confirmed_intrusion)
+
+    assert collision_score is not None and 4.0 <= collision_score < 5.0
+    assert intrusion_score is not None and 4.0 <= intrusion_score < 5.0
+
+
+def test_constraints_first_v2_same_component_source_conflict_stays_unknown(
+    tmp_path: Path,
+) -> None:
+    """A collision flag that conflicts with its metric is not treated as confirmed."""
+    evaluation = _evaluation(
+        tmp_path,
+        "collision_source_conflict_no_intrusion",
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {"success": True, "collisions": 1, "severe_intrusion": False},
+        },
+    )
+
+    assert constraints_first_lexicographic_v2(evaluation) is None
 
 
 def test_constraints_first_objective_rejects_success_metric_conflicting_with_outcome(

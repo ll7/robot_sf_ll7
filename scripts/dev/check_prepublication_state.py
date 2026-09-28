@@ -1489,7 +1489,7 @@ def _perform_reconstruction(plan: dict[str, Any]) -> dict[str, Any]:
             ),
             "push_performed": False,
         }
-    except Exception as exc:
+    except (GateError, OSError, subprocess.SubprocessError) as exc:
         if not replacement_created:
             raise
         rollback = _rollback_reconstruction(

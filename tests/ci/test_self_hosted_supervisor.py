@@ -95,3 +95,24 @@ printf '%s\\n' "$count" >"$SLEEP_COUNT"
         assert events == ["network-verify", "sleep:60"] * 2
     if failure != "none":
         assert "network isolation check failed" in result.stderr
+
+
+@pytest.mark.parametrize("reported", ["imech039", "auxme-imech039"])
+def test_setup_accepts_auxme_hostname_prefix(tmp_path: Path, reported: str) -> None:
+    """The lab hosts report ``auxme-imech0xx``; the slot limit must still apply."""
+    commands = tmp_path / "commands"
+    commands.mkdir()
+    _mock_command(commands, "hostname", f"printf '{reported}\\n'\n")
+    environment = os.environ.copy()
+    environment["PATH"] = f"{commands}:{environment['PATH']}"
+
+    result = subprocess.run(
+        ["bash", str(SETUP), "status", "3"],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "SLOT must be in 1..2 on imech039" in result.stderr

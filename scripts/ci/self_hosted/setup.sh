@@ -12,6 +12,8 @@ network_gateway="172.30.244.1"
 network_bridge="br-robot-sf-ci"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 host="$(hostname -s)"
+# imech036 and imech039 report the short hostname with an "auxme-" prefix.
+host="${host#auxme-}"
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/robot-sf-ci-runners"
 
 usage() {
@@ -70,9 +72,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && cp -a /home/runner/. /opt/robot-sf-runner/ \
     && chown -R runner:runner /opt/robot-sf-runner
 COPY --chown=runner:runner setup.sh /usr/local/bin/robot-sf-runner
-COPY --chown=runner:runner job_started_hook.sh /usr/local/libexec/robot-sf-job-started
+COPY --chown=runner:runner job_started_hook.sh /usr/local/libexec/robot-sf-job-started.sh
 COPY --chown=runner:runner network_probe.sh /usr/local/libexec/robot-sf-network-probe
-ENV ACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/libexec/robot-sf-job-started
+ENV ACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/libexec/robot-sf-job-started.sh
 USER 1001:1001
 ENTRYPOINT ["/usr/local/bin/robot-sf-runner", "container"]
 DOCKERFILE

@@ -324,33 +324,3 @@ def test_risk_dwa_observation_rotates_pedestrian_velocity_to_world(flat: bool) -
     _robot_pos, _heading, _goal, _ped_pos, ped_vel = planner._extract_robot_goal_ped(observation)
 
     np.testing.assert_allclose(ped_vel, np.asarray([[0.5, 1.25]]), rtol=0.0, atol=1e-12)
-
-
-def test_risk_dwa_ignores_padded_flat_rows_when_visible_count_is_zero(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A zero visible count removes padded rows before the planner scores rollouts."""
-    observation = _flat_observation(
-        heading=float(np.pi / 2.0),
-        pedestrian_velocities=[(2.0, 1.0)] * 4,
-    )
-    observation["pedestrians_count"] = np.asarray([0], dtype=float)
-    planner = RiskDWAPlannerAdapter()
-    original_score = planner._rollout_score
-    scored_rows: list[tuple[np.ndarray, np.ndarray]] = []
-
-    def check_empty_pedestrians(**kwargs: object) -> float:
-        ped_pos = np.asarray(kwargs["ped_pos"])
-        ped_vel = np.asarray(kwargs["ped_vel"])
-        scored_rows.append((ped_pos, ped_vel))
-        assert ped_pos.shape == ped_vel.shape == (0, 2)
-        return original_score(**kwargs)  # type: ignore[arg-type]
-
-    monkeypatch.setattr(planner, "_rollout_score", check_empty_pedestrians)
-    command = planner.plan(observation)
-
-    assert scored_rows
-    assert all(
-        positions.shape == velocities.shape == (0, 2) for positions, velocities in scored_rows
-    )
-    assert np.all(np.isfinite(command))

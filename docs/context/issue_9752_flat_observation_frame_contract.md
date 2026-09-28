@@ -4,12 +4,12 @@ This crosswalk was verified against the 14-arm roster reached through
 `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml::canonical_campaign_config`,
 which points to
 `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`. The roster
-and four candidate files below were checked against current main
-`6fb2cfdd9fdad68858c9559de0170a0e7aca5e3f`; these files are unchanged since main
-`5d7aba11f7ae34fc88cd99620ba179d0ebfec635`. Candidate arms point to their own files under
-`configs/policy_search/candidates/`. Source symbols and focused test anchors below were checked
-against the combined PR branch with current main merged; they provide implementation-integrity
-evidence only.
+and four candidate files below were checked at the PR base snapshot
+`6fb2cfdd9fdad68858c9559de0170a0e7aca5e3f` and compared with live `origin/main`
+`9a578901421826c873845952d9418f146d7d3695`; none of the 34 referenced paths changed between those
+snapshots. Candidate arms point to their own files under `configs/policy_search/candidates/`.
+Source symbols and focused test anchors below were checked against this PR candidate. They provide
+implementation-integrity evidence only.
 
 ## Producer contract
 
@@ -53,7 +53,7 @@ Test anchors establish implementation-integrity behavior only; they are not camp
 | `hybrid_rule_v3_fast_progress_static_escape_continuous` | Same hybrid-v3 frame path and historical flat defect. | Same hybrid source and characterization tests as the preceding arm; the tested v3 candidate's rotation outcome anchor is `tests/metamorphic/test_mirror_symmetry.py::test_release_hybrid_v3_outcome_is_mirror_and_rotation_invariant`. |
 | `guarded_ppo` | PPO primary features remain ego-native. Guard and fallback rollouts convert ego velocities to world for both nested and flat inputs. | `robot_sf/planner/guarded_ppo.py::GuardedPPOAdapter._extract_state`; `tests/planner/test_guarded_ppo.py::test_guarded_ppo_observation_rotates_pedestrian_velocity_to_world`; `tests/metamorphic/test_mirror_symmetry.py::test_flat_velocity_rotation_equivariance_for_world_frame_rollouts[guarded_ppo]` |
 | `predictive_mppi` | Shared learned predictor consumes ego-native velocity features; MPPI scores predictor positions in its robot-relative rollout. Sampling is stochastic, so use seeded replay rather than scene-trace equivalence. | `robot_sf/planner/predictive_mppi.py::PredictiveMPPIAdapter._predict_future`; shared flat predictor boundary at `tests/planner/test_socnav_prediction_module.py::test_flat_observation_pedestrian_velocity_stays_ego_native_in_model_input`; seeded replay test `tests/planner/test_predictive_mppi_planner.py::test_predictive_mppi_is_deterministic_for_fixed_seed` |
-| `risk_dwa` | TTC and constant-velocity rollout are world-frame; converts ego to world for nested and flat inputs. `pedestrians_count` limits both arrays before rollout, including zero visible rows. | `robot_sf/planner/risk_dwa.py::RiskDWAPlannerAdapter._extract_robot_goal_ped`; `tests/planner/test_risk_dwa.py::test_risk_dwa_observation_rotates_pedestrian_velocity_to_world`; `tests/planner/test_risk_dwa.py::test_risk_dwa_ignores_padded_flat_rows_when_visible_count_is_zero`; real flat map-runner scene rotation at `tests/metamorphic/test_mirror_symmetry.py::test_risk_dwa_flat_release_trace_is_rotation_equivariant` |
+| `risk_dwa` | TTC and constant-velocity rollout are world-frame; converts ego to world for nested and flat inputs. Zero-count padded-row normalization is handled separately in #9869. | `robot_sf/planner/risk_dwa.py::RiskDWAPlannerAdapter._extract_robot_goal_ped`; `tests/planner/test_risk_dwa.py::test_risk_dwa_observation_rotates_pedestrian_velocity_to_world`; real flat map-runner scene rotation at `tests/metamorphic/test_mirror_symmetry.py::test_risk_dwa_flat_release_trace_is_rotation_equivariant` |
 
 ## Scenario-adaptive override crosswalk
 
@@ -102,10 +102,10 @@ training provenance or policy action equivalence.
 
 ## Outcome and limitations
 
-Risk-DWA previously retained padded position and velocity rows when the declared visible count was
-zero. `_extract_robot_goal_ped` now slices both arrays to the count before the rollout score sees
-them; the negative test supplies four nonzero padded rows and verifies empty arrays reach scoring.
-This is a focused input-contract regression. No rollout impact has been measured.
+The zero-count padded-row runtime finding is tracked separately in #9869, which owns the Risk-DWA
+code change and its negative test. This PR makes no claim about that runtime behavior or its
+rollout/release effect; its Risk-DWA evidence covers the ego-to-world frame boundary and the flat
+real-path rotation episode.
 
 The historical hybrid-v3 flat-observation pass-through remains unchanged and is the known 0.0.7
 frame defect. The focused characterization test pins both the nested conversion and the flat
@@ -115,10 +115,10 @@ remains available for the 0.0.7 comparison.
 
 The Risk-DWA closed-loop episode uses map-runner's occupancy-grid-enabled flattened SOCNAV output;
 the test harness asserts flat pedestrian keys are present at reset and after every step. Its
-90-degree trace relation therefore exercises the real flat planner path, while the direct negative
-case isolates count/padding normalization. `run_arm_episode` records this observation shape as
-`ArmEpisode.flat_socnav_observation`; the ORCA release episode, both ORCA scenario overrides, and
-Risk-DWA assert the flag for baseline and rotated episodes.
+90-degree trace relation therefore exercises the real flat planner path. `run_arm_episode` records
+this observation shape as `ArmEpisode.flat_socnav_observation`; the ORCA release episode, both
+ORCA scenario overrides, and Risk-DWA assert the flag for baseline and rotated episodes. Count-zero
+runtime behavior is handled separately in #9869.
 
 Social Force's current rotation case is a strict expected failure for its separately recorded
 branch-cut defect; it is not counted as passing evidence. Learned and stochastic arms receive
@@ -156,13 +156,15 @@ They establish a matching feature-frame contract, not checkpoint provenance or a
 ## Validation record
 
 The required focused command over `tests/metamorphic/test_mirror_symmetry.py`,
-`tests/planner/test_risk_dwa.py`, and `tests/planner/test_guarded_ppo.py` reported 216 passed and
-3 expected xfails on the merged head. The prediction, SACADRL, and sampling test modules reported
-70 passed; eight additional producer, normalizer, Goal, hybrid-v3 characterization, PPO, and replay
-anchors reported 8 passed. Ruff check and format passed for all changed Python files, and
-`git diff --check` passed. The PR readiness command stopped during collection because the worktree
-environment lacks `imageio_ffmpeg` for the unrelated
-`tests/analysis_workbench/test_audit_materialize.py`; full readiness did not complete. These are
-implementation-integrity/smoke results, not campaign evidence. All 34 referenced paths and 83 exact
-source/config/test anchors resolved; the 14 roster arms and 12 candidate override keys also
-resolved against the current checkout.
+`tests/planner/test_risk_dwa.py`, and `tests/planner/test_guarded_ppo.py` reported 215 passed and
+3 expected xfails after the Risk-DWA runtime hunk and its dedicated negative test moved to #9869.
+The prediction, SACADRL, and sampling test modules reported 70 passed; eight additional producer,
+normalizer, Goal, hybrid-v3 characterization, PPO, and replay anchors reported 8 passed. Ruff check
+and format passed for the six changed Python files, and `git diff --check` passed. A prior PR
+readiness attempt stopped during collection because the environment lacked `imageio_ffmpeg` for
+the unrelated `tests/analysis_workbench/test_audit_materialize.py`; readiness was not rerun for
+this split and no readiness pass is claimed. These are implementation-integrity/smoke results, not
+campaign evidence. All 34 referenced paths and 82 source/config/test anchor references (41 unique
+path-symbol pairs) resolved; the 14 roster arms and 12 candidate override keys also resolved
+against the PR candidate. The live-main path comparison found no referenced files changed after
+the PR base snapshot.

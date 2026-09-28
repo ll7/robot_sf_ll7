@@ -26,14 +26,38 @@ DEFAULT_CONFIG = ROOT / "configs/benchmarks/issue_9748_hybrid_v4_dev_split_v1.ya
 DEFAULT_RELEASE_MATRIX = ROOT / "configs/scenarios/classic_interactions_francis2023.yaml"
 EXPECTED_DEV_SEEDS = tuple(range(1001, 1031))
 RELEASE_SEEDS = frozenset(range(111, 141))
-EXPECTED_SCENARIO_IDS = frozenset(
-    {
-        "issue_9748_dev_classic_doorway_medium",
-        "issue_9748_dev_classic_group_crossing_medium",
-        "issue_9748_dev_francis2023_perpendicular_traffic",
-        "issue_9748_dev_francis2023_crowd_navigation",
-    }
-)
+EXPECTED_VARIANTS = {
+    "issue_9748_dev_classic_doorway_medium": {
+        "source_file": "configs/scenarios/archetypes/classic_doorway.yaml",
+        "source_id": "classic_doorway_medium",
+        "simulation_overrides": {"ped_density": 0.065, "route_spawn_jitter_frac": 0.30},
+        "development_variant": "density_and_route_spawn_jitter",
+    },
+    "issue_9748_dev_classic_group_crossing_medium": {
+        "source_file": "configs/scenarios/archetypes/classic_group_crossing.yaml",
+        "source_id": "classic_group_crossing_medium",
+        "simulation_overrides": {"ped_density": 0.10},
+        "development_variant": "density",
+    },
+    "issue_9748_dev_francis2023_perpendicular_traffic": {
+        "source_file": "configs/scenarios/single/francis2023_perpendicular_traffic.yaml",
+        "source_id": "francis2023_perpendicular_traffic",
+        "simulation_overrides": {"ped_density": 0.12},
+        "development_variant": "density",
+    },
+    "issue_9748_dev_francis2023_crowd_navigation": {
+        "source_file": "configs/scenarios/single/francis2023_crowd_navigation.yaml",
+        "source_id": "francis2023_crowd_navigation",
+        "simulation_overrides": {"ped_density": 0.10},
+        "development_variant": "density",
+    },
+}
+EXPECTED_SCENARIO_IDS = frozenset(EXPECTED_VARIANTS)
+DEV_METADATA = {
+    "development_only": True,
+    "evidence_tier": "development_tuning_only",
+    "claim_boundary": "no release or paper-facing evidence",
+}
 EXPECTED_PLANNER_CONFIGS = {
     "hybrid_rule_v4_fast_progress_static_escape_s30_h600_release": (
         ROOT
@@ -100,40 +124,74 @@ def _require_exact_dev_seed_list(raw: Any, *, label: str) -> None:
         raise ValidationError(f"{label} must be the ordered development seed list 1001–1030")
 
 
+def _source_scenario_row(spec: Mapping[str, Any]) -> Mapping[str, Any]:
+    source_path = ROOT / spec["source_file"]
+    source_id = spec["source_id"]
+    source_rows = _load_scenario_rows(source_path, label=f"source scenario {source_id}")
+    matches = [
+        row for row in source_rows if _scenario_id(row, label="source scenario") == source_id
+    ]
+    if len(matches) != 1:
+        raise ValidationError(
+            f"source scenario {source_id} must resolve exactly once in {source_path}"
+        )
+    return matches[0]
+
+
+def _validate_variant_source(
+    scenario_id: str,
+    actual: Mapping[str, Any],
+    spec: Mapping[str, Any],
+) -> None:
+    source_id = spec["source_id"]
+    source = _source_scenario_row(spec)
+    source_simulation = source.get("simulation_config")
+    source_metadata = source.get("metadata")
+    if not isinstance(source_simulation, Mapping) or not isinstance(source_metadata, Mapping):
+        raise ValidationError(f"source scenario {source_id} lacks simulation or metadata")
+
+    expected = dict(source)
+    expected["name"] = scenario_id
+    expected["seeds"] = list(EXPECTED_DEV_SEEDS)
+    expected["simulation_config"] = {
+        **source_simulation,
+        **spec["simulation_overrides"],
+    }
+    expected["metadata"] = {
+        **source_metadata,
+        **DEV_METADATA,
+        "source_scenario": source_id,
+        "development_variant": spec["development_variant"],
+    }
+    differences = sorted(
+        key
+        for key in expected.keys() | actual.keys()
+        if key not in expected or key not in actual or expected[key] != actual[key]
+    )
+    if differences:
+        raise ValidationError(
+            f"{scenario_id} differs from its source outside approved development "
+            f"overrides: {differences!r}"
+        )
+
+
 def _validate_scenario_parameters(rows: Sequence[Mapping[str, Any]]) -> None:
-    ids = {_scenario_id(row, label="development scenario matrix") for row in rows}
-    if ids != EXPECTED_SCENARIO_IDS:
-        missing = sorted(EXPECTED_SCENARIO_IDS - ids)
-        unexpected = sorted(ids - EXPECTED_SCENARIO_IDS)
+    ids = [_scenario_id(row, label="development scenario matrix") for row in rows]
+    if len(ids) != len(set(ids)):
+        raise ValidationError("development scenario matrix contains duplicate scenario IDs")
+    actual_ids = set(ids)
+    if actual_ids != EXPECTED_SCENARIO_IDS:
+        missing = sorted(EXPECTED_SCENARIO_IDS - actual_ids)
+        unexpected = sorted(actual_ids - EXPECTED_SCENARIO_IDS)
         raise ValidationError(
             f"development scenario IDs drifted; missing={missing!r}, unexpected={unexpected!r}"
         )
+    if len(rows) != len(EXPECTED_VARIANTS):
+        raise ValidationError("development scenario matrix must contain exactly four variants")
 
-    expected_values = {
-        "issue_9748_dev_classic_doorway_medium": (0.065, 0.30),
-        "issue_9748_dev_classic_group_crossing_medium": (0.10, None),
-        "issue_9748_dev_francis2023_perpendicular_traffic": (0.12, None),
-        "issue_9748_dev_francis2023_crowd_navigation": (0.10, None),
-    }
-    for row in rows:
-        scenario_id = _scenario_id(row, label="development scenario matrix")
-        simulation = row.get("simulation_config")
-        if not isinstance(simulation, Mapping):
-            raise ValidationError(f"{scenario_id} must define simulation_config")
-        density, jitter = expected_values[scenario_id]
-        if simulation.get("ped_density") != density:
-            raise ValidationError(
-                f"{scenario_id} ped_density must be {density!r}, "
-                f"got {simulation.get('ped_density')!r}"
-            )
-        if jitter is not None and simulation.get("route_spawn_jitter_frac") != jitter:
-            raise ValidationError(
-                f"{scenario_id} route_spawn_jitter_frac must be {jitter!r}, "
-                f"got {simulation.get('route_spawn_jitter_frac')!r}"
-            )
-        metadata = row.get("metadata")
-        if not isinstance(metadata, Mapping) or metadata.get("development_only") is not True:
-            raise ValidationError(f"{scenario_id} must be marked development_only")
+    rows_by_id = dict(zip(ids, rows, strict=True))
+    for scenario_id, spec in EXPECTED_VARIANTS.items():
+        _validate_variant_source(scenario_id, rows_by_id[scenario_id], spec)
 
 
 def _validate_planner_spec(
@@ -159,6 +217,20 @@ def _validate_planner_spec(
         raise ValidationError(f"planner {key} must use existing candidate config {expected}")
     if not expected.is_file():
         raise ValidationError(f"approved v4 candidate config is missing: {expected}")
+    _validate_planner_scenario_overrides(expected, key=key)
+
+
+def _validate_planner_scenario_overrides(config_path: Path, *, key: str) -> None:
+    planner_config = _load_mapping(config_path, label=f"planner config {key}")
+    scenario_overrides = planner_config.get("scenario_overrides", {})
+    if not isinstance(scenario_overrides, Mapping):
+        raise ValidationError(f"planner config {key} scenario_overrides must be a mapping")
+    overlap = EXPECTED_SCENARIO_IDS & scenario_overrides.keys()
+    if overlap:
+        raise ValidationError(
+            f"planner config {key} applies scenario overrides to development IDs: "
+            + ", ".join(sorted(overlap))
+        )
 
 
 def _validate_planner_specs(payload: Mapping[str, Any], *, config_path: Path) -> None:
@@ -203,6 +275,7 @@ def _validate_config_seed_policy(payload: Mapping[str, Any]) -> None:
         raise ValidationError("development seed policy admits a release seed")
     if set(typed_seed_values) - set(EXPECTED_DEV_SEEDS):
         raise ValidationError("development campaign admits a seed outside 1001–1030")
+    _validate_typed_scenario_ids(payload, label="development campaign config")
 
 
 def _load_development_rows(
@@ -306,6 +379,7 @@ _SCENARIO_FIELD_NAMES = frozenset(
     }
 )
 _ENTRY_SCENARIO_FIELD_NAMES = frozenset({"scenario_id", "scenario_ids"})
+_SCENARIO_LIST_FIELDS = frozenset({"scenario_ids", "scenario_names", "scenarios"})
 
 
 def _typed_values(value: Any) -> list[int]:
@@ -368,27 +442,35 @@ def _validate_tuning_log_seeds(payload: Mapping[str, Any]) -> int:
 
 
 def _typed_scenario_values(field: str, raw: Any) -> list[str]:
-    if isinstance(raw, str):
-        values: list[Any] = [raw]
-    elif isinstance(raw, list):
-        values = raw
-    else:
-        raise ValidationError(f"structured tuning-log field {field!r} must contain scenario IDs")
+    expected_type = list if field in _SCENARIO_LIST_FIELDS else str
+    if not isinstance(raw, expected_type):
+        type_name = "a list of scenario IDs" if expected_type is list else "a scenario ID string"
+        raise ValidationError(f"structured field {field!r} must contain {type_name}")
+    values = raw if isinstance(raw, list) else [raw]
+    if not values:
+        raise ValidationError(f"structured field {field!r} must contain at least one scenario ID")
     if any(not isinstance(value, str) or not value.strip() for value in values):
-        raise ValidationError(
-            f"structured tuning-log field {field!r} contains invalid scenario IDs"
-        )
+        raise ValidationError(f"structured field {field!r} contains invalid scenario IDs")
     return [value.strip() for value in values]
+
+
+def _validate_typed_scenario_ids(payload: Mapping[str, Any], *, label: str) -> int:
+    scenario_ids = [
+        scenario_id
+        for field, raw in _collect_typed_fields(payload, field_names=_SCENARIO_FIELD_NAMES)
+        for scenario_id in _typed_scenario_values(field, raw)
+    ]
+    unexpected = sorted(set(scenario_ids) - EXPECTED_SCENARIO_IDS)
+    if unexpected:
+        raise ValidationError(
+            f"{label} admits scenario IDs outside the development set: {unexpected!r}"
+        )
+    return len(scenario_ids)
 
 
 def _validate_tuning_log_scenarios(
     payload: Mapping[str, Any], entries: Sequence[Mapping[str, Any]]
 ) -> int:
-    scenario_values = [
-        scenario_id
-        for field, raw in _collect_typed_fields(payload, field_names=_SCENARIO_FIELD_NAMES)
-        for scenario_id in _typed_scenario_values(field, raw)
-    ]
     for index, entry in enumerate(entries):
         entry_values = [
             scenario_id
@@ -400,13 +482,7 @@ def _validate_tuning_log_scenarios(
                 f"structured tuning-log entry {index} must contain a non-empty typed "
                 "scenario_id or scenario_ids field"
             )
-    unexpected_scenarios = sorted(set(scenario_values) - EXPECTED_SCENARIO_IDS)
-    if unexpected_scenarios:
-        raise ValidationError(
-            "structured tuning log admits scenario IDs outside the development set: "
-            + ", ".join(unexpected_scenarios)
-        )
-    return len(scenario_values)
+    return _validate_typed_scenario_ids(payload, label="structured tuning log")
 
 
 def _validate_tuning_log(path: Path) -> dict[str, Any]:

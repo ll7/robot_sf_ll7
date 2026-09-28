@@ -25,6 +25,20 @@ crossing traffic, and dense crowd behavior without introducing an ungoverned
 second geometry change. The trade-off is less geometric diversity; this is a
 tuning surface, not a generalization benchmark.
 
+The validator compares each resolved row with its named source scenario. It
+allows only the approved density/jitter change, the 1001–1030 seed list, the
+development-only identity, and development metadata. It checks the map-file
+reference, robot settings, and every other simulation setting against the
+source row, so these variants retain the existing map geometry and settings.
+The referenced v4 candidate files retain their existing release-keyed
+`scenario_overrides`. The runtime resolver uses each resolved scenario's
+`name` as the key and performs an exact mapping lookup in
+`robot_sf/benchmark/policy_search_manifest.py`; it does not alias through the
+`source_scenario` metadata. The four issue-specific names therefore select
+none of those release-keyed overrides. The focused test resolves every dev row
+and confirms the effective config matches an unmatched-name control, and the
+validator rejects an override key that exactly matches a dev identity.
+
 The development campaign config
 `configs/benchmarks/issue_9748_hybrid_v4_dev_split_v1.yaml` uses the exact
 ordered seed list 1001–1030 and only the existing v4 fast-progress and v4
@@ -62,12 +76,12 @@ The validator inspects typed values under the seed fields (`seed`, `seeds`,
 `tuning_seeds`) and under the scenario identity fields. It requires typed seeds
 to belong to 1001–1030 and rejects any 111–140 value. It requires structured
 scenario IDs to belong to the four development identities, and every tuning-log
-entry must contain a nonempty typed `scenario_id` or `scenario_ids` field.
-Free-form strings
-such as `notes`, `rationale`, and `claim_boundary` are not parsed as seed
-admissions, so stating the held-out range does not create a false violation.
-Malformed logs, missing typed seed fields, and non-string structured scenario
-IDs fail closed.
+entry must contain a nonempty string `scenario_id` or a list of string
+`scenario_ids`. Release scenario IDs in typed config or log fields fail closed.
+Free-form strings such as `notes`, `rationale`, and `claim_boundary` are not
+parsed as admissions, so mentioning held-out values does not create a false
+violation. Malformed logs, missing typed seed fields, and non-string structured
+scenario IDs fail closed.
 
 Run the checker with:
 

@@ -127,9 +127,9 @@ input_provenance:
       sha256: 19c30bbc49ccc11d28998c18517ce91acbb3a403d1282c4cc35b9c8a82e0e6d8
     - id: execution_runner
       path: scripts/tools/compare_adversarial_samplers.py
-      # Refreshed for the outcome-free stored-report renderer; the frozen
+      # Refreshed for outcome-free stored-report rendering and path-identity guards; the frozen
       # #5303 search design and promotion boundary are unchanged.
-      sha256: 098514f0917b0af864247be7efade6b2696cce77b2bcbba91c024a9679b85071
+      sha256: 8f58214272181655c2630a46d12e264d5c15bef30faff0fcf3a6404eeb0bb2a5
     - id: adversarial_search_runner
       path: robot_sf/adversarial/search.py
       # Refreshed after the additive issue #9304 evidence-trace bridge; the
@@ -189,9 +189,9 @@ input_provenance:
       sha256: 1f88149400e81284d37615814fe2e9b03a768cce7214e02ba7a210e1bb53b8db
     - id: historical_contract
       path: configs/adversarial/issue_5303_search_promotion_contract.yaml
-      # Tracks the v1 provenance refresh from the additive temporal-robustness
-      # fixture fields and the current-base #9304 trace bridge pins.
-      sha256: 66d446d4238be872ccd6c9b027a64c099f2b661eecc2a524734db7fde853def8
+      # Rebound after the outcome-free v1 runner provenance refresh; the historical
+      # three-seed design and its diagnostic-only boundary are unchanged.
+      sha256: 1b6ce7fd00bbe07eb896ecb54e053fca89715bed25107f49736a586d574bf8b6
     - id: historical_search_space
       path: configs/adversarial/issue_5303_search_promotion_space.yaml
       sha256: 04906a154f88c17b5d2797a4d6d934f5b6b74cc25d7e99796bd603f9823f2106

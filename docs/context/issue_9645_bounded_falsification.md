@@ -55,7 +55,8 @@ evidence is absent. The 64 historical `0.0` scores remain recorded, but they can
 non-critical safety tier; the report's `unknown` criticality classification is controlling for that
 claim. The recorded source and results are not rewritten or re-scored.
 
-The implementation now provides `constraints_first_lexicographic_v2` for future searches. It uses
+The implementation now provides `constraints_first_lexicographic_v2` in
+`robot_sf.adversarial.objectives_v2` for future searches. It uses
 three-valued OR: known collision or intrusion evidence establishes a safety failure, both components
 must be explicitly false to establish a negative safety result, and otherwise the objective returns
 no score. Conflicts within one component make only that component unknown; a confirmed positive in

@@ -282,11 +282,16 @@
     "pedestrian_robot_force_disabled",
     "collision_total_doubled"
   ],
+  "packet_execution_heads": {
+    "force": "08ebc56809645e3ecf0c948bc64885dce7c8b269",
+    "geometry_radius": "08ebc56809645e3ecf0c948bc64885dce7c8b269",
+    "remaining": "08ebc56809645e3ecf0c948bc64885dce7c8b269"
+  },
   "packet_sha256": {
     "first": "5b8e842b9d2372bd412ec8cc7a2a572d981e28a86314ccebd8601892b2ca85f8",
-    "force": "1fbd4867a5e76b1c2040472d1b02a85aa9a4d31f5297b41c0ff31038e548ecae",
-    "geometry_radius": "7681164b41e7310d28b432b24dad838d229caf79ae1fa956eeead857a1889976",
-    "remaining": "f0ced154af47cdd0a27de448151a34506959c761d0eb5c786e9b99ae3c37470b"
+    "force": "6376b8e5d08e4ae7633aa10999d485ade8804f5665306ddd0364d9e50d002579",
+    "geometry_radius": "ec43e503a116bd4275e8e48a952a79dfe32f9ff685fa3d8a46c3c71222a9f62c",
+    "remaining": "6169a6d0b2cef8fe1cf7282cc1db8a3f052a2d308587b6e27a40a5b01041c5fd"
   },
   "release_admitted": false,
   "schema_version": "issue_9735_full_fault_matrix_diagnostic.v1",
@@ -318,7 +323,9 @@
     "robot_sf/scenario_certification/feasibility_oracle.py": "41e0f90daeff3448ab6669146d046cb92cfc866e3f78dc2f9b1f6f0042526930",
     "robot_sf/sim/simulator.py": "eb39a4c1c9deb28af90a33b0586e2fca02f66aa495afe052d7476a2bdb39c993",
     "robot_sf/sim/spawn_validation.py": "fe211644ab9e7f80d65e4c97230c0d880c1d6ed62db6588103ac52d9deedd13b",
+    "scripts/validation/run_issue_9735_braking_goal_diagnostic.py": "29e026803dc22e0dc7c5d1fd64f25869d19183a90bf1c021ef6168206a2a37bd",
     "scripts/validation/run_issue_9735_fault_injection.py": "80c267edfe642fc193552092ec2adc6d66727c5e9d617ecdd24dce78fec5ebc4",
+    "scripts/validation/run_issue_9735_force_diagnostic.py": "b247ce4e2c3f73a72deb3bfd864c8fbd5e1c7647c6abdcd639967cdb6a7c479d",
     "scripts/validation/run_issue_9735_geometry_radius_diagnostic.py": "8e5eade9e4f8130eec47a42052f614995f26e483d42d9149a03166ad9488ac3d",
     "tests/metamorphic/test_planner_unit_consistency.py": "7c1ee006e4b61a37c290a5be4ce734f1be02abc880ddb7ba202c73803e987465"
   }

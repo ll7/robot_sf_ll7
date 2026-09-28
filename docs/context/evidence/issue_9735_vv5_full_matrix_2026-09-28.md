@@ -63,16 +63,19 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/validation/run_
 scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/validation/build_issue_9735_full_matrix.py --first "$vv5_artifact_root"/first/report.json --geometry-radius "$vv5_artifact_root"/geometry/report.json --force "$vv5_artifact_root"/force/report.json --remaining "$vv5_artifact_root"/remaining/remaining_report.json --source-commit 7c1b714b8bef4e0a80de334172e4bf03c3339a4b --output "$vv5_artifact_root"/full_matrix.json
 ```
 
-The compactor verifies all ten unique classes, exact 8/10 disposition, matching
-source commits, and source/config file hashes. Those file hashes are retained in
-the compact JSON so packet identity can be rechecked without local raw logs.
-Current-source packet
+The compactor verifies all ten unique classes, exact 8/10 disposition, and
+source/config and replay-script file hashes against the pinned source commit
+or tracked script bytes. It records packet execution HEADs as provenance;
+these may differ from the source commit when the evidence-only PR advances.
+The current packets ran at `08ebc56809645e3ecf0c948bc64885dce7c8b269`.
+Those file hashes are retained in the compact JSON so packet identity can be
+rechecked without local raw logs. Current-source packet
 SHA-256 values, in command order: `5b8e842b9d2372bd412ec8cc7a2a572d981e28a86314ccebd8601892b2ca85f8`,
-`7681164b41e7310d28b432b24dad838d229caf79ae1fa956eeead857a1889976`,
-`1fbd4867a5e76b1c2040472d1b02a85aa9a4d31f5297b41c0ff31038e548ecae`,
-`f0ced154af47cdd0a27de448151a34506959c761d0eb5c786e9b99ae3c37470b`.
+`ec43e503a116bd4275e8e48a952a79dfe32f9ff685fa3d8a46c3c71222a9f62c`,
+`6376b8e5d08e4ae7633aa10999d485ade8804f5665306ddd0364d9e50d002579`,
+`6169a6d0b2cef8fe1cf7282cc1db8a3f052a2d308587b6e27a40a5b01041c5fd`.
 The tracked compact JSON SHA-256 is
-`87c2d26c0da05dfbcaade5840f93e4109a8332043c34e39de61c6832a1c820b5`.
+`365c903025a82fd1748cf12eec026c9d0da4bcdf34cbadc607ebfabd3ada1d8b`.
 These packet hashes identify local replay inputs; the raw logs and generated
 fixtures are ignored caches and are **not** independently durable. The tracked
 scripts and compact matrix are the reviewable, reproducible evidence. No

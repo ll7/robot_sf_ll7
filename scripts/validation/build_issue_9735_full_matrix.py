@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -43,6 +44,12 @@ def _verified_sources(packets: dict[str, dict[str, Any]], source_commit: str) ->
             if path in sources and sources[path] != expected:
                 raise ValueError(f"conflicting packet source digest: {path}")
             sources[path] = expected
+    sources["scripts/validation/run_issue_9735_force_diagnostic.py"] = packets["force"][
+        "fixture_script_sha256"
+    ]
+    sources["scripts/validation/run_issue_9735_braking_goal_diagnostic.py"] = packets["remaining"][
+        "script_sha256"
+    ]
     for path, expected in sources.items():
         content = (
             (repo / path).read_bytes()
@@ -199,6 +206,21 @@ def _gather_cases(packets: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any
     return cases
 
 
+def _packet_heads(packets: dict[str, dict[str, Any]]) -> dict[str, str]:
+    """Keep execution HEADs as provenance; content hashes bind tested source."""
+    heads = {
+        "geometry_radius": packets["geometry_radius"]["source_commit"],
+        "force": packets["force"]["head"],
+        "remaining": packets["remaining"]["head"],
+    }
+    if any(
+        not isinstance(head, str) or re.fullmatch(r"[0-9a-f]{40}", head) is None
+        for head in heads.values()
+    ):
+        raise ValueError("packet execution head must be a full Git SHA")
+    return heads
+
+
 def main() -> None:
     """Read four packets, verify all ten classes, and write a compact matrix."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -215,10 +237,7 @@ def main() -> None:
     }
     packets = {name: json.loads(path.read_text()) for name, path in paths.items()}
     source_sha256 = _verified_sources(packets, args.source_commit)
-    for name in ("geometry_radius", "force", "remaining"):
-        key = "source_commit" if name == "geometry_radius" else "head"
-        if packets[name][key] != args.source_commit:
-            raise ValueError(f"{name} source commit does not match the requested source")
+    packet_heads = _packet_heads(packets)
     cases = _gather_cases(packets)
     if set(cases) != set(ORDER) or len(cases) != len(ORDER):
         raise ValueError("packet fault roster differs from the ten-class #9735 contract")
@@ -231,6 +250,7 @@ def main() -> None:
         "schema_version": "issue_9735_full_fault_matrix_diagnostic.v1",
         "evidence_tier": "diagnostic_fixture_only",
         "source_commit": args.source_commit,
+        "packet_execution_heads": packet_heads,
         "packet_sha256": {name: _sha(path) for name, path in paths.items()},
         "source_sha256": source_sha256,
         "claim_boundary": "Ten synthetic fixture classes on one source; differing checks and some one-seed/component-only probes. No nominal release rows or final 0.0.8 gate sensitivity.",

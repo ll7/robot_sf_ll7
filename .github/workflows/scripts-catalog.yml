@@ -2,6 +2,7 @@ name: Scripts Catalog
 
 on:
   pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
     paths:
       - "scripts/**"
       - "tests/dev/test_scripts_catalog.py"
@@ -23,6 +24,7 @@ concurrency:
 
 jobs:
   scripts-catalog:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

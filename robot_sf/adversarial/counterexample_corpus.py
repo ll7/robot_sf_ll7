@@ -66,6 +66,7 @@ CASE_ADMISSIBILITY_EVIDENCE_SCHEMA_VERSION = "adversarial-case-admissibility-evi
 CASE_SCENARIO_ADMISSIBILITY_RECEIPT_SCHEMA_VERSION = (
     "adversarial-case-scenario-admissibility-receipt.v2"
 )
+PENDING_HISTORICAL_CANDIDATE_SCHEMA_VERSION = "adversarial-pending-historical-candidate.v1"
 ISSUE_9645_SUMMARY_SCHEMA = "issue_9645_bounded_pilot_summary.v2"
 ISSUE_9645_SUPPORTED_SUMMARY_SCHEMAS = frozenset(
     {"issue_9645_bounded_pilot_summary.v1", ISSUE_9645_SUMMARY_SCHEMA}
@@ -111,6 +112,21 @@ _ISSUE_1501_PROVENANCE_FIELD_ADDITIONS = {
     "raw_artifacts[0].bundle_retention_status": 1,
     "raw_artifacts[0].producer_output_path": 1,
 }
+_ISSUE_1501_REQUIRED_PACKET_ARTIFACTS = frozenset(
+    {
+        "historical_issue_1501_failure_0002.json",
+        "historical_issue_1501_failure_0002/scenario.yaml",
+        "historical_issue_1501_failure_0002/route_overrides.yaml",
+        "historical_issue_1501_failure_0002/replay_1.jsonl",
+        "historical_issue_1501_failure_0002/replay_1.provenance.json",
+        "historical_issue_1501_failure_0002/replay_1_recorded.jsonl",
+        "historical_issue_1501_failure_0002/replay_2.jsonl",
+        "historical_issue_1501_failure_0002/replay_2.provenance.json",
+        "historical_issue_1501_failure_0002/replay_2_recorded.jsonl",
+        "path_normalization.json",
+        "replay_validation.json",
+    }
+)
 _ROOT = Path(__file__).resolve().parents[2]
 _CORPUS_SCHEMA_PATH = _ROOT / "robot_sf/benchmark/schemas/adversarial-counterexample-corpus.v1.json"
 _CASE_SCENARIO_MANIFEST_TRANSFORMS = frozenset(
@@ -142,6 +158,7 @@ def new_corpus() -> dict[str, Any]:
         "cases": [],
         "historical_candidates": [],
         "historical_candidate_imports": [],
+        "pending_historical_candidates": [],
         "admission_attempts": [],
         "planner_evaluations": [],
     }
@@ -306,6 +323,7 @@ def validate_corpus(corpus: Mapping[str, Any], *, corpus_root: str | Path | None
         corpus["cases"], corpus["planner_evaluations"], corpus_root=root
     )
     _validate_historical_candidate_registry(corpus, corpus_root=root)
+    _validate_pending_historical_candidates(corpus, corpus_root=root)
 
 
 def _validate_search_run_evidence(
@@ -1279,6 +1297,281 @@ def _validate_historical_candidate_registry(
         source_identity_by_import,
         corpus_root=corpus_root,
     )
+
+
+def _validate_pending_historical_candidates(
+    corpus: Mapping[str, Any], *, corpus_root: Path | None
+) -> None:
+    """Validate staged historical evidence without treating it as an admitted case."""
+    candidates = corpus.get("pending_historical_candidates", [])
+    candidate_ids = [item["candidate_id"] for item in candidates]
+    if len(candidate_ids) != len(set(candidate_ids)):
+        raise CorpusError("pending historical candidate_id values must be unique")
+    if candidates and corpus_root is None:
+        raise CorpusError(
+            "corpus_root is required to validate pending historical candidate evidence"
+        )
+    root = corpus_root.resolve() if corpus_root is not None else None
+    cases_by_id = {case["case_id"]: case for case in corpus.get("cases", [])}
+    evaluations_by_case: dict[str, list[Mapping[str, Any]]] = {}
+    for evaluation in corpus.get("planner_evaluations", []):
+        evaluations_by_case.setdefault(str(evaluation.get("case_id")), []).append(evaluation)
+    attempts_by_id: dict[str, list[Mapping[str, Any]]] = {}
+    for attempt in corpus.get("admission_attempts", []):
+        attempts_by_id.setdefault(str(attempt.get("attempt_id")), []).append(attempt)
+    runs_by_id = {run["run_id"]: run for run in corpus.get("search_runs", [])}
+
+    for candidate in candidates:
+        _validate_pending_historical_candidate(
+            candidate,
+            cases_by_id=cases_by_id,
+            evaluations_by_case=evaluations_by_case,
+            attempts_by_id=attempts_by_id,
+            runs_by_id=runs_by_id,
+            corpus_root=root,
+        )
+
+
+def _validate_pending_historical_candidate(
+    candidate: Mapping[str, Any],
+    *,
+    cases_by_id: Mapping[str, Mapping[str, Any]],
+    evaluations_by_case: Mapping[str, Sequence[Mapping[str, Any]]],
+    attempts_by_id: Mapping[str, Sequence[Mapping[str, Any]]],
+    runs_by_id: Mapping[str, Mapping[str, Any]],
+    corpus_root: Path | None,
+) -> None:
+    root = _require_pending_candidate_root(corpus_root)
+    case_record = _validate_pending_candidate_case_snapshot(candidate)
+    _validate_pending_candidate_semantics(
+        candidate, case_record, cases_by_id=cases_by_id, evaluations_by_case=evaluations_by_case
+    )
+    run = runs_by_id.get(candidate.get("source_run_id"))
+    _validate_pending_candidate_origin(candidate, case_record, run)
+    source_packets = _validate_pending_candidate_packet_artifacts(candidate, run, root)
+    _validate_pending_candidate_local_artifacts(candidate, case_record, source_packets, root)
+    _validate_pending_candidate_identity(candidate, source_packets)
+    _validate_pending_candidate_attempt(candidate, attempts_by_id)
+
+
+def _require_pending_candidate_root(corpus_root: Path | None) -> Path:
+    if corpus_root is None:
+        raise CorpusError(
+            "corpus_root is required to validate pending historical candidate artifacts"
+        )
+    return corpus_root
+
+
+def _validate_pending_candidate_case_snapshot(
+    candidate: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    candidate_id = candidate.get("candidate_id")
+    if not isinstance(candidate_id, str) or not _is_sha256(candidate_id):
+        raise CorpusError("pending historical candidate has an invalid ID")
+    case_record = candidate.get("candidate_case_record")
+    if not isinstance(case_record, Mapping):
+        raise CorpusError("pending historical candidate case snapshot is missing")
+    if hashlib.sha256(_stable_json(case_record).encode("utf-8")).hexdigest() != candidate.get(
+        "candidate_case_record_sha256"
+    ):
+        raise CorpusError("pending historical candidate case snapshot digest differs")
+    if case_record.get("case_id") != f"case-{candidate.get('effective_scenario_sha256')}":
+        raise CorpusError("pending historical candidate case snapshot identity differs")
+    if case_record.get("effective_scenario_sha256") != candidate.get("effective_scenario_sha256"):
+        raise CorpusError("pending historical candidate scenario identity differs")
+    case_errors = _validate_case_record(case_record)
+    if case_errors:
+        raise CorpusError(
+            "pending historical candidate case snapshot is malformed: " + "; ".join(case_errors)
+        )
+    return case_record
+
+
+def _validate_pending_candidate_semantics(
+    candidate: Mapping[str, Any],
+    case_record: Mapping[str, Any],
+    *,
+    cases_by_id: Mapping[str, Mapping[str, Any]],
+    evaluations_by_case: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> None:
+    replay_receipt = case_record.get("replay_receipt")
+    if (
+        not isinstance(replay_receipt, Mapping)
+        or replay_receipt.get("input_binding_status") != "unknown_historical"
+        or replay_receipt.get("target_and_replay_revision_match") is not True
+        or replay_receipt.get("historical_origin_match")
+        != "not_verifiable_original_raw_episode_absent"
+    ):
+        raise CorpusError("pending historical candidate replay limitations differ")
+    admissibility = case_record.get("admissibility")
+    if (
+        not isinstance(admissibility, Mapping)
+        or admissibility.get("verdict") != "admissible_feasibility_unknown"
+        or admissibility.get("dynamic_task_status") != "unknown"
+    ):
+        raise CorpusError("pending historical candidate dynamic feasibility is not unknown")
+    if candidate.get("feasibility") != {
+        "verdict": "unknown",
+        "reason_codes": [
+            "historical_replay_input_binding_unknown",
+            "no_reference_planner_success_evidence",
+        ],
+    }:
+        raise CorpusError("pending historical candidate feasibility status differs")
+    if candidate.get("planner_status") != {
+        "status": "not_evaluated",
+        "valid_observation_count": 0,
+        "reason_codes": ["candidate_is_not_admitted"],
+    }:
+        raise CorpusError("pending historical candidate planner status differs")
+    if case_record["case_id"] in cases_by_id:
+        raise CorpusError("pending historical candidate is also present as an admitted case")
+    if evaluations_by_case.get(case_record["case_id"]):
+        raise CorpusError("pending historical candidate has planner evaluations")
+
+
+def _validate_pending_candidate_origin(
+    candidate: Mapping[str, Any],
+    case_record: Mapping[str, Any],
+    run: Mapping[str, Any] | None,
+) -> None:
+    if (
+        not isinstance(run, Mapping)
+        or run.get("source_issue") != 9645
+        or run.get("new_counterexamples_discovered") != 0
+        or run.get("new_counterexamples_admitted") != 0
+        or run.get("search_or_simulation_rerun") is not False
+    ):
+        raise CorpusError("pending #1501 candidate is not bound to the zero-discovery #9645 packet")
+    discovery = case_record.get("discovery")
+    search_source = discovery.get("search_source", {}) if isinstance(discovery, Mapping) else {}
+    if (
+        not isinstance(discovery, Mapping)
+        or discovery.get("discovery_issue") != 1501
+        or search_source.get("origin_case_id") != "issue_1501/failure_0002"
+        or search_source.get("historical_source_revision")
+        == case_record.get("replay_receipt", {}).get("replay_revision")
+    ):
+        raise CorpusError("pending historical candidate source/replay revisions are mislabeled")
+
+
+def _validate_pending_candidate_packet_artifacts(
+    candidate: Mapping[str, Any], run: Mapping[str, Any] | None, corpus_root: Path
+) -> list[Mapping[str, Any]]:
+    if not isinstance(run, Mapping) or run.get("run_id") != candidate.get("source_run_id"):
+        raise CorpusError("pending historical candidate source search run is missing")
+    source_packets = candidate.get("source_packet_artifacts")
+    if not isinstance(source_packets, list):
+        raise CorpusError("pending historical candidate source packet inventory is malformed")
+    run_source_by_path = {
+        item.get("path"): item for item in run.get("source_files", []) if isinstance(item, Mapping)
+    }
+    expected_prefix = f"{_ISSUE_9645_PILOT_EVIDENCE_ROOT}/"
+    packet_by_source: dict[str, Mapping[str, Any]] = {}
+    for item in source_packets:
+        _validate_pending_packet_artifact(
+            item, packet_by_source, run_source_by_path, expected_prefix
+        )
+        _verify_corpus_artifact(corpus_root, item["path"], item["sha256"])
+    if set(packet_by_source) != _ISSUE_1501_REQUIRED_PACKET_ARTIFACTS:
+        raise CorpusError("pending historical candidate packet inventory is incomplete")
+    return source_packets
+
+
+def _validate_pending_packet_artifact(
+    item: Any,
+    packet_by_source: dict[str, Mapping[str, Any]],
+    run_source_by_path: Mapping[str, Mapping[str, Any]],
+    expected_prefix: str,
+) -> None:
+    if not isinstance(item, Mapping):
+        raise CorpusError("pending historical candidate packet receipt is malformed")
+    source_path = item.get("source_path")
+    path = item.get("path")
+    digest = item.get("sha256")
+    if (
+        not isinstance(source_path, str)
+        or source_path not in _ISSUE_1501_REQUIRED_PACKET_ARTIFACTS
+        or source_path in packet_by_source
+        or path != expected_prefix + source_path
+        or not _is_sha256(digest)
+    ):
+        raise CorpusError("pending historical candidate packet receipt identity differs")
+    run_receipt = run_source_by_path.get(path)
+    if not isinstance(run_receipt, Mapping) or run_receipt.get("sha256") != digest:
+        raise CorpusError("pending historical candidate packet receipt is not in #9645 run custody")
+    packet_by_source[source_path] = item
+
+
+def _validate_pending_candidate_local_artifacts(
+    candidate: Mapping[str, Any],
+    case_record: Mapping[str, Any],
+    source_packets: Sequence[Mapping[str, Any]],
+    corpus_root: Path,
+) -> None:
+    candidate_artifacts = candidate.get("candidate_artifacts")
+    if not isinstance(candidate_artifacts, list):
+        raise CorpusError("pending historical candidate artifact inventory is malformed")
+    candidate_id = candidate["candidate_id"]
+    artifact_root_rel = f"pending_historical_candidate_artifacts/{candidate_id}"
+    artifact_paths = candidate.get("artifact_paths")
+    if (
+        not isinstance(artifact_paths, Mapping)
+        or artifact_paths.get("artifact_root") != artifact_root_rel
+    ):
+        raise CorpusError("pending historical candidate artifact root is invalid")
+    artifact_root = corpus_root / artifact_root_rel
+    if _pending_candidate_file_inventory(artifact_root, corpus_root) != candidate_artifacts:
+        raise CorpusError("pending historical candidate artifact digest differs")
+    expected_paths = _issue1501_candidate_artifact_paths(
+        candidate_id, case_record, source_packets, candidate_artifacts
+    )
+    if artifact_paths != expected_paths:
+        raise CorpusError("pending historical candidate artifact references differ")
+
+
+def _validate_pending_candidate_identity(
+    candidate: Mapping[str, Any], source_packets: Sequence[Mapping[str, Any]]
+) -> None:
+    candidate_artifacts = candidate["candidate_artifacts"]
+    candidate_identity = {
+        "schema_version": candidate.get("schema_version"),
+        "source_issue": candidate.get("source_issue"),
+        "source_case_id": candidate.get("source_case_id"),
+        "source_run_id": candidate.get("source_run_id"),
+        "effective_scenario_sha256": candidate.get("effective_scenario_sha256"),
+        "candidate_case_record_sha256": candidate.get("candidate_case_record_sha256"),
+        "source_packet_artifacts": [
+            {"source_path": item["source_path"], "sha256": item["sha256"]}
+            for item in source_packets
+        ],
+        "candidate_artifacts": [
+            {"path": item["path"], "sha256": item["sha256"]} for item in candidate_artifacts
+        ],
+    }
+    if candidate.get("identity") != candidate_identity:
+        raise CorpusError("pending historical candidate identity inputs differ")
+    expected_id = hashlib.sha256(_stable_json(candidate_identity).encode("utf-8")).hexdigest()
+    if candidate.get("candidate_id") != expected_id:
+        raise CorpusError("pending historical candidate ID does not bind its evidence")
+
+
+def _validate_pending_candidate_attempt(
+    candidate: Mapping[str, Any], attempts_by_id: Mapping[str, Sequence[Mapping[str, Any]]]
+) -> None:
+    attempt_matches = attempts_by_id.get(str(candidate.get("admission_attempt_id")), [])
+    if len(attempt_matches) != 1:
+        raise CorpusError("pending historical candidate has no unique rejected admission attempt")
+    attempt = attempt_matches[0]
+    if (
+        attempt.get("source_kind") != "issue_9645_historical_replay"
+        or attempt.get("source_id") != "issue_1501/failure_0002"
+        or attempt.get("decision") != "rejected"
+        or attempt.get("candidate_identity") != candidate.get("effective_scenario_sha256")
+        or not isinstance(attempt.get("blockers"), list)
+        or not attempt.get("blockers")
+    ):
+        raise CorpusError("pending historical candidate does not match its fail-closed attempt")
 
 
 def _validate_issue9656_candidate_imports(
@@ -2560,8 +2853,10 @@ def _import_issue9645_historical_case(
             corpus,
             case,
             pilot,
+            source_files,
             near_report,
             admission_binding_errors,
+            root,
         )
 
     duplicate_case_id = existing["case_id"] if existing else None
@@ -2623,8 +2918,10 @@ def _reject_issue9645_historical_candidate(
     corpus: dict[str, Any],
     case: Mapping[str, Any],
     pilot: Mapping[str, Any],
+    source_files: Mapping[str, Any],
     near_report: Mapping[str, Any],
     blockers: list[str],
+    root: Path,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     corpus, receipt = _record_attempt(
         corpus,
@@ -2635,9 +2932,383 @@ def _reject_issue9645_historical_candidate(
         candidate_identity=str(case["effective_scenario_sha256"]),
         near_duplicate_report=near_report,
     )
+    pending_candidate, created_candidate_artifacts = _stage_issue1501_historical_candidate(
+        case,
+        source_files,
+        pilot,
+        receipt,
+        corpus_root=root,
+    )
+    corpus = _append_unique(
+        corpus,
+        "pending_historical_candidates",
+        pending_candidate,
+        key="candidate_id",
+    )
+    try:
+        validate_corpus(corpus, corpus_root=root)
+    except BaseException:
+        corpus["pending_historical_candidates"] = [
+            item
+            for item in corpus["pending_historical_candidates"]
+            if item.get("candidate_id") != pending_candidate["candidate_id"]
+        ]
+        artifact_root = root / pending_candidate["artifact_paths"]["artifact_root"]
+        if created_candidate_artifacts and artifact_root.is_dir():
+            shutil.rmtree(artifact_root, ignore_errors=True)
+        raise
+    receipt["pending_candidate_id"] = pending_candidate["candidate_id"]
     receipt["pilot_new_discoveries"] = 0
     receipt["pilot_run_id"] = pilot["run_id"]
     return corpus, receipt
+
+
+def _stage_issue1501_historical_candidate(
+    case: Mapping[str, Any],
+    source_files: Mapping[str, Any],
+    pilot: Mapping[str, Any],
+    attempt: Mapping[str, Any],
+    *,
+    corpus_root: Path,
+) -> tuple[dict[str, Any], bool]:
+    """Retain a fail-closed #1501 candidate outside admitted cases and planner status."""
+    packet_artifacts = _issue1501_packet_artifact_receipts(pilot)
+    artifact_sources = _issue1501_candidate_artifact_sources(case, source_files)
+    artifact_identity = [
+        {"path": relative, "sha256": _artifact_source_sha256(source)}
+        for relative, source in sorted(artifact_sources.items())
+    ]
+    case_record = copy.deepcopy(dict(case))
+    case_record_sha256 = hashlib.sha256(_stable_json(case_record).encode("utf-8")).hexdigest()
+    identity = {
+        "schema_version": PENDING_HISTORICAL_CANDIDATE_SCHEMA_VERSION,
+        "source_issue": 1501,
+        "source_case_id": "issue_1501/failure_0002",
+        "source_run_id": pilot["run_id"],
+        "effective_scenario_sha256": case["effective_scenario_sha256"],
+        "candidate_case_record_sha256": case_record_sha256,
+        "source_packet_artifacts": [
+            {"source_path": row["source_path"], "sha256": row["sha256"]} for row in packet_artifacts
+        ],
+        "candidate_artifacts": artifact_identity,
+    }
+    candidate_id = hashlib.sha256(_stable_json(identity).encode("utf-8")).hexdigest()
+    artifact_root_rel = f"pending_historical_candidate_artifacts/{candidate_id}"
+    artifact_root = corpus_root / artifact_root_rel
+    planned_rows, created_artifact_root = _materialize_pending_candidate_artifacts(
+        artifact_sources,
+        artifact_root,
+        corpus_root=corpus_root,
+        expected_identity=artifact_identity,
+    )
+    candidate = {
+        "schema_version": PENDING_HISTORICAL_CANDIDATE_SCHEMA_VERSION,
+        "candidate_id": candidate_id,
+        "source_issue": 1501,
+        "source_case_id": "issue_1501/failure_0002",
+        "source_run_id": pilot["run_id"],
+        "effective_scenario_sha256": case["effective_scenario_sha256"],
+        "candidate_case_record_sha256": case_record_sha256,
+        "candidate_status": "pending_exact_historical_input_binding",
+        "admission_status": "not_admitted",
+        "input_binding_status": "unknown_historical",
+        "feasibility": {
+            "verdict": "unknown",
+            "reason_codes": [
+                "historical_replay_input_binding_unknown",
+                "no_reference_planner_success_evidence",
+            ],
+        },
+        "planner_status": {
+            "status": "not_evaluated",
+            "valid_observation_count": 0,
+            "reason_codes": ["candidate_is_not_admitted"],
+        },
+        "admission_attempt_id": attempt["attempt_id"],
+        "identity": identity,
+        "source_packet_artifacts": packet_artifacts,
+        "candidate_artifacts": planned_rows,
+        "artifact_paths": _issue1501_candidate_artifact_paths(
+            candidate_id, case, packet_artifacts, planned_rows
+        ),
+        "candidate_case_record": case_record,
+    }
+    # Do not leave an unreferenced directory after a changed caller or an interrupted import.
+    if created_artifact_root and not candidate["candidate_artifacts"]:
+        shutil.rmtree(artifact_root, ignore_errors=True)
+        raise CorpusError("#1501 pending candidate artifact inventory is empty")
+    return candidate, created_artifact_root
+
+
+def _issue1501_packet_artifact_receipts(pilot: Mapping[str, Any]) -> list[dict[str, str]]:
+    rows = pilot.get("source_files")
+    if not isinstance(rows, list):
+        raise CorpusError("#1501 pending candidate has no custodied #9645 source inventory")
+    by_source_path: dict[str, dict[str, str]] = {}
+    prefix = f"{_ISSUE_9645_PILOT_EVIDENCE_ROOT}/"
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        stored_path = row.get("path")
+        digest = row.get("sha256")
+        if not isinstance(stored_path, str) or not stored_path.startswith(prefix):
+            continue
+        source_path = stored_path[len(prefix) :]
+        if source_path not in _ISSUE_1501_REQUIRED_PACKET_ARTIFACTS:
+            continue
+        if not _is_sha256(digest) or source_path in by_source_path:
+            raise CorpusError("#1501 pending candidate packet receipt is duplicate or malformed")
+        by_source_path[source_path] = {
+            "source_path": source_path,
+            "path": stored_path,
+            "sha256": str(digest),
+        }
+    if set(by_source_path) != _ISSUE_1501_REQUIRED_PACKET_ARTIFACTS:
+        missing = sorted(_ISSUE_1501_REQUIRED_PACKET_ARTIFACTS - set(by_source_path))
+        raise CorpusError(
+            "#1501 pending candidate packet artifacts are not in corpus custody: "
+            + ", ".join(missing)
+        )
+    return [by_source_path[path] for path in sorted(by_source_path)]
+
+
+def _issue1501_candidate_artifact_sources(
+    case: Mapping[str, Any], source_files: Mapping[str, Any]
+) -> dict[str, Path | bytes]:
+    result = _issue1501_candidate_map_asset_sources(case, source_files)
+    result.update(_issue1501_candidate_historical_sources(source_files))
+    return result
+
+
+def _issue1501_candidate_map_asset_sources(
+    case: Mapping[str, Any], source_files: Mapping[str, Any]
+) -> dict[str, Path | bytes]:
+    map_assets = source_files.get("map_assets")
+    case_inputs = case.get("inputs")
+    asset_records = case_inputs.get("map_assets") if isinstance(case_inputs, Mapping) else None
+    if not isinstance(map_assets, Mapping) or not isinstance(asset_records, list):
+        raise CorpusError("#1501 pending candidate map assets are missing")
+    result: dict[str, Path | bytes] = {}
+    seen_roles: set[str] = set()
+    for asset in asset_records:
+        destination, source = _issue1501_candidate_map_asset(asset, map_assets, seen_roles)
+        if destination in result:
+            raise CorpusError("#1501 pending candidate artifact destination is duplicate")
+        result[destination] = source
+    if seen_roles != {"map_registry", "map"}:
+        raise CorpusError("#1501 pending candidate map snapshot is incomplete")
+    return result
+
+
+def _issue1501_candidate_map_asset(
+    asset: Any, map_assets: Mapping[str, Any], seen_roles: set[str]
+) -> tuple[str, bytes]:
+    if not isinstance(asset, Mapping):
+        raise CorpusError("#1501 pending candidate map asset is malformed")
+    role = asset.get("role")
+    source_path = asset.get("source_path")
+    if role not in {"map_registry", "map"} or role in seen_roles:
+        raise CorpusError("#1501 pending candidate map asset role is unsupported or duplicate")
+    if not _safe_bundle_relative_path(source_path):
+        raise CorpusError("#1501 pending candidate map asset path is unsafe")
+    destination = _issue1501_candidate_map_asset_path(asset)
+    source = map_assets.get(role)
+    if not isinstance(source, bytes) or hashlib.sha256(source).hexdigest() != asset.get("sha256"):
+        raise CorpusError(f"#1501 pending candidate {role} bytes differ from their source digest")
+    seen_roles.add(str(role))
+    return destination, source
+
+
+def _issue1501_candidate_historical_sources(
+    source_files: Mapping[str, Any],
+) -> dict[str, Path | bytes]:
+    result: dict[str, Path | bytes] = {}
+    for source_key, destination in (
+        ("source_archive", "source_evidence/issue_1501_archive.json"),
+        ("source_run_report", "source_evidence/issue_1501_adversarial_smoke_run.md"),
+    ):
+        source = source_files.get(source_key)
+        if not isinstance(source, Path):
+            raise CorpusError(f"#1501 pending candidate source evidence is missing: {source_key}")
+        result[destination] = source
+    historical_sources = source_files.get("historical_sources")
+    if not isinstance(historical_sources, Mapping) or not historical_sources:
+        raise CorpusError("#1501 pending candidate historical source snapshots are missing")
+    for name, content in sorted(historical_sources.items()):
+        if (
+            not isinstance(name, str)
+            or PurePosixPath(name).name != name
+            or name in {"", ".", ".."}
+            or not isinstance(content, bytes)
+        ):
+            raise CorpusError("#1501 pending candidate historical source snapshot is malformed")
+        result[f"source_evidence/historical_sources/{name}"] = content
+    return result
+
+
+def _artifact_source_sha256(source: Path | bytes) -> str:
+    if isinstance(source, bytes):
+        return hashlib.sha256(source).hexdigest()
+    if isinstance(source, Path):
+        return _sha256_file(source)
+    raise CorpusError("pending candidate artifact source is not a path or byte string")
+
+
+def _materialize_pending_candidate_artifacts(
+    sources: Mapping[str, Path | bytes],
+    artifact_root: Path,
+    *,
+    corpus_root: Path,
+    expected_identity: Sequence[Mapping[str, str]],
+) -> tuple[list[dict[str, str]], bool]:
+    root = corpus_root.resolve()
+    _validate_pending_artifact_root(artifact_root, root)
+    expected_rows = [dict(row) for row in expected_identity]
+    existing_rows = _existing_pending_candidate_artifacts(artifact_root, root, expected_rows)
+    if existing_rows is not None:
+        return existing_rows, False
+
+    artifact_root.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{artifact_root.name}.", dir=artifact_root.parent))
+    promoted = False
+    try:
+        _copy_pending_candidate_artifacts(sources, staging, expected_rows, root)
+        staging.replace(artifact_root)
+        promoted = True
+        return expected_rows, True
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        if promoted:
+            shutil.rmtree(artifact_root, ignore_errors=True)
+        raise
+
+
+def _validate_pending_artifact_root(artifact_root: Path, root: Path) -> None:
+    try:
+        artifact_root.resolve().relative_to(root)
+    except ValueError as exc:
+        raise CorpusError("#1501 pending candidate artifact root escapes corpus root") from exc
+    if artifact_root.is_symlink():
+        raise CorpusError("#1501 pending candidate artifact root is a symlink")
+
+
+def _existing_pending_candidate_artifacts(
+    artifact_root: Path, root: Path, expected_rows: list[dict[str, str]]
+) -> list[dict[str, str]] | None:
+    if artifact_root.exists():
+        rows = _pending_candidate_file_inventory(artifact_root, root)
+        if rows != expected_rows:
+            raise CorpusError("#1501 pending candidate artifact directory differs from its source")
+        return rows
+    return None
+
+
+def _copy_pending_candidate_artifacts(
+    sources: Mapping[str, Path | bytes],
+    staging: Path,
+    expected_rows: list[dict[str, str]],
+    root: Path,
+) -> None:
+    for relative, source in sorted(sources.items()):
+        if not _safe_bundle_relative_path(relative):
+            raise CorpusError("#1501 pending candidate artifact path is unsafe")
+        target = staging / Path(*PurePosixPath(relative).parts)
+        expected_sha256 = _artifact_source_sha256(source)
+        if isinstance(source, bytes):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source)
+        else:
+            _copy_verified_file(source, target, expected_sha256, "#1501 candidate artifact")
+        if _sha256_file(target) != expected_sha256:
+            raise CorpusError("#1501 pending candidate artifact copy changed bytes")
+    rows = _pending_candidate_file_inventory(staging, root)
+    if rows != expected_rows:
+        raise CorpusError("#1501 pending candidate artifact inventory differs from source")
+
+
+def _pending_candidate_file_inventory(
+    artifact_root: Path, corpus_root: Path
+) -> list[dict[str, str]]:
+    root = corpus_root.resolve()
+    resolved_artifact_root = artifact_root.resolve()
+    try:
+        resolved_artifact_root.relative_to(root)
+    except ValueError as exc:
+        raise CorpusError("#1501 pending candidate artifact root escapes corpus root") from exc
+    if artifact_root.is_symlink():
+        raise CorpusError("#1501 pending candidate artifact root is a symlink")
+    rows = []
+    for path in sorted(artifact_root.rglob("*")):
+        if path.is_symlink():
+            raise CorpusError("#1501 pending candidate artifact contains a symlink")
+        if not path.is_file():
+            continue
+        resolved = path.resolve(strict=True)
+        try:
+            resolved.relative_to(resolved_artifact_root)
+        except ValueError as exc:
+            raise CorpusError("#1501 pending candidate artifact escapes its custody root") from exc
+        rows.append(
+            {
+                "path": path.relative_to(artifact_root).as_posix(),
+                "sha256": _sha256_file(path),
+            }
+        )
+    return rows
+
+
+def _issue1501_candidate_artifact_paths(
+    candidate_id: str,
+    case: Mapping[str, Any],
+    packet_artifacts: Sequence[Mapping[str, str]],
+    candidate_artifacts: Sequence[Mapping[str, str]],
+) -> dict[str, Any]:
+    packet_by_source = {item["source_path"]: item["path"] for item in packet_artifacts}
+    artifact_root = f"pending_historical_candidate_artifacts/{candidate_id}"
+    local_paths = {item["path"]: f"{artifact_root}/{item['path']}" for item in candidate_artifacts}
+    replay_paths = {
+        f"replay_{index}": {
+            "episode": packet_by_source[f"historical_issue_1501_failure_0002/replay_{index}.jsonl"],
+            "provenance": packet_by_source[
+                f"historical_issue_1501_failure_0002/replay_{index}.provenance.json"
+            ],
+            "recorded_projection_source": packet_by_source[
+                f"historical_issue_1501_failure_0002/replay_{index}_recorded.jsonl"
+            ],
+        }
+        for index in (1, 2)
+    }
+    input_paths = {
+        "scenario": packet_by_source["historical_issue_1501_failure_0002/scenario.yaml"],
+        "route_overrides": packet_by_source[
+            "historical_issue_1501_failure_0002/route_overrides.yaml"
+        ],
+        "replay_validation": packet_by_source["replay_validation.json"],
+        "path_normalization": packet_by_source["path_normalization.json"],
+    }
+    map_paths = {
+        asset["role"]: local_paths[_issue1501_candidate_map_asset_path(asset)]
+        for asset in case["inputs"]["map_assets"]
+    }
+    return {
+        "artifact_root": artifact_root,
+        "source_inputs": input_paths,
+        "replays": replay_paths,
+        "map_assets": map_paths,
+        "source_archive": local_paths["source_evidence/issue_1501_archive.json"],
+        "source_run_report": local_paths["source_evidence/issue_1501_adversarial_smoke_run.md"],
+        "historical_source_snapshots": local_paths[
+            "source_evidence/historical_sources/objective_source.py"
+        ].rsplit("/", 1)[0],
+    }
+
+
+def _issue1501_candidate_map_asset_path(asset: Mapping[str, Any]) -> str:
+    source_path = PurePosixPath(str(asset["source_path"]))
+    if asset["role"] == "map_registry":
+        return "inputs/maps/registry.yaml"
+    parts = source_path.parts[1:] if source_path.parts[:1] == ("maps",) else source_path.parts
+    return PurePosixPath("inputs/maps").joinpath(*parts).as_posix()
 
 
 def _bind_historical_replay_artifact_receipts(

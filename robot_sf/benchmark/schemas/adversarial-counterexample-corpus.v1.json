@@ -650,6 +650,103 @@
         "additionalProperties": true
       }
     },
+    "pending_historical_candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "candidate_id",
+          "source_issue",
+          "source_case_id",
+          "source_run_id",
+          "effective_scenario_sha256",
+          "candidate_case_record_sha256",
+          "candidate_status",
+          "admission_status",
+          "input_binding_status",
+          "feasibility",
+          "planner_status",
+          "admission_attempt_id",
+          "identity",
+          "source_packet_artifacts",
+          "candidate_artifacts",
+          "artifact_paths",
+          "candidate_case_record"
+        ],
+        "properties": {
+          "schema_version": {"const": "adversarial-pending-historical-candidate.v1"},
+          "candidate_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "source_issue": {"const": 1501},
+          "source_case_id": {"const": "issue_1501/failure_0002"},
+          "source_run_id": {"const": "issue_9645_bounded_pilot"},
+          "effective_scenario_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "candidate_case_record_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "candidate_status": {"const": "pending_exact_historical_input_binding"},
+          "admission_status": {"const": "not_admitted"},
+          "input_binding_status": {"const": "unknown_historical"},
+          "feasibility": {
+            "type": "object",
+            "required": ["verdict", "reason_codes"],
+            "properties": {
+              "verdict": {"const": "unknown"},
+              "reason_codes": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string", "minLength": 1}
+              }
+            },
+            "additionalProperties": false
+          },
+          "planner_status": {
+            "type": "object",
+            "required": ["status", "valid_observation_count", "reason_codes"],
+            "properties": {
+              "status": {"const": "not_evaluated"},
+              "valid_observation_count": {"const": 0},
+              "reason_codes": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string", "minLength": 1}
+              }
+            },
+            "additionalProperties": false
+          },
+          "admission_attempt_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "identity": {"type": "object", "minProperties": 1},
+          "source_packet_artifacts": {
+            "type": "array",
+            "minItems": 11,
+            "items": {
+              "type": "object",
+              "required": ["source_path", "path", "sha256"],
+              "properties": {
+                "source_path": {"type": "string", "minLength": 1},
+                "path": {"type": "string", "minLength": 1},
+                "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+              },
+              "additionalProperties": false
+            }
+          },
+          "candidate_artifacts": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["path", "sha256"],
+              "properties": {
+                "path": {"type": "string", "minLength": 1},
+                "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+              },
+              "additionalProperties": false
+            }
+          },
+          "artifact_paths": {"type": "object", "minProperties": 1},
+          "candidate_case_record": {"type": "object", "minProperties": 1}
+        },
+        "additionalProperties": false
+      }
+    },
     "admission_attempts": {
       "type": "array",
       "items": {

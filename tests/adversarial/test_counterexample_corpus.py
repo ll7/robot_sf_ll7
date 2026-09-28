@@ -627,28 +627,6 @@ def _revision_separated_packet() -> Iterator[Path]:
         yield payload
 
 
-@contextmanager
-def _test_only_reconciled_packet() -> Iterator[Path]:
-    """Build a hypothetical hash-consistent packet only for downstream mechanics tests.
-
-    The tracked source packet is never modified. Its #1501 replay-provenance hash
-    conflicts remain covered by the production importer rejection regression.
-    """
-    with _packet_copy() as payload:
-        normalization_path = payload / "path_normalization.json"
-        normalization = json.loads(normalization_path.read_text(encoding="utf-8"))
-        for index in (1, 2):
-            relative = f"historical_issue_1501_failure_0002/replay_{index}.provenance.json"
-            artifact = payload / relative
-            row = next(item for item in normalization["records"] if item["path"] == relative)
-            row["normalized_sha256"] = hashlib.sha256(artifact.read_bytes()).hexdigest()
-        normalization_path.write_text(
-            json.dumps(normalization, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
-        _refresh_bundle_checksum_for_payload(payload, "path_normalization.json")
-        yield payload
-
-
 def _import(tmp_path: Path, payload: Path | None = None):
     corpus_root = tmp_path / "corpus"
     corpus, receipt = import_issue9645_packet(
@@ -661,8 +639,19 @@ def _import(tmp_path: Path, payload: Path | None = None):
         or "replay_input_binding_unknown_historical" in blocker
         for blocker in receipt["blockers"]
     ):
+        # These downstream mechanics tests need a synthetic exact-bound case, so keep
+        # that independent fixture separate from the real pending historical candidate.
         _seed_bound_test_case(corpus, corpus_root)
     return corpus, receipt, corpus_root
+
+
+def _remove_pending_candidates_for_synthetic_case(
+    corpus: dict[str, object], corpus_root: Path
+) -> None:
+    for pending in corpus.get("pending_historical_candidates", []):
+        artifact_root = corpus_root / pending["artifact_paths"]["artifact_root"]
+        shutil.rmtree(artifact_root, ignore_errors=True)
+    corpus["pending_historical_candidates"] = []
 
 
 def _seed_bound_test_case(corpus: dict[str, object], corpus_root: Path) -> None:
@@ -673,7 +662,10 @@ def _seed_bound_test_case(corpus: dict[str, object], corpus_root: Path) -> None:
     #1501 records because their recorded replay bytes lack direct input binding.
     No simulator is run.
     """
-    with _test_only_reconciled_packet() as payload:
+    # This synthetic admitted case uses the same scenario identity as the unbound
+    # historical candidate, so it must live in a separate test corpus state.
+    _remove_pending_candidates_for_synthetic_case(corpus, corpus_root)
+    with _packet_copy() as payload:
         case, source_files, _observations = counterexample_corpus._build_issue9645_historical_case(
             payload
         )
@@ -1649,7 +1641,7 @@ def test_generic_case_admission_rejects_historical_unknown_input_binding(
 ) -> None:
     corpus_root = tmp_path / "corpus"
     corpus = new_corpus()
-    with _test_only_reconciled_packet() as payload:
+    with _packet_copy() as payload:
         case, source_files, _observations = counterexample_corpus._build_issue9645_historical_case(
             payload
         )
@@ -1691,7 +1683,7 @@ def test_issue9645_import_rejects_stale_target_revision_after_input_binding(
         lambda: "a" * 40,
     )
 
-    with _test_only_reconciled_packet() as payload:
+    with _packet_copy() as payload:
         corpus, receipt = import_issue9645_packet(
             payload, new_corpus(), corpus_root=tmp_path / "corpus"
         )
@@ -4078,7 +4070,7 @@ def test_issue9656_candidate_import_cli_persists_receipt_and_candidates(tmp_path
 def test_historical_case_admission_fails_closed_and_retains_zero_pilot(
     tmp_path: Path, tamper: str, expected_fragment: str, pilot_accounting_persists: bool
 ) -> None:
-    with _test_only_reconciled_packet() as payload:
+    with _packet_copy() as payload:
         replay_dir = payload / "historical_issue_1501_failure_0002"
         if tamper == "missing_scenario":
             (replay_dir / "scenario.yaml").unlink()
@@ -4120,7 +4112,7 @@ def test_historical_case_admission_fails_closed_and_retains_zero_pilot(
 def test_historical_normalized_replay_must_match_hash_bound_recorded_payload(
     tmp_path: Path,
 ) -> None:
-    with _test_only_reconciled_packet() as payload:
+    with _packet_copy() as payload:
         replay_path = payload / "historical_issue_1501_failure_0002/replay_1.jsonl"
         episode = json.loads(replay_path.read_text(encoding="utf-8"))
         episode["algorithm_metadata"]["config_hash"] = "review-mutated-config-hash"
@@ -4434,7 +4426,7 @@ def _refresh_bundle_checksum_for_payload(payload: Path, relative: str) -> None:
 def test_normalized_replay_metric_tampering_is_rejected_before_projection_comparison(
     tmp_path: Path,
 ) -> None:
-    with _test_only_reconciled_packet() as payload:
+    with _packet_copy() as payload:
         replay_path = payload / "historical_issue_1501_failure_0002/replay_2.jsonl"
         episode = json.loads(replay_path.read_text())
         episode["metrics"]["min_clearance"] += 0.25
@@ -4465,15 +4457,41 @@ def test_replayed_historical_origin_is_not_mislabeled_as_raw_historical_match(
     tmp_path: Path,
 ) -> None:
     corpus_root = tmp_path / "corpus"
-    with _test_only_reconciled_packet() as payload:
-        corpus, receipt = import_issue9645_packet(payload, new_corpus(), corpus_root=corpus_root)
-        case, _source_files, _observations = counterexample_corpus._build_issue9645_historical_case(
-            payload
-        )
+    corpus, receipt = import_issue9645_packet(_SOURCE_PACKET, new_corpus(), corpus_root=corpus_root)
+    case, _source_files, _observations = counterexample_corpus._build_issue9645_historical_case(
+        _SOURCE_PACKET
+    )
     assert receipt["decision"] == "rejected"
     assert receipt["blockers"] == ["replay_input_binding_unknown_historical"]
+    assert receipt["pilot_new_discoveries"] == 0
+    pending = corpus["pending_historical_candidates"][0]
+    assert receipt["pending_candidate_id"] == pending["candidate_id"]
+    assert pending["candidate_case_record"] == case
+    assert pending["candidate_status"] == "pending_exact_historical_input_binding"
+    assert pending["admission_status"] == "not_admitted"
+    assert pending["input_binding_status"] == "unknown_historical"
+    assert pending["feasibility"]["verdict"] == "unknown"
+    assert pending["planner_status"]["status"] == "not_evaluated"
+    assert pending["planner_status"]["valid_observation_count"] == 0
+    assert len(pending["source_packet_artifacts"]) == 11
+    assert {
+        item["source_path"] for item in pending["source_packet_artifacts"]
+    } == counterexample_corpus._ISSUE_1501_REQUIRED_PACKET_ARTIFACTS
+    for item in pending["source_packet_artifacts"]:
+        artifact = corpus_root / item["path"]
+        assert artifact.is_file()
+        assert hashlib.sha256(artifact.read_bytes()).hexdigest() == item["sha256"]
+    for item in pending["candidate_artifacts"]:
+        artifact = corpus_root / pending["artifact_paths"]["artifact_root"] / item["path"]
+        assert artifact.is_file()
+        assert hashlib.sha256(artifact.read_bytes()).hexdigest() == item["sha256"]
     assert corpus["cases"] == []
     assert corpus["planner_evaluations"] == []
+    pilot = corpus["search_runs"][0]
+    assert pilot["attempted_candidates"] == 64
+    assert pilot["new_counterexamples_discovered"] == 0
+    assert pilot["new_counterexamples_admitted"] == 0
+    assert pilot["search_or_simulation_rerun"] is False
     assert (
         case["discovery"]["search_source"]["historical_source_revision"]
         != (case["replay_receipt"]["replay_revision"])
@@ -4483,13 +4501,30 @@ def test_replayed_historical_origin_is_not_mislabeled_as_raw_historical_match(
         "not_verifiable_original_raw_episode_absent"
     )
     assert case["source_evidence"]["historical_raw_episode_status"] == "not_archived"
+    assert case["replay_receipt"]["input_binding_status"] == "unknown_historical"
+    validate_corpus(corpus, corpus_root=corpus_root)
+
+
+def test_pending_issue1501_candidate_rejects_custody_artifact_tampering(tmp_path: Path) -> None:
+    corpus_root = tmp_path / "corpus"
+    with _packet_copy() as payload:
+        corpus, receipt = import_issue9645_packet(payload, new_corpus(), corpus_root=corpus_root)
+    pending = corpus["pending_historical_candidates"][0]
+    map_path = corpus_root / pending["artifact_paths"]["map_assets"]["map_registry"]
+    map_path.write_bytes(map_path.read_bytes() + b"\n# tampered\n")
+
+    with pytest.raises(CorpusError, match="pending historical candidate artifact digest differs"):
+        validate_corpus(corpus, corpus_root=corpus_root)
+    assert receipt["decision"] == "rejected"
+    assert corpus["cases"] == []
+    assert corpus["planner_evaluations"] == []
 
 
 def test_duplicate_import_is_deterministic_and_later_planner_solve_keeps_case(
     tmp_path: Path,
 ) -> None:
     corpus_root = tmp_path / "corpus"
-    with _test_only_reconciled_packet() as payload:
+    with _packet_copy() as payload:
         corpus, first = import_issue9645_packet(payload, new_corpus(), corpus_root=corpus_root)
         case, _source_files, _observations = counterexample_corpus._build_issue9645_historical_case(
             payload
@@ -4501,6 +4536,11 @@ def test_duplicate_import_is_deterministic_and_later_planner_solve_keeps_case(
     assert first["blockers"] == ["replay_input_binding_unknown_historical"]
     assert second["blockers"] == ["replay_input_binding_unknown_historical"]
     assert second["candidate_identity"] == case_hash
+    assert first["pending_candidate_id"] == second["pending_candidate_id"]
+    assert len(corpus["pending_historical_candidates"]) == 1
+    assert corpus["pending_historical_candidates"][0]["candidate_status"] == (
+        "pending_exact_historical_input_binding"
+    )
     assert len(corpus["cases"]) == 0
     assert len(corpus["planner_evaluations"]) == 0
     assert len(corpus["search_runs"]) == 1
@@ -5120,23 +5160,22 @@ def test_corpus_cli_import_status_and_slice_work_without_simulator_run(tmp_path:
     corpus_path = corpus_root / "corpus.json"
     receipt_path = tmp_path / "admission.json"
     corpus_root.mkdir()
-    with _test_only_reconciled_packet() as payload:
-        assert (
-            corpus_cli_main(
-                [
-                    "import-9645",
-                    "--payload",
-                    str(payload),
-                    "--corpus",
-                    str(corpus_path),
-                    "--corpus-root",
-                    str(corpus_root),
-                    "--output",
-                    str(receipt_path),
-                ]
-            )
-            == 2
+    assert (
+        corpus_cli_main(
+            [
+                "import-9645",
+                "--payload",
+                str(_SOURCE_PACKET),
+                "--corpus",
+                str(corpus_path),
+                "--corpus-root",
+                str(corpus_root),
+                "--output",
+                str(receipt_path),
+            ]
         )
+        == 2
+    )
     receipt = json.loads(receipt_path.read_text())
     assert receipt["decision"] == "rejected"
     assert receipt["blockers"] == ["replay_input_binding_unknown_historical"]
@@ -5144,6 +5183,8 @@ def test_corpus_cli_import_status_and_slice_work_without_simulator_run(tmp_path:
     assert corpus["cases"] == []
     assert corpus["planner_evaluations"] == []
     assert corpus["search_runs"][0]["new_counterexamples_discovered"] == 0
+    assert len(corpus["pending_historical_candidates"]) == 1
+    assert corpus["pending_historical_candidates"][0]["admission_status"] == "not_admitted"
 
     _seed_bound_test_case(corpus, corpus_root)
     save_corpus(corpus_path, corpus)

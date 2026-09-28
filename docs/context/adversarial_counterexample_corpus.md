@@ -3,8 +3,9 @@
 Current contract: [issue #9652](https://github.com/ll7/robot_sf_ll7/issues/9652). The
 versioned corpus API and CLI are the implementation surface for the planned #9653 loop; the
 initial fixture is the persisted [#9645 bounded pilot](https://github.com/ll7/robot_sf_ll7/issues/9645)
-and the historical #1501 case artifact. Its replay projections match at the recorded regeneration
-revision, but direct input binding is unknown, so the importer rejects it as a corpus admission.
+and a staged historical #1501 candidate. Its replay projections match at the recorded regeneration
+revision, but direct input binding is unknown, so the importer keeps it pending and rejects corpus
+admission.
 
 The versioned corpus in `robot_sf.adversarial.counterexample_corpus` stores
 admitted challenge cases, search-run provenance, admission attempts, and planner
@@ -19,11 +20,14 @@ exercises the import path; it is not the durable output of the bounded pilot.
 The fixture contains a zero-discovery search result and a separate historical
 #1501 collision with two matching replay projections at its recorded
 regeneration revision. The importer records the pilot's 64 completed candidates
-and explicit zero discoveries. It rejects #1501 as a case because the replay
-artifacts do not directly bind the materialized scenario, route, and map inputs.
-It does not treat the pilot's successful candidates as newly discovered
-counterexamples or the historical projection match as a validated current
-planner failure.
+and explicit zero discoveries. A valid packet import stages #1501 in the separate
+`pending_historical_candidates` collection with `not_admitted`,
+`pending_exact_historical_input_binding`, `unknown_historical` input binding,
+unknown feasibility, and planner status `not_evaluated`. It keeps the candidate
+outside `cases` and `planner_evaluations` because the replay artifacts do not
+directly bind the materialized scenario, route, and map inputs. The importer does
+not treat the pilot's successful candidates as new discoveries or the historical
+projection match as a validated current planner failure.
 
 ```bash
 uv run python scripts/tools/manage_adversarial_counterexample_corpus.py init \
@@ -48,6 +52,16 @@ recomputes the stored search-run record from the copied summary, metadata,
 candidate table, row-status receipt, and manifests. This keeps the pilot's
 explicit zero-discovery and zero-admission counts bound to their source packet.
 
+The pending #1501 record points to the packet's checksummed scenario, route,
+replay JSONL files, replay provenance sidecars, normalization receipt, and replay
+validation file under `evidence/issue_9645_pilot/`. The case's resolved map
+registry/map bytes and historical source snapshots are separately copied into
+`pending_historical_candidate_artifacts/<candidate-id>/` and checksum-validated.
+Re-importing the same evidence reuses the same candidate and admission-attempt
+IDs. A changed source file or staged artifact fails validation. The pending
+record is not a planner solved/unsolved observation and does not add a case to a
+regression slice.
+
 The #1501 original episode and search manifest were not archived. Its two
 regenerated rows and source sidecars have distinct run IDs, matching event and
 metric projections, and matching replay revisions at the recorded regeneration
@@ -61,6 +75,13 @@ all inputs. The persisted #9645 packet rewrites local paths in its bundled
 replay artifacts, so each source receipt keeps the original digest separate
 from the normalized bundle digest. The normalization receipt pins the allowed
 local-path rewrites.
+
+The checked-in #9645 packet's normalized digests match the two #1501 replay
+provenance sidecars, and its bundle manifest and checksum sidecar bind the
+normalization receipt. A direct fixture import stages the pending #1501
+candidate from that packet without changing its files. Separate tampering tests
+deliberately alter replay hashes in isolated packet copies, refresh their outer
+bundle checksums, and verify that the importer rejects those mismatches.
 
 Dynamic feasibility for #1501 remains `unknown`. The current `scenario_cert.v1`
 result is a static route certificate, not proof that the dynamic task is

@@ -40,6 +40,18 @@ Classification: **`reward_refuted` at the bound evaluation boundary only**
   that exact source reproduced all 15 committed non-binding trace, table, and figure artifacts
   byte-for-byte. The generated evidence is committed separately; the binding intentionally does
   not self-reference that later artifact commit.
+- 2026-09-28 rebased regeneration: the diagnostic was rebased onto current `origin/main` with the
+  producer bytes unchanged (SHA-256 `7cf38669c725117b885568f5db850f0651413e4cef1ae7793478def21cbf9b4f`)
+  and the committed artifacts regenerated at commit
+  `49fae6e46d8674fa47355f9bb7c7b7cfaa158bd2` (branch
+  `diagnostic/issue-9545-crash-vs-wait-20260928`). This run is newly generated diagnostic evidence
+  on the current tree, distinct from the original #9546 executions and from the historical 0.0.6
+  release-bundle analysis discussed in section 2. Against the previously committed bytes it
+  reproduces identical contact steps (62/59/57), identical termination and collision flags on all
+  181 trace rows, the wait-preferring return ordering on every seed, and identical parameters and
+  decisions across all 27 sensitivity cells; per-step command values differ by at most 8.4e-7 and
+  position/velocity/reward columns by at most 3.2e-6 (inference float noise), so the artifact bytes
+  are no longer bit-identical while nothing decision-relevant changed.
 - Resolved run parameters: `binding.json.resolved_cli` records the actual seed tuple and the
   `hold_start_offset`/`hold_steps` values passed to the producer. `scenario_seeds` remains the
   scenario-file declaration and is not a substitute for the resolved run subset.

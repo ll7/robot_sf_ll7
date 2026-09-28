@@ -280,6 +280,17 @@ def classify_delegation_attempt(attempt: dict[str, Any]) -> dict[str, Any]:
         }
 
     if not started:
+        if _auth_failure(attempt, status, text):
+            return {
+                "phase": "worker_startup",
+                "classification": "startup_auth",
+                "signature": f"worker_startup_auth_http_{status}"
+                if status in _AUTH_STATUSES
+                else "worker_startup_auth",
+                "retryable": False,
+                "review_evidence_status": "none",
+                "reason": _AUTH_REMEDY,
+            }
         backend_404 = (
             status == 404
             or failure_class in _STARTUP_BACKEND_404_FAILURE_CLASSES
@@ -305,17 +316,6 @@ def classify_delegation_attempt(attempt: dict[str, Any]) -> dict[str, Any]:
                 "retryable": True,
                 "review_evidence_status": "none",
                 "reason": "transient HTTP failure occurred before worker startup",
-            }
-        if _auth_failure(attempt, status, text):
-            return {
-                "phase": "worker_startup",
-                "classification": "startup_auth",
-                "signature": f"worker_startup_auth_http_{status}"
-                if status in _AUTH_STATUSES
-                else "worker_startup_auth",
-                "retryable": False,
-                "review_evidence_status": "none",
-                "reason": _AUTH_REMEDY,
             }
         return {
             "phase": "worker_startup",

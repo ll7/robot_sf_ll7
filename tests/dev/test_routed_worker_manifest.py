@@ -1023,6 +1023,17 @@ class TestAuthCredentialFailureClassification:
             assert result["classification"] == "startup_transient", status
             assert result["retryable"] is True, status
 
+    @pytest.mark.parametrize("http_status", [404, *sorted(manifest._TRANSIENT_STARTUP_STATUSES)])
+    def test_explicit_auth_failure_precedes_bounded_retry_status(self, http_status: int) -> None:
+        """Structured auth evidence must not also earn a transient/backend retry."""
+        result = manifest.classify_delegation_attempt(
+            {"worker_started": False, "http_status": http_status, "failure_class": "auth"}
+        )
+
+        assert result["classification"] == "startup_auth"
+        assert result["retryable"] is False
+        assert result["review_evidence_status"] == "none"
+
     def test_backend_404_still_earns_its_bounded_retry(self) -> None:
         result = manifest.classify_delegation_attempt(
             {
@@ -1090,6 +1101,31 @@ class TestAuthCredentialFailureClassification:
             manifest.classify_terminal_state(returncode=1, failure_class="authentication_error")
             is manifest.TerminalFailure.AUTH
         )
+
+    def test_manifest_keeps_auth_terminal_state_and_retry_classification_consistent(
+        self, tmp_path: Path
+    ) -> None:
+        repo = _init_repo(tmp_path / "repo-auth-transient-status")
+        data = manifest.build_routing_manifest(
+            [
+                {
+                    "route": {"provider": "luna"},
+                    "worker_started": False,
+                    "run_dir": None,
+                    "returncode": 1,
+                    "http_status": 503,
+                    "failure_class": "auth",
+                }
+            ],
+            chosen_index=0,
+            target_repo=repo,
+        )
+
+        attempt = data["attempted_routes"][0]
+        assert attempt["delegation"]["classification"] == "startup_auth"
+        assert attempt["delegation"]["retryable"] is False
+        assert attempt["terminal_state"] == "auth"
+        assert data["aggregation"] == "inconclusive"
 
     def test_auth_reason_never_echoes_credential_material(self) -> None:
         secret = "sk-live-abcdef0123456789"

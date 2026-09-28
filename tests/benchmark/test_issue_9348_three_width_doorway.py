@@ -73,20 +73,109 @@ def test_campaign_failure_keeps_error_and_seals_receipt(
     assert "run_failure.json" in (output_root / "SHA256SUMS").read_text(encoding="utf-8")
 
 
-def test_h400_confirmation_rejects_h1_oracle_fallback() -> None:
-    """H1 readiness cannot authorize confirmation with an expected fallback."""
+def test_h400_confirmation_admits_empty_or_expected_oracle_diagnostic() -> None:
+    """The known actor-free H1 diagnostic remains visible without blocking H400."""
+    expected = {
+        "variant_id": "gap_3p60__depth_1p00",
+        "reason": "expected_distributional_metric_unavailable",
+        "marker": (
+            "metrics.distributional_disruption.missing_data.slow_speed_tier.status=unavailable"
+        ),
+    }
+    for diagnostics in ([], [expected]):
+        doorway_campaign._require_confirmation_preflight(
+            {"go": True, "checks": {"oracle_expected_fallbacks": diagnostics}}
+        )
+
+
+@pytest.mark.parametrize(
+    "diagnostics",
+    [
+        [
+            {
+                "variant_id": "gap_2p80__depth_1p00",
+                "reason": "expected_distributional_metric_unavailable",
+                "marker": (
+                    "metrics.distributional_disruption.missing_data."
+                    "slow_speed_tier.status=unavailable"
+                ),
+            }
+        ],
+        [
+            {
+                "variant_id": "gap_3p60__depth_1p00",
+                "reason": "unexpected_reason",
+                "marker": (
+                    "metrics.distributional_disruption.missing_data."
+                    "slow_speed_tier.status=unavailable"
+                ),
+            }
+        ],
+        [
+            {
+                "variant_id": "gap_3p60__depth_1p00",
+                "reason": "expected_distributional_metric_unavailable",
+                "marker": "metrics.distributional_disruption.missing_data.unknown.status=unavailable",
+            }
+        ],
+        [
+            {
+                "variant_id": "gap_3p60__depth_1p00",
+                "reason": "expected_distributional_metric_unavailable",
+            }
+        ],
+        [
+            {
+                "variant_id": "gap_3p60__depth_1p00",
+                "reason": "expected_distributional_metric_unavailable",
+                "marker": (
+                    "metrics.distributional_disruption.missing_data."
+                    "slow_speed_tier.status=unavailable"
+                ),
+            },
+            {
+                "variant_id": "gap_3p60__depth_1p00",
+                "reason": "expected_distributional_metric_unavailable",
+                "marker": (
+                    "metrics.distributional_disruption.missing_data."
+                    "slow_speed_tier.status=unavailable"
+                ),
+            },
+        ],
+    ],
+)
+def test_h400_confirmation_rejects_unexpected_or_malformed_oracle_diagnostics(
+    diagnostics: list[dict[str, str]],
+) -> None:
+    """Only the pre-registered singleton oracle diagnostic is admitted."""
     with pytest.raises(ValueError, match="refuses oracle_expected_fallbacks"):
         doorway_campaign._require_confirmation_preflight(
-            {
-                "go": True,
-                "checks": {"oracle_expected_fallbacks": [{"variant_id": "gap_3p60"}]},
-            }
+            {"go": True, "checks": {"oracle_expected_fallbacks": diagnostics}}
         )
-    doorway_campaign._require_confirmation_preflight(
-        {"go": True, "checks": {"oracle_expected_fallbacks": []}}
-    )
+
+
+@pytest.mark.parametrize(
+    "preflight",
+    [
+        {"go": True, "checks": {}},
+        {"go": True},
+        {"go": False, "checks": {"oracle_expected_fallbacks": []}},
+    ],
+)
+def test_h400_confirmation_rejects_missing_check_or_go_false(
+    preflight: dict[str, Any],
+) -> None:
+    """The required admission check and true geometry gate remain fail closed."""
+    with pytest.raises(ValueError):
+        doorway_campaign._require_confirmation_preflight(preflight)
+
+
+def test_h400_confirmation_rejects_malformed_fallback_check() -> None:
+    """A non-list diagnostic check cannot authorize confirmation."""
     with pytest.raises(ValueError, match="fallback admission check is unavailable"):
-        doorway_campaign._require_confirmation_preflight({"go": True, "checks": {}})
+        doorway_campaign._require_confirmation_preflight(
+            {"go": True, "checks": {"oracle_expected_fallbacks": {"variant_id": "gap_3p60"}}}
+        )
 
 
 def _sha256(path: Path) -> str:

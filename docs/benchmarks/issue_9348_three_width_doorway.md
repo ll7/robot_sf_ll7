@@ -21,8 +21,18 @@ positive continuous clearance, available execution, known geometry, and stable
 runtime input identity. The preregistered unavailable `slow_speed_tier`
 distributional metric may leave the completed H1 oracle rollout explicitly
 fallback/degraded; it is diagnostic only and does not block H1
-executability/binding readiness or become comparison evidence. Unknown geometry,
-execution failure, or unstable binding keeps the preflight `go` field false.
+executability/binding readiness or become comparison evidence. Each of the three
+preserved H1 smokes recorded the same actor-free oracle diagnostic:
+`gap_3p60__depth_1p00` / `expected_distributional_metric_unavailable` /
+`metrics.distributional_disruption.missing_data.slow_speed_tier.status=unavailable`.
+The H400 admission gate therefore accepts an empty list or exactly that one
+`oracle_expected_fallbacks` entry so the diagnostic remains visible in the
+preflight report. This is an oracle-only admission exception outside the 18
+confirmation cells; it is not H400 success evidence. Other, multiple,
+malformed or unknown diagnostics are rejected. Planner rows remain fail closed:
+fallback, degraded, non-native, adapter and incomplete traces are excluded
+from H400 evidence. Unknown geometry, execution failure, or unstable binding
+keeps the preflight `go` field false.
 
 ## Diagnostic commands
 

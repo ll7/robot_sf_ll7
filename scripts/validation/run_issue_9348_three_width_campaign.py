@@ -251,16 +251,24 @@ def _row_inventory_item(
 
 
 def _require_confirmation_preflight(preflight: dict[str, Any]) -> None:
-    """Admit H400 only after H1 diagnostics are clear for confirmation."""
+    """Admit H400 while retaining the one known actor-free oracle diagnostic."""
     checks = preflight.get("checks")
     if not isinstance(checks, dict):
         raise ValueError("doorway confirmation preflight checks are unavailable")
     expected_fallbacks = checks.get("oracle_expected_fallbacks")
     if not isinstance(expected_fallbacks, list):
         raise ValueError("doorway confirmation fallback admission check is unavailable")
-    if expected_fallbacks:
+    expected_oracle_fallback = {
+        "variant_id": "gap_3p60__depth_1p00",
+        "reason": "expected_distributional_metric_unavailable",
+        "marker": (
+            "metrics.distributional_disruption.missing_data.slow_speed_tier.status=unavailable"
+        ),
+    }
+    if expected_fallbacks and expected_fallbacks != [expected_oracle_fallback]:
         raise ValueError(
-            "doorway H400 confirmation refuses oracle_expected_fallbacks from H1 preflight"
+            "doorway H400 confirmation refuses oracle_expected_fallbacks except the "
+            "pre-registered oracle-only entry"
         )
     if preflight.get("go") is not True:
         raise ValueError("doorway geometry/oracle preflight did not admit policy execution")

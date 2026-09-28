@@ -22,6 +22,15 @@ queue owns Slurm submission, retrieval and preservation. No H1 smoke is a
 confirmation result. Validate with focused synthetic report tests and a
 real H1 runner smoke, then the full PR gate after dependent source merges.
 
+The three preserved H1 smokes each recorded exactly one actor-free oracle diagnostic:
+`variant_id=gap_3p60__depth_1p00`, `reason=expected_distributional_metric_unavailable`,
+and `marker=metrics.distributional_disruption.missing_data.slow_speed_tier.status=unavailable`.
+To preserve that report visibility, H400 admission accepts either an empty
+`oracle_expected_fallbacks` list or exactly this singleton. The diagnostic is
+oracle metadata outside the 18 confirmation cells, so this narrow allowance
+does not turn H1 output into H400 success evidence. Any other, multiple,
+malformed or unknown diagnostic remains a fail-closed admission error.
+
 The author [approved execution as part of release 0.0.8 on 2026-09-24](https://github.com/ll7/diss/issues/2669#issuecomment-5811968439).
 The preregistration's earlier no-execution line applied to writing that protocol,
 before this decision. Slurm submission remains subject to the frozen source,
@@ -123,8 +132,14 @@ distance, and pedestrian delay or impairment. Time for failures is censored
 at termination, not imputed as a successful arrival time. Execution errors,
 fallback, degraded rows and unavailable cells are counted separately. H1
 execution/binding readiness may record the expected unavailable distributional
-metric, but the H400 producer refuses any non-empty
-`oracle_expected_fallbacks` list before dispatch, even when H1 `go` is true.
+metric. Before dispatch, the H400 producer admits only an empty
+`oracle_expected_fallbacks` list or the exact singleton recorded by the
+preserved H1 smokes above, even when H1 `go` is true; every other, multiple,
+malformed or unknown diagnostic is rejected. This admission exception keeps
+the actor-free oracle diagnostic visible and does not authorize it as success
+evidence. Planner rows remain fail closed: fallback, degraded, non-native,
+adapter or incomplete traces are excluded from H400 evidence and cannot be
+admitted through this oracle-only path.
 
 The three seed IDs alone do **not** prove paired realizations. Before campaign
 submission, each width cell records SHA-256 receipts for the initial

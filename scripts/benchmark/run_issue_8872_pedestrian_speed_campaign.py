@@ -273,6 +273,34 @@ JOURNAL_PROVENANCE_FIELDS = frozenset(
         "terminal_status",
     }
 )
+JOURNAL_SUCCESS_PROVENANCE_FIELDS = frozenset(
+    {
+        "identity_key",
+        "scenario_id",
+        "scenario_source_sha256",
+        "regime_id",
+        "planner_id",
+        "planner_algorithm",
+        "planner_config_sha256",
+        "seed",
+        "horizon_steps",
+        "dt_seconds",
+        "robot_speed_cap_m_s",
+        "runtime_controls",
+        "protocol_semantic_hash",
+        "manifest_hash",
+        "source_commit",
+        "execution_mode",
+        "native",
+        "fallback",
+        "degraded",
+        "intervention_status",
+        "diagnostics",
+        "trace_sha256",
+        "checkpoint_provenance",
+        "metrics",
+    }
+)
 JOURNAL_DIAGNOSTIC_SCALARS = frozenset(
     {
         "configured_desired_speed_mean_m_s",
@@ -439,7 +467,13 @@ def _validated_protocol_metrics(
     """Validate one complete protocol metric mapping without accepting extras."""
     _require(isinstance(value, Mapping), f"{field} must be a mapping")
     names = _protocol_metric_names()
-    result = _finite_protocol_metrics(value, field=field)
+    _require(
+        set(value).issubset(names),
+        f"{field} contains an unsupported metric",
+    )
+    result = {
+        str(name): _finite_metric(metric, f"{field}.{name}") for name, metric in value.items()
+    }
     _require(
         set(result) == set(names) if require_complete else True,
         f"{field} must contain every frozen protocol metric",
@@ -871,11 +905,77 @@ def _journal_provenance(  # noqa: C901, PLR0912
             normalized["checkpoint_provenance"]
         )
     if "metrics" in normalized:
-        normalized["metrics"] = _finite_protocol_metrics(
-            normalized["metrics"], field="journal.row_finished.provenance.metrics"
+        normalized["metrics"] = _validated_protocol_metrics(
+            normalized["metrics"],
+            field="journal.row_finished.provenance.metrics",
+            require_complete=False,
         )
     _assert_no_transient_state(normalized, "journal.row_finished.provenance")
     return normalized
+
+
+def _validate_journal_success_provenance(
+    provenance: Mapping[str, Any],
+    identity_key: str,
+    *,
+    packet_context: Mapping[str, Any] | None = None,
+) -> None:
+    """Require a successful row to carry complete packet-bound identity evidence."""
+    _require(
+        JOURNAL_SUCCESS_PROVENANCE_FIELDS.issubset(provenance),
+        "journal native terminal row provenance is incomplete",
+    )
+    expected = _compiled_identity_rows()[identity_key]
+    for field in (
+        "identity_key",
+        "scenario_id",
+        "scenario_source_sha256",
+        "regime_id",
+        "planner_id",
+        "planner_config_sha256",
+        "seed",
+        "horizon_steps",
+        "dt_seconds",
+        "robot_speed_cap_m_s",
+        "runtime_controls",
+    ):
+        _require(
+            provenance.get(field) == expected[field],
+            "journal native terminal row identity does not match the packet",
+        )
+    _require(
+        provenance.get("protocol_semantic_hash") == EXPECTED_PROTOCOL_SEMANTIC_HASH,
+        "journal native terminal row protocol hash does not match the packet",
+    )
+    _require(
+        provenance.get("manifest_hash") == PRODUCTION_MANIFEST_HASH,
+        "journal native terminal row manifest does not match the packet",
+    )
+    _require(
+        provenance.get("source_commit") == packet_context.get("source_commit")
+        if packet_context is not None
+        else isinstance(provenance.get("source_commit"), str),
+        "journal native terminal row source does not match the packet",
+    )
+    if packet_context is not None:
+        _require(
+            provenance.get("manifest_hash") == packet_context.get("manifest_hash")
+            and provenance.get("protocol_semantic_hash")
+            == packet_context.get("protocol_semantic_hash"),
+            "journal native terminal row packet context does not match",
+        )
+    _require(
+        provenance.get("execution_mode") == expected["execution_mode"]
+        and provenance.get("native") is True
+        and provenance.get("fallback") is False
+        and provenance.get("degraded") is False,
+        "journal native terminal row execution mode is invalid",
+    )
+    _validated_protocol_metrics(
+        provenance.get("metrics"),
+        field="journal.row_finished.provenance.metrics",
+        require_complete=True,
+    )
 
 
 def _journal_missingness(value: Any) -> str | None:
@@ -1200,13 +1300,15 @@ def validate_production_packet(
     packet: Mapping[str, Any],
     *,
     config_path: str | Path = DEFAULT_PROTOCOL_CONFIG,
+    _require_source_checkout: bool = True,
 ) -> dict[str, Any]:
     """Validate a complete packet and all admission receipts before execution."""
     manifest = _compiled_manifest(config_path)
     source_commit = _require_digest(
         packet.get("source_commit"), "production packet source_commit", 40
     )
-    _validate_source_checkout(source_commit)
+    if _require_source_checkout:
+        _validate_source_checkout(source_commit)
     binding_hash = _validate_packet_structure(packet, manifest, source_commit)
     receipt_fields = (
         "activation_receipt",
@@ -2076,14 +2178,29 @@ def _read_journal(path: Path) -> list[dict[str, Any]]:
     return events
 
 
+def _validate_journal_packet(packet: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Validate the preserved production packet used as journal context."""
+    _require(packet is not None, "journal reconciliation requires the preserved production packet")
+    value = _mapping(packet, "journal production packet")
+    validate_production_packet(value, _require_source_checkout=False)
+    _require(
+        value.get("expected_rows") == EXPECTED_ROWS
+        and value.get("identity_count") == EXPECTED_ROWS
+        and value.get("unique_identity_count") == EXPECTED_ROWS,
+        "journal packet cardinality is not the frozen production cardinality",
+    )
+    _require(
+        value.get("manifest_hash") == PRODUCTION_MANIFEST_HASH,
+        "journal packet manifest is not the frozen production manifest",
+    )
+    return value
+
+
 def _validate_journal_header(
     header: Mapping[str, Any],
     *,
+    packet_context: Mapping[str, Any],
     expected_rows: int | None,
-    packet_sha256: str | None,
-    packet_binding_hash: str | None,
-    source_commit: str | None,
-    manifest_hash: str | None,
 ) -> int:
     """Validate the immutable execution identity before reading terminal rows."""
     _require(
@@ -2129,56 +2246,36 @@ def _validate_journal_header(
     )
     if expected_rows is not None:
         _require(
-            expected_rows == header_expected_rows,
+            expected_rows == header_expected_rows == packet_context["expected_rows"],
             "execution journal header expected_rows does not match the requested count",
         )
-    if packet_sha256 is not None:
-        _require(
-            _require_digest(packet_sha256, "expected packet_sha256") == header_packet_sha256,
-            "execution journal header packet does not match the expected packet",
-        )
-    if packet_binding_hash is not None:
-        _require(
-            _require_digest(packet_binding_hash, "expected packet_binding_hash")
-            == header_binding_hash,
-            "execution journal header binding does not match the expected packet",
-        )
-    if source_commit is not None:
-        _require(
-            isinstance(source_commit, str)
-            and HEX_COMMIT.fullmatch(source_commit) is not None
-            and source_commit == header_source_commit,
-            "execution journal header source does not match the expected packet",
-        )
-    if manifest_hash is not None:
-        _require(
-            _require_digest(manifest_hash, "expected manifest_hash") == header_manifest_hash,
-            "execution journal header manifest does not match the expected packet",
-        )
+    _require(
+        header_expected_rows == packet_context["expected_rows"]
+        and header_packet_sha256 == packet_context["packet_sha256"]
+        and header_binding_hash == packet_context["packet_binding_hash"]
+        and header_source_commit == packet_context["source_commit"]
+        and header_manifest_hash == packet_context["manifest_hash"],
+        "execution journal header does not match the preserved production packet",
+    )
     return header_expected_rows
 
 
 def reconcile_execution_journal(
     journal_path: str | Path,
     *,
+    packet: Mapping[str, Any] | None = None,
     expected_rows: int | None = None,
-    packet_sha256: str | None = None,
-    packet_binding_hash: str | None = None,
-    source_commit: str | None = None,
-    manifest_hash: str | None = None,
 ) -> dict[str, Any]:
-    """Summarize an interrupted journal; this function never authorizes a retry."""
+    """Summarize a journal only against its exact preserved production packet."""
     path = Path(journal_path)
     _require(path.is_file(), "execution journal does not exist")
     events = _read_journal(path)
+    packet_context = _validate_journal_packet(packet)
     _require(events and events[0].get("event") == "header", "execution journal header is missing")
     header_expected_rows = _validate_journal_header(
         events[0],
+        packet_context=packet_context,
         expected_rows=expected_rows,
-        packet_sha256=packet_sha256,
-        packet_binding_hash=packet_binding_hash,
-        source_commit=source_commit,
-        manifest_hash=manifest_hash,
     )
     started: list[str] = []
     terminal_rows: list[dict[str, Any]] = []
@@ -2225,15 +2322,25 @@ def reconcile_execution_journal(
                 isinstance(provenance, Mapping),
                 "journal native terminal row is missing provenance",
             )
+            _validate_journal_success_provenance(
+                provenance,
+                identity_key,
+                packet_context=packet_context,
+            )
             _validated_protocol_metrics(
                 metric_value,
                 field="journal.row_finished.metrics",
                 require_complete=True,
             )
+            _require(
+                metric_value == provenance.get("metrics"),
+                "journal row metrics do not match provenance",
+            )
         if metric_value is not None:
-            row["metrics"] = _finite_protocol_metrics(
+            row["metrics"] = _validated_protocol_metrics(
                 metric_value,
                 field="journal.row_finished.metrics",
+                require_complete=terminal_status == SUCCESS_STATUS,
             )
         if provenance is not None:
             _assert_no_transient_state(provenance, "journal.row_finished.provenance")
@@ -2285,11 +2392,8 @@ def _prepare_execution_paths(
         )
         summary = reconcile_execution_journal(
             journal_path,
-            expected_rows=(packet.get("expected_rows") if packet is not None else None),
-            packet_sha256=(packet.get("packet_sha256") if packet is not None else None),
-            packet_binding_hash=(packet.get("packet_binding_hash") if packet is not None else None),
-            source_commit=(packet.get("source_commit") if packet is not None else None),
-            manifest_hash=(packet.get("manifest_hash") if packet is not None else None),
+            packet=packet,
+            expected_rows=packet.get("expected_rows") if packet is not None else None,
         )
         raise CampaignAdapterError(
             "existing execution journal requires reconciliation; automatic retry is forbidden "
@@ -2307,16 +2411,35 @@ def _append_journal_event(handle: Any, event: str, **payload: Any) -> None:
 def _journal_row_payload(row: Mapping[str, Any]) -> dict[str, Any]:
     """Return a complete, already-normalized terminal row for the durable journal."""
     identity_key = _journal_identity_key(row.get("identity_key"))
+    terminal_status = row.get("terminal_status")
+    _require(
+        isinstance(terminal_status, str) and terminal_status in TERMINAL_STATUSES,
+        "journal row terminal status is invalid",
+    )
     provenance = row.get("provenance")
+    metrics = row.get("metrics")
+    if metrics is not None:
+        metrics = _validated_protocol_metrics(
+            metrics,
+            field="journal.row_finished.metrics",
+            require_complete=terminal_status == SUCCESS_STATUS,
+        )
+    if provenance is not None:
+        provenance = _journal_provenance(provenance, identity_key)
+        if terminal_status == SUCCESS_STATUS:
+            _validate_journal_success_provenance(provenance, identity_key)
+        if metrics is not None and "metrics" in provenance:
+            _require(
+                metrics == provenance["metrics"],
+                "journal row metrics do not match provenance",
+            )
     payload = {
         "identity_key": identity_key,
-        "terminal_status": row.get("terminal_status"),
-        "missingness": row.get("missingness"),
-        "reason": row.get("reason"),
-        "metrics": row.get("metrics"),
-        "provenance": (
-            None if provenance is None else _journal_provenance(provenance, identity_key)
-        ),
+        "terminal_status": terminal_status,
+        "missingness": _journal_missingness(row.get("missingness")),
+        "reason": _journal_reason(row.get("reason")),
+        "metrics": metrics,
+        "provenance": provenance,
     }
     _assert_no_transient_state(payload, "journal.row_finished")
     return payload
@@ -2642,15 +2765,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             packet = _load_json(args.packet, "production packet")
             summary = reconcile_execution_journal(
                 args.journal,
+                packet=packet,
                 expected_rows=(
                     args.expected_rows
                     if args.expected_rows is not None
                     else packet.get("expected_rows")
                 ),
-                packet_sha256=packet.get("packet_sha256"),
-                packet_binding_hash=packet.get("packet_binding_hash"),
-                source_commit=packet.get("source_commit"),
-                manifest_hash=packet.get("manifest_hash"),
             )
             print(json.dumps(summary, sort_keys=True))
             return 0

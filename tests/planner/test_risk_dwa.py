@@ -305,14 +305,22 @@ def test_risk_dwa_plan_stops_at_goal() -> None:
     assert planner.plan(obs) == (0.0, 0.0)
 
 
-def test_risk_dwa_flat_observation_rotates_pedestrian_velocity_to_world() -> None:
-    """Flat SocNav ego velocities are converted before world-frame prediction."""
+@pytest.mark.parametrize("flat", [False, True], ids=["structured", "flat"])
+def test_risk_dwa_observation_rotates_pedestrian_velocity_to_world(flat: bool) -> None:
+    """SocNav ego velocities are converted before world-frame prediction."""
     heading = float(np.pi / 2.0)
     ego_velocity = (1.25, -0.5)
     planner = RiskDWAPlannerAdapter()
-
-    _robot_pos, _heading, _goal, _ped_pos, ped_vel = planner._extract_robot_goal_ped(
+    observation = (
         _flat_observation(heading=heading, pedestrian_velocities=[ego_velocity])
+        if flat
+        else _observation(
+            heading=heading,
+            pedestrians=[(1.0, 0.5)],
+            pedestrian_velocities=[ego_velocity],
+        )
     )
+
+    _robot_pos, _heading, _goal, _ped_pos, ped_vel = planner._extract_robot_goal_ped(observation)
 
     np.testing.assert_allclose(ped_vel, np.asarray([[0.5, 1.25]]), rtol=0.0, atol=1e-12)

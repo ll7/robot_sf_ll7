@@ -1,8 +1,8 @@
 # Flat-observation frame contract and per-arm audit (issue #9752)
 
-This note records the contract at the current main base (`006cdcb52`). The
-current 14-arm roster is the planner list in
-`configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`.
+This note records the contract against main commit
+(`a979a38316d8df2a9a0950825bd35d3687865c00`). The 14-arm roster at that revision is the
+planner list in `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`.
 
 ## Producer contract
 
@@ -43,9 +43,9 @@ source and focused-test anchors, not campaign acceptance evidence.
 | `scenario_adaptive_hybrid_orca_v2_collision_guard` | Hybrid v3 base; one scenario override selects ORCA | Hybrid v3 converts | Hybrid v3 pass-through; ORCA override converts | Same hybrid and ORCA symbols; candidate config; characterization test above |
 | `hybrid_rule_v3_fast_progress_static_escape` | Hybrid v3 local rollout | Converts | **Historical pass-through retained** | `hybrid_rule_local_planner.py:HybridRuleLocalPlannerAdapter._extract_state`; characterization test above |
 | `hybrid_rule_v3_fast_progress_static_escape_continuous` | Hybrid v3 local rollout | Converts | **Historical pass-through retained** | Same source and characterization test |
-| `guarded_ppo` | PPO primary input stays ego-native; safety and fallback rollouts use world vectors | Converts for guard rollout | Converts for guard rollout | `guarded_ppo.py:GuardedPPOAdapter._extract_state`; `tests/planner/test_guarded_ppo.py::test_guarded_ppo_flat_observation_rotates_pedestrian_velocity_to_world` |
+| `guarded_ppo` | PPO primary input stays ego-native; safety and fallback rollouts use world vectors | Converts for guard rollout | Converts for guard rollout | `guarded_ppo.py:GuardedPPOAdapter._extract_state`; `tests/planner/test_guarded_ppo.py::test_guarded_ppo_observation_rotates_pedestrian_velocity_to_world` |
 | `predictive_mppi` | Learned predictor consumes ego-native velocity features; MPPI scores predicted positions | Ego-native predictor input | Ego-native predictor input | `socnav_prediction.py:PredictionPlannerAdapter._build_model_input`, `predictive_mppi.py:PredictiveMPPIAdapter._predict_future`; `tests/planner/test_predictive_mppi_planner.py` |
-| `risk_dwa` | World-frame TTC and constant-velocity rollout | Converts ego to world | Converts ego to world | `risk_dwa.py:RiskDWAPlannerAdapter._extract_robot_goal_ped`; `tests/planner/test_risk_dwa.py::test_risk_dwa_flat_observation_rotates_pedestrian_velocity_to_world` |
+| `risk_dwa` | World-frame TTC and constant-velocity rollout | Converts ego to world | Converts ego to world | `risk_dwa.py:RiskDWAPlannerAdapter._extract_robot_goal_ped`; `tests/planner/test_risk_dwa.py::test_risk_dwa_observation_rotates_pedestrian_velocity_to_world`; `tests/metamorphic/test_mirror_symmetry.py::test_risk_dwa_release_trace_is_rotation_equivariant` |
 
 ## Scoped outcome and limitations
 

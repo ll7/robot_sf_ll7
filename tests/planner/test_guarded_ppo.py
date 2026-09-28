@@ -696,14 +696,22 @@ def test_guarded_ppo_reshapes_flattened_pedestrian_payloads() -> None:
     assert ped_pos.tolist() == [[1.0, 2.0], [3.0, 4.0]]
 
 
-def test_guarded_ppo_flat_observation_rotates_pedestrian_velocity_to_world() -> None:
-    """The world-frame safety rollout must convert flat ego velocities first."""
+@pytest.mark.parametrize("flat", [False, True], ids=["structured", "flat"])
+def test_guarded_ppo_observation_rotates_pedestrian_velocity_to_world(flat: bool) -> None:
+    """The world-frame safety rollout converts SOCNAV ego velocities first."""
     guard = GuardedPPOAdapter(fallback_adapter=_FallbackAdapter((0.0, 0.0)))
     heading = float(np.pi / 2.0)
-
-    _robot_pos, _heading, _goal, _ped_pos, ped_vel = guard._extract_state(
+    observation = (
         _flat_obs(heading=heading, pedestrian_velocity=(1.25, -0.5))
+        if flat
+        else _obs(
+            heading=heading,
+            ped_positions=[(1.0, 0.5)],
+            ped_velocities=[(1.25, -0.5)],
+        )
     )
+
+    _robot_pos, _heading, _goal, _ped_pos, ped_vel = guard._extract_state(observation)
 
     np.testing.assert_allclose(ped_vel, np.asarray([[0.5, 1.25]]), rtol=0.0, atol=1e-12)
 

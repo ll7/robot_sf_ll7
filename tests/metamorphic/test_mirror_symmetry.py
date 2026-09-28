@@ -1,10 +1,10 @@
 """Mirror and rotation symmetry for deterministic planner-driven robot episodes.
 
-Release arms (``social_force``, ``orca``, hybrid v3) run through the map-runner
-policy builder. Risk-DWA and Guarded-PPO also have direct flat-observation frame
-relations below because their world-frame safety rollouts are deterministic,
-while Guarded-PPO's learned primary policy is not an exact scene-trace oracle.
-Exact trace relations apply only to deterministic planners.
+Release arms (``social_force``, ``orca``, hybrid v3, and ``risk_dwa``) run
+through the map-runner policy builder. Guarded-PPO also has a direct
+flat-observation frame relation because its world-frame safety rollout is
+deterministic, while the learned primary policy is not an exact scene-trace
+oracle. Exact trace relations apply only to deterministic planners.
 Stochastic planners (sampling, MPPI, stochastic learned policies) draw different
 samples in a transformed scene even with the same seed, so they are excluded from
 exact mirror relations; their contract is seeded replay (``test_replay_determinism``)
@@ -334,6 +334,17 @@ def test_release_arm_trace_is_mirror_and_rotation_equivariant(arm: str) -> None:
             arm, interaction_scene(point_map), seed=_SEED, max_steps=_ARM_STEPS
         )
         _assert_arm_equivariant(base, transformed, name)
+
+
+def test_risk_dwa_release_trace_is_rotation_equivariant() -> None:
+    """The deterministic Risk-DWA release arm rotates its flat scene and trace."""
+    base = run_arm_episode("risk_dwa", interaction_scene(), seed=_SEED, max_steps=_ARM_STEPS)
+    rotated = run_arm_episode(
+        "risk_dwa", interaction_scene(rotate_90), seed=_SEED, max_steps=_ARM_STEPS
+    )
+
+    assert base.status == rotated.status == "ok"
+    _assert_arm_equivariant(base, rotated, "rotate_90")
 
 
 @pytest.mark.parametrize("arm", ["risk_dwa", "guarded_ppo"])

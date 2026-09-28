@@ -6,6 +6,8 @@ import hashlib
 import json
 from typing import TYPE_CHECKING, Any
 
+import pytest
+
 from robot_sf.analysis_workbench.audit_contracts import Signal, record_from_dict, record_to_dict
 from robot_sf.analysis_workbench.audit_store import AuditStore
 from robot_sf.analysis_workbench.release_row_anomalies import (
@@ -55,6 +57,15 @@ def _row(  # noqa: PLR0913
 
     if observation_ped_count is None:
         observation_ped_count = 0 if scenario_id == "pedestrian-free" else 1
+    default_collision_count = 1.0 if collision else 0.0
+    row_metrics: dict[str, object] = {
+        "ped_collision_count": default_collision_count,
+        "obstacle_collision_count": 0.0,
+        "agent_collision_count": 0.0,
+        "total_collision_count": default_collision_count,
+        "collisions": default_collision_count,
+    }
+    row_metrics.update(metrics or {})
     return {
         "episode_id": f"{scenario_id}:{seed}:{algo}",
         "scenario_id": scenario_id,
@@ -68,7 +79,7 @@ def _row(  # noqa: PLR0913
         },
         "event_ledger": {"exact_events": {"invalid_run": invalid_run}},
         "integrity": {"effective_view": {"observation_ped_count": observation_ped_count}},
-        "metrics": dict(metrics or {}),
+        "metrics": row_metrics,
     }
 
 
@@ -182,6 +193,7 @@ def test_all_release_row_detector_families_flag_synthetic_anomalies() -> None:
         "pedestrian_free_baseline_regression",
         "universal_failure_unannotated",
         "invalid_run_preflight_mismatch",
+        "collision_count_arithmetic",
     } <= detector_ids
 
     # Findings expose stable cell identity and annotation state.  The release
@@ -210,6 +222,147 @@ def test_pedestrian_free_finding_is_scenario_level() -> None:
     finding = _findings(report, "pedestrian_free_baseline_regression")[0]
     assert finding["seed"] is None
     assert finding["planner_id"] == "social_force"
+
+
+def test_collision_component_sum_blocks_issue_9855_mutant_but_control_passes() -> None:
+    """The exact VV-5 clean control stays eligible while doubled aliases block."""
+
+    control = [
+        _row("vv5-fixture", 111, "goal", success=True, timeout=False),
+        _row("vv5-fixture", 111, "social_force", collision=True, timeout=False),
+    ]
+    config = {**BASIC_CONFIG, "min_planners_per_cell": 2}
+    source = _source("goal", "social_force")
+    clean_report = analyze_release_rows(control, config=config, source=source)
+
+    mutant = json.loads(json.dumps(control))
+    mutant[1]["metrics"]["total_collision_count"] = 2.0
+    mutant[1]["metrics"]["collisions"] = 2.0
+    mutant_report = analyze_release_rows(mutant, config=config, source=source)
+
+    assert not _findings(clean_report, "collision_count_arithmetic")
+    assert clean_report["gate"]["blocked"] is False
+    findings = _findings(mutant_report, "collision_count_arithmetic")
+    assert len(findings) == 1
+    assert findings[0]["measured"]["component_sum"] == 1.0
+    assert "collision_metric_component_sum_mismatch" in findings[0]["measured"]["violations"]
+    assert "collision_metric_alias_mismatch" in findings[0]["measured"]["violations"]
+    assert mutant_report["gate"]["blocked"] is True
+    assert "collision_count_arithmetic_inconsistent" in mutant_report["gate"]["reasons"]
+
+
+def test_valid_collision_and_zero_collision_rows_pass_arithmetic_gate() -> None:
+    """Typed collision and clean success controls both satisfy the row schema."""
+
+    collision = _row("valid-collision", 112, "social_force", collision=True, timeout=False)
+    zero = _row("valid-success", 113, "social_force", success=True, timeout=False)
+    report = analyze_release_rows(
+        [collision, zero],
+        config=BASIC_CONFIG,
+        source=_source("social_force"),
+    )
+
+    assert not _findings(report, "collision_count_arithmetic")
+    assert "collision_count_arithmetic_inconsistent" not in report["gate"]["reasons"]
+
+
+def test_collision_count_tolerance_cannot_weaken_integer_consistency() -> None:
+    """The absolute tolerance cannot be raised to hide a one-count mismatch."""
+
+    row = _row("tolerance-cap", 117, "planner_a", collision=True, timeout=False)
+    with pytest.raises(ReleaseRowError, match="collision_count_tolerance"):
+        analyze_release_rows(
+            [row],
+            config={**BASIC_CONFIG, "collision_count_tolerance": 1.0},
+            source=_source("planner_a"),
+        )
+
+
+def test_missing_collision_component_is_a_named_blocking_finding() -> None:
+    """An absent required component cannot be treated as a zero count."""
+
+    row = _row("missing-collision-component", 114, "planner_a")
+    del row["metrics"]["agent_collision_count"]
+    report = analyze_release_rows(
+        [row],
+        config=BASIC_CONFIG,
+        source=_source("planner_a"),
+    )
+
+    finding = _findings(report, "collision_count_arithmetic")[0]
+    assert finding["measured"]["missing_fields"] == ["metrics.agent_collision_count"]
+    assert "collision_metric_required_field_missing" in finding["measured"]["violations"]
+    assert report["gate"]["blocked"] is True
+    assert "collision_count_arithmetic_inconsistent" in report["gate"]["reasons"]
+
+
+def test_typed_event_list_is_not_required_to_equal_sampled_collision_count() -> None:
+    """One exact event may correspond to multiple sampled collision counts."""
+
+    row = _row(
+        "sampled-count",
+        115,
+        "planner_a",
+        collision=True,
+        timeout=False,
+        metrics={
+            "ped_collision_count": 2.0,
+            "total_collision_count": 2.0,
+            "collisions": 2.0,
+        },
+    )
+    row["event_ledger"] = {
+        "schema_version": "EpisodeEventLedger.v2",
+        "exact_events": {"collision": True},
+        "collision_events": [{"collision_partner_type": "pedestrian"}],
+        "reconciliation": {
+            "collision_metric_value": 2.0,
+            "collision_metric_source": "metrics.total_collision_count",
+        },
+        "metric_definitions": {
+            "collision_count": {
+                "kind": "exact_or_sampled",
+                "source": "metrics.total_collision_count",
+            }
+        },
+    }
+    report = analyze_release_rows(
+        [row],
+        config=BASIC_CONFIG,
+        source=_source("planner_a"),
+    )
+
+    assert not _findings(report, "collision_count_arithmetic")
+
+
+def test_typed_event_ledger_schema_mismatch_is_named_and_blocks() -> None:
+    """An unknown typed-ledger version cannot be silently treated as valid."""
+
+    row = _row("ledger-schema-mismatch", 116, "planner_a", collision=True, timeout=False)
+    row["event_ledger"] = {
+        "schema_version": "EpisodeEventLedger.v99",
+        "exact_events": {"collision": True},
+        "collision_events": [{"collision_partner_type": "pedestrian"}],
+        "reconciliation": {
+            "collision_metric_value": 1.0,
+            "collision_metric_source": "metrics.total_collision_count",
+        },
+        "metric_definitions": {
+            "collision_count": {
+                "kind": "exact_or_sampled",
+                "source": "metrics.total_collision_count",
+            }
+        },
+    }
+    report = analyze_release_rows(
+        [row],
+        config=BASIC_CONFIG,
+        source=_source("planner_a"),
+    )
+
+    finding = _findings(report, "collision_count_arithmetic")[0]
+    assert "collision_ledger_schema_mismatch" in finding["measured"]["violations"]
+    assert report["gate"]["blocked"] is True
 
 
 def test_empty_pedestrian_free_scenario_list_discovers_observed_free_cells() -> None:

@@ -53,6 +53,36 @@ also requires a non-empty, member-unique `episode_id`. `metrics` must be an
 object. `event_ledger.exact_events.invalid_run` is used when present for
 preflight parity. Optional measurements remain unavailable when absent.
 
+Admitted rows must also carry the release collision-count schema. The required
+metric fields are `metrics.ped_collision_count`,
+`metrics.obstacle_collision_count`, `metrics.agent_collision_count`,
+`metrics.total_collision_count`, and the legacy alias `metrics.collisions`.
+Counts are finite, non-negative integers (JSON integer-valued floats are
+accepted) and the detector compares values with an absolute tolerance of
+`1e-12` by default, and the configuration key cannot raise it above that bound.
+Both total fields must equal the sum of the three typed components. A missing
+field, non-finite/non-integral value, or arithmetic mismatch creates a
+`collision_count_arithmetic` finding and blocks the release gate even when the
+finding is annotated or an unannotated-finding threshold would otherwise allow
+it. The tolerance is disclosed as the `collision_count_tolerance` configuration
+key and in the detector registry.
+
+`metrics.collisions` is the release row's retained alias for
+`metrics.total_collision_count`; it is not an independent collision measure.
+`metrics.wall_collisions` is an obstacle-specific producer field and may be
+present without serving as the total alias. Older `metrics.collision_count`
+values are not substitutes for the required release fields and remain a schema
+finding when the required fields are absent.
+
+When a typed `EpisodeEventLedger` is present, the gate checks its declared
+schema, exact collision boolean, typed event-list presence, outcome parity, and
+any declared reconciliation value against the sampled total. It checks only
+whether the exact event/count measures are zero or non-zero. The number of
+`event_ledger.collision_events` records is not required to equal a sampled
+per-step collision count, so exact-event and sampled-count semantics are not
+conflated. A malformed or contradictory typed ledger is reported as a named
+`collision_count_arithmetic` finding.
+
 The published row's top-level `status` is a terminal outcome (`success`,
 `collision`, or `failure`), not an execution-availability marker. The gate
 applies the Benchmark Auditor's shared execution-admission policy to explicit
@@ -103,6 +133,9 @@ The configured detectors are:
   scenario-by-seed cell and no matching root-cause annotation exists;
 - `invalid_run_preflight_mismatch`: the row's `invalid_run` value disagrees
   with the supplied preflight cell.
+- `collision_count_arithmetic`: admitted-row collision components, total, and
+  `collisions` alias are complete and arithmetically consistent; typed event
+  ledger parity is checked when that surface is present.
 
 For the oscillation signature, the progress ratio is read at the exact path
 `safety_predicates.oscillatory_control_predicate.fields.progress_ratio`. It is
@@ -120,7 +153,8 @@ keys are:
 `min_orbit_path_length_m`, `max_zero_progress_m`, `max_progress_ratio`,
 `min_planners_per_cell`, `min_paired_cells`, `min_success_rate_gap`,
 `baseline_planner`, `pedestrian_free_scenarios`, `pedestrian_aware_planners`,
-`max_unannotated_findings`, and `require_preflight`.
+`max_unannotated_findings`, `require_preflight`, and
+`collision_count_tolerance`.
 
 `pedestrian_aware_planners` is an explicit release-cohort allowlist. The
 detector compares only those planner IDs against the blind baseline; an
@@ -185,6 +219,11 @@ evidence. Any invalid-run/preflight mismatch also blocks the gate. An empty
 pedestrian-aware planner list disables these comparison checks. The parity reason remains blocking even when that
 finding has an annotation. Detector findings and their annotation state stay
 in the JSON report, while Markdown summarizes the same report-level decision.
+
+Any `collision_count_arithmetic` finding also blocks the gate. This arithmetic
+admission rule is independent of annotations and the general unannotated
+finding threshold. It is an admission prerequisite for a future 0.0.8 matrix;
+no candidate matrix is implied by this tooling change.
 
 The JSON report also carries `detector_registry` and its
 `detector_registry_digest`. Every entry in `signals` is a canonical BA-03

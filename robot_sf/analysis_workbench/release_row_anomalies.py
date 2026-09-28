@@ -33,9 +33,17 @@ from robot_sf.analysis_workbench.audit_detectors import (
 )
 from robot_sf.analysis_workbench.audit_store import AuditStore, BatchCommitResult, CommitResult
 from robot_sf.analysis_workbench.release_row_bundle import load_release_rows
+from robot_sf.benchmark.event_ledger import SUPPORTED_EVENT_LEDGER_SCHEMA_VERSIONS
 
 SCHEMA_VERSION = "release-row-anomalies.v1"
-DETECTOR_VERSION = "1.0.1"
+DETECTOR_VERSION = "1.1.0"
+COLLISION_COUNT_TOLERANCE = 1e-12
+COLLISION_COMPONENT_FIELDS = (
+    "ped_collision_count",
+    "obstacle_collision_count",
+    "agent_collision_count",
+)
+COLLISION_TOTAL_FIELDS = ("total_collision_count", "collisions")
 DEFAULT_CONFIG: dict[str, Any] = {
     "short_collision_max_steps": 20,
     "same_step_max_steps": 20,
@@ -47,6 +55,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "min_planners_per_cell": 2,
     "min_paired_cells": 5,
     "min_success_rate_gap": 0.2,
+    "collision_count_tolerance": COLLISION_COUNT_TOLERANCE,
     "baseline_planner": "goal",
     # Empty means discover pedestrian-free scenarios from paired release rows.
     "pedestrian_free_scenarios": [],
@@ -76,6 +85,7 @@ DETECTOR_IDS = (
     "pedestrian_free_baseline_regression",
     "universal_failure_unannotated",
     "invalid_run_preflight_mismatch",
+    "collision_count_arithmetic",
 )
 RELEASE_TERMINAL_STATUSES = frozenset({"success", "collision", "failure"})
 
@@ -89,6 +99,175 @@ def _finite(value: object) -> float | None:
         return None
     number = float(value)
     return number if math.isfinite(number) else None
+
+
+def _collision_ledger_is_typed(ledger: object) -> bool:
+    """Return whether a row carries the typed collision-ledger surface."""
+
+    if not isinstance(ledger, Mapping):
+        return False
+    exact = ledger.get("exact_events")
+    return any(
+        key in ledger
+        for key in ("schema_version", "collision_events", "reconciliation", "metric_definitions")
+    ) or (isinstance(exact, Mapping) and "collision" in exact)
+
+
+def _collision_ledger_event_issues(
+    row: Mapping[str, Any], ledger: Mapping[str, Any], values: Mapping[str, float], tolerance: float
+) -> list[str]:
+    """Check exact-event parity while preserving sampled-count semantics.
+
+    Returns:
+        Named exact-event or outcome-parity issues.
+    """
+
+    issues: list[str] = []
+    exact = ledger.get("exact_events")
+    exact_collision = None
+    if not isinstance(exact, Mapping) or type(exact.get("collision")) is not bool:
+        issues.append("collision_ledger_exact_events_missing_collision")
+    else:
+        exact_collision = exact["collision"]
+
+    events = ledger.get("collision_events")
+    if not isinstance(events, list) or any(not isinstance(event, Mapping) for event in events):
+        issues.append("collision_ledger_collision_events_schema_mismatch")
+    elif exact_collision is not None and bool(events) is not exact_collision:
+        issues.append("collision_ledger_exact_event_mismatch")
+
+    outcome = row.get("outcome")
+    outcome_collision = outcome.get("collision_event") if isinstance(outcome, Mapping) else None
+    if exact_collision is not None and type(outcome_collision) is bool:
+        if exact_collision is not outcome_collision:
+            issues.append("collision_ledger_outcome_mismatch")
+
+    total = values.get("total_collision_count")
+    if exact_collision is not None and total is not None:
+        if (total > tolerance) is not exact_collision:
+            issues.append("collision_ledger_sampled_count_mismatch")
+    return issues
+
+
+def _collision_ledger_reconciliation_issues(
+    ledger: Mapping[str, Any], values: Mapping[str, float], tolerance: float
+) -> list[str]:
+    """Check the typed ledger's declared metric source and reconciliation value.
+
+    Returns:
+        Named reconciliation or metric-definition schema issues.
+    """
+
+    issues: list[str] = []
+    total = values.get("total_collision_count")
+    reconciliation = ledger.get("reconciliation")
+    if not isinstance(reconciliation, Mapping):
+        issues.append("collision_ledger_reconciliation_schema_mismatch")
+    elif "collision_metric_value" not in reconciliation:
+        issues.append("collision_ledger_metric_value_missing")
+    else:
+        ledger_value = _finite(reconciliation.get("collision_metric_value"))
+        if ledger_value is None:
+            issues.append("collision_ledger_metric_value_invalid")
+        elif total is not None and not math.isclose(
+            ledger_value, total, rel_tol=0.0, abs_tol=tolerance
+        ):
+            issues.append("collision_ledger_metric_value_mismatch")
+    if isinstance(reconciliation, Mapping) and reconciliation.get(
+        "collision_metric_source"
+    ) not in {"metrics.total_collision_count", "metrics.collisions"}:
+        issues.append("collision_ledger_metric_source_schema_mismatch")
+
+    definitions = ledger.get("metric_definitions")
+    collision_definition = (
+        definitions.get("collision_count") if isinstance(definitions, Mapping) else None
+    )
+    if not isinstance(collision_definition, Mapping):
+        issues.append("collision_ledger_metric_definition_missing")
+    else:
+        kind = collision_definition.get("kind")
+        source = collision_definition.get("source")
+        if kind not in {"exact_or_sampled", "exact", "sampled"} or source not in {
+            "metrics.total_collision_count",
+            "metrics.collisions",
+        }:
+            issues.append("collision_ledger_metric_definition_schema_mismatch")
+    return issues
+
+
+def _collision_ledger_issues(
+    row: Mapping[str, Any],
+    values: Mapping[str, float],
+    *,
+    tolerance: float,
+) -> list[str]:
+    """Check a typed ledger without equating exact events to sampled counts.
+
+    Returns:
+        Named ledger schema or parity issues.  The exact event-list length is
+        intentionally not compared with a sampled collision count.
+    """
+
+    ledger = row.get("event_ledger")
+    if not _collision_ledger_is_typed(ledger):
+        return []
+    assert isinstance(ledger, Mapping)
+    issues: list[str] = []
+    if ledger.get("schema_version") not in SUPPORTED_EVENT_LEDGER_SCHEMA_VERSIONS:
+        issues.append("collision_ledger_schema_mismatch")
+    issues.extend(_collision_ledger_event_issues(row, ledger, values, tolerance))
+    issues.extend(_collision_ledger_reconciliation_issues(ledger, values, tolerance))
+    return issues
+
+
+def _collision_count_issues(
+    row: Mapping[str, Any], *, tolerance: float
+) -> tuple[list[str], dict[str, Any]]:
+    """Return named arithmetic/schema issues for one admitted release row."""
+
+    metrics = row["metrics"]
+    values: dict[str, float] = {}
+    missing_fields: list[str] = []
+    invalid_fields: list[str] = []
+    for field in (*COLLISION_COMPONENT_FIELDS, *COLLISION_TOTAL_FIELDS):
+        if field not in metrics:
+            missing_fields.append(f"metrics.{field}")
+            continue
+        value = _finite(metrics.get(field))
+        if value is None or value < 0.0 or abs(value - round(value)) > COLLISION_COUNT_TOLERANCE:
+            invalid_fields.append(f"metrics.{field}")
+            continue
+        values[field] = value
+
+    issues: list[str] = []
+    if missing_fields:
+        issues.append("collision_metric_required_field_missing")
+    if invalid_fields:
+        issues.append("collision_metric_value_invalid")
+
+    component_sum = None
+    if not missing_fields and not invalid_fields:
+        component_sum = math.fsum(values[field] for field in COLLISION_COMPONENT_FIELDS)
+        if not math.isclose(
+            values["total_collision_count"], component_sum, rel_tol=0.0, abs_tol=tolerance
+        ):
+            issues.append("collision_metric_component_sum_mismatch")
+        if not math.isclose(values["collisions"], component_sum, rel_tol=0.0, abs_tol=tolerance):
+            issues.append("collision_metric_alias_mismatch")
+
+    issues.extend(_collision_ledger_issues(row, values, tolerance=tolerance))
+    measured = {
+        "metric_schema": "release-row-collision-counts.v1",
+        "tolerance_abs": tolerance,
+        "values": dict(sorted(values.items())),
+        "component_fields": list(COLLISION_COMPONENT_FIELDS),
+        "alias_fields": list(COLLISION_TOTAL_FIELDS),
+        "component_sum": component_sum,
+        "missing_fields": missing_fields,
+        "invalid_fields": invalid_fields,
+        "violations": issues,
+    }
+    return issues, measured
 
 
 def _positive_integer(value: object, name: str, *, minimum: int = 0) -> int:
@@ -161,6 +340,7 @@ def _configured(config: Mapping[str, Any] | None) -> dict[str, Any]:  # noqa: C9
         "max_zero_progress_m",
         "max_progress_ratio",
         "min_success_rate_gap",
+        "collision_count_tolerance",
     ):
         value = _finite(result[key])
         if value is None or value < 0:
@@ -172,6 +352,8 @@ def _configured(config: Mapping[str, Any] | None) -> dict[str, Any]:  # noqa: C9
         raise ReleaseRowError("min_success_rate_gap must be <= 1")
     if result["max_progress_ratio"] > 1:
         raise ReleaseRowError("max_progress_ratio must be <= 1")
+    if result["collision_count_tolerance"] > COLLISION_COUNT_TOLERANCE:
+        raise ReleaseRowError(f"collision_count_tolerance must be <= {COLLISION_COUNT_TOLERANCE}")
     if not isinstance(result["baseline_planner"], str) or not result["baseline_planner"].strip():
         raise ReleaseRowError("baseline_planner must be a nonempty string")
     result["pedestrian_free_scenarios"] = _unique_string_ids(
@@ -558,6 +740,10 @@ def release_row_registry(config: Mapping[str, Any] | None = None) -> DetectorReg
         "pedestrian_free_baseline_regression": "Paired pedestrian-free success is worse than blind goal.",
         "universal_failure_unannotated": "Every planner fails a cell without root-cause annotation.",
         "invalid_run_preflight_mismatch": "Episode invalid_run differs from scenario-seed preflight.",
+        "collision_count_arithmetic": (
+            "Admitted-row collision totals and aliases equal typed component counts "
+            "under the declared tolerance."
+        ),
     }
     parameters = {
         "same_step_all_planners": ("same_step_max_steps", "min_planners_per_cell"),
@@ -578,6 +764,7 @@ def release_row_registry(config: Mapping[str, Any] | None = None) -> DetectorReg
         ),
         "universal_failure_unannotated": ("min_planners_per_cell",),
         "invalid_run_preflight_mismatch": (),
+        "collision_count_arithmetic": ("collision_count_tolerance",),
     }
     specs = tuple(
         DetectorSpec(
@@ -588,7 +775,12 @@ def release_row_registry(config: Mapping[str, Any] | None = None) -> DetectorReg
             required_capabilities=("episode",),
             cohort_definition={"kind": "release_cell", "key": ["scenario_id", "seed"]},
             parameters={key: settings[key] for key in parameters[detector_id]},
-            units={"steps": "count", "contact_speed": "m/s", "displacement": "m"},
+            units={
+                "steps": "count",
+                "contact_speed": "m/s",
+                "displacement": "m",
+                "collision_count": "count",
+            },
             provenance={
                 "owner": "robot_sf.analysis_workbench.release_row_anomalies",
                 "source": "published_episode_rows",
@@ -746,6 +938,28 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
                     )
         for row in cell:
             planner = row["_release_arm"]
+            collision_issues, collision_measurements = _collision_count_issues(
+                row,
+                tolerance=settings["collision_count_tolerance"],
+            )
+            for issue in collision_issues:
+                missingness[issue] += 1
+            if collision_issues:
+                append(
+                    _new_finding(
+                        "collision_count_arithmetic",
+                        scenario_id=scenario,
+                        seed=seed,
+                        planner_id=planner,
+                        rows=[row],
+                        measured=collision_measurements,
+                        threshold={
+                            "collision_count_tolerance": settings["collision_count_tolerance"]
+                        },
+                        reason="collision_metric_arithmetic_or_schema_mismatch",
+                        source=source_info,
+                    )
+                )
             if (
                 row["outcome"]["collision_event"]
                 and row["steps"] <= settings["short_collision_max_steps"]
@@ -997,6 +1211,8 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
     counts = dict(sorted(Counter(item["detector_id"] for item in findings).items()))
     if counts.get("invalid_run_preflight_mismatch", 0):
         reasons.append("invalid_run_preflight_mismatch")
+    if counts.get("collision_count_arithmetic", 0):
+        reasons.append("collision_count_arithmetic_inconsistent")
     if admission_counts.get("unavailable", 0) or admission_counts.get("error", 0):
         reasons.append("execution_admission_incomplete")
     if missingness.get("pedestrian_aware_planner_missing", 0):

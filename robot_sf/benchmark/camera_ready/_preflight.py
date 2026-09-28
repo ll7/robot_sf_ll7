@@ -618,6 +618,8 @@ def _validate_and_setup_campaign(
     Returns:
         Tuple of ``(checkpoint_report, campaign_id, campaign_root, reports_dir, preflight_dir)``.
     """
+    # Issue #9751: refuse unfrozen release placeholders before any other check or directory.
+    _assert_release_parameters_frozen_preflight(cfg)
     ckpt_report = _run_preflight_checks(
         cfg,
         checkpoint_preflight_mode=checkpoint_preflight_mode,
@@ -1410,7 +1412,6 @@ def prepare_campaign_preflight(  # noqa: PLR0913
         build_route_clearance_warnings = _build_route_clearance_warnings
     validate_campaign_config(cfg)
     _assert_radius_sweep_preflight_ready(cfg.radius_sweep)
-    _assert_release_parameters_frozen_preflight(cfg)
     ckpt_report, campaign_id, campaign_root, reports_dir, preflight_dir = (
         _validate_and_setup_campaign(
             cfg,

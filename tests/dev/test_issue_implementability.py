@@ -1545,3 +1545,58 @@ def test_inspect_contract_surfaces_heading_suggestions_on_missing_fields() -> No
     assert "heading_suggestions" in inspection
     assert "input contract" in inspection["heading_suggestions"]
     assert inspection["heading_suggestions"]["input contract"]["field"] == "inputs"
+
+
+class TestDependencyBlockedStateLabel:
+    """``state:blocked-dependency`` is a known qualifier that blocks dispatch (#9901).
+
+    The label was in use on five open issues but absent from the shared taxonomy,
+    so admission refused them with ``unknown state:* label(s) must be classified``
+    instead of treating them as dependency-blocked.
+    """
+
+    def test_dependency_label_is_known_to_the_taxonomy(self) -> None:
+        from scripts.dev import issue_state_taxonomy as taxonomy
+
+        assert "state:blocked-dependency" in taxonomy.KNOWN_STATE_LABELS
+        assert taxonomy.unknown_state_labels({"state:blocked-dependency"}) == []
+
+    def test_dependency_label_is_a_qualifier_not_an_execution_state(self) -> None:
+        """It must compose with an execution state, not conflict with one."""
+        from scripts.dev import issue_state_taxonomy as taxonomy
+
+        both = {"state:ready", "state:blocked-dependency"}
+        assert taxonomy.execution_state_labels(both) == ["state:ready"]
+        assert taxonomy.state_qualifier_labels(both) == ["state:blocked-dependency"]
+        assert taxonomy.unknown_state_labels(both) == []
+
+    def test_dependency_label_blocks_dispatch(self) -> None:
+        assert "state:blocked-dependency" in issue_implementability.BLOCKING_LABELS
+        assert bool(
+            {"state:ready", "state:blocked-dependency"} & issue_implementability.BLOCKING_LABELS
+        )
+
+    def test_existing_blocked_labels_are_unchanged(self) -> None:
+        """The new entry must not swallow the vocabulary it was added beside."""
+        for label in (
+            "state:blocked",
+            "state:hold",
+            "state:blocked-no-code-slice",
+            "state:parked",
+            "state:deferred",
+        ):
+            assert label in issue_implementability.BLOCKING_LABELS, label
+        for label in ("state:blocked-external-input", "state:blocked-human-decision"):
+            assert label in issue_implementability.BLOCKING_LABELS or label in {
+                "state:blocked-external-input",
+                "state:blocked-human-decision",
+            }, label
+
+    def test_dependency_only_label_is_not_missing_an_execution_state_conflict(self) -> None:
+        """A qualifier alone must not be reported as a missing execution state."""
+        from scripts.dev import issue_state_taxonomy as taxonomy
+
+        only = {"state:blocked-dependency"}
+        assert taxonomy.execution_state_labels(only) == []
+        assert taxonomy.state_qualifier_labels(only) == ["state:blocked-dependency"]
+        assert not issue_implementability._missing_execution_state_is_conflict(only)

@@ -108,6 +108,15 @@ def test_campaign_failure_keeps_error_and_seals_receipt(
     manifest = tmp_path / "manifest.yaml"
     manifest.write_text("test: true\n", encoding="utf-8")
     monkeypatch.setattr(doorway_campaign, "_source_identity", lambda: "a" * 40)
+    monkeypatch.setattr(
+        doorway_campaign,
+        "_source_tree_custody",
+        lambda _sha: {
+            "git_tree_oid": "b" * 40,
+            "entry_manifest_sha256": "c" * 64,
+            "tracked_entry_count": 1,
+        },
+    )
     monkeypatch.setattr(doorway_campaign, "load_three_width_manifest", lambda _path: {})
 
     def fail_preflight(_manifest: Path, *, output_dir: Path) -> None:
@@ -122,6 +131,7 @@ def test_campaign_failure_keeps_error_and_seals_receipt(
     assert receipt["error_type"] == "ValueError"
     assert receipt["error"] == "preflight rejection"
     assert receipt["source_commit"] == "a" * 40
+    assert receipt["source_tree_custody"]["git_tree_oid"] == "b" * 40
     assert "run_failure.json" in (output_root / "SHA256SUMS").read_text(encoding="utf-8")
 
 
@@ -132,6 +142,15 @@ def test_campaign_blocks_h400_before_first_episode_on_red_confirmation(
     manifest_path = tmp_path / "manifest.yaml"
     manifest_path.write_text("test: true\n", encoding="utf-8")
     monkeypatch.setattr(doorway_campaign, "_source_identity", lambda: "a" * 40)
+    monkeypatch.setattr(
+        doorway_campaign,
+        "_source_tree_custody",
+        lambda _sha: {
+            "git_tree_oid": "b" * 40,
+            "entry_manifest_sha256": "c" * 64,
+            "tracked_entry_count": 1,
+        },
+    )
     monkeypatch.setattr(
         doorway_campaign,
         "load_three_width_manifest",
@@ -966,6 +985,8 @@ def test_h400_report_excludes_non_native_or_fallback_rows(marker: str) -> None:
 
 def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None:  # noqa: PLR0915
     """Paired intervals use whole seeds and censor failure arrival times."""
+    source_sha = doorway_campaign._git("rev-parse", "HEAD")
+    source_tree_custody = doorway_campaign._source_tree_custody(source_sha)
     assets = []
     for i, width in enumerate((2.2, 2.8, 3.6)):
         variant_id = f"gap_{i}"
@@ -998,7 +1019,7 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
                 success = not (planner == "goal" and seed == 225 and width == 2.2)
                 rows.append(
                     {
-                        "git_hash": "d" * 40,
+                        "git_hash": source_sha,
                         "algo": planner,
                         "seed": seed,
                         "scenario_id": scenario_id,
@@ -1149,7 +1170,7 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
         confirmation_rows,
         confirmation_cells,
         confirmation_pairs,
-        source_sha="d" * 40,
+        source_sha=source_sha,
         manifest_sha256=_sha256(inputs / "application_manifest.yaml"),
     )
     assert confirmation["admit_h400"] is True
@@ -1175,7 +1196,8 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
     write_json(
         tmp_path / "run_manifest.json",
         {
-            "source_commit": "d" * 40,
+            "source_commit": source_sha,
+            "source_tree_custody": source_tree_custody,
             "application_manifest_sha256": _sha256(inputs / "application_manifest.yaml"),
             "planner_config_hash": {
                 "goal": doorway_application.GOAL_PLANNER_CONFIG_HASH,
@@ -1186,6 +1208,17 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
             "cells": cells,
         },
     )
+    _write_checksums(tmp_path)
+    assert verify_campaign_bundle(tmp_path)["native_rows"] == 18
+    run_manifest_path = tmp_path / "run_manifest.json"
+    run_manifest_payload = json.loads(run_manifest_path.read_text(encoding="utf-8"))
+    run_manifest_payload["source_tree_custody"]["git_tree_oid"] = "e" * 40
+    write_json(run_manifest_path, run_manifest_payload)
+    _write_checksums(tmp_path)
+    with pytest.raises(ValueError, match="source tree custody"):
+        verify_campaign_bundle(tmp_path)
+    run_manifest_payload["source_tree_custody"] = source_tree_custody
+    write_json(run_manifest_path, run_manifest_payload)
     _write_checksums(tmp_path)
     assert verify_campaign_bundle(tmp_path)["native_rows"] == 18
     confirmation_path = tmp_path / "confirmation_preflight.json"

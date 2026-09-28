@@ -13,6 +13,7 @@ import io
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -70,6 +71,26 @@ def _source_identity() -> str:
     if _git("status", "--porcelain", "--untracked-files=no"):
         raise ValueError("doorway campaign requires a clean tracked source tree")
     return _git("rev-parse", "HEAD")
+
+
+def _source_tree_custody(source_sha: str) -> dict[str, Any]:
+    """Describe the complete tracked Git tree that produced a campaign bundle.
+
+    Returns:
+        The commit tree object, digest of its recursive entry manifest, and entry count.
+    """
+    if re.fullmatch(r"[0-9a-f]{40}", source_sha) is None:
+        raise ValueError("doorway campaign source commit must be a lowercase Git SHA-1")
+    tree_oid = _git("rev-parse", f"{source_sha}^{{tree}}")
+    entries = subprocess.check_output(
+        ["git", "ls-tree", "-r", "-z", "--full-tree", source_sha],
+        cwd=_ROOT,
+    )
+    return {
+        "git_tree_oid": tree_oid,
+        "entry_manifest_sha256": hashlib.sha256(entries).hexdigest(),
+        "tracked_entry_count": sum(bool(entry) for entry in entries.split(b"\0")),
+    }
 
 
 def _json(path: Path) -> dict[str, Any]:
@@ -935,6 +956,11 @@ def verify_campaign_bundle(root: Path) -> dict[str, Any]:
     ):
         raise ValueError("doorway bundle file checksum or full-tree coverage mismatch")
     run_manifest = _json(root / "run_manifest.json")
+    source_sha = run_manifest.get("source_commit")
+    if not isinstance(source_sha, str) or run_manifest.get(
+        "source_tree_custody"
+    ) != _source_tree_custody(source_sha):
+        raise ValueError("doorway source tree custody differs from the declared source commit")
     if (
         sha256_file(root / "inputs/application_manifest.yaml")
         != run_manifest.get("application_manifest_sha256")
@@ -983,6 +1009,7 @@ def run_campaign(manifest_path: Path, output_root: Path) -> Path:
         Path to the completed result root.
     """
     source_sha = _source_identity()
+    source_tree_custody = _source_tree_custody(source_sha)
     manifest_path = manifest_path.resolve()
     manifest = load_three_width_manifest(manifest_path)
     output_root = output_root.resolve()
@@ -1078,6 +1105,7 @@ def run_campaign(manifest_path: Path, output_root: Path) -> Path:
             {
                 "schema_version": "issue_9348_three_width_run.v1",
                 "source_commit": source_sha,
+                "source_tree_custody": source_tree_custody,
                 "application_manifest_path": manifest_path.as_posix(),
                 "application_manifest_sha256": sha256_file(manifest_path),
                 "planner_config_hash": dict(planner_config_hashes),
@@ -1098,6 +1126,7 @@ def run_campaign(manifest_path: Path, output_root: Path) -> Path:
                 {
                     "schema_version": "issue_9348_run_failure.v1",
                     "source_commit": source_sha,
+                    "source_tree_custody": source_tree_custody,
                     "error_type": type(error).__name__,
                     "error": str(error),
                 },

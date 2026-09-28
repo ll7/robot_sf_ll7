@@ -80,8 +80,10 @@ count.
 
 Criticality is tri-state. `criticality_status` and the `critical`/`observed_critical` fields preserve
 `unknown` when candidate evidence cannot establish whether a critical event occurred; unknown is
-not counted as a negative result. The collision/severe-intrusion tier is reported separately for
-each candidate and run. It is `not_critical` only when both collision and severe intrusion have
+not counted as a negative result. An attributed `primary_failure` label does not override missing or
+conflicting episode evidence; the report uses it as criticality evidence only when candidate details
+corroborate the failure. The collision/severe-intrusion tier is reported separately for each
+candidate and run. It is `not_critical` only when both collision and severe intrusion have
 explicit, consistent negative evidence. A missing, malformed, or contradictory component keeps the
 tier `unknown`. Execution `analysis_eligibility` does not establish objective or safety-tier
 completeness. Run and aggregate tables report known critical, known non-critical, and unknown counts

@@ -172,7 +172,9 @@ def test_collision_intrusion_criticality_is_tristate(
         assert "unknown" in render_markdown(report)
 
 
-def test_conflicting_collision_evidence_remains_unknown(tmp_path: Path) -> None:
+def test_conflicting_attributed_collision_label_cannot_override_source_details(
+    tmp_path: Path,
+) -> None:
     def add_conflicting_safety_outcome(manifest: dict[str, Any]) -> None:
         candidate = manifest["candidates"][0]
         attribution = candidate["failure_attribution"]
@@ -186,9 +188,10 @@ def test_conflicting_collision_evidence_remains_unknown(tmp_path: Path) -> None:
     evaluation = random_2202["evaluations"][0]
 
     assert evaluation["collision_intrusion_tier"]["status"] == "unknown"
-    assert "collisions_evidence_conflict" in evaluation["collision_intrusion_tier"]["reason_codes"]
-    assert evaluation["criticality_status"] == "critical"
-    assert evaluation["critical"] is True
+    assert evaluation["collision_intrusion_tier"]["collision"] is False
+    assert evaluation["criticality_status"] == "unknown"
+    assert evaluation["criticality_failure_type"] is None
+    assert evaluation["critical"] is None
 
 
 def test_unattributed_primary_failure_cannot_establish_criticality(tmp_path: Path) -> None:

@@ -70,6 +70,23 @@ The owner of #9751's 0.0.8 campaign template must replace only the Risk-DWA
 and Predictive-MPPI `algo_config` paths with the corresponding
 `*_camera_ready_goal_v2.yaml` paths after this PR is reviewed. A proposed
 0.0.8 row using either historical path is uncorrected and must fail admission.
+The currently separate #9879 release-candidate path hashes algo configs but
+does not enforce this semantic requirement. A read-only assertion against the
+current campaign template exits 1 and reports both violations:
+
+```text
+risk_dwa: expected configs/algos/risk_dwa_camera_ready_goal_v2.yaml;
+          found configs/algos/risk_dwa_camera_ready.yaml
+predictive_mppi: expected configs/algos/predictive_mppi_camera_ready_goal_v2.yaml;
+                 found configs/algos/predictive_mppi_camera_ready.yaml
+```
+
+Before #9883 can close, the #9879 candidate admission path needs a focused
+assertion that each of those arm keys occurs once, uses the exact corrected
+path, and parses to `goal_target_version: active_waypoint_v2`. Its regression
+test must reject the present old-path template and admit an otherwise
+identical corrected copy. This dependency is pending; the new configs alone
+do not enforce it.
 The final campaign manifest must pin the corrected source/config hashes and
 the 14-arm, 48-identity, seed-111–140 contract. Release preflight, complete
 model-backed evaluation, and the paired 0.0.7/0.0.8 episode comparison remain

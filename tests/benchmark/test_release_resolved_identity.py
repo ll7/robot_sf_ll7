@@ -810,10 +810,24 @@ def test_public_runner_preflight_consumes_the_verified_resolved_identity(
         output_path=output,
         **_identity_inputs(repo, template, source_commit),
     )
+    observed_preflight_manifests: list[dict[str, Any] | None] = []
+
+    def _pass_spawn_preflight(*, manifest, **_kwargs):
+        observed_preflight_manifests.append(manifest.resolved_manifest_payload)
+        return (
+            {"status": "valid", "blocked_cell_count": 0},
+            {"status": "valid", "blocked_cell_count": 0},
+        )
+
     monkeypatch.setattr(release_protocol, "get_repository_root", lambda: repo)
     monkeypatch.setattr(run_benchmark_release, "get_repository_root", lambda: repo)
     monkeypatch.setattr(run_benchmark_release, "_current_source_commit", lambda: source_commit)
     monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda _cfg: None)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_run_spawn_matrix_preflight",
+        _pass_spawn_preflight,
+    )
     monkeypatch.setattr(
         run_benchmark_release,
         "prepare_campaign_preflight",
@@ -834,6 +848,7 @@ def test_public_runner_preflight_consumes_the_verified_resolved_identity(
     assert result["manifest_validation"]["status"] == "valid"
     assert result["resolved_manifest"] == identity["resolved_manifest"]
     assert result["resolved_manifest"]["provenance"]["source_sha"] == source_commit
+    assert observed_preflight_manifests == [identity["resolved_manifest"]]
 
 
 def test_doctor_and_acceptance_resolve_the_same_identity_bound_campaign(

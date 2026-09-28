@@ -976,22 +976,37 @@ def test_check_ancestry_classifies_undeclared_contamination_blocked(
     assert "remediation_command" in result
 
 
-def test_check_ancestry_classifies_clean_pr_ok(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
-    """A PR created from current main with only intended commits passes."""
-    from scripts.dev.stacked_prs import check_ancestry
+def _clean_ancestry_git_runner() -> Any:
+    """Build a Git fake for a clean, single-commit PR ancestry."""
+    ancestry_range = f"refs/remotes/origin/main..{'c' * 40}"
+    responses = {
+        ("fetch", "--no-tags", "origin", "main"): "",
+        ("rev-parse", "refs/remotes/origin/main"): "b" * 40 + "\n",
+        ("merge-base", "refs/remotes/origin/main", "c" * 40): "b" * 40 + "\n",
+        ("log", "--oneline", ancestry_range): "e" * 7 + " intended work\n",
+        (
+            "log",
+            "--reverse",
+            "--format=%H%x1f%P%x1f%s",
+            ancestry_range,
+        ): "c" * 40 + "\x1f" + "b" * 40 + "\x1fintended work\n",
+        ("merge-base", "--is-ancestor", "b" * 40, "refs/remotes/origin/main"): "",
+    }
 
     def fake_git(args: list[str], worktree: Path) -> subprocess.CompletedProcess[str]:
-        if args == ["fetch", "--no-tags", "origin", "main"]:
-            return _completed(args)
-        if args == ["rev-parse", "refs/remotes/origin/main"]:
-            return _completed(args, stdout="b" * 40 + "\n")
-        if args == ["merge-base", "refs/remotes/origin/main", "c" * 40]:
-            return _completed(args, stdout="b" * 40 + "\n")
-        if args == ["log", "--oneline", f"refs/remotes/origin/main..{'c' * 40}"]:
-            return _completed(args, stdout=f"{'e' * 7} intended work\n")
+        stdout = responses.get(tuple(args))
+        if stdout is not None:
+            return _completed(args, stdout=stdout)
         if args[:2] == ["diff", "--name-only"]:
             return _completed(args, stdout="robot_sf/own.py\n")
         raise AssertionError(f"unexpected git call: {args}")
+
+    return fake_git
+
+
+def test_check_ancestry_classifies_clean_pr_ok(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    """A PR created from current main with only intended commits passes."""
+    from scripts.dev.stacked_prs import check_ancestry
 
     def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
         if path.endswith("/pulls/2"):
@@ -1008,7 +1023,7 @@ def test_check_ancestry_classifies_clean_pr_ok(monkeypatch, tmp_path: Path) -> N
         target="2",
         worktree=tmp_path,
         api=fake_api,
-        git_runner=fake_git,
+        git_runner=_clean_ancestry_git_runner(),
     )
 
     assert result["state"] == "clean"

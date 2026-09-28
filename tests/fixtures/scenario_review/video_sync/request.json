@@ -1,0 +1,20 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev03-smoke",
+  "component_id": "srev03-video-sync",
+  "sources": [
+    {
+      "artifact_id": "capture",
+      "uri": "tests/fixtures/scenario_review/video_sync/capture-frames.json",
+      "format": "capture-frames"
+    },
+    {
+      "artifact_id": "stamps",
+      "uri": "tests/fixtures/scenario_review/video_sync/sim-stamps.json",
+      "format": "sim-stamps"
+    }
+  ],
+  "output_directory": "output/scenario_review/srev-03-smoke",
+  "config": {},
+  "required_capabilities": []
+}

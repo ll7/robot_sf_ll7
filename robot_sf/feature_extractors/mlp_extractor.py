@@ -81,6 +81,15 @@ def _init_classes() -> dict[str, Any]:
             self.drive_state_extractor = nn.Sequential(nn.Flatten(), *drive_layers)
 
         def forward(self, obs: dict) -> th.Tensor:
+            """Flatten and encode rays and drive state with separate MLPs.
+
+            Args:
+                obs: Observation dict with ``rays`` and ``drive_state`` entries.
+
+            Returns:
+                Concatenated ray and drive-state MLP features of shape
+                ``(batch, features_dim)``.
+            """
             ray_features = self.ray_extractor(obs[OBS_RAYS])
             drive_features = self.drive_state_extractor(obs[OBS_DRIVE_STATE])
             return th.cat([ray_features, drive_features], dim=1)

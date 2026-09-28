@@ -35,6 +35,12 @@ class EvaluationSchedule:
     step_schedule: tuple[tuple[int | None, int], ...] = ()
     randomize_seeds: bool = False
     scenario_config: Path | None = None
+    # Optional immutable seed manifest for evaluation.  An empty tuple keeps
+    # legacy configs on their existing deterministic training-seed schedule;
+    # campaign configs that require disjoint evaluation identities must bind a
+    # manifest and expose its resolved values here.
+    evaluation_seed_manifest: Path | None = None
+    evaluation_seeds: tuple[int, ...] = ()
 
 
 @dataclass(slots=True)

@@ -7,6 +7,9 @@ For broad context lookup, start with [INDEX.md](INDEX.md). It is the retrieval-f
 current entry points, status rules, and curated context-pack scopes. This README remains the note
 maintenance workflow and full discoverability surface.
 
+The repository-wide explicit issue-relationship contract and bounded migration audit are documented
+in [issue_relationships.md](issue_relationships.md).
+
 ## Per-tool contract notes
 
 Each tool-specific contract lives in its own `docs/context/<tool>.md` note (for example
@@ -1300,6 +1303,11 @@ parser-smoke validation for `maps/svg_maps/socnavbench/socnavbench_eth.svg`.
 
 ## Benchmark Run Notes
 
+* [Issue #9656 historical benchmark hard-case mining](issue_9656_hard_case_mining.md)
+  records the checksum-verified Release 0.0.2 source slice, one-row scenario/config inputs, and
+  bounded replay comparisons. It is diagnostic-only; source collision-event/count contradictions,
+  per-metric replay differences, and refreshed unavailable-execution-evidence classifications are
+  preserved, while rendering and #9652 corpus admission remain downstream responsibilities.
 * [Issue #6095 S10 ORCA/PPO Nominal-vs-Stress Discriminability Calibration](issue_6095_s10_discriminability_calibration.md)
   records the fail-closed, portable preflight for the frozen two-planner S10 (ten-seed) campaign. It is a
   configuration/provenance packet only; full SLURM execution remains required before any benchmark

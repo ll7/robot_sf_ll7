@@ -1,0 +1,19 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev19-smoke",
+  "component_id": "srev19-review-rerun",
+  "sources": [
+    {
+      "artifact_id": "trace-0001",
+      "uri": "trace-export.json",
+      "format": "simulation_trace_export.v1"
+    }
+  ],
+  "config": {
+    "preset": "test",
+    "recording": {
+      "mode": "auto"
+    }
+  },
+  "output_directory": "srev-19-smoke"
+}

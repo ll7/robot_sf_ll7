@@ -125,3 +125,28 @@ def test_build_reset_metadata_seed_preserved() -> None:
     config = _config_with_map_pool({})
     metadata = build_reset_metadata(config, map_def=object(), seed=12345)
     assert metadata["seed"] == 12345
+
+
+def test_build_reset_metadata_records_opted_in_success_definition() -> None:
+    """Opted-in success policy and route binding are available to run manifests."""
+    config = _config_with_map_pool({})
+    success_definition = {
+        "schema_version": "success_definition_runtime.v1",
+        "policy": "goal_zone_entry_v1",
+        "robots": [{"route_binding": {"spawn_id": 0, "goal_id": 1}}],
+    }
+    simulator = SimpleNamespace(goal_completion_metadata=lambda: success_definition)
+
+    metadata = build_reset_metadata(config, map_def=object(), seed=7, simulator=simulator)
+
+    assert metadata["success_definition"] == success_definition
+
+
+def test_build_reset_metadata_preserves_legacy_shape_without_opt_in() -> None:
+    """The legacy reset payload has no new success-definition field."""
+    config = _config_with_map_pool({})
+    simulator = SimpleNamespace(goal_completion_metadata=lambda: {})
+
+    metadata = build_reset_metadata(config, map_def=object(), seed=7, simulator=simulator)
+
+    assert "success_definition" not in metadata

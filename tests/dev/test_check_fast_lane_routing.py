@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import subprocess
 from pathlib import Path
@@ -24,6 +25,26 @@ def _policy(*fast_files: str) -> FastLanePolicy:
         fast_file_prefixes=(),
         slow_file_overrides=frozenset(),
     )
+
+
+def test_helper_source_has_no_backslash_in_fstring_expressions() -> None:
+    """The routing helper must stay importable on supported Python 3.11 (issue #9503).
+
+    Python 3.11 rejects backslashes inside f-string expressions (PEP 701
+    lifted this only in 3.12), and ``ast.parse(..., feature_version=(3, 11))``
+    does not gate tokenizer behavior on newer interpreters, so walk the
+    formatted values directly instead.
+    """
+    helper = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "check_fast_lane_routing.py"
+    source = helper.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(helper))
+    offenders = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FormattedValue):
+            segment = ast.get_source_segment(source, node)
+            if segment is not None and "\\" in segment:
+                offenders.append(segment)
+    assert not offenders, offenders
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -153,6 +174,29 @@ def test_registered_contracts_are_not_reported() -> None:
 
     assert all(item.policy_state == "registered-fast" for item in observations)
     assert all(not item.needs_attention for item in observations)
+
+
+def test_trajectory_mode_risk_contract_tests_are_registered_in_fast_lane() -> None:
+    """Changed risk estimator lines need their deterministic tests in PR coverage shards."""
+    policy = load_fast_lane_policy(Path("tests/conftest.py").read_text(encoding="utf-8"))
+
+    assert policy.is_fast("tests/research/collision_risk/test_trajectory_mode_risk.py")
+    assert policy.is_fast("tests/dev/test_check_fast_lane_routing.py")
+
+
+def test_multimodal_arbitration_contract_tests_are_registered_in_fast_lane() -> None:
+    """Arbitration contracts provide changed-line coverage for issue #8062."""
+    policy = load_fast_lane_policy(Path("tests/conftest.py").read_text(encoding="utf-8"))
+
+    assert policy.is_fast("tests/test_multimodal_trajectory_arbitration.py")
+
+
+def test_hybrid_reflection_transform_and_route_tests_are_registered_in_fast_lane() -> None:
+    """Issue #9759 transform and synthetic-grid contracts stay in changed-line shards."""
+    policy = load_fast_lane_policy(Path("tests/conftest.py").read_text(encoding="utf-8"))
+
+    assert policy.is_fast("tests/benchmark/test_release_map_mirror.py")
+    assert policy.is_fast("tests/planner/test_grid_route.py")
 
 
 def test_release_checkpoint_producer_tests_are_registered_in_fast_lane() -> None:

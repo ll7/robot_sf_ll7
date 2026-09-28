@@ -1,0 +1,10 @@
+{
+  "source_duration_s": 1.0,
+  "overrides": {
+    "pin": [
+      "ep-3"
+    ],
+    "exclude": [],
+    "source_digest": "ec8ba2868777060da626807513f89255abd869702bc6f87d5c0d6ea40cfcf1eb"
+  }
+}

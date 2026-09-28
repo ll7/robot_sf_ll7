@@ -19,9 +19,11 @@ from robot_sf.benchmark.aggregate import (
     observation_track_group_label,
 )
 from robot_sf.benchmark.grouping import resolve_report_group_key
+from robot_sf.benchmark.spawn_validity import record_has_spawn_overlap
+from robot_sf.nav.spawn_clearance import SPAWN_OVERLAP_INVALID_REASON
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
 
 _BOOTSTRAP_METHOD = "bootstrap_mean_over_seed_means"
@@ -386,6 +388,9 @@ def build_seed_variability_rows(
     ] = defaultdict(lambda: defaultdict(list))
 
     for record in records:
+        if record_has_spawn_overlap(record):
+            # Issue #9725: spawn-overlap rows are simulator defects, not seed variance.
+            continue
         scenario_id = str(record.get("scenario_id") or "unknown")
         planner_key = str(
             record.get("planner_key")
@@ -534,6 +539,10 @@ def build_seed_episode_rows(
         For canonical per-episode collision status, consumers should read
         ``outcome.collision_event`` from source ``episodes.jsonl``.
 
+    Rows carry ``invalid_run``/``invalid_reason``; spawn-overlap rows (issue #9725)
+    are listed but must be dropped before computing any rate, see
+    :func:`seed_episode_row_is_valid`.
+
     Returns:
         One flat row per executed episode with deterministic repeat indices.
     """
@@ -590,6 +599,12 @@ def build_seed_episode_rows(
                     "near_miss": _coerce_float(flat.get("near_misses")),
                     "time_to_goal": _coerce_float(flat.get("time_to_goal_norm")),
                     "snqi": _coerce_float(flat.get("snqi")),
+                    # Issue #9725: spawn-overlap rows stay listed for traceability but
+                    # must not enter rates; readers filter with seed_episode_row_is_valid.
+                    "invalid_run": record_has_spawn_overlap(record),
+                    "invalid_reason": (
+                        SPAWN_OVERLAP_INVALID_REASON if record_has_spawn_overlap(record) else ""
+                    ),
                     **_taxonomy_from_record(record, flat),
                     **_interaction_exposure_from_flat(flat),
                 }
@@ -604,6 +619,17 @@ def build_seed_episode_rows(
         )
     )
     return rows
+
+
+def seed_episode_row_is_valid(row: Mapping[str, Any]) -> bool:
+    """Return whether a ``seed_episode_rows`` row (dict or CSV row) may enter a rate.
+
+    Rows without the ``invalid_run`` column (older artifacts) count as valid.
+    """
+    value = row.get("invalid_run")
+    if isinstance(value, bool):
+        return not value
+    return str(value or "").strip().lower() not in {"true", "1", "yes"}
 
 
 def build_statistical_sufficiency_rows(
@@ -651,4 +677,5 @@ __all__ = [
     "build_seed_variability_rows",
     "build_statistical_sufficiency_rows",
     "compute_seed_variance",
+    "seed_episode_row_is_valid",
 ]

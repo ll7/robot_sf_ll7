@@ -55,7 +55,7 @@ def test_release_assurance_case_representative_payload_is_exact() -> None:
     )
 
     assert _canonical_payload_digest(payload) == (
-        "3aa16db86325ed432902a3282f7d98e1f927dc3163bd99b5524b55be4390d459"
+        "e68921c4867c90cf7d29a6c5d87c2b6121645017822dc6f0cfc769e4e8d63a1f"
     )
 
 

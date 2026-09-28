@@ -1,0 +1,30 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev08-smoke",
+  "component_id": "srev08-review-alignment",
+  "sources": [
+    {
+      "artifact_id": "trace-a",
+      "uri": "trace-a.json",
+      "format": "simulation_trace_export.v1"
+    },
+    {
+      "artifact_id": "trace-b",
+      "uri": "trace-b.json",
+      "format": "simulation_trace_export.v1"
+    }
+  ],
+  "config": {
+    "preset": "test",
+    "alignment": {
+      "left_artifact_id": "trace-a",
+      "right_artifact_id": "trace-b",
+      "comparison_grain": "matched_planner_pair",
+      "anchor": {
+        "type": "event",
+        "event_id": "evt-0001"
+      }
+    }
+  },
+  "output_directory": "srev-08-smoke"
+}

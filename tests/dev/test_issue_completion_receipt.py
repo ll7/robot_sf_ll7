@@ -12,6 +12,7 @@ import pytest
 
 from scripts.dev.issue_audit_core import build_audit_plan, classify_issue
 from scripts.dev.issue_completion_receipt import (
+    TERMINAL_OUTCOME_SCHEMA,
     VERIFICATION_SCHEMA,
     admit_completion_receipt,
     build_receipt,
@@ -28,6 +29,10 @@ HEAD_SHA = "b" * 40
 NEW_HEAD_SHA = "c" * 40
 CONTRACT = "Completion condition: merged PR #9000\n"
 BRANCH = "issue-7614-completion-receipt"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+RESEARCH_OUTCOME_FIXTURE = (
+    REPO_ROOT / "tests/dev/fixtures/research_terminal_outcomes/issue_9645_no_signal_fixture.json"
+)
 HEALTHY_AUDIT_QUOTA = {
     "available": True,
     "status": "ok",
@@ -142,6 +147,34 @@ def _receipt(*, artifact_root: Path | None = None) -> dict[str, Any]:
     return build_receipt(_payload(artifact_root=artifact_root))
 
 
+def _receipt_from_preserved_9645_evidence(
+    artifact_root: Path,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Build an offline receipt from the preserved #9645 NO-GO evidence fixture."""
+    fixture = json.loads(RESEARCH_OUTCOME_FIXTURE.read_text(encoding="utf-8"))
+    source = fixture["source"]
+    evidence_path = str(source["fixture_copy_path"])
+    evidence_bytes = (REPO_ROOT / evidence_path).read_bytes()
+    assert sha256_bytes(evidence_bytes) == source["artifact_sha256"]
+    assert source["search_or_simulation_rerun"] is False
+
+    staged_evidence = artifact_root / evidence_path
+    staged_evidence.parent.mkdir(parents=True, exist_ok=True)
+    staged_evidence.write_bytes(evidence_bytes)
+
+    payload = _payload(artifact_root=artifact_root)
+    payload["artifacts"].append(
+        {
+            "path": evidence_path,
+            "schema": "evidence_synthesis_summary.v1",
+            "digest": sha256_bytes(evidence_bytes),
+            "captured_head_sha": HEAD_SHA,
+        }
+    )
+    payload["terminal_outcome"] = fixture["terminal_outcome"]
+    return build_receipt(payload), fixture
+
+
 def _verification(receipt: dict[str, Any]) -> dict[str, Any]:
     """Build the minimal exact-head verification result consumed by admission."""
     delivery = receipt["delivery"]
@@ -192,6 +225,201 @@ def test_build_and_validate_self_digested_receipt() -> None:
     assert receipt["receipt_digest"] == compute_receipt_digest(receipt)
     result = validate_receipt(receipt, expected_repository="ll7/robot_sf_ll7", expected_issue=7614)
     assert result["ok"] is True
+
+
+@pytest.mark.parametrize("classification", ["success", "no_signal", "no_change"])
+def test_research_terminal_outcomes_are_consumed_by_completion_admission(
+    tmp_path: Path, classification: str
+) -> None:
+    """Exact-head research outcomes survive the canonical close/promotion gate."""
+    payload = _payload(artifact_root=tmp_path)
+    payload["terminal_outcome"] = {
+        "schema": TERMINAL_OUTCOME_SCHEMA,
+        "classification": classification,
+        "summary": "The finite run completed and its result is preserved.",
+        "evidence_artifacts": ["reports/completion.json"],
+    }
+    receipt = build_receipt(payload)
+
+    result = validate_receipt(receipt, artifact_root=tmp_path)
+    admission = admit_completion_receipt(
+        {"receipt": receipt, "verification": _verification(receipt)},
+        expected_repository="ll7/robot_sf_ll7",
+        expected_issue=7614,
+        issue_contract=CONTRACT,
+    )
+
+    assert result["ok"] is True
+    assert admission["eligible"] is True
+    assert admission["terminal_outcome"]["classification"] == classification
+    assert admission["terminal_outcome"]["evidence_artifacts"] == ["reports/completion.json"]
+
+
+def test_terminal_outcome_requires_an_exact_head_artifact_reference() -> None:
+    """Outcome labels without declared, head-bound evidence cannot be built."""
+    payload = _payload()
+    payload["terminal_outcome"] = {
+        "schema": TERMINAL_OUTCOME_SCHEMA,
+        "classification": "no_signal",
+        "summary": "No signal was observed within the finite budget.",
+        "evidence_artifacts": ["reports/missing.json"],
+    }
+
+    with pytest.raises(ValueError, match="not declared at the delivered head"):
+        build_receipt(payload)
+
+
+def test_terminal_outcome_rejects_artifact_captured_at_another_head() -> None:
+    """Declaring the correct path does not hide an artifact-head mismatch."""
+    payload = _payload()
+    payload["artifacts"] = [
+        {
+            "path": "reports/completion.json",
+            "schema": "completion_report.v1",
+            "digest": "d" * 64,
+            "captured_head_sha": BASE_SHA,
+        }
+    ]
+    payload["terminal_outcome"] = {
+        "schema": TERMINAL_OUTCOME_SCHEMA,
+        "classification": "no_signal",
+        "summary": "The finite search found no qualifying signal.",
+        "evidence_artifacts": ["reports/completion.json"],
+    }
+
+    with pytest.raises(ValueError, match="does not match delivered head"):
+        build_receipt(payload)
+
+
+@pytest.mark.parametrize(
+    "remote_uri",
+    [
+        "https://artifacts.example.invalid/evidence.json",
+        "s3://research-artifacts/evidence.json",
+    ],
+)
+def test_terminal_outcome_rejects_remote_artifacts_without_verifiable_bytes(
+    tmp_path: Path, remote_uri: str
+) -> None:
+    """A claimed remote digest cannot satisfy terminal evidence without fetched bytes."""
+    payload = _payload()
+    payload["artifacts"] = [
+        {
+            "path": remote_uri,
+            "schema": "research_evidence.v1",
+            "digest": "a" * 64,
+            "captured_head_sha": HEAD_SHA,
+        }
+    ]
+    payload["terminal_outcome"] = {
+        "schema": TERMINAL_OUTCOME_SCHEMA,
+        "classification": "no_signal",
+        "summary": "The finite search found no qualifying signal.",
+        "evidence_artifacts": [remote_uri],
+    }
+    payload["schema"] = "issue_completion_receipt.v1"
+    payload["receipt_digest"] = compute_receipt_digest(payload)
+
+    verification = verify_receipt_against_git(
+        payload,
+        repo_root=tmp_path,
+        repository="ll7/robot_sf_ll7",
+        issue_contract=CONTRACT,
+        pr_snapshot={
+            "state": "open",
+            "head": {"sha": HEAD_SHA, "ref": BRANCH},
+            "base": {"sha": BASE_SHA},
+        },
+        git_runner=_git_runner(),
+        artifact_root=tmp_path,
+    )
+    admission = admit_completion_receipt(
+        {"receipt": payload, "verification": verification},
+        expected_repository="ll7/robot_sf_ll7",
+        expected_issue=7614,
+        issue_contract=CONTRACT,
+    )
+
+    assert verification["ok"] is False
+    assert any("must be a locally verifiable file" in error for error in verification["errors"])
+    assert admission["eligible"] is False
+
+
+def test_legacy_receipt_without_terminal_outcome_keeps_remote_artifact_compatibility(
+    tmp_path: Path,
+) -> None:
+    """The outcome-specific local verification rule preserves legacy receipts."""
+    payload = _payload()
+    payload["artifacts"] = [
+        {
+            "path": "https://artifacts.example.invalid/legacy-report.json",
+            "schema": "legacy_report.v1",
+            "digest": "b" * 64,
+            "captured_head_sha": HEAD_SHA,
+        }
+    ]
+    receipt = build_receipt(payload)
+
+    verification = verify_receipt_against_git(
+        receipt,
+        repo_root=tmp_path,
+        repository="ll7/robot_sf_ll7",
+        issue_contract=CONTRACT,
+        pr_snapshot={
+            "state": "open",
+            "head": {"sha": HEAD_SHA, "ref": BRANCH},
+            "base": {"sha": BASE_SHA},
+        },
+        git_runner=_git_runner(),
+        artifact_root=tmp_path,
+    )
+    admission = admit_completion_receipt(
+        {"receipt": receipt, "verification": verification},
+        expected_repository="ll7/robot_sf_ll7",
+        expected_issue=7614,
+        issue_contract=CONTRACT,
+    )
+
+    assert "terminal_outcome" not in receipt
+    assert verification["ok"] is True
+    assert admission["eligible"] is True
+
+
+@pytest.mark.parametrize(
+    ("validation_status", "criterion_disposition", "reason"),
+    [
+        ("skipped", "met", "non-passing validation status"),
+        ("passed", "not_met", "incomplete acceptance criteria"),
+    ],
+)
+def test_null_result_cannot_bypass_existing_completion_gates(
+    tmp_path: Path,
+    validation_status: str,
+    criterion_disposition: str,
+    reason: str,
+) -> None:
+    """No-signal/no-change classifications retain every existing close gate."""
+    payload = _payload(artifact_root=tmp_path)
+    payload["terminal_outcome"] = {
+        "schema": TERMINAL_OUTCOME_SCHEMA,
+        "classification": "no_signal",
+        "summary": "The finite search found no qualifying signal.",
+        "evidence_artifacts": ["reports/completion.json"],
+    }
+    payload["validation"][0]["status"] = validation_status
+    payload["validation"][0]["exit_code"] = 0 if validation_status == "passed" else None
+    payload["acceptance_criteria"][0]["disposition"] = criterion_disposition
+    receipt = build_receipt(payload)
+
+    admission = admit_completion_receipt(
+        {"receipt": receipt, "verification": _verification(receipt)},
+        expected_repository="ll7/robot_sf_ll7",
+        expected_issue=7614,
+        issue_contract=CONTRACT,
+    )
+
+    assert admission["eligible"] is False
+    assert any(reason in error for error in admission["errors"])
 
 
 def test_validation_states_are_explicit_and_admission_stays_fail_closed() -> None:
@@ -480,9 +708,12 @@ def test_state_working_never_promotes_without_a_receipt() -> None:
     )
 
 
-def test_audit_plan_accepts_issue_number_keyed_receipt_inventory() -> None:
-    """Batch planning forwards receipt entries without inventing a new closure owner."""
-    receipt = _receipt()
+def test_audit_plan_consumes_issue_number_keyed_research_completion_receipt(
+    tmp_path: Path,
+) -> None:
+    """Batch closure surfaces a finite #9645 null result through the canonical receipt owner."""
+    receipt, fixture = _receipt_from_preserved_9645_evidence(tmp_path)
+    assert validate_receipt(receipt, artifact_root=tmp_path)["ok"] is True
     plan = build_audit_plan(
         {
             "repo": "ll7/robot_sf_ll7",
@@ -540,6 +771,10 @@ def test_audit_plan_accepts_issue_number_keyed_receipt_inventory() -> None:
     )
 
     assert plan["issues"][0]["closure_evidence"]["completion_receipt"]["eligible"] is True
+    assert (
+        plan["issues"][0]["closure_evidence"]["completion_receipt"]["terminal_outcome"]
+        == (fixture["terminal_outcome"])
+    )
     assert any(mutation["operation"] == "close_issue" for mutation in plan["mutations"])
 
 

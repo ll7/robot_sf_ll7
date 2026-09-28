@@ -1,0 +1,10 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_9666_force_validation.json",
+  "artifact_sha256": "3d84427395a7b69b8ac96ae47213bf921810f3594704536edbe6786bf06f6975",
+  "preserved_exact_bytes": true,
+  "review_marker": [
+    "AI-GENERATED",
+    "NEEDS-REVIEW"
+  ]
+}

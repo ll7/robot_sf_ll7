@@ -120,6 +120,7 @@ VALID_ACTIONS = frozenset(
         "verify_artifacts",
         "refresh_snapshot",
         "mark_ready_candidate",
+        "promote_merge_if_ci_green",
         "await_gate_verdict",
         "await_review_threads",
         "reconcile_pr_metadata",
@@ -146,6 +147,7 @@ VALID_STATES = frozenset(
         "stacked_not_independently_mergeable",
         "merged_externally",
         "ready_to_merge",
+        "ready_for_ci_promotion",
         "no_action",
     }
 )
@@ -1189,7 +1191,7 @@ def _merge_ready_state(
     title/body pair must also have a current ``pr-metadata: reconciled @
     <digest>`` trailer. Fail closed when either trailer is missing or stale.
     """
-    if "merge-ready" not in label_names or overall != "success":
+    if not {"merge-ready", "merge-if-ci-green"}.intersection(label_names) or overall != "success":
         return None
     base_state = _base_state_after_policy(pr, head_sha)
     if base_state is not None:
@@ -1204,7 +1206,7 @@ def _merge_ready_state(
     body_text = str(pr.get("body") or "")
     if has_not_ready_body_narrative(body_text):
         return "pending_pr_metadata"
-    return "ready_to_merge"
+    return "ready_to_merge" if "merge-ready" in label_names else "ready_for_ci_promotion"
 
 
 def _active_writer_or_author_decision(
@@ -1413,7 +1415,13 @@ def _compute_flow_decision(
     if review_state == "CHANGES_REQUESTED":
         return "escalate"
     match state:
-        case "pending_ci" | "pending_gate_verdict" | "pending_pr_metadata" | "ready_to_merge":
+        case (
+            "pending_ci"
+            | "pending_gate_verdict"
+            | "pending_pr_metadata"
+            | "ready_to_merge"
+            | "ready_for_ci_promotion"
+        ):
             return "continue"
         case "unknown_review_threads":
             return "continue"
@@ -1522,6 +1530,15 @@ def recommend_action(  # noqa: C901, PLR0912
                 state=state,
                 flow_decision=flow_decision,
                 reason="CI green, merge-ready label, and current exact-head gate verdict present",
+                actions_remaining=remaining,
+            )
+        case "ready_for_ci_promotion":
+            return PolicyDecision(
+                pr=pr_number,
+                action="promote_merge_if_ci_green",
+                state=state,
+                flow_decision=flow_decision,
+                reason="CI green and exact-head review accepted; promote without re-review",
                 actions_remaining=remaining,
             )
         case "pending_gate_verdict":

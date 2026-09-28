@@ -257,6 +257,10 @@ def _write_evidence_preflight_transport(repo: Path, *, ratchet_exit: int = 0) ->
     checker.write_text(
         "# Fake transport target; never run a real evidence scan.\n", encoding="utf-8"
     )
+    docs_checker = repo / "scripts" / "dev" / "check_docs_evidence_integrity.py"
+    docs_checker.write_text(
+        "# Fake transport target; never run a real docs-evidence scan.\n", encoding="utf-8"
+    )
     python = repo / "bin" / "python"
     fallback = python.read_text(encoding="utf-8").split("\n", 1)[1]
     python.write_text(
@@ -280,6 +284,259 @@ def _write_evidence_preflight_transport(repo: Path, *, ratchet_exit: int = 0) ->
     _git(repo, "commit", "-q", "-m", "evidence transport fixture")
     _git(repo, "branch", "preflight-base")
     return trace
+
+
+def _write_docs_evidence_preflight_transport(
+    repo: Path, *, checker_exit: int = 0, run_real_checker: bool = False
+) -> Path:
+    """Record docs-evidence checker, formatter, and test-lane boundaries."""
+    _make_fake_bin(repo, fail=False)
+    trace = _write_lane_logging_stub(repo)
+    scripts_dir = repo / "scripts" / "dev"
+    checker = scripts_dir / "check_docs_evidence_integrity.py"
+    if run_real_checker:
+        shutil.copy2(SCRIPTS_DEV / checker.name, checker)
+    else:
+        checker.write_text(
+            "# Fake transport target; never run a real integrity scan.\n", encoding="utf-8"
+        )
+    # Existing evidence paths also pass through the registry preflight. Keep
+    # that prerequisite present while the fake Python transport records only
+    # the checker owned by these tests.
+    (scripts_dir / "evidence_registry_ratchet.py").write_text(
+        "# Fake transport target; never run a real evidence scan.\n", encoding="utf-8"
+    )
+    python = repo / "bin" / "python"
+    fallback = python.read_text(encoding="utf-8").split("\n", 1)[1]
+    if run_real_checker:
+        docs_checker_transport = (
+            '    printf "docs %s %s\\n" "$2" "$3" >> "$PWD/lane.log"\n'
+            f'exec "{sys.executable}" "$@" ;;\n'
+        )
+    else:
+        docs_checker_transport = (
+            '    printf "docs %s %s\\n" "$2" "$3" >> "$PWD/lane.log"\n'
+            '    printf "fixture docs-evidence diagnostic\\n" >&2\n'
+            f"    exit {checker_exit} ;;\n"
+        )
+    python.write_text(
+        "#!/usr/bin/env bash\n"
+        'case "${1##*/}" in\n'
+        "  check_docs_evidence_integrity.py)\n"
+        + docs_checker_transport
+        + "  pr_ready_freshness.py)\n"
+        '    printf "stamp\\n" >> "$PWD/lane.log" ;;\n'
+        "esac\n" + fallback,
+        encoding="utf-8",
+    )
+    formatter = scripts_dir / "ruff_fix_format.sh"
+    formatter.write_text(
+        '#!/usr/bin/env bash\nprintf "format\\n" >> "$PWD/lane.log"\n',
+        encoding="utf-8",
+    )
+    formatter.chmod(0o755)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "docs-evidence transport fixture")
+    _git(repo, "branch", "preflight-base")
+    return trace
+
+
+def _hosted_docs_evidence_input_examples() -> list[str]:
+    """Exercise each current hosted docs-evidence path filter locally."""
+    workflow = REPO_ROOT / ".github/workflows/docs-evidence-integrity.yml"
+    payload = yaml.load(workflow.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+    return [
+        pattern.replace("**", "sample").replace("*", "sample")
+        for pattern in payload["on"]["pull_request"]["paths"]
+    ]
+
+
+@pytest.mark.parametrize("changed_path", _hosted_docs_evidence_input_examples())
+def test_final_docs_evidence_preflight_matches_every_hosted_filter(
+    preflight_repo: Path, changed_path: str
+) -> None:
+    """Each hosted path filter must invoke the same checker in final readiness."""
+    trace = _write_docs_evidence_preflight_transport(preflight_repo)
+    path = preflight_repo / changed_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("changed fixture\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "change hosted docs-evidence input")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = trace.read_text(encoding="utf-8").splitlines()
+    assert calls[0] == "docs --base-ref preflight-base"
+    assert "core --lane core" in calls
+    assert calls[-1] == "stamp"
+
+
+def test_final_docs_evidence_preflight_skips_code_only_changes(
+    preflight_repo: Path,
+) -> None:
+    """Code-only changes outside the hosted filters keep the checker skipped."""
+    trace = _write_docs_evidence_preflight_transport(preflight_repo)
+    code = preflight_repo / "scripts/code_only.py"
+    code.parent.mkdir(parents=True, exist_ok=True)
+    code.write_text("code-only fixture\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "code-only change")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert trace.read_text(encoding="utf-8").splitlines() == [
+        "format",
+        "core --lane core",
+        "stamp",
+    ]
+
+
+def test_final_docs_evidence_preflight_passes_selected_base_to_checker(
+    preflight_repo: Path,
+) -> None:
+    """The checker receives the exact BASE_REF selected for readiness."""
+    trace = _write_docs_evidence_preflight_transport(preflight_repo)
+    docs = preflight_repo / "docs/guide.md"
+    docs.parent.mkdir(parents=True)
+    docs.write_text("doc fixture\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "change docs")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert trace.read_text(encoding="utf-8").splitlines()[0] == "docs --base-ref preflight-base"
+
+
+def test_final_docs_evidence_checker_failure_stops_before_formatting_and_tests(
+    preflight_repo: Path,
+) -> None:
+    """The checker status is returned unchanged before any expensive lane starts."""
+    trace = _write_docs_evidence_preflight_transport(preflight_repo, checker_exit=73)
+    docs = preflight_repo / "docs/guide.md"
+    docs.parent.mkdir(parents=True)
+    docs.write_text("doc fixture\n", encoding="utf-8")
+    code = preflight_repo / "changed.py"
+    code.write_text("pass\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "change docs and code")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == 73, result.stdout + result.stderr
+    assert "fixture docs-evidence diagnostic" in result.stderr
+    assert trace.read_text(encoding="utf-8").splitlines() == ["docs --base-ref preflight-base"]
+
+
+def test_final_docs_evidence_scope_git_failure_is_not_an_empty_success(
+    preflight_repo: Path,
+) -> None:
+    """A failed docs-path producer stops before its checker or test lanes."""
+    trace = _write_docs_evidence_preflight_transport(preflight_repo)
+    docs = preflight_repo / "docs/guide.md"
+    docs.parent.mkdir(parents=True)
+    docs.write_text("doc fixture\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "change docs")
+    git = preflight_repo / "bin/git"
+    git.write_text(
+        "#!/usr/bin/env bash\n"
+        'for arg in "$@"; do\n'
+        '  if [[ "$arg" == "--no-renames" ]]; then\n'
+        '    count_file="$HOME/no-renames-count"\n'
+        "    count=0\n"
+        '    [[ ! -f "$count_file" ]] || read -r count < "$count_file"\n'
+        "    count=$((count + 1))\n"
+        '    printf "%s\\n" "$count" > "$count_file"\n'
+        '    if [[ "$count" -eq 2 ]]; then\n'
+        '      printf "fixture docs Git enumeration failed\\n" >&2\n'
+        "      exit 128\n"
+        "    fi\n"
+        "  fi\n"
+        "done\n"
+        f'exec "{shutil.which("git")}" "$@"\n',
+        encoding="utf-8",
+    )
+    git.chmod(0o755)
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == 128, result.stdout + result.stderr
+    assert "fixture docs Git enumeration failed" in result.stderr
+    assert "Cannot resolve final docs-evidence integrity input scope" in result.stderr
+    assert not trace.exists()
+
+
+def test_final_docs_evidence_preflight_preserves_embedded_newline_path(
+    preflight_repo: Path,
+) -> None:
+    """NUL-framed changed paths classify names containing embedded newlines."""
+    trace = _write_docs_evidence_preflight_transport(preflight_repo)
+    path = preflight_repo / "docs/context/new\nmanifest.json"
+    path.parent.mkdir(parents=True)
+    path.write_text("{}\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "change newline docs path")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert trace.read_text(encoding="utf-8").splitlines()[0] == "docs --base-ref preflight-base"
+
+
+def test_final_docs_evidence_unregistered_file_fails_with_real_checker(
+    preflight_repo: Path,
+) -> None:
+    """An unregistered evidence addition fails the canonical entry point before test lanes."""
+    registered = preflight_repo / "docs/context/evidence/registered/README.md"
+    registered.parent.mkdir(parents=True)
+    registered.write_text("Registered fixture.\n", encoding="utf-8")
+    catalog = preflight_repo / "docs/context/catalog.yaml"
+    catalog.parent.mkdir(parents=True, exist_ok=True)
+    catalog.write_text(
+        "version: 1\n"
+        "status_values:\n  evidence: Evidence pointer.\n"
+        "freshness_values:\n  evidence: Evidence pointer.\n"
+        "entries:\n"
+        "  - path: docs/context/evidence/registered\n"
+        "    status: evidence\n"
+        "    freshness: evidence\n",
+        encoding="utf-8",
+    )
+    trace = _write_docs_evidence_preflight_transport(preflight_repo, run_real_checker=True)
+    unregistered = preflight_repo / "docs/context/evidence/issue_9710_unregistered.json"
+    unregistered.write_text("{}\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "add unregistered evidence")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "preflight-base", "PR_READY_MODE": "final"},
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "issue_9710_unregistered.json: evidence file is not registered" in result.stderr
+    assert trace.read_text(encoding="utf-8").splitlines() == ["docs --base-ref preflight-base"]
 
 
 @pytest.mark.parametrize("ratchet_exit", [1, 2])
@@ -379,7 +636,10 @@ def test_final_evidence_sigterm_cleans_checker_and_releases_lock(
         assert trace.read_text(encoding="utf-8").splitlines() == ["ratchet --check"]
     finally:
         _stop_process_group(process, signal.SIGKILL)
-        _collect_process(process)
+        try:
+            _collect_process(process, timeout=3.0)
+        except AssertionError:
+            pass
         transport.write_text(original, encoding="utf-8")
 
     retry = _run_pr_ready(preflight_repo, env_overrides=env)
@@ -522,7 +782,13 @@ def test_evidence_success_preserves_formatting_and_downstream_gates(
 
     assert result.returncode == (67 if later_failure else 0), result.stdout + result.stderr
     calls = trace.read_text(encoding="utf-8").splitlines()
-    expected = ["ratchet --check", "format", "core --lane core", "optional --lane optional"]
+    expected = [
+        "ratchet --check",
+        "format",
+        "core --lane core",
+        "optional --lane optional tests/render/test_audit_workbench_launch.py::test_launch_opt_in_binds_fake_app_server_and_private_mcp",
+        "optional --lane optional",
+    ]
     assert calls == expected + ([] if later_failure else ["stamp"])
     if later_failure:
         assert "later gate rejected" in result.stderr
@@ -875,19 +1141,49 @@ def _lock_anchor(tmp_path: Path, repo: Path) -> Path:
     return tmp_path / "lock-tmp" / "robot-sf-pr-ready-locks" / f"{key}.lock"
 
 
+def _child_pgids_for_pid(parent_pid: int) -> set[int]:
+    """Return distinct child process group IDs spawned by parent_pid."""
+    child_pgids: set[int] = set()
+    try:
+        res = subprocess.run(
+            ["ps", "-eo", "ppid=,pgid="],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return child_pgids
+    for line in res.stdout.splitlines():
+        parts = line.strip().split()
+        if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+            ppid, pgid = int(parts[0]), int(parts[1])
+            if ppid == parent_pid and pgid != parent_pid:
+                child_pgids.add(pgid)
+    return child_pgids
+
+
 def _stop_process_group(process: subprocess.Popen[str], signum: signal.Signals) -> None:
     """Terminate a controlled readiness process and any lane child it owns.
 
     The process group is signaled even after the direct child exits: a lane
     descendant can outlive it while keeping the inherited pipes open, which
-    otherwise stalls xdist teardown (issue #9144).
+    otherwise stalls xdist teardown (issue #9144). Child process groups created
+    in separate sessions (e.g. by start_pr_ready_child setsid) are also signaled.
     """
     if os.name == "posix":
+        child_pgids = _child_pgids_for_pid(process.pid)
         try:
             os.killpg(process.pid, signum)
-            return
         except ProcessLookupError:
             pass
+
+        for cpgid in child_pgids:
+            try:
+                os.killpg(cpgid, signum)
+            except ProcessLookupError:
+                pass
+        return
+
     if process.poll() is None:
         try:
             process.send_signal(signum)
@@ -895,14 +1191,14 @@ def _stop_process_group(process: subprocess.Popen[str], signum: signal.Signals) 
             pass
 
 
-def _collect_process(process: subprocess.Popen[str], *, timeout: float = 10.0) -> tuple[str, str]:
+def _collect_process(process: subprocess.Popen[str], *, timeout: float = 25.0) -> tuple[str, str]:
     """Collect readiness output without allowing leaked descendants to hold pipes forever."""
     try:
         return process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired as exc:
         _stop_process_group(process, signal.SIGKILL)
         try:
-            stdout, stderr = process.communicate(timeout=1.0)
+            stdout, stderr = process.communicate(timeout=2.0)
         except subprocess.TimeoutExpired as cleanup_exc:
             for stream in (process.stdout, process.stderr):
                 if stream is not None:
@@ -1104,34 +1400,83 @@ def _verify_subreaper_receipt(receipt: Path) -> bool:
     )
 
 
+def _send_subreaper_report(
+    pipe_w: int, report: dict[str, object], env: dict[str, str], stdout: str, stderr: str
+) -> None:
+    """Send a bounded diagnostic without copying environment credentials to pytest."""
+    secrets = tuple(
+        value
+        for key, value in {**os.environ, **env}.items()
+        if value and any(word in key.upper() for word in ("TOKEN", "SECRET", "PASSWORD", "KEY"))
+    )
+
+    def redact(value: object) -> object:
+        if isinstance(value, str):
+            for secret in secrets:
+                value = value.replace(secret, "<redacted>")
+            return value[:4000]
+        if isinstance(value, dict):
+            return {redact(key): redact(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [redact(item) for item in value]
+        return value
+
+    report["stdout"] = stdout
+    report["stderr"] = stderr
+    os.write(pipe_w, json.dumps(redact(report), sort_keys=True).encode() + b"\n")
+    os.close(pipe_w)
+
+
 def _run_subreaper_pr_ready_child(
     preflight_repo: Path, env: dict[str, str], ready: Path, receipt: Path, pipe_w: int
 ) -> None:
-    """Execute readiness under subreaper, verify receipt, and signal reaped count."""
+    """Execute readiness under subreaper and report the original failing stage."""
     import ctypes
 
-    libc = ctypes.CDLL(None)
-    PR_SET_CHILD_SUBREAPER = 36
-    if libc.prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) != 0:
-        os._exit(2)
-    pr_ready_proc = _start_pr_ready(preflight_repo, env_overrides=env)
+    stage = "enable subreaper"
+    pr_ready_proc: subprocess.Popen[str] | None = None
+    report: dict[str, object] = {"status": "failed"}
+    stdout = stderr = ""
     try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        if libc.prctl(36, 1, 0, 0, 0) != 0:
+            raise OSError(ctypes.get_errno(), "PR_SET_CHILD_SUBREAPER failed")
+        stage = "start readiness"
+        pr_ready_proc = _start_pr_ready(preflight_repo, env_overrides=env)
+        stage = "wait for core marker"
         _wait_for_marker(ready, pr_ready_proc, timeout=10.0)
+        stage = "send SIGTERM"
         os.kill(pr_ready_proc.pid, signal.SIGTERM)
-        _ = _collect_process(pr_ready_proc, timeout=5.0)
-        if pr_ready_proc.returncode != 143 or not _verify_subreaper_receipt(receipt):
-            os._exit(3)
-        reaped_count = _reap_zombie_descendants()
-        os.write(pipe_w, f"ok:{reaped_count}\n".encode())
-        os.close(pipe_w)
-        os._exit(0)
+        stage = "collect readiness"
+        stdout, stderr = _collect_process(pr_ready_proc, timeout=5.0)
+        stage = "verify termination receipt"
+        assert pr_ready_proc.returncode == 143, f"readiness exit={pr_ready_proc.returncode}"
+        assert _verify_subreaper_receipt(receipt), "termination receipt did not verify cleanup"
+        report["status"] = "ok"
+    except BaseException as exc:
+        report["stage"] = stage
+        report["error"] = f"{type(exc).__name__}: {exc}"
     finally:
-        _stop_process_group(pr_ready_proc, signal.SIGKILL)
-        try:
-            _collect_process(pr_ready_proc, timeout=1.0)
-        except Exception:
-            pass
-        os._exit(9)
+        if pr_ready_proc is not None:
+            _stop_process_group(pr_ready_proc, signal.SIGKILL)
+            try:
+                if pr_ready_proc.poll() is None:
+                    stdout, stderr = _collect_process(pr_ready_proc, timeout=1.0)
+            except Exception as exc:
+                report["cleanup_error"] = f"{type(exc).__name__}: {exc}"
+                report["status"] = "failed"
+            report["readiness_exit"] = pr_ready_proc.returncode
+        report["reaped_count"] = _reap_zombie_descendants()
+        report["receipt_exists"] = receipt.is_file()
+        if receipt.is_file():
+            try:
+                payload = json.loads(receipt.read_text(encoding="utf-8"))
+                report["receipt_cleanup"] = payload.get("cleanup")
+                report["receipt_process"] = payload.get("process")
+            except (OSError, ValueError) as exc:
+                report["receipt_error"] = f"{type(exc).__name__}: {exc}"
+        _send_subreaper_report(pipe_w, report, env, stdout, stderr)
+        os._exit(0 if report["status"] == "ok" else 9)
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="PR_SET_CHILD_SUBREAPER is Linux-specific")
@@ -1158,14 +1503,66 @@ def test_pr_ready_sigterm_under_subreaper_verifies_zombie_cleanup(
 
     os.close(pipe_w)
     try:
-        data = os.read(pipe_r, 64).decode("utf-8").strip()
+        with os.fdopen(pipe_r, "rb") as stream:
+            data = stream.read().decode("utf-8").strip()
     finally:
-        os.close(pipe_r)
         _, status = os.waitpid(harness_pid, 0)
 
     exit_code = os.waitstatus_to_exitcode(status)
-    assert exit_code == 0, f"subreaper harness failed with exit code {exit_code}"
-    assert data.startswith("ok:"), f"unexpected harness output: {data}"
+    report = json.loads(data) if data else {"status": "no report"}
+    assert exit_code == 0, f"subreaper harness failed with exit code {exit_code}: {report}"
+    assert report["status"] == "ok", report
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="PR_SET_CHILD_SUBREAPER is Linux-specific")
+def test_subreaper_harness_reports_start_failure_without_masking_stage(tmp_path: Path) -> None:
+    """The forked harness preserves its first failure after mandatory cleanup."""
+    pipe_r, pipe_w = os.pipe()
+    harness_pid = os.fork()
+    if harness_pid == 0:
+        os.close(pipe_r)
+        _run_subreaper_pr_ready_child(
+            tmp_path / "missing-repo",
+            {"PR_READY_TOKEN": "private-test-token"},
+            tmp_path / "ready",
+            tmp_path / "receipt",
+            pipe_w,
+        )
+
+    os.close(pipe_w)
+    try:
+        with os.fdopen(pipe_r, "rb") as stream:
+            report = json.loads(stream.read())
+    finally:
+        _, status = os.waitpid(harness_pid, 0)
+    assert os.waitstatus_to_exitcode(status) == 9
+    assert report["stage"] == "start readiness"
+    assert report["error"].startswith("FileNotFoundError:")
+    assert report["receipt_exists"] is False
+    assert "private-test-token" not in json.dumps(report)
+
+
+def test_subreaper_report_redacts_credentials() -> None:
+    pipe_r, pipe_w = os.pipe()
+    _send_subreaper_report(
+        pipe_w,
+        {
+            "error": "failure private-test-token",
+            "receipt_process": {"nested": {"detail": "process private-test-token"}},
+            "receipt_cleanup": {"details": ["cleanup private-test-token"]},
+        },
+        {"PR_READY_TOKEN": "private-test-token"},
+        "stdout private-test-token",
+        "stderr private-test-token",
+    )
+    with os.fdopen(pipe_r, "rb") as stream:
+        report = json.loads(stream.read())
+    assert "private-test-token" not in json.dumps(report)
+    assert report["error"] == "failure <redacted>"
+    assert report["stdout"] == "stdout <redacted>"
+    assert report["stderr"] == "stderr <redacted>"
+    assert report["receipt_process"]["nested"]["detail"] == "process <redacted>"
+    assert report["receipt_cleanup"]["details"] == ["cleanup <redacted>"]
 
 
 @pytest.mark.skipif(
@@ -1502,8 +1899,8 @@ def test_pr_ready_sigterm_writes_optional_receipt_and_cleans_lane(
 
         assert process.returncode == 143, stdout + stderr
         payload = json.loads(receipt.read_text(encoding="utf-8"))
-        assert payload["phase"] == "optional_lane"
-        assert payload["lane"] == "optional"
+        assert payload["phase"] == "optional_launch_smoke_lane"
+        assert payload["lane"] == "optional_launch_smoke"
         assert payload["signal"]["name"] == "SIGTERM"
         assert payload["cleanup"]["verified"] is True
         assert payload["process"]["child_process_group_exists"] is False
@@ -1643,6 +2040,7 @@ def test_pr_ready_check_escalates_optional_changed_files_to_the_optional_lane(
     lane_lines = lane_log.read_text(encoding="utf-8").splitlines()
     assert lane_lines == [
         "core --lane core",
+        "optional --lane optional tests/render/test_audit_workbench_launch.py::test_launch_opt_in_binds_fake_app_server_and_private_mcp",
         "optional --lane optional",
     ]
     assert "Optional-extra changed files requiring the predictive lane" in result.stderr
@@ -1867,6 +2265,7 @@ def test_pr_ready_coverage_database_parent_survives_lanes_and_reporting(
     assert result.returncode == 0, result.stderr
     records = lifetime_log.read_text(encoding="utf-8").splitlines()
     assert [record.split(":", maxsplit=1)[0] for record in records] == [
+        "lane",
         "lane",
         "lane",
         "report",
@@ -2341,6 +2740,7 @@ def test_publication_preflight_lane_coverage_routing(preflight_repo: Path) -> No
     # When an optional file changes, both core and optional lanes must be run
     assert lane_lines == [
         "core --lane core",
+        "optional --lane optional tests/render/test_audit_workbench_launch.py::test_launch_opt_in_binds_fake_app_server_and_private_mcp",
         "optional --lane optional",
     ]
     assert "Optional-extra changed files requiring the predictive lane" in result.stderr
@@ -2410,6 +2810,7 @@ def test_pr_ready_check_regression_shapes_classification(preflight_repo: Path) -
     lane_lines = lane_log.read_text(encoding="utf-8").splitlines()
     assert lane_lines == [
         "core --lane core",
+        "optional --lane optional tests/render/test_audit_workbench_launch.py::test_launch_opt_in_binds_fake_app_server_and_private_mcp",
         "optional --lane optional",
     ]
 

@@ -1,0 +1,16 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev22-admitted-source-smoke",
+  "component_id": "srev22-review-execute",
+  "sources": [
+    {
+      "artifact_id": "fixture-source",
+      "uri": "source.json",
+      "format": "fixture-json",
+      "units": "metres",
+      "coordinate_frame": "world"
+    }
+  ],
+  "output_directory": "unused",
+  "required_capabilities": []
+}

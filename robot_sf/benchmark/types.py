@@ -181,6 +181,11 @@ class PlannerDecisionTraceEntry(TypedDict, total=False):
     selected_source: str
     planner_mode: str
     selected_command: list[float]
+    proposed_command: list[float]
+    safety_guard: dict[str, Any]
+    guard_intervened: bool
+    guard_intervention_start: bool
+    guard_intervention_end: bool
     selected_score: float | None
     static_recenter: float
     route_arc_progress: float
@@ -234,6 +239,8 @@ class EpisodeRecordDict(TypedDict, total=False):
     scenario_id: str
     seed: int
     scenario_params: dict[str, Any]
+    runtime_input_records: list[dict[str, str]]
+    selected_map_identity: dict[str, str | None]
     metrics: dict[str, Any]
     safety_predicates: dict[str, Any]
     public_requirement: dict[str, Any]

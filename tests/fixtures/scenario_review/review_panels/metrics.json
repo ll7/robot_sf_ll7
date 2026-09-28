@@ -1,0 +1,26 @@
+{
+  "schema_version": "metric-series.v1",
+  "source_identity": {"episode_id": "episode-17", "execution_id": "exec-17"},
+  "series": [
+    {
+      "metric_id": "clearance",
+      "label": "Obstacle clearance",
+      "units": "m",
+      "samples": [
+        {"time_s": 10.0, "value": 1.2},
+        {"time_s": 10.5, "value": null, "missing": true},
+        {"time_s": 12.0, "value": 0.4}
+      ]
+    },
+    {
+      "metric_id": "collision_count",
+      "label": "Collision count",
+      "units": "count",
+      "samples": [
+        {"time_s": 10.0, "value": 0},
+        {"time_s": 10.25, "value": 0},
+        {"time_s": 12.0, "value": 1}
+      ]
+    }
+  ]
+}

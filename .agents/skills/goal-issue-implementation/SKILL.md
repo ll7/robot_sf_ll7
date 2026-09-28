@@ -98,6 +98,7 @@ failure-state guardrail.
 - `docs/code_review.md`
 - `docs/context/goal_driven_agent_loops_2026-05-13.md`
 - `docs/context/issue_713_batch_first_issue_workflow.md`
+- `docs/context/issue_relationships.md`
 - `.agents/skills/implementation-verification/SKILL.md`
 - `.agents/skills/pr-ready-check/SKILL.md`
 - `.agents/skills/gh-pr-opener/SKILL.md`
@@ -484,7 +485,8 @@ Route remaining issues by their blocker:
 1. Build a live label-based queue and select one issue or an orchestrator-authorized bounded batch
    of non-overlapping issues (`gh-issue-sequencer` output or explicit user targets).
 2. Re-check issue body/comments and open PRs for source-PR dependencies, active coverage, and
-   duplicate branch/PR risk before branching.
+   duplicate branch/PR risk before branching. Read native Parent/Blocked by/Blocking state; use
+   body and comment context only as evidence for a separately reviewed relationship candidate.
 3. Acquire the cross-machine issue claim before branching:
 
    ```bash
@@ -524,7 +526,19 @@ Route remaining issues by their blocker:
    - Check the sub-agent's status and wait for it to complete.
    - Once complete, inspect `result.json`, `RESULT.md`, `diffstat.txt`, and run targeted local verification before accepting.
    - If validation or proof is insufficient, instruct the sub-agent to repair it, or mark the issue blocked.
+   - Before PR handoff, require the exact-diff implementation self-review receipt
+     (`uv run python scripts/dev/implementation_self_review.py verify --receipt-file <receipt.json>
+     --worktree <task-worktree>`): the receipt must validate bound to the exact final head and
+     complete `git diff origin/main...HEAD`, with executed validation, no fail verdicts, and no
+     blocking findings. `verify` binds Git state only, so follow it with the issue-bound gate
+     (`... gate --receipt-file <receipt.json> --issue <number> --expected-head-sha <head-sha>
+     --expected-base-sha <base-sha> [--issue-body-file <body.md>]`) before opening the PR.
+     A blocking self-review finding returns to implementation; never open the PR
+     merely because tests are green. Self-review never counts as independent merge-review
+     authority.
 10. Commit/push the completed changes from the worktree and prepare the PR handoff using `gh-pr-opener`.
+    Keep `Closes`/`Refs` coverage references in the PR body; native relationship state remains on
+    the linked issue and is not copied into the PR body.
 11. Open the PR and keep the transient claim while the PR is open. Release it only after terminal
     delivery, with an explicit reason:
     ```bash
@@ -537,7 +551,9 @@ Route remaining issues by their blocker:
     - Follow `AGENTS.md` "Worktree Teardown And Preservation" to clean up the linked worktree and prune references.
     - Move to the next queue item.
 
-Never run unrelated refactors or paper-facing claims in this loop.
+Never run unrelated refactors or paper-facing claims in this loop. Do not mutate native issue
+relationships from a review-only worktree; relationship changes require an explicit declaration, a
+fresh read, and native-link readback before the PR is published.
 
 ### Parallel Lane Contract
 
@@ -585,6 +601,38 @@ any integration.
 - Keep worker and review control-plane artifacts outside the worktree. In particular, never commit
   `RESULT.md` or `REVIEW.json`.
 
+### Research completion receipt
+
+When an issue's own criteria permit a research null result, record it in the existing
+`issue_completion_receipt.v1` as `terminal_outcome.schema: research_terminal_outcome.v1` with
+classification `success`, `no_signal`, or `no_change`, a concise summary, and `evidence_artifacts`
+that name declared artifacts captured at the delivered head. Pass the receipt and its
+`issue_completion_receipt_verification.v1` Git result through the existing issue-audit
+`completion_receipts` input. The goal loop consumes the outcome at
+`closure.completion_receipt.terminal_outcome`; this metadata does not waive issue criteria,
+validation, independent review, merged-PR, domain, or scientific gates. A blocked external outcome
+stays with `goal_blocker_receipt.v1` and its current redispatch fence; do not encode a blocker as a
+research null result.
+
+### Bounded repair and resume
+
+- For a substantial implementation, validation, or integration failure, allow at most three
+  materially different repair cycles. Each cycle records its root-cause diagnosis, changed
+  approach, exact head, and focused verification in the active delegation ledger. Count only a
+  changed repair attempt as a new cycle; rerunning the same failed command without a meaningful
+  code or environment change is not a repair.
+- Reuse the latest `goal_blocker_receipt.v1` and compare its fingerprint before dispatch. An
+  unchanged blocker remains `blocked_unchanged` with no new worker; a changed issue, dependency,
+  base/head, or required input returns to the owning admission/evaluation path.
+- Resolve prerequisites through the existing typed dependency packet and `goal_issue_admission.py`
+  check. Dependency drift invalidates only the dependent proof; re-run the smallest affected step.
+- On resume, verify the active ledger's issue, branch/head, dependency and artifact digests. Reuse
+  still-valid completed work and durable research outputs; never rerun a completed expensive
+  experiment only because the orchestration process restarted.
+- After three distinct unsuccessful repairs, preserve the failed attempts and resumable state. Use
+  the blocker receipt only when a named blocker actually prevents progress; ordinary implementation
+  difficulty is not an external blocker.
+
 ## Confidence
 
 Use one confidence level for final reporting:
@@ -596,10 +644,11 @@ Never close an issue with `Low` proof without explicitly marking follow-up work.
 
 ## Anti-Loop and Retry
 
-- Do not rerun identical failed validations more than twice without meaningful code/env change.
-- If a candidate fails the same gate with no new signal, move to `blocked` and record:
+- Follow the three-cycle, materially-different repair cap above; it supersedes a raw retry count.
+- Do not rerun identical failed validations without a meaningful code/environment change.
+- If a candidate still fails after the authorized repairs, record:
   - failing command,
-  - last error,
+  - last error and stable blocker fingerprint when an external input is actually required,
   - next minimal action.
 
 ## Delegation Failure Recovery

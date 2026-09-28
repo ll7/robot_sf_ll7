@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_9431_trace_worked_examples_2026-09/campaign_provenance.json",
+  "artifact_sha256": "c765b4839e1fca6a5c9589d12293ee2e190b884f8e599fe159437bd7944dd8b6",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

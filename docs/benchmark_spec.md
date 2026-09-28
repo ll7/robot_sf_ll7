@@ -363,11 +363,33 @@ Full details live in
 * Thresholds (e.g., collision/near-miss distances, force thresholds) are defined in the metrics
   spec and implemented in `robot_sf/benchmark/metrics.py` .
 
+**Operational quantities for external cost models (opt-in, diagnostic-only)**
+* `robot_sf/benchmark/operational_quantities.py` (issue #9350) exposes simulator-measured
+  quantities (distance, simulated/active/idle time, goal result, exposure, IDs) as typed inputs
+  to an optional external total-cost model. Queue time stays unknown (no simulator timer);
+  productive distance, orders, passenger load, prices, and supervision are external assumptions
+  with currency, period, source/date, provenance, and uncertainty.
+* Missing inputs block with named reasons instead of implicit zeros; trajectory-only data
+  cannot produce a numeric total. Results are a sensitivity surface, not a market-price
+  forecast, and never enter planner rankings. Postprocessor:
+  `scripts/analysis/extract_operational_quantities_issue_9350.py`.
+
 ## Expected Schema & Provenance
 
 Each episode record is schema-validated against
 `robot_sf/benchmark/schemas/episode.schema.v1.json` and includes:
 * `scenario_id`,  `seed`,  `scenario_params`,  `metrics`, timing fields
+* Map-runner episodes also include the `episode_runtime_input_identity.v1` extension, described by
+  `robot_sf/benchmark/schemas/episode_runtime_input_identity.v1.json`. It contains
+  `runtime_input_records`: producer-captured hashes and paths for
+  the map and route files consumed while building that episode's environment. These records are
+  covered by the episode-store digest in result provenance; consumers that need external-resource
+  identity must keep older rows without them as unknown. The extension also provides
+  `selected_map_identity` when the producer can bind the realized map ID to exactly one
+  parser-captured map resource. This distinguishes a selected map from the full closure of a default
+  map pool. Admissibility comparisons require matching map ID, digest, and source role across
+  executions; missing, ambiguous, or mismatched selected-map provenance remains unknown. Absolute
+  paths support producer-to-candidate binding but are not compared across checkouts.
 * `algorithm_metadata.baseline_category` (`diagnostic|classical|learning`) and
   `algorithm_metadata.policy_semantics`
 * `algorithm_metadata.planner_kinematics` including `execution_mode` (`native|adapter|mixed`) and
@@ -408,6 +430,11 @@ path as `compute_aggregates`. Canonical aliases and derived IDs are resolved per
 provenance reader; no fields are added to serialized aggregate output. Metric IDs must be exact
 keys from `robot_sf.benchmark.metric_layers.CANONICAL_METRICS`. Use `resolve_metric_source_binding`
 to retrieve their canonical episode field paths, owner, reduction, direction, and source kind.
+For derived metrics, those paths enumerate every canonical input consulted by the resolver; the
+per-episode selected source identifies the decisive input (collision before timeout before route
+completion for `failure_to_progress_rate`). The resolver validates the route-completion flag before
+applying collision or timeout exclusions, so malformed or non-finite outcomes remain unavailable
+instead of being inferred from partial metadata.
 Unit or source-channel metadata that the registry does not own remains explicitly `unavailable` or
 `unsupported`; display-name matching and inferred aliases fail closed.
 When bootstrap sampling is enabled, aggregate output also includes an additive
@@ -446,3 +473,41 @@ benchmark_protocol:
 The manifest declares scenario classes, planner panel, metric layers, and claim rules required for
 AMMV benchmark comparison. This slice is descriptive: loading the manifest validates protocol shape,
 but does not execute scenarios, instantiate planners, or enforce CI/release gates.
+
+### Robot-attributable force metrics
+
+When force recording is enabled, `robot_force_*` measures the simulator's own robot-repulsion
+component, **not measured human discomfort**. Accelerations are in m/s² (unit mass), with
+inverse-cubic distance dependence and linear scaling by `force_multiplier`. The six reductions
+are total magnitude integral and integral per exposed pedestrian (m/s), peak and active-only
+mean (m/s²), time with any pedestrian above the reference (s), and exposed pedestrian count.
+Empty exposure gives zero total, peak, time and count; conditional means are undefined (NaN/null).
+Despawned NaN rows are excluded. Pedestrian identity is the stable simulation row, not proximity order.
+
+`robot_force_metadata` declares configured radii, activation, multiplier, SocialForce parameters,
+the acquisition source and sample timing, and the computed reference. Exact recorded values declare
+`source: recorded_robot_pedestrian_social_force` and `sample_timing: pre_integration`; explicit
+recomputation from caller-supplied snapshots declares `source: posthoc_recomputed`. The reference is
+the full pedestrian-pair force magnitude at contact
+(2 × pedestrian radius) and 1 m/s relative head-on speed. Current defaults give
+3.7030154332523164 m/s² for radius 0.35 m; the approximate 2.6 in issue #9666 omitted the kernel's
+lateral contribution. This reference is a model comparison, not an empirical discomfort threshold.
+
+`record_simulation_step_trace: true` explicitly enables persistence of `robot_force_samples`,
+including per-step vectors and pre-integration force inputs. Ordinary episode rows retain only
+reductions and metadata; samples remain in memory for all force reductions. Existing
+post-integration trajectories are unchanged. `recompute_robot_ped_forces(data, cfg)` accepts aligned
+inputs without a simulator, including explicitly supplied response multipliers. Reconstructing from
+post-integration legacy snapshots is a post-hoc estimate, not exact recorded-force parity.
+When recorded robot forces are absent, supplying both `robot_force_config` and
+`social_force_config` explicitly opts `robot_force_metrics` into this post-hoc path. Metadata
+declares `source: posthoc_recomputed` and timing as caller-supplied positions that may be
+post-integration. Supplying only one configuration fails closed. Absent optional fields produce
+no new metric keys and preserve legacy calculations; the recorded-force path is unchanged.
+
+`robot_force_pp_equiv_*` is experimental: it evaluates the pedestrian-pair kernel with robot
+position and finite-difference velocity, reducing center distance by the robot/pedestrian radius
+difference (floored at zero for overlap). Velocity uses backward differences, with a forward
+first sample. At least two samples are required. It is a counterfactual, never applied to dynamics
+or included automatically in the Social Navigation Quality Index. Its reductions use the same
+reference and units. Validation campaign evidence remains separate from release evaluation.

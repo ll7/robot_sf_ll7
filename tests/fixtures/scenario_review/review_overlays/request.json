@@ -1,0 +1,69 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "req-review-overlays-smoke-001",
+  "component_id": "review-overlays",
+  "sources": [
+    {
+      "artifact_id": "smoke-overlay-source",
+      "uri": "tests/fixtures/scenario_review/review_overlays/source_scene.json",
+      "format": "threejs-viewer.v1",
+      "schema": "threejs-viewer.v1",
+      "sha256": "0b65739f9ba52cc6e9cd66ad6521ca4d2a03ac7882156c107d8a1a35d6a311d4"
+    }
+  ],
+  "output_directory": "output/scenario_review/srev-12-smoke",
+  "config": {
+    "presentation": {
+      "width": 320,
+      "height": 180,
+      "fps": 10.0,
+      "speed": 1.0,
+      "pauses": [
+        {
+          "presentation_t_s": 0.2,
+          "duration_s": 0.1,
+          "source_t_s": 0.2
+        }
+      ],
+      "cuts": [],
+      "presentation_timestamp_map": {
+        "policy": "explicit_table",
+        "mapping": [
+          {
+            "frame_idx": 0,
+            "presentation_t_s": 0.0,
+            "source_t_s": 0.0
+          },
+          {
+            "frame_idx": 1,
+            "presentation_t_s": 0.1,
+            "source_t_s": 0.1
+          },
+          {
+            "frame_idx": 2,
+            "presentation_t_s": 0.2,
+            "source_t_s": 0.2
+          },
+          {
+            "frame_idx": 3,
+            "presentation_t_s": 0.3,
+            "source_t_s": 0.2,
+            "is_pause": true
+          },
+          {
+            "frame_idx": 4,
+            "presentation_t_s": 0.4,
+            "source_t_s": 0.3
+          }
+        ]
+      }
+    },
+    "layers": [
+      "paths",
+      "controls",
+      "clearance",
+      "markers",
+      "labels"
+    ]
+  }
+}

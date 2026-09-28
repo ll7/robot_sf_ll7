@@ -364,11 +364,27 @@ def attach_obstacle_force_diagnostic_receipt(
     """Return law metadata with a validated diagnostic receipt attached."""
 
     result = dict(metadata)
-    result["diagnostic_receipt"] = build_obstacle_force_diagnostic_receipt(
+    receipt = build_obstacle_force_diagnostic_receipt(
         metadata,
         config_hash=config_hash,
         source_commit=source_commit,
         fallback=fallback,
+    )
+    # Keep the legacy aliases beside the receipt as a lossless projection of
+    # its validated fallback state.  Producers can still expose the historical
+    # names, but none may disagree with the authoritative nested receipt.
+    fallback_state = receipt["fallback"]
+    result.update(
+        {
+            "fallback": fallback_state["used"],
+            "fallback_triggered": fallback_state["used"],
+            "fallback_count": fallback_state["count"],
+            "fallback_reason": fallback_state["first_reason"],
+            "fallback_reasons": dict(fallback_state["reasons"]),
+            "config_hash": str(config_hash),
+            "source_commit": str(source_commit),
+            "diagnostic_receipt": receipt,
+        }
     )
     return result
 

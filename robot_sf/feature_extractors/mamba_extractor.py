@@ -87,6 +87,15 @@ def _init_classes() -> dict[str, Any]:  # noqa: C901
             self.norm = nn.LayerNorm(d_model)
 
         def forward(self, sequence: th.Tensor) -> th.Tensor:
+            """Apply one gated depthwise-convolution SSM block with a residual.
+
+            Args:
+                sequence: Input of shape ``(batch, seq_len, d_model)``.
+
+            Returns:
+                Normalized residual update of the same shape
+                ``(batch, seq_len, d_model)``.
+            """
             residual = sequence
             convolved = self.depthwise_conv(sequence.transpose(1, 2)).transpose(1, 2)
             convolved = convolved[:, : sequence.shape[1], :].contiguous()
@@ -218,6 +227,17 @@ def _init_classes() -> dict[str, Any]:  # noqa: C901
             return layers, "torch_ssm_lite", False
 
         def forward(self, obs: dict[str, th.Tensor]) -> th.Tensor:
+            """Encode the configured sequence source and fuse drive-state features.
+
+            Args:
+                obs: Observation dict. Reads the sequence key selected by
+                    ``sequence_source`` (``rays`` or temporal history) and
+                    ``drive_state``.
+
+            Returns:
+                Concatenated mean-pooled sequence features and drive-state
+                features of shape ``(batch, features_dim)``.
+            """
             sequence = self._prepare_sequence(obs[self.sequence_key])
             sequence_features = self.sequence_projection(sequence)
             for layer in self.sequence_layers:

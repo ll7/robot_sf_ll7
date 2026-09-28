@@ -72,6 +72,8 @@ from robot_sf.sim.simulator import (
 )
 from robot_sf.telemetry.pane import TelemetrySession
 
+_LEGACY_GOAL_COMPLETION_POLICY = "waypoint_radius_v1"
+
 DEFAULT_PANE_WIDTH = 320
 DEFAULT_PANE_HEIGHT = 240
 MIN_PANE_WIDTH = 200
@@ -107,6 +109,26 @@ __all__ = [
 
 # Helper to compute a stable, short hash for env_config
 # Placed near imports for reuse and clarity
+def _hash_payload_without_default_goal_policy(value: Any) -> Any:
+    """Remove policy fields that did not exist in historical config hashes.
+
+    Returns:
+        Any: Recursively normalized payload suitable for stable JSON hashing.
+    """
+    if isinstance(value, dict):
+        return {
+            key: _hash_payload_without_default_goal_policy(item)
+            for key, item in value.items()
+            if not (
+                key == "goal_completion_policy"
+                and (item is None or item == _LEGACY_GOAL_COMPLETION_POLICY)
+            )
+        }
+    if isinstance(value, list):
+        return [_hash_payload_without_default_goal_policy(item) for item in value]
+    return value
+
+
 def _stable_config_hash(cfg: EnvSettings) -> str:
     """Build a stable short hash of the environment settings.
 
@@ -117,8 +139,9 @@ def _stable_config_hash(cfg: EnvSettings) -> str:
         16-character hexadecimal hash string representing the configuration.
     """
     try:
+        config_payload = asdict(cfg) if is_dataclass(cfg) else cfg.__dict__
         payload = json.dumps(
-            asdict(cfg) if is_dataclass(cfg) else cfg.__dict__,
+            _hash_payload_without_default_goal_policy(config_payload),
             sort_keys=True,
             default=str,
         )
@@ -433,20 +456,30 @@ def _jsonl_runtime_metadata(
     Returns:
         Runtime metadata for the obstacle-force site, or ``None`` when absent.
     """
+    runtime_metadata: dict[str, Any] = {}
     raw_metadata = info.get("obstacle_force_law")
-    if not isinstance(raw_metadata, Mapping):
+    if isinstance(raw_metadata, Mapping):
+        obstacle_metadata = dict(raw_metadata)
+        # The caller's identity is authoritative.  Do not let stale aliases
+        # supplied by an upstream info mapping disagree with the receipt.
+        source_commit = _git_hash_fallback()
+        obstacle_metadata["config_hash"] = config_hash
+        obstacle_metadata["source_commit"] = source_commit
+        fallback = obstacle_force_fallback_from_mapping(info.get("obstacle_force_law_diagnostics"))
+        obstacle_metadata = attach_obstacle_force_diagnostic_receipt(
+            obstacle_metadata,
+            config_hash=str(config_hash),
+            source_commit=source_commit,
+            fallback=fallback,
+        )
+        runtime_metadata["obstacle_force_law"] = obstacle_metadata
+    if "success_definition" in info:
+        success_definition = info["success_definition"]
+        if isinstance(success_definition, dict):
+            runtime_metadata["success_definition"] = dict(success_definition)
+    if not runtime_metadata:
         return None
-    obstacle_metadata = dict(raw_metadata)
-    obstacle_metadata.setdefault("config_hash", config_hash)
-    obstacle_metadata.setdefault("source_commit", _git_hash_fallback())
-    fallback = obstacle_force_fallback_from_mapping(info.get("obstacle_force_law_diagnostics"))
-    obstacle_metadata = attach_obstacle_force_diagnostic_receipt(
-        obstacle_metadata,
-        config_hash=str(obstacle_metadata["config_hash"]),
-        source_commit=str(obstacle_metadata["source_commit"]),
-        fallback=fallback,
-    )
-    return {"obstacle_force_law": obstacle_metadata}
+    return runtime_metadata
 
 
 def _extract_reward_terms(meta: dict[str, Any]) -> dict[str, float]:
@@ -632,6 +665,22 @@ class RobotEnv(BaseEnv):
         self._grid_obstacle_cache_key: _GridObstacleCacheKey | None = None
         self._grid_obstacle_cache_value: _GridObstacleCacheValue | None = None
         self._prime_snqi_proxy_state()
+
+    def _apply_reset_seed(self, seed: int | None) -> None:
+        """Record the reset seed, establishing a deterministic crowd when needed (issue #9760).
+
+        A directly-constructed env samples its crowd from an unseeded RNG at
+        construction. Its first seeded reset re-runs construction-time
+        population under the seeded context. Factory-seeded envs (applied_seed
+        already set) keep their construction crowd, preserving legacy replay
+        bytes. Must run inside the seeded RNG context.
+        """
+        if seed is None:
+            return
+        establish_crowd = self.applied_seed is None
+        self.applied_seed = int(seed)
+        if establish_crowd:
+            self.simulator.repopulate_crowd()
 
     def _reset_action_latency_queue(self) -> None:
         """Clear queued controls and prime the configured delay with zero commands."""
@@ -1190,10 +1239,8 @@ class RobotEnv(BaseEnv):
         Returns:
             tuple: ``(obs, info)`` with the initial observation and placeholder info dict.
         """
-        if seed is not None:
-            self.applied_seed = int(seed)
-
         with global_reset_seed(seed):
+            self._apply_reset_seed(seed)
             super().reset(seed=seed, options=options)
             self._telemetry_episode_id += 1
             # Reset last_action

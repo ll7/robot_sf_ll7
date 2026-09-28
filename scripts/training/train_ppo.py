@@ -30,7 +30,7 @@ import sys
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -877,6 +877,59 @@ def _resolve_optional_path(path: Path, raw: object, *, field_name: str) -> Path 
     return (path.parent / candidate).resolve()
 
 
+def _load_evaluation_seed_manifest(  # noqa: C901
+    path: Path | None,
+    *,
+    training_seeds: Sequence[int],
+) -> tuple[int, ...]:
+    """Load and validate an immutable disjoint evaluation-seed manifest.
+
+    The manifest is intentionally optional for legacy training configs.  A
+    campaign that declares ``evaluation.evaluation_seed_manifest`` must resolve
+    a small, explicit YAML mapping with ``evaluation_seeds``; malformed,
+    duplicated, or training-overlapping identities fail before any environment
+    is constructed.
+    """
+    if path is None:
+        return ()
+    if not path.is_file():
+        raise ValueError(f"evaluation.evaluation_seed_manifest is not a regular file: {path}")
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise ValueError(
+            f"Unable to read evaluation.evaluation_seed_manifest {path}: {exc}"
+        ) from exc
+    if not isinstance(raw, Mapping):
+        raise ValueError("evaluation.evaluation_seed_manifest must contain a YAML mapping")
+    schema = str(raw.get("schema_version", "")).strip()
+    if schema != "robot-sf-evaluation-seed-manifest.v1":
+        raise ValueError(
+            "evaluation.evaluation_seed_manifest schema_version must be "
+            "robot-sf-evaluation-seed-manifest.v1"
+        )
+    values = raw.get("evaluation_seeds")
+    if isinstance(values, (str, bytes)) or not isinstance(values, Sequence):
+        raise ValueError("evaluation.evaluation_seed_manifest.evaluation_seeds must be a sequence")
+    try:
+        evaluation_seeds = tuple(int(value) for value in values)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "evaluation.evaluation_seed_manifest.evaluation_seeds must contain integers"
+        ) from exc
+    if not evaluation_seeds:
+        raise ValueError("evaluation.evaluation_seed_manifest.evaluation_seeds must not be empty")
+    if len(set(evaluation_seeds)) != len(evaluation_seeds):
+        raise ValueError("evaluation.evaluation_seed_manifest.evaluation_seeds must be unique")
+    overlap = sorted(set(evaluation_seeds).intersection(int(seed) for seed in training_seeds))
+    if overlap:
+        raise ValueError(
+            "evaluation.evaluation_seed_manifest must be disjoint from training seeds; "
+            f"overlap={overlap}"
+        )
+    return evaluation_seeds
+
+
 def _deep_merge_config(base: Mapping[str, Any], overlay: Mapping[str, Any]) -> dict[str, Any]:
     """Return ``base`` recursively merged with ``overlay`` values taking precedence."""
     merged = dict(base)
@@ -936,10 +989,20 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         (path.parent / scenario_raw).resolve() if not scenario_raw.is_absolute() else scenario_raw
     )
     scenario_id = data.get("scenario_id")
+    training_seeds = common.ensure_seed_tuple(data.get("seeds", []))
 
     convergence_raw = data.get("convergence", {})
     evaluation_raw = data.get("evaluation", {})
     step_schedule = _parse_step_schedule(evaluation_raw.get("step_schedule"))
+    evaluation_seed_manifest = _resolve_optional_path(
+        path,
+        evaluation_raw.get("evaluation_seed_manifest"),
+        field_name="evaluation.evaluation_seed_manifest",
+    )
+    evaluation_seeds = _load_evaluation_seed_manifest(
+        evaluation_seed_manifest,
+        training_seeds=training_seeds,
+    )
     socnav_orca_raw = (
         data.get("socnav_orca", {}) if isinstance(data.get("socnav_orca"), Mapping) else {}
     )
@@ -969,6 +1032,8 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
             evaluation_raw.get("scenario_config"),
             field_name="evaluation.scenario_config",
         ),
+        evaluation_seed_manifest=evaluation_seed_manifest,
+        evaluation_seeds=evaluation_seeds,
     )
     if "frequency_episodes" in evaluation_raw:
         _warn_frequency_episodes_deprecated(evaluation.frequency_episodes)
@@ -990,7 +1055,7 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
     return ExpertTrainingConfig.from_raw(
         scenario_config=scenario_config,
         scenario_id=str(scenario_id) if scenario_id else None,
-        seeds=common.ensure_seed_tuple(data.get("seeds", [])),
+        seeds=training_seeds,
         randomize_seeds=bool(data.get("randomize_seeds", False)),
         total_timesteps=int(data["total_timesteps"]),
         policy_id=str(data["policy_id"]),
@@ -1474,6 +1539,9 @@ def _deterministic_eval_seed_for_episode(
     """
     cycle_length = max(1, int(scenario_cycle_length))
     seed_block = max(0, int(episode_idx)) // cycle_length
+    evaluation_seeds = tuple(getattr(config.evaluation, "evaluation_seeds", ()) or ())
+    if evaluation_seeds:
+        return int(evaluation_seeds[seed_block % len(evaluation_seeds)])
     if config.seeds:
         return int(config.seeds[seed_block % len(config.seeds)])
     return int(seed_block)
@@ -1524,6 +1592,12 @@ def _init_wandb(
             "seeds": list(config.seeds),
             "randomize_seeds": bool(config.randomize_seeds),
             "evaluation_randomize_seeds": bool(_randomize_eval_seeds(config)),
+            "evaluation_seed_manifest": (
+                str(config.evaluation.evaluation_seed_manifest)
+                if config.evaluation.evaluation_seed_manifest is not None
+                else None
+            ),
+            "evaluation_seeds": list(config.evaluation.evaluation_seeds),
             "scenario_config": str(config.scenario_config),
             "evaluation_scenario_config": (
                 str(config.evaluation.scenario_config)
@@ -2994,6 +3068,14 @@ def _prepare_seed_state(config: ExpertTrainingConfig) -> None:
         common.set_global_seed(int(config.seeds[0]), deterministic=deterministic)
 
 
+def _validate_run_id(run_id: str) -> str:
+    """Validate a caller-supplied run id before it becomes a path component."""
+    value = str(run_id).strip()
+    if not value or value in {".", ".."} or Path(value).name != value:
+        raise ValueError("run_id must be a non-empty single path component")
+    return value
+
+
 def _persist_expert_checkpoint(
     outputs: TrainingOutputs,
     *,
@@ -3029,6 +3111,7 @@ def _build_training_notes(  # noqa: C901, PLR0912
     outputs: TrainingOutputs,
     scenario_coverage: dict[str, int],
     dry_run: bool,
+    training_seed: int | None = None,
 ) -> list[str]:
     """Assemble training run notes for the manifest."""
     notes: list[str] = [
@@ -3040,6 +3123,8 @@ def _build_training_notes(  # noqa: C901, PLR0912
     ]
     if config_sha256 is not None:
         notes.append(f"config_sha256={config_sha256}")
+    if training_seed is not None:
+        notes.append(f"training_seed_override={training_seed}")
     # Record the resolved reward profile so training artifacts are self-describing
     # (issue #4967). Pairs the human-readable name with any reward_kwargs weights.
     notes.append(f"reward_profile={_resolved_reward_name(config.env_factory_kwargs)}")
@@ -3059,6 +3144,9 @@ def _build_training_notes(  # noqa: C901, PLR0912
     notes.append(
         f"evaluation.scenario_config={config.evaluation.scenario_config or config.scenario_config}"
     )
+    if config.evaluation.evaluation_seed_manifest is not None:
+        notes.append(f"evaluation.seed_manifest={config.evaluation.evaluation_seed_manifest}")
+        notes.append(f"evaluation.seeds={list(config.evaluation.evaluation_seeds)}")
     if outputs.tensorboard_log is not None:
         notes.append(f"tensorboard_log={outputs.tensorboard_log}")
     notes.append(f"startup_sec={outputs.startup_sec:.3f}")
@@ -3155,8 +3243,29 @@ def run_expert_training(
     config_sha256: str | None = None,
     dry_run: bool = False,
     resume_from: Path | None = None,
+    training_seed: int | None = None,
+    run_id: str | None = None,
 ) -> ExpertTrainingResult:
-    """Execute the expert PPO training workflow and persist manifests."""
+    """Execute one expert PPO workflow and persist manifests.
+
+    ``training_seed`` selects exactly one seed from a multi-seed source
+    configuration. This keeps the checked-in config immutable while making a
+    per-seed scheduler invocation explicit and artifact-isolated.
+    """
+
+    if training_seed is not None:
+        training_seed = int(training_seed)
+        if training_seed not in config.seeds:
+            raise ValueError(
+                f"training_seed={training_seed} is not declared in config.seeds={config.seeds}"
+            )
+        config = replace(
+            config,
+            seeds=(training_seed,),
+            policy_id=f"{config.policy_id}_seed_{training_seed}",
+        )
+    if run_id is not None:
+        run_id = _validate_run_id(run_id)
 
     _ensure_cuda_determinism_env()
     _prepare_seed_state(config)
@@ -3170,7 +3279,7 @@ def run_expert_training(
 
     start_time = time.perf_counter()
     timestamp = datetime.now(UTC)
-    run_id = f"{config.policy_id}_{timestamp.strftime('%Y%m%dT%H%M%S')}"
+    run_id = run_id or f"{config.policy_id}_{timestamp.strftime('%Y%m%dT%H%M%S')}"
     runtime_ctx = TrainingRuntimeContext(
         run_id=run_id,
         dry_run=dry_run,
@@ -3238,6 +3347,7 @@ def run_expert_training(
         outputs=outputs,
         scenario_coverage=scenario_coverage,
         dry_run=dry_run,
+        training_seed=training_seed,
     )
     metrics_synthetic = _apply_synthetic_metrics_fallback(
         aggregates,
@@ -3333,7 +3443,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
     Returns:
         Parser with ``--config``, ``--dry-run``, ``--log-level``, ``--log-file``,
-        and ``--resume-from`` options.
+        ``--resume-from``, ``--seed``, and ``--run-id`` options.
     """
     parser = argparse.ArgumentParser(
         description="Train an expert PPO policy with manifest outputs."
@@ -3361,6 +3471,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--resume-from",
         default=None,
         help="Optional checkpoint path to resume PPO training from.",
+    )
+    parser.add_argument(
+        "--seed",
+        dest="training_seed",
+        type=int,
+        default=None,
+        help="Run exactly one seed declared in the config (required for independent multi-seed jobs).",
+    )
+    parser.add_argument(
+        "--run-id",
+        default=None,
+        help="Override the run id used for artifact and tracking paths.",
     )
     return parser
 
@@ -3413,6 +3535,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             config_sha256=config_sha256,
             dry_run=bool(args.dry_run),
             resume_from=resume_from,
+            training_seed=args.training_seed,
+            run_id=args.run_id,
         )
         return 0
     finally:

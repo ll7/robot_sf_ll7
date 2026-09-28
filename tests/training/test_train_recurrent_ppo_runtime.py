@@ -47,6 +47,18 @@ class _StubRecurrentModel:
         Path(path).write_bytes(b"stub-model")
 
 
+class _SegmentTrainingModel(_StubRecurrentModel):
+    """Stub model for checkpoint selection over scheduled train segments."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.learned = 0
+
+    def learn(self, total_timesteps: int, reset_num_timesteps: bool = False) -> None:
+        del reset_num_timesteps
+        self.learned += int(total_timesteps)
+
+
 class _StubVecEnv:
     """Single-index vectorized environment returning terminal episodes."""
 
@@ -67,6 +79,37 @@ class _StubVecEnv:
         obs = np.zeros((1, 4), dtype=np.float32)
         reward = np.array([0.5], dtype=np.float32)
         return obs, reward, terminated, False, {}
+
+    def close(self) -> None:
+        return None
+
+
+class _MetricVecEnv:
+    """Single-index VecEnv stub exposing terminal metadata for metric checks."""
+
+    def __init__(self, terminal_metas: list[dict[str, object]], *, legacy_api: bool) -> None:
+        self.terminal_metas = terminal_metas
+        self.legacy_api = legacy_api
+        self.step_count = 0
+        self.resets = 0
+
+    def reset(self) -> Any:
+        self.resets += 1
+        self.step_count = 0
+        return np.zeros((1, 4), dtype=np.float32)
+
+    def step(self, action: Any) -> tuple[Any, ...]:
+        del action
+        self.step_count += 1
+        done = self.step_count >= 2
+        obs = np.zeros((1, 4), dtype=np.float32)
+        reward = np.array([1.0], dtype=np.float32)
+        info: dict[str, object] = {}
+        if done:
+            info = {"meta": self.terminal_metas[self.resets - 1]}
+        if self.legacy_api:
+            return obs, reward, np.asarray([done]), [info]
+        return obs, reward, np.asarray([done]), np.asarray([False]), [info]
 
     def close(self) -> None:
         return None
@@ -115,6 +158,123 @@ def test_evaluate_recurrently_fails_closed_on_non_finite_actions() -> None:
     env = _StubVecEnv(episodes_to_terminate=3)
     with pytest.raises(RecurrentStateError, match="non-finite actions"):
         train_recurrent_ppo._evaluate_recurrently(model=model, eval_env=env, episodes=1)
+
+
+@pytest.mark.parametrize("legacy_api", [False, True])
+def test_evaluate_recurrently_emits_native_success_and_collision_metrics(
+    legacy_api: bool,
+) -> None:
+    """Both VecEnv step APIs preserve terminal metadata for native metrics."""
+    model = _StubRecurrentModel()
+    env = _MetricVecEnv(
+        [
+            {
+                "is_route_complete": True,
+                "is_pedestrian_collision": False,
+                "is_robot_collision": False,
+                "is_obstacle_collision": False,
+                "max_sim_steps": 2,
+            },
+            {
+                "is_route_complete": False,
+                "is_pedestrian_collision": True,
+                "is_robot_collision": False,
+                "is_obstacle_collision": False,
+                "max_sim_steps": 2,
+            },
+        ],
+        legacy_api=legacy_api,
+    )
+
+    summary = train_recurrent_ppo._evaluate_recurrently(model=model, eval_env=env, episodes=2)
+
+    assert summary["success_rate"] == pytest.approx(0.5)
+    assert summary["collision_rate"] == pytest.approx(0.5)
+    assert summary["eval_episode_return"] == pytest.approx(2.0)
+    assert [row["success_rate"] for row in summary["episode_metrics"]] == [1.0, 0.0]
+    assert [row["collision_rate"] for row in summary["episode_metrics"]] == [0.0, 1.0]
+
+
+def test_checkpoint_selection_uses_configured_native_metric(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Checkpoint records use success_rate instead of a return proxy."""
+    config = _load_config()
+    model = _SegmentTrainingModel()
+    summaries = iter(
+        [
+            {
+                "episodes": 1,
+                "mean_episode_return": 99.0,
+                "mean_episode_length": 2.0,
+                "reset_counts": {},
+                "state_norms": None,
+                "non_finite_action_count": 0,
+                "episode_metrics": [],
+                "success_rate": 0.25,
+                "collision_rate": 0.0,
+                "path_efficiency": 0.5,
+                "comfort_exposure": 0.0,
+                "snqi": 0.25,
+                "eval_episode_return": 99.0,
+                "eval_avg_step_reward": 1.0,
+            },
+            {
+                "episodes": 1,
+                "mean_episode_return": 1.0,
+                "mean_episode_length": 2.0,
+                "reset_counts": {},
+                "state_norms": None,
+                "non_finite_action_count": 0,
+                "episode_metrics": [],
+                "success_rate": 0.75,
+                "collision_rate": 0.0,
+                "path_efficiency": 0.5,
+                "comfort_exposure": 0.0,
+                "snqi": 0.75,
+                "eval_episode_return": 1.0,
+                "eval_avg_step_reward": 0.5,
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        train_recurrent_ppo,
+        "_evaluate_recurrently",
+        lambda **_: next(summaries),
+    )
+    output_dir = tmp_path / "segments"
+    output_dir.mkdir()
+
+    total_learned, best_score, best_path, index_entries = (
+        train_recurrent_ppo._train_and_evaluate_segments(
+            model=model,
+            output_dir=output_dir,
+            eval_vec_env=object(),
+            config=config,
+            hyperparams={},
+            metric_name="success_rate",
+            higher_is_better=True,
+            source_sha="source-sha",
+            seed=123,
+            snqi_context=train_recurrent_ppo.train_ppo.resolve_training_snqi_context(),
+        )
+    )
+
+    assert total_learned == config.base.total_timesteps == 2_048
+    assert model.learned == 2_048
+    assert best_score == pytest.approx(0.75)
+    assert best_path == output_dir / "best.zip"
+    best_entry = next(entry for entry in index_entries if entry["kind"] == "best")
+    assert best_entry["metric"] == "success_rate"
+    assert best_entry["score"] == pytest.approx(0.75)
+    history = [
+        json.loads(line)
+        for line in (output_dir / "evaluation_history.jsonl").read_text().splitlines()
+    ]
+    assert [row["metric"] for row in history] == ["success_rate", "success_rate"]
+    assert [row["score"] for row in history] == pytest.approx([0.25, 0.75])
+    assert [row["mean_episode_return"] for row in history] == [99.0, 1.0]
 
 
 def test_resume_identity_mismatch_rejected(tmp_path: Path) -> None:

@@ -1,0 +1,104 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, sans-serif;
+  line-height: 1.45;
+  color: #172033;
+  background: #f8fafc;
+}
+
+body {
+  margin: 0;
+}
+
+.audit-workbench-shell {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+
+.audit-boundary {
+  color: #475569;
+  font-size: 0.9rem;
+}
+
+.audit-status,
+.autosave-status {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.35rem;
+  background: #e2e8f0;
+}
+
+.audit-error,
+.autosave-error,
+.audit-warning {
+  color: #9f1239;
+  background: #ffe4e6;
+}
+
+.autosave-pending {
+  color: #854d0e;
+  background: #fef3c7;
+}
+
+.autosave-saved {
+  color: #166534;
+  background: #dcfce7;
+}
+
+details {
+  margin: 0.75rem 0;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.45rem;
+  background: #fff;
+}
+
+summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+
+button {
+  margin: 0.25rem 0.35rem 0.25rem 0;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid #64748b;
+  border-radius: 0.35rem;
+  background: #fff;
+  color: inherit;
+  cursor: pointer;
+}
+
+button:focus-visible,
+summary:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+.audit-main-content {
+  margin: 1rem 0;
+  padding: 0.8rem;
+  border: 1px solid #94a3b8;
+  border-radius: 0.45rem;
+  background: #fff;
+}
+
+.audit-editor-root {
+  min-height: 8rem;
+}
+
+.audit-finding-actions {
+  margin-top: 0.8rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.review-editor-controls {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.autosave-status {
+  font-weight: 650;
+}

@@ -1,0 +1,9 @@
+# Candidate release scenario matrix with the explicit goal-zone completion policy.
+# This is a derived input: the included scenario rows and maps remain unchanged.
+includes:
+  - classic_interactions_francis2023.yaml
+map_search_paths:
+  - ../../maps/svg_maps
+scenario_overrides:
+  simulation_config:
+    goal_completion_policy: goal_zone_entry_v1

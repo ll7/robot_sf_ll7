@@ -245,9 +245,23 @@ readiness label is stale, the audit must remove or re-evaluate `state:ready`
 through its normal readiness evidence path before triage can block the issue
 again.
 
-A stale state:running label is preserved when no active record is observable;
-absence of evidence is not evidence of completion. Multiple states without a
-decisive signal become a decision gate.
+By default, a stale `state:running` label is preserved when no active record is
+observable; absence of evidence is not evidence of completion. The autonomous
+entry point may explicitly enable a bounded stale-running reclaim policy. With
+`--reclaim-stale-running-after-hours H`, the plan captures one UTC cutoff and
+may remove only `state:running` when all of the following hold:
+
+1. the complete REST issue and comment inventories are available;
+2. the latest attributable human comment, or the issue creation timestamp when
+   no such comment exists, is older than the cutoff; and
+3. no linked open PR, atomic claim, local worktree, or active job is observed.
+
+The mutation records its cutoff, progress timestamp, and source, and apply
+requires the issue's state, labels, and `updated_at` snapshot to remain stable.
+The reclaim never adds `state:ready`, closes an issue, releases a claim, or
+removes any other label. If progress evidence is missing, malformed, partial,
+or changes after planning, the issue is preserved. Multiple states without a
+decisive signal remain a decision gate.
 
 Resource labels and evidence labels are composable. A resource label does not
 by itself prove that work is blocked. A type label is normally singular. A
@@ -348,6 +362,30 @@ scientific interpretation, benchmark admission, release checks, licensing
 review, or specialized evidence packets. Raw logs remain out of the receipt;
 they may be referenced through digested durable artifacts.
 
+`issue_completion_receipt.v1` also accepts the optional `terminal_outcome`
+object (`research_terminal_outcome.v1`) for a completed research or engineering
+run. Its classification is `success`, `no_signal`, or `no_change`, with a
+concise summary and one or more `evidence_artifacts` paths. Every referenced
+path must name an artifact already declared in the receipt and captured at the
+delivered head; the normal digest, exact Git diff, and post-review drift checks
+still apply. Terminal-outcome evidence paths must resolve to locally verifiable
+files under the verifier's artifact root so its bytes can be compared with the
+declared digest. Receipts without this optional object retain the existing
+generic `artifacts` path behavior, including URI references; a URI cannot
+satisfy `terminal_outcome.evidence_artifacts` unless a future canonical verifier
+can fetch and hash those bytes. Older receipts may omit this object.
+
+The outcome is surfaced by the existing `admit_completion_receipt` consumer
+inside `closure.completion_receipt.terminal_outcome`, so the goal/issue-close
+path can report the recorded result. It is descriptive receipt metadata: all
+existing validation, issue acceptance-criterion, independent-verifier,
+documented-closure, merged-PR, and specialized evidence gates remain in force.
+A `no_signal` or `no_change` outcome cannot make an unmet issue criterion
+complete and cannot promote scientific, benchmark, safety, release, or
+publication claims.
+A `no_signal` result is limited to the recorded scenario space, objective, and finite budget; it
+must not be interpreted as proof that no counterexample exists.
+
 ## Shared plan schema
 
 Implementation admission may consume one canonical `issue_dependency_packet.v1` for exact
@@ -362,6 +400,15 @@ Every plan has schema issue_audit_plan.v1 and contains:
       "schema": "issue_audit_plan.v1",
       "repo": "ll7/robot_sf_ll7",
       "mode": "autonomous",
+      "stale_running_policy": {
+        "enabled": true,
+        "threshold_hours": 6.0,
+        "observed_at": "2026-09-16T15:04:18Z",
+        "cutoff_at": "2026-09-16T09:04:18Z",
+        "progress_source": "latest_human_issue_comment_or_issue_creation",
+        "active_record_policy": "preserve",
+        "action": "remove_state_running"
+      },
       "project5": {"writes": false, "owner": "gh-issue-sequencer"},
       "quota": {
         "available": true,

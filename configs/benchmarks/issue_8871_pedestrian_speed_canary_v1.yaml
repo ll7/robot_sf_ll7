@@ -1,0 +1,17 @@
+# Freeze the smallest pedestrian desired-speed activation canary before outcomes.
+# This is a 72-row disjoint-seed packet, never registered benchmark evidence.
+schema_version: robot_sf.issue_8871_pedestrian_speed_canary.v1
+owner_issue: 8871
+parent_issue: 6561
+seed_owner_issue: 8888
+protocol_config: configs/benchmarks/issue_6561_pedestrian_speed_protocol.yaml
+protocol_sha256: e844126371c2ba017b13c3a570b79d63eee93c87b943f27298f281287533df29
+seed_owner_config: configs/benchmarks/issue_6561_pedestrian_speed_activation_preflight.yaml
+seed_owner_sha256: c2260105da166aabdce6701806cd75d983ed15fd74aa86d3a40b0f2215ad4274
+production_manifest_hash: 371f1a0160ec7faf1ade531691f104e2a1c92f7c34857e887ba1ba539e1b5238
+selected_seed: 311
+seed_selection_rule: lowest_frozen_disjoint_seed_from_issue_8888
+expected_rows: 72
+execution_boundary: activation_canary_only
+registered_rows_allowed: false
+publication_authorized: false

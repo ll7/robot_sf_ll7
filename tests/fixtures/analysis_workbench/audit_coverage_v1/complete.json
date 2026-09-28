@@ -1,0 +1,21 @@
+{
+  "expected_rows": [
+    {
+      "episode_id": "episode-success",
+      "planner_id": "ppo",
+      "scenario_group": "corridor",
+      "outcome": "success",
+      "ordinary_control": true
+    },
+    {
+      "episode_id": "episode-collision",
+      "planner_id": "ppo",
+      "scenario_group": "corridor",
+      "outcome": "collision"
+    }
+  ],
+  "detector_attempts": [
+    {"episode_id": "episode-success", "detector_id": "telemetry", "status": "clear"},
+    {"episode_id": "episode-collision", "detector_id": "telemetry", "status": "flagged"}
+  ]
+}

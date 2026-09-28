@@ -31,11 +31,14 @@ from scripts.dev._gh_pagination import is_likely_truncated  # noqa: E402
 from scripts.dev.check_pr_ci_status import (  # noqa: E402
     PENDING_STATUSES,
     _actions_run_id,
+    _apply_docs_only_exception,
     _enrich_rest_check_runs,
     _fetch_ci_status,
     _latest_check_runs_with_evidence,
     _rest_api_get,
     _rest_check_runs_to_rollup,
+    _rollup_conclusion,
+    _rollup_status,
     _summarize_check_runs,
 )
 
@@ -46,6 +49,8 @@ DEFAULT_MULTIPLIER = 1.3
 DEFAULT_POLL_INTERVAL_SECONDS = 120
 DEFAULT_WORKFLOW = "CI"
 DEFAULT_SAMPLE_LIMIT = 10
+EXACT_COMMIT_CHECK_RUNS_PAGE_SIZE = 100
+EXACT_COMMIT_CHECK_RUNS_MAX_PAGES = 30
 
 
 def _fetch_pr_status_with_cache(
@@ -224,8 +229,61 @@ def _build_drift_sample(
 
 
 def _fetch_exact_commit_check_runs(commit_sha: str) -> Any:
-    """Fetch check runs for one exact commit through the repository REST endpoint."""
-    return _rest_api_get(f"commits/{commit_sha}/check-runs?per_page=100")
+    """Fetch a complete bounded check-run inventory for one exact commit."""
+    check_runs: list[dict[str, Any]] = []
+    total_count: int | None = None
+    for page in range(1, EXACT_COMMIT_CHECK_RUNS_MAX_PAGES + 1):
+        payload = _rest_api_get(
+            f"commits/{commit_sha}/check-runs?"
+            f"per_page={EXACT_COMMIT_CHECK_RUNS_PAGE_SIZE}&page={page}"
+        )
+        if not isinstance(payload, dict):
+            return None
+        page_runs = payload.get("check_runs")
+        if not isinstance(page_runs, list) or any(not isinstance(run, dict) for run in page_runs):
+            return None
+        page_total = payload.get("total_count")
+        if type(page_total) is not int or page_total < 0:
+            return None
+        if total_count is not None and page_total != total_count:
+            return None
+        total_count = page_total
+        check_runs.extend(page_runs)
+        if len(check_runs) > total_count:
+            return None
+        if len(check_runs) == total_count:
+            return {"total_count": total_count, "check_runs": check_runs}
+        if len(page_runs) < EXACT_COMMIT_CHECK_RUNS_PAGE_SIZE:
+            return None
+    return None
+
+
+def _fetch_exact_commit_pr_metadata(pr_number: str | int) -> Any:
+    """Fetch the PR identity used to authorize an exact merge-commit readback."""
+    return _rest_api_get(f"pulls/{pr_number}")
+
+
+def _validate_exact_commit_pr(
+    commit_sha: str,
+    pr_number: str | int | None,
+    fetch_pr_metadata: Callable[[str | int], Any],
+) -> tuple[str | None, str]:
+    """Require merged PR metadata to bind an exact commit to a verified source head."""
+    if pr_number is None or not str(pr_number).strip():
+        return None, "post-merge PR number is required to verify the merge commit"
+    metadata = fetch_pr_metadata(pr_number)
+    if not isinstance(metadata, dict):
+        return None, f"could not fetch metadata for post-merge PR {pr_number}"
+    if metadata.get("merged") is not True:
+        return None, f"PR {pr_number} is not confirmed merged"
+    merged_sha = metadata.get("merge_commit_sha")
+    if not isinstance(merged_sha, str) or merged_sha.lower() != commit_sha.lower():
+        return None, "PR merge commit SHA did not match the requested exact commit"
+    head = metadata.get("head")
+    head_sha = head.get("sha") if isinstance(head, dict) else None
+    if not isinstance(head_sha, str) or not head_sha.strip():
+        return None, f"merged PR {pr_number} metadata has no head SHA"
+    return head_sha, ""
 
 
 def _fetch_exact_commit_workflow_runs(commit_sha: str) -> Any:
@@ -499,19 +557,31 @@ def _materialize_missing_replacements(
 def fetch_exact_commit_ci_status(
     commit_sha: str,
     *,
+    pr_number: str | int | None = None,
     fetch_check_runs: Callable[[str], Any] = _fetch_exact_commit_check_runs,
     fetch_workflow_runs: Callable[[str], Any] = _fetch_exact_commit_workflow_runs,
+    fetch_pr_metadata: Callable[[str | int], Any] = _fetch_exact_commit_pr_metadata,
+    changed_files_cache: dict[tuple[str, str], tuple[list[str] | None, str | None]] | None = None,
 ) -> dict[str, Any]:
     """Return a fail-closed check summary for one exact commit SHA.
 
-    The commit endpoint is intentionally independent of PR lifecycle state.  This supports the
-    post-merge readback window where the PR is already terminal but its merge-commit checks are
-    still running. If a visible cancelled check has a newer exact-SHA workflow run, Actions run
-    metadata supplies a pending representative until that job's check record materializes.
+    Successful results are bound to the supplied merged PR's ``merge_commit_sha``. If required
+    checks are absent, docs-only success may be established from a complete changed-file inventory
+    bound to that PR's verified ``head.sha``. If a visible cancelled check has a newer exact-SHA
+    workflow run, Actions run metadata supplies a pending representative until that job's check
+    record materializes.
     """
     commit_sha = commit_sha.strip()
     if not commit_sha:
         return {"status": "error", "error": "post-merge commit SHA is required"}
+    pr_head_sha, metadata_error = _validate_exact_commit_pr(
+        commit_sha,
+        pr_number,
+        fetch_pr_metadata,
+    )
+    if metadata_error:
+        return {"status": "error", "head_sha": commit_sha, "error": metadata_error}
+    assert pr_head_sha is not None  # Verified by _validate_exact_commit_pr.
     payload = fetch_check_runs(commit_sha)
     if not isinstance(payload, dict):
         return {
@@ -557,6 +627,20 @@ def fetch_exact_commit_ci_status(
     )
     normalized_check_runs = _rest_check_runs_to_rollup(enriched_check_runs)
     checks, _ = _summarize_check_runs(normalized_check_runs)
+    applicable_check_runs, _, _ = _latest_check_runs_with_evidence(normalized_check_runs)
+    all_applicable_checks_green = all(
+        _rollup_status(check) == "completed" and _rollup_conclusion(check) in {"success", "neutral"}
+        for check in applicable_check_runs
+    )
+    if all_applicable_checks_green:
+        _apply_docs_only_exception(
+            checks,
+            applicable_check_runs,
+            pr_number,
+            repo="",
+            head_sha=pr_head_sha,
+            changed_files_cache=changed_files_cache,
+        )
     if materializations:
         checks["replacement_materialization"] = materializations
         if any(item["check_status"] in PENDING_STATUSES for item in materializations):
@@ -564,9 +648,12 @@ def fetch_exact_commit_ci_status(
             checks["diagnostic"] = "workflow_replacement_check_materialization"
     return {
         "status": "ok",
+        "pr": pr_number,
+        "state": "MERGED",
         "head_sha": commit_sha,
         "commit_sha": commit_sha,
         "target_kind": "merge_commit",
+        "pr_head_sha": pr_head_sha,
         "checks": checks,
     }
 
@@ -614,7 +701,11 @@ def watch_pr_ci_status(  # noqa: PLR0913, C901 - CLI/test seam with explicit inj
 
     while True:
         last_status = (
-            fetch_commit_status(post_merge_commit_sha)
+            fetch_commit_status(
+                post_merge_commit_sha,
+                pr_number=pr_number,
+                changed_files_cache=changed_files_cache,
+            )
             if post_merge_commit_sha
             else _fetch_pr_status_with_cache(fetch_status, pr_number, changed_files_cache)
         )
@@ -868,8 +959,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--post-merge-commit-sha",
         default="",
         help=(
-            "Opt in to exact check-run polling for a merged PR commit; this bypasses the "
-            "terminal PR-state stop and requires the supplied SHA."
+            "Poll one exact merge commit after verifying the supplied PR is merged and its "
+            "merge SHA matches; proven docs-only changes may pass after applicable checks are green."
         ),
     )
     parser.add_argument(

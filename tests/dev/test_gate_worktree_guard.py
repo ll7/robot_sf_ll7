@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from pathlib import Path
 from unittest.mock import patch
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 import pytest
 
@@ -311,3 +309,125 @@ def test_guard_module_is_valid_json_serializable(mock_git_dirs: Path) -> None:
     health = guard.verify_gate_worktree(wt)
     payload = json.loads(json.dumps(asdict(health)))
     assert payload["classification"] == "healthy"
+
+
+def _init_index_lock_worktree(path: Path) -> Path:
+    """Create a small real Git worktree and return its resolved index-lock path."""
+    path.mkdir()
+    subprocess.run(["git", "init", "--quiet", str(path)], check=True)
+    result = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "--git-path", "index.lock"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    lock_path = Path(result.stdout.strip())
+    if not lock_path.is_absolute():
+        lock_path = path / lock_path
+    return lock_path.resolve()
+
+
+def _fake_proc_root(path: Path, *, owner: str, lock_path: Path | None = None) -> Path:
+    """Create a minimal process table for deterministic lock-owner tests."""
+    proc_root = path / "proc"
+    if owner == "unavailable":
+        return proc_root
+    proc_root.mkdir()
+    if owner == "active":
+        descriptor_dir = proc_root / "123" / "fd"
+        descriptor_dir.mkdir(parents=True)
+        assert lock_path is not None
+        (descriptor_dir / "9").symlink_to(lock_path)
+    elif owner == "ambiguous":
+        process_dir = proc_root / "456"
+        process_dir.mkdir()
+        (process_dir / "fd").write_text("uninspectable descriptor table", encoding="utf-8")
+    elif owner == "proven_orphan":
+        (proc_root / "1" / "fd").mkdir(parents=True)
+    return proc_root
+
+
+@pytest.mark.parametrize(
+    ("owner", "expected_owner", "expected_pids"),
+    [
+        ("active", "active", [123]),
+        ("proven_orphan", "proven_orphan", []),
+        ("ambiguous", "ambiguous", []),
+        ("unavailable", "unavailable", []),
+    ],
+)
+def test_preflight_blocks_index_lock_and_preserves_state(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    owner: str,
+    expected_owner: str,
+    expected_pids: list[int],
+) -> None:
+    """Lock owner classes all fail closed without changing the lock or worktree."""
+    worktree = tmp_path / "worktree"
+    lock_path = _init_index_lock_worktree(worktree)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.write_bytes(b"preserve this lock\n")
+    stale_time = datetime.now(UTC).timestamp() - 30
+    os.utime(lock_path, (stale_time, stale_time))
+    dirty_file = worktree / "untracked.txt"
+    dirty_file.write_text("preserve worktree state\n", encoding="utf-8")
+    initial_lock_stat = lock_path.stat()
+    initial_lock_bytes = lock_path.read_bytes()
+    initial_dirty_bytes = dirty_file.read_bytes()
+    index_path = lock_path.parent / "index"
+    initial_index_exists = index_path.exists()
+    initial_index_bytes = index_path.read_bytes() if initial_index_exists else None
+    proc_root = _fake_proc_root(tmp_path, owner=owner, lock_path=lock_path)
+
+    with patch.object(guard, "PROC_ROOT", proc_root):
+        exit_code = guard.main(["preflight", "--path", str(worktree), "--json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code != 0
+    assert payload["schema"] == "gate_worktree_preflight.v1"
+    assert payload["status"] == "index_lock_present"
+    inspection = payload["index_lock"]
+    assert inspection["index_lock_path"] == str(lock_path)
+    assert inspection["lock_exists"] is True
+    assert inspection["lock_mtime_utc"].endswith("Z")
+    assert inspection["lock_age_seconds"] >= 29
+    assert inspection["lock_size_bytes"] == len(initial_lock_bytes)
+    assert inspection["dirty_state"] == "dirty"
+    assert inspection["owner_classification"] == expected_owner
+    assert inspection["owner_pids"] == expected_pids
+    assert payload["recovery_packet"]["index_lock_path"] == str(lock_path)
+    assert payload["recovery_packet"]["next_action"] != "continue_local_refresh"
+    after_lock_stat = lock_path.stat()
+    assert lock_path.read_bytes() == initial_lock_bytes
+    assert after_lock_stat.st_ino == initial_lock_stat.st_ino
+    assert after_lock_stat.st_size == initial_lock_stat.st_size
+    assert after_lock_stat.st_mtime_ns == initial_lock_stat.st_mtime_ns
+    assert dirty_file.read_bytes() == initial_dirty_bytes
+    assert index_path.exists() is initial_index_exists
+    if initial_index_exists:
+        assert index_path.read_bytes() == initial_index_bytes
+
+
+def test_preflight_allows_absent_index_lock_without_recovery_packet(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An absent lock is the only preflight state that authorizes local work."""
+    worktree = tmp_path / "worktree"
+    lock_path = _init_index_lock_worktree(worktree)
+    proc_root = _fake_proc_root(tmp_path, owner="proven_orphan")
+
+    with (
+        patch.object(guard, "PROC_ROOT", proc_root),
+        patch.object(guard, "_proc_lock_owners", side_effect=AssertionError("unexpected scan")),
+    ):
+        exit_code = guard.main(["preflight", "--path", str(worktree), "--json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["status"] == "ready"
+    assert payload["index_lock"]["index_lock_path"] == str(lock_path)
+    assert payload["index_lock"]["lock_exists"] is False
+    assert payload["index_lock"]["owner_classification"] == "absent"
+    assert payload["recovery_packet"] is None

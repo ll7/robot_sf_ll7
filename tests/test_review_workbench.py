@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -141,6 +142,66 @@ def test_run_writes_offline_workbench_with_episode_and_provenance_index(tmp_path
             artifact["sha256"]
             == hashlib.sha256((tmp_path / "out" / artifact["artifact_id"]).read_bytes()).hexdigest()
         )
+
+
+def test_canonical_launch_mounts_diagnostic_audit_extension_and_browser_runtime(
+    tmp_path: Path,
+) -> None:
+    """SREV-15 owns the offline launch while mounting the BA-06 fixture controls."""
+    _write(tmp_path / "trace-0000.json", {"step": 0})
+    _write(tmp_path / "bundle.json", _bundle(tmp_path))
+    request = _request(
+        tmp_path,
+        sources=[
+            {
+                "artifact_id": "bundle",
+                "uri": "bundle.json",
+                "format": review_workbench.BUNDLE_FORMAT,
+            }
+        ],
+    )
+
+    result = review_workbench.run(request, base=tmp_path)
+
+    assert result.status == "complete"
+    output = tmp_path / "out"
+    document = json.loads((output / "review-workbench.v1.json").read_text(encoding="utf-8"))
+    extension = document["extensions"]["audit_workbench"]
+    assert extension["slot"] == "panels"
+    assert extension["mode"] == "diagnostic_fixture"
+    assert extension["evidence_status"] == "diagnostic_only"
+    assert extension["native"] is False
+    assert extension["native_or_live_claim"] is False
+    assert extension["model"]["service"]["id"] == "ba06-fixture-facade"
+    assert [case["episode_id"] for case in extension["model"]["queue"]] == [
+        "fixture-normal-control",
+        "fixture-missing-media",
+    ]
+    assert extension["model"]["queue"][1]["media"]["reason"] == "recording_not_present"
+
+    html = (output / "review-workbench.v1.html").read_text(encoding="utf-8")
+    assert "data-extension-slot" in html
+    assert "components/audit_workbench/audit_workbench.js" in html
+    assert "http://" not in html and "https://" not in html
+    expected_assets = {
+        "components/audit_workbench/audit_workbench.css",
+        "components/audit_workbench/audit_workbench.js",
+        "components/review_editor/review_editor.js",
+        "components/review_panels/review_panels.js",
+    }
+    emitted = {artifact["artifact_id"] for artifact in result.artifacts}
+    assert expected_assets <= emitted
+    assert all((output / artifact).is_file() for artifact in expected_assets)
+
+    runtime = Path(__file__).parent / "render" / "review_workbench_runtime.mjs"
+    completed = subprocess.run(
+        ["node", str(runtime), str(output)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert completed.stdout.strip() == "review_workbench_runtime: ok"
 
 
 def test_missing_source_is_partial_with_a_reason(tmp_path: Path) -> None:

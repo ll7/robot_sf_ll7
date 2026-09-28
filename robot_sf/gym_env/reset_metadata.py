@@ -56,4 +56,9 @@ def build_reset_metadata(
         obstacle_force_metadata = metadata_fn()
         if isinstance(obstacle_force_metadata, Mapping):
             metadata["obstacle_force_law"] = dict(obstacle_force_metadata)
+    completion_metadata_fn = getattr(simulator, "goal_completion_metadata", None)
+    if callable(completion_metadata_fn):
+        completion_metadata = completion_metadata_fn()
+        if isinstance(completion_metadata, Mapping) and completion_metadata:
+            metadata["success_definition"] = dict(completion_metadata)
     return metadata

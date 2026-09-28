@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from contextlib import contextmanager
 from dataclasses import dataclass, field, fields
 from multiprocessing.context import (  # noqa: TC003 - runtime annotation resolution.
     BaseContext,
@@ -73,7 +74,10 @@ from robot_sf.benchmark.map_runner.map_runner_env import (
 from robot_sf.benchmark.map_runner.map_runner_env import (
     validate_sensor_fusion_adapter_config as _validate_sensor_fusion_adapter_config,  # noqa: F401 - compatibility re-export.
 )
-from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode as _execute_map_episode
+from robot_sf.benchmark.map_runner.map_runner_episode import _PairResetHook
+from robot_sf.benchmark.map_runner.map_runner_episode import (
+    run_map_episode as _execute_map_episode,
+)
 from robot_sf.benchmark.map_runner.map_runner_identity import (
     _compute_map_episode_id,
     _resolve_seed_list,
@@ -1257,6 +1261,31 @@ def _attach_checkpoint_runtime_stats(
     policy._planner_stats = _planner_stats
 
 
+def _attach_guard_decision_stats(
+    policy: Callable[[dict[str, Any]], Any], metadata: dict[str, Any]
+) -> None:
+    """Expose the latest shield decision through the per-step planner stats hook.
+
+    The episode trace sampler reads ``policy._planner_stats()`` after each
+    action. Guarded PPO also publishes checkpoint provenance there, so this
+    wrapper adds the current shield decision while preserving those fields.
+    """
+    checkpoint_stats = getattr(policy, "_planner_stats", None)
+
+    def _planner_stats() -> dict[str, Any]:
+        """Return checkpoint provenance and the most recent guard decision."""
+        base_payload = checkpoint_stats() if callable(checkpoint_stats) else {}
+        runtime = dict(base_payload) if isinstance(base_payload, dict) else {}
+        shield_stats = metadata.get("shield_stats")
+        if isinstance(shield_stats, dict):
+            last_decision = shield_stats.get("last_decision")
+            if isinstance(last_decision, dict):
+                runtime["last_decision"] = dict(last_decision)
+        return runtime
+
+    policy._planner_stats = _planner_stats
+
+
 def _build_ppo_policy(  # noqa: C901
     algo_key: str,
     algo_config: dict[str, Any],
@@ -1673,6 +1702,7 @@ def _build_guarded_ppo_policy(  # noqa: C901, PLR0915
 
     _policy._planner_close = _close_guarded_ppo
     _attach_checkpoint_runtime_stats(_policy, ppo_planner, ppo_config)
+    _attach_guard_decision_stats(_policy, meta)
     ppo_bind_env = getattr(ppo_planner, "bind_env", None)
     guard_bind_env = getattr(guard_adapter, "bind_env", None)
     bind_hooks = [hook for hook in (ppo_bind_env, guard_bind_env) if callable(hook)]
@@ -2395,14 +2425,25 @@ def _validate_behavior_sanity(scenario: dict[str, Any]) -> list[str]:
     return errors
 
 
-def _sync_episode_compat_overrides() -> None:
-    """Propagate legacy monkeypatchable map-runner hooks into the episode module."""
-    _map_runner_episode_module._build_env_config = _build_env_config
-    _map_runner_episode_module.make_robot_env = make_robot_env
-    _map_runner_episode_module.sample_obstacle_points = sample_obstacle_points
-    _map_runner_episode_module.compute_shortest_path_length = compute_shortest_path_length
-    _map_runner_episode_module.compute_all_metrics = compute_all_metrics
-    _map_runner_episode_module.post_process_metrics = post_process_metrics
+@contextmanager
+def _scoped_episode_compat_overrides() -> Iterator[None]:
+    """Apply legacy map-runner hooks for one episode and restore prior module state."""
+    overrides = {
+        "_build_env_config": _build_env_config,
+        "make_robot_env": make_robot_env,
+        "sample_obstacle_points": sample_obstacle_points,
+        "compute_shortest_path_length": compute_shortest_path_length,
+        "compute_all_metrics": compute_all_metrics,
+        "post_process_metrics": post_process_metrics,
+    }
+    previous = {name: getattr(_map_runner_episode_module, name) for name in overrides}
+    try:
+        for name, value in overrides.items():
+            setattr(_map_runner_episode_module, name, value)
+        yield
+    finally:
+        for name, value in previous.items():
+            setattr(_map_runner_episode_module, name, value)
 
 
 def _run_map_episode(  # noqa: PLR0913
@@ -2435,47 +2476,55 @@ def _run_map_episode(  # noqa: PLR0913
     cbf_safety_filter: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
+    pair_reset_hook: _PairResetHook | None = None,
     close_policy: bool = True,
     policy_builder: Any | None = None,
+    runtime_input_records: list[dict[str, str]] | None = None,
 ) -> EpisodeRecordDict:
     """Run one scenario/seed episode through the extracted episode executor.
 
     Returns:
         EpisodeRecordDict: Episode record with metrics, provenance, and planner metadata.
     """
-    _sync_episode_compat_overrides()
-    return _execute_map_episode(
-        scenario,
-        seed,
-        horizon=horizon,
-        dt=dt,
-        record_forces=record_forces,
-        snqi_weights=snqi_weights,
-        snqi_baseline=snqi_baseline,
-        algo=algo,
-        scenario_path=scenario_path,
-        algo_config=algo_config,
-        algo_config_path=algo_config_path,
-        adapter_impact_eval=adapter_impact_eval,
-        experimental_ped_impact=experimental_ped_impact,
-        ped_impact_radius_m=ped_impact_radius_m,
-        ped_impact_window_steps=ped_impact_window_steps,
-        observation_mode=observation_mode,
-        observation_level=observation_level,
-        benchmark_track=benchmark_track,
-        track_schema_version=track_schema_version,
-        observation_noise=observation_noise,
-        tracking_precision=tracking_precision,
-        synthetic_actuation_profile=synthetic_actuation_profile,
-        latency_stress_profile=latency_stress_profile,
-        safety_wrapper=safety_wrapper,
-        paired_wrapper_off_record=paired_wrapper_off_record,
-        cbf_safety_filter=cbf_safety_filter,
-        record_planner_decision_trace=record_planner_decision_trace,
-        record_simulation_step_trace=record_simulation_step_trace,
-        close_policy=close_policy,
-        policy_builder=policy_builder or _build_policy,
-    )
+    with _scoped_episode_compat_overrides():
+        consumed_runtime_inputs = runtime_input_records if runtime_input_records is not None else []
+        episode_kwargs: dict[str, Any] = {
+            "horizon": horizon,
+            "dt": dt,
+            "record_forces": record_forces,
+            "snqi_weights": snqi_weights,
+            "snqi_baseline": snqi_baseline,
+            "algo": algo,
+            "scenario_path": scenario_path,
+            "algo_config": algo_config,
+            "algo_config_path": algo_config_path,
+            "adapter_impact_eval": adapter_impact_eval,
+            "experimental_ped_impact": experimental_ped_impact,
+            "ped_impact_radius_m": ped_impact_radius_m,
+            "ped_impact_window_steps": ped_impact_window_steps,
+            "observation_mode": observation_mode,
+            "observation_level": observation_level,
+            "benchmark_track": benchmark_track,
+            "track_schema_version": track_schema_version,
+            "observation_noise": observation_noise,
+            "tracking_precision": tracking_precision,
+            "synthetic_actuation_profile": synthetic_actuation_profile,
+            "latency_stress_profile": latency_stress_profile,
+            "safety_wrapper": safety_wrapper,
+            "paired_wrapper_off_record": paired_wrapper_off_record,
+            "cbf_safety_filter": cbf_safety_filter,
+            "record_planner_decision_trace": record_planner_decision_trace,
+            "record_simulation_step_trace": record_simulation_step_trace,
+            "pair_reset_hook": pair_reset_hook,
+            "close_policy": close_policy,
+            "policy_builder": policy_builder or _build_policy,
+            "runtime_input_records": consumed_runtime_inputs,
+        }
+        episode = _execute_map_episode(scenario, seed, **episode_kwargs)
+        # Keep exact parser-consumed map/route input identities in the hashed episode row so
+        # downstream evidence consumers can bind the execution to the same resource closure.
+        episode["runtime_input_records"] = [dict(record) for record in consumed_runtime_inputs]
+        return episode
 
 
 def _write_validated(out_path: Path, schema: dict[str, Any], record: dict[str, Any]) -> None:

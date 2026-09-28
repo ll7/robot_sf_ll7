@@ -47,6 +47,24 @@ def resolve_repo_root() -> Path:
     return Path(result.stdout.strip())
 
 
+def git_head_commit() -> str:
+    """Return the current commit hash, or ``unknown`` outside git.
+
+    Unlike :func:`resolve_repo_root`, this never raises: callers that record
+    provenance opportunistically use the ``unknown`` sentinel instead.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+    return result.stdout.strip()
+
+
 def resolve_agent_artifact_dir(subdir: str, *, mkdir: bool = True) -> Path:
     """Return the absolute path to a codex-agent-runs artifact subdirectory.
 

@@ -54,6 +54,7 @@ from robot_sf.adversarial.samplers import (
     OptunaCandidateSampler,
     RandomCandidateSampler,
 )
+from robot_sf.adversarial.scenario_admissibility import ScenarioAdmissibilityVerdict
 from robot_sf.adversarial.scenario_manifest import build_manifest
 from robot_sf.adversarial.seed_sensitivity import (
     SeedSensitivityPerturbation,
@@ -134,6 +135,7 @@ def _config(
     tmp_path: Path,
     *,
     require_certification: bool = False,
+    apply_admissibility_filter: bool = False,
     workers: int = 1,
 ) -> SearchConfig:
     """Build a search config backed by temporary template and space files."""
@@ -151,7 +153,36 @@ def _config(
         seed=123,
         workers=workers,
         require_certification=require_certification,
+        apply_admissibility_filter=apply_admissibility_filter,
     )
+
+
+def test_search_config_preserves_legacy_positional_benchmark_profile(tmp_path: Path) -> None:
+    """The explicit filter option must not shift existing positional arguments."""
+    base = _config(tmp_path)
+    config = SearchConfig(
+        base.policy,
+        base.scenario_template,
+        base.search_space_path,
+        base.search_space,
+        base.objective,
+        base.output_dir,
+        base.budget,
+        base.seed,
+        base.algo_config_path,
+        base.horizon,
+        base.dt,
+        base.workers,
+        base.record_forces,
+        base.require_certification,
+        "legacy-profile",
+        base.snqi_weights_path,
+        base.snqi_baseline_path,
+        base.warm_start,
+    )
+
+    assert config.benchmark_profile == "legacy-profile"
+    assert config.apply_admissibility_filter is False
 
 
 class _SequenceSampler:
@@ -180,13 +211,13 @@ def _candidate(seed: int, *, goal_x: float = 5.0) -> CandidateSpec:
 def _runtime_base_map(*, obstacles: list[Obstacle] | None = None) -> MapDefinition:
     """Build a compact map fixture for multi-pedestrian runtime checks."""
     width, height = 8.0, 6.0
-    robot_spawn_zones = [((0.5, 0.5), (1.0, 0.5), (1.0, 1.0))]
+    robot_spawn_zones = [((3.0, 4.0), (3.5, 4.0), (3.5, 4.5))]
     robot_goal_zones = [((7.0, 5.0), (7.5, 5.0), (7.5, 5.5))]
     robot_routes = [
         GlobalRoute(
             spawn_id=0,
             goal_id=0,
-            waypoints=[(0.75, 0.75), (4.0, 3.0), (7.25, 5.25)],
+            waypoints=[(3.25, 4.25), (4.0, 3.0), (7.25, 5.25)],
             spawn_zone=robot_spawn_zones[0],
             goal_zone=robot_goal_zones[0],
         )
@@ -2241,6 +2272,7 @@ def test_invalid_optimizer_proposals_are_rejected_before_evaluation(tmp_path: Pa
     assert sampler.observed[0].objective_value is None
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     assert manifest["candidates"][0]["error"] == "start.x outside search space"
+    assert manifest["candidates"][0]["evaluation_disposition"] == "rejected_by_search_space"
 
 
 def test_default_search_keeps_candidate_evaluation_sequential(
@@ -2319,6 +2351,88 @@ def test_required_certification_fails_closed_when_adapter_missing(tmp_path: Path
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     assert manifest["candidates"][0]["certification_status"]["status"] == "not_available"
     assert manifest["candidates"][0]["error"] == "scenario_cert.v1 adapter is not available"
+    assert manifest["candidates"][0]["evaluation_disposition"] == "rejected_by_certification"
+    assert (
+        manifest["candidates"][0]["certification_status"]["details"]["scenario_admissibility"][
+            "search_disposition"
+        ]
+        == "retain"
+    )
+
+
+@pytest.mark.parametrize("apply_filter", [False, True], ids=["default-disabled", "opted-in"])
+def test_bound_admissibility_filter_is_explicit_opt_in(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, apply_filter: bool
+) -> None:
+    """Only explicit opt-in lets a bound admissibility rejection skip evaluation."""
+    config = dataclasses.replace(
+        _config(
+            tmp_path,
+            require_certification=True,
+            apply_admissibility_filter=apply_filter,
+        ),
+        budget=1,
+    )
+    candidate = _candidate(7)
+    evaluated: list[CandidateSpec] = []
+
+    def reject_bound_candidate(
+        case_id: str,
+        *,
+        scenario_id: str | None,
+        **_kwargs: Any,
+    ) -> ScenarioAdmissibilityVerdict:
+        assert scenario_id == "template_adversarial_0000"
+        return ScenarioAdmissibilityVerdict(
+            case_id=case_id,
+            scenario_id=scenario_id,
+            verdict="structurally_invalid",
+            target_planner_outcome="not_evaluated",
+            search_disposition="reject",
+            reason_codes=("fixture_structural_exclusion",),
+            assumptions={},
+            evidence={"fixture": "bound to the materialized case_id"},
+        )
+
+    def evaluator(
+        _config: SearchConfig,
+        candidate: CandidateSpec,
+        scenario_yaml_path: Path,
+        candidate_dir: Path,
+    ) -> CandidateEvaluation:
+        evaluated.append(candidate)
+        return CandidateEvaluation(
+            candidate=candidate,
+            certification_status=passed_status("evaluator called"),
+            objective_value=None,
+            failure_attribution=None,
+            episode_record_path=None,
+            trajectory_csv_path=None,
+            scenario_yaml_path=scenario_yaml_path,
+            bundle_path=candidate_dir,
+        )
+
+    monkeypatch.setattr(search, "classify_scenario_admissibility", reject_bound_candidate)
+    result = search.run_adversarial_search(
+        config,
+        evaluator=evaluator,
+        certifier=lambda _candidate, _path, _required: passed_status("certification passed"),
+        sampler=_SequenceSampler([candidate]),
+    )
+
+    assert evaluated == ([] if apply_filter else [candidate])
+    assert result.num_invalid_candidates == int(apply_filter)
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    row = manifest["candidates"][0]
+    assert row["certification_status"]["status"] == "passed"
+    assert (
+        row["certification_status"]["details"]["scenario_admissibility"]["search_disposition"]
+        == "reject"
+    )
+    assert row["evaluation_disposition"] == (
+        "rejected_by_admissibility" if apply_filter else "evaluator_invoked"
+    )
+    assert manifest["config"]["apply_admissibility_filter"] is apply_filter
 
 
 def test_required_certification_uses_real_scenario_certification_api(tmp_path: Path) -> None:
@@ -2412,10 +2526,19 @@ def test_required_certification_uses_real_scenario_certification_api(tmp_path: P
     invalid_status = manifest["candidates"][0]["certification_status"]
     valid_status = manifest["candidates"][1]["certification_status"]
     assert invalid_status["status"] == "failed"
+    assert invalid_status["details"]["scenario_admissibility"]["search_disposition"] == "retain"
+    assert manifest["candidates"][0]["evaluation_disposition"] == "rejected_by_certification"
     assert "start_inside_static_obstacle" in invalid_status["reason"]
     assert manifest["candidates"][0]["error"] == "start_inside_static_obstacle"
     assert valid_status["status"] == "passed"
     assert valid_status["details"]["certificates"][0]["benchmark_eligibility"] != "excluded"
+    admissibility = valid_status["details"]["scenario_admissibility"]
+    assert admissibility["schema_version"] == "scenario_admissibility.v1"
+    assert admissibility["scenario_id"] == "template_adversarial_0001"
+    assert admissibility["search_disposition"] == "retain"
+    assert admissibility["verdict"] == "admissible_feasibility_unknown"
+    assert admissibility["evidence"]["selected_scenario_row_binding"]["status"] == "valid"
+    assert manifest["candidates"][1]["evaluation_disposition"] == "evaluator_invoked"
     assert manifest["candidates"][1]["trajectory_csv_path"].endswith(
         "candidate_0001/trajectory.csv"
     )

@@ -15,6 +15,8 @@ evidence_tier:
 linked_policy:
 ```
 
+<!-- Set Parent/Blocked by/Blocking in GitHub's Relationships panel when needed. Native links are authoritative; do not duplicate them in this body. See docs/context/issue_relationships.md. -->
+
 ## Goal / Problem
 
 **What documentation needs to be created or improved?**

@@ -1,0 +1,9 @@
+schema_version: robot-sf-evaluation-seed-manifest.v1
+issue: 7849
+purpose: matched_ppo_recurrentppo_evaluation
+training_seeds: [123, 231, 777, 992, 1337]
+evaluation_seeds: [111, 112, 113]
+disjoint_from_training: true
+schedule: cycle_one_seed_block_per_scenario_surface
+episodes_per_checkpoint: 100
+claim_boundary: disjoint_seed_in_distribution_matching

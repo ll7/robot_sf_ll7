@@ -1,0 +1,88 @@
+{
+  "schema_version": "experiment-results.v1",
+  "experiment_id": "fixture-delay-study-0001",
+  "hypothesis": "A delayed response changes clearance and task success.",
+  "source_identity": {
+    "availability_status": "available",
+    "source_kind": "fixture",
+    "execution_mode": "recorded_results_only",
+    "readiness_status": "verified",
+    "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "families": [
+    {
+      "family_id": "family-shared-parent-0001",
+      "shared_parent_id": "episode-parent-0001",
+      "control_condition_id": "control",
+      "conditions": [
+        {
+          "condition_id": "control",
+          "label": "Control",
+          "role": "control",
+          "outcome": "survived",
+          "fidelity": {"status": "pass", "checks": ["same initial state"]},
+          "activation": {"status": "pass", "checks": ["control path"]},
+          "measurements": {
+            "clearance_m": {"value": 1.2, "units": "m"},
+            "success_rate": {"value": 0.8, "units": "ratio"}
+          }
+        },
+        {
+          "condition_id": "delay-100ms",
+          "label": "100 ms delay",
+          "role": "treatment",
+          "outcome": "falsified",
+          "fidelity": {"status": "pass", "checks": ["same initial state"]},
+          "activation": {"status": "pass", "checks": ["delay observed"]},
+          "measurements": {
+            "clearance_m": {"value": 0.7, "units": "m"},
+            "success_rate": {"value": 0.5, "units": "ratio"}
+          }
+        },
+        {
+          "condition_id": "delay-200ms",
+          "label": "200 ms delay",
+          "role": "treatment",
+          "outcome": "inconclusive",
+          "fidelity": {"status": "pass", "checks": ["same initial state"]},
+          "activation": {"status": "missing", "checks": ["delay trace unavailable"]},
+          "measurements": {
+            "clearance_m": {"value": null, "units": "m"},
+            "success_rate": {"value": 0.6, "units": "ratio"}
+          }
+        }
+      ]
+    },
+    {
+      "family_id": "family-control-failed-0002",
+      "shared_parent_id": "episode-parent-0002",
+      "control_condition_id": "control",
+      "conditions": [
+        {
+          "condition_id": "control",
+          "label": "Control",
+          "role": "control",
+          "outcome": "survived",
+          "fidelity": {"status": "fail", "checks": ["initial state mismatch"]},
+          "activation": {"status": "pass", "checks": ["control path"]},
+          "measurements": {
+            "clearance_m": {"value": 1.0, "units": "m"},
+            "success_rate": {"value": 0.9, "units": "ratio"}
+          }
+        },
+        {
+          "condition_id": "delay-100ms",
+          "label": "100 ms delay",
+          "role": "treatment",
+          "outcome": "contradictory",
+          "fidelity": {"status": "pass", "checks": ["same initial state"]},
+          "activation": {"status": "pass", "checks": ["delay observed"]},
+          "measurements": {
+            "clearance_m": {"value": 1.1, "units": "m"},
+            "success_rate": {"value": 0.85, "units": "ratio"}
+          }
+        }
+      ]
+    }
+  ]
+}

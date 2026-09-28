@@ -137,6 +137,58 @@ def test_jsonl_runtime_metadata_attaches_receipt_and_fallback(monkeypatch) -> No
     assert metadata["source_commit"] == "jsonl-commit"
 
 
+def test_jsonl_first_receipt_projects_authoritative_aliases_and_identity(monkeypatch) -> None:
+    """The first sidecar snapshot cannot contradict its validated receipt."""
+    from robot_sf.gym_env import robot_env
+
+    monkeypatch.setattr(robot_env, "_git_hash_fallback", lambda: "current-commit")
+    law_metadata = {
+        **_metadata(),
+        "fallback": False,
+        "fallback_triggered": False,
+        "fallback_count": 0,
+        "fallback_reason": None,
+        "fallback_reasons": {},
+        "config_hash": "stale-config",
+        "source_commit": "stale-source",
+    }
+    payload = _jsonl_runtime_metadata(
+        {
+            "obstacle_force_law": law_metadata,
+            "obstacle_force_law_diagnostics": {
+                "fallback": True,
+                "fallback_count": 1,
+                "fallback_reason": "malformed_occupancy",
+                "fallback_reasons": {"malformed_occupancy": 1},
+            },
+        },
+        "current-config",
+    )
+
+    assert payload is not None
+    metadata = payload["obstacle_force_law"]
+    assert metadata["fallback"] is True
+    assert metadata["fallback_triggered"] is True
+    assert metadata["fallback_count"] == 1
+    assert metadata["fallback_reason"] == "malformed_occupancy"
+    assert metadata["fallback_reasons"] == {"malformed_occupancy": 1}
+    assert metadata["config_hash"] == "current-config"
+    assert metadata["source_commit"] == "current-commit"
+    assert metadata["diagnostic_receipt"]["fallback"] == {
+        "used": True,
+        "count": 1,
+        "first_reason": "malformed_occupancy",
+        "reasons": {"malformed_occupancy": 1},
+    }
+    receipt_identity = metadata["diagnostic_receipt"]["input_identity"]
+    assert receipt_identity["config_hash"] == "current-config"
+    assert receipt_identity["source_commit"] == "current-commit"
+    assert (
+        validate_obstacle_force_diagnostic_receipt(metadata["diagnostic_receipt"])
+        == metadata["diagnostic_receipt"]
+    )
+
+
 def _valid_receipt() -> dict[str, object]:
     """Build one valid receipt for negative validation cases."""
     return build_obstacle_force_diagnostic_receipt(

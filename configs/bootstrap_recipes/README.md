@@ -17,6 +17,11 @@ uv run python scripts/tools/bootstrap_recipe_check.py --check \
   --recipes configs/bootstrap_recipes --execute-safe-checks --require-verified --format markdown
 ```
 
+When `uv.lock` changes, refresh the frozen recipes' source identity digests with
+`uv run python scripts/dev/refresh_bootstrap_recipe_lock_hashes.py --write`. The helper validates
+all recipe declarations before writing and changes only `lockfile_sha256` values for recipes that
+reference the root `uv.lock`; run it with `--check` (or no option) to check for drift.
+
 Private host, account, path, module, and storage details never appear here. A recipe that needs them
 declares a `private_substitutions` placeholder with a capability class;
 [private_overlay.example.json](private_overlay.example.json) shows the overlay shape.

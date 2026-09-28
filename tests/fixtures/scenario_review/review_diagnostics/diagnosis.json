@@ -1,0 +1,57 @@
+{
+  "schema_version": "failure_diagnosis.v1",
+  "diagnosis_source": "failure_diagnosis.deterministic.v1",
+  "generated_at_utc": "2026-01-01T00:00:00Z",
+  "records": [
+    {
+      "diagnosis_schema_version": "failure_diagnosis.v1",
+      "diagnosis_source": "failure_diagnosis.deterministic.v1",
+      "failure_level": "interaction",
+      "failure_type": "near_miss",
+      "onset_time_s": 0.0,
+      "onset_interval": [0.0, 0.5],
+      "severity": "major",
+      "detection_method": "predicate",
+      "causal_evidence": [
+        {
+          "evidence_kind": "trace_failure_predicate",
+          "predicate_id": "clearance_critical_interaction",
+          "time_interval_s": [0.0, 0.5],
+          "steps": [0, 1],
+          "involved_actors": ["ped-1"],
+          "evidence_fields": {"clearance_m": 1.9},
+          "non_causal_note": "causal_evidence cites trace/predicate evidence pointers only; it is not causal inference."
+        }
+      ],
+      "contributing_factors": [],
+      "confidence": "supported_hypothesis",
+      "evidence_mode": "direct_probe",
+      "validity_status": "valid",
+      "proposed_correction": null,
+      "correction_status": "unreviewed",
+      "unknown_reason": null,
+      "caveats": [
+        "causal_evidence cites trace/predicate evidence pointers only; it is not causal inference.",
+        "failure_type reuses an existing classifier label as a diagnostic label; it is not a canonical mechanism attribution without trace review."
+      ],
+      "source_predicate": {
+        "predicate_id": "clearance_critical_interaction",
+        "time_interval_s": [0.0, 0.5],
+        "severity": "medium",
+        "validity_status": "valid",
+        "steps": [0, 1],
+        "involved_actors": ["ped-1"],
+        "evidence_fields": {"clearance_m": 1.9}
+      }
+    }
+  ],
+  "failure_type_coverage": {
+    "counts": {"near_miss": 1},
+    "classification_source": "failure_diagnosis.deterministic.v1"
+  },
+  "caveats": [
+    "failure_diagnosis records are deterministic diagnostics adapted from trace predicates; they make no benchmark-ranking, causal-validity, or correction-quality claim.",
+    "causal_evidence cites trace/predicate evidence pointers only; it is not causal inference.",
+    "Learned/LLM diagnosis generation, correction-usefulness scoring, and campaign-level diagnosis-quality claims are out of scope for this schema version."
+  ]
+}

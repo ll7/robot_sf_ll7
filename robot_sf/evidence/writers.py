@@ -60,20 +60,6 @@ def _repo_root() -> Path:
     return Path(result.stdout.strip())
 
 
-def _git_commit() -> str:
-    """Return the current commit hash, or ``unknown`` outside git."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError):
-        return "unknown"
-    return result.stdout.strip()
-
-
 def sha256_file(path: Path) -> str:
     """Compute a SHA-256 hex digest for ``path``.
 

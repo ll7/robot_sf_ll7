@@ -444,6 +444,7 @@ def export_trace_viewer(
     html_path = output_path / "index.html"
     _copy_web_asset("index.html", html_path)
     _copy_web_asset("viewer.js", output_path / "viewer.js")
+    _copy_web_asset_tree("components", output_path / "components")
 
     return TraceViewerResult(output_dir=output_path, html_path=html_path, scene_path=scene_path)
 
@@ -453,6 +454,13 @@ def _copy_web_asset(asset_name: str, destination: Path) -> None:
     asset = resources.files("robot_sf.render.web_assets").joinpath(asset_name)
     with resources.as_file(asset) as asset_path:
         shutil.copyfile(asset_path, destination)
+
+
+def _copy_web_asset_tree(asset_name: str, destination: Path) -> None:
+    """Copy a packaged static web asset directory into an export directory."""
+    asset = resources.files("robot_sf.render.web_assets").joinpath(asset_name)
+    with resources.as_file(asset) as asset_path:
+        shutil.copytree(asset_path, destination, dirs_exist_ok=True)
 
 
 def main(argv: list[str] | None = None) -> int:

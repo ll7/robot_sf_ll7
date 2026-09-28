@@ -116,6 +116,14 @@ def _import_torch_optional():
         return None
 
 
+def _import_matplotlib_optional():
+    """Import matplotlib if available in the environment, returning None on failure."""
+    try:
+        return importlib.import_module("matplotlib")  # type: ignore
+    except Exception:  # pragma: no cover - matplotlib optional in some envs
+        return None
+
+
 def _snapshot_torch_determinism(torch_module):
     """Snapshot determinism-related flags for PyTorch and cuDNN backends.
 
@@ -277,6 +285,34 @@ def torch_nondeterministic_guard():  # type: ignore[missing-return-type-doc]
         _restore_torch_determinism(torch_module, state)
 
 
+@pytest.fixture(autouse=True)
+def matplotlib_rcparams_isolation():  # type: ignore[missing-return-type-doc]
+    """Restore matplotlib rcParams after each test.
+
+    Production render paths mutate global rcParams (notably savefig.bbox via
+    the latex style helper); without isolation, fixed-canvas assertions in
+    unrelated suites flip depending on xdist worker execution order
+    (issue #9411).
+    """
+
+    matplotlib_module = _import_matplotlib_optional()
+    if matplotlib_module is None:
+        yield
+        return
+
+    # Some production modules configure style at import time (for example
+    # ``robot_sf.research.extractor_report`` sets ``savefig.bbox``). Taking a
+    # context snapshot here would preserve that already-polluted value and
+    # make the fixture order-dependent. Normalize to Matplotlib's canonical
+    # defaults at both boundaries instead.
+    defaults = matplotlib_module.rcParamsDefault.copy()
+    matplotlib_module.rcParams.update(defaults)
+    try:
+        yield
+    finally:
+        matplotlib_module.rcParams.update(defaults)
+
+
 @pytest.fixture(scope="session")
 def perf_policy():  # type: ignore[missing-return-type-doc]
     """Provide session-scoped performance budget policy or fallback envelope."""
@@ -377,12 +413,136 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Scenario-admissibility tests exercise deterministic candidate, manifest,
+    # materialization, and provenance contracts used by the adversarial search.
+    "test_scenario_admissibility.py",
+    # Issue #9651 search-consumer contracts use a fake sampler/certifier and do
+    # not construct a simulator; keep the changed search adapter in PR coverage.
+    "test_search.py",
+    # MAP-Elites QD unit tests inject candidate evaluations and are CPU-only.
+    "test_issue_5308_qd.py",
+    # Map migration/source-capture tests use local SVG fixtures only.
+    "test_map_migration.py",
+    # Scenario-cache profiler tests use synthetic data and patched loaders; keep
+    # the changed cache instrumentation covered in the fast lane.
+    "test_perf_scenario_cache.py",
+    # Social-force v2 planner contracts (issue #9724) are deterministic adapter
+    # checks on synthetic grids; the four episode tests stay marked slow.
+    "test_issue_9724_social_force_resolution_independent.py",
+    # VV-3 bounded metamorphic tests, including the release-arm episodes, run in
+    # the default lane; none is marked slow, so PR shards execute all of them.
+    "test_grid_resolution_invariance.py",
+    "test_mirror_symmetry.py",
+    "test_pedestrian_removal.py",
+    "test_planner_unit_consistency.py",
+    "test_replay_determinism.py",
+    # Issue #9759 map-reflection and route-waypoint checks use in-memory maps and
+    # synthetic grids; keep their changed transform/planner branches in fast shards.
+    "test_release_map_mirror.py",
+    "test_grid_route.py",
+    # Adversarial evidence packet and gallery tests are deterministic fixture
+    # contracts for replay provenance, materialization, and report schemas.
+    "test_replay_gallery.py",
+    "test_search_evidence_packet.py",
+    # Recorded episode figure tests use pinned fixture traces and deterministic
+    # render inputs; keep changed replay materialization coverage in PR shards.
+    "test_episode_replay_figure.py",
+    # Telemetry replay alignment and export checks use synthetic samples and
+    # arrays, so they provide deterministic coverage for replay consumers.
+    "test_replay.py",
+    # socnav_sampling bounded_v2 contracts (issues #9727, #9746) are deterministic
+    # planner checks on synthetic grids; the two episode replays stay marked slow.
+    "test_issue_9727_socnav_sampling.py",
+    # Bounded robot-force contracts cover capture, post-hoc reconstruction, and
+    # legacy compatibility; include them in PR changed-line coverage shards.
+    "test_robot_attributable_force.py",
+    # Grid-time trajectory-mode risk tests are deterministic estimator/schema
+    # contracts and provide exact-head changed-line coverage for #9813.
+    "test_trajectory_mode_risk.py",
+    # The changed-test routing audit is itself fast, deterministic CI policy coverage.
+    "test_check_fast_lane_routing.py",
+    # Force-residual predictor tests are deterministic synthetic contracts and
+    # must cover the changed planner-visible prediction module in PR shards.
+    "test_force_residual_intent_predictor.py",
+    # Guarded-PPO and Risk-DWA planner tests use synthetic observations and
+    # adapters; keep their planner contracts and frame checks in PR shards.
+    "test_guarded_ppo.py",
+    "test_risk_dwa.py",
+    # Surface-distance pedestrian-term contracts include deterministic rollout
+    # and construction-validation checks; keep changed lines in PR shards.
+    "test_socnav_ped_surface_v3.py",
+    # ScenarioBelief projection tests are deterministic identity and data-contract
+    # checks; keep them in PR shards so changed-line coverage sees the adapter.
+    "test_identity_safe_scenario_belief.py",
+    # Benchmark Auditor record and journal tests are deterministic schema,
+    # provenance, and persistence contracts for BA-03 (issue #9484).
+    # Benchmark Auditor release-bound coverage tests are deterministic
+    # denominator, protocol, and receipt contracts for BA-04 (issue #9487).
+    "test_audit_coverage.py",
+    "test_audit_codex.py",
+    "test_audit_codex_app_server.py",
+    "test_audit_contracts.py",
+    "test_audit_findings_similarity.py",
+    "test_audit_github.py",
+    # BA-05 immutable-issue publication tests are deterministic append-only
+    # reconciliation contracts; keep them in the exact-head fast lane so the
+    # changed GitHub sync implementation receives hosted coverage.
+    "test_audit_github_append_only.py",
+    # Bounded GitHub REST provider contracts are deterministic pagination,
+    # accounting, and redaction checks; keep changed coverage in fast shards.
+    "test_audit_github_rest.py",
+    # Benchmark Auditor queue tests are deterministic policy, control-stream,
+    # provenance, and save/resume contracts for BA-02 (issue #9486).
+    "test_audit_queue.py",
+    "test_audit_mcp.py",
+    "test_audit_mcp_stdio.py",
+    "test_audit_service.py",
+    "test_audit_service_adapters.py",
+    # BA-06 fixture workbench tests exercise deterministic UI/facade contracts.
+    # They do not claim the native BA-05 service or simulator-backed evidence.
+    "test_audit_workbench.py",
+    "test_audit_workbench_server.py",
+    # BA-06 local launch and service/queue HTTP wiring are deterministic
+    # contracts; retained native-trace execution remains outside this lane.
+    "test_audit_workbench_launch.py",
+    "test_audit_workbench_live_integration.py",
+    # Durable BA-05 Next integration tests exercise the queue/authority
+    # transaction and replay boundary entirely with local fixtures.
+    "test_audit_service_next.py",
+    "test_audit_store.py",
+    "test_audit_store_cli.py",
+    # BA-05 source-first lazy materialization contracts stay in the exact-head
+    # fast lane (issue #9488).
+    "test_audit_materialize.py",
+    # The BA-05 native/provider seams below are deterministic offline admission,
+    # replay, and diagnostic contracts.  Keep them in the exact-head fast lane
+    # so changed coverage does not depend on live providers or benchmark runs.
+    "test_audit_codex_durable.py",
+    "test_audit_github_service.py",
+    "test_audit_materialize_native.py",
+    "test_audit_native_diagnostic.py",
+    "test_audit_native_service.py",
+    # BA-01 campaign accounting and detector-family tests are deterministic
+    # offline contracts; keep changed coverage in the exact-head fast lane.
+    "test_audit_scan.py",
+    "test_audit_detectors.py",
+    # VV-4 release-row bundle and anomaly checks are deterministic offline
+    # contracts; include them in fast shards for changed-line coverage.
+    "test_release_row_bundle.py",
+    "test_release_row_anomalies.py",
+    "test_grid_socnav_extractor.py",
     "map_test.py",
     "navigation_test.py",
     "ped_grouping_test.py",
     # Differential-drive kinematics tests are deterministic unit coverage for
     # the changed robot motion module; keep them in the exact-head fast lane.
     "differential_drive_test.py",
+    # Shared-world contract tests are deterministic simulator-backed coverage
+    # for the changed multi-robot modules (issue #9344).
+    "test_shared_world.py",
+    # SREV-28 review-session preview, lifecycle, and offline-browser contracts
+    # are deterministic and provide exact-head changed coverage (issue #9299).
+    "test_review_sessions.py",
     # Native replay adapter and engine tests are deterministic fixture contracts
     # for the exact-head changed-coverage gate (issue #5442).
     "test_simulator_counterfactual_adapter_issue_5442.py",
@@ -420,9 +580,24 @@ _FAST_FILES = {
     # schema/compatibility coverage for changed benchmark producers.
     "test_algorithm_contract_registry.py",
     "test_algorithm_readiness_contract.py",
+    # Deterministic Slurm closeout receipt schema and provenance tests provide
+    # exact-head changed-line coverage for the packaged release validator.
+    "test_slurm_closeout_receipt.py",
     # Paired-effect metric-contract tests are deterministic schema, provenance,
     # and materialization coverage for the native counterfactual producer.
     "test_paired_effect_metric_contract.py",
+    # Offline synchronized review-panel contract and runtime-model tests are
+    # deterministic coverage for the SREV-16 renderer component.
+    "test_review_panels.py",
+    # Offline recorded planner/pedestrian diagnostic contracts are deterministic
+    # SREV-18 coverage for the diagnostics renderer component (issue #9288).
+    "test_review_diagnostics.py",
+    # Offline review-editor annotation, source-binding, and persistence tests
+    # are deterministic coverage for SREV-17 (issue #9287).
+    "test_review_editor.py",
+    # Operational-quantities tests are deterministic synthetic arithmetic
+    # coverage for the changed benchmark producer (issue #9350).
+    "test_operational_quantities.py",
     # Native wrapper trace tests exercise the map-runner producer paths that
     # are otherwise excluded with the benchmark slow-test default.
     "test_safety_wrapper_runtime.py",
@@ -439,6 +614,9 @@ _FAST_FILES = {
     # coverage for the changed receipt verifier; keep it in the exact-head fast
     # lane (issue #9218).
     "test_merge_receipt_verify_remedy.py",
+    # Review-package path, provenance, and output-contract tests are deterministic
+    # fixture checks for the SREV-04 component; keep changed coverage in fast shards.
+    "test_review_package.py",
     # The helper-consolidation contracts are deterministic no-duplicate-def
     # coverage for the delegated helper families; keep them in the exact-head
     # fast lane (issue #9250).
@@ -447,6 +625,9 @@ _FAST_FILES = {
     # the canonical coordination markers; keep them in the exact-head fast
     # lane (issue #9254).
     "test_lane_markers_issue_9254.py",
+    # Deterministic report-schema, comparison, and provenance tests cover the
+    # recorded experiment outcome comparator in the exact-head fast lane.
+    "test_review_experiment_report.py",
     # The environment-manifest owner is deterministic schema, redaction, and
     # digest coverage for the changed capture/check command (issue #8894).
     "test_environment_manifest.py",
@@ -499,9 +680,22 @@ _FAST_FILES = {
     # Goal-marker pixels require the optional pygame extra, but the focused
     # regression is deterministic and covers the renderer in PR fast shards.
     "test_sim_view_goal_marker.py",
+    # Spawn-footprint validation tests are deterministic pure-function contracts
+    # for the changed ped_population helper; keep them in fast shards for
+    # changed-line coverage (issue #9403).
+    "test_spawn_footprint_validation.py",
+    # Presentation-style preset contracts are deterministic spec/coverage for
+    # the changed presentation renderer module (issue #9367).
+    "test_presentation_style.py",
     # Three.js viewer payload contracts are deterministic schema/fidelity
     # coverage for the changed viewer exporter (issue #9368).
     "test_threejs_viewer.py",
+    # Presentation-scene view contracts are deterministic coverage for the
+    # changed presentation view adapter (issue #9369).
+    "test_presentation_scene.py",
+    # Video-sync mapping tests are deterministic source/provenance contracts
+    # for the SREV-03 component (issue #9272).
+    "test_video_sync.py",
     # SVG geometry contract tests provide changed-line coverage for the
     # parser's explicit legacy/corrected transform paths (issue #8314).
     "test_svg_transform_contract.py",
@@ -519,6 +713,9 @@ _FAST_FILES = {
     # The preparation-only adversarial search harness uses deterministic data
     # fixtures only; keep its contract coverage in pull-request fast shards.
     "test_search_harness.py",
+    # The bounded falsification report covers deterministic schema, candidate
+    # accounting, and provenance contracts; keep changed lines in fast shards.
+    "test_falsification_report.py",
     # The search-to-trace eligibility fixtures are deterministic gate and
     # round-trip coverage for the changed search loop; keep them in the
     # exact-head fast lane (issue #9304).
@@ -557,7 +754,19 @@ _FAST_FILES = {
     # Finite-float helper migration touches these deterministic benchmark
     # producers; their focused contract suites provide exact-head coverage.
     "test_collision_scenario_similarity.py",
+    # Three-width doorway application tests are deterministic manifest/matrix/
+    # preflight contracts for the #9348 application module; keep them in fast
+    # shards for the exact-head changed-coverage gate (issue #9348).
+    "test_issue_9348_three_width_doorway.py",
+    "test_issue_9533_guarded_ppo_trace.py",
     "test_event_ledger.py",
+    "test_spawn_overlap_rate_paths_issue_9725.py",
+    "test_spawn_clearance_issue_9725.py",
+    "test_spawn_preflight_issue_9725.py",
+    "test_hierarchical_paired_release_analysis.py",
+    "test_parquet_export.py",
+    "test_seed_variance.py",
+    "test_map_inventory.py",
     "test_scenario_coverage.py",
     "test_seed_distribution_report.py",
     # ORCA preflight tests are deterministic contract coverage for the changed
@@ -707,6 +916,9 @@ _FAST_FILES = {
     # Pedestrian-population tests are deterministic sampler contracts for the
     # spawn-capture owners; keep them in the exact-head fast lane (issue #9312).
     "test_ped_population.py",
+    # Pedestrian tracker reset-epoch tests are deterministic producer-contract
+    # coverage required by the exact-head changed-line gate (issue #9598).
+    "test_pedestrian_tracking.py",
     "test_spawn_sampler_capture.py",
     "test_run_benchmark_release.py",
     "test_zenodo_manifest_binding.py",
@@ -739,8 +951,10 @@ _FAST_FILES = {
     # The release-publication contract is deterministic schema/CLI coverage for
     # the changed release_publication_contract.py producer.
     "test_release_publication_contract.py",
-    # Radius rank-stability schema tests exercise the changed benchmark producer;
-    # keep their deterministic contract coverage in pull-request fast shards.
+    # Radius sweep summary and rank-stability schema tests exercise the changed
+    # benchmark producers; keep their deterministic contract coverage in
+    # pull-request fast shards.
+    "test_radius_sweep_summary.py",
     "test_radius_rank_stability.py",
     # The mechanism-boundary atlas tests are deterministic schema/lineage checks;
     # keep coverage for the changed producer in pull-request fast shards.
@@ -764,6 +978,10 @@ _FAST_FILES = {
     # The shared DWA diagnostic harness tests are deterministic contract tests;
     # keep their changed-module coverage in pull-request fast shards.
     "test_dwa_diagnostic_harness.py",
+    # Diagnostic-report tests are deterministic fail-closed domain-error
+    # contracts for malformed cost inputs (issue #9587); keep their
+    # changed-module coverage in pull-request fast shards.
+    "test_diagnostic_report.py",
     # Research orchestration tests are deterministic manifest/report contracts;
     # keep coverage for the benchmark orchestrator basename match in fast shards.
     "test_orchestrator.py",
@@ -792,6 +1010,14 @@ _FAST_FILES = {
     # coverage for the changed planner producer; keep them in the exact-head
     # fast lane for changed-coverage admission.
     "test_force_coupled_potential_field.py",
+    # Maneuver-candidate portfolio and adversarial boundary tests are
+    # deterministic planner-contract coverage for the changed producer; keep
+    # both focused files in the exact-head fast lane.
+    "test_maneuver_candidates.py",
+    "test_maneuver_candidates_counterexamples.py",
+    # Multimodal arbitration tests are deterministic planner/risk contracts and
+    # cover the issue #8062 selector in exact-head changed-line shards.
+    "test_multimodal_trajectory_arbitration.py",
     # Versioned obstacle-force dispatch tests are deterministic contract
     # coverage for the planner, simulator, and wrapper seams; keep their
     # top-level modules in PR shards so changed coverage cannot exclude them as
@@ -874,6 +1100,10 @@ _FAST_FILES = {
     # SREV-21 recipe tests protect deterministic contract and provenance
     # behavior for the new analysis-workbench component (issue #9292).
     "test_review_hypotheses.py",
+    # SREV-08 alignment tests protect deterministic compatibility checks and
+    # visible inadmissibility for the new review-alignment component
+    # (issue #9277).
+    "test_review_alignment.py",
     # SREV-26 explanation tests protect deterministic draft citations and
     # fail-closed evidence handling for the new review-ai component
     # (issue #9297).
@@ -882,13 +1112,52 @@ _FAST_FILES = {
     # contracts for the review component; keep changed coverage in fast shards
     # (issue #9284).
     "test_review_workbench.py",
+    # SREV-19 rerun tests protect deterministic offline timelines and the
+    # optional-SDK recording path for the new render component (issue #9289).
+    "test_review_rerun.py",
     # SREV-22 review-execute tests are deterministic fixture and fail-closed
     # execution coverage for the bounded experiment leaf; keep changed coverage
     # in fast shards (issue #9293).
     "test_review_execute.py",
+    # SREV-24 loop tests are deterministic journal, budget, and recovery
+    # contracts; keep their changed coverage in fast shards (issue #9296).
+    "test_review_experiment_loop.py",
     # SREV-02 review-import tests are deterministic fixture and CLI contracts;
     # keep their changed coverage in fast shards (issue #9271).
     "test_review_import.py",
+    # SREV-07 review-storyboard tests are deterministic fixture and CLI contracts;
+    # keep their changed coverage in fast shards (issue #9276).
+    "test_review_storyboard.py",
+    # SREV-06 review-context tests are deterministic fixture and CLI contracts;
+    # keep their changed coverage in fast shards (issue #9275).
+    "test_review_context.py",
+    # SREV-05 review-events tests are deterministic fixture and CLI contracts;
+    # keep their changed coverage in fast shards (issue #9274).
+    "test_review_events.py",
+    # SREV-09 review-scene tests are deterministic fixture and CLI contracts;
+    # keep their changed coverage in fast shards (issue #9278).
+    "test_review_scene.py",
+    # SREV-10 review-encode tests are deterministic fixture and CLI contracts;
+    # keep their changed coverage in fast shards (issue #9279).
+    "test_review_encode.py",
+    # SREV-29 registry tests are deterministic discovery/invocation coverage
+    # for the component registry leaf; keep changed coverage in fast shards
+    # (issue #9290).
+    "test_review_registry.py",
+    # SREV-11 review-camera tests protect deterministic camera tracks and
+    # pixel-metric freedom contracts for the new render component (issue #9280).
+    "test_review_camera.py",
+    # SREV-12 review-overlays tests protect deterministic telemetry overlays,
+    # nonoverlapping labels, and timestamp mapping receipts (issue #9281).
+    "test_review_overlays.py",
+    # SREV-13 review-media-qa tests protect standalone video/visual-quality
+    # checks and contact-sheet contracts for the new render component (issue #9282).
+    "test_review_media_qa.py",
+    # SREV-14 review-report tests protect traceable captions, numerical citations,
+    # and scenario review report generation (issue #9283).
+    "test_review_report.py",
+    # Static trace viewer web asset export contract tests.
+    "test_trace_viewer.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

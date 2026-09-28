@@ -15,6 +15,16 @@ import yaml
 
 from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_artifacts
 from robot_sf.benchmark.map_runner.map_runner_trace import _scenario_id
+from robot_sf.benchmark.policy_search_manifest import (
+    deep_merge_config as _deep_merge_config,
+)
+from robot_sf.benchmark.policy_search_manifest import (
+    is_candidate_manifest,
+    resolve_candidate_manifest_runtime,
+)
+from robot_sf.benchmark.policy_search_manifest import (
+    scenario_family as _scenario_family,
+)
 from robot_sf.planner.hybrid_rule_local_planner import (
     HybridRuleLocalPlannerAdapter,
     build_hybrid_rule_local_planner_config,
@@ -42,27 +52,6 @@ def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
         raise TypeError("Algorithm config must be a mapping (YAML dict).")
     validate_no_local_model_artifacts(data, config_path=path)
     return data
-
-
-def _deep_merge_config(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
-    """Merge nested planner config overrides without mutating either input.
-
-    Returns:
-        A new mapping containing ``base`` with ``overrides`` applied recursively.
-    """
-    merged = deepcopy(base)
-    _deep_merge_inline(merged, overrides)
-    return merged
-
-
-def _deep_merge_inline(base: dict[str, Any], overrides: dict[str, Any]) -> None:
-    """Merge override values into an already isolated base mapping."""
-    for key, value in overrides.items():
-        current = base.get(key)
-        if isinstance(current, dict) and isinstance(value, dict):
-            _deep_merge_inline(current, value)
-        else:
-            base[key] = deepcopy(value)
 
 
 _UNCERTAINTY_ENVELOPE_ALGOS = {
@@ -123,32 +112,9 @@ def _resolve_config_path(anchor: Path | None, raw_path: Any) -> Path | None:
     return path.resolve()
 
 
-def _scenario_family(scenario: dict[str, Any]) -> str:
-    """Classify a scenario into the report family used by benchmark summaries.
-
-    Returns:
-        str: Scenario family label.
-    """
-    scenario_id = _scenario_id(scenario)
-    if scenario_id.startswith("francis2023_"):
-        return "francis2023"
-    if scenario_id.startswith("classic_"):
-        return "classic"
-    return str(scenario.get("family") or scenario.get("metadata", {}).get("family") or "nominal")
-
-
 def _is_policy_search_candidate_manifest(config: dict[str, Any]) -> bool:
-    """Return whether a config has policy-search candidate manifest fields."""
-    return any(
-        key in config
-        for key in (
-            "base_config_path",
-            "params",
-            "family_overrides",
-            "scenario_overrides",
-            "scenario_algo_overrides",
-        )
-    )
+    """Return whether a config is a candidate manifest."""
+    return is_candidate_manifest(config)
 
 
 def _load_base_candidate_config(
@@ -156,19 +122,26 @@ def _load_base_candidate_config(
     *,
     config_anchor: Path | None,
 ) -> dict[str, Any]:
-    """Load and merge a policy-search candidate's base config and params.
+    """Resolve only the candidate base and params.
 
     Returns:
-        dict[str, Any]: Effective candidate planner config.
+        Effective candidate planner config.
     """
-    base_cfg: dict[str, Any] = {}
-    base_path = _resolve_config_path(config_anchor, manifest.get("base_config_path"))
-    if base_path is not None:
-        base_cfg = _parse_algo_config(str(base_path))
-    params = manifest.get("params") or {}
-    if not isinstance(params, dict):
-        raise TypeError("Policy-search candidate params must be a mapping.")
-    return _deep_merge_config(base_cfg, params)
+
+    def load_config(raw_path: object) -> dict[str, Any]:
+        path = _resolve_config_path(config_anchor, raw_path)
+        return _parse_algo_config(str(path)) if path is not None else {}
+
+    _, effective = resolve_candidate_manifest_runtime(
+        default_algo="",
+        manifest={
+            "base_config_path": manifest.get("base_config_path"),
+            "params": manifest.get("params"),
+        },
+        scenario={},
+        load_config=load_config,
+    )
+    return effective
 
 
 def _scenario_algo_override_runtime(
@@ -178,22 +151,22 @@ def _scenario_algo_override_runtime(
     scenario_key: str,
     config_anchor: Path | None,
 ) -> tuple[str, dict[str, Any]]:
-    """Resolve one scenario-level algorithm override.
+    """Resolve one scenario-specific algorithm override.
 
     Returns:
-        Effective algorithm key and flattened runtime config for the scenario.
+        Effective algorithm key and flattened runtime config.
     """
-    algo = str(override.get("algo", default_algo)).strip().lower()
-    if not algo:
-        raise ValueError(f"Scenario algo override is missing algo: {scenario_key}")
-    base_cfg: dict[str, Any] = {}
-    base_path = _resolve_config_path(config_anchor, override.get("base_config_path"))
-    if base_path is not None:
-        base_cfg = _parse_algo_config(str(base_path))
-    params = override.get("params") or {}
-    if not isinstance(params, dict):
-        raise TypeError("Policy-search scenario_algo_overrides params must be a mapping.")
-    return algo, _deep_merge_config(base_cfg, params)
+
+    def load_config(raw_path: object) -> dict[str, Any]:
+        path = _resolve_config_path(config_anchor, raw_path)
+        return _parse_algo_config(str(path)) if path is not None else {}
+
+    return resolve_candidate_manifest_runtime(
+        default_algo=default_algo,
+        manifest={"scenario_algo_overrides": {scenario_key: override}},
+        scenario={"name": scenario_key},
+        load_config=load_config,
+    )
 
 
 def _resolve_policy_search_candidate_runtime(
@@ -211,34 +184,20 @@ def _resolve_policy_search_candidate_runtime(
     manifest = (
         dict(algo_config) if algo_config is not None else _parse_algo_config(algo_config_path)
     )
-    if not _is_policy_search_candidate_manifest(manifest):
-        return default_algo, manifest
-
     config_anchor = Path(algo_config_path).resolve().parent if algo_config_path else None
-    scenario_key = _scenario_id(scenario)
-    algo_overrides = manifest.get("scenario_algo_overrides")
-    if isinstance(algo_overrides, dict):
-        override = algo_overrides.get(scenario_key)
-        if isinstance(override, dict):
-            return _scenario_algo_override_runtime(
-                override,
-                default_algo=default_algo,
-                scenario_key=scenario_key,
-                config_anchor=config_anchor,
-            )
 
-    effective = _load_base_candidate_config(manifest, config_anchor=config_anchor)
-    family_overrides = manifest.get("family_overrides")
-    if isinstance(family_overrides, dict):
-        family_cfg = family_overrides.get(_scenario_family(scenario), {})
-        if isinstance(family_cfg, dict):
-            effective = _deep_merge_config(effective, family_cfg)
-    scenario_overrides = manifest.get("scenario_overrides")
-    if isinstance(scenario_overrides, dict):
-        scenario_cfg = scenario_overrides.get(scenario_key, {})
-        if isinstance(scenario_cfg, dict):
-            effective = _deep_merge_config(effective, scenario_cfg)
-    return default_algo, effective
+    def load_config(config_path: object) -> dict[str, Any]:
+        resolved_path = _resolve_config_path(config_anchor, config_path)
+        if resolved_path is None:
+            return {}
+        return _parse_algo_config(str(resolved_path))
+
+    return resolve_candidate_manifest_runtime(
+        default_algo=default_algo,
+        manifest=manifest,
+        scenario=scenario,
+        load_config=load_config,
+    )
 
 
 def _apply_planner_selector_v2_context(

@@ -1,0 +1,10 @@
+{
+  "schema_version": "executor-admission.v1",
+  "source_root": "tests/fixtures/scenario_review/review_execute",
+  "receipt_reference": "receipt.json",
+  "receipt_sha256": "578805260c1c37404ad81677867916705e48f10dba01e5493dfcd691651f0822",
+  "preservation_destination": "external:post-execution-preservation",
+  "preservation_receipt_reference": "preservation-receipt.json",
+  "preservation_receipt_sha256": "12241ce084d6e02d5776b7b0a19c68d7208481ed2dbc14bb9984ff69892cc304",
+  "config_identity": "srev22-admitted-source-config.v1"
+}

@@ -2,6 +2,7 @@
 
 import configparser
 import importlib
+import pickle
 import sys
 import types
 from pathlib import Path
@@ -10,12 +11,16 @@ import numpy as np
 import pytest
 
 from robot_sf.planner.socnav import (
+    SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1,
+    SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1,
     OccupancyAwarePlannerMixin,
     PredictionPlannerAdapter,
     SamplingPlannerAdapter,
+    SocialForcePlannerAdapter,
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
 )
+from robot_sf.planner.socnav_base import resolve_social_force_goal_approach_version_with_mode
 from robot_sf.planner.socnav_occupancy import OccupancyAwarePlannerMixin as ExtractedOccupancyMixin
 
 
@@ -53,6 +58,130 @@ def _with_grid(observation: dict, grid: np.ndarray) -> dict:
     obs = dict(observation)
     obs["occupancy_grid"] = grid
     return obs
+
+
+def _goal_approach_observation(
+    *, goal: tuple[float, float] = (3.0, 0.0), next_goal: tuple[float, float] = (0.0, 0.0)
+) -> dict:
+    """Build a compact terminal-goal observation for versioned social-force checks."""
+    return {
+        "robot": {
+            "position": np.array([0.0, 0.0], dtype=np.float32),
+            "heading": np.array([0.0], dtype=np.float32),
+            "speed": np.array([0.0, 0.0], dtype=np.float32),
+            "radius": np.array([0.5], dtype=np.float32),
+        },
+        "goal": {
+            "current": np.asarray(goal, dtype=np.float32),
+            "next": np.asarray(next_goal, dtype=np.float32),
+        },
+        "pedestrians": {
+            "positions": np.zeros((0, 2), dtype=np.float32),
+            "velocities": np.zeros((0, 2), dtype=np.float32),
+            "count": np.array([0.0], dtype=np.float32),
+        },
+        "sim": {"timestep": np.array([0.1], dtype=np.float32)},
+    }
+
+
+def _with_goal_approach_grid(observation: dict, *, blocked: bool) -> dict:
+    """Attach the occupancy metadata required by the terminal controller."""
+    obs = dict(observation)
+    grid = np.zeros((4, 4, 4), dtype=np.float32)
+    if blocked:
+        grid[0, 1, 2] = 1.0
+    obs["occupancy_grid"] = grid
+    obs["occupancy_grid_meta_origin"] = np.array([-2.0, -2.0], dtype=np.float32)
+    obs["occupancy_grid_meta_resolution"] = np.array([1.0], dtype=np.float32)
+    obs["occupancy_grid_meta_size"] = np.array([4.0, 4.0], dtype=np.float32)
+    obs["occupancy_grid_meta_use_ego_frame"] = np.array([1.0], dtype=np.float32)
+    obs["occupancy_grid_meta_channel_indices"] = np.array([0, 1, 2, 3], dtype=np.float32)
+    return obs
+
+
+@pytest.mark.parametrize(
+    ("selector", "expected", "mode"),
+    [
+        (None, SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1, "defaulted_missing"),
+        ("", SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1, "historical_unversioned"),
+        (
+            SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1,
+            SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1,
+            "explicit",
+        ),
+        (
+            {"version": SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1},
+            SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1,
+            "explicit",
+        ),
+        (
+            {"goal_approach_version": SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1, "version": ""},
+            SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1,
+            "explicit",
+        ),
+        ({}, SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1, "defaulted_missing"),
+    ],
+)
+def test_versioned_social_force_goal_approach_selector(
+    selector: object, expected: str, mode: str
+) -> None:
+    """Resolve aliases and retain explicit provenance for the production fast lane."""
+    resolved, resolution_mode = resolve_social_force_goal_approach_version_with_mode(selector)
+    assert str(resolved) == expected
+    assert resolution_mode == mode
+    assert resolved.resolution_mode == mode
+
+
+def test_social_force_goal_approach_fail_closed_and_metadata() -> None:
+    """Cover invalid selectors, terminal proof branches, and reset metadata."""
+    with pytest.raises(TypeError, match="must be a string or None"):
+        resolve_social_force_goal_approach_version_with_mode(3)
+    with pytest.raises(ValueError, match="unsupported social-force"):
+        resolve_social_force_goal_approach_version_with_mode("terminal_goal_v9")
+    with pytest.raises(ValueError, match="conflicting"):
+        resolve_social_force_goal_approach_version_with_mode(
+            {
+                "goal_approach_version": SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1,
+                "version": SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1,
+            }
+        )
+
+    resolved, _ = resolve_social_force_goal_approach_version_with_mode(
+        SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1
+    )
+    resolved_again, mode_again = resolve_social_force_goal_approach_version_with_mode(resolved)
+    assert str(resolved_again) == SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1
+    assert mode_again == "explicit"
+    copied = pickle.loads(pickle.dumps(resolved))
+    assert copied.resolution_mode == "explicit"
+
+    adapter = SocialForcePlannerAdapter(
+        SocNavPlannerConfig(
+            social_force_goal_approach_version=SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1
+        )
+    )
+    for observation in (
+        _goal_approach_observation(goal=(3.0, 0.0), next_goal=(1.0, 0.0)),
+        _goal_approach_observation(goal=(5.0, 0.0)),
+        _goal_approach_observation(goal=(3.0, 0.0)),
+    ):
+        adapter.plan(observation)
+        assert adapter.diagnostics()["goal_approach"]["applied"] is False
+
+    clear = _with_goal_approach_grid(_goal_approach_observation(), blocked=False)
+    adapter.plan(clear)
+    clear_metadata = adapter.diagnostics()["goal_approach"]
+    assert clear_metadata["applied"] is True
+    assert clear_metadata["parameters"]["segment_clear"] is True
+    adapter.reset()
+    assert "final_goal" not in adapter.goal_approach_metadata()["parameters"]
+
+    blocked = _with_goal_approach_grid(_goal_approach_observation(), blocked=True)
+    adapter.plan(blocked)
+    blocked_metadata = adapter.diagnostics()["goal_approach"]
+    assert blocked_metadata["applied"] is False
+    assert blocked_metadata["parameters"]["segment_clear"] is False
+    assert adapter.diagnostics()["obstacle_force_law"]["applied"] is True
 
 
 def test_occupancy_mixin_is_reexported_from_socnav():

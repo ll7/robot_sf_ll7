@@ -1,0 +1,56 @@
+{
+  "presentation": {
+    "width": 320,
+    "height": 180,
+    "fps": 10.0,
+    "speed": 1.0,
+    "pauses": [
+      {
+        "presentation_t_s": 0.2,
+        "duration_s": 0.1,
+        "source_t_s": 0.2
+      }
+    ],
+    "cuts": [],
+    "presentation_timestamp_map": {
+      "policy": "explicit_table",
+      "mapping": [
+        {
+          "frame_idx": 0,
+          "presentation_t_s": 0.0,
+          "source_t_s": 0.0
+        },
+        {
+          "frame_idx": 1,
+          "presentation_t_s": 0.1,
+          "source_t_s": 0.1
+        },
+        {
+          "frame_idx": 2,
+          "presentation_t_s": 0.2,
+          "source_t_s": 0.2
+        },
+        {
+          "frame_idx": 3,
+          "presentation_t_s": 0.3,
+          "source_t_s": 0.2,
+          "is_pause": true
+        },
+        {
+          "frame_idx": 4,
+          "presentation_t_s": 0.4,
+          "source_t_s": 0.3
+        }
+      ]
+    }
+  },
+  "layers": [
+    "paths",
+    "controls",
+    "clearance",
+    "markers",
+    "labels"
+  ],
+  "resampling_policy": "nearest",
+  "units": "meters, seconds, radians"
+}

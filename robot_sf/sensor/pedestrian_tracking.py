@@ -53,6 +53,23 @@ class TrackStatus(StrEnum):
     RETIRED = "retired"
 
 
+def _validate_track_observation_state(
+    observed_this_step: bool,
+    missed_steps: int,
+    status: TrackStatus,
+) -> None:
+    """Require observation marker, miss count, and lifecycle status to agree."""
+    if type(observed_this_step) is not bool:
+        raise TypeError("observed_this_step must be a bool")
+    if status in {TrackStatus.LOST, TrackStatus.RETIRED}:
+        if observed_this_step:
+            raise ValueError("LOST and RETIRED tracks cannot be observed_this_step")
+        if missed_steps == 0:
+            raise ValueError("LOST and RETIRED tracks must have missed steps")
+    elif missed_steps > 0:
+        raise ValueError("only LOST and RETIRED tracks may have missed steps")
+
+
 # These aliases make the contract discoverable from either the domain-specific
 # or the shorter adapter vocabulary without changing the serialized values.
 CoordinateFrame = PedestrianCoordinateFrame
@@ -1105,7 +1122,12 @@ class TrackAssociation:
 
 @dataclass(frozen=True, slots=True)
 class PedestrianTrack:
-    """Immutable per-track output consumed by future prediction adapters."""
+    """Immutable per-track output consumed by future prediction adapters.
+
+    ``observed_this_step`` is producer-owned evidence for this result's decision
+    point. It is distinct from ``last_observation_slot``, which is retained only
+    as diagnostic source-row metadata.
+    """
 
     track_id: int
     timestamp_s: float
@@ -1126,6 +1148,7 @@ class PedestrianTrack:
     timestamp_history_s: np.ndarray
     blockers: tuple[str, ...]
     config_hash: str
+    observed_this_step: bool = False
 
     def __post_init__(self) -> None:  # noqa: C901
         """Validate and defensively freeze track state."""
@@ -1146,6 +1169,7 @@ class PedestrianTrack:
         except ValueError as exc:
             raise ValueError("status must be tentative, confirmed, lost, or retired") from exc
         object.__setattr__(self, "status", status)
+        _validate_track_observation_state(self.observed_this_step, self.missed_steps, status)
         confidence = _finite_scalar(self.association_confidence, "association_confidence")
         if not 0.0 <= confidence <= 1.0:
             raise ValueError("association_confidence must be between 0 and 1")
@@ -1250,6 +1274,7 @@ class PedestrianTrack:
             "age_steps": self.age_steps,
             "visible_age_steps": self.visible_age_steps,
             "missed_steps": self.missed_steps,
+            "observed_this_step": self.observed_this_step,
             "status": (self.status.value if isinstance(self.status, TrackStatus) else self.status),
             "association_confidence": self.association_confidence,
             "last_observation_slot": self.last_observation_slot,
@@ -1329,7 +1354,22 @@ class PedestrianTrackingDiagnostics:
 
 @dataclass(frozen=True, slots=True)
 class PedestrianTrackingResult:
-    """Immutable result of one tracker update."""
+    """Immutable result of one tracker update.
+
+    ``reset_epoch`` is a deterministic per-instance counter owned by the
+    producing tracker: it starts at zero and advances by exactly one on each
+    ``PedestrianTracker.reset()``.  Composite ``(reset_epoch, track_id)``
+    identity is available only for producer-supplied integer epochs; ``None``
+    means producer provenance is unavailable for legacy or manual
+    construction that omits an epoch, and no epoch is manufactured in that
+    case.  Within one tracker instance lifecycle with an integer epoch, the
+    numeric ``track_id`` restarts at one after reset while the epoch
+    distinguishes the resulting generations.  Independent tracker instances
+    are not separated by epoch alone: callers that correlate results from
+    more than one tracker must supply their own namespace.  Epochs never
+    encode tracker-goal adapter IDs, simulator indices, observation-row
+    identity, object addresses, or physical-person claims.
+    """
 
     timestamp_s: float
     step_index: int
@@ -1337,8 +1377,9 @@ class PedestrianTrackingResult:
     associations: tuple[TrackAssociation, ...]
     diagnostics: PedestrianTrackingDiagnostics
     history_order: str = HISTORY_ORDER
+    reset_epoch: int | None = None
 
-    def __post_init__(self) -> None:  # noqa: C901
+    def __post_init__(self) -> None:  # noqa: C901, PLR0912
         """Validate deterministic output ordering."""
         timestamp = _finite_scalar(self.timestamp_s, "timestamp_s")
         if timestamp < 0.0:
@@ -1346,6 +1387,10 @@ class PedestrianTrackingResult:
         object.__setattr__(self, "timestamp_s", timestamp)
         if type(self.step_index) is not int or self.step_index < 0:
             raise ValueError("step_index must be a non-negative integer")
+        if self.reset_epoch is not None and (
+            type(self.reset_epoch) is not int or self.reset_epoch < 0
+        ):
+            raise ValueError("reset_epoch must be None or a non-negative integer")
         tracks = tuple(self.tracks)
         associations = tuple(self.associations)
         if not isinstance(self.diagnostics, PedestrianTrackingDiagnostics):
@@ -1381,6 +1426,29 @@ class PedestrianTrackingResult:
             for association in associations
         ):
             raise ValueError("associations must match each track's last_observation_slot")
+        associated_track_ids = set(association_track_ids)
+        for track in tracks:
+            associated = track.track_id in associated_track_ids
+            status = TrackStatus(track.status)
+            if associated and (
+                not track.observed_this_step
+                or status in {TrackStatus.LOST, TrackStatus.RETIRED}
+                or track.missed_steps > 0
+            ):
+                raise ValueError("associations conflict with current track lifecycle state")
+            if (
+                track.observed_this_step
+                and not associated
+                and not (
+                    track.age_steps == 1
+                    and track.visible_age_steps == 1
+                    and track.missed_steps == 0
+                    and status in {TrackStatus.TENTATIVE, TrackStatus.CONFIRMED}
+                )
+            ):
+                raise ValueError("observed unassociated tracks must be current-step births")
+            if not associated and not track.observed_this_step and track.missed_steps == 0:
+                raise ValueError("unobserved tracks must have missed steps")
         object.__setattr__(self, "tracks", tracks)
         object.__setattr__(self, "associations", associations)
         if self.history_order != HISTORY_ORDER:
@@ -1415,6 +1483,7 @@ class _TrackState:
     age_steps: int
     visible_age_steps: int
     missed_steps: int
+    observed_this_step: bool
     missed_seconds: float
     status: TrackStatus
     association_confidence: float
@@ -1439,6 +1508,7 @@ def _clone_track_state(state: _TrackState) -> _TrackState:
         age_steps=state.age_steps,
         visible_age_steps=state.visible_age_steps,
         missed_steps=state.missed_steps,
+        observed_this_step=state.observed_this_step,
         missed_seconds=state.missed_seconds,
         status=state.status,
         association_confidence=state.association_confidence,
@@ -1588,6 +1658,7 @@ class PedestrianTracker:
             self.config = PedestrianTrackingConfig.from_mapping(config)
         self._tracks: dict[int, _TrackState] = {}
         self._next_track_id = 1
+        self._reset_epoch = 0
         self._last_timestamp_s: float | None = None
         self._last_step_index: int | None = None
 
@@ -1598,19 +1669,32 @@ class PedestrianTracker:
             self._public_track(self._tracks[track_id]) for track_id in sorted(self._tracks)
         )
 
+    @property
+    def reset_epoch(self) -> int:
+        """Return the current per-instance reset epoch carried by results."""
+        return self._reset_epoch
+
     def reset(self) -> None:
-        """Reset all estimator memory and restart episode-local IDs at one."""
+        """Reset estimator memory, restart episode-local IDs, and advance the epoch.
+
+        The numeric ID restart is preserved for compatibility; the epoch is the
+        producer-owned discriminator that lets a retained consumer separate
+        post-reset births from pre-reset identities via ``(reset_epoch,
+        track_id)`` within this instance's lifecycle.
+        """
         self._tracks.clear()
         self._next_track_id = 1
+        self._reset_epoch += 1
         self._last_timestamp_s = None
         self._last_step_index = None
 
     def update(self, snapshot: PedestrianObservationSnapshot) -> PedestrianTrackingResult:
         """Consume one snapshot atomically and return deterministic tracking output.
 
-        A failed update must not consume a temporal cursor, track ID, or partial
-        mutable track transition. This keeps the same snapshot retryable after
-        an internal estimator or result-construction failure.
+        A failed update must not consume a temporal cursor, track ID, advance
+        the reset epoch, or leave a partial mutable track transition. This
+        keeps the same snapshot retryable after an internal estimator or
+        result-construction failure.
 
         Returns:
             An immutable tracking result for the snapshot timestamp.
@@ -1619,6 +1703,7 @@ class PedestrianTracker:
             track_id: _clone_track_state(state) for track_id, state in self._tracks.items()
         }
         next_track_id = self._next_track_id
+        reset_epoch = self._reset_epoch
         last_timestamp_s = self._last_timestamp_s
         last_step_index = self._last_step_index
         try:
@@ -1626,6 +1711,7 @@ class PedestrianTracker:
         except Exception:
             self._tracks = state_snapshot
             self._next_track_id = next_track_id
+            self._reset_epoch = reset_epoch
             self._last_timestamp_s = last_timestamp_s
             self._last_step_index = last_step_index
             raise
@@ -1659,6 +1745,7 @@ class PedestrianTracker:
                 tracks=(),
                 associations=(),
                 diagnostics=diagnostics,
+                reset_epoch=self._reset_epoch,
             )
         if self._last_timestamp_s is not None and snapshot.timestamp_s < self._last_timestamp_s:
             raise ValueError("timestamp_s must be monotonically non-decreasing")
@@ -1793,6 +1880,7 @@ class PedestrianTracker:
             tracks=output_tracks,
             associations=tuple(sorted(associations, key=lambda association: association.track_id)),
             diagnostics=diagnostics,
+            reset_epoch=self._reset_epoch,
         )
         self._last_timestamp_s = snapshot.timestamp_s
         self._last_step_index = snapshot.step_index
@@ -1952,6 +2040,7 @@ class PedestrianTracker:
             age_steps=1,
             visible_age_steps=1,
             missed_steps=0,
+            observed_this_step=True,
             missed_seconds=0.0,
             status=(
                 TrackStatus.CONFIRMED
@@ -2019,6 +2108,7 @@ class PedestrianTracker:
         state.age_steps += gap_steps
         state.visible_age_steps += 1
         state.missed_steps = 0
+        state.observed_this_step = True
         state.missed_seconds = 0.0
         if state.status is not TrackStatus.CONFIRMED:
             state.status = (
@@ -2055,6 +2145,7 @@ class PedestrianTracker:
         state.step_index = observation.step_index
         state.age_steps += gap_steps
         state.missed_steps += gap_steps
+        state.observed_this_step = False
         state.missed_seconds += dt_s
         should_retire = retire or self._exceeds_missed_limit(
             state.missed_steps, state.missed_seconds
@@ -2103,6 +2194,7 @@ class PedestrianTracker:
             age_steps=state.age_steps,
             visible_age_steps=state.visible_age_steps,
             missed_steps=state.missed_steps,
+            observed_this_step=state.observed_this_step,
             status=state.status,
             association_confidence=state.association_confidence,
             last_observation_slot=state.last_observation_slot,

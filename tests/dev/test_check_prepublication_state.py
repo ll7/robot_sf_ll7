@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import io
 import json
 import subprocess
+import sys
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
@@ -2033,3 +2035,82 @@ def test_real_git_main_fast_forward_keeps_unchanged_head_refresh_required(
         "baseline": real_git_repo.initial_main_sha,
         "current": new_main_sha,
     }
+
+
+def test_check_missing_snapshot_path_hints_capture_roundtrip(capsys) -> None:
+    """Omitting the baseline path must name the capture roundtrip, not argparse."""
+    assert gate.main(["check"]) == 4
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["decision"] == "blocked"
+    assert output["reason"] == "state_collection_failed"
+    assert "capture" in output["error"]
+    assert "--snapshot-path -" in output["error"]
+
+
+def test_parser_allows_omitted_snapshot_path() -> None:
+    """The check baseline path is optional because stdin composition exists."""
+    assert gate._parser().parse_args(["check"]).snapshot_path is None
+
+
+def test_check_stdin_snapshot_is_ready(tmp_path, monkeypatch, capsys) -> None:
+    """A piped snapshot must check exactly like a file baseline."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(gate, "collect_live_state", lambda **_: _snapshot())
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(_snapshot())))
+
+    assert gate.main(["check", "--snapshot-path", "-"]) == 0
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["decision"] == "ready"
+    snapshot_rel = gate._default_snapshot_path("feature/fresh-state")
+    persisted = json.loads(
+        (tmp_path / snapshot_rel.parent / f"{snapshot_rel.stem}.decision.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert persisted["reason"] == "remote_state_unchanged"
+
+
+def test_check_stdin_unwraps_capture_payload(tmp_path, monkeypatch, capsys) -> None:
+    """Piping capture output into check must use the wrapped baseline."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(gate, "collect_live_state", lambda **_: _snapshot())
+    capture_payload = {"kind": "capture", "decision": "ready", "snapshot": _snapshot()}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(capture_payload)))
+
+    assert gate.main(["check", "--snapshot-path", "-"]) == 0
+
+    assert json.loads(capsys.readouterr().out)["decision"] == "ready"
+
+
+def test_check_stdin_invalid_json_is_blocked(monkeypatch, capsys) -> None:
+    """Unparsable stdin must fail closed without a decision file."""
+    monkeypatch.setattr(sys, "stdin", io.StringIO("{not json"))
+
+    assert gate.main(["check", "--snapshot-path", "-"]) == 4
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["decision"] == "blocked"
+
+
+def test_check_stdin_wrong_schema_is_blocked(monkeypatch, capsys) -> None:
+    """A non-snapshot document on stdin must fail closed."""
+    monkeypatch.setattr(
+        sys, "stdin", io.StringIO(json.dumps({"schema": "other", "kind": "snapshot"}))
+    )
+
+    assert gate.main(["check", "--snapshot-path", "-"]) == 4
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["decision"] == "blocked"
+
+
+def test_check_help_documents_stdin_roundtrip(capsys) -> None:
+    """Check help must document the piped capture roundtrip."""
+    with pytest.raises(SystemExit):
+        gate._parser().parse_args(["check", "--help"])
+
+    help_text = capsys.readouterr().out
+    assert "stdin" in help_text
+    assert "capture" in help_text

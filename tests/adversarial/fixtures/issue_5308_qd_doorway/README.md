@@ -16,7 +16,7 @@ claim, or a validated QD-superiority result without a held-out comparator.
 | File | Schema | Purpose |
 | --- | --- | --- |
 | `archive.json` | `adversarial_qd_archive.v1` | Populated MAP-Elites grid: filled cells, coverage, QD score, distinct certified failure modes. |
-| `comparison.json` | `adversarial_qd_archive.v1` (comparison) | Equal-budget MAP-Elites vs single-objective diversity comparison. |
+| `comparison.json` | `adversarial_qd_archive.v1` (comparison) | Historical comparison artifact from the recorded code revision; its 120 proposal slots all reached the evaluator. |
 | `campaign_summary.json` | `adversarial_qd_archive.v1` | Run summary provenance block. |
 | `run_manifest.json` | `adversarial-qd-campaign-run.v1` | Budget, wall-clock, git head, claim boundary. |
 

@@ -1,0 +1,195 @@
+{
+  "schema": "benchmark_auditor_v1_acceptance.v1",
+  "report_date": "2026-09-22",
+  "status": "ba05_bounded_acceptance_complete_ba06_epic_open",
+  "repository": "ll7/robot_sf_ll7",
+  "revisions": {
+    "acceptance_base": "9d37fd1f619fcda682e42773923ea8ddf93fb8d1",
+    "final_runtime_pr_head": "4833a1eb06b60f04aca78003789bdf992361c8be",
+    "final_runtime_merge": "7521db3b5f1b7ab562971ffe1000383416e4eadc",
+    "current_origin_main": "7521db3b5f1b7ab562971ffe1000383416e4eadc",
+    "final_runtime_metadata_digest": "fe00b9dad7d6b15329d5720e69c514b69cc19c280da67b8311ec73e3f637e7dd",
+    "guarded_merge_receipt_digest": "f66abadfaf8f8f4bb212a0268f358e467962d9158ae06e1b4dd307f4cef74535"
+  },
+  "evidence_boundary": {
+    "benchmark_claim": false,
+    "scientific_claim": false,
+    "fallback_or_degraded_promoted": false,
+    "note": "Diagnostic, fake-provider, unavailable, and storage-limited results remain explicitly classified."
+  },
+  "slices": [
+    {
+      "name": "BA-05 D1 append-only publication",
+      "issue": 9488,
+      "pr": 9559,
+      "exact_head": "ec8061c4517fb3926fefd1b1a2cb6cb3cdcf0088",
+      "merge_sha": "6787f5b93a1023dd243f66d81b1e6a13fe6871a3",
+      "focused": "102 passed",
+      "hosted_run": "35655668527",
+      "status": "implemented_and_verified",
+      "scope": "bounded_fake_or_injected_provider_contract"
+    },
+    {
+      "name": "BA-05 D2 route/accounting",
+      "issue": 9488,
+      "pr": 9558,
+      "exact_head": "78fb3c818fafe1ae0ea1522c96092e55b8460e3b",
+      "merge_sha": "6982a2456aa98cabff6f5186d396d4f15eb72b48",
+      "focused": "113 passed, 2 skipped",
+      "hosted_run": "35658827492",
+      "status": "implemented_and_verified",
+      "scope": "bounded_route_and_local_accounting_contract"
+    },
+    {
+      "name": "BA-06 server-held publication",
+      "issue": 9489,
+      "pr": 9561,
+      "exact_head": "e2c84dd8ea75bd63a62005ecbc55ae7847d06328",
+      "merge_sha": "208e8a3bf02f5b2c2b3eafe39fe776da07a9dcc7",
+      "focused": "149 passed",
+      "hosted_run": "35667772524",
+      "status": "diagnostic_only",
+      "scope": "loopback_route_with_injected_provider"
+    },
+    {
+      "name": "BA-06 external MCP same-context smoke",
+      "issue": 9489,
+      "pr": 9565,
+      "exact_head": "2d486ed94bfc1d785e1fe576ca8232ab3bc7d880",
+      "merge_sha": "ac2818befaf5e5ce1c783a02d3eed2759f27eb40",
+      "focused": "2 focused tests passed",
+      "hosted_run": "35676387775 attempt 2",
+      "status": "diagnostic_only",
+      "scope": "external_mcp_context_contract"
+    },
+    {
+      "name": "BA-06 runtime friction repair",
+      "issue": 9489,
+      "pr": 9569,
+      "exact_head": "4833a1eb06b60f04aca78003789bdf992361c8be",
+      "merge_sha": "7521db3b5f1b7ab562971ffe1000383416e4eadc",
+      "focused": "store/render/server 181 passed; live call 17.55s from 64.88s baseline",
+      "hosted_run": "35683653944; changed coverage 106609257737; merge gate 35685480912",
+      "status": "implemented_and_verified",
+      "scope": "bounded_list_records_projection_repair"
+    }
+  ],
+  "command_receipts": [
+    {
+      "command": ".venv/bin/python -m pytest tests/analysis_workbench/test_audit_github_rest.py tests/analysis_workbench/test_audit_github.py tests/analysis_workbench/test_audit_github_service.py -q",
+      "exit_code": 0,
+      "result": "126 passed in 49.85s",
+      "classification": "implemented_and_verified"
+    },
+    {
+      "command": ".venv/bin/python -m pytest tests/analysis_workbench/test_audit_codex_app_server.py::test_d2_strict_provider_ceiling_requires_verified_capability tests/analysis_workbench/test_audit_codex_app_server.py::test_d2_offline_mode_refuses_provider_work_before_transport tests/analysis_workbench/test_audit_codex_app_server.py::test_d2_strict_ceiling_rejects_a_reservation_above_verified_cap tests/analysis_workbench/test_audit_codex_app_server.py::test_d2_local_accounting_records_provider_overspend_without_retry -q",
+      "exit_code": 0,
+      "result": "4 passed in 2.97s",
+      "classification": "implemented_and_verified"
+    },
+    {
+      "command": ".venv/bin/python -m pytest tests/analysis_workbench/test_audit_store.py tests/render/test_audit_workbench_live_coverage.py tests/render/test_audit_workbench_server.py tests/render/test_audit_workbench.py -q",
+      "exit_code": 0,
+      "result": "181 passed; live coverage call 17.55s",
+      "classification": "implemented_and_verified"
+    },
+    {
+      "command": ".venv/bin/python -m pytest tests/analysis_workbench/test_audit_service_review.py -q",
+      "exit_code": 0,
+      "result": "6 passed",
+      "classification": "implemented_and_verified"
+    },
+    {
+      "command": "uv run python scripts/dev/pr_ready_check.sh",
+      "exit_code": 120,
+      "result": "967 passed before sqlite3.OperationalError: database or disk is full",
+      "classification": "blocked_external",
+      "issue": 9532,
+      "note": "Host storage limitation; not attributed to the changed code."
+    }
+  ],
+  "packages": [
+    {"name": "BA-01", "issue": 9485, "state": "closed", "status": "implemented_but_unproven"},
+    {"name": "BA-02", "issue": 9486, "state": "closed", "status": "implemented_but_unproven"},
+    {"name": "BA-03", "issue": 9484, "state": "closed", "status": "implemented_and_verified", "scope": "canonical record annotation finding contracts"},
+    {"name": "BA-04", "issue": 9487, "state": "closed", "status": "implemented_but_unproven"},
+    {"name": "BA-05", "issue": 9488, "state": "open", "status": "implemented_but_unproven", "scope": "bounded D1/D2 accepted; live provider and cap gates remain"},
+    {"name": "BA-06", "issue": 9489, "state": "open", "status": "diagnostic_only", "scope": "runtime/publication slices; full real-data workflow missing"}
+  ],
+  "srev_and_prerequisite": [
+    {"issue": 9285, "status": "implemented_but_unproven", "scope": "synchronized panels contract/test integration"},
+    {"issue": 9287, "status": "implemented_but_unproven", "scope": "annotation speed/reference contract/test integration"},
+    {"issue": 9288, "status": "implemented_but_unproven", "scope": "planner/pedestrian diagnostic contract/test integration"},
+    {"issue": 9296, "status": "implemented_but_unproven", "scope": "bounded loop; admitted-source/live execution pending"},
+    {"issue": 9299, "status": "implemented_but_unproven", "scope": "session UI; admitted-source/live execution pending"},
+    {"issue": 9417, "status": "implemented_but_unproven", "scope": "source-admission enforcement remains evidence dependency"}
+  ],
+  "decision_matrix": [
+    {"id": 1, "status": "implemented_but_unproven", "evidence": "BA package paths exist; no complete end-to-end campaign receipt"},
+    {"id": 2, "status": "implemented_but_unproven", "evidence": "queue/packet contracts; full UI route absent"},
+    {"id": 3, "status": "implemented_but_unproven", "evidence": "scan/detector contracts; no second campaign proof"},
+    {"id": 4, "status": "implemented_but_unproven", "evidence": "twelve-family registry; source availability remains unproven"},
+    {"id": 5, "status": "implemented_but_unproven", "evidence": "ranking tests; full coverage-aware acceptance absent"},
+    {"id": 6, "status": "implemented_and_verified", "evidence": "typed suspicion/observation/evidence/confidence service tests"},
+    {"id": 7, "status": "implemented_and_verified", "evidence": "annotation contract tests"},
+    {"id": 8, "status": "implemented_and_verified", "evidence": "finding/annotation schema tests"},
+    {"id": 9, "status": "implemented_but_unproven", "evidence": "record contracts; synchronized editor absent"},
+    {"id": 10, "status": "diagnostic_only", "evidence": "loopback retained-trace route; full media sync absent"},
+    {"id": 11, "status": "implemented_but_unproven", "evidence": "panel contracts; no complete browser receipt"},
+    {"id": 12, "status": "diagnostic_only", "evidence": "fake provider and MCP/loopback tests; no live provider"},
+    {"id": 13, "status": "implemented_but_unproven", "evidence": "detector/queue contracts; no campaign-level result"},
+    {"id": 14, "status": "implemented_and_verified", "evidence": "protocol and hand-computed tiny-strata tests"},
+    {"id": 15, "status": "implemented_but_unproven", "evidence": "detector/statistical adapters; no second campaign"},
+    {"id": 16, "status": "diagnostic_only", "evidence": "native diagnostic and cancellation contracts; admitted native source absent"},
+    {"id": 17, "status": "implemented_and_verified", "evidence": "canonical store and rebuildable projection tests"},
+    {"id": 18, "status": "implemented_but_unproven", "evidence": "service/store ownership; full knowledge loop absent"},
+    {"id": 19, "status": "implemented_and_verified", "evidence": "queue reason/component contract tests"},
+    {"id": 20, "status": "authorized_later_extension", "evidence": "human-approved proposal path; adaptive/learned policy later"},
+    {"id": 21, "status": "implemented_but_unproven", "evidence": "annotation contracts; complete UI proof absent"},
+    {"id": 22, "status": "implemented_but_unproven", "evidence": "reference schema; source/media incomplete"},
+    {"id": 23, "status": "implemented_but_unproven", "evidence": "rendering contracts; browser acceptance absent"},
+    {"id": 24, "status": "implemented_and_verified", "evidence": "finding aggregation and persistence tests"},
+    {"id": 25, "status": "implemented_but_unproven", "evidence": "similarity contract; no related-case campaign receipt"},
+    {"id": 26, "status": "implemented_but_unproven", "evidence": "queue tests; full protocol integration absent"},
+    {"id": 27, "status": "implemented_but_unproven", "evidence": "control-selection contracts; no complete campaign"},
+    {"id": 28, "status": "missing", "evidence": "no accepted release-specific completion receipt"},
+    {"id": 29, "status": "diagnostic_only", "evidence": "service/fake-provider routes; live provider/native source unproven"},
+    {"id": 30, "status": "blocked_external", "evidence": "guards exist; complete admitted live source unavailable"},
+    {"id": 31, "status": "implemented_but_unproven", "evidence": "service contracts; no real Codex receipt"},
+    {"id": 32, "status": "implemented_and_verified", "evidence": "local outbox/finding markers and fake-provider retry tests"},
+    {"id": 33, "status": "blocked_external", "evidence": "current-schema contracts; second campaign and historical adapters absent"},
+    {"id": 34, "status": "implemented_but_unproven", "evidence": "materialization contracts; native assets not accepted"},
+    {"id": 35, "status": "implemented_but_unproven", "evidence": "registry/tests; full campaign execution absent"},
+    {"id": 36, "status": "implemented_and_verified", "evidence": "JSON/NDJSON store and SQLite projection hosted-tested"},
+    {"id": 37, "status": "missing", "evidence": "no one-route real-data browser acceptance"},
+    {"id": 38, "status": "diagnostic_only", "evidence": "stdio/MCP dispatcher and loopback tests; no live external provider"},
+    {"id": 39, "status": "implemented_but_unproven", "evidence": "queue/Next tests; no full active-policy campaign"}
+  ],
+  "gates": {
+    "github_cas": {
+      "status": "blocked_external",
+      "claims": ["no cross-system atomic CAS proven", "no exactly-once remote delivery claim"],
+      "required_before_live_acceptance": ["complete pagination/readback", "duplicate marker detection", "timeout reconciliation", "durable outbox replay", "canonical finding-link CAS"],
+      "forbidden_substitute": "read-then-PATCH body update; compatibility fake only"
+    },
+    "provider_cap": {
+      "status": "blocked_external",
+      "offline": "provider-free read-only",
+      "local_accounting": "finite local ledger; observed overspend recorded; no physical enforcement",
+      "strict_provider_ceiling": "refuses without verified finite provider compute ceiling and exact route/provider/model",
+      "current_proof": "tested refusal; App Server token telemetry has no measured provider compute quantity",
+      "fallback_policy": "no premium or degraded fallback"
+    },
+    "real_data_browser_codex_native": {
+      "status": "diagnostic_only",
+      "unproven": ["complete real-data browser workflow", "live Codex conversation", "native source-bound rerun", "media recovery", "external reconnect/cancellation"],
+      "limitations": ["optional imageio_ffmpeg gap #9560", "host filesystem exhaustion #9532"]
+    }
+  },
+  "open_work": {
+    "epic": 9483,
+    "issues": [9488, 9489],
+    "complete": false,
+    "next_action": "resume BA-06 only as separately scoped work against the explicit CAS, provider-cap, source-admission, and real-data gates"
+  }
+}

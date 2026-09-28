@@ -2108,15 +2108,22 @@ def test_worktree_creation_lock_survives_detached_descendant_with_descriptor(
         "import os, sys, time\n"
         "from pathlib import Path\n"
         "started, release, finished = map(Path, sys.argv[1:])\n"
+        "r, w = os.pipe()\n"
         "pid = os.fork()\n"
         "if pid == 0:\n"
+        "    os.close(r)\n"
         "    os.setsid()\n"
         "    started.write_text(str(os.getpid()), encoding='utf-8')\n"
+        "    os.write(w, b'1')\n"
+        "    os.close(w)\n"
         "    while not release.exists():\n"
         "        time.sleep(0.02)\n"
         "    finished.touch()\n"
         "    os.close(int(os.environ['ROBOT_SF_WORKTREE_LOCK_FD']))\n"
         "    os._exit(0)\n"
+        "os.close(w)\n"
+        "os.read(r, 1)\n"
+        "os.close(r)\n"
         "os._exit(0)\n"
     )
     holder = subprocess.Popen(
@@ -2140,13 +2147,13 @@ def test_worktree_creation_lock_survives_detached_descendant_with_descriptor(
     contender: subprocess.Popen[bytes] | None = None
     detached_pid: int | None = None
     try:
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + 15
         while not started.exists() and time.monotonic() < deadline:
             assert holder.poll() is None, "lock helper exited before detached child started"
             time.sleep(0.02)
         assert started.is_file(), "detached child did not start"
         detached_pid = int(started.read_text(encoding="utf-8"))
-        assert holder.wait(timeout=10) == 0
+        assert holder.wait(timeout=15) == 0
 
         contender = subprocess.Popen(
             [
@@ -2167,11 +2174,11 @@ def test_worktree_creation_lock_survives_detached_descendant_with_descriptor(
         assert contender.poll() is None, "detached descendant released its inherited lock"
 
         release.touch()
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + 15
         while not finished.exists() and time.monotonic() < deadline:
             time.sleep(0.02)
         assert finished.is_file(), "detached child did not finish after the release marker"
-        assert contender.wait(timeout=10) == 0
+        assert contender.wait(timeout=15) == 0
         assert contender_marker.read_text(encoding="utf-8") == "ok"
     finally:
         release.touch()

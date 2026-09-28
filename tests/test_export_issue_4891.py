@@ -358,6 +358,69 @@ class TestPinGeneratedAt:
         meta = json.loads((bundle_dir / "metadata.json").read_text(encoding="utf-8"))
         assert meta["generated_at_utc"] == pin
 
+    def test_missing_source_commit_is_not_inferred_from_export_checkout(
+        self, tmp_path: Path
+    ) -> None:
+        record = self._make_minimal_record()
+        selection = _export_module.SelectedEpisode(
+            planner="goal",
+            scenario_id="classic_head_on_corridor_low",
+            seed=20,
+            selection_mode="median",
+            metric_value=1.0,
+            episode_id="test_episode",
+            status="collision",
+        )
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+
+        metadata = _export_module.write_bundle(
+            episode_record=record,
+            selection=selection,
+            output_dir=bundle_dir,
+            pin_generated_at="2026-01-01T00:00:00+00:00",
+        )
+
+        assert metadata["source_commit"] is None
+        assert "Source commit: `not specified`" in (bundle_dir / "README.md").read_text(
+            encoding="utf-8"
+        )
+
+    def test_custom_campaign_provenance_is_retained(self, tmp_path: Path) -> None:
+        record = self._make_minimal_record()
+        selection = _export_module.SelectedEpisode(
+            planner="goal",
+            scenario_id="classic_head_on_corridor_low",
+            seed=20,
+            selection_mode="median",
+            metric_value=1.0,
+            episode_id="test_episode",
+            status="collision",
+        )
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+
+        metadata = _export_module.write_bundle(
+            episode_record=record,
+            selection=selection,
+            output_dir=bundle_dir,
+            provenance=_export_module.CampaignProvenance(
+                campaign_id="campaign-v007",
+                campaign_job="15716",
+                source_commit="07f7e8d4",
+                release_tag="paper-matrix-v2",
+                config_sha256="config-digest",
+                issue_url="https://github.com/ll7/robot_sf_ll7/issues/9431",
+            ),
+        )
+
+        assert metadata["campaign_id"] == "campaign-v007"
+        assert metadata["campaign_job"] == "15716"
+        assert metadata["source_commit"] == "07f7e8d4"
+        assert metadata["release_tag"] == "paper-matrix-v2"
+        assert metadata["config_sha256"] == "config-digest"
+        assert metadata["issue"] == "https://github.com/ll7/robot_sf_ll7/issues/9431"
+
     def test_pin_generated_at_byte_identical(self, tmp_path: Path) -> None:
         """pin_generated_at makes metadata.json and trace_series.json byte-identical."""
         pin = "2026-07-08T23:13:18.753884+00:00"

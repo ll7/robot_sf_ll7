@@ -1,0 +1,102 @@
+{
+  "schema_version": "simulation_trace_export.v1",
+  "trace_id": "fixture_trace_srev14",
+  "source": {
+    "scenario_id": "bottleneck_evasion_diagnostic",
+    "seed": 42,
+    "planner_id": "predictive_v2",
+    "episode_id": "ep_srev14_001",
+    "generated_by": "synthetic fixture"
+  },
+  "evidence_boundary": "diagnostic_only",
+  "coordinate_frame": "world",
+  "units": {
+    "position": "m",
+    "heading": "rad",
+    "time": "s",
+    "velocity": "m/s"
+  },
+  "frames": [
+    {
+      "step": 0,
+      "time_s": 0.0,
+      "robot": {
+        "position": [0.0, 0.0],
+        "heading": 0.0,
+        "velocity": [0.5, 0.0],
+        "radius": 0.35,
+        "speed": 0.5,
+        "clearance_m": 1.35
+      },
+      "pedestrians": [
+        {
+          "id": "ped_1",
+          "position": [2.0, 0.0],
+          "velocity": [-0.5, 0.0],
+          "radius": 0.30
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.5,
+          "angular_velocity": 0.0
+        },
+        "event": "approach"
+      }
+    },
+    {
+      "step": 1,
+      "time_s": 0.5,
+      "robot": {
+        "position": [0.5, 0.0],
+        "heading": 0.0,
+        "velocity": [0.95, 0.0],
+        "radius": 0.35,
+        "speed": 0.95,
+        "clearance_m": 0.45
+      },
+      "pedestrians": [
+        {
+          "id": "ped_1",
+          "position": [1.6, 0.0],
+          "velocity": [-0.4, 0.1],
+          "radius": 0.30
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.95,
+          "angular_velocity": 0.2
+        },
+        "event": "near_miss"
+      }
+    },
+    {
+      "step": 2,
+      "time_s": 1.0,
+      "robot": {
+        "position": [1.0, 0.4],
+        "heading": 0.4,
+        "velocity": [0.8, 0.3],
+        "radius": 0.35,
+        "speed": 0.8544,
+        "clearance_m": 0.85
+      },
+      "pedestrians": [
+        {
+          "id": "ped_1",
+          "position": [1.0, -0.6],
+          "velocity": [0.0, -0.5],
+          "radius": 0.30
+        }
+      ],
+      "planner": {
+        "selected_action": {
+          "linear_velocity": 0.85,
+          "angular_velocity": -0.1
+        },
+        "event": "evaded"
+      }
+    }
+  ]
+}

@@ -202,6 +202,9 @@ def build_analysis_trace(  # noqa: C901, PLR0912, PLR0913, PLR0915
     git_hash: str | None,
     termination_reason: str,
     safety_events: list[dict[str, Any]],
+    episode_id: str | None = None,
+    seed: int | None = None,
+    execution_id: str | None = None,
     initial_robot_velocity: Any = None,
     initial_pedestrian_velocities: Any = None,
     initial_pedestrian_ids: list[Any] | None = None,
@@ -410,6 +413,14 @@ def build_analysis_trace(  # noqa: C901, PLR0912, PLR0913, PLR0915
         "events": _normalize_events(safety_events, actor_ids=resolved_initial_ids),
         "steps": normalized_steps,
     }
+    # Older trace producers remain readable but cannot claim a selected native
+    # episode until they supply the canonical episode/seed binding.
+    if episode_id is not None:
+        payload["episode_id"] = episode_id
+    if seed is not None:
+        payload["seed"] = seed
+    if execution_id is not None:
+        payload["execution_id"] = execution_id
     _deduplicate_trace_event_ids(payload)
     payload["artifact_sha256"] = sha256_json(payload)
     return payload

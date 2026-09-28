@@ -1,0 +1,25 @@
+[
+  {
+    "row_id": "cost-ambiguous",
+    "planner_id": "orca_residual",
+    "sim_step": 3,
+    "sim_time_s": 0.3,
+    "observation_source_time_s": 0.3,
+    "planner_available_time_s": 0.35,
+    "logging_time_s": 0.4,
+    "observation_version": 2,
+    "consumed_observation_version": 2,
+    "candidates": [
+      {"candidate_id": "cand_a", "cost": 1.0, "cost_terms": {"progress": 1.0, "safety": 0.0}},
+      {"candidate_id": "cand_b", "cost": 2.0, "cost_terms": {"progress": 0.0, "safety": 2.0}}
+    ],
+    "cost_scale": {"progress": 1.0, "safety": 0.1},
+    "cost_units": "unitless",
+    "commanded_control": [0.5, 0.0],
+    "executed_control": [0.5, 0.0],
+    "saturation_flag": null,
+    "collision_event": true,
+    "unsupported_narrative": "the cost defect caused the episode failure",
+    "provenance": {"artifact_digest": "digest-cost-ambiguous", "source_row": "cost_scaling/ambiguous.json#0"}
+  }
+]

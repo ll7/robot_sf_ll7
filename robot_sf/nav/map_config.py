@@ -2,16 +2,14 @@
 define the map configuration
 """
 
+import hashlib
 import os
 import random
 from dataclasses import dataclass, field
 from math import isfinite, sqrt
 from typing import Any
 
-import matplotlib.axes
-import matplotlib.patches as mpl_patches
 from loguru import logger
-from matplotlib.path import Path as MplPath
 from shapely.geometry import Point, Polygon
 
 from robot_sf.common.types import Line2D, Rect, Vec2D
@@ -22,6 +20,49 @@ from robot_sf.nav.nav_types import (
     SemanticBoundary,
 )
 from robot_sf.nav.obstacle import Obstacle
+
+DEFAULT_MAPS_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), "maps")
+
+# Success-definition identifiers are intentionally versioned.  The legacy policy is
+# the default so maps/configurations that predate the goal-zone policy retain their
+# historical waypoint-radius semantics.
+GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1 = "waypoint_radius_v1"
+GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1 = "goal_zone_entry_v1"
+SUPPORTED_GOAL_COMPLETION_POLICIES = frozenset(
+    {
+        GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1,
+        GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1,
+    }
+)
+
+
+def normalize_goal_completion_policy(value: object | None) -> str:
+    """Validate and normalize a versioned goal-completion policy identifier.
+
+    ``None`` is deliberately interpreted as the historical waypoint-radius policy;
+    callers that opt into a different definition must name its version explicitly.
+    Unknown, empty, or non-string values fail closed instead of silently reverting
+    to legacy semantics.
+
+    Returns:
+        str: Canonical versioned policy identifier.
+
+    Raises:
+        ValueError: If ``value`` is not a supported versioned identifier.
+    """
+    if value is None:
+        return GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1
+    if not isinstance(value, str):
+        raise ValueError(
+            f"goal_completion_policy must be a versioned string identifier; got {value!r}"
+        )
+    normalized = value.strip().lower()
+    if normalized not in SUPPORTED_GOAL_COMPLETION_POLICIES:
+        raise ValueError(
+            "Unknown goal_completion_policy "
+            f"{value!r}; supported policies are {sorted(SUPPORTED_GOAL_COMPLETION_POLICIES)}"
+        )
+    return normalized
 
 
 @dataclass
@@ -677,6 +718,14 @@ class MapDefinition:
     Rows from different contracts must never be pooled as comparable evidence.
     """
 
+    goal_completion_policy: str = GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1
+    """Versioned success definition used for robot route completion.
+
+    ``waypoint_radius_v1`` preserves the historical final-waypoint distance
+    predicate.  ``goal_zone_entry_v1`` is an explicit opt-in that completes a
+    route when the robot centre enters the bound route goal rectangle.
+    """
+
     _poi_positions_by_label: dict[str, Vec2D] = field(init=False, default_factory=dict, repr=False)
     """Internal lookup table from POI label to position for faster access."""
     obstacles_pysf: list[Line2D] = field(init=False)
@@ -715,6 +764,7 @@ class MapDefinition:
                 f"Unknown svg_geometry_contract {self.svg_geometry_contract!r}. "
                 f"Supported contracts: {sorted(SUPPORTED_GEOMETRY_CONTRACTS)}."
             )
+        self.goal_completion_policy = normalize_goal_completion_policy(self.goal_completion_policy)
 
         if not self.robot_spawn_zones:
             logger.error("Robot spawn zones mustn't be empty!")
@@ -951,6 +1001,13 @@ class MapDefinition:
             TypeError: If ax is not a matplotlib.axes.Axes object.
         """
 
+        # Keep plotting optional for canonical simulation/runner imports.  In
+        # particular, native diagnostics must not pay Matplotlib's first-use
+        # font-cache cost before their bounded execution deadline starts.
+        import matplotlib.axes  # noqa: PLC0415
+        import matplotlib.patches as mpl_patches  # noqa: PLC0415
+        from matplotlib.path import Path as MplPath  # noqa: PLC0415
+
         if not isinstance(ax, matplotlib.axes.Axes):
             raise TypeError("ax must be a matplotlib.axes.Axes object")
         for obstacle in self.obstacles:
@@ -1007,6 +1064,14 @@ class MapDefinition:
         state = self.__dict__.copy()
         # Drop shapely prepared geometries to keep pickling safe
         state.pop("_prepared_obstacles", None)
+        # Spawn-clearance caches (issue #9725) hold prepared geometries too; they are
+        # rebuilt lazily after unpickling.
+        for cache_name in (
+            "_robot_start_exclusion_cache",
+            "_ped_relocation_block_cache",
+            "_ped_relocation_wall_cache",
+        ):
+            state.pop(cache_name, None)
         return state
 
     def __setstate__(self, state):
@@ -1055,7 +1120,7 @@ class MapDefinitionPool:
         Returns a random map definition from the pool.
     """
 
-    maps_folder: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "maps")
+    maps_folder: str = DEFAULT_MAPS_FOLDER
     """The directory where the **default** map files are located."""
     map_defs: dict[str, MapDefinition] = field(default_factory=dict)
 
@@ -1076,7 +1141,12 @@ class MapDefinitionPool:
         if not self.map_defs:
             raise ValueError("Map pool is empty! Please specify some maps!")
 
-    def _load_map_definitions_from_folder(self, maps_folder: str) -> dict[str, MapDefinition]:
+    def _load_map_definitions_from_folder(
+        self,
+        maps_folder: str,
+        *,
+        capture_source_input_records: bool = False,
+    ) -> dict[str, MapDefinition]:
         """Load SVG map definitions from a folder.
 
         Each SVG map is loaded via ``convert_map`` and then normalised so that
@@ -1114,7 +1184,26 @@ class MapDefinitionPool:
         for name in map_names:
             svg_path = os.path.join(maps_folder, f"{name}.svg")
             try:
-                map_def = convert_map(svg_path)
+                if capture_source_input_records:
+                    with open(svg_path, "rb") as source_file:
+                        source_bytes = source_file.read()
+                    self.source_input_records.append(
+                        {
+                            "role": "default_map_pool",
+                            "sha256": hashlib.sha256(source_bytes).hexdigest(),
+                            "path": os.path.realpath(svg_path),
+                            "map_id": name,
+                            "parser": "svg",
+                        }
+                    )
+                    map_def = convert_map(svg_path, source_bytes=source_bytes)
+                else:
+                    map_def = convert_map(svg_path)
+            except OSError as exc:
+                if not capture_source_input_records:
+                    raise
+                logger.warning("SVG map '{}' could not be read ({}); skipping", svg_path, exc)
+                continue
             except ValueError as exc:
                 logger.warning("SVG map '{}' failed validation ({}); skipping", svg_path, exc)
                 continue
@@ -1128,6 +1217,20 @@ class MapDefinitionPool:
             logger.debug("Loaded SVG map '{}' from '{}'", name, svg_path)
 
         return map_defs
+
+    def load_map_definitions_with_source_records(self) -> None:
+        """Reload the default pool from byte snapshots and retain their input identities.
+
+        This opt-in path is used only by callers that request runtime input records. The
+        ordinary ``MapDefinitionPool`` construction path keeps its established parser call.
+        """
+        self.source_input_records = []
+        self.map_defs = self._load_map_definitions_from_folder(
+            self.maps_folder,
+            capture_source_input_records=True,
+        )
+        if not self.map_defs:
+            raise ValueError("Map pool is empty! Please specify some maps!")
 
     def choose_random_map(self) -> MapDefinition:
         """
@@ -1575,10 +1678,17 @@ def serialize_map(map_structure: dict) -> MapDefinition:
         ped_routes,
         single_pedestrians,
         infrastructure_zones=infrastructure_zones,
+        goal_completion_policy=map_structure.get(
+            "goal_completion_policy",
+            GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1,
+        ),
     )
 
 
 __all__ = [
+    "GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1",
+    "GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1",
+    "SUPPORTED_GOAL_COMPLETION_POLICIES",
     "GlobalRoute",
     "InfrastructureZone",
     "MapDefinition",
@@ -1587,6 +1697,7 @@ __all__ = [
     "PedestrianWaitRule",
     "SinglePedestrianDefinition",
     "SocialGroupDefinition",
+    "normalize_goal_completion_policy",
     "parse_social_group_definitions",
     "serialize_map",
 ]

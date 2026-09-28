@@ -1,5 +1,15 @@
 #!/usr/bin/env python3
-"""Emit compact PR queue state for token-efficient goal orchestration."""
+"""Emit compact PR queue state for token-efficient goal orchestration.
+
+When this helper is slow or quota-constrained, prefer explicit PR numbers or
+the direct REST open-PR list as the canonical fallback::
+
+    gh api 'repos/OWNER/REPO/pulls?state=open&per_page=100'
+
+``--active`` also accepts ``--max-wall-seconds`` to stop per-PR fan-out at a
+deadline and report ``truncated`` with a wall-budget note instead of hanging
+past the caller's wait budget.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +19,7 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +47,10 @@ from scripts.dev.pr_metadata import extract_metadata_digests, metadata_digest, m
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_ACTIVE_LIMIT = 20
+WALL_BUDGET_EXCEEDED_NOTE = (
+    "wall budget exceeded: per-PR fan-out stopped early; narrow with explicit "
+    "PR numbers or use the direct REST open-PR list fallback"
+)
 REST_PAGE_SIZE = 100
 REST_ACTIVE_MAX_PAGES = 100
 REST_ENRICHMENT_MAX_PAGES = 10
@@ -78,6 +93,23 @@ def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
         timeout=timeout,
         check=False,
     )
+
+
+def _wall_deadline(max_wall_seconds: float) -> float | None:
+    """Return a monotonic per-PR fan-out deadline, or None when unbounded.
+
+    Returns:
+        Monotonic deadline timestamp, or None when ``max_wall_seconds`` is
+        not positive (existing unbounded behavior preserved).
+    """
+    if max_wall_seconds <= 0:
+        return None
+    return time.monotonic() + max_wall_seconds
+
+
+def _wall_budget_exceeded(deadline: float | None) -> bool:
+    """Return whether a wall-budget deadline has passed."""
+    return deadline is not None and time.monotonic() >= deadline
 
 
 def _labels(pr: dict[str, Any]) -> list[str]:
@@ -1365,6 +1397,13 @@ def _next_action(
         return "inspect_failing_checks"
     if checks.get("overall") == "pending":
         return "await_ci_or_start_read_only_monitor"
+    if (
+        checks.get("overall") == "success"
+        and "merge-if-ci-green" in labels
+        and not is_draft
+        and "merge-ready" not in labels
+    ):
+        return "promote_merge_if_ci_green"
     if "merge-ready" in labels and not is_draft:
         return "merge_readiness_local_check"
     if is_draft:
@@ -1391,7 +1430,7 @@ def _attention(*, next_action: str, is_draft: bool, labels: list[str]) -> str:
         return "ci_attention"
     if next_action == "await_ci_or_start_read_only_monitor":
         return "ci_pending"
-    if "merge-ready" in labels:
+    if "merge-ready" in labels or next_action == "promote_merge_if_ci_green":
         return "merge_attention"
     return "review_attention"
 
@@ -1773,6 +1812,7 @@ def _snapshot_active_rest_fallback(
     current_main_sha: str,
     fallback_kind: str,
     fallback_diagnostic: str = "",
+    deadline: float | None = None,
 ) -> dict[str, Any]:
     """Build an active snapshot through REST while preserving its failure provenance."""
     transient = fallback_kind == "transient_exhausted"
@@ -1796,7 +1836,11 @@ def _snapshot_active_rest_fallback(
 
     listed, truncated = rest_listing
     prs: list[dict[str, Any]] = []
+    budget_exceeded = False
     for listed_pr in listed:
+        if _wall_budget_exceeded(deadline):
+            budget_exceeded = True
+            break
         number = listed_pr.get("number")
         if isinstance(number, bool) or not isinstance(number, int) or number < 1:
             return _active_rest_fallback_error(
@@ -1829,22 +1873,90 @@ def _snapshot_active_rest_fallback(
     return _active_snapshot_envelope(
         repo=repo,
         prs=prs,
-        truncated=truncated,
+        truncated=truncated or budget_exceeded,
         truncation_note=(
-            "REST open-PR list may be capped: got "
-            f"{len(prs)} rows at --limit {limit}; raise --limit or paginate"
-            if truncated
-            else ""
+            WALL_BUDGET_EXCEEDED_NOTE
+            if budget_exceeded
+            else (
+                "REST open-PR list may be capped: got "
+                f"{len(prs)} rows at --limit {limit}; raise --limit or paginate"
+                if truncated
+                else ""
+            )
         ),
         data_source=data_source,
     )
 
 
+def _materialize_active_rows(
+    listed: list[Any],
+    *,
+    repo: str,
+    current_main_sha: str,
+    deadline: float | None,
+) -> tuple[list[dict[str, Any]], bool]:
+    """Materialize one payload per listed row, stopping at the wall deadline.
+
+    Returns:
+        Tuple of (row payloads, whether the wall budget stopped the fan-out).
+    """
+    prs: list[dict[str, Any]] = []
+    for pr in listed:
+        if not isinstance(pr, dict):
+            continue
+        if _wall_budget_exceeded(deadline):
+            return prs, True
+        prs.append(
+            _pr_payload_from_dict(
+                pr,
+                repo=repo,
+                base_sha=str(pr.get("base_sha", "") or "")
+                or _fetch_pr_base_sha(int(pr.get("number", -1)), repo=repo),
+                current_main_sha=current_main_sha or str(pr.get("current_main_sha", "") or ""),
+                default_number=-1,
+                expected_head_sha="",
+            )
+        )
+    return prs, False
+
+
+def _enrich_active_review_threads(
+    prs: list[dict[str, Any]], *, repo: str, deadline: float | None
+) -> bool:
+    """Attach review-thread snapshots, stopping at the wall deadline.
+
+    Returns:
+        Whether the wall budget stopped the enrichment early.
+    """
+    for pr in prs:
+        if _wall_budget_exceeded(deadline):
+            return True
+        if pr.get("status") == "ok" and isinstance(pr.get("number"), int):
+            review_thread_snapshot = _review_thread_snapshot(
+                int(pr["number"]),
+                repo=repo,
+            )
+            pr["review_thread_snapshot"] = review_thread_snapshot
+            _project_review_thread_state(pr, review_thread_snapshot.get("status"))
+            _refresh_route_hint(pr)
+    return False
+
+
 def snapshot_active_prs(
-    *, repo: str, limit: int, include_review_threads: bool = False
+    *,
+    repo: str,
+    limit: int,
+    include_review_threads: bool = False,
+    max_wall_seconds: float = 0.0,
 ) -> dict[str, Any]:
-    """Return a compact active PR queue snapshot."""
+    """Return a compact active PR queue snapshot.
+
+    When ``max_wall_seconds`` is positive, per-PR fan-out stops at the
+    deadline and the envelope reports ``truncated`` with a wall-budget note
+    instead of hanging past the caller's wait budget.
+    """
     current_main_sha = _fetch_current_main_sha(repo=repo)
+    deadline = _wall_deadline(max_wall_seconds)
     retry = run_with_retry(
         _gh,
         [
@@ -1869,6 +1981,7 @@ def snapshot_active_prs(
             limit=limit,
             current_main_sha=current_main_sha,
             fallback_kind="quota",
+            deadline=deadline,
         )
     if result.returncode != 0:
         stderr = result.stderr.strip()
@@ -1878,6 +1991,7 @@ def snapshot_active_prs(
                 limit=limit,
                 current_main_sha=current_main_sha,
                 fallback_kind="quota",
+                deadline=deadline,
             )
         if retry.exhausted:
             return _snapshot_active_rest_fallback(
@@ -1886,6 +2000,7 @@ def snapshot_active_prs(
                 current_main_sha=current_main_sha,
                 fallback_kind="transient_exhausted",
                 fallback_diagnostic=retry.terminal_diagnostic,
+                deadline=deadline,
             )
         return _active_snapshot_envelope(
             repo=repo,
@@ -1931,39 +2046,27 @@ def snapshot_active_prs(
             ],
         }
 
-    prs = [
-        _pr_payload_from_dict(
-            pr,
-            repo=repo,
-            base_sha=str(pr.get("base_sha", "") or "")
-            or _fetch_pr_base_sha(int(pr.get("number", -1)), repo=repo),
-            current_main_sha=current_main_sha or str(pr.get("current_main_sha", "") or ""),
-            default_number=-1,
-            expected_head_sha="",
-        )
-        for pr in listed
-        if isinstance(pr, dict)
-    ]
+    prs, budget_exceeded = _materialize_active_rows(
+        listed, repo=repo, current_main_sha=current_main_sha, deadline=deadline
+    )
     if include_review_threads:
-        for pr in prs:
-            if pr.get("status") == "ok" and isinstance(pr.get("number"), int):
-                review_thread_snapshot = _review_thread_snapshot(
-                    int(pr["number"]),
-                    repo=repo,
-                )
-                pr["review_thread_snapshot"] = review_thread_snapshot
-                _project_review_thread_state(pr, review_thread_snapshot.get("status"))
-                _refresh_route_hint(pr)
-    truncated = is_likely_truncated(len(listed), limit=limit)
+        budget_exceeded = (
+            _enrich_active_review_threads(prs, repo=repo, deadline=deadline) or budget_exceeded
+        )
+    truncated = is_likely_truncated(len(listed), limit=limit) or budget_exceeded
     return _active_snapshot_envelope(
         repo=repo,
         prs=prs,
         truncated=truncated,
         truncation_note=(
-            "gh pr list may be capped: got "
-            f"{len(listed)} rows at --limit {limit}; raise --limit or paginate"
-            if truncated
-            else ""
+            WALL_BUDGET_EXCEEDED_NOTE
+            if budget_exceeded
+            else (
+                "gh pr list may be capped: got "
+                f"{len(listed)} rows at --limit {limit}; raise --limit or paginate"
+                if truncated
+                else ""
+            )
         ),
     )
 
@@ -2096,6 +2199,19 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="Limit for --active discovery mode.",
     )
     parser.add_argument(
+        "--max-wall-seconds",
+        type=float,
+        default=0.0,
+        help=(
+            "Bound per-PR fan-out in --active mode: stop at the deadline and "
+            "report truncated with a wall-budget note instead of hanging past "
+            "the caller's wait budget (0 disables the bound). When the helper "
+            "is slow or quota-constrained, prefer explicit PR numbers or the "
+            "direct REST open-PR list "
+            "(gh api 'repos/OWNER/REPO/pulls?state=open&per_page=100')."
+        ),
+    )
+    parser.add_argument(
         "--expected-head-sha",
         default="",
         help="Optional PR head SHA expected for stale-lane invalidation in single-PR mode.",
@@ -2150,6 +2266,7 @@ def main(argv: list[str] | None = None) -> int:
                 repo=args.repo,
                 limit=max(args.limit, 1),
                 include_review_threads=args.review_threads,
+                max_wall_seconds=args.max_wall_seconds,
             )
         elif not numbers:
             print("at least one PR number is required", file=sys.stderr)

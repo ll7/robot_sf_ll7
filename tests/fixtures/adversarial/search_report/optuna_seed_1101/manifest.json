@@ -1,0 +1,120 @@
+{
+  "candidates": [
+    {
+      "analysis_eligibility": {
+        "eligible": true,
+        "reason_codes": []
+      },
+      "bundle_path": null,
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 5.0,
+          "y": 0.0
+        },
+        "scenario_seed": 100,
+        "start": {
+          "theta": 0.0,
+          "x": 4.0,
+          "y": 0.0
+        }
+      },
+      "certification_status": {
+        "details": {},
+        "reason": "fixture",
+        "schema_version": "scenario_cert.v1",
+        "status": "passed"
+      },
+      "effective_scenario_hash": null,
+      "episode_record_path": null,
+      "error": null,
+      "failure_attribution": {
+        "details": {},
+        "primary_failure": "success",
+        "reasons": [],
+        "status": "attributed"
+      },
+      "objective_value": null,
+      "scenario_yaml_path": null,
+      "trajectory_csv_path": null
+    },
+    {
+      "analysis_eligibility": {
+        "eligible": true,
+        "reason_codes": []
+      },
+      "bundle_path": null,
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 5.0,
+          "y": 0.0
+        },
+        "scenario_seed": 100,
+        "start": {
+          "theta": 0.0,
+          "x": 5.0,
+          "y": 0.0
+        }
+      },
+      "certification_status": {
+        "details": {},
+        "reason": "fixture",
+        "schema_version": "scenario_cert.v1",
+        "status": "passed"
+      },
+      "effective_scenario_hash": "tpe-1",
+      "episode_record_path": "tests/fixtures/adversarial/search_report/records/episode.jsonl",
+      "error": null,
+      "failure_attribution": {
+        "details": {
+          "availability_status": "available",
+          "execution_mode": "native",
+          "readiness_status": "native"
+        },
+        "primary_failure": "collision",
+        "reasons": [],
+        "status": "attributed"
+      },
+      "objective_value": 4.4,
+      "scenario_yaml_path": null,
+      "trajectory_csv_path": null
+    }
+  ],
+  "config": {
+    "algo_config_path": null,
+    "benchmark_profile": "baseline-safe",
+    "budget": 4,
+    "dt": null,
+    "horizon": null,
+    "objective": "constraints_first_lexicographic_v1",
+    "output_dir": "tests/fixtures/adversarial/search_report/optuna_seed_1101",
+    "policy": "goal",
+    "record_forces": true,
+    "require_certification": false,
+    "scenario_template": "tests/fixtures/adversarial/search_report/scenario.yaml",
+    "search_space": {
+      "variables": {
+        "start_x": {
+          "max": 1.0,
+          "min": 0.0
+        }
+      }
+    },
+    "search_space_path": "tests/fixtures/adversarial/search_report/space.yaml",
+    "seed": 1101,
+    "snqi_baseline_path": null,
+    "snqi_weights_path": null,
+    "warm_start": [],
+    "workers": 1
+  },
+  "runtime_seconds": 4.25,
+  "schema_version": "adversarial-search-manifest.v1",
+  "summary": {
+    "best_objective_value": 4.4,
+    "num_candidates": 2,
+    "num_failed_evaluations": 0,
+    "num_invalid_candidates": 0,
+    "num_valid_candidates": 2
+  }
+}

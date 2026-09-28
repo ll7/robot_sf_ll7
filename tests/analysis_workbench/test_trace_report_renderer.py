@@ -64,25 +64,24 @@ def test_trace_report_renderer_writes_markdown_summary_for_minimal_fixture(
     assert "ped_1 @ (1.000, 0.500)" in markdown
 
 
-def test_trace_report_renderer_surfaces_existing_planner_annotations(
-    tmp_path: Path,
-) -> None:
+def test_trace_report_renderer_surfaces_existing_planner_annotations() -> None:
     """Planner annotation fields already present in the trace should be visible."""
+    from robot_sf.analysis_workbench.simulation_trace_export import (
+        simulation_trace_export_from_dict,
+    )
+    from scripts.tools.render_trace_report import render_trace_report
 
-    from scripts.tools.render_trace_report import write_trace_report
-
+    # Render in memory: file-backed inputs under the runner's scratch tree
+    # trip the renderer's generated-output guard, which is correct production
+    # behavior under test here, not the annotation path under test.
     payload = load_simulation_trace_export(FIXTURE_PATH).to_dict()
     payload["frames"][1]["planner"]["annotations"] = {
         "clearance": 0.42,
         "note": "fixture near-pass",
     }
-    trace_path = tmp_path / "annotated_trace.json"
-    output = tmp_path / "report.md"
-    trace_path.write_text(json.dumps(payload), encoding="utf-8")
+    trace = simulation_trace_export_from_dict(payload)
 
-    write_trace_report(trace_path=trace_path, output=output)
-
-    markdown = output.read_text(encoding="utf-8")
+    markdown = render_trace_report(trace)
     assert "## Notable Annotations" in markdown
     assert "clearance: 0.420" in markdown
     assert "note: fixture near-pass" in markdown

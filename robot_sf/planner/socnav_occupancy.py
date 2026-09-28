@@ -123,12 +123,49 @@ class OccupancyAwarePlannerMixin:
             return -1
         try:
             pos = self._CHANNEL_KEYS.index(key)
-            idx_arr = self._as_1d_float(indices)
-            if pos >= idx_arr.size:
+            raw_idx_arr = np.asarray(indices)
+            if raw_idx_arr.ndim != 1 or pos >= raw_idx_arr.size:
                 return -1
-            return int(idx_arr[pos])
+            raw_idx = raw_idx_arr[pos]
+            if isinstance(raw_idx, (bool, np.bool_, str, bytes)) or np.ndim(raw_idx) != 0:
+                return -1
+            numeric_idx = float(raw_idx)
+            if not np.isfinite(numeric_idx) or numeric_idx < 0.0:
+                return -1
+            if not numeric_idx.is_integer():
+                return -1
+            return int(numeric_idx)
         except (OverflowError, ValueError, TypeError, IndexError):
             return -1
+
+    @staticmethod
+    def _validated_channel_indices(
+        meta: Mapping[str, Any], channel_count: int
+    ) -> np.ndarray | None:
+        """Return integral, in-range channel indices or ``None`` when malformed."""
+        raw_indices = meta.get("channel_indices")
+        if raw_indices is None:
+            return None
+        try:
+            raw_array = np.asarray(raw_indices)
+        except (TypeError, ValueError):
+            return None
+        # Boolean, object, string, and complex arrays are not channel-index
+        # metadata even when a coercion might happen to produce integers.
+        if raw_array.ndim != 1 or raw_array.dtype.kind not in "iuf":
+            return None
+        try:
+            indices = np.asarray(raw_array, dtype=float)
+        except (OverflowError, TypeError, ValueError):
+            return None
+        if (
+            not np.all(np.isfinite(indices))
+            or not np.all(np.equal(indices, np.floor(indices)))
+            or np.any(indices < 0.0)
+            or np.any(indices >= float(channel_count))
+        ):
+            return None
+        return indices.astype(np.int64)
 
     def _preferred_channel(self, meta: dict[str, Any]) -> int:
         """Prefer combined channel, else obstacles, else pedestrians.
@@ -231,16 +268,7 @@ class OccupancyAwarePlannerMixin:
         if grid.ndim < 3:
             self._obstacle_grid_payload_failure_reason = self._OBSTACLE_GRID_METADATA_FAILURE_REASON
             return None
-        try:
-            channel_indices = meta.get("channel_indices")
-            if channel_indices is not None and not np.all(
-                np.isfinite(self._as_1d_float(channel_indices))
-            ):
-                self._obstacle_grid_payload_failure_reason = (
-                    self._OBSTACLE_GRID_METADATA_FAILURE_REASON
-                )
-                return None
-        except (OverflowError, TypeError, ValueError):
+        if self._validated_channel_indices(meta, grid.shape[0]) is None:
             self._obstacle_grid_payload_failure_reason = self._OBSTACLE_GRID_METADATA_FAILURE_REASON
             return None
         channel_idx = self._grid_channel_index(meta, "obstacles")

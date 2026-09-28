@@ -160,6 +160,9 @@ def test_export_trace_viewer_writes_static_assets(tmp_path: Path) -> None:
     assert isinstance(result, TraceViewerResult)
     assert result.html_path.exists()
     assert (result.output_dir / "viewer.js").exists()
+    assert (
+        result.output_dir / "components" / "presentation_scene" / "presentation_scene.js"
+    ).exists()
     assert result.scene_path.exists()
 
     scene = json.loads(result.scene_path.read_text(encoding="utf-8"))

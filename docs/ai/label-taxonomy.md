@@ -42,12 +42,18 @@ resource, type, and evidence labels:
 
 | Family / labels | Meaning |
 | --- | --- |
-| `blocked`, `blocked-external` | Work is blocked; `blocked-external` identifies an unavailable external input or action. Prefer the more specific `state:blocked` or `state:blocked-external-input` when the execution-state classifier is the relevant authority. |
-| `parked`, `parked-revivable` | Work is intentionally not active; `parked-revivable` must retain a revival condition. |
+| `blocked` | Generic blocked marker; external-input blocks use the more specific `state:blocked-external-input` label. |
+| `state:parked` | Work is intentionally not active; retain a revival condition in the issue context when applicable. |
 | `deferred`, `wontfix` | Deferred or deliberately not pursued; neither is a dispatch signal. |
 | `follow-up`, `friction`, `campaign` | Successor/residual work, process or tooling friction, and campaign/evidence context. |
 
 ## Execution state
+
+For pull requests, `merge-if-ci-green` records an accepted review on the exact
+head while hosted continuous integration (CI) is pending. It is a conditional
+handoff, not merge permission. `merge-ready` is the merge admission label after
+green required checks and the guarded promotion. Both are active review labels
+and are cleared when the pull request is merged or closed.
 
 The core execution states recognized by the classifier are mutually exclusive.
 The classifier gives the more blocking state precedence when contradictory labels
@@ -65,7 +71,8 @@ coexist:
 execution-state precedence set. Verify the issue/PR terminal state separately.
 
 These are composable state qualifiers rather than replacement execution states:
-`state:review`, `state:needs-artifact-promotion`, and `state:needs-interpretation`.
+`state:parked`, `state:review`, `state:needs-artifact-promotion`, and
+`state:needs-interpretation`.
 An issue with no `state:*` label is undispatchable, not implicitly ready. A
 `resource:*` label never promotes an issue to ready.
 
@@ -116,7 +123,9 @@ domain-aware review. `evidence:blocked` is a blocker, not a degraded success.
 
 1. Read the live labels and the issue body before changing metadata.
 2. Preserve explicit blocked, running, review, resource, and evidence markers;
-   do not infer readiness from their absence.
+   do not infer readiness from their absence. The autonomous audit may remove
+   `state:running` only when its explicit six-hour stale-running reclaim policy
+   has complete progress evidence and no active execution record.
 3. Use the shared issue-audit plan and its REST readback for label changes; do not
    hand-create labels or silently rename them.
 4. After recording a decision, verify the terminal issue/PR state from GitHub.

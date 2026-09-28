@@ -117,3 +117,13 @@ class TestWriteSha256sumsMarker:
         write_sha256sums(out1)
         write_sha256sums(out2)
         assert (out1 / "SHA256SUMS").read_bytes() == (out2 / "SHA256SUMS").read_bytes()
+
+
+class TestNoGitCommitDuplicate:
+    """writers.py must not regrow a local git-commit helper (issue #9402)."""
+
+    def test_git_commit_helper_absent(self) -> None:
+        """Verify consolidation: canonical homes are git_common/probe_git_commit."""
+        import robot_sf.evidence.writers as writers_module
+
+        assert not hasattr(writers_module, "_git_commit")

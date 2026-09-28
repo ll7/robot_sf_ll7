@@ -1,0 +1,22 @@
+[
+  {
+    "row_id": "stale-benign",
+    "planner_id": "orca_residual",
+    "sim_step": 7,
+    "sim_time_s": 0.7,
+    "observation_source_time_s": 0.7,
+    "planner_available_time_s": 0.9,
+    "logging_time_s": 1.1,
+    "observation_version": 5,
+    "consumed_observation_version": 5,
+    "candidates": null,
+    "cost_scale": null,
+    "cost_units": null,
+    "commanded_control": [1.0, 0.0],
+    "executed_control": [1.0, 0.0],
+    "saturation_flag": null,
+    "collision_event": false,
+    "unsupported_narrative": null,
+    "provenance": {"artifact_digest": "digest-stale-benign", "source_row": "stale_observation/benign.json#0"}
+  }
+]

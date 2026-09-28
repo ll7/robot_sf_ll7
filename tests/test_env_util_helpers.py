@@ -25,7 +25,10 @@ from robot_sf.gym_env.robot_env import (
 )
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.global_route import GlobalRoute
-from robot_sf.nav.map_config import MapDefinition
+from robot_sf.nav.map_config import (
+    GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1,
+    MapDefinition,
+)
 from robot_sf.nav.occupancy_grid import GridChannel, GridConfig
 
 
@@ -157,6 +160,15 @@ def test_robot_env_hash_and_run_id_stable() -> None:
     run_b = _make_telemetry_run_id()
     assert run_a.startswith("telemetry-")
     assert run_a != run_b
+
+
+def test_robot_env_hash_changes_only_for_opted_in_goal_policy() -> None:
+    """Legacy config hashes stay stable while the zone policy is identity-visible."""
+    cfg = EnvSettings()
+    opted_in = EnvSettings()
+    opted_in.sim_config.goal_completion_policy = GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1
+
+    assert _stable_config_hash(cfg) != _stable_config_hash(opted_in)
 
 
 def test_robot_env_flatten_helpers() -> None:

@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/review_rerun_timeline.v1.json",
+  "title": "Robot SF Review Rerun Timeline v1",
+  "description": "Diagnostic wrapper around the canonical simulation_timeline.v1 artifact.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "component",
+    "artifact_id",
+    "trace_id",
+    "source",
+    "source_trace",
+    "canonical_timeline",
+    "evidence_boundary",
+    "diagnostic_only",
+    "admission",
+    "coordinate_frame",
+    "units",
+    "frames",
+    "events",
+    "counts",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {"const": "review-rerun-timeline.v1"},
+    "component": {"const": "srev19-review-rerun"},
+    "artifact_id": {"type": "string", "minLength": 1},
+    "trace_id": {"type": "string", "minLength": 1},
+    "source": {"$ref": "#/$defs/source"},
+    "source_trace": {"$ref": "#/$defs/source_trace"},
+    "canonical_timeline": {"type": "object"},
+    "evidence_boundary": {"const": "analysis_workbench_only"},
+    "diagnostic_only": {"const": true},
+    "admission": {"const": "not_evaluated"},
+    "coordinate_frame": {"type": "string", "minLength": 1},
+    "units": {"type": "object", "additionalProperties": {"type": "string"}},
+    "frames": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/frame"}},
+    "events": {"type": "array", "items": {"type": "object"}},
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["frames", "pedestrian_points"],
+      "properties": {
+        "frames": {"type": "integer", "minimum": 1},
+        "pedestrian_points": {"type": "integer", "minimum": 0}
+      }
+    },
+    "provenance": {"type": "object", "additionalProperties": true}
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["artifact_id", "uri", "format", "sha256"],
+      "properties": {
+        "artifact_id": {"type": "string", "minLength": 1},
+        "uri": {"type": "string", "minLength": 1},
+        "format": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "source_trace": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["schema_version", "trace_id", "source"],
+      "properties": {
+        "schema_version": {"const": "simulation_trace_export.v1"},
+        "trace_id": {"type": "string", "minLength": 1},
+        "source": {"type": "object", "additionalProperties": true}
+      }
+    },
+    "frame": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "episode_id",
+        "step",
+        "time_s",
+        "robot_xy",
+        "pedestrians",
+        "event_id",
+        "robot",
+        "planner"
+      ],
+      "properties": {
+        "episode_id": {"type": "string", "minLength": 1},
+        "step": {"type": "integer", "minimum": 0},
+        "time_s": {"type": "number", "minimum": 0},
+        "robot_xy": {
+          "anyOf": [
+            {"type": "null"},
+            {"type": "array", "prefixItems": [{"type": "number"}, {"type": "number"}], "items": false, "minItems": 2, "maxItems": 2}
+          ]
+        },
+        "pedestrians": {"type": "array", "items": {"type": "object"}},
+        "event_id": {"type": ["string", "null"]},
+        "robot": {"type": "object"},
+        "planner": {"type": "object"}
+      }
+    }
+  }
+}

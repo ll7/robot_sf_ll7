@@ -4,6 +4,12 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 from robot_sf.planner.socnav_base import (
+    SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1,
+    SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1,
+    SOCIAL_FORCE_GOAL_APPROACH_VERSIONS,
+    SOCIAL_FORCE_PLANNER_LEGACY_V1,
+    SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2,
+    SOCIAL_FORCE_PLANNER_VERSIONS,
     SamplingPlannerAdapter,
     SocNavBenchComplexPolicy,
     SocNavPlannerConfig,
@@ -130,6 +136,12 @@ def __dir__() -> list[str]:
 
 
 __all__ = [
+    "SOCIAL_FORCE_GOAL_APPROACH_LEGACY_V1",
+    "SOCIAL_FORCE_GOAL_APPROACH_TERMINAL_V1",
+    "SOCIAL_FORCE_GOAL_APPROACH_VERSIONS",
+    "SOCIAL_FORCE_PLANNER_LEGACY_V1",
+    "SOCIAL_FORCE_PLANNER_RESOLUTION_INDEPENDENT_V2",
+    "SOCIAL_FORCE_PLANNER_VERSIONS",
     "HRVOPlannerAdapter",
     "ORCAPlannerAdapter",
     "OccupancyAwarePlannerMixin",

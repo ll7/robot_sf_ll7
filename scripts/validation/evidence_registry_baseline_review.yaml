@@ -14,13 +14,100 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 8566
-latest_reviewed_date: 2026-09-10
+latest_reconciliation_issue: 9759
+latest_reviewed_date: 2026-09-28
+latest_reviewed_by: Codex #9759 integration lane; evidence inventory and row audit only, no additional human sign-off is claimed.
+evidence_tree_refresh_addenda:
+  - issue: 9647
+    reviewed_date: 2026-09-26
+    previous:
+      count: 2442
+      sha256: a1acca979b7f839b93dcc20296d6c7d33ba07f6952344bdddf3f265351d49ee9
+    candidate:
+      count: 2456
+      sha256: eeb2c9c4b87aac65506d53a8b839bda869d90b15bcd3c070857a9c2615cb7e21
+    files_added: 14
+    finding_delta: none
+    decision: >-
+      Reviewed the seven new #9647 smoke-bundle members and their seven exact-byte review sidecars.
+      The bundle now declares that files[].path entries resolve under its tracked payload/ directory;
+      the adjacent checksum gate verifies those payload bytes. The generated candidate retains 438
+      findings with no new or increased finding and updates only the evidence-tree manifest.
+  - issue: 9647
+    reviewed_date: 2026-09-26
+    previous:
+      count: 2456
+      sha256: eeb2c9c4b87aac65506d53a8b839bda869d90b15bcd3c070857a9c2615cb7e21
+    candidate:
+      count: 2462
+      sha256: d76bed17284d321a99cc2fd51e19c5d0e32de11af9f3c49b8e5ebd3b1007a29f
+    files_added: 6
+    finding_delta: none
+    decision: >-
+      Reviewed the six newly tracked #9647 visual-evidence paths: the compact recorded trace,
+      trace provenance, render-only provenance, and one exact-byte review sidecar for each. Their
+      bytes are bound by the refreshed bundle manifest and checksums; the generated baseline still
+      has 438 findings and this refresh changes only the evidence-tree path inventory. The compact
+      trace and both provenance documents were cross-checked against the local source row and
+      source-sidecar digests; the full ignored JSONL and output tree were intentionally not promoted.
+      Those source artifacts remain available only in ignored local output in this checkout and are
+      not preserved by the tracked bundle. The render-only claims remain limited to byte-reproducible
+      figures from stored trace samples; no simulator, replay, search, or campaign result is asserted.
+  - issue: 9647
+    reviewed_date: 2026-09-27
+    previous:
+      count: 2462
+      sha256: d76bed17284d321a99cc2fd51e19c5d0e32de11af9f3c49b8e5ebd3b1007a29f
+    candidate:
+      count: 2465
+      sha256: 7253f1cc2eb98da8e6ddd3acdab31c59efaf534968f782c69933c89232132dd0
+    files_added: 3
+    finding_delta: none
+    decision: >-
+      Reviewed the three new exact-byte review sidecars for the tracked #9647 gallery-demo figures.
+      Each sidecar's artifact path matches its adjacent PNG and its SHA-256 matches the unchanged PNG
+      bytes. The sidecars mark AI-generated images as needing review; this addendum makes no new
+      interpretation or benchmark claim. The refreshed machine baseline retains 438 findings and
+      changes only the evidence-tree manifest for these three tracked files.
+  - issue: 9656
+    reviewed_date: 2026-09-27
+    previous:
+      count: 2465
+      sha256: 7253f1cc2eb98da8e6ddd3acdab31c59efaf534968f782c69933c89232132dd0
+    candidate:
+      count: 2475
+      sha256: df403f7cc9982246fd776c1e13cef5fb1426575dddeb23ce9cd0db4c769b3f4f
+    files_added: 10
+    finding_delta: none
+    decision: >-
+      Verified the five checksummed #9656 packet files and their five exact-byte evidence-review
+      sidecars against the merged #9808 main tree. The regenerated candidate baseline retains 438
+      findings across 98 files with no new or increased per-code finding; this refresh binds the
+      combined evidence-tree path set only and introduces no finding disposition or scientific claim.
+  - issue: 9759
+    reviewed_date: 2026-09-28
+    previous:
+      count: 2475
+      sha256: df403f7cc9982246fd776c1e13cef5fb1426575dddeb23ce9cd0db4c769b3f4f
+    candidate:
+      count: 2487
+      sha256: 746fa1210ba77d193e7d12a9e5589bcde626360a7ce487dbd60fff74eebfb628
+    files_added: 12
+    finding_delta: none
+    decision: >-
+      This issue adds six compact diagnostic-bundle files and six evidence-review-marker.v1
+      sidecars, with a catalog row for every tracked file. Payload checksums and sidecar byte
+      digests were verified. The generated registry scan remains at 438 findings across 98 files,
+      with no new or increased finding; the machine refresh only binds the 12-path evidence-tree
+      addition. The report remains partial and diagnostic-only: 8,040 valid eligible terminal
+      jobs and 600 explicit reflected-map exclusions, with no official benchmark or performance
+      claim. Raw episode rows and logs remain private. Inventory and row audit are complete;
+      this addendum records path inventory and finding delta only, with no additional human sign-off.
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 436
-refreshed_baseline_files_with_findings: 97
+refreshed_baseline_total_findings: 438
+refreshed_baseline_files_with_findings: 98
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -142,6 +229,59 @@ decision_summary: >-
   The packet's validator and SHA256SUMS receipt verify those bytes and retain the explicit
   no-campaign/no-claim boundary, so the five `hash_without_artifact_path` findings are baselined
   as reviewed provenance bookkeeping rather than rewritten into a weaker schema.
+  Worked-example trace addendum (issue #9431; 2026-09-23): the diagnostic-only 18-episode trace
+  bundle preserves its exact 0.0.7 release-tag identity and the exporter revision used to produce
+  the compact examples. The generic linter extracts their embedded/full SHA-1 values from the
+  campaign provenance document and requires ancestry from frozen main `5426a585...`; the release
+  candidate commit `07f7e8d43084de748915e1b1eb8b2a1603357c6e` and pre-squash exporter commit
+  `f39bbcc7d49026c490d5cbda8bb1bdcfb18f8233` are outside that ancestry. Both objects and their
+  roles are verified, while runtime `source_commit` `2e87f9de0523ef977bce19b40189ea0a74c61e13`
+  is reachable from frozen main. Replacing these exact provenance coordinates with a later
+  integration SHA or shortening the release-tag identity would misstate the producer record.
+  Preserve the diagnostic-only claim boundary and the separately disclosed startup/admission
+  receipt exception; no benchmark, statistical, or causal claim is promoted. This targeted
+  provenance disposition refreshes the machine baseline from 436 findings across 97 files to 438
+  across 98 files, and records the 40-file evidence-tree addition: 38 diagnostic trace files plus
+  two SHA-bound `evidence-review-marker.v1` sidecars. The sidecars bind the root README and
+  campaign provenance bytes without modifying either artifact.
+  Replay-gallery addendum (issue #9647; 2026-09-25): the current strict-gate demo records one
+  selected #1501 compatibility row, one changed-revision outcome replay, and three tracked figures.
+  Its complete `scenario_cert.v1` certificate was generated post-hoc from tracked static route
+  inputs; dynamic task feasibility remains unknown. Two earlier smoke receipts are retained as
+  pre-strict run history. The exact old fixture manifest bytes are preserved as
+  `manifest.pre_strict_gate.json`, so the historical receipt hash remains bound without implying
+  current-gate acceptance. Explicit location markers distinguish ignored local replay outputs from
+  the compact tracked bundle, resolving 23 prior missing-location findings. The seven-file demo
+  bundle adds no current evidence-registry findings. The machine baseline drops from 461 findings
+  across 102 files to 438 across 98 files; the result remains diagnostic plumbing evidence only.
+  Issue #9656 evidence-tree addendum (2026-09-25): the checksum-pinned historical hard-case packet
+  contributes five diagnostic packet paths under `issue_9656_hard_case_mining_2026-09-24/`:
+  `checksums.sha256`, `evidence_bundle_manifest.json`, and payload
+  `current_head_no_replay_manifest.json`, `report.md`, and `summary.json`. Five adjacent
+  `evidence-review-marker.v1` sidecars bind those exact bytes without modifying the packet. An
+  independent exact-head review at `5ab13d21f56ec6f2c3c3dd9312bc1e2ae5650eb1` verified the packet,
+  sidecar digests, test-fixture writer exemption, and candidate/frozen-base report, and conditionally
+  approved only the tree-manifest refresh after this companion update. Its separate catalog finding
+  was repaired by registering all five sidecars in `docs/context/catalog.yaml` at
+  `97a581a85fefae082922c20290ccdaed473b67c3`. The reviewed candidate adds five paths to the prior
+  baseline tree (2428 files / `4159317c0c3ae61d519788cd1050e8a6f724322c37e8cc2446f4dd8b8809d5b6`
+  to 2433 / `71237cccbc8e6fa3f14a8548a264d0eda3ac30b1b6e368bb72a8bef7d6675022`); from frozen base,
+  the complete packet tree is 2423 files / `c5d2440137291b0eb83416894ba10dcd32aacc24a23946b7a67ef99b0c961222`
+  to 2433. The evidence scan remains at 438 findings across 98 files with no new or increased
+  per-code finding, and no #9656 path has a finding. Refresh the machine baseline only to bind this
+  five-sidecar path-set change. The diagnostic-only historical claim boundary is preserved; no
+  finding disposition or strict-CI exclusion is added.
+  Prior-main reconciliation (2026-09-25): the source packet was merged onto frozen main
+  `61c9db79ba9b37d0668c0a93a72bd9b89ad3405b`. Relative to that base, the only evidence-tree
+  additions are the same five packet files and five SHA-bound sidecars listed above; there are no
+  evidence-tree removals. The tree at that prior-main reconciliation was 2427 files /
+  `2d0a52ac85a26ecedca6e4779c4e486acc999e8aef4d0f0ac88acf026ae1300c`; the merged candidate is
+  2437 files / `105bdffc3c3a47967360ed41c7a43b4e4042cb42cc511cb50265095fc66d7347`. The three
+  payload checksums and all five sidecar artifact paths, schema markers, and byte digests were
+  verified. Candidate projection retains 438 findings across 98 files, with all 171 finding rows
+  unchanged and no #9656 path finding. This refresh binds the merged path set only; it does not
+  alter finding dispositions or strict-CI exclusions.
+  Combined-main reconciliation (2026-09-27): base a0ba60cd contains the #9647 gallery evidence and already binds 2465 evidence-tree paths at SHA-256 7253f1cc2eb98da8e6ddd3acdab31c59efaf534968f782c69933c89232132dd0. This candidate retains those bytes and adds the five checksum-pinned #9656 packet files plus five exact-byte review sidecars, yielding 2475 paths at SHA-256 df403f7cc9982246fd776c1e13cef5fb1426575dddeb23ce9cd0db4c769b3f4f. The ratchet retains 438 findings across 98 files with no new or increased finding. The refresh binds the combined path inventory only; it introduces no new finding disposition or scientific claim.
 #8237 disposition: remediate. The E_release_checklist digest in the
 #4683 assurance-case example was recomputed against the exact final-head
 # docs/RELEASE.md bytes and is already current at this head. No
@@ -371,6 +511,23 @@ reviewed_files:
       Rewriting either identity would falsify provenance. The receipt explicitly disclaims benchmark
       evidence and campaign authorization, so these two historical provenance findings are reviewed
       legacy debt pending an external or historical-source backfill.
+  - path: docs/context/evidence/issue_9431_trace_worked_examples_2026-09/campaign_provenance.json
+    codes: [dangling_commit]
+    disposition: baseline
+    reason: >-
+      The diagnostic-only #9431 worked-example trace provenance preserves two exact, verified
+      identities: the 0.0.7 release-tag string embeds campaign source commit
+      07f7e8d43084de748915e1b1eb8b2a1603357c6e, and exporter_commit is
+      f39bbcc7d49026c490d5cbda8bb1bdcfb18f8233. Neither commit is an ancestor of the frozen
+      5426a585... base (and the exporter commit will not survive a squash merge), so the frozen-base
+      projection correctly classifies both as dangling_commit even though the objects exist.
+      Runtime source_commit 2e87f9de0523ef977bce19b40189ea0a74c61e13 is main-reachable and binds
+      the recorded trace config. Do not rewrite the release tag, replace the exporter revision with
+      an integration commit, or suppress the linter; those changes would falsify exact provenance.
+      Keep this pair of campaign coordinates explicitly baselined as diagnostic provenance debt;
+      the trace bundle disclaims aggregate/statistical/causal evidence and documents its startup /
+      admission receipt exception. The #9431 full-campaign goal-adjacent timeout criterion remains
+      unavailable, no waiver is claimed, and the issue stays open.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

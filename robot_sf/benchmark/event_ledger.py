@@ -7,7 +7,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from robot_sf.benchmark.spawn_validity import record_has_spawn_overlap
 from robot_sf.common.validation import finite_float as _finite_float
+from robot_sf.nav.spawn_clearance import SPAWN_OVERLAP_INVALID_REASON
 
 EPISODE_EVENT_LEDGER_SCHEMA_VERSION = "EpisodeEventLedger.v2"
 SUPPORTED_EVENT_LEDGER_SCHEMA_VERSIONS = frozenset(
@@ -312,12 +314,15 @@ def build_event_ledger(
             "source": occlusion_near_miss_source or "missing",
         },
     }
+    spawn_overlap = record_has_spawn_overlap(record)
     exact = ExactEvents(
         collision=_bool_at(outcome, "collision_event") or termination_reason == "collision",
         goal_reached=_bool_at(outcome, "route_complete") or termination_reason == "success",
         timeout=_bool_at(outcome, "timeout_event")
         or termination_reason in {"max_steps", "truncated"},
-        invalid_run=termination_reason == "error" or record.get("status") in {"error", "invalid"},
+        invalid_run=termination_reason == "error"
+        or record.get("status") in {"error", "invalid"}
+        or spawn_overlap,
     )
     surrogate = SurrogateEvents(
         near_miss=near_miss_value is not None and near_miss_value > 0.0,
@@ -350,6 +355,9 @@ def build_event_ledger(
         provenance={"source": "episode_record"},
     )
     payload = ledger.to_dict()
+    if spawn_overlap:
+        # Issue #9725: the outcome is caused by a spawn overlap, not the planner.
+        payload["provenance"]["invalid_reason"] = SPAWN_OVERLAP_INVALID_REASON
     if safety_wrapper is not None:
         payload["provenance"]["safety_wrapper"] = safety_wrapper
     if cbf_safety_filter is not None:

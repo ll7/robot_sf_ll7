@@ -62,6 +62,19 @@ from robot_sf.benchmark.constants import (
     NEAR_MISS_DIST as D_NEAR,
 )
 from robot_sf.benchmark.group_space_metrics import compute_group_space_metrics
+from robot_sf.benchmark.robot_force_contract import (
+    ROBOT_FORCE_POSTHOC_SOURCE,
+    ROBOT_FORCE_QUANTITY,
+    ROBOT_FORCE_RECORDED_SOURCE,
+    ROBOT_FORCE_SAMPLE_TIMING,
+)
+from robot_sf.benchmark.robot_force_kernel import (
+    ROBOT_FORCE_REFERENCE_RULE,
+    robot_force_reference,
+)
+from robot_sf.benchmark.robot_force_kernel import (
+    pedestrian_pair_force as _pedestrian_pair_force,
+)
 from robot_sf.benchmark.signal_metrics import calculate_signal_metrics
 from robot_sf.benchmark.social_compliance import build_social_compliance_episode_block
 from robot_sf.common.math_utils import wrap_angle_pi_array
@@ -134,6 +147,171 @@ class EpisodeData:
     ped_radius: float = 0.4
     episode_metadata: dict[str, Any] | None = None
     cooperative_goal_steps: dict[int, int] | None = None
+    robot_ped_forces: np.ndarray | None = None
+    robot_force_config: dict[str, Any] | None = None
+    social_force_config: dict[str, Any] | None = None
+    robot_force_samples: list[dict[str, Any]] | None = None
+
+
+def recompute_robot_ped_forces(data: EpisodeData, cfg: dict[str, Any]) -> np.ndarray:
+    """Evaluate inverse-cubic robot repulsion from aligned positions, without a simulator.
+
+    Positions must be force-evaluation inputs, not post-integration snapshots. NaN
+    rows stay NaN. Coincident centers are singular and rejected, as in the model.
+    Per-pedestrian response multipliers, when used, must be supplied explicitly.
+
+    Returns:
+        Acceleration vectors with shape (T, K, 2).
+    """
+    delta = np.asarray(data.peds_pos) - np.asarray(data.robot_pos)[:, None, :]
+    out = np.zeros_like(delta, dtype=float)
+    finite = np.isfinite(delta).all(axis=-1)
+    out[~finite] = np.nan
+    if not cfg["prf_active"]:
+        return out
+    distance = np.linalg.norm(delta, axis=-1)
+    if np.any(finite & (distance == 0)):
+        raise ValueError("robot force is undefined at coincident centers")
+    cutoff = cfg["prf_activation_m"] + cfg["prf_robot_radius_m"] + cfg["prf_ped_radius_m"]
+    active = finite & (distance <= cutoff)
+    out[active] = cfg["prf_multiplier"] * delta[active] / distance[active, None] ** 4
+    if "response_multipliers" in cfg:
+        out *= np.asarray(cfg["response_multipliers"])[..., None]
+    return out
+
+
+def robot_force_reductions(
+    forces: np.ndarray, *, dt: float, reference: float, prefix: str = "robot_force"
+) -> dict[str, float]:
+    """Reduce model accelerations; absent/despawned NaN rows contribute no exposure.
+
+    Empty exposure gives zero impulse, peak, duration and count; the conditional
+    mean and per-exposed-pedestrian impulse are NaN (undefined denominator).
+
+    Returns:
+        Six named scalar reductions in model acceleration/time units.
+    """
+    if forces.ndim != 3 or forces.shape[-1] != 2:
+        raise ValueError("robot forces must have shape (T,K,2)")
+    if not math.isfinite(dt) or dt <= 0 or not math.isfinite(reference) or reference < 0:
+        raise ValueError("dt and force reference must be finite, with dt > 0 and reference >= 0")
+    if np.isinf(forces).any():
+        raise ValueError("infinite robot force sample")
+    magnitude = np.linalg.norm(forces, axis=-1)
+    magnitude = np.where(np.isfinite(magnitude), magnitude, 0.0)
+    active = magnitude > 0
+    count = int(np.count_nonzero(active.any(axis=0)))
+    impulse = float(magnitude.sum() * dt)
+    return {
+        f"{prefix}_impulse_total": impulse,
+        f"{prefix}_impulse_per_exposed_ped": impulse / count if count else float("nan"),
+        f"{prefix}_peak": float(np.max(magnitude, initial=0)),
+        f"{prefix}_mean_active": float(magnitude[active].mean()) if active.any() else float("nan"),
+        f"{prefix}_time_above_ref_s": float(
+            np.count_nonzero((magnitude > reference).any(axis=1)) * dt
+        ),
+        f"{prefix}_exposed_ped_count": float(count),
+    }
+
+
+def robot_force_pp_equivalent(data: EpisodeData) -> np.ndarray:
+    """Evaluate the experimental pedestrian-pair counterfactual on force-input positions.
+
+    Uses forward differences at the first sample and backward differences thereafter.
+    A single sample cannot establish velocity and is rejected. Effective center
+    distance is floored at zero for body overlap. This never drives the simulator.
+
+    Returns:
+        Counterfactual acceleration vectors (T,K,2).
+    """
+    samples = data.robot_force_samples
+    if not samples or len(samples) < 2 or data.social_force_config is None:
+        raise ValueError("pp-equivalent requires at least two aligned force-input samples")
+    positions = np.full_like(data.peds_pos, np.nan)
+    component_count = len(samples[0]["components"])
+    for t, sample in enumerate(samples):
+        if len(sample["components"]) != component_count:
+            raise ValueError("robot force component roster changed during episode")
+        peds = np.asarray(sample["peds_pos"], dtype=float).reshape(-1, 2)
+        positions[t, : len(peds)] = peds
+    ped_velocity = np.diff(positions, axis=0) / data.dt
+    ped_velocity = np.concatenate((ped_velocity[:1], ped_velocity), axis=0)
+    result = np.zeros_like(positions)
+    for index in range(component_count):
+        components = [sample["components"][index] for sample in samples]
+        robots = np.asarray([component["robot_pos"] for component in components])
+        robot_velocity = np.diff(robots, axis=0) / data.dt
+        robot_velocity = np.concatenate((robot_velocity[:1], robot_velocity), axis=0)
+        delta = positions - robots[:, None, :]
+        distance = np.linalg.norm(delta, axis=-1)
+        radius_difference = np.asarray(
+            [cfg["prf_robot_radius_m"] - cfg["prf_ped_radius_m"] for cfg in components]
+        )[:, None]
+        effective = np.maximum(0, distance - radius_difference)
+        adjusted = np.divide(
+            delta * effective[..., None],
+            distance[..., None],
+            out=np.zeros_like(delta),
+            where=distance[..., None] > 0,
+        )
+        result += _pedestrian_pair_force(
+            adjusted, robot_velocity[:, None, :] - ped_velocity, data.social_force_config
+        )
+    result[~np.isfinite(positions).all(axis=-1)] = np.nan
+    return result
+
+
+def robot_force_metrics(data: EpisodeData) -> dict[str, Any]:
+    """Compute optional robot-attributable metrics with declared reference provenance.
+
+    Explicit robot and social configurations opt into post-hoc recomputation when
+    recorded forces are absent. Caller-supplied positions may be post-integration;
+    this path is an estimate and never claims recorded simulator-force parity.
+
+    Returns:
+        Computed model quantity with the declared configuration.
+    """
+    if (
+        data.robot_ped_forces is None
+        and data.robot_force_config is None
+        and data.social_force_config is None
+    ):
+        return {}
+    if data.robot_force_config is None or data.social_force_config is None:
+        raise ValueError("robot force metrics require robot and social force configuration")
+    cfg = data.robot_force_config
+    posthoc = data.robot_ped_forces is None
+    forces = recompute_robot_ped_forces(data, cfg) if posthoc else data.robot_ped_forces
+    reference = robot_force_reference(data.social_force_config, cfg["prf_ped_radius_m"])
+    result = robot_force_reductions(forces, dt=data.dt, reference=reference)
+    result["robot_force_metadata"] = {
+        **cfg,
+        "source": ROBOT_FORCE_RECORDED_SOURCE,
+        "social_force_config": data.social_force_config,
+        "reference_rule": ROBOT_FORCE_REFERENCE_RULE,
+        "reference_m_s2": reference,
+        "quantity": ROBOT_FORCE_QUANTITY,
+        "sample_timing": ROBOT_FORCE_SAMPLE_TIMING,
+    }
+    if posthoc:
+        result["robot_force_metadata"].update(
+            source=ROBOT_FORCE_POSTHOC_SOURCE,
+            sample_timing="caller_supplied_positions_may_be_post_integration",
+        )
+    if data.robot_force_samples and len(data.robot_force_samples) > 1 and cfg["prf_active"]:
+        result.update(
+            robot_force_reductions(
+                robot_force_pp_equivalent(data),
+                dt=data.dt,
+                reference=reference,
+                prefix="robot_force_pp_equiv",
+            )
+        )
+        result["robot_force_metadata"]["pp_equiv_status"] = "experimental_counterfactual"
+        result["robot_force_metadata"]["pp_equiv_velocity_rule"] = (
+            "backward_difference_first_forward"
+        )
+    return result
 
 
 def has_force_data(data: EpisodeData) -> bool:
@@ -2947,6 +3125,8 @@ def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None =
 
 
 # --- Orchestrator ---
+# Optional force metrics remain in the canonical registry/schema, not this
+# always-present output contract; absent instrumentation preserves legacy keys.
 METRIC_NAMES: list[str] = [
     "distributional_disruption",
     "success",
@@ -3218,6 +3398,7 @@ def compute_all_metrics(  # noqa: PLR0913
         )
     )
     values.update(_compute_force_smoothness_block(data))
+    values.update(robot_force_metrics(data))
     if experimental_near_miss_ttc:
         values.update(_compute_near_miss_ttc_metrics(data, t_thr=near_miss_ttc_threshold_s))
     values["wall_collisions"] = values["obstacle_collision_count"]
@@ -3344,7 +3525,12 @@ def post_process_metrics(
     _attach_group_space_block(metrics)
     _attach_social_mini_game_block(metrics)
     metrics.pop("_episode_metadata", None)
-    return _sanitize_metrics(metrics)
+    return _sanitize_metrics(
+        {
+            key: _robot_force_json_value(value) if key.startswith("robot_force_") else value
+            for key, value in metrics.items()
+        }
+    )
 
 
 def _attach_pedestrian_impact_block(metrics: dict[str, Any]) -> None:
@@ -3945,6 +4131,21 @@ def build_distributional_disruption_block(
         "cohort_metrics": cohort_metrics,
         "missing_data": missing_data,
     }
+
+
+def _robot_force_json_value(value: Any) -> Any:
+    """Represent undefined new force values as JSON null without changing legacy sanitization.
+
+    Returns:
+        A JSON-safe value preserving the optional force family's undefined entries.
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {key: _robot_force_json_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_robot_force_json_value(item) for item in value]
+    return value
 
 
 def _sanitize_metrics(metrics: dict[str, Any]) -> dict[str, Any]:

@@ -1,0 +1,21 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev16-fixture",
+  "component_id": "srev16-review-panels",
+  "sources": [
+    {"artifact_id": "scene", "uri": "tests/fixtures/scenario_review/review_panels/scene.json", "format": "threejs-viewer.v1"},
+    {"artifact_id": "video", "uri": "tests/fixtures/scenario_review/review_panels/video-map.json", "format": "media-mapping.v1"},
+    {"artifact_id": "metrics", "uri": "tests/fixtures/scenario_review/review_panels/metrics.json", "format": "metric-series.v1"},
+    {"artifact_id": "events", "uri": "tests/fixtures/scenario_review/review_panels/events.json", "format": "event-index.v1"}
+  ],
+  "output_directory": "output/scenario_review/srev-16-smoke",
+  "config": {
+    "sample_resolution_s": 0.4,
+    "cursor_time_s": 10.5,
+    "intervals": [{"interval_id": "interaction", "start_s": 10.4, "end_s": 10.8, "label": "near miss"}],
+    "selected_interval": "interaction",
+    "requested_metrics": ["clearance", "collision_count", "goal_distance"],
+    "metric_visibility": {"clearance": true, "collision_count": false, "goal_distance": true}
+  },
+  "required_capabilities": ["source-time-cursor", "synchronized-panels"]
+}

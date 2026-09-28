@@ -1,0 +1,25 @@
+{
+  "schema_version": "component-request.v1",
+  "request_id": "srev09-smoke",
+  "component_id": "srev09-review-scene",
+  "sources": [
+    {
+      "artifact_id": "trace-0002",
+      "uri": "trace-export.json",
+      "format": "simulation_trace_export.v1"
+    }
+  ],
+  "config": {
+    "preset": "test",
+    "scene": {
+      "frame_indices": [0, 1, 2],
+      "formats": ["svg", "png", "pdf"],
+      "figure": {
+        "width_in": 3.2,
+        "height_in": 2.4,
+        "dpi": 80
+      }
+    }
+  },
+  "output_directory": "srev-09-smoke"
+}

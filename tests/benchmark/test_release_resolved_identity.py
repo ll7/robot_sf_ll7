@@ -129,9 +129,11 @@ def test_checked_in_future_benchmark_templates_pin_contract_without_historical_i
         "horizon_steps": 600,
         "dt": 0.1,
     }
-    assert manifest["scenario"]["matrix_sha256"] == _sha256(
-        REPO_ROOT / "configs/scenarios/classic_interactions_francis2023.yaml"
-    )
+    scenario_matrix = (
+        PUBLIC_RELEASE_TEMPLATE.parent / manifest["scenario"]["matrix_path"]
+    ).resolve()
+    assert scenario_matrix.is_file()
+    assert manifest["scenario"]["matrix_sha256"] == _sha256(scenario_matrix)
     assert manifest["seed_policy"]["resolved_seeds"] == list(range(111, 141))
     loaded_template, metadata_path, metadata_bytes = release_protocol._identity_template_payload(
         PUBLIC_RELEASE_TEMPLATE,

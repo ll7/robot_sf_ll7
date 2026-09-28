@@ -64,6 +64,14 @@ def _init_classes() -> dict[str, Any]:  # noqa: C901
             def conv_block(
                 in_channels: int, out_channels: int, kernel_size: int
             ) -> list[nn.Module]:
+                """Build convolution, normalization, activation, pooling, and dropout layers.
+
+                The convolution maps ``in_channels`` to ``out_channels`` using
+                ``kernel_size``; max pooling then halves the convolution output length.
+
+                Returns:
+                    Layers in execution order, using the enclosing dropout probability.
+                """
                 padding = kernel_size // 2
                 return [
                     nn.Conv1d(in_channels, out_channels, kernel_size, stride=1, padding=padding),
@@ -104,9 +112,26 @@ def _init_classes() -> dict[str, Any]:  # noqa: C901
             self.drive_state_extractor = nn.Sequential(nn.Flatten(), *drive_layers)
 
         def latest_feature_stats(self) -> dict[str, float]:
+            """Return a copy of the most recent recorded feature statistics.
+
+            Returns:
+                Mapping of statistic name to value; empty unless the extractor
+                was built with ``record_feature_stats=True`` and ``forward`` has
+                run at least once.
+            """
             return self._latest_feature_stats.copy()
 
         def forward(self, obs: dict) -> th.Tensor:
+            """Encode rays with a 1-D CNN and drive state with an MLP.
+
+            Args:
+                obs: Observation dict with ``rays`` and ``drive_state`` entries.
+
+            Returns:
+                Concatenated ray and drive-state features of shape
+                ``(batch, features_dim)``. When ``record_feature_stats`` is
+                enabled, records summary statistics for ``latest_feature_stats``.
+            """
             ray_features = self.ray_extractor(obs[OBS_RAYS])
             drive_features = self.drive_state_extractor(obs[OBS_DRIVE_STATE])
             combined_features = th.cat([ray_features, drive_features], dim=1)

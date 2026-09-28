@@ -78,6 +78,9 @@ GLOBAL_ROUTE_ALL = [
 ]
 
 MAP_CONFIG_ALL = [
+    "GOAL_COMPLETION_POLICY_GOAL_ZONE_ENTRY_V1",
+    "GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1",
+    "SUPPORTED_GOAL_COMPLETION_POLICIES",
     "GlobalRoute",
     "InfrastructureZone",
     "MapDefinition",
@@ -86,6 +89,7 @@ MAP_CONFIG_ALL = [
     "PedestrianWaitRule",
     "SinglePedestrianDefinition",
     "SocialGroupDefinition",
+    "normalize_goal_completion_policy",
     "parse_social_group_definitions",
     "serialize_map",
 ]
@@ -101,6 +105,7 @@ NAV_TYPES_ALL = [
 NAVIGATION_ALL = [
     "NavigationSettings",
     "RouteNavigator",
+    "SampledRoute",
     "get_prepared_obstacles",
     "sample_route",
 ]

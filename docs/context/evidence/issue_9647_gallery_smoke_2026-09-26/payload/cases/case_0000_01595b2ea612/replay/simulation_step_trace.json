@@ -1,0 +1,1108 @@
+{
+  "dt": 0.1,
+  "initial_goal_distance_m": 2.0000010000000006,
+  "reset": {
+    "collision_at_reset": false,
+    "heading_source": "simulator.ped_headings (velocity-derived, 0.0 fallback when stationary)",
+    "min_surface_clearance_m": 2.7287786969249894,
+    "pedestrians": [
+      {
+        "actor_id": "simulator-slot-0",
+        "heading": 2.46752714026501,
+        "id": "simulator-slot-0",
+        "position": [
+          36.53918559072127,
+          36.35095075219507
+        ],
+        "surface_clearance_m": 46.618996561914514,
+        "velocity": [
+          -0.3906452841905888,
+          0.31208374187011745
+        ]
+      },
+      {
+        "actor_id": "simulator-slot-1",
+        "heading": 1.1328733936448205,
+        "id": "simulator-slot-1",
+        "position": [
+          4.244094480055415,
+          6.299239795340249
+        ],
+        "surface_clearance_m": 2.7287786969249894,
+        "velocity": [
+          0.212029658967513,
+          0.4528172078423259
+        ]
+      },
+      {
+        "actor_id": "simulator-slot-2",
+        "heading": 1.0469321977545185,
+        "id": "simulator-slot-2",
+        "position": [
+          15.919948716024788,
+          24.1863582610969
+        ],
+        "surface_clearance_m": 24.071069294131377,
+        "velocity": [
+          0.2501148926080066,
+          0.43294634828773565
+        ]
+      }
+    ],
+    "robot": {
+      "heading": 0.0419040210545063,
+      "position": [
+        2.3542022395006836,
+        2.6283923663025566
+      ],
+      "velocity": [
+        0.0,
+        0.0
+      ]
+    },
+    "routes": {
+      "owner": "map_def.ped_routes",
+      "reason": "route_objects_not_retained_per_episode",
+      "status": "unavailable"
+    },
+    "spawn": {
+      "owner": "robot_sf.ped_npc.ped_population.populate_simulation",
+      "reason": "spawn_sampler_decision_not_retained",
+      "scenario_echo": {},
+      "status": "unavailable"
+    }
+  },
+  "schema_version": "simulation-step-trace.v1",
+  "steps": [
+    {
+      "pedestrians": [
+        {
+          "actor_id": "simulator-slot-0",
+          "heading": 2.63317384780677,
+          "id": "simulator-slot-0",
+          "position": [
+            36.49786662106931,
+            36.373977178771334
+          ],
+          "surface_clearance_m": 46.602074680704845,
+          "track_confidence": null,
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-1",
+          "heading": 1.0868231936991857,
+          "id": "simulator-slot-1",
+          "position": [
+            4.266104057373206,
+            6.341109260111882
+          ],
+          "surface_clearance_m": 2.773609367525219,
+          "track_confidence": null,
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-2",
+          "heading": 1.1041978118413347,
+          "id": "simulator-slot-2",
+          "position": [
+            15.941227541967793,
+            24.228603795067464
+          ],
+          "surface_clearance_m": 24.11532260282608,
+          "track_confidence": null,
+          "velocity": [
+            0.0,
+            0.0
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        }
+      ],
+      "planner": {
+        "ammv": {
+          "pedestrian_force_vectors": [
+            [
+              -0.6030033156969478,
+              -0.6077868274936804
+            ],
+            [
+              0.30135216898226597,
+              0.07860141503746346
+            ],
+            [
+              -0.2451531964802145,
+              0.14943702072832626
+            ]
+          ]
+        },
+        "applied_environment_action": {
+          "angular_velocity": -0.136815438449589,
+          "linear_velocity": 9.956450293358925
+        },
+        "event": "step",
+        "selected_action": {
+          "angular_velocity": -0.013681543844958899,
+          "linear_velocity": 0.9956450293358926
+        }
+      },
+      "rl": {
+        "reward": 0.0024998629275352433,
+        "terminated": false,
+        "truncated": false
+      },
+      "robot": {
+        "heading": 0.04121994599699974,
+        "position": [
+          2.3591979216259777,
+          2.6286001164000674
+        ],
+        "velocity": [
+          0.0499568212529411,
+          0.002077500975108393
+        ]
+      },
+      "step": 0,
+      "time_s": 0.1
+    },
+    {
+      "pedestrians": [
+        {
+          "actor_id": "simulator-slot-0",
+          "heading": 2.762978359118561,
+          "id": "simulator-slot-0",
+          "position": [
+            36.45391471136485,
+            36.39146154914322
+          ],
+          "surface_clearance_m": 46.57204902741002,
+          "track_confidence": null,
+          "velocity": [
+            -0.43951909704460945,
+            0.17484370371889213
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-1",
+          "heading": 1.0506043287409843,
+          "id": "simulator-slot-1",
+          "position": [
+            4.289615333080222,
+            6.382154277941084
+          ],
+          "surface_clearance_m": 2.8134846186248503,
+          "track_confidence": null,
+          "velocity": [
+            0.235112757070155,
+            0.41045017829202557
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-2",
+          "heading": 1.1520810545630975,
+          "id": "simulator-slot-2",
+          "position": [
+            15.960459898228446,
+            24.271819417782336
+          ],
+          "surface_clearance_m": 24.153656087487434,
+          "track_confidence": null,
+          "velocity": [
+            0.1923235626065356,
+            0.4321562271487167
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        }
+      ],
+      "planner": {
+        "ammv": {
+          "pedestrian_force_vectors": [
+            [
+              -0.535790962722167,
+              -0.4458044665016339
+            ],
+            [
+              0.2800523100791344,
+              0.1442987802821532
+            ],
+            [
+              -0.17545316397823202,
+              0.16260813919445352
+            ]
+          ]
+        },
+        "applied_environment_action": {
+          "angular_velocity": 0.0881919134454856,
+          "linear_velocity": 8.984522651290089
+        },
+        "event": "step",
+        "selected_action": {
+          "angular_velocity": -0.0048623525004103385,
+          "linear_velocity": 0.9984522651290089
+        }
+      },
+      "rl": {
+        "reward": 0.02749943292336022,
+        "terminated": false,
+        "truncated": false
+      },
+      "robot": {
+        "heading": 0.04029275104403496,
+        "position": [
+          2.3741854652510157,
+          2.6292112923874806
+        ],
+        "velocity": [
+          0.14987543625037958,
+          0.006111759874132261
+        ]
+      },
+      "step": 1,
+      "time_s": 0.2
+    },
+    {
+      "pedestrians": [
+        {
+          "actor_id": "simulator-slot-0",
+          "heading": 2.857122329528304,
+          "id": "simulator-slot-0",
+          "position": [
+            36.40851381503441,
+            36.404736796273255
+          ],
+          "surface_clearance_m": 46.53072343137672,
+          "track_confidence": null,
+          "velocity": [
+            -0.45400896330441753,
+            0.13275247130032142
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-1",
+          "heading": 1.0238530322103918,
+          "id": "simulator-slot-1",
+          "position": [
+            4.31421607306609,
+            6.422555727990786
+          ],
+          "surface_clearance_m": 2.848444857431406,
+          "track_confidence": null,
+          "velocity": [
+            0.24600739985868536,
+            0.40401450049701637
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-2",
+          "heading": 1.1899773299359993,
+          "id": "simulator-slot-2",
+          "position": [
+            15.978041126908872,
+            24.315732672866165
+          ],
+          "surface_clearance_m": 24.186082871679783,
+          "track_confidence": null,
+          "velocity": [
+            0.17581228680425554,
+            0.43913255083829483
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        }
+      ],
+      "planner": {
+        "ammv": {
+          "pedestrian_force_vectors": [
+            [
+              -0.45645529622507586,
+              -0.32981299265989156
+            ],
+            [
+              0.24456690211551207,
+              0.15837082367789568
+            ],
+            [
+              -0.1388621947256926,
+              0.13533019487773668
+            ]
+          ]
+        },
+        "applied_environment_action": {
+          "angular_velocity": 0.009138021481338576,
+          "linear_velocity": 7.987431373867759
+        },
+        "event": "step",
+        "selected_action": {
+          "angular_velocity": -0.003948550352276481,
+          "linear_velocity": 0.9987431373867759
+        }
+      },
+      "rl": {
+        "reward": 0.05210673874345665,
+        "terminated": false,
+        "truncated": false
+      },
+      "robot": {
+        "heading": 0.03985220566391945,
+        "position": [
+          2.3991653953930863,
+          2.6302128362443753
+        ],
+        "velocity": [
+          0.2497993014207056,
+          0.0100154385689466
+        ]
+      },
+      "step": 2,
+      "time_s": 0.30000000000000004
+    },
+    {
+      "pedestrians": [
+        {
+          "actor_id": "simulator-slot-0",
+          "heading": 2.923841893632596,
+          "id": "simulator-slot-0",
+          "position": [
+            36.36232887055549,
+            36.41495562582706
+          ],
+          "surface_clearance_m": 46.47940278424842,
+          "track_confidence": null,
+          "velocity": [
+            -0.4618494447892374,
+            0.1021882955380704
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-1",
+          "heading": 1.0042823661478872,
+          "id": "simulator-slot-1",
+          "position": [
+            4.339602734840617,
+            6.462468019054024
+          ],
+          "surface_clearance_m": 2.8785909289965717,
+          "track_confidence": null,
+          "velocity": [
+            0.25386661774526864,
+            0.3991229106323768
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-2",
+          "heading": 1.220002401901571,
+          "id": "simulator-slot-2",
+          "position": [
+            15.994296130854766,
+            24.36015393377454
+          ],
+          "surface_clearance_m": 24.2126514691407,
+          "track_confidence": null,
+          "velocity": [
+            0.1625500394589352,
+            0.44421260908375615
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        }
+      ],
+      "planner": {
+        "ammv": {
+          "pedestrian_force_vectors": [
+            [
+              -0.3973536742068492,
+              -0.23507148700803554
+            ],
+            [
+              0.21715966134528292,
+              0.16893652093286454
+            ],
+            [
+              -0.10967840456210892,
+              0.11350154973217483
+            ]
+          ]
+        },
+        "applied_environment_action": {
+          "angular_velocity": 0.004214849749351046,
+          "linear_velocity": 6.988773002211756
+        },
+        "event": "step",
+        "selected_action": {
+          "angular_velocity": -0.0035270653773413763,
+          "linear_velocity": 0.9988773002211757
+        }
+      },
+      "rl": {
+        "reward": 0.0772421443823951,
+        "terminated": false,
+        "truncated": false
+      },
+      "robot": {
+        "heading": 0.039478424936532974,
+        "position": [
+          2.434137865601311,
+          2.6316007582648195
+        ],
+        "velocity": [
+          0.3497247020822458,
+          0.013879220204442433
+        ]
+      },
+      "step": 3,
+      "time_s": 0.4
+    },
+    {
+      "pedestrians": [
+        {
+          "actor_id": "simulator-slot-0",
+          "heading": 2.308307239586534,
+          "id": "simulator-slot-0",
+          "position": [
+            4.0524597499641875,
+            2.719201285421601
+          ],
+          "surface_clearance_m": 0.17569612545501967,
+          "track_confidence": null,
+          "velocity": [
+            -323.098691205913,
+            -336.95754340405455
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-1",
+          "heading": 0.9901851560642404,
+          "id": "simulator-slot-1",
+          "position": [
+            4.365549507410491,
+            6.502018475020777
+          ],
+          "surface_clearance_m": 2.904082546894346,
+          "track_confidence": null,
+          "velocity": [
+            0.259467725698741,
+            0.3955045596675344
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-2",
+          "heading": 1.2438253735129543,
+          "id": "simulator-slot-2",
+          "position": [
+            16.00948837604336,
+            24.404949795861352
+          ],
+          "surface_clearance_m": 24.23343604501356,
+          "track_confidence": null,
+          "velocity": [
+            0.1519224518859552,
+            0.4479586208681141
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        }
+      ],
+      "planner": {
+        "ammv": {
+          "pedestrian_force_vectors": [
+            [
+              2.722869724808254,
+              1.0645788402067566
+            ],
+            [
+              0.19581842362286314,
+              0.17692369631697144
+            ],
+            [
+              -0.08658919807204726,
+              0.09550826585342659
+            ]
+          ]
+        },
+        "applied_environment_action": {
+          "angular_velocity": 0.003496848498811822,
+          "linear_velocity": 5.989886083659415
+        },
+        "event": "step",
+        "selected_action": {
+          "angular_velocity": -0.003177380527460194,
+          "linear_velocity": 0.9989886083659415
+        }
+      },
+      "rl": {
+        "reward": -1.431064488475399,
+        "terminated": false,
+        "truncated": false
+      },
+      "robot": {
+        "heading": 0.03914320096373558,
+        "position": [
+          2.4791030999271273,
+          2.6333692893005693
+        ],
+        "velocity": [
+          0.4496523432581645,
+          0.017685310357498096
+        ]
+      },
+      "step": 4,
+      "time_s": 0.5
+    },
+    {
+      "pedestrians": [
+        {
+          "actor_id": "simulator-slot-0",
+          "heading": 1.1222922419921029,
+          "id": "simulator-slot-0",
+          "position": [
+            4.071030618675258,
+            2.7577931971992307
+          ],
+          "surface_clearance_m": 0.1418258896557959,
+          "track_confidence": null,
+          "velocity": [
+            0.1857086871107061,
+            0.3859191177762966
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-1",
+          "heading": 0.9801748072886886,
+          "id": "simulator-slot-1",
+          "position": [
+            4.391890887212294,
+            6.541307217481029
+          ],
+          "surface_clearance_m": 2.9251308499137596,
+          "track_confidence": null,
+          "velocity": [
+            0.26341379801802844,
+            0.3928874246025238
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-2",
+          "heading": 1.2627591859019371,
+          "id": "simulator-slot-2",
+          "position": [
+            16.02382979241137,
+            24.45002525870457
+          ],
+          "surface_clearance_m": 24.248524047753357,
+          "track_confidence": null,
+          "velocity": [
+            0.14341416368008453,
+            0.45075462843218617
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        }
+      ],
+      "planner": {
+        "ammv": {
+          "pedestrian_force_vectors": [
+            [
+              3.7527115941909632,
+              1.7727293821753438
+            ],
+            [
+              0.17883226714580208,
+              0.1817043467452778
+            ],
+            [
+              -0.06844508823449183,
+              0.08025311546874017
+            ]
+          ]
+        },
+        "applied_environment_action": {
+          "angular_velocity": 0.0030712146802658324,
+          "linear_velocity": 4.990863681654736
+        },
+        "event": "step",
+        "selected_action": {
+          "angular_velocity": -0.002870259059433611,
+          "linear_velocity": 0.9990863681654737
+        }
+      },
+      "rl": {
+        "reward": -1.4060468685948733,
+        "terminated": false,
+        "truncated": false
+      },
+      "robot": {
+        "heading": 0.03884081915020943,
+        "position": [
+          2.534061294857673,
+          2.6355133065523972
+        ],
+        "velocity": [
+          0.5495819493054555,
+          0.0214401725182789
+        ]
+      },
+      "step": 5,
+      "time_s": 0.6000000000000001
+    },
+    {
+      "pedestrians": [
+        {
+          "actor_id": "simulator-slot-0",
+          "heading": 0.813697517087305,
+          "id": "simulator-slot-0",
+          "position": [
+            4.103518332225429,
+            2.792173744638923
+          ],
+          "surface_clearance_m": 0.11238163990136829,
+          "track_confidence": null,
+          "velocity": [
+            0.3248771355017066,
+            0.3438054743969232
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-1",
+          "heading": 0.973273117576248,
+          "id": "simulator-slot-1",
+          "position": [
+            4.418502796209848,
+            6.580413225631655
+          ],
+          "surface_clearance_m": 2.9419974994459532,
+          "track_confidence": null,
+          "velocity": [
+            0.266119089975545,
+            0.3910600815062537
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-2",
+          "heading": 1.277835629068156,
+          "id": "simulator-slot-2",
+          "position": [
+            16.037490027004985,
+            24.495311808195762
+          ],
+          "surface_clearance_m": 24.258010663465136,
+          "track_confidence": null,
+          "velocity": [
+            0.13660234593615428,
+            0.4528654949119115
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        }
+      ],
+      "planner": {
+        "ammv": {
+          "pedestrian_force_vectors": [
+            [
+              3.161574845999446,
+              1.4518731722193523
+            ],
+            [
+              0.1653018903199315,
+              0.18488243347594324
+            ],
+            [
+              -0.05428012722947123,
+              0.06698471043804113
+            ]
+          ]
+        },
+        "applied_environment_action": {
+          "angular_velocity": 0.0027093325174742944,
+          "linear_velocity": 3.9917260889800086
+        },
+        "event": "step",
+        "selected_action": {
+          "angular_velocity": -0.0025993258076861814,
+          "linear_velocity": 0.9991726088980009
+        }
+      },
+      "rl": {
+        "reward": -1.381032316563387,
+        "terminated": false,
+        "truncated": false
+      },
+      "robot": {
+        "heading": 0.03856734186410904,
+        "position": [
+          2.599012615743845,
+          2.6380284437537243
+        ],
+        "velocity": [
+          0.6495132088617206,
+          0.025151372013270112
+        ]
+      },
+      "step": 6,
+      "time_s": 0.7000000000000001
+    },
+    {
+      "pedestrians": [
+        {
+          "actor_id": "simulator-slot-0",
+          "heading": 0.6741751552187994,
+          "id": "simulator-slot-0",
+          "position": [
+            4.140471654869231,
+            2.821702129619378
+          ],
+          "surface_clearance_m": 0.07761635052585725,
+          "track_confidence": null,
+          "velocity": [
+            0.3695332264380191,
+            0.2952838498045507
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-1",
+          "heading": 0.9687465037890994,
+          "id": "simulator-slot-1",
+          "position": [
+            4.445291449756901,
+            6.619398371714578
+          ],
+          "surface_clearance_m": 2.9549956257383516,
+          "track_confidence": null,
+          "velocity": [
+            0.2678865354705273,
+            0.38985146082922917
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-2",
+          "heading": 1.289865720685235,
+          "id": "simulator-slot-2",
+          "position": [
+            16.050604484936137,
+            24.540759410631345
+          ],
+          "surface_clearance_m": 24.261996289886564,
+          "track_confidence": null,
+          "velocity": [
+            0.131144579311524,
+            0.45447602435583434
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        }
+      ],
+      "planner": {
+        "ammv": {
+          "pedestrian_force_vectors": [
+            [
+              3.027202003627673,
+              1.5769031597479
+            ],
+            [
+              0.15413540175180285,
+              0.18650346614268928
+            ],
+            [
+              -0.04330136995585793,
+              0.055182825011862474
+            ]
+          ]
+        },
+        "applied_environment_action": {
+          "angular_velocity": 0.0023938306166249035,
+          "linear_velocity": 2.9924880689311295
+        },
+        "event": "step",
+        "selected_action": {
+          "angular_velocity": -0.002359942746023691,
+          "linear_velocity": 0.9992488068931129
+        }
+      },
+      "rl": {
+        "reward": -1.356019917736777,
+        "terminated": false,
+        "truncated": false
+      },
+      "robot": {
+        "heading": 0.03831937909126282,
+        "position": [
+          2.673957201622932,
+          2.640910985585543
+        ],
+        "velocity": [
+          0.7494458587908692,
+          0.028825418318185747
+        ]
+      },
+      "step": 7,
+      "time_s": 0.8
+    },
+    {
+      "pedestrians": [
+        {
+          "actor_id": "simulator-slot-0",
+          "heading": 0.60138415711273,
+          "id": "simulator-slot-0",
+          "position": [
+            4.179474624606449,
+            2.8484648261510896
+          ],
+          "surface_clearance_m": 0.03519593213874328,
+          "track_confidence": null,
+          "velocity": [
+            0.39002969737218507,
+            0.26762696531711594
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-1",
+          "heading": 0.9659952663876431,
+          "id": "simulator-slot-1",
+          "position": [
+            4.472187259174937,
+            6.658309668399725
+          ],
+          "surface_clearance_m": 2.964491414421764,
+          "track_confidence": null,
+          "velocity": [
+            0.26895809418036265,
+            0.38911296685147256
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-2",
+          "heading": 1.2994875371642811,
+          "id": "simulator-slot-2",
+          "position": [
+            16.0632810540652,
+            24.586331092288784
+          ],
+          "surface_clearance_m": 24.260585616634717,
+          "track_confidence": null,
+          "velocity": [
+            0.12676569129062898,
+            0.45571681657438745
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        }
+      ],
+      "planner": {
+        "ammv": {
+          "pedestrian_force_vectors": [
+            [
+              3.125473486881175,
+              1.7273988185649478
+            ],
+            [
+              0.14504581936636485,
+              0.18695624699709062
+            ],
+            [
+              -0.03486679751447658,
+              0.0444823981851174
+            ]
+          ]
+        },
+        "applied_environment_action": {
+          "angular_velocity": 0.0021161013077497515,
+          "linear_velocity": 1.993161644897553
+        },
+        "event": "step",
+        "selected_action": {
+          "angular_velocity": -0.002148332615248716,
+          "linear_velocity": 0.9993161644897552
+        }
+      },
+      "rl": {
+        "reward": -1.3310092907851858,
+        "terminated": false,
+        "truncated": false
+      },
+      "robot": {
+        "heading": 0.038093965500593185,
+        "position": [
+          2.7588951698068245,
+          2.6441577625708073
+        ],
+        "velocity": [
+          0.8493796818389265,
+          0.032467769852644324
+        ]
+      },
+      "step": 8,
+      "time_s": 0.9
+    },
+    {
+      "pedestrians": [
+        {
+          "actor_id": "simulator-slot-0",
+          "heading": 0.559262202356799,
+          "id": "simulator-slot-0",
+          "position": [
+            4.2195699625419705,
+            2.873561388660868
+          ],
+          "surface_clearance_m": -0.015686402836192603,
+          "track_confidence": null,
+          "velocity": [
+            0.40095337935521336,
+            0.2509656250977832
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-1",
+          "heading": 0.96458922868965,
+          "id": "simulator-slot-1",
+          "position": [
+            4.499137752739241,
+            6.69718311011269
+          ],
+          "surface_clearance_m": 2.9709197419886384,
+          "track_confidence": null,
+          "velocity": [
+            0.26950493564303457,
+            0.38873441712965473
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        },
+        {
+          "actor_id": "simulator-slot-2",
+          "heading": 1.3072037774747343,
+          "id": "simulator-slot-2",
+          "position": [
+            16.07560560725481,
+            24.63199923175874
+          ],
+          "surface_clearance_m": 24.253904664695245,
+          "track_confidence": null,
+          "velocity": [
+            0.1232455318961101,
+            0.45668139469956515
+          ],
+          "visibility_evidence_reason": "observation_visibility_disabled",
+          "visibility_evidence_status": "not_applicable",
+          "visibility_state": "not_applicable"
+        }
+      ],
+      "planner": {
+        "ammv": {
+          "pedestrian_force_vectors": [
+            [
+              3.343195303953874,
+              1.8575930375018848
+            ],
+            [
+              0.13741936304206254,
+              0.1865407945788953
+            ],
+            [
+              -0.028460846349670943,
+              0.03462335216834847
+            ]
+          ]
+        },
+        "applied_environment_action": {
+          "angular_velocity": 0.0018729463774080912,
+          "linear_velocity": 0.9937578222457744
+        },
+        "event": "step",
+        "selected_action": {
+          "angular_velocity": -0.0019610379775079068,
+          "linear_velocity": 0.9993757822245773
+        }
+      },
+      "rl": {
+        "reward": -4.90618554198548,
+        "terminated": true,
+        "truncated": false
+      },
+      "robot": {
+        "heading": 0.03788849711418152,
+        "position": [
+          2.8537954313415055,
+          2.64776487580748
+        ],
+        "velocity": [
+          0.9490026153468101,
+          0.03607113236672621
+        ]
+      },
+      "step": 9,
+      "time_s": 1.0
+    }
+  ]
+}

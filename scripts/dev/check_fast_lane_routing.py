@@ -147,7 +147,8 @@ def _has_slow_marker(test_path: str, source: str) -> bool:
 def _is_contract_candidate(test_path: str, source: str) -> bool:
     """Return whether a test looks like deterministic schema/contract coverage."""
 
-    haystack = f"{test_path.replace('\\', '/').lower()}\n{source.lower()}"
+    normalized_path = test_path.replace("\\", "/").lower()
+    haystack = f"{normalized_path}\n{source.lower()}"
     explicit_lane = _EXPLICIT_LANE_RE.search(source.lower())
     if explicit_lane:
         return explicit_lane.group(1) in {

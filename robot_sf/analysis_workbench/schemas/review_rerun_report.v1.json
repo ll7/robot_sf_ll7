@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/review_rerun_report.v1.json",
+  "title": "Robot SF Review Rerun Report v1",
+  "description": "Diagnostic-only measurements for review-rerun timeline generation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "component",
+    "component_version",
+    "request_id",
+    "prototype",
+    "mode",
+    "evidence_boundary",
+    "diagnostic_only",
+    "admission",
+    "timelines",
+    "measurements",
+    "report_sha256",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {"const": "review-rerun-report.v1"},
+    "component": {"const": "srev19-review-rerun"},
+    "component_version": {"type": "string", "minLength": 1},
+    "request_id": {"type": "string", "minLength": 1},
+    "prototype": {"const": true},
+    "mode": {"enum": ["auto", "json", "rerun"]},
+    "evidence_boundary": {"const": "analysis_workbench_only"},
+    "diagnostic_only": {"const": true},
+    "admission": {"const": "not_evaluated"},
+    "timelines": {"type": "array", "items": {"type": "object"}},
+    "measurements": {"type": "array", "items": {"type": "object"}},
+    "report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "provenance": {"type": "object", "additionalProperties": true}
+  }
+}

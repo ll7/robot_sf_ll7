@@ -47,6 +47,7 @@ from robot_sf.benchmark.latency.latency_stress import (
 from robot_sf.benchmark.paired_effect_metric_contract import (
     load_paired_effect_metric_contract,
 )
+from robot_sf.benchmark.snqi.v2_spec import SnqiV2Spec, load_snqi_v2_spec
 from robot_sf.benchmark.synthetic_actuation import (
     SYNTHETIC_ACTUATION_CLAIM_SCOPE,
     SyntheticActuationProfile,
@@ -1563,6 +1564,26 @@ def _build_snqi_contract_config(snqi_contract_raw: dict[str, Any]) -> SnqiContra
     )
 
 
+def _load_snqi_v2_config(raw: Any, config_path: Path) -> SnqiV2Spec | None:
+    """Resolve explicit versioned assets relative to the campaign config.
+
+    Returns:
+        Validated result described above.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or set(raw) != {"weights_path", "anchors_path", "family_path"}:
+        raise ValueError("snqi_v2_spec requires exactly weights_path, anchors_path, family_path")
+    paths = []
+    for key in ("weights_path", "anchors_path", "family_path"):
+        path = Path(raw[key])
+        if not path.is_absolute():
+            local = config_path.parent / path
+            path = local if local.exists() else get_repository_root() / path
+        paths.append(path)
+    return load_snqi_v2_spec(*paths)
+
+
 def _assemble_campaign_config(
     parsed: _ParsedCampaignConfig,
     *,
@@ -1602,6 +1623,7 @@ def _assemble_campaign_config(
         bootstrap_seed=int(payload.get("bootstrap_seed", 123)),
         snqi_weights_path=parsed.snqi_weights_path,
         snqi_baseline_path=parsed.snqi_baseline_path,
+        snqi_v2_spec=_load_snqi_v2_config(payload.get("snqi_v2_spec"), config_path),
         stop_on_failure=bool(payload.get("stop_on_failure", False)),
         export_publication_bundle=bool(payload.get("export_publication_bundle", True)),
         include_videos_in_publication=bool(payload.get("include_videos_in_publication", False)),

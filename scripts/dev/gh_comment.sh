@@ -14,6 +14,9 @@ Usage:
 
 Notes:
   - If --body-file is omitted, comment body is read from stdin.
+  - --body-file also accepts /dev/stdin and /dev/fd/N: the stream is
+    materialized to a temporary file first so every downstream gate
+    (existence, emptiness, transport policy, file upload) keeps working.
   - Prefer heredoc stdin for multiline comments to avoid literal "\n" escapes.
   - Both PR and issue comments use the REST issue-comments endpoint
     (POST repos/<owner>/<repo>/issues/<number>/comments) with REST target
@@ -280,6 +283,19 @@ if [ -z "$body_file" ]; then
   body_file="$(mktemp)"
   trap 'rm -f "$body_file"' EXIT
   cat >"$body_file"
+fi
+
+# An explicit stdio path (/dev/stdin, /dev/fd/N) is a stream, not a regular
+# file, so the existence gate below would reject it. Materialize it to a
+# temporary file first; every downstream check then applies unchanged.
+if [[ "$body_file" == /dev/stdin || "$body_file" == /dev/fd/* ]]; then
+  stdio_tmp="$(mktemp)"
+  trap 'rm -f "$stdio_tmp"' EXIT
+  if ! cat "$body_file" >"$stdio_tmp"; then
+    echo "Error: could not read comment body from '$body_file'." >&2
+    exit 2
+  fi
+  body_file="$stdio_tmp"
 fi
 
 if [ ! -f "$body_file" ]; then

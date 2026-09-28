@@ -341,7 +341,14 @@ def evaluate_manifest(  # noqa: C901, PLR0912 - one bounded decision per manifes
             problems.append("latest_safe_submission_conflict")
     if deadline is not None and effective_as_of is not None and deadline <= effective_as_of:
         problems.append("deadline_expired")
-    if any(code != "deadline_expired" for code in problems):
+    # An independently parsed deadline that is already in the past is a
+    # decisive ``too_late`` result even when its supporting evidence-age field
+    # is now stale.  That distinction matters for manifests written long ago:
+    # the current clock must not turn a known-expired window into ``unknown``
+    # merely because the manifest's evidence timestamp aged out.  Other
+    # malformed or contradictory fields remain fail-closed as ``unknown``.
+    non_decisive_expiry_codes = {"deadline_expired", "expired_deadline_evidence"}
+    if any(code not in non_decisive_expiry_codes for code in problems):
         verdict = "unknown"
     elif "deadline_expired" in problems:
         verdict = "too_late"

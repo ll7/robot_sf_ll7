@@ -1,0 +1,54 @@
+# Issue #7849 candidate: true RecurrentPPO-LSTM arm of the matched 15M-step
+# comparison.
+#
+# This file is a frozen input candidate only. It does not authorize Slurm or
+# training. The admission packet owns the exact-source, seed-independence,
+# evaluation-split, GPU, artifact, and domain-review gates.
+
+scenario_config: ../../scenarios/classic_interactions_francis2023.yaml
+evaluation:
+  scenario_config: ../../scenarios/classic_interactions_francis2023.yaml
+  evaluation_episodes: 100
+  hold_out_scenarios: []
+  randomize_seeds: false
+  step_schedule:
+    - every_steps: 1000000
+
+policy_id: recurrent_ppo_issue_7849_full_v1
+algorithm: recurrent_ppo
+recurrent_policy: MultiInputLstmPolicy
+seeds: [123, 231, 777, 992, 1337]
+randomize_seeds: false
+total_timesteps: 15000000
+
+# Keep the recurrent arm byte-matched to the #4014 smoke hyperparameters.
+# The only arm-specific model state is true RecurrentPPO/LSTM recurrence.
+recurrent_ppo_hyperparams:
+  learning_rate: 0.0001
+  n_steps: 128
+  batch_size: 64
+  n_epochs: 2
+  gamma: 0.99
+  gae_lambda: 0.95
+  device: cuda
+  policy_kwargs:
+    lstm_hidden_size: 128
+    n_lstm_layers: 1
+    shared_lstm: false
+    enable_critic_lstm: true
+
+best_checkpoint_metric: success_rate
+convergence:
+  success_rate: 0.8
+  collision_rate: 0.1
+  plateau_window: 512
+
+env_overrides:
+  observation_mode: default_gym
+env_factory_kwargs:
+  reward_name: route_completion_v2
+policy_net_arch: [64, 64]
+num_envs: auto
+worker_mode: auto
+tracking:
+  tensorboard: true

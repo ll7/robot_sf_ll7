@@ -1662,6 +1662,8 @@ def test_social_force_obstacle_no_grid_returns_zero():
         ("origin", "malformed-origin"),
         ("use_ego_frame", np.array([np.inf], dtype=np.float32)),
         ("channel_indices", np.array([np.inf, 1.0, 2.0, 3.0], dtype=np.float32)),
+        ("channel_indices", np.array([0.5, 1.0, 2.0, 3.0], dtype=np.float32)),
+        ("channel_indices", np.array([-0.5, 1.0, 2.0, 3.0], dtype=np.float32)),
     ],
 )
 def test_social_force_malformed_grid_metadata_fails_closed(metadata_key, metadata_value):
@@ -1686,6 +1688,10 @@ def test_social_force_malformed_grid_metadata_fails_closed(metadata_key, metadat
     diagnostics = adapter.diagnostics()
     metadata = diagnostics["obstacle_force_law"]
     assert metadata["applied"] is False
+    assert metadata["fallback"] is True
+    assert metadata["fallback_count"] == 1
+    assert metadata["fallback_reason"] == "malformed_or_nonfinite_occupancy_grid_metadata"
+    assert metadata["fallback_reasons"] == {"malformed_or_nonfinite_occupancy_grid_metadata": 1}
     assert metadata["parameters_sha256"]
     json.dumps(metadata, allow_nan=False)
 

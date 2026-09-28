@@ -1,0 +1,150 @@
+{
+  "schema_version": "audit-queue-input.v1",
+  "campaign_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "source_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "protocol_version": "audit-protocol.v1",
+  "protocol_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "input_revision": 4,
+  "accounting": {
+    "expected_rows": 4,
+    "indexed_rows": 4,
+    "detector_attempts": 2,
+    "human_full_episode_reviews": 0
+  },
+  "scan_summary": {
+    "summary_id": "scan-summary-4",
+    "revision": 4,
+    "campaign_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "source_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "accounting": {
+      "expected_rows": 4,
+      "indexed_rows": 4,
+      "flagged_rows": 2,
+      "unavailable_detectors": 1
+    },
+    "detector_accounting": {
+      "telemetry.v1": {
+        "status": "unavailable",
+        "reason": "optional video stream was not recorded"
+      }
+    }
+  },
+  "coverage_deficits": [
+    {
+      "stratum_id": "orca|crossing|success",
+      "observed": 0,
+      "target": 1,
+      "source_revision": "scan-summary-4",
+      "protocol_revision": "audit-protocol.v1",
+      "reason": "ordinary control has not been reviewed",
+      "status": "under_review"
+    }
+  ],
+  "candidates": [
+    {
+      "episode": {
+        "campaign_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "execution_id": "exec-benchmark-defect",
+        "planner_id": "ppo",
+        "scenario_id": "crossing",
+        "seed": 11,
+        "config_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "environment_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "trace_available": true,
+      "trace_identity": "trace-benchmark-defect",
+      "signals": [
+        {
+          "signal_id": "signal-config-drift",
+          "detector_id": "config-provenance",
+          "status": "flagged",
+          "reason_code": "benchmark/config defect",
+          "measured": {
+            "severity": 0.8
+          }
+        }
+      ],
+      "metadata": {
+        "symptoms": ["unexpected-checkpoint"],
+        "geometry_signature": ["crossing-map-a"],
+        "outcome": "failure"
+      },
+      "outcome": "failure"
+    },
+    {
+      "episode": {
+        "campaign_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "execution_id": "exec-peer",
+        "planner_id": "orca",
+        "scenario_id": "crossing",
+        "seed": 11,
+        "config_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "environment_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "trace_available": true,
+      "trace_identity": "trace-peer",
+      "metadata": {
+        "event_alignment": {
+          "status": "available",
+          "provenance_gate": {
+            "compatible": true
+          }
+        },
+        "outcome": "success"
+      },
+      "outcome": "success"
+    },
+    {
+      "episode": {
+        "campaign_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "execution_id": "exec-control",
+        "planner_id": "orca",
+        "scenario_id": "crossing",
+        "seed": 12,
+        "config_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "environment_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "trace_available": true,
+      "trace_identity": "trace-control",
+      "stratum_id": "orca|crossing|success",
+      "outcome": "success",
+      "metadata": {
+        "control_eligible": true,
+        "ordinary": true,
+        "symptoms": ["common-mode-outcome"],
+        "geometry_signature": ["crossing-map-a"]
+      },
+      "signals": [
+        {
+          "signal_id": "signal-common-mode",
+          "detector_id": "outcome-check",
+          "status": "flagged",
+          "reason_code": "common-mode anomaly"
+        }
+      ]
+    },
+    {
+      "episode": {
+        "campaign_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "execution_id": "exec-normal",
+        "planner_id": "ppo",
+        "scenario_id": "crossing",
+        "seed": 13,
+        "config_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "environment_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "trace_available": false,
+      "stratum_id": "ppo|crossing|success",
+      "outcome": "success",
+      "metadata": {
+        "control_eligible": true,
+        "ordinary": true,
+        "geometry_signature": ["crossing-map-b"]
+      }
+    }
+  ]
+}

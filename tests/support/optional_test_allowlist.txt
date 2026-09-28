@@ -51,6 +51,19 @@ tests/unit/test_figure_orchestrator_requirements.py
 tests/unit/test_runner_helper_coverage.py
 tests/unit/test_runner_video.py
 tests/validation/test_publication_preflight.py
+tests/validation/test_presentation_scene_browser.py
+tests/validation/test_threejs_viewer_fidelity_browser.py
+# Issue #9754: tests/validation and tests/maps are otherwise in no readiness lane.
+# These specific files need optional extras, so they belong to the optional lane
+# while the rest of those roots run in the extended core-style lane.
+tests/validation/test_check_s20_s30_archive_readiness.py
+tests/validation/test_evaluate_predictive_planner_smoke.py
+tests/validation/test_issue_4206_trace_capable_h600_rerun_preregistration.py
+tests/validation/test_planner_optimizer.py
+tests/validation/test_predictive_success_campaign_tags.py
+tests/validation/test_run_vecenv_worker_mode_throughput.py
+tests/validation/test_smoke_threejs_viewer_browser.py
+tests/maps/test_map_visualizer.py
 
 # Adversarial sampler/campaign tests that require optimizer extras.
 tests/adversarial/test_adversarial_search.py

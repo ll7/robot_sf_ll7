@@ -71,6 +71,16 @@ def _init_classes() -> dict[str, Any]:
             self.drive_mlp = nn.Sequential(*drive_layers)
 
         def forward(self, obs: dict) -> th.Tensor:
+            """Encode rays as a sequence with an LSTM and fuse drive-state features.
+
+            Args:
+                obs: Observation dict with ``rays`` and ``drive_state`` entries.
+
+            Returns:
+                Concatenated final LSTM state and drive-state features of shape
+                ``(batch, features_dim)``; bidirectional encoders concatenate both
+                direction states.
+            """
             rays = obs[OBS_RAYS]
             rays_seq = rays.reshape(rays.shape[0], self._ray_seq_len, 1)
             _, (h_n, _) = self.ray_lstm(rays_seq)

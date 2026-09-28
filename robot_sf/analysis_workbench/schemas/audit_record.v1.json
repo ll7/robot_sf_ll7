@@ -1,0 +1,465 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/audit_record.v1.json",
+  "title": "Robot SF Audit Record v1",
+  "description": "Versioned durable records used by the offline benchmark auditor.",
+  "type": "object",
+  "required": ["schema_version", "record_type", "record_id"],
+  "properties": {
+    "schema_version": {"const": "audit-record.v1"},
+    "record_type": {
+      "enum": [
+        "campaign_audit",
+        "episode_ref",
+        "review_packet",
+        "signal",
+        "reference",
+        "annotation",
+        "finding",
+        "detector_rule_proposal",
+        "action_record",
+        "review_record"
+      ]
+    },
+    "record_id": {"type": "string", "minLength": 1},
+    "audit_id": {},
+    "campaign_digest": {},
+    "source_digest": {},
+    "title": {},
+    "protocol_version": {},
+    "protocol_digest": {},
+    "source": {},
+    "metadata": {},
+    "execution_id": {},
+    "planner_id": {},
+    "scenario_id": {},
+    "seed": {},
+    "attempt": {},
+    "config_digest": {},
+    "checkpoint_digest": {},
+    "environment_digest": {},
+    "episode_id": {},
+    "campaign_id": {},
+    "source_id": {},
+    "packet_id": {},
+    "primary": {},
+    "peers": {},
+    "signals": {},
+    "selection_reasons": {},
+    "missingness": {},
+    "policy_version": {},
+    "input_revision": {},
+    "signal_id": {},
+    "detector_id": {},
+    "detector_version": {},
+    "status": {},
+    "reason_code": {},
+    "evidence": {},
+    "measured": {},
+    "interval": {},
+    "threshold": {},
+    "message": {},
+    "reference_id": {},
+    "coordinate_frame": {},
+    "point": {},
+    "timestamp_s": {},
+    "source_revision": {},
+    "calibration": {},
+    "actor_id": {},
+    "object_id": {},
+    "goal_id": {},
+    "waypoint_id": {},
+    "metric_id": {},
+    "event_id": {},
+    "source_point": {},
+    "seek_identity": {},
+    "actor_kind": {},
+    "annotation_id": {},
+    "classification": {},
+    "mode": {},
+    "author_kind": {},
+    "author_id": {},
+    "observed_behavior": {},
+    "suspected_cause": {},
+    "confidence": {},
+    "references": {},
+    "tags": {},
+    "review_scope": {},
+    "source_identity": {},
+    "scan_identity": {},
+    "created_at": {},
+    "source_ref": {},
+    "provenance_status": {},
+    "provenance_reason": {},
+    "finding_id": {},
+    "candidate_members": {},
+    "confirmed_members": {},
+    "negative_controls": {},
+    "observations": {},
+    "hypotheses": {},
+    "negative_evidence": {},
+    "diagnostic_results": {},
+    "github_issue": {},
+    "updated_at": {},
+    "proposal_id": {},
+    "proposal_kind": {},
+    "target_detector_id": {},
+    "candidate_rule": {},
+    "detector_registry_version": {},
+    "detector_registry_digest": {},
+    "episode_ids": {},
+    "finding_ids": {},
+    "rationale": {},
+    "lifecycle_status": {},
+    "activation_status": {},
+    "proposer_kind": {},
+    "proposer_id": {},
+    "decided_by_kind": {},
+    "decided_by_id": {},
+    "decided_at": {},
+    "decision_reason": {},
+    "action_id": {},
+    "action_type": {},
+    "target_id": {},
+    "details": {},
+    "review_id": {},
+    "scope": {},
+    "outcome": {},
+    "annotation_ids": {},
+    "notes": {}
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "record_type": {"const": "campaign_audit"},
+        "audit_id": {"type": "string", "minLength": 1},
+        "campaign_digest": {"type": "string", "minLength": 1},
+        "source_digest": {"type": "string", "minLength": 1}
+      },
+      "required": ["audit_id", "campaign_digest", "source_digest"]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "episode_ref"},
+        "episode_id": {"type": "string", "minLength": 1},
+        "campaign_digest": {"type": "string", "minLength": 1},
+        "source_digest": {"type": "string", "minLength": 1},
+        "execution_id": {"type": "string", "minLength": 1}
+      },
+      "required": ["episode_id", "campaign_digest", "source_digest", "execution_id"]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "review_packet"},
+        "packet_id": {"type": "string", "minLength": 1},
+        "primary": {"type": "object"}
+      },
+      "required": ["packet_id", "primary"]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "signal"},
+        "signal_id": {"type": "string", "minLength": 1},
+        "detector_id": {"type": "string", "minLength": 1}
+      },
+      "required": ["signal_id", "detector_id"]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "reference"},
+        "reference_id": {"type": "string", "minLength": 1},
+        "coordinate_frame": {"enum": ["world", "image"]},
+        "point": {"type": "array", "minItems": 2, "maxItems": 2}
+      },
+      "required": ["reference_id", "coordinate_frame", "point"]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "annotation"},
+        "annotation_id": {"type": "string", "minLength": 1},
+        "episode_id": {"type": "string", "minLength": 1},
+        "classification": {"type": "string", "minLength": 1},
+        "mode": {"enum": ["one_click", "quick", "full"]},
+        "author_kind": {"enum": ["human", "detector", "agent"]},
+        "review_scope": {"enum": ["interval", "full_episode"]}
+      },
+      "required": [
+        "annotation_id",
+        "episode_id",
+        "classification",
+        "mode",
+        "author_kind",
+        "review_scope"
+      ]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "finding"},
+        "finding_id": {"type": "string", "minLength": 1},
+        "title": {"type": "string", "minLength": 1},
+        "status": {
+          "enum": ["proposed", "under_investigation", "supported", "refuted", "resolved"]
+        },
+        "candidate_members": {"type": "array"},
+        "confirmed_members": {"type": "array"},
+        "negative_controls": {"type": "array"}
+      },
+      "required": [
+        "finding_id",
+        "title",
+        "status",
+        "candidate_members",
+        "confirmed_members",
+        "negative_controls"
+      ]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "detector_rule_proposal"},
+        "proposal_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": ".*\\S.*"
+        },
+        "proposal_kind": {
+          "enum": ["new_rule", "threshold_change", "parameter_change", "cohort_change"]
+        },
+        "target_detector_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": ".*\\S.*"
+        },
+        "candidate_rule": {"$ref": "#/$defs/declarative_rule"},
+        "detector_registry_version": {"type": "string", "maxLength": 4096},
+        "detector_registry_digest": {
+          "type": "string",
+          "pattern": "^$|^[0-9a-fA-F]{40}$|^[0-9a-fA-F]{64}$"
+        },
+        "campaign_digest": {
+          "type": "string",
+          "pattern": "^$|^[0-9a-fA-F]{40}$|^[0-9a-fA-F]{64}$"
+        },
+        "source_identity": {"type": "string", "maxLength": 4096},
+        "source_revision": {
+          "oneOf": [
+            {"type": "string", "maxLength": 4096, "pattern": "^$|.*\\S.*"},
+            {"type": "integer", "minimum": 0}
+          ]
+        },
+        "annotation_ids": {"$ref": "#/$defs/evidence_ids"},
+        "finding_ids": {"$ref": "#/$defs/evidence_ids"},
+        "episode_ids": {"$ref": "#/$defs/evidence_ids"},
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": ".*\\S.*"
+        },
+        "metadata": {"$ref": "#/$defs/metadata"},
+        "lifecycle_status": {
+          "enum": ["proposed", "approved", "rejected", "withdrawn"]
+        },
+        "activation_status": {"const": "inactive"},
+        "proposer_kind": {"enum": ["human", "detector", "agent"]},
+        "proposer_id": {"type": "string", "maxLength": 4096},
+        "author_kind": {"enum": ["human", "detector", "agent"]},
+        "author_id": {"type": "string", "maxLength": 4096},
+        "decided_by_kind": {
+          "enum": ["", "human"]
+        },
+        "decided_by_id": {"type": "string", "maxLength": 4096},
+        "decided_at": {"type": "string", "maxLength": 4096},
+        "decision_reason": {"type": "string", "maxLength": 4096},
+        "created_at": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": ".*\\S.*"
+        },
+        "updated_at": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": ".*\\S.*"
+        }
+      },
+      "required": [
+        "proposal_id",
+        "proposal_kind",
+        "target_detector_id",
+        "candidate_rule",
+        "detector_registry_version",
+        "detector_registry_digest",
+        "campaign_digest",
+        "source_identity",
+        "source_revision",
+        "annotation_ids",
+        "finding_ids",
+        "episode_ids",
+        "rationale",
+        "metadata",
+        "lifecycle_status",
+        "activation_status",
+        "proposer_kind",
+        "proposer_id",
+        "author_kind",
+        "author_id",
+        "decided_by_kind",
+        "decided_by_id",
+        "decided_at",
+        "decision_reason",
+        "created_at",
+        "updated_at"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "lifecycle_status": {"const": "proposed"}
+            }
+          },
+          "then": {
+            "properties": {
+              "decided_by_kind": {"const": ""},
+              "decided_by_id": {"const": ""},
+              "decided_at": {"const": ""},
+              "decision_reason": {"const": ""}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "lifecycle_status": {
+                "enum": ["approved", "rejected", "withdrawn"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "author_kind": {"const": "human"},
+              "decided_by_kind": {"const": "human"},
+              "decided_by_id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": ".*\\S.*"
+              },
+              "decided_at": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": ".*\\S.*"
+              },
+              "decision_reason": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": ".*\\S.*"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "action_record"},
+        "action_id": {"type": "string", "minLength": 1},
+        "action_type": {"type": "string", "minLength": 1},
+        "actor_kind": {"enum": ["human", "detector", "agent"]},
+        "status": {"type": "string", "minLength": 1}
+      },
+      "required": ["action_id", "action_type", "actor_kind", "status"]
+    },
+    {
+      "properties": {
+        "record_type": {"const": "review_record"},
+        "review_id": {"type": "string", "minLength": 1},
+        "episode_id": {"type": "string", "minLength": 1},
+        "scope": {"enum": ["interval", "full_episode"]},
+        "author_kind": {"enum": ["human", "detector", "agent"]},
+        "source_identity": {"type": "string"},
+        "scan_identity": {"type": "string"}
+      },
+      "required": ["review_id", "episode_id", "scope", "author_kind"]
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "declarative_value": {
+      "anyOf": [
+        {"type": "string", "maxLength": 4096},
+        {"type": "number"},
+        {"type": "boolean"},
+        {"type": "null"},
+        {
+          "type": "array",
+          "maxItems": 128,
+          "items": {"$ref": "#/$defs/declarative_value"}
+        },
+        {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {"$ref": "#/$defs/declarative_property_name"},
+          "additionalProperties": {"$ref": "#/$defs/declarative_value"}
+        }
+      ]
+    },
+    "declarative_rule": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 64,
+      "propertyNames": {"$ref": "#/$defs/declarative_property_name"},
+      "additionalProperties": {"$ref": "#/$defs/declarative_value"}
+    },
+    "evidence_ids": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {"type": "string", "minLength": 1, "maxLength": 256}
+    },
+    "metadata": {
+      "type": "object",
+      "maxProperties": 32,
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": ".*\\S.*"
+      },
+      "additionalProperties": {"$ref": "#/$defs/metadata_value"}
+    },
+    "metadata_value": {
+      "anyOf": [
+        {"type": "string", "maxLength": 4096},
+        {"type": "number"},
+        {"type": "boolean"},
+        {"type": "null"},
+        {
+          "type": "array",
+          "maxItems": 128,
+          "items": {"$ref": "#/$defs/metadata_value"}
+        },
+        {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": ".*\\S.*"
+          },
+          "additionalProperties": {"$ref": "#/$defs/metadata_value"}
+        }
+      ]
+    },
+    "declarative_property_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9_]{0,127}$",
+      "not": {
+        "pattern": "c_*a_*l_*l_*a_*b_*l_*e|c_*a_*l_*l_*b_*a_*c_*k|c_*o_*m_*m_*a_*n_*d|c_*o_*m_*m_*a_*n_*d_*s|e_*n_*t_*r_*y_*p_*o_*i_*n_*t|e_*v_*a_*l|e_*x_*e_*c|e_*x_*e_*c_*u_*t_*a_*b_*l_*e|e_*x_*p_*r_*e_*s_*s_*i_*o_*n|f_*u_*n_*c_*t_*i_*o_*n|i_*m_*p_*o_*r_*t|m_*o_*d_*u_*l_*e|p_*y_*t_*h_*o_*n|r_*u_*n_*t_*i_*m_*e|s_*c_*r_*i_*p_*t|s_*h_*e_*l_*l|c_*l_*a_*s_*s(?:_|$)|c_*o_*d_*e(?:_|$)"
+      }
+    }
+  }
+}

@@ -348,6 +348,10 @@ def test_empirical_cpu_run_produces_certified_replayable_failures(tmp_path: Path
     the issue #3079 campaign is CPU-achievable; the full 27-cell empirical run is the same path
     scaled up. Prior cheap-lane workers BLOCKED on a false "requires Slurm/GPU" premise; the
     executor here verifies that premise against the actual code path.
+
+    Seed 1105 replaces 1101 (issue #9725): the only certified failure under seed 1101 was a
+    pedestrian placed on the robot at reset (collision at step 1), a spawn defect the
+    simulator now prevents. Seed 1105 yields a certified collision at step 10.
     """
     config, objectives, _samplers, _budgets, _seeds = load_package_b_manifest(SHIPPED_MANIFEST)
     config = replace(config, output_dir=tmp_path / "comparison")
@@ -357,7 +361,7 @@ def test_empirical_cpu_run_produces_certified_replayable_failures(tmp_path: Path
         objective_names=objectives,
         synthetic=False,
         budgets=(16,),
-        seeds=(1101,),
+        seeds=(1105,),
     )
     assert len(rows) == 1
     row = rows[0]
@@ -404,7 +408,9 @@ def test_package_b_orchestrator_empirical_flag_runs_real_evaluator(tmp_path: Pat
     # not enforce the preflight's fixed 27-cell contract, so a reduced manifest runs here.
     payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))
     payload["budget_grid"] = [16]
-    payload["repeated_seeds"] = [1101]
+    # Seed 1105, not 1101: seed 1101's only certified failure was a reset spawn overlap
+    # that issue #9725 removed (see the evaluator test above).
+    payload["repeated_seeds"] = [1105]
     payload["samplers"] = ["random"]
     manifest.write_text(yaml.safe_dump(payload), encoding="utf-8")
 

@@ -21,11 +21,16 @@ import argparse
 import json
 import re
 import sys
+from pathlib import Path
 from typing import Any
 
-from scripts.dev._gh_rest import gh_api_get as _gh_api_get
-from scripts.dev._gh_rest import gh_api_post as _gh_api_post
-from scripts.dev._gh_rest import parse_json as _parse_json
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from scripts.dev._gh_rest import gh_api_get as _gh_api_get  # noqa: E402
+from scripts.dev._gh_rest import gh_api_post as _gh_api_post  # noqa: E402
+from scripts.dev._gh_rest import parse_json as _parse_json  # noqa: E402
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 AUDIT_SCHEMA = "post-merge-audit.v1"

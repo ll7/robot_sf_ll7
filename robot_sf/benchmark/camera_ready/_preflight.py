@@ -1237,7 +1237,12 @@ def _build_campaign_manifest_payload(  # noqa: PLR0913
     Returns:
         Complete JSON-serializable campaign manifest payload.
     """
+    if getattr(cfg, "snqi_v2_spec", None) is not None:
+        cfg.snqi_v2_spec.validate_evaluation_seeds(metadata["resolved_seeds"])
     return {
+        **(
+            {"metrics": cfg.snqi_v2_spec.provenance()} if getattr(cfg, "snqi_v2_spec", None) else {}
+        ),
         **_build_manifest_context_block(
             cfg,
             campaign_id=campaign_id,

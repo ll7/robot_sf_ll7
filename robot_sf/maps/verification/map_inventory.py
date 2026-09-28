@@ -61,11 +61,17 @@ class MapInventory:
         ----------
         maps_root : Path | None
             Root directory containing SVG maps.
-            If None, uses repository_root/maps/svg_maps/
+            If None, uses repository_root/maps/svg_maps/ plus
+            repository_root/maps/successor_svg_maps/ (successor revisions kept outside
+            the pinned map registry, issue #9725).
         """
+        self.extra_roots: list[Path] = []
         if maps_root is None:
             repo_root = get_repository_root()
             maps_root = repo_root / "maps" / "svg_maps"
+            successor_root = repo_root / "maps" / "successor_svg_maps"
+            if successor_root.exists():
+                self.extra_roots.append(successor_root.resolve())
 
         self.maps_root = Path(maps_root).resolve()
 
@@ -85,6 +91,8 @@ class MapInventory:
             return
 
         svg_files = sorted(self.maps_root.rglob("*.svg"))
+        for extra_root in self.extra_roots:
+            svg_files.extend(sorted(extra_root.rglob("*.svg")))
         logger.info(f"Discovered {len(svg_files)} SVG files in {self.maps_root}")
 
         for svg_file in svg_files:

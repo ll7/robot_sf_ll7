@@ -77,6 +77,7 @@ pr_ready_previous_async_pid=""
 pr_ready_parent_pgid=""
 pr_ready_cleanup_status="no_child_active"
 pr_ready_evidence_scope_file=""
+pr_ready_docs_scope_file=""
 pr_ready_termination_receipt="${PR_READY_TERMINATION_RECEIPT:-}"
 if [[ -z "$pr_ready_termination_receipt" ]]; then
   pr_ready_termination_stamp="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || printf 'unknown')"
@@ -326,6 +327,9 @@ pr_ready_exit_without_coverage() {
   fi
   if [[ -n "$pr_ready_evidence_scope_file" ]]; then
     rm -f -- "$pr_ready_evidence_scope_file" || true
+  fi
+  if [[ -n "$pr_ready_docs_scope_file" ]]; then
+    rm -f -- "$pr_ready_docs_scope_file" || true
   fi
   release_pr_ready_lock || true
   return "$exit_code"
@@ -590,6 +594,43 @@ preflight_check_evidence_registry() {
     --report-output output/evidence/ratchet-report.json
 }
 
+preflight_check_docs_evidence_integrity() {
+  [[ "$pr_ready_final" == "1" ]] || return 0
+  mark_pr_ready_progress "docs_evidence_scope" "none" "resolving docs-evidence integrity inputs"
+  local changed_path relevant=0 scope_status=0
+  pr_ready_docs_scope_file="$(mktemp "${TMPDIR:-/tmp}/pr-ready-docs-evidence-scope.XXXXXX")"
+  # NUL framing preserves whitespace and embedded newlines. Disabling rename
+  # detection exposes both paths so moves into or out of a filtered tree trigger
+  # the same checker as the hosted pull_request.paths filters.
+  if git diff --name-only --no-renames -z "$BASE_REF...HEAD" > "$pr_ready_docs_scope_file"; then
+    while IFS= read -r -d '' changed_path; do
+      case "$changed_path" in
+        *.md|*.markdown|docs/*|*.json|*.yaml|*.yml|\
+        .github/ISSUE_TEMPLATE/*|AGENTS.md|CLAUDE.md)
+          relevant=1 ;;
+      esac
+    done < "$pr_ready_docs_scope_file"
+  else
+    scope_status=$?
+  fi
+  rm -f -- "$pr_ready_docs_scope_file"
+  pr_ready_docs_scope_file=""
+  if [[ "$scope_status" -ne 0 ]]; then
+    printf 'Cannot resolve final docs-evidence integrity input scope; refusing to start test lanes.\n' >&2
+    return "$scope_status"
+  fi
+  [[ "$relevant" == "1" ]] || return 0
+
+  if [[ ! -f "$SCRIPT_DIR/check_docs_evidence_integrity.py" ]]; then
+    printf 'Required docs-evidence integrity checker is missing: %s\n' \
+      "$SCRIPT_DIR/check_docs_evidence_integrity.py" >&2
+    return 2
+  fi
+  printf 'Checking docs-evidence integrity before formatting and test lanes.\n' >&2
+  run_pr_ready_lane docs_evidence_integrity uv run python \
+    "$SCRIPT_DIR/check_docs_evidence_integrity.py" --base-ref "$BASE_REF"
+}
+
 is_optional_readiness_path() {
   # Code paths and test directory patterns that require optional extras
   case "$1" in
@@ -814,6 +855,7 @@ fi
 mark_pr_ready_progress "base_resolution" "none" "resolving readiness base reference"
 resolve_base_ref
 preflight_check_evidence_registry
+preflight_check_docs_evidence_integrity
 
 if [[ "$pr_ready_final" != "1" && "$(worktree_state)" != "clean" ]]; then
   dirty_paths=()
@@ -842,6 +884,19 @@ mark_pr_ready_progress "changed_file_scope" "none" "classifying changed files fo
 changed_files=()
 core_changed_files=()
 optional_changed_files=()
+# Issue #9754: the core lane runs a fixed path list plus changed test files, and
+# the optional lane runs only the allowlist. Some test roots therefore belong to
+# neither lane and are never executed by a readiness run, so a green readiness
+# report can silently omit them. Track those roots explicitly instead of letting
+# a PR body imply coverage that no lane produced.
+pr_ready_uncovered_test_roots=()
+for pr_ready_candidate_root in tests/validation tests/maps; do
+  if [[ -e "$pr_ready_candidate_root" ]] && ! is_optional_readiness_path "${pr_ready_candidate_root}/"; then
+    pr_ready_uncovered_test_roots+=("$pr_ready_candidate_root")
+  fi
+done
+pr_ready_extended_required=0
+pr_ready_extended_trigger_files=()
 while IFS= read -r changed_file; do
   [[ -z "$changed_file" ]] && continue
   changed_files+=("$changed_file")
@@ -850,6 +905,22 @@ while IFS= read -r changed_file; do
   else
     core_changed_files+=("$changed_file")
   fi
+  # A change to shipped behavior (robot_sf/, configs/, maps/) or to a test root
+  # that no lane covers can break the uncovered roots, so they must run.
+  case "$changed_file" in
+    robot_sf/*|configs/*|maps/*)
+      pr_ready_extended_required=1
+      pr_ready_extended_trigger_files+=("$changed_file")
+      ;;
+  esac
+  for pr_ready_uncovered_root in "${pr_ready_uncovered_test_roots[@]}"; do
+    case "$changed_file" in
+      "${pr_ready_uncovered_root}"/*)
+        pr_ready_extended_required=1
+        pr_ready_extended_trigger_files+=("$changed_file")
+        ;;
+    esac
+  done
 done < <(git diff --name-only --diff-filter=ACMRT "$BASE_REF...HEAD")
 
 # Validate that every changed test file under tests/ or fast-pysf/tests/ is classified
@@ -1069,8 +1140,21 @@ if [[ ${#optional_changed_files[@]} -gt 0 ]]; then
   if [[ " $optional_pytest_addopts " != *" --cov-append "* ]]; then
     optional_pytest_addopts="${optional_pytest_addopts:+$optional_pytest_addopts }--cov-append"
   fi
-  run_pr_ready_lane optional env \
+  # The live launch smoke performs durable queue selection, episode reads, and
+  # loopback HTTP dispatch in one request. Under the full optional xdist lane,
+  # unrelated CPU-heavy tests can starve that request beyond its fixed client
+  # deadline. Keep the same smoke and assertions in readiness, but run it alone
+  # before the parallel lane (issue #9615).
+  optional_audit_launch_smoke="tests/render/test_audit_workbench_launch.py::test_launch_opt_in_binds_fake_app_server_and_private_mcp"
+  run_pr_ready_lane optional_launch_smoke env \
     "PYTEST_ADDOPTS=$optional_pytest_addopts" \
+    ROBOT_SF_PYTEST_COVERAGE=1 \
+    ROBOT_SF_TEST_LANE=optional \
+    PYTEST_NUM_WORKERS=1 \
+    "$SCRIPT_DIR/run_tests_parallel.sh" --lane optional "$optional_audit_launch_smoke"
+  optional_parallel_pytest_addopts="${optional_pytest_addopts} --deselect=$optional_audit_launch_smoke"
+  run_pr_ready_lane optional env \
+    "PYTEST_ADDOPTS=$optional_parallel_pytest_addopts" \
     ROBOT_SF_PYTEST_COVERAGE=1 \
     ROBOT_SF_TEST_LANE=optional \
     "PYTEST_XDIST_DIST=${PYTEST_XDIST_DIST:-worksteal}" \
@@ -1081,6 +1165,44 @@ else
   else
     printf 'No committed changed files require the optional-extra lane.\n' >&2
   fi
+fi
+
+# Issue #9754: run the test roots that no readiness lane covers when the change
+# can affect them, and always report which roots this run did and did not cover.
+pr_ready_extended_ran=0
+if [[ ${#pr_ready_uncovered_test_roots[@]} -gt 0 ]]; then
+  if [[ "$pr_ready_extended_required" -eq 1 ]]; then
+    printf 'Running extended readiness lane for test roots no other lane covers.\n' >&2
+    printf 'Extended roots: %s\n' "${pr_ready_uncovered_test_roots[*]}" >&2
+    run_pr_ready_lane extended env \
+      ROBOT_SF_TEST_LANE=core \
+      "$SCRIPT_DIR/run_tests_parallel.sh" --lane core "${pr_ready_uncovered_test_roots[@]}"
+    pr_ready_extended_ran=1
+  else
+    printf 'Extended readiness lane not required: no robot_sf/, configs/, maps/ or uncovered-root change.\n' >&2
+  fi
+  mark_pr_ready_progress "lane_coverage_summary" "none" "reporting readiness lane coverage"
+  lane_coverage_dir="${REPO_ROOT}/output/validation/pr_ready"
+  mkdir -p "$lane_coverage_dir"
+  {
+    printf 'Readiness lane coverage summary (issue #9754)\n'
+    printf '  core lane:      ran\n'
+    if [[ ${#optional_changed_files[@]} -gt 0 ]]; then
+      printf '  optional lane:  ran\n'
+    else
+      printf '  optional lane:  skipped (no optional-extra changed files)\n'
+    fi
+    if [[ ${#pr_ready_uncovered_test_roots[@]} -eq 0 ]]; then
+      printf '  uncovered roots: none\n'
+    elif [[ "$pr_ready_extended_ran" -eq 1 ]]; then
+      printf '  extended lane:  ran (%s)\n' "${pr_ready_uncovered_test_roots[*]}"
+      printf '  uncovered roots: none remaining\n'
+    else
+      printf '  extended lane:  NOT RUN\n'
+      printf '  NOT COVERED by this readiness run: %s\n' "${pr_ready_uncovered_test_roots[*]}"
+      printf '  A PR body must not claim full-suite or benchmark/validation/map coverage from this run.\n'
+    fi
+  } | tee -a "$lane_coverage_dir/lane_coverage.txt" >&2
 fi
 mark_pr_ready_progress "post_lane_checks" "none" "running post-lane readiness checks"
 "$SCRIPT_DIR/check_changed_coverage.sh"

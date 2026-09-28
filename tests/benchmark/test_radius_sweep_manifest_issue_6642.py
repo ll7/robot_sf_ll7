@@ -518,6 +518,20 @@ def test_check_rejects_gate_receipt_that_differs_from_an_arm() -> None:
     assert any("gate1_receipt_sha256" in v for v in check["violations"])
 
 
+def test_check_rejects_coordinated_replacement_of_frozen_gate1_receipt() -> None:
+    """Consistent edits to gate and all arms cannot substitute another passing receipt."""
+    manifest = _build()
+    replacement = "c" * 64
+    manifest["gate_preconditions"]["gate1_receipt_sha256"] = replacement
+    for arm in manifest["arms"]:
+        arm["gate1_receipt_sha256"] = replacement
+
+    check = check_radius_sweep_manifest(manifest)
+
+    assert check["passes"] is False
+    assert any("frozen Gate 1 receipt digest" in item for item in check["violations"])
+
+
 def test_check_fails_when_arm_campaign_config_drifts() -> None:
     """A serialized arm cannot point at another campaign config."""
     manifest = _build()

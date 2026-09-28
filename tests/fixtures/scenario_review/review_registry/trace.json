@@ -1,0 +1,8 @@
+{
+  "fixture": "srev29-tiny-episodes",
+  "kind": "synthetic",
+  "episodes": [
+    {"episode_id": "episode-0000", "steps": [[0.0, 0.0], [1.0, 0.0], [2.0, 0.5], [3.0, 1.0]]},
+    {"episode_id": "episode-0001", "steps": [[0.0, 1.0], [0.5, 2.0], [1.0, 3.0]]}
+  ]
+}

@@ -227,7 +227,7 @@ class TestWriteBundleFixture:
         )
         bundle_dir = tmp_path / "bundle"
         bundle_dir.mkdir()
-        _export_module.write_bundle(
+        metadata = _export_module.write_bundle(
             episode_record=record,
             selection=sel,
             output_dir=bundle_dir,
@@ -242,6 +242,45 @@ class TestWriteBundleFixture:
         }
         actual = {f.name for f in bundle_dir.iterdir()}
         assert expected_files.issubset(actual)
+        assert metadata["source_commit"] is None
+        assert "Source commit: `not specified`" in (bundle_dir / "README.md").read_text(
+            encoding="utf-8"
+        )
+
+    def test_custom_campaign_provenance_is_retained(self, tmp_path: Path) -> None:
+        record = self._make_minimal_record()
+        selection = _export_module.SelectedEpisode(
+            planner="orca",
+            scenario_id="classic_group_crossing_low",
+            seed=42,
+            selection_mode="best",
+            metric_value=0.85,
+            episode_id="classic_group_crossing_low_s42",
+            status="success",
+        )
+        bundle_dir = tmp_path / "bundle"
+        bundle_dir.mkdir()
+
+        metadata = _export_module.write_bundle(
+            episode_record=record,
+            selection=selection,
+            output_dir=bundle_dir,
+            provenance=_export_module.CampaignProvenance(
+                campaign_id="campaign-v007",
+                campaign_job="15716",
+                source_commit="07f7e8d4",
+                release_tag="paper-matrix-v2",
+                config_sha256="config-digest",
+                issue_url="https://github.com/ll7/robot_sf_ll7/issues/9431",
+            ),
+        )
+
+        assert metadata["campaign_id"] == "campaign-v007"
+        assert metadata["campaign_job"] == "15716"
+        assert metadata["source_commit"] == "07f7e8d4"
+        assert metadata["release_tag"] == "paper-matrix-v2"
+        assert metadata["config_sha256"] == "config-digest"
+        assert metadata["issue"] == "https://github.com/ll7/robot_sf_ll7/issues/9431"
 
     def test_json_has_review_marker(self, tmp_path: Path) -> None:
         record = self._make_minimal_record()

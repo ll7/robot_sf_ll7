@@ -1,0 +1,18 @@
+{
+  "evidence_boundary": "diagnostic_only",
+  "receipt_id": "srev22-review-execute-receipt",
+  "recipe_sha256": "669a0bbeb47ae38378424f57597358dd65161feb541aebd091fb6ace1a072b3f",
+  "request_sha256": "f8f771ec5443168cced165d297c246f1851ec38a1238e465ea7acde921746afb",
+  "schema_version": "admitted-source-receipt.v1",
+  "scientific_claim_allowed": false,
+  "source": {
+    "config_identity": "srev22-admitted-source-config.v1",
+    "format": "experiment-recipe.v1",
+    "schema": "experiment-recipe.v1",
+    "sha256": "ea05e90eaabfef95fc794bed492594a918c92a9d889dd40a53bd80d449efcee2",
+    "source_commit": "8514936f1d0ea6f150fe9d34efb03877648f2696",
+    "uri": "recipe.json"
+  },
+  "source_kind": "fixture",
+  "status": "admitted"
+}

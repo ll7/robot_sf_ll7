@@ -35,7 +35,7 @@ import time
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlsplit
@@ -94,6 +94,18 @@ EXPECTED_GITHUB_HOST = "github.com"
 UNCERTAIN_QUOTA_STATUSES = frozenset(
     {"exhausted", "insufficient", "quota_blocked", "failed", "malformed", "unavailable"}
 )
+AUTOMATION_COMMENT_LOGINS = frozenset(
+    {
+        "coderabbitai",
+        "dependabot",
+        "dependabot[bot]",
+        "github-actions",
+        "github-actions[bot]",
+        "renovate",
+        "renovate[bot]",
+    }
+)
+BOOKKEEPING_COMMENT_MARKERS = frozenset({"<!-- blocked-queue-triage.v1"})
 
 _PREPARATION_AUDIT_SCHEMA = "open_issue_contract_audit.v1"
 PREPARATION_MARKER_END = prepare_open_issue_contracts.MARKER_END
@@ -877,6 +889,7 @@ def _normalize_issue(raw: Mapping[str, Any]) -> dict[str, Any]:
         "title": str(raw.get("title") or ""),
         "body": str(raw.get("body") or ""),
         "state": str(raw.get("state") or "").lower(),
+        "created_at": str(raw.get("created_at") or ""),
         "updated_at": str(raw.get("updated_at") or ""),
         "url": url,
         "author": author,
@@ -1002,6 +1015,13 @@ def _issue_row_validation_errors(
         raw.get("updated_at")
     ):
         errors.append("updated_at must be a non-empty timezone-aware ISO-8601 timestamp")
+
+    if "created_at" in raw:
+        created_at = raw.get("created_at")
+        if created_at is not None and not isinstance(created_at, str):
+            errors.append("created_at must be a string or null")
+        elif created_at not in (None, "") and not _valid_issue_timestamp(created_at):
+            errors.append("created_at must be a valid timezone-aware ISO-8601 timestamp")
 
     for field in ("body", "author"):
         if field in raw and raw[field] is not None and not isinstance(raw[field], str):
@@ -1951,6 +1971,7 @@ def _build_plan_retry_command(
     max_wall_seconds: float | None = None,
     output: Path | None = None,
     read_only_diagnostic: bool = False,
+    reclaim_stale_running_after_hours: float | None = None,
 ) -> str:
     """Serialize the bounded plan invocation used by quota-reset handoffs."""
     command = [
@@ -1974,6 +1995,13 @@ def _build_plan_retry_command(
         command.append("--read-only-diagnostic")
     if include_comments:
         command.append("--include-comments")
+    if reclaim_stale_running_after_hours is not None:
+        command.extend(
+            (
+                "--reclaim-stale-running-after-hours",
+                str(reclaim_stale_running_after_hours),
+            )
+        )
     command.extend(
         (
             "--max-comment-pages",
@@ -2175,6 +2203,7 @@ def discover_inventory(
     max_comment_pages: int = DEFAULT_MAX_COMMENT_PAGES,
     max_wall_seconds: float | None = None,
     deadline: float | None = None,
+    reclaim_stale_running_after_hours: float | None = None,
     runner: Runner | None = None,
     command_runner: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
     retry_command: str | None = None,
@@ -2191,6 +2220,7 @@ def discover_inventory(
         include_comments=include_comments,
         max_comment_pages=max_comment_pages,
         max_wall_seconds=max_wall_seconds,
+        reclaim_stale_running_after_hours=reclaim_stale_running_after_hours,
     )
     _quota_snapshot, quota_meta = discover_core_quota(
         repo,
@@ -2474,6 +2504,181 @@ def _comment_timestamp(value: object) -> datetime | None:
     if parsed.tzinfo is None:
         return None
     return parsed.astimezone(UTC)
+
+
+def _normalize_policy_now(value: datetime | None) -> datetime:
+    """Return a timezone-aware UTC timestamp for a policy snapshot."""
+    timestamp = value if value is not None else datetime.now(UTC)
+    if timestamp.tzinfo is None:
+        raise ValueError("stale-running policy timestamp must be timezone-aware")
+    return timestamp.astimezone(UTC)
+
+
+def _validate_stale_running_hours(value: float | None) -> float | None:
+    """Validate an optional stale-running reclaim threshold."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("stale-running reclaim hours must be a finite positive number")
+    if not math.isfinite(float(value)) or float(value) <= 0:
+        raise ValueError("stale-running reclaim hours must be a finite positive number")
+    return float(value)
+
+
+def _format_policy_timestamp(value: datetime | None) -> str | None:
+    """Render a policy timestamp in canonical UTC ISO-8601 form."""
+    if value is None:
+        return None
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _stale_running_policy(
+    hours: float | None,
+    *,
+    now: datetime | None = None,
+) -> tuple[dict[str, Any], datetime | None]:
+    """Build reproducible metadata and cutoff for stale-running reclamation."""
+    validated_hours = _validate_stale_running_hours(hours)
+    if validated_hours is None:
+        return (
+            {
+                "enabled": False,
+                "threshold_hours": None,
+                "observed_at": None,
+                "cutoff_at": None,
+                "progress_source": "latest_human_issue_comment_or_issue_creation",
+                "active_record_policy": "preserve",
+                "action": "none",
+            },
+            None,
+        )
+    observed_at = _normalize_policy_now(now)
+    cutoff = observed_at - timedelta(hours=validated_hours)
+    return (
+        {
+            "enabled": True,
+            "threshold_hours": validated_hours,
+            "observed_at": _format_policy_timestamp(observed_at),
+            "cutoff_at": _format_policy_timestamp(cutoff),
+            "progress_source": "latest_human_issue_comment_or_issue_creation",
+            "active_record_policy": "preserve",
+            "action": "remove_state_running",
+        },
+        cutoff,
+    )
+
+
+def _comment_author(comment: Mapping[str, Any]) -> str:
+    """Return a normalized comment author login."""
+    author = comment.get("user")
+    if isinstance(author, Mapping):
+        author = author.get("login")
+    if author in (None, ""):
+        author = comment.get("author")
+    return str(author or "").strip()
+
+
+def _is_automated_comment(comment: Mapping[str, Any]) -> bool:
+    """Return whether a comment is a known bot or bookkeeping status."""
+    login = _comment_author(comment).casefold()
+    if login.endswith("[bot]") or login in AUTOMATION_COMMENT_LOGINS:
+        return True
+    body = str(comment.get("body") or "").casefold()
+    return any(marker in body for marker in BOOKKEEPING_COMMENT_MARKERS)
+
+
+def _latest_human_progress(
+    issue: Mapping[str, Any],
+) -> tuple[datetime | None, str, str | None]:
+    """Find the latest attributable progress timestamp for one issue.
+
+    The issue creation timestamp is the conservative fallback when no human
+    progress comment exists.  A malformed timestamp on an attributable
+    comment makes the result unavailable rather than silently treating old
+    issue activity as fresh.
+    """
+    comments = issue.get("comments")
+    if not isinstance(comments, Sequence) or isinstance(comments, (str, bytes)):
+        return None, "unavailable", "comment inventory is unavailable"
+    dated: list[datetime] = []
+    for comment in comments:
+        if not isinstance(comment, Mapping) or _is_automated_comment(comment):
+            continue
+        if not _comment_author(comment):
+            continue
+        timestamp = _comment_timestamp(comment.get("created_at"))
+        if timestamp is None:
+            return None, "unavailable", "an attributable progress comment lacks a valid timestamp"
+        dated.append(timestamp)
+    if dated:
+        return max(dated), "latest_human_comment", None
+    created_at = _comment_timestamp(issue.get("created_at"))
+    if created_at is not None:
+        return created_at, "issue_creation", None
+    return None, "unavailable", "issue creation timestamp is unavailable"
+
+
+def _comment_inventory_available(inventory_meta: Mapping[str, Any]) -> bool:
+    """Return whether complete issue-comment evidence is present in an inventory."""
+    comments = inventory_meta.get("comments")
+    if not isinstance(comments, Mapping):
+        return False
+    return bool(
+        comments.get("available") is True
+        and comments.get("truncated") is not True
+        and not comments.get("errors")
+    )
+
+
+def _assess_stale_running_reclaim(
+    issue: Mapping[str, Any],
+    *,
+    has_running_label: bool,
+    active: Mapping[str, Sequence[Mapping[str, Any]]],
+    active_records_uncertain: bool,
+    comments_available: bool,
+    cutoff: datetime | None,
+    threshold_hours: float | None,
+) -> dict[str, Any]:
+    """Return evidence for the optional stale-running label reclaim policy."""
+    assessment: dict[str, Any] = {
+        "enabled": threshold_hours is not None,
+        "eligible": False,
+        "last_progress_at": None,
+        "progress_source": None,
+        "cutoff_at": _format_policy_timestamp(cutoff),
+        "reason": "policy disabled",
+    }
+    if threshold_hours is None or not has_running_label:
+        return assessment
+    if cutoff is None:
+        assessment["reason"] = "stale-running cutoff is unavailable"
+        return assessment
+    if active_records_uncertain:
+        assessment["reason"] = "active execution inventory is unavailable"
+        return assessment
+    active_kinds = sorted(kind for kind, rows in active.items() if rows)
+    if active_kinds:
+        assessment["reason"] = "active execution record present: " + ", ".join(active_kinds)
+        return assessment
+    if not comments_available:
+        assessment["reason"] = "complete issue-comment inventory is unavailable"
+        return assessment
+    progress_at, progress_source, progress_error = _latest_human_progress(issue)
+    assessment["last_progress_at"] = _format_policy_timestamp(progress_at)
+    assessment["progress_source"] = progress_source
+    if progress_error:
+        assessment["reason"] = progress_error
+        return assessment
+    if progress_at is None:
+        assessment["reason"] = "progress timestamp is unavailable"
+        return assessment
+    if progress_at >= cutoff:
+        assessment["reason"] = "latest attributable progress is within the reclaim window"
+        return assessment
+    assessment["eligible"] = True
+    assessment["reason"] = f"latest attributable progress is older than {threshold_hours:g} hours"
+    return assessment
 
 
 def _ordered_comment_texts(issue: Mapping[str, Any]) -> tuple[list[str], bool]:
@@ -3081,6 +3286,7 @@ def _mutation(
     reason: str,
     evidence: Iterable[str] = (),
     blocked_reason: Iterable[str] = (),
+    revalidate_progress: bool = False,
 ) -> dict[str, Any]:
     """Build a stable mutation row."""
     mutation = {
@@ -3093,6 +3299,8 @@ def _mutation(
     reason_evidence = [item for item in blocked_reason if item]
     if reason_evidence:
         mutation["blocked_reason"] = reason_evidence
+    if revalidate_progress:
+        mutation["revalidate_progress"] = True
     return mutation
 
 
@@ -3137,6 +3345,7 @@ class Classification:
     readiness_evidence: tuple[str, ...]
     preparation_packet: dict[str, Any]
     closure: dict[str, Any]
+    stale_running_reclaim: dict[str, Any]
     mutations: tuple[dict[str, Any], ...]
     findings: tuple[str, ...]
 
@@ -3161,6 +3370,7 @@ class Classification:
             "readiness_evidence": list(self.readiness_evidence),
             "preparation_packet": dict(self.preparation_packet),
             "closure_evidence": self.closure,
+            "stale_running_reclaim": dict(self.stale_running_reclaim),
             "mutations": list(self.mutations),
             "findings": list(self.findings),
         }
@@ -3818,6 +4028,9 @@ def classify_issue(
     completion_receipt: Mapping[str, Any] | None = None,
     repository: str = DEFAULT_REPO,
     merged_pr_index: Mapping[int, Sequence[Mapping[str, Any]]] | None = None,
+    reclaim_stale_running_after_hours: float | None = None,
+    stale_running_cutoff: datetime | None = None,
+    stale_running_progress_available: bool | None = None,
 ) -> Classification:
     """Classify one issue and plan only evidence-supported autonomous repairs."""
     number = int(issue.get("number", 0))
@@ -3841,6 +4054,17 @@ def classify_issue(
         jobs=jobs,
     )
     active_now = any(active.values())
+    stale_running_hours = _validate_stale_running_hours(reclaim_stale_running_after_hours)
+    if stale_running_hours is not None and stale_running_cutoff is None:
+        _, stale_running_cutoff = _stale_running_policy(stale_running_hours)
+    if stale_running_cutoff is not None and stale_running_cutoff.tzinfo is None:
+        raise ValueError("stale-running cutoff must be timezone-aware")
+    stale_running_comments_available = (
+        stale_running_progress_available
+        if stale_running_progress_available is not None
+        else isinstance(issue.get("comments"), Sequence)
+        and not isinstance(issue.get("comments"), (str, bytes))
+    )
     blocker_evidence = _gate_evidence(text)
     blocked_reason_evidence = _blocked_reason_evidence(text)
     if "state:blocked-external-input" in labels:
@@ -3858,6 +4082,18 @@ def classify_issue(
         findings.append(
             "SLURM job inventory unavailable; preserve this issue and do not promote it to ready"
         )
+    stale_running_reclaim = _assess_stale_running_reclaim(
+        issue,
+        has_running_label="state:running" in labels,
+        active=active,
+        # The reclaim policy requires a complete job inventory for every
+        # issue, even when the issue has no resource label.  An unavailable
+        # job source cannot prove that no active execution exists.
+        active_records_uncertain=not job_inventory_available,
+        comments_available=stale_running_comments_available,
+        cutoff=stale_running_cutoff,
+        threshold_hours=stale_running_hours,
+    )
 
     _, comment_order_complete = _ordered_comment_texts(issue)
     terminal_review_evidence = _terminal_review_evidence(
@@ -3928,10 +4164,23 @@ def classify_issue(
         )
     execution_state_set = set(execution_state_labels)
     stale_running = "state:running" in execution_state_set and not active_now
-    if stale_running:
+    if stale_running_reclaim["enabled"] and "state:running" in execution_state_set:
+        if stale_running_reclaim["eligible"]:
+            findings.append(
+                "state:running is stale beyond the configured reclaim window; removal planned"
+            )
+        else:
+            findings.append(
+                "state:running stale-running reclaim withheld: "
+                + str(stale_running_reclaim["reason"])
+            )
+    elif stale_running:
         findings.append("state:running has no currently observed active record; preserved")
-    state_set = execution_state_set
-    ready = ready and not stale_running
+    stale_running_reclaimed = bool(stale_running_reclaim["eligible"])
+    if stale_running_reclaimed:
+        stale_running = False
+    state_set = execution_state_set - ({"state:running"} if stale_running_reclaimed else set())
+    ready = ready and not stale_running_reclaimed and not stale_running
     if working_state and not receipt_admission["eligible"]:
         ready = False
     external_blocker = any(item["kind"] == "external-input" for item in blocker_evidence)
@@ -3956,6 +4205,25 @@ def classify_issue(
     if working_state and not receipt_admission["eligible"] and "state:ready" in state_set:
         winner = None
     mutations: list[dict[str, Any]] = []
+
+    if stale_running_reclaimed:
+        if _available("state:running", available_labels):
+            mutations.append(
+                _mutation(
+                    "remove_label",
+                    number,
+                    value="state:running",
+                    reason="reclaim state:running after the configured period without progress",
+                    evidence=[
+                        f"last_progress_at={stale_running_reclaim['last_progress_at']}",
+                        f"progress_source={stale_running_reclaim['progress_source']}",
+                        f"cutoff_at={stale_running_reclaim['cutoff_at']}",
+                    ],
+                    revalidate_progress=True,
+                )
+            )
+        else:
+            findings.append("cannot remove unavailable label state:running")
 
     if working_state and not receipt_admission["eligible"] and "state:ready" in state_set:
         if _available("state:ready", available_labels):
@@ -4219,7 +4487,7 @@ def classify_issue(
                 findings.append("autonomous close withheld: " + str(receipt_admission["reason"]))
 
     # Preserve a pre-existing running state when discovery has no active
-    # evidence: stale state is uncertain, not permission to promote to ready.
+    # evidence unless the explicit stale-running reclaim policy selected it.
     if stale_running and classification == "unclassified":
         classification = "running"
 
@@ -4258,6 +4526,7 @@ def classify_issue(
         readiness_evidence=tuple(readiness_evidence),
         preparation_packet=preparation_packet,
         closure=closure,
+        stale_running_reclaim=stale_running_reclaim,
         mutations=tuple(unique_mutations),
         findings=tuple(findings),
     )
@@ -4274,11 +4543,17 @@ def build_audit_plan(
     classifier_digest: str | None = None,
     producer: Mapping[str, Any] | None = None,
     read_only_diagnostic: bool = False,
+    reclaim_stale_running_after_hours: float | None = None,
+    policy_now: datetime | None = None,
     command_runner: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
 ) -> dict[str, Any]:
     """Build the shared issue_audit_plan.v1 from a read-only inventory."""
     if mode not in {"autonomous", "interactive"}:
         raise ValueError("mode must be autonomous or interactive")
+    stale_running_policy, stale_running_cutoff = _stale_running_policy(
+        reclaim_stale_running_after_hours,
+        now=policy_now,
+    )
     effective_deadline = _resolve_deadline(max_wall_seconds, deadline)
     resolved_source_sha = (
         source_sha if source_sha is not None else resolve_source_sha(command_runner=command_runner)
@@ -4341,6 +4616,7 @@ def build_audit_plan(
         }
     inventory_meta = inventory.get("inventory")
     inventory_meta = inventory_meta if isinstance(inventory_meta, Mapping) else {}
+    stale_running_comments_available = _comment_inventory_available(inventory_meta)
     job_meta = inventory_meta.get("jobs", {})
     job_available = bool(job_meta.get("available", True)) if isinstance(job_meta, Mapping) else True
     open_numbers = {int(item.get("number", 0)) for item in issues}
@@ -4389,6 +4665,9 @@ def build_audit_plan(
                         completion_receipts, int(issue["number"])
                     ),
                     repository=repository,
+                    reclaim_stale_running_after_hours=reclaim_stale_running_after_hours,
+                    stale_running_cutoff=stale_running_cutoff,
+                    stale_running_progress_available=stale_running_comments_available,
                 )
         except _AuditDeadlineExceeded:
             classification_timeout_reason = (
@@ -4405,6 +4684,8 @@ def build_audit_plan(
             # time (issue #8295). Sorted for plan-digest determinism.
             "labels": sorted(issue_labels),
         }
+        if any(mutation.get("revalidate_progress") is True for mutation in classified.mutations):
+            expected_issue["strict_updated_at"] = True
         issue_mutations = [
             {**mutation, "expected_issue": expected_issue.copy()}
             for mutation in classified.mutations
@@ -4579,6 +4860,7 @@ def build_audit_plan(
         "schema": PLAN_SCHEMA,
         "repo": str(inventory.get("repo") or DEFAULT_REPO),
         "mode": mode,
+        "stale_running_policy": stale_running_policy,
         "source_sha": resolved_source_sha,
         "classifier_digest": resolved_classifier_digest,
         "producer": resolved_producer,
@@ -4783,6 +5065,18 @@ def _mutation_issue_preconditions(
                 )
                 continue
             expected["labels"] = sorted(raw_labels)
+        if "strict_updated_at" in raw_expected:
+            if type(raw_expected["strict_updated_at"]) is not bool:
+                errors.append(
+                    {
+                        "index": index,
+                        "issue": number,
+                        "expected_issue": expected,
+                        "error": "expected_issue strict_updated_at must be a boolean when present",
+                    }
+                )
+                continue
+            expected["strict_updated_at"] = raw_expected["strict_updated_at"]
         previous = preconditions.setdefault(number, expected)
         if previous != expected:
             errors.append(
@@ -5149,6 +5443,10 @@ def apply_mutations(
                         observed_issue["state"] == expected_issue["state"]
                         and observed_labels == expected_issue["labels"]
                     )
+                    if expected_issue.get("strict_updated_at") is True:
+                        semantic_match = semantic_match and (
+                            observed_issue["updated_at"] == expected_issue["updated_at"]
+                        )
                 else:
                     # Legacy plan without a label snapshot: keep the strict
                     # state/version comparison.
@@ -5786,6 +6084,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="include bounded REST comment threads in the issue evidence inventory",
     )
+    plan_parser.add_argument(
+        "--reclaim-stale-running-after-hours",
+        type=float,
+        default=None,
+        help=(
+            "remove state:running from issues whose latest attributable progress is older "
+            "than this threshold, when no active execution record is present"
+        ),
+    )
     plan_parser.add_argument("--max-comment-pages", type=int, default=DEFAULT_MAX_COMMENT_PAGES)
     plan_parser.add_argument("--max-mutations", type=int, default=DEFAULT_MAX_MUTATIONS)
     plan_parser.add_argument(
@@ -5826,6 +6133,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "plan":
         if not math.isfinite(args.max_wall_seconds) or args.max_wall_seconds < 0:
             parser.error("--max-wall-seconds must be finite and non-negative")
+        try:
+            _validate_stale_running_hours(args.reclaim_stale_running_after_hours)
+        except ValueError as exc:
+            parser.error(str(exc))
         if (
             args.mode == "autonomous"
             and not args.read_only_diagnostic
@@ -5862,6 +6173,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             max_wall_seconds=args.max_wall_seconds,
             output=args.output,
             read_only_diagnostic=args.read_only_diagnostic,
+            reclaim_stale_running_after_hours=args.reclaim_stale_running_after_hours,
         )
         try:
             with _deadline_interrupt(deadline):
@@ -5874,6 +6186,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     max_comment_pages=args.max_comment_pages,
                     deadline=deadline,
                     retry_command=retry_command,
+                    reclaim_stale_running_after_hours=args.reclaim_stale_running_after_hours,
                 )
         except _AuditDeadlineExceeded:
             inventory = _deadline_timeout_inventory(
@@ -5887,6 +6200,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             max_mutations=args.max_mutations,
             deadline=deadline,
             read_only_diagnostic=args.read_only_diagnostic,
+            reclaim_stale_running_after_hours=args.reclaim_stale_running_after_hours,
         )
         rendered = _render_plan(plan, deadline)
         if args.output:

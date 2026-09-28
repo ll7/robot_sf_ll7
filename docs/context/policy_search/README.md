@@ -130,6 +130,8 @@ Use it for three things only:
 - Candidate config home: `configs/policy_search/candidates/`
 - Benchmark-facing algorithm configs: `configs/algos/`
 - Candidate runner: `uv run python scripts/validation/run_policy_search_candidate.py`
+- Bounded planner-configuration optimizer: `uv run python scripts/validation/optimize_planner_config.py`
+- Planner optimizer output and #9653 integration contract: `contracts/planner_optimizer_manifest.v1.md`
 - Candidate step diagnostics: `uv run python scripts/validation/run_policy_search_step_diagnostics.py`
 - Candidate/learned-policy registry validator:
   `uv run python scripts/validation/validate_policy_search_registry.py`
@@ -158,6 +160,26 @@ uv run python scripts/validation/run_policy_search_step_diagnostics.py \
 
 Use `configs/algos/` for benchmark-facing algorithm configs and wrappers. Do not assume a
 policy-search candidate lives there just because a similarly named benchmark config exists.
+
+## Bounded Planner Configuration Search
+
+The initial planner-configuration optimizer reuses the candidate loader and episode evaluator.
+Its checked-in pilot config compares equal-budget Random and Optuna TPE proposals over bounded
+`hybrid_rule_local_planner` parameters, selects with a typed lexicographic objective, and evaluates
+the frozen selection on a disjoint held-out scenario/seed suite:
+
+```bash
+uv run python scripts/validation/optimize_planner_config.py \
+  --config configs/policy_search/planner_optimizer_issue9650.yaml \
+  --output-dir docs/context/policy_search/validation/issue_9650_planner_optimizer_pilot_v1
+```
+
+The run writes an integration manifest, every trial (including invalid attempts), full episode
+records, a canonical `best_candidate.yaml`, and a minimal candidate registry. To evaluate the
+export through the existing policy-search CLI, read `selected.candidate_name` from the manifest and
+pass that name and the exported registry to `run_policy_search_candidate.py`. The manifest contract,
+objective ordering, null handling, and evidence limits are owned by
+`contracts/planner_optimizer_manifest.v1.md`.
 
 ## Learned-Policy Intake
 

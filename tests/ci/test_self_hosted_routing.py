@@ -165,9 +165,7 @@ def test_container_setup_keeps_ephemeral_and_no_host_mounts() -> None:
 def test_job_started_hook_path_has_runner_accepted_extension() -> None:
     """The runner rejects hook paths without .sh/.ps1/.js and fails every job."""
     script = SETUP_SCRIPT.read_text(encoding="utf-8")
-    env_lines = [
-        line for line in script.splitlines() if "ACTIONS_RUNNER_HOOK_JOB_STARTED=" in line
-    ]
+    env_lines = [line for line in script.splitlines() if "ACTIONS_RUNNER_HOOK_JOB_STARTED=" in line]
     assert env_lines
     for line in env_lines:
         hook_path = line.split("ACTIONS_RUNNER_HOOK_JOB_STARTED=", 1)[1].strip()

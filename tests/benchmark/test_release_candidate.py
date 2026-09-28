@@ -241,43 +241,38 @@ def test_post_preflight_readback_rejects_candidate_digest_drift(candidate_repo) 
         )
 
 
-@pytest.mark.parametrize(
-    ("change_during_run", "prior_error"),
-    [(False, None), (True, None), (True, "matrix_worker_failed")],
-)
+@pytest.mark.parametrize("change_during_run", [False, True])
 def test_preflight_cli_accepts_candidate_and_rejects_mid_run_drift(
     candidate_repo,
     monkeypatch: pytest.MonkeyPatch,
     change_during_run: bool,
-    prior_error: str | None,
 ) -> None:
     root, path, payload = candidate_repo
     original_digest = hashlib.sha256(path.read_bytes()).hexdigest()
     monkeypatch.setattr(release_candidate, "get_repository_root", lambda: root)
-    observed: dict[str, object] = {}
+    observed: dict[str, object] = {"changed": False}
 
-    def diagnostic_preflight(manifest, *, source_commit, **_kwargs):
-        assert isinstance(manifest, release_candidate.PrepublicationCandidate)
-        identity, scenarios, seeds = spawn_preflight._release_manifest_inputs(manifest)
-        observed["source_commit"] = source_commit
-        assert len(scenarios) == 48 and seeds == tuple(range(111, 141))
-        if change_during_run:
+    def diagnostic_scenario(job):
+        scenario, _matrix, seeds, *_checks = job
+        if change_during_run and not observed["changed"]:
             payload["candidate_id"] = "changed-during-preflight"
             path.write_text(json.dumps(payload), encoding="utf-8")
+            observed["changed"] = True
+        name = scenario["name"]
         return {
-            "schema_version": "spawn_matrix_preflight.v1",
-            "status": "blocked",
-            "evidence_class": "preflight_diagnostic_only",
-            "benchmark_success": None,
-            "source_commit": source_commit,
-            "release_inputs": identity,
-            "rows": [],
-            "cell_count": 0,
-            "blocked_cell_count": 0,
-            "input_error": prior_error,
+            "scenario": name,
+            "rows": [
+                {
+                    "scenario": name,
+                    "seed": seed,
+                    "overall_status": "valid",
+                }
+                for seed in seeds
+            ],
+            "map_warnings": [],
         }
 
-    monkeypatch.setattr(spawn_preflight, "run_manifest_preflight", diagnostic_preflight)
+    monkeypatch.setattr(spawn_preflight, "_check_release_scenario", diagnostic_scenario)
     json_output = root / "report.json"
     result = spawn_preflight.main(
         [
@@ -290,15 +285,14 @@ def test_preflight_cli_accepts_candidate_and_rejects_mid_run_drift(
         ]
     )
     report = json.loads(json_output.read_text(encoding="utf-8"))
-    assert result == 2
-    assert observed["source_commit"] == payload["source_commit"]
+    assert result == (2 if change_during_run else 0)
     assert report["source_commit"] == payload["source_commit"]
     assert report["release_inputs"]["manifest_sha256"] == original_digest
+    assert report["expected_cell_count"] == report["cell_count"] == 1440
     if change_during_run:
         assert report["status"] == "invalid"
         assert "candidate_input_drift" in report["input_error"]
-        if prior_error:
-            assert prior_error in report["input_error"]
+        assert "release manifest changed" in report["input_error"]
     else:
-        assert report["status"] == "blocked"
+        assert report["status"] == "valid"
         assert report["input_error"] is None

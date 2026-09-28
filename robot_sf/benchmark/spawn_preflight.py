@@ -955,6 +955,25 @@ def write_preflight_reports(
     return sha256_file(json_path), sha256_file(markdown_path)
 
 
+def _verify_candidate_report_inputs(
+    manifest: Any, identity: dict[str, Any], report: dict[str, Any]
+) -> None:
+    """Invalidate a candidate report when its pinned source or inputs drifted."""
+    if not isinstance(manifest, PrepublicationCandidate):
+        return
+    try:
+        verify_prepublication_candidate_after_preflight(
+            manifest,
+            manifest_sha256=identity["manifest_sha256"],
+            repository_root=manifest.repository_root,
+        )
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        report["status"] = "invalid"
+        drift_error = f"candidate_input_drift: {type(exc).__name__}: {exc}"
+        prior_error = report.get("input_error")
+        report["input_error"] = f"{prior_error}; {drift_error}" if prior_error else drift_error
+
+
 def run_manifest_preflight(  # noqa: C901
     manifest: Any,
     *,
@@ -1119,6 +1138,7 @@ def run_manifest_preflight(  # noqa: C901
         "input_error": input_error,
         "runtime_s": round(time.perf_counter() - started, 1),
     }
+    _verify_candidate_report_inputs(manifest, identity, report)
     return report
 
 
@@ -1228,20 +1248,6 @@ def main(argv: list[str] | None = None) -> int:
             if isinstance(manifest, PrepublicationCandidate)
             else None,
         )
-        if isinstance(manifest, PrepublicationCandidate) and report.get("release_inputs"):
-            try:
-                verify_prepublication_candidate_after_preflight(
-                    manifest,
-                    manifest_sha256=report["release_inputs"]["manifest_sha256"],
-                    repository_root=manifest.repository_root,
-                )
-            except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
-                report["status"] = "invalid"
-                drift_error = f"candidate_input_drift: {type(exc).__name__}: {exc}"
-                prior_error = report.get("input_error")
-                report["input_error"] = (
-                    f"{prior_error}; {drift_error}" if prior_error else drift_error
-                )
     except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
         report = {
             "schema_version": "spawn_matrix_preflight.v1",

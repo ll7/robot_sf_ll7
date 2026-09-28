@@ -86,9 +86,9 @@ at `dt=0.05`; crossing-pedestrian minimum clearance was 0.117046958640 m / 0.194
 Clearance exceeded 0.05 m in each case and standing speed remained below 0.05 m/s. This rechecks
 only the opt-in `surface_v3` planner path, which is separate from the pair-kernel branch.
 
-Raw artifacts are retained at
-`/home/luttkule/robot_sf_campaign_retrievals/20260928/issue9764-social-force-kernel-paired-diagnostic-450ca42b`.
-`SHA256SUMS` in that directory verifies all 44 listed files. The legacy and wrapped episode files have
+Raw artifacts are retained in the author's private host store under the logical bundle key
+`issue9764-social-force-kernel-paired-diagnostic-450ca42b`; `SHA256SUMS` verifies all 44 listed
+files. The legacy and wrapped episode files have
 SHA-256 values `f4faf49f0646457eadb33da0700a9425d4f6292b6b64a7e7ed41300595ed11a6` and
 `9351259aa243a7ab78cadd2d819d86ae3fb7201504f306582e71f9c1da6c3a15`; the compact summary has
 SHA-256 `a9ce8f7ef9f4b21fb832f571bd021dde32328e075ad61978ca1a1670125572d3`. The `#9758` recheck

@@ -26,7 +26,8 @@ classify them as `durable-required-private` until a repository-approved promotio
 3. Run matched diagnostic scenarios `classic_head_on_corridor_medium` and
    `classic_group_crossing_medium`, seeds 111–113, with traces and force recording. Done; 6/6
    terminal outcomes matched, while traces and several metrics changed. Raw evidence and checksums
-   are stored under `/home/luttkule/robot_sf_campaign_retrievals/20260928/issue9764-social-force-kernel-paired-diagnostic-450ca42b`.
+   are retained in the author's private host store under logical bundle key
+   `issue9764-social-force-kernel-paired-diagnostic-450ca42b`.
 4. Review the release consequence with #9668: do not select `wrapped_v2` for the release until the
    required old-metric equivalence gate is run on the full release row set and passes, or the author
    updates that release contract.

@@ -3,7 +3,7 @@
 name: paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_4
 derived_from:
   config: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
-  config_sha256: e84cd899c8e54f6d854849b8d3f51c52f0158c43869fb65619ed2c16661a9d75
+  config_sha256: 7dc9a2dd9df8585593c9bc8ecc001bed0d2ddff4ebb3803dfb92e8dad8762881
 paper_facing: true
 paper_profile_version: paper-matrix-v1
 scenario_matrix: configs/scenarios/single/francis2023_blind_corner_goal_zone_entry_v1.yaml
@@ -104,6 +104,7 @@ planners:
   - key: socnav_sampling
     algo: socnav_sampling
     planner_group: experimental
+    algo_config: configs/algos/socnav_sampling_bounded_v2.yaml
     benchmark_profile: experimental
     socnav_missing_prereq_policy: fail-fast
   - key: sacadrl

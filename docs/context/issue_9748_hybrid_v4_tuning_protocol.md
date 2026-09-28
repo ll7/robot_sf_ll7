@@ -58,10 +58,12 @@ intentionally records no run hash or tuning result.
 
 The source commit also binds the transitive files resolved from those inputs:
 included scenario YAML files, their referenced map files, and every candidate
-`base_config_path`. The validator checks their tracked bytes at both the frozen
-source commit and the current checkout. Changing an included scenario, map, or
-inherited planner config therefore invalidates the log even when the direct
-manifest and candidate YAML hashes remain unchanged.
+`base_config_path`. It also binds the canonical campaign and scenario loader
+implementations (`camera_ready/_config.py`, `_config_types.py`, `_util.py`, and
+`training/scenario_loader.py`). The validator checks their tracked bytes at
+both the frozen source commit and the current checkout. Changing an included
+scenario, map, inherited planner config, or loader therefore invalidates the
+log even when the direct manifest and candidate YAML hashes remain unchanged.
 
 ## Structured tuning-log contract
 
@@ -91,7 +93,12 @@ entries:
 
 When a tuning log is supplied, `provenance` is mandatory. Its source commit
 must exist in the current repository and be a strict ancestor of the checked-out
-commit. Record the log in a descendant commit after the frozen source point.
+commit. The log itself must be a regular tracked file whose bytes match the
+validating checkout. The commit that last recorded that file must be a strict
+descendant of `provenance.source_commit`; merely merging sibling source and log
+commits into a later checkout is rejected. The validator reports that log
+commit in its result. Record the log in a descendant commit after the frozen
+source point.
 The recorded hashes must match the campaign, scenario manifest, and candidate
 files both at that frozen commit and in the current tracked tree; the recursive
 scenario, map, and candidate-base inputs must also match at both points.
@@ -112,7 +119,8 @@ metadata does not satisfy the direct per-entry binding. Free-form strings such
 as `notes`, `rationale`, and `claim_boundary` are not parsed as admissions, so
 mentioning held-out values does not create a false violation. Malformed logs,
 missing per-entry bindings, and non-integer seed or non-string scenario values
-fail closed.
+fail closed. Scenario identity aliases such as `episode_scenario_id` are also
+rejected, even when a valid direct identity is present.
 
 Run the checker with:
 

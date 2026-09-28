@@ -138,6 +138,74 @@ def _write_log(tmp_path: Path, payload: dict) -> Path:
     return path
 
 
+def _write_committed_log(
+    tmp_path: Path,
+    payload: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[Path, str]:
+    """Create a frozen-input Git repo and record one log commit after its freeze."""
+    source_root = CHECKER.ROOT
+    scenario_manifest = (
+        source_root / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml"
+    )
+    tracked_inputs = CHECKER._tuning_input_paths(
+        config_path=CHECKER.DEFAULT_CONFIG,
+        scenario_matrix_path=scenario_manifest,
+        candidate_paths=CHECKER.EXPECTED_PLANNER_CONFIGS,
+    )
+    repository = tmp_path / "repo"
+    for source in tracked_inputs:
+        destination = repository / source.relative_to(source_root)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+
+    def git(*args: str) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=repository,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+
+    git("init", "--quiet")
+    git("config", "user.name", "Issue 9748 test")
+    git("config", "user.email", "issue-9748-test@example.invalid")
+    relative_inputs = [source.relative_to(source_root).as_posix() for source in tracked_inputs]
+    git("add", "--", *relative_inputs)
+    git("commit", "--quiet", "-m", "Freeze issue 9748 tuning inputs")
+    frozen_source = git("rev-parse", "HEAD")
+
+    config_path = repository / CHECKER.DEFAULT_CONFIG.relative_to(source_root)
+    candidate_paths = {
+        key: repository / path.relative_to(source_root)
+        for key, path in CHECKER.EXPECTED_PLANNER_CONFIGS.items()
+    }
+    monkeypatch.setattr(CHECKER, "ROOT", repository)
+    monkeypatch.setattr(CHECKER, "DEFAULT_CONFIG", config_path)
+    monkeypatch.setattr(CHECKER, "EXPECTED_PLANNER_CONFIGS", candidate_paths)
+
+    payload["provenance"]["source_commit"] = frozen_source
+    path = repository / "evidence/tuning-log.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    git("add", "--", "evidence/tuning-log.json")
+    git("commit", "--quiet", "-m", "Record issue 9748 tuning log")
+    return path, frozen_source
+
+
+def _validate_committed_log(path: Path) -> dict:
+    scenario_manifest = (
+        CHECKER.ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml"
+    )
+    return CHECKER._validate_tuning_log(
+        path,
+        config_path=CHECKER.DEFAULT_CONFIG,
+        scenario_matrix_path=scenario_manifest,
+    )
+
+
 def _parent_commit() -> str:
     result = subprocess.run(
         ["git", "rev-parse", "HEAD^"],
@@ -263,6 +331,20 @@ def test_tuning_log_requires_scenario_identity_on_entry(tmp_path: Path) -> None:
         CHECKER._validate_tuning_log(path)
 
 
+def test_tuning_log_rejects_scenario_identity_alias_even_with_valid_binding(
+    tmp_path: Path,
+) -> None:
+    payload = _valid_log_payload()
+    payload["entries"][0]["episode_scenario_id"] = "classic_doorway_medium"
+    path = _write_log(tmp_path, payload)
+
+    with pytest.raises(
+        CHECKER.ValidationError,
+        match="unsupported scenario field.*episode_scenario_id",
+    ):
+        CHECKER._validate_tuning_log(path)
+
+
 @pytest.mark.parametrize("malformed_seed", [True, "1001", [1001, "1002"]])
 def test_tuning_log_rejects_malformed_entry_seed(tmp_path: Path, malformed_seed: object) -> None:
     payload = _valid_log_payload()
@@ -360,13 +442,23 @@ def test_tuning_log_requires_frozen_provenance_and_known_candidates(
         CHECKER._validate_tuning_log(path)
 
 
-def test_tuning_log_accepts_valid_frozen_provenance(tmp_path: Path) -> None:
+def test_tuning_log_accepts_valid_frozen_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path, frozen_source = _write_committed_log(tmp_path, _valid_log_payload(), monkeypatch)
+
+    summary = _validate_committed_log(path)
+
+    assert summary["provenance"]["source_commit"] == frozen_source
+    assert summary["provenance"]["log_commit"] != frozen_source
+    assert set(summary["provenance"]["candidate_configs"]) == set(CHECKER.EXPECTED_PLANNER_CONFIGS)
+
+
+def test_tuning_log_requires_a_tracked_log_file(tmp_path: Path) -> None:
     path = _write_log(tmp_path, _valid_log_payload())
 
-    summary = CHECKER._validate_tuning_log(path)
-
-    assert summary["provenance"]["source_commit"] == _parent_commit()
-    assert set(summary["provenance"]["candidate_configs"]) == set(CHECKER.EXPECTED_PLANNER_CONFIGS)
+    with pytest.raises(CHECKER.ValidationError, match="structured tuning log must be inside"):
+        CHECKER._validate_tuning_log(path)
 
 
 def test_tuning_log_validates_after_log_is_committed(
@@ -433,6 +525,15 @@ def test_tuning_log_validates_after_log_is_committed(
         summary["provenance"]["campaign_config_sha256"]
         == hashlib.sha256(frozen_config.read_bytes()).hexdigest()
     )
+    assert summary["provenance"]["log_commit"] == committed_head
+
+    committed_log_bytes = log_path.read_bytes()
+    log_path.write_bytes(committed_log_bytes + b"\n")
+    with pytest.raises(CHECKER.ValidationError, match="bytes differ from the tracked file"):
+        CHECKER._validate_tuning_log(
+            log_path, config_path=frozen_config, scenario_matrix_path=frozen_scenario_manifest
+        )
+    log_path.write_bytes(committed_log_bytes)
 
     self_anchored_payload = copy.deepcopy(payload)
     self_anchored_payload["provenance"]["source_commit"] = committed_head
@@ -446,12 +547,92 @@ def test_tuning_log_validates_after_log_is_committed(
         )
 
 
+def test_tuning_log_rejects_source_commit_sibling_to_log_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_root = CHECKER.ROOT
+    scenario_manifest = (
+        source_root / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml"
+    )
+    tracked_inputs = CHECKER._tuning_input_paths(
+        config_path=CHECKER.DEFAULT_CONFIG,
+        scenario_matrix_path=scenario_manifest,
+        candidate_paths=CHECKER.EXPECTED_PLANNER_CONFIGS,
+    )
+    repository = tmp_path / "repo"
+    for source in tracked_inputs:
+        destination = repository / source.relative_to(source_root)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+
+    def git(*args: str) -> str:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=repository,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+
+    git("init", "--quiet")
+    git("config", "user.name", "Issue 9748 test")
+    git("config", "user.email", "issue-9748-test@example.invalid")
+    relative_inputs = [source.relative_to(source_root).as_posix() for source in tracked_inputs]
+    git("add", "--", *relative_inputs)
+    git("commit", "--quiet", "-m", "Base issue 9748 inputs")
+    base_commit = git("rev-parse", "HEAD")
+    git("branch", "-M", "base")
+
+    git("checkout", "-b", "frozen-source")
+    (repository / "freeze-marker.txt").write_text("source branch\n", encoding="utf-8")
+    git("add", "--", "freeze-marker.txt")
+    git("commit", "--quiet", "-m", "Create frozen source branch")
+    frozen_source = git("rev-parse", "HEAD")
+
+    git("checkout", "base")
+    git("checkout", "-b", "log-record")
+    payload = _valid_log_payload()
+    payload["provenance"]["source_commit"] = frozen_source
+    log_path = repository / "evidence/tuning-log.json"
+    log_path.parent.mkdir(parents=True)
+    log_path.write_text(json.dumps(payload), encoding="utf-8")
+    git("add", "--", "evidence/tuning-log.json")
+    git("commit", "--quiet", "-m", "Record log on sibling branch")
+    log_commit = git("rev-parse", "HEAD")
+    assert git("merge-base", "--is-ancestor", base_commit, frozen_source) == ""
+    assert git("merge-base", "--is-ancestor", base_commit, log_commit) == ""
+
+    git("merge", "--quiet", "--no-ff", "frozen-source", "-m", "Join source and log branches")
+
+    frozen_config = repository / CHECKER.DEFAULT_CONFIG.relative_to(source_root)
+    frozen_scenario_manifest = repository / scenario_manifest.relative_to(source_root)
+    frozen_candidates = {
+        key: repository / path.relative_to(source_root)
+        for key, path in CHECKER.EXPECTED_PLANNER_CONFIGS.items()
+    }
+    monkeypatch.setattr(CHECKER, "ROOT", repository)
+    monkeypatch.setattr(CHECKER, "DEFAULT_CONFIG", frozen_config)
+    monkeypatch.setattr(CHECKER, "EXPECTED_PLANNER_CONFIGS", frozen_candidates)
+
+    with pytest.raises(CHECKER.ValidationError, match="commit recording.*must descend"):
+        CHECKER._validate_tuning_log(
+            log_path,
+            config_path=frozen_config,
+            scenario_matrix_path=frozen_scenario_manifest,
+        )
+
+
 @pytest.mark.parametrize(
     "dependency",
     [
         "configs/scenarios/archetypes/classic_doorway.yaml",
         "configs/algos/hybrid_rule_v4_clearance_braking.yaml",
         "maps/svg_maps/classic_doorway.svg",
+        "robot_sf/benchmark/camera_ready/_config.py",
+        "robot_sf/benchmark/camera_ready/_config_types.py",
+        "robot_sf/benchmark/camera_ready/_util.py",
+        "robot_sf/training/scenario_loader.py",
     ],
 )
 def test_tuning_log_rejects_changed_transitive_inputs_after_source_commit(
@@ -538,7 +719,9 @@ def test_tuning_log_rejects_unknown_entry_candidate_or_hash(
         CHECKER._validate_tuning_log(path)
 
 
-def test_tuning_log_accepts_dev_fields_and_held_out_prose(tmp_path: Path) -> None:
+def test_tuning_log_accepts_dev_fields_and_held_out_prose(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     payload = _valid_log_payload()
     provenance = payload["provenance"]
     first_candidate, second_candidate = sorted(CHECKER.EXPECTED_PLANNER_CONFIGS)
@@ -558,15 +741,17 @@ def test_tuning_log_accepts_dev_fields_and_held_out_prose(tmp_path: Path) -> Non
         },
     ]
     payload["rationale"] = "This prose may mention 111–140 without admitting those seeds."
-    path = _write_log(tmp_path, payload)
+    path, _ = _write_committed_log(tmp_path, payload, monkeypatch)
 
-    summary = CHECKER._validate_tuning_log(path)
+    summary = _validate_committed_log(path)
     assert summary["release_seed_overlap"] == []
     assert summary["release_scenario_overlap"] == []
     assert summary["typed_scenario_count"] == 2
 
 
-def test_tuning_log_accepts_independent_seed_bindings(tmp_path: Path) -> None:
+def test_tuning_log_accepts_independent_seed_bindings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     payload = _valid_log_payload()
     provenance = payload["provenance"]
     first_candidate, second_candidate = sorted(CHECKER.EXPECTED_PLANNER_CONFIGS)
@@ -584,8 +769,8 @@ def test_tuning_log_accepts_independent_seed_bindings(tmp_path: Path) -> None:
             "scenario_ids": ["issue_9748_dev_francis2023_crowd_navigation"],
         },
     ]
-    path = _write_log(tmp_path, payload)
+    path, _ = _write_committed_log(tmp_path, payload, monkeypatch)
 
-    summary = CHECKER._validate_tuning_log(path)
+    summary = _validate_committed_log(path)
 
     assert summary["typed_seed_count"] == 3

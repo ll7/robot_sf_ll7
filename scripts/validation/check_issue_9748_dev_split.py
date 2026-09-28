@@ -139,6 +139,12 @@ _TUNING_FILE_REFERENCE_KEYS = frozenset(
         "scenario_config_path",
     }
 )
+_TUNING_LOADER_RELATIVE_PATHS = (
+    "robot_sf/benchmark/camera_ready/_config.py",
+    "robot_sf/benchmark/camera_ready/_config_types.py",
+    "robot_sf/benchmark/camera_ready/_util.py",
+    "robot_sf/training/scenario_loader.py",
+)
 
 
 def _iter_tuning_file_references(value: Any, *, owner_path: Path) -> list[Path]:
@@ -175,6 +181,7 @@ def _tuning_input_paths(
 ) -> tuple[Path, ...]:
     """Resolve the transitive scenario, map, campaign, and candidate inputs."""
     pending = [config_path.resolve(), scenario_matrix_path.resolve()]
+    pending.extend((ROOT / path).resolve() for path in _TUNING_LOADER_RELATIVE_PATHS)
     pending.extend(path.resolve() for path in candidate_paths.values())
     found: set[Path] = set()
     while pending:
@@ -246,6 +253,73 @@ def _require_source_commit(raw: Any) -> str:
             f"(git merge-base exited {result.returncode})"
         )
     return raw
+
+
+def _require_committed_log(path: Path, *, source_commit: str) -> str:
+    """Require the exact supplied log bytes in a commit descended from the freeze."""
+    if path.is_symlink():
+        raise ValidationError("structured tuning log must be a regular tracked file, not a symlink")
+    relative_path = _repo_relative_path(path, label="structured tuning log")
+    try:
+        tracked = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", "--", relative_path],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if tracked.returncode != 0:
+            raise ValidationError(
+                "structured tuning log must be tracked in the validating checkout"
+            )
+        committed_bytes = subprocess.run(
+            ["git", "show", f"HEAD:{relative_path}"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+        ).stdout
+        log_commit = subprocess.run(
+            ["git", "log", "-1", "--format=%H", "--", relative_path],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ValidationError(f"could not verify structured tuning-log commit: {exc}") from exc
+
+    if path.read_bytes() != committed_bytes:
+        raise ValidationError(
+            "structured tuning log bytes differ from the tracked file at validating HEAD"
+        )
+    if not SOURCE_COMMIT_PATTERN.fullmatch(log_commit):
+        raise ValidationError("could not identify the commit that recorded the tuning log")
+    if log_commit == source_commit:
+        raise ValidationError(
+            "structured tuning log must be recorded in a strict descendant commit of "
+            "provenance.source_commit"
+        )
+    try:
+        ancestry = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", source_commit, log_commit],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:
+        raise ValidationError(f"could not verify tuning-log commit ancestry: {exc}") from exc
+    if ancestry.returncode == 1:
+        raise ValidationError(
+            "the commit recording the structured tuning log must descend from "
+            "provenance.source_commit"
+        )
+    if ancestry.returncode != 0:
+        raise ValidationError(
+            "could not verify tuning-log commit ancestry "
+            f"(git merge-base exited {ancestry.returncode})"
+        )
+    return log_commit
 
 
 def _repo_relative_path(path: Path, *, label: str) -> str:
@@ -539,6 +613,7 @@ _SCENARIO_FIELD_NAMES = frozenset(
     }
 )
 _ENTRY_SCENARIO_FIELD_NAMES = frozenset({"scenario_id", "scenario_ids"})
+_SCENARIO_NON_IDENTITY_FIELDS = frozenset({"scenario_manifest_sha256"})
 _SCENARIO_LIST_FIELDS = frozenset({"scenario_ids", "scenario_names", "scenarios"})
 
 
@@ -712,7 +787,29 @@ def _validate_tuning_log_scenarios(
                 f"structured tuning-log entry {index} must contain a non-empty typed "
                 "scenario_id or scenario_ids field"
             )
+    _reject_unbound_scenario_fields(payload)
     return _validate_typed_scenario_ids(payload, label="structured tuning log")
+
+
+def _reject_unbound_scenario_fields(value: Any, path: tuple[str, ...] = ()) -> None:
+    """Reject scenario identity aliases outside the tuning-log schema."""
+    if isinstance(value, Mapping):
+        for key, nested in value.items():
+            normalized = str(key).strip().lower().replace("-", "_")
+            child_path = (*path, normalized)
+            if (
+                "scenario" in normalized
+                and normalized not in _ENTRY_SCENARIO_FIELD_NAMES
+                and normalized not in _SCENARIO_NON_IDENTITY_FIELDS
+            ):
+                raise ValidationError(
+                    "unsupported scenario field "
+                    f"{'.'.join(child_path)!r}; bind identities only as scenario_id or scenario_ids"
+                )
+            _reject_unbound_scenario_fields(nested, child_path)
+    elif isinstance(value, list):
+        for index, nested in enumerate(value):
+            _reject_unbound_scenario_fields(nested, (*path, str(index)))
 
 
 def _validate_candidate_provenance(raw: Any) -> dict[str, dict[str, str]]:
@@ -916,6 +1013,8 @@ def _validate_tuning_log(
     typed_seed_count = _validate_tuning_log_seeds(payload)
     typed_scenario_count = _validate_tuning_log_scenarios(payload, entries)
     _validate_tuning_log_candidates(entries, provenance)
+    log_commit = _require_committed_log(path, source_commit=provenance["source_commit"])
+    provenance["log_commit"] = log_commit
 
     return {
         "path": str(path),

@@ -36,6 +36,7 @@ class PrepublicationCandidate:
     """Pinned setup input consumed only by the diagnostic preflight."""
 
     path: Path
+    repository_root: Path
     schema_version: str
     release_id: str
     release_kind: str
@@ -274,6 +275,7 @@ def load_prepublication_candidate(
     pinned = _candidate_pins(root, payload, expected_paths)
     return PrepublicationCandidate(
         path=candidate_path,
+        repository_root=root,
         schema_version=CANDIDATE_SCHEMA,
         release_id=release_id,
         release_kind="benchmark-data-prepublication-candidate",

@@ -8,7 +8,7 @@ Provide a checksummed input for the 0.0.8 setup preflight before an author reser
 
 1. Define a distinct candidate schema and loader that require an exact source commit, the 14-arm campaign config, 48 scenario identities, seeds 111–140, H600, and 20,160 planned episodes.
 2. Require SHA-256 pins for the campaign config, scenario matrix and its includes, every effective SVG map, seed-set file, route certification, suite policy, and every referenced planner config. Reject missing, extra, stale, or symlinked inputs.
-3. Connect only the setup preflight to this loader after #9819 lands. Keep `load_release_manifest` strict for published manifests. The report must record candidate and checker source identities and must remain diagnostic until all setup cells pass.
+3. Connect only the #9819 setup preflight to this loader. Keep `load_release_manifest` strict for published manifests. The preflight report records the candidate digest and source commit; its checker implementation is bound by that exact source commit. Recheck the complete pinned input closure after the run and invalidate the report on drift. The report remains diagnostic until all setup cells pass.
 4. Test valid DOI-free loading, hash drift, omitted pins, roster/count drift, and publication-loader rejection. Review at the final head and run focused validation before delivery.
 
 ## Stop rule and custody

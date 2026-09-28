@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from robot_sf.benchmark import release_candidate, spawn_preflight
 from robot_sf.benchmark.release_candidate import (
     CANDIDATE_SCHEMA,
     _expected_input_paths,
@@ -238,3 +239,58 @@ def test_post_preflight_readback_rejects_candidate_digest_drift(candidate_repo) 
         verify_prepublication_candidate_after_preflight(
             candidate, manifest_sha256=original_digest, repository_root=root
         )
+
+
+@pytest.mark.parametrize("change_during_run", [False, True])
+def test_preflight_cli_accepts_candidate_and_rejects_mid_run_drift(
+    candidate_repo, monkeypatch: pytest.MonkeyPatch, change_during_run: bool
+) -> None:
+    root, path, payload = candidate_repo
+    original_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    monkeypatch.setattr(release_candidate, "get_repository_root", lambda: root)
+    observed: dict[str, object] = {}
+
+    def diagnostic_preflight(manifest, *, source_commit, **_kwargs):
+        assert isinstance(manifest, release_candidate.PrepublicationCandidate)
+        identity, scenarios, seeds = spawn_preflight._release_manifest_inputs(manifest)
+        observed["source_commit"] = source_commit
+        assert len(scenarios) == 48 and seeds == tuple(range(111, 141))
+        if change_during_run:
+            payload["candidate_id"] = "changed-during-preflight"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+        return {
+            "schema_version": "spawn_matrix_preflight.v1",
+            "status": "blocked",
+            "evidence_class": "preflight_diagnostic_only",
+            "benchmark_success": None,
+            "source_commit": source_commit,
+            "release_inputs": identity,
+            "rows": [],
+            "cell_count": 0,
+            "blocked_cell_count": 0,
+            "input_error": None,
+        }
+
+    monkeypatch.setattr(spawn_preflight, "run_manifest_preflight", diagnostic_preflight)
+    json_output = root / "report.json"
+    result = spawn_preflight.main(
+        [
+            "--manifest",
+            str(path),
+            "--json-output",
+            str(json_output),
+            "--markdown-output",
+            str(root / "report.md"),
+        ]
+    )
+    report = json.loads(json_output.read_text(encoding="utf-8"))
+    assert result == 2
+    assert observed["source_commit"] == payload["source_commit"]
+    assert report["source_commit"] == payload["source_commit"]
+    assert report["release_inputs"]["manifest_sha256"] == original_digest
+    if change_during_run:
+        assert report["status"] == "invalid"
+        assert "candidate_input_drift" in report["input_error"]
+    else:
+        assert report["status"] == "blocked"
+        assert report["input_error"] is None

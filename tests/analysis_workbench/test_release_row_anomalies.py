@@ -4,9 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from robot_sf.analysis_workbench.audit_contracts import Signal, record_from_dict, record_to_dict
+from robot_sf.analysis_workbench.audit_contracts import (
+    Signal,
+    canonical_json,
+    record_from_dict,
+    record_to_dict,
+)
 from robot_sf.analysis_workbench.audit_store import AuditStore
 from robot_sf.analysis_workbench.release_row_anomalies import (
     ReleaseRowError,
@@ -15,10 +22,10 @@ from robot_sf.analysis_workbench.release_row_anomalies import (
     main,
 )
 from robot_sf.analysis_workbench.release_row_bundle import load_release_rows
+from robot_sf.benchmark.event_ledger import EPISODE_EVENT_LEDGER_SCHEMA_VERSION
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-    from pathlib import Path
 
 
 CONFIG: dict[str, object] = {
@@ -36,6 +43,14 @@ CONFIG: dict[str, object] = {
     "require_preflight": False,
 }
 BASIC_CONFIG = {**CONFIG, "pedestrian_free_scenarios": [], "pedestrian_aware_planners": []}
+CANDIDATE_CONFIG = {
+    **BASIC_CONFIG,
+    "baseline_planner": "goal",
+    "pedestrian_aware_planners": ["social_force"],
+    "collision_metric_contract": "release_0_0_8",
+    "collision_roster_status": "frozen",
+    "collision_expected_arm_count": 2,
+}
 
 
 def _row(  # noqa: PLR0913
@@ -68,7 +83,14 @@ def _row(  # noqa: PLR0913
         },
         "event_ledger": {"exact_events": {"invalid_run": invalid_run}},
         "integrity": {"effective_view": {"observation_ped_count": observation_ped_count}},
-        "metrics": dict(metrics or {}),
+        "metrics": {
+            "ped_collision_count": int(collision),
+            "obstacle_collision_count": 0,
+            "agent_collision_count": 0,
+            "total_collision_count": int(collision),
+            "collisions": int(collision),
+            **dict(metrics or {}),
+        },
     }
 
 
@@ -91,6 +113,163 @@ def _with_source_members(rows: list[dict[str, object]]) -> list[dict[str, object
 
 def _findings(report: Mapping[str, Any], detector_id: str) -> list[Mapping[str, Any]]:
     return [finding for finding in report["findings"] if finding["detector_id"] == detector_id]
+
+
+def test_legacy_default_report_serialization_is_byte_identical() -> None:
+    """Absent 0.0.8 fields retain the pre-gate report and registry bytes."""
+
+    report = analyze_release_rows(
+        [
+            _row("legacy-v1", 1, "goal", steps=100, success=True, timeout=False),
+            _row("legacy-v1", 1, "social_force", steps=100, collision=True, timeout=False),
+        ],
+        source=_source("goal", "social_force"),
+    )
+
+    # Golden canonical bytes captured from base 9a578901421826c873845952d9418f146d7d3695.
+    assert hashlib.sha256(canonical_json(report).encode()).hexdigest() == (
+        "760dd1e306f99c7b3be13d3c539043a31613be482f71725f0b6a4198d9a8bb74"
+    )
+    assert "collision_metric_contract" not in report["config"]
+    assert "collision_metric_inconsistent" not in {
+        item["detector_id"] for item in report["detector_registry"]["detectors"]
+    }
+
+
+def test_collision_metric_gate_blocks_vv5_double_total_and_missing_components() -> None:
+    """The exact two-row VV-5 mutant fails while its clean control passes."""
+
+    template = json.loads(
+        Path("configs/benchmarks/release_row_anomalies_0_0_8.template.json").read_text()
+    )
+    assert template["collision_metric_contract"] == "release_0_0_8"
+    assert template["collision_roster_status"] == "unfrozen_template"
+    assert template["pedestrian_aware_planners"] == []
+    rows = [
+        _row("vv5-fixture", 111, "goal", steps=100, success=True, timeout=False),
+        _row("vv5-fixture", 111, "social_force", steps=100, collision=True, timeout=False),
+    ]
+    rows[0]["status"] = "success"
+    rows[1]["status"] = "collision"
+    source = _source("goal", "social_force")
+    clean = analyze_release_rows(rows, config=CANDIDATE_CONFIG, source=source)
+    assert clean["gate"]["blocked"] is False
+    assert not _findings(clean, "collision_metric_inconsistent")
+    assert clean["missingness"]["typed_collision_ledger_unavailable"] == 2
+
+    doubled = deepcopy(rows)
+    doubled[1]["metrics"]["total_collision_count"] = 2
+    doubled[1]["metrics"]["collisions"] = 2
+    report = analyze_release_rows(doubled, config=CANDIDATE_CONFIG, source=source)
+    findings = _findings(report, "collision_metric_inconsistent")
+    assert report["gate"]["blocked"] is True
+    assert "collision_metric_inconsistent" in report["gate"]["reasons"]
+    assert len(findings) == 1
+    assert findings[0]["planner_id"] == "social_force"
+    assert findings[0]["measured"]["problems"] == ["collision_component_sum_mismatch"]
+    tolerated = analyze_release_rows(
+        doubled,
+        config={**CANDIDATE_CONFIG, "max_unannotated_findings": 10},
+        source=source,
+    )
+    assert tolerated["gate"]["blocked"] is True
+    assert tolerated["gate"]["reasons"] == ["collision_metric_inconsistent"]
+
+    alias = deepcopy(rows)
+    alias[1]["metrics"]["collisions"] = 2
+    report = analyze_release_rows(alias, config=CANDIDATE_CONFIG, source=source)
+    assert (
+        "collision_alias_mismatch"
+        in _findings(report, "collision_metric_inconsistent")[0]["measured"]["problems"]
+    )
+
+    missing = deepcopy(rows)
+    del missing[1]["metrics"]["agent_collision_count"]
+    report = analyze_release_rows(missing, config=CANDIDATE_CONFIG, source=source)
+    assert report["gate"]["blocked"] is True
+    assert (
+        "missing_or_nonfinite_agent_collision_count"
+        in _findings(report, "collision_metric_inconsistent")[0]["measured"]["problems"]
+    )
+    historical_diagnostic = analyze_release_rows(missing, config=BASIC_CONFIG, source=source)
+    assert "collision_metric_contract" not in historical_diagnostic["config"]
+    assert not _findings(historical_diagnostic, "collision_metric_inconsistent")
+    assert historical_diagnostic["detector_registry_digest"] != report["detector_registry_digest"]
+    unfrozen = analyze_release_rows(rows, config=template, source=source)
+    assert "collision_roster_unfrozen_template" in unfrozen["gate"]["reasons"]
+    assert "collision_roster_manifest_mismatch" in unfrozen["gate"]["reasons"]
+
+    wrong_roster = analyze_release_rows(
+        rows,
+        config={**CANDIDATE_CONFIG, "pedestrian_aware_planners": ["old_hybrid"]},
+        source=source,
+    )
+    assert "collision_roster_manifest_mismatch" in wrong_roster["gate"]["reasons"]
+
+
+def test_collision_metric_gate_reconciles_typed_ledger_without_counting_events() -> None:
+    """Exact events and sampled counts retain distinct meanings."""
+
+    row = _row("typed-ledger", 111, "goal", steps=100, collision=True, timeout=False)
+    row["event_ledger"] = {
+        "schema_version": EPISODE_EVENT_LEDGER_SCHEMA_VERSION,
+        "exact_events": {"collision": True, "invalid_run": False},
+        "collision_events": [{"collision_partner_type": "pedestrian"}] * 2,
+        "reconciliation": {
+            "collision_metric_value": 1,
+            "collision_metric_source": "metrics.total_collision_count",
+        },
+    }
+    source = _source("goal")
+    ledger_config = {
+        **CANDIDATE_CONFIG,
+        "pedestrian_aware_planners": [],
+        "collision_expected_arm_count": 1,
+    }
+    clean = analyze_release_rows([row], config=ledger_config, source=source)
+    assert clean["gate"]["blocked"] is False
+
+    stale = deepcopy(row)
+    stale["event_ledger"]["reconciliation"]["collision_metric_value"] = 2
+    report = analyze_release_rows([stale], config=ledger_config, source=source)
+    assert report["gate"]["blocked"] is True
+    assert (
+        "ledger_collision_metric_mismatch"
+        in _findings(report, "collision_metric_inconsistent")[0]["measured"]["problems"]
+    )
+
+
+def test_strict_collision_signal_handoff_accepts_versioned_registry(tmp_path: Path) -> None:
+    """The strict collision detector is accepted by its matching BA handoff."""
+
+    rows = _with_source_members(
+        [
+            _row("strict-handoff", 111, "goal", steps=100, success=True, timeout=False),
+            _row("strict-handoff", 111, "social_force", steps=100, collision=True, timeout=False),
+        ]
+    )
+    rows[1]["status"] = "collision"
+    rows[1]["metrics"]["total_collision_count"] = 2
+    rows[1]["metrics"]["collisions"] = 2
+    report = analyze_release_rows(
+        rows,
+        config=CANDIDATE_CONFIG,
+        source=_source("goal", "social_force"),
+    )
+
+    assert report["gate"]["blocked"] is True
+    assert "collision_metric_inconsistent" in report["gate"]["reasons"]
+    assert "collision_metric_inconsistent" in {
+        item["detector_id"] for item in report["detector_registry"]["detectors"]
+    }
+    with AuditStore(tmp_path / "audit-store") as store:
+        receipt = handoff_release_row_signals(report, store)
+        assert receipt is not None
+        assert receipt.committed is True
+        persisted = store.get(report["signals"][0]["signal_id"])
+
+    assert isinstance(persisted.record, Signal)
+    assert persisted.record.detector_id == "collision_metric_inconsistent"
 
 
 def test_all_release_row_detector_families_flag_synthetic_anomalies() -> None:

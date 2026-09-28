@@ -79,10 +79,18 @@ verified replay artifact, and the target planner's configuration snapshot must
 match the configuration recorded in its replay episode.
 
 An `admissible_feasibility_unknown` case also requires a digest-bound
-`scenario_admissibility.v1` result from the #9651 classifier. The corpus receipt
-binds that result to the case ID, effective scenario digest, scenario and route
-bytes, and resolved map asset digests. The result must retain the scenario as
-unknown; `structurally_invalid` and
+`scenario_admissibility.v1` result from the #9651 classifier and a
+`adversarial-case-scenario-admissibility-receipt.v2`. The corpus receipt
+bounds the raw result bytes and exact 40-character producer source revision to
+the case. Admission recomputes the complete scenario runtime input identity from
+the staged scenario, including its route override and resolved map bytes, and
+requires the classifier's root digest, effective input digest, closure flag,
+and path-independent input-file records to match. The receipt also binds the
+route and map registry digests used by the case identity. If the closure is
+unavailable, incomplete, or different, the result cannot support admission.
+This records producer revision provenance but is not a cryptographic signature
+of the producer. The result must retain the scenario as unknown;
+`structurally_invalid` and
 `geometric_or_kinodynamic_impossibility` results fail admission. Unknown remains
 a valid outcome when the classifier cannot demonstrate feasibility, but an
 unverified caller label is not sufficient.
@@ -94,6 +102,10 @@ source revision. Historical archives whose source manifest was not retained may
 omit that run link only when the record explicitly declares the manifest as
 unavailable and preserves its historical revision, source archive, origin case,
 and report reference.
+The archive and report references must resolve to digest-pinned bytes retained
+under that case's artifact directory and listed in its custody inventory; a
+well-formed path string alone is insufficient. The missing original search
+manifest remains explicitly unavailable.
 
 New search runs should be registered with `register_search_run`. Its
 `candidate_evaluation_source` points to one SHA-256-pinned JSONL file under
@@ -110,13 +122,13 @@ match every candidate row; candidate rows may add their measured result without
 changing that declaration. The schema requires the pinned #9645 packet to retain
 its explicit zero-admission count and disallows admission counts on generic runs.
 
-When a #9651 classifier records raw output or file-backed execution evidence,
-the corpus receipt preserves those exact bytes or records the reference as
-unavailable. Digest-bound references are checked against the immutable case
-inventory. Re-admitting a duplicate may retain references to already-custodied
-classifier evidence without relocating or dropping those bytes. These records
-remain evidence about an `admissible_feasibility_unknown` result; they do not
-upgrade its feasibility verdict.
+When a #9651 classifier records file-backed execution evidence, the corpus
+receipt preserves those exact bytes or records the reference as unavailable.
+Digest-bound references are checked against the immutable case inventory.
+Re-admitting a duplicate may retain references to already-custodied classifier
+evidence without relocating or dropping those bytes. These records remain
+evidence about an `admissible_feasibility_unknown` result; they do not upgrade
+its feasibility verdict.
 
 ## Import historical #9656 candidates
 

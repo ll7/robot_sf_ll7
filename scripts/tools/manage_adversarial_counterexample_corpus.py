@@ -19,6 +19,7 @@ from robot_sf.adversarial.counterexample_corpus import (
     load_corpus,
     new_corpus,
     promote_historical_candidate,
+    promote_pending_historical_candidate,
     recompute_planner_status,
     save_corpus,
 )
@@ -58,6 +59,7 @@ def _load_command_corpus(args: argparse.Namespace) -> dict[str, Any]:
         "import-9656-candidates",
         "admit-case",
         "promote-candidate",
+        "promote-1501-candidate",
     }
     return load_corpus(args.corpus, create=create)
 
@@ -109,6 +111,18 @@ def _run_promote_candidate(args: argparse.Namespace, corpus: dict[str, Any]) -> 
     return _save_receipt(args, corpus, receipt)
 
 
+def _run_promote_1501_candidate(args: argparse.Namespace, corpus: dict[str, Any]) -> int:
+    case_record = _read_json_object(args.case)
+    corpus, receipt = promote_pending_historical_candidate(
+        args.candidate_id,
+        case_record,
+        corpus,
+        corpus_root=args.corpus_root,
+        artifact_root=args.artifact_root,
+    )
+    return _save_receipt(args, corpus, receipt)
+
+
 def _run_record_evaluation(args: argparse.Namespace, corpus: dict[str, Any]) -> int:
     evaluation = _read_json_object(args.observation)
     corpus_root = Path(args.corpus).resolve().parent
@@ -147,6 +161,7 @@ _COMMAND_HANDLERS = {
     "import-9656-candidates": _run_import_9656,
     "admit-case": _run_admit_case,
     "promote-candidate": _run_promote_candidate,
+    "promote-1501-candidate": _run_promote_1501_candidate,
     "record-evaluation": _run_record_evaluation,
     "status": _run_status,
     "export-slice": _run_export_slice,
@@ -203,6 +218,21 @@ def _build_parser() -> argparse.ArgumentParser:
     promotion_parser.add_argument("--corpus", required=True)
     promotion_parser.add_argument("--corpus-root", required=True)
     promotion_parser.add_argument("--output")
+
+    historical_1501_parser = subparsers.add_parser(
+        "promote-1501-candidate",
+        help="resolve a pending #1501 row with exact-current, input-bound replay evidence",
+    )
+    historical_1501_parser.add_argument("--candidate-id", required=True)
+    historical_1501_parser.add_argument("--case", required=True)
+    historical_1501_parser.add_argument(
+        "--artifact-root",
+        required=True,
+        help="corpus-relative directory containing the complete case and exact replay artifacts",
+    )
+    historical_1501_parser.add_argument("--corpus", required=True)
+    historical_1501_parser.add_argument("--corpus-root", required=True)
+    historical_1501_parser.add_argument("--output")
 
     evaluation_parser = subparsers.add_parser(
         "record-evaluation", help="append one complete or explicitly incomplete planner result"

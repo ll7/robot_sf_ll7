@@ -76,6 +76,35 @@ replay artifacts, so each source receipt keeps the original digest separate
 from the normalized bundle digest. The normalization receipt pins the allowed
 local-path rewrites.
 
+When a new exact-current replay and current input-binding receipts become
+available, `promote-1501-candidate` can resolve the staged row. Prepare a full
+case record using the same scenario, route, map, target planner, and historical
+discovery identity as the pending candidate. Put every referenced case and
+replay artifact below one corpus-relative artifact root, then run:
+
+```bash
+uv run python scripts/tools/manage_adversarial_counterexample_corpus.py promote-1501-candidate \
+  --candidate-id <candidate-id> \
+  --case exact-current-case.json \
+  --artifact-root promotion_inputs/<candidate-id> \
+  --corpus output/adversarial-corpus/corpus.json \
+  --corpus-root output/adversarial-corpus \
+  --output output/adversarial-corpus/promotion-receipt.json
+```
+
+The transition applies the ordinary case validators, requires directly bound
+replay artifacts at the independently resolved current target revision, and
+records a digest-bound replay identity and admission attempt. On success the
+row moves to `resolved_historical_candidates`; its source candidate snapshot,
+discovery lineage, original `unknown_historical` input-binding status, unknown
+feasibility, and not-evaluated-at-import planner status remain in the record.
+`input_binding_status: bound` refers only to the new admission replay. It does
+not upgrade the historical replay or turn unknown feasibility into a positive
+claim. Repeating the same promotion is idempotent. A different replay identity
+is rejected, and a failed transition leaves the candidate pending and records
+the rejection attempt. The checked-in #9645 fixture still has no exact
+current-revision replay and therefore remains pending.
+
 The checked-in #9645 packet's normalized digests match the two #1501 replay
 provenance sidecars, and its bundle manifest and checksum sidecar bind the
 normalization receipt. A direct fixture import stages the pending #1501

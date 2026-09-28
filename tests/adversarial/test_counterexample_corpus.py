@@ -29,6 +29,7 @@ from robot_sf.adversarial.counterexample_corpus import (
     load_corpus,
     new_corpus,
     promote_historical_candidate,
+    promote_pending_historical_candidate,
     recompute_planner_status,
     save_corpus,
     validate_corpus,
@@ -736,6 +737,209 @@ def _seed_bound_test_case(corpus: dict[str, object], corpus_root: Path) -> None:
                 },
                 termination_reason="collision",
             )
+    validate_corpus(corpus, corpus_root=corpus_root)
+
+
+def _pending_1501_promotion_fixture(
+    tmp_path: Path,
+) -> tuple[dict[str, object], dict[str, object], dict[str, object], Path, Path]:
+    """Build a test-only exact-bound case bundle while retaining its pending source row."""
+    corpus_root = tmp_path / "corpus"
+    corpus, _receipt = import_issue9645_packet(
+        _SOURCE_PACKET, new_corpus(), corpus_root=corpus_root
+    )
+    candidate = corpus["pending_historical_candidates"][0]
+
+    producer_root = tmp_path / "producer"
+    producer_root.mkdir()
+    producer_corpus: dict[str, object] = new_corpus()
+    _seed_bound_test_case(producer_corpus, producer_root)
+    case = copy.deepcopy(producer_corpus["cases"][0])
+    source_dir = producer_root / "cases" / case["case_id"]
+    stage_relative = f"promotion_inputs/{candidate['candidate_id']}"
+    stage_dir = corpus_root / stage_relative
+    stage_dir.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source_dir, stage_dir)
+    counterexample_corpus._rewrite_case_artifact_paths(
+        case,
+        corpus_root=producer_root,
+        artifact_root=source_dir,
+        new_root=stage_relative,
+    )
+    counterexample_corpus._attach_case_external_artifact_references(case)
+    case["source_evidence"]["corpus_files"] = counterexample_corpus._case_file_inventory(
+        stage_dir, corpus_root
+    )
+    return corpus, candidate, case, corpus_root, stage_dir
+
+
+def test_pending_issue1501_candidate_promotion_is_exact_bound_and_idempotent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    corpus, candidate, case, corpus_root, stage_dir = _pending_1501_promotion_fixture(tmp_path)
+    target_revision = case["replay_receipt"]["target_revision"]
+    monkeypatch.setattr(counterexample_corpus, "_current_target_revision", lambda: target_revision)
+    case_path = tmp_path / "exact-current-case.json"
+    case_path.write_text(json.dumps(case, sort_keys=True), encoding="utf-8")
+    corpus_path = corpus_root / "corpus.json"
+    save_corpus(corpus_path, corpus)
+    receipt_path = tmp_path / "promotion-receipt.json"
+
+    cli_status = corpus_cli_main(
+        [
+            "promote-1501-candidate",
+            "--candidate-id",
+            candidate["candidate_id"],
+            "--case",
+            str(case_path),
+            "--artifact-root",
+            stage_dir.relative_to(corpus_root).as_posix(),
+            "--corpus",
+            str(corpus_path),
+            "--corpus-root",
+            str(corpus_root),
+            "--output",
+            str(receipt_path),
+        ]
+    )
+    assert cli_status == 0, receipt_path.read_text(encoding="utf-8")
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    promoted = load_corpus(corpus_path)
+    assert receipt["decision"] == "admitted"
+    assert receipt["replay_identity_sha256"]
+    assert promoted["pending_historical_candidates"] == []
+    assert len(promoted["resolved_historical_candidates"]) == 1
+    resolved = promoted["resolved_historical_candidates"][0]
+    assert resolved["candidate_id"] == candidate["candidate_id"]
+    assert resolved["candidate_status"] == "promoted_exact_current_replay"
+    assert resolved["source_candidate_status"] == "pending_exact_historical_input_binding"
+    assert resolved["source_admission_status"] == "not_admitted"
+    assert resolved["source_input_binding_status"] == "unknown_historical"
+    assert resolved["input_binding_status"] == "bound"
+    assert resolved["feasibility"]["verdict"] == "unknown"
+    assert resolved["planner_status_at_import"]["status"] == "not_evaluated"
+    assert resolved["promotion"]["target_revision"] == target_revision
+    assert resolved["promotion"]["replay_identity_sha256"] == receipt["replay_identity_sha256"]
+    assert (
+        promoted["cases"][0]["source_evidence"]["pending_historical_candidate_promotion"]
+        == resolved["promotion"]
+    )
+    assert promoted["planner_evaluations"] == []
+    validate_corpus(promoted, corpus_root=corpus_root)
+
+    import jsonschema
+
+    schema_path = (
+        _REPO_ROOT / "robot_sf/benchmark/schemas/adversarial-counterexample-corpus.v1.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    jsonschema.validate(
+        resolved,
+        schema["properties"]["resolved_historical_candidates"]["items"],
+    )
+
+    first_attempt_count = len(promoted["admission_attempts"])
+    second = promote_pending_historical_candidate(
+        candidate["candidate_id"],
+        case,
+        promoted,
+        corpus_root=corpus_root,
+        artifact_root=stage_dir,
+    )[1]
+    assert second["idempotent"] is True
+    assert second["attempt_id"] == receipt["attempt_id"]
+    assert len(promoted["admission_attempts"]) == first_attempt_count
+
+    changed_replay = copy.deepcopy(case)
+    changed_replay["replay_receipt"]["target_revision"] = "f" * 40
+    changed_replay["replay_receipt"]["replay_revision"] = "f" * 40
+    unchanged_cases = copy.deepcopy(promoted["cases"])
+    rejected = promote_pending_historical_candidate(
+        candidate["candidate_id"],
+        changed_replay,
+        promoted,
+        corpus_root=corpus_root,
+        artifact_root=stage_dir,
+    )[1]
+    assert rejected["decision"] == "rejected"
+    assert "candidate_already_resolved_with_different_replay_identity" in rejected["blockers"]
+    assert promoted["cases"] == unchanged_cases
+    assert promoted["pending_historical_candidates"] == []
+    assert len(promoted["resolved_historical_candidates"]) == 1
+    validate_corpus(promoted, corpus_root=corpus_root)
+
+
+def test_pending_issue1501_promotion_rejects_missing_or_mismatched_replay(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    corpus, candidate, case, corpus_root, stage_dir = _pending_1501_promotion_fixture(tmp_path)
+    target_revision = case["replay_receipt"]["target_revision"]
+    monkeypatch.setattr(counterexample_corpus, "_current_target_revision", lambda: target_revision)
+    missing = copy.deepcopy(case)
+    missing.pop("replay_receipt")
+    corpus, missing_receipt = promote_pending_historical_candidate(
+        candidate["candidate_id"],
+        missing,
+        corpus,
+        corpus_root=corpus_root,
+        artifact_root=stage_dir,
+    )
+    assert missing_receipt["decision"] == "rejected"
+    assert any("replay" in blocker for blocker in missing_receipt["blockers"])
+
+    mismatched = copy.deepcopy(case)
+    mismatched["replay_receipt"]["target_revision"] = "f" * 40
+    mismatched["replay_receipt"]["replay_revision"] = "f" * 40
+    corpus, mismatch_receipt = promote_pending_historical_candidate(
+        candidate["candidate_id"],
+        mismatched,
+        corpus,
+        corpus_root=corpus_root,
+        artifact_root=stage_dir,
+    )
+    assert mismatch_receipt["decision"] == "rejected"
+    assert corpus["pending_historical_candidates"][0]["candidate_id"] == candidate["candidate_id"]
+    assert corpus["resolved_historical_candidates"] == []
+    assert corpus["cases"] == []
+    assert len(corpus["admission_attempts"]) == 3
+    validate_corpus(corpus, corpus_root=corpus_root)
+
+
+def test_pending_issue1501_promotion_rolls_back_case_files_after_commit_validation_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    corpus, candidate, case, corpus_root, stage_dir = _pending_1501_promotion_fixture(tmp_path)
+    target_revision = case["replay_receipt"]["target_revision"]
+    monkeypatch.setattr(counterexample_corpus, "_current_target_revision", lambda: target_revision)
+    real_validate = counterexample_corpus.validate_corpus
+
+    def fail_resolved_candidate_commit(value, *, corpus_root=None):
+        if value.get("resolved_historical_candidates"):
+            raise CorpusError("injected resolved-candidate validation failure")
+        return real_validate(value, corpus_root=corpus_root)
+
+    monkeypatch.setattr(counterexample_corpus, "validate_corpus", fail_resolved_candidate_commit)
+    file_inventory_before = counterexample_corpus._case_file_inventory(stage_dir, corpus_root)
+    corpus, receipt = promote_pending_historical_candidate(
+        candidate["candidate_id"],
+        case,
+        corpus,
+        corpus_root=corpus_root,
+        artifact_root=stage_dir,
+    )
+
+    assert receipt["decision"] == "rejected"
+    assert any(
+        "injected resolved-candidate validation failure" in item for item in receipt["blockers"]
+    )
+    assert corpus["pending_historical_candidates"][0]["candidate_id"] == candidate["candidate_id"]
+    assert corpus["resolved_historical_candidates"] == []
+    assert corpus["cases"] == []
+    assert not (corpus_root / "cases" / case["case_id"]).exists()
+    assert (
+        counterexample_corpus._case_file_inventory(stage_dir, corpus_root) == file_inventory_before
+    )
+    monkeypatch.setattr(counterexample_corpus, "validate_corpus", real_validate)
     validate_corpus(corpus, corpus_root=corpus_root)
 
 

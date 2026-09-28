@@ -67,6 +67,10 @@ CASE_SCENARIO_ADMISSIBILITY_RECEIPT_SCHEMA_VERSION = (
     "adversarial-case-scenario-admissibility-receipt.v2"
 )
 PENDING_HISTORICAL_CANDIDATE_SCHEMA_VERSION = "adversarial-pending-historical-candidate.v1"
+RESOLVED_HISTORICAL_CANDIDATE_SCHEMA_VERSION = "adversarial-resolved-historical-candidate.v1"
+PENDING_HISTORICAL_PROMOTION_SCHEMA_VERSION = (
+    "adversarial-pending-historical-candidate-promotion.v1"
+)
 ISSUE_9645_SUMMARY_SCHEMA = "issue_9645_bounded_pilot_summary.v2"
 ISSUE_9645_SUPPORTED_SUMMARY_SCHEMAS = frozenset(
     {"issue_9645_bounded_pilot_summary.v1", ISSUE_9645_SUMMARY_SCHEMA}
@@ -159,6 +163,7 @@ def new_corpus() -> dict[str, Any]:
         "historical_candidates": [],
         "historical_candidate_imports": [],
         "pending_historical_candidates": [],
+        "resolved_historical_candidates": [],
         "admission_attempts": [],
         "planner_evaluations": [],
     }
@@ -324,6 +329,7 @@ def validate_corpus(corpus: Mapping[str, Any], *, corpus_root: str | Path | None
     )
     _validate_historical_candidate_registry(corpus, corpus_root=root)
     _validate_pending_historical_candidates(corpus, corpus_root=root)
+    _validate_resolved_historical_candidates(corpus, corpus_root=root)
 
 
 def _validate_search_run_evidence(
@@ -1572,6 +1578,374 @@ def _validate_pending_candidate_attempt(
         or not attempt.get("blockers")
     ):
         raise CorpusError("pending historical candidate does not match its fail-closed attempt")
+
+
+def _validate_resolved_historical_candidates(
+    corpus: Mapping[str, Any], *, corpus_root: Path | None
+) -> None:
+    """Validate pending #1501 evidence after an exact-bound case is admitted."""
+    candidates = corpus.get("resolved_historical_candidates", [])
+    candidate_ids = [item["candidate_id"] for item in candidates]
+    if len(candidate_ids) != len(set(candidate_ids)):
+        raise CorpusError("resolved historical candidate_id values must be unique")
+    pending_ids = {item["candidate_id"] for item in corpus.get("pending_historical_candidates", [])}
+    if pending_ids.intersection(candidate_ids):
+        raise CorpusError("historical candidate cannot be both pending and resolved")
+    if candidates and corpus_root is None:
+        raise CorpusError("corpus_root is required to validate resolved historical candidates")
+    root = corpus_root.resolve() if corpus_root is not None else None
+    cases_by_id = {case["case_id"]: case for case in corpus.get("cases", [])}
+    attempts_by_id: dict[str, list[Mapping[str, Any]]] = {}
+    for attempt in corpus.get("admission_attempts", []):
+        attempts_by_id.setdefault(str(attempt.get("attempt_id")), []).append(attempt)
+    runs_by_id = {run["run_id"]: run for run in corpus.get("search_runs", [])}
+    for candidate in candidates:
+        _validate_resolved_historical_candidate(
+            candidate,
+            cases_by_id=cases_by_id,
+            attempts_by_id=attempts_by_id,
+            runs_by_id=runs_by_id,
+            corpus_root=root,
+        )
+
+
+def _validate_resolved_historical_candidate(
+    candidate: Mapping[str, Any],
+    *,
+    cases_by_id: Mapping[str, Mapping[str, Any]],
+    attempts_by_id: Mapping[str, Sequence[Mapping[str, Any]]],
+    runs_by_id: Mapping[str, Mapping[str, Any]],
+    corpus_root: Path | None,
+) -> None:
+    _validate_resolved_candidate_status(candidate)
+    if corpus_root is None:
+        raise CorpusError("corpus_root is required to validate resolved historical candidate")
+
+    source_candidate, promotion = _resolved_candidate_source_snapshot(candidate)
+    _validate_pending_historical_candidate(
+        source_candidate,
+        cases_by_id={},
+        evaluations_by_case={},
+        attempts_by_id=attempts_by_id,
+        runs_by_id=runs_by_id,
+        corpus_root=corpus_root,
+    )
+
+    case = _resolved_candidate_case(candidate, cases_by_id)
+    errors = _pending_candidate_promotion_case_errors(
+        candidate, case, corpus_root=corpus_root, require_current_target=False
+    )
+    if errors:
+        raise CorpusError(
+            "resolved historical candidate case binding is invalid: " + "; ".join(errors)
+        )
+    case_replay_identity = _pending_candidate_replay_identity(str(candidate["candidate_id"]), case)
+    attempt = _resolved_candidate_attempt(candidate, promotion, attempts_by_id)
+    _validate_resolved_candidate_promotion(candidate, promotion, attempt, case_replay_identity)
+    _validate_resolved_candidate_case_evidence(candidate, promotion, case)
+
+
+def _validate_resolved_candidate_status(candidate: Mapping[str, Any]) -> None:
+    if (
+        candidate.get("schema_version") != RESOLVED_HISTORICAL_CANDIDATE_SCHEMA_VERSION
+        or candidate.get("candidate_status") != "promoted_exact_current_replay"
+        or candidate.get("source_candidate_status") != "pending_exact_historical_input_binding"
+        or candidate.get("admission_status") != "admitted"
+        or candidate.get("source_admission_status") != "not_admitted"
+        or candidate.get("input_binding_status") != "bound"
+        or candidate.get("source_input_binding_status") != "unknown_historical"
+        or candidate.get("feasibility", {}).get("verdict") != "unknown"
+        or candidate.get("planner_status_at_import", {}).get("status") != "not_evaluated"
+    ):
+        raise CorpusError("resolved historical candidate status differs from its contract")
+
+
+def _resolved_candidate_source_snapshot(
+    candidate: Mapping[str, Any],
+) -> tuple[dict[str, Any], Mapping[str, Any]]:
+    source_candidate = copy.deepcopy(dict(candidate))
+    source_candidate["schema_version"] = PENDING_HISTORICAL_CANDIDATE_SCHEMA_VERSION
+    source_candidate["candidate_status"] = candidate["source_candidate_status"]
+    source_candidate["admission_status"] = candidate["source_admission_status"]
+    source_candidate["input_binding_status"] = candidate["source_input_binding_status"]
+    source_candidate["planner_status"] = source_candidate.pop("planner_status_at_import")
+    promotion = source_candidate.pop("promotion", None)
+    for key in (
+        "source_candidate_status",
+        "source_admission_status",
+        "source_input_binding_status",
+        "planner_status_at_import",
+        "promotion_attempt_id",
+        "promoted_case_id",
+    ):
+        source_candidate.pop(key, None)
+    if not isinstance(promotion, Mapping):
+        raise CorpusError("resolved historical candidate promotion record is missing")
+    return source_candidate, promotion
+
+
+def _resolved_candidate_case(
+    candidate: Mapping[str, Any],
+    cases_by_id: Mapping[str, Mapping[str, Any]],
+) -> Mapping[str, Any]:
+    promoted_case_id = candidate.get("promoted_case_id")
+    case = cases_by_id.get(promoted_case_id)
+    if (
+        not isinstance(case, Mapping)
+        or case.get("case_id") != f"case-{candidate.get('effective_scenario_sha256')}"
+        or case.get("effective_scenario_sha256") != candidate.get("effective_scenario_sha256")
+    ):
+        raise CorpusError("resolved historical candidate references an absent or mismatched case")
+    return case
+
+
+def _resolved_candidate_attempt(
+    candidate: Mapping[str, Any],
+    promotion: Mapping[str, Any],
+    attempts_by_id: Mapping[str, Sequence[Mapping[str, Any]]],
+) -> Mapping[str, Any]:
+    attempt_id = candidate.get("promotion_attempt_id")
+    matching_attempts = attempts_by_id.get(str(attempt_id), [])
+    if len(matching_attempts) != 1:
+        raise CorpusError("resolved historical candidate has no unique promotion attempt")
+    attempt = matching_attempts[0]
+    attempt_body = {key: value for key, value in attempt.items() if key != "attempt_id"}
+    if (
+        hashlib.sha256(_stable_json(attempt_body).encode("utf-8")).hexdigest() != attempt_id
+        or attempt.get("schema_version") != ATTEMPT_SCHEMA_VERSION
+        or attempt.get("source_kind") != "issue_1501_historical_candidate"
+        or attempt.get("source_id") != candidate.get("candidate_id")
+        or attempt.get("decision") not in {"admitted", "duplicate"}
+        or attempt.get("blockers") != []
+        or attempt.get("candidate_identity") != candidate.get("effective_scenario_sha256")
+        or attempt.get("replay_identity_sha256") != promotion.get("replay_identity_sha256")
+    ):
+        raise CorpusError("resolved historical candidate promotion attempt is not evidence-bound")
+
+    promoted_case_id = candidate.get("promoted_case_id")
+    if attempt.get("decision") == "admitted" and attempt.get("duplicate_case_id") is not None:
+        raise CorpusError("admitted candidate promotion has an unexpected duplicate case")
+    if (
+        attempt.get("decision") == "duplicate"
+        and attempt.get("duplicate_case_id") != promoted_case_id
+    ):
+        raise CorpusError("duplicate candidate promotion references a different case")
+    return attempt
+
+
+def _validate_resolved_candidate_promotion(
+    candidate: Mapping[str, Any],
+    promotion: Mapping[str, Any],
+    attempt: Mapping[str, Any],
+    case_replay_identity: Mapping[str, Any] | None,
+) -> None:
+    if not isinstance(case_replay_identity, Mapping):
+        raise CorpusError("resolved historical candidate replay identity is incomplete")
+    attempt_id = attempt.get("attempt_id")
+    promoted_case_id = candidate.get("promoted_case_id")
+    if (
+        promotion.get("schema_version") != PENDING_HISTORICAL_PROMOTION_SCHEMA_VERSION
+        or promotion.get("candidate_id") != candidate.get("candidate_id")
+        or promotion.get("source_issue") != 1501
+        or promotion.get("source_case_id") != candidate.get("source_case_id")
+        or promotion.get("source_run_id") != candidate.get("source_run_id")
+        or promotion.get("candidate_case_record_sha256")
+        != candidate.get("candidate_case_record_sha256")
+        or promotion.get("source_discovery_sha256")
+        != hashlib.sha256(
+            _stable_json(candidate["candidate_case_record"]["discovery"]).encode("utf-8")
+        ).hexdigest()
+        or promotion.get("promotion_attempt_id") != attempt_id
+        or promotion.get("admission_decision") != attempt.get("decision")
+        or promotion.get("promoted_case_id") != promoted_case_id
+        or promotion.get("source_input_binding_status") != "unknown_historical"
+        or promotion.get("input_binding_status") != "bound"
+        or promotion.get("target_revision")
+        != promotion.get("replay_identity", {}).get("target_revision")
+        or promotion.get("replay_identity") != case_replay_identity
+        or promotion.get("replay_identity_sha256")
+        != promotion.get("replay_identity", {}).get("identity_sha256")
+    ):
+        raise CorpusError("resolved historical candidate promotion provenance differs")
+
+
+def _validate_resolved_candidate_case_evidence(
+    candidate: Mapping[str, Any],
+    promotion: Mapping[str, Any],
+    case: Mapping[str, Any],
+) -> None:
+    evidence_records = [case.get("source_evidence")]
+    supporting = case.get("supporting_source_evidence", [])
+    if isinstance(supporting, Sequence) and not isinstance(supporting, (str, bytes)):
+        evidence_records.extend(supporting)
+    matching_evidence = [
+        record.get("pending_historical_candidate_promotion")
+        for record in evidence_records
+        if isinstance(record, Mapping)
+        and isinstance(record.get("pending_historical_candidate_promotion"), Mapping)
+        and record["pending_historical_candidate_promotion"].get("candidate_id")
+        == candidate.get("candidate_id")
+    ]
+    if matching_evidence != [promotion]:
+        raise CorpusError("promoted case does not retain unique candidate promotion provenance")
+
+
+def _pending_candidate_promotion_case_errors(
+    candidate: Mapping[str, Any],
+    case: Mapping[str, Any],
+    *,
+    corpus_root: Path,
+    require_current_target: bool = True,
+) -> list[str]:
+    source_case = candidate.get("candidate_case_record")
+    if not isinstance(source_case, Mapping):
+        return ["pending candidate source case record is missing"]
+    errors = _pending_candidate_source_case_errors(source_case, case)
+    errors.extend(
+        _pending_candidate_replay_errors(
+            str(candidate.get("candidate_id")),
+            case,
+            corpus_root=corpus_root,
+            require_current_target=require_current_target,
+        )
+    )
+    return errors
+
+
+def _pending_candidate_source_case_errors(
+    source_case: Mapping[str, Any], case: Mapping[str, Any]
+) -> list[str]:
+    errors = []
+    for field in ("case_id", "scenario_id", "scenario_seed", "effective_scenario_sha256"):
+        if case.get(field) != source_case.get(field):
+            errors.append(f"promoted case {field} differs from pending candidate")
+    if case.get("target_planner") != source_case.get("target_planner"):
+        errors.append("promoted case target planner differs from pending candidate")
+    if _pending_candidate_input_identity(case) != _pending_candidate_input_identity(source_case):
+        errors.append("promoted case input digests differ from pending candidate")
+    if _historical_discovery_identity(case.get("discovery")) != _historical_discovery_identity(
+        source_case.get("discovery")
+    ):
+        errors.append("promoted case discovery provenance differs from pending candidate")
+    if case.get("admissibility", {}).get("verdict") != "admissible_feasibility_unknown":
+        errors.append("promoted historical case must retain unknown feasibility")
+    return errors
+
+
+def _pending_candidate_replay_errors(
+    candidate_id: str,
+    case: Mapping[str, Any],
+    *,
+    corpus_root: Path,
+    require_current_target: bool,
+) -> list[str]:
+    errors = []
+    receipt = case.get("replay_receipt")
+    if not isinstance(receipt, Mapping) or receipt.get("input_binding_status") != "bound":
+        errors.append("promoted case replay input binding is not verified")
+    if _case_admission_input_binding_errors(case):
+        errors.append("promoted case has incomplete bound replay artifact receipts")
+    if require_current_target:
+        errors.extend(_validate_case_current_target_revision(case))
+    else:
+        receipt = case.get("replay_receipt")
+        if (
+            not isinstance(receipt, Mapping)
+            or receipt.get("target_revision") != receipt.get("replay_revision")
+            or receipt.get("target_and_replay_revision_match") is not True
+        ):
+            errors.append("promoted case target and replay revisions differ")
+    replay_identity = _pending_candidate_replay_identity(candidate_id, case)
+    if replay_identity is None:
+        errors.append("promoted case replay identity is incomplete")
+    elif (
+        replay_identity.get("target_revision") != replay_identity.get("replay_revision")
+        or replay_identity.get("target_and_replay_revision_match") is not True
+    ):
+        errors.append("promoted case does not have an exact target-revision replay")
+    return errors
+
+
+def _pending_candidate_input_identity(case: Mapping[str, Any]) -> dict[str, Any]:
+    inputs = case.get("inputs")
+    inputs = inputs if isinstance(inputs, Mapping) else {}
+    assets = inputs.get("map_assets")
+    assets = assets if isinstance(assets, list) else []
+    return {
+        "scenario_sha256": inputs.get("scenario_sha256"),
+        "route_overrides_sha256": inputs.get("route_overrides_sha256"),
+        "map_assets": sorted(
+            [
+                {
+                    field: asset.get(field)
+                    for field in ("role", "source_path", "source_revision", "sha256")
+                }
+                for asset in assets
+                if isinstance(asset, Mapping)
+            ],
+            key=_stable_json,
+        ),
+    }
+
+
+def _historical_discovery_identity(value: Any) -> Any:
+    if not isinstance(value, Mapping):
+        return value
+    discovery = copy.deepcopy(dict(value))
+    source = discovery.get("search_source")
+    if isinstance(source, dict):
+        for key in ("archive", "source_run_report"):
+            artifact = source.get(key)
+            if isinstance(artifact, dict):
+                artifact.pop("path", None)
+    return discovery
+
+
+def _pending_candidate_replay_identity(
+    candidate_id: str, case: Mapping[str, Any]
+) -> dict[str, Any] | None:
+    if not isinstance(case, Mapping):
+        return None
+    receipt = case.get("replay_receipt")
+    artifacts = receipt.get("artifact_receipts") if isinstance(receipt, Mapping) else None
+    if not isinstance(receipt, Mapping) or not isinstance(artifacts, list) or not artifacts:
+        return None
+    artifact_identity = []
+    for item in artifacts:
+        if not isinstance(item, Mapping):
+            return None
+        artifact_identity.append(
+            {
+                "artifact_sha256": item.get("artifact_sha256"),
+                "run_id": item.get("run_id"),
+                "selected_event_identity": item.get("selected_event_identity"),
+                "input_binding": item.get("input_binding"),
+            }
+        )
+    artifact_identity.sort(key=_stable_json)
+    identity = {
+        "schema_version": PENDING_HISTORICAL_PROMOTION_SCHEMA_VERSION,
+        "candidate_id": candidate_id,
+        "case_id": case.get("case_id"),
+        "effective_scenario_sha256": case.get("effective_scenario_sha256"),
+        "verification_status": receipt.get("verification_status"),
+        "target_revision": receipt.get("target_revision"),
+        "replay_revision": receipt.get("replay_revision"),
+        "target_and_replay_revision_match": receipt.get("target_and_replay_revision_match"),
+        "replay_count": receipt.get("replay_count"),
+        "selected_projection_sha256": receipt.get("selected_projection_sha256"),
+        "input_binding_status": receipt.get("input_binding_status"),
+        "scenario_input_sha256": receipt.get("scenario_input_sha256"),
+        "route_overrides_sha256": receipt.get("route_overrides_sha256"),
+        "map_assets": receipt.get("map_assets"),
+        "planner_id": receipt.get("planner_id"),
+        "planner_config_identity": receipt.get("planner_config_identity"),
+        "artifact_receipts": artifact_identity,
+    }
+    return {
+        **identity,
+        "identity_sha256": hashlib.sha256(_stable_json(identity).encode("utf-8")).hexdigest(),
+    }
 
 
 def _validate_issue9656_candidate_imports(
@@ -2905,8 +3279,10 @@ def _import_issue9645_historical_case(
         decision="admitted" if existing is None else "duplicate",
         blockers=[],
         candidate_identity=case["effective_scenario_sha256"],
-        duplicate_case_id=duplicate_case_id,
         near_duplicate_report=near_report,
+        attempt_fields=(
+            {"duplicate_case_id": duplicate_case_id} if duplicate_case_id is not None else None
+        ),
     )
     receipt["case_id"] = stored_case_id
     receipt["pilot_new_discoveries"] = 0
@@ -3543,6 +3919,7 @@ def admit_case_record(
     artifact_root: str,
     source_kind: str,
     source_id: str,
+    attempt_evidence_sha256: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Admit a complete, replay-verified case record from corpus-staged artifacts.
 
@@ -3574,6 +3951,7 @@ def admit_case_record(
             blockers=[f"case_record_invalid:{type(exc).__name__}:{exc}"],
             candidate_identity=identity if isinstance(identity, str) else None,
             near_duplicate_report=_unassessed_near_duplicates(),
+            attempt_fields=_attempt_replay_identity_fields(attempt_evidence_sha256),
         )
         return corpus, receipt
 
@@ -3604,6 +3982,7 @@ def admit_case_record(
                 blockers=[f"duplicate_evidence_persistence_failed:{type(exc).__name__}:{exc}"],
                 candidate_identity=incoming["effective_scenario_sha256"],
                 near_duplicate_report=near_report,
+                attempt_fields=_attempt_replay_identity_fields(attempt_evidence_sha256),
             )
             return corpus, receipt
         corpus, receipt = _record_attempt(
@@ -3613,8 +3992,11 @@ def admit_case_record(
             decision="duplicate",
             blockers=[],
             candidate_identity=incoming["effective_scenario_sha256"],
-            duplicate_case_id=existing["case_id"],
             near_duplicate_report=near_report,
+            attempt_fields={
+                "duplicate_case_id": existing["case_id"],
+                **_attempt_replay_identity_fields(attempt_evidence_sha256),
+            },
         )
         receipt["case_id"] = existing["case_id"]
         return corpus, receipt
@@ -3632,6 +4014,7 @@ def admit_case_record(
             blockers=["case_artifact_destination_exists_without_corpus_record"],
             candidate_identity=incoming["effective_scenario_sha256"],
             near_duplicate_report=near_report,
+            attempt_fields=_attempt_replay_identity_fields(attempt_evidence_sha256),
         )
         return corpus, receipt
 
@@ -3665,6 +4048,7 @@ def admit_case_record(
             blockers=[],
             candidate_identity=incoming["effective_scenario_sha256"],
             near_duplicate_report=near_report,
+            attempt_fields=_attempt_replay_identity_fields(attempt_evidence_sha256),
         )
         receipt["case_id"] = case_id
         validate_corpus(corpus, corpus_root=root)
@@ -4084,6 +4468,332 @@ def promote_historical_candidate(
         candidate["promotion_attempt_id"] = receipt["attempt_id"]
         validate_corpus(corpus, corpus_root=root)
     return corpus, receipt
+
+
+def promote_pending_historical_candidate(
+    candidate_id: str,
+    case_record: Mapping[str, Any],
+    corpus: dict[str, Any],
+    *,
+    corpus_root: str | Path,
+    artifact_root: str | Path,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Resolve one staged #1501 row with a current, directly input-bound replay.
+
+    The caller supplies a complete case record and an artifact directory below
+    ``corpus_root``. The pending candidate is moved to the resolved registry only
+    after normal case admission and final corpus validation both succeed.
+    """
+    root = Path(corpus_root).resolve()
+    validate_corpus(corpus, corpus_root=root)
+    if not isinstance(case_record, Mapping):
+        return _record_pending_candidate_promotion_rejection(
+            corpus,
+            candidate_id,
+            case_record,
+            blockers=["completed_case_record_missing"],
+            attempt_fields=None,
+        )
+    replay_identity = _pending_candidate_replay_identity(candidate_id, case_record)
+    replay_digest = (
+        replay_identity.get("identity_sha256") if isinstance(replay_identity, Mapping) else None
+    )
+
+    resolved = next(
+        (
+            item
+            for item in corpus.get("resolved_historical_candidates", [])
+            if item.get("candidate_id") == candidate_id
+        ),
+        None,
+    )
+    if resolved is not None:
+        return _repeat_pending_candidate_promotion(
+            corpus,
+            candidate_id,
+            case_record,
+            resolved,
+            replay_digest if isinstance(replay_digest, str) else None,
+        )
+
+    candidate = next(
+        (
+            item
+            for item in corpus.get("pending_historical_candidates", [])
+            if item.get("candidate_id") == candidate_id
+        ),
+        None,
+    )
+    if candidate is None:
+        return _record_pending_candidate_promotion_rejection(
+            corpus,
+            candidate_id,
+            case_record,
+            blockers=["pending_historical_candidate_missing"],
+            attempt_fields=_attempt_replay_identity_fields(
+                replay_digest if isinstance(replay_digest, str) else None
+            ),
+        )
+
+    blockers, artifact_root_ref = _pending_candidate_promotion_blockers(
+        candidate,
+        case_record,
+        root,
+        artifact_root,
+        replay_identity,
+    )
+    if blockers:
+        return _record_pending_candidate_promotion_rejection(
+            corpus,
+            candidate_id,
+            case_record,
+            blockers=blockers,
+            attempt_fields=_attempt_replay_identity_fields(
+                replay_digest if isinstance(replay_digest, str) else None
+            ),
+        )
+    if not isinstance(replay_identity, Mapping):
+        raise CorpusError("validated pending-candidate promotion has no replay identity")
+    return _persist_pending_historical_candidate_promotion(
+        candidate,
+        case_record,
+        corpus,
+        root=root,
+        artifact_root_ref=artifact_root_ref,
+        replay_identity=replay_identity,
+        replay_digest=replay_digest if isinstance(replay_digest, str) else None,
+    )
+
+
+def _repeat_pending_candidate_promotion(
+    corpus: dict[str, Any],
+    candidate_id: str,
+    case_record: Mapping[str, Any],
+    resolved: Mapping[str, Any],
+    replay_digest: str | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    if replay_digest == resolved.get("promotion", {}).get("replay_identity_sha256"):
+        attempt_id = resolved["promotion_attempt_id"]
+        attempt = next(
+            item for item in corpus["admission_attempts"] if item.get("attempt_id") == attempt_id
+        )
+        return corpus, {
+            **attempt,
+            "case_id": resolved["promoted_case_id"],
+            "idempotent": True,
+        }
+    return _record_pending_candidate_promotion_rejection(
+        corpus,
+        candidate_id,
+        case_record,
+        blockers=["candidate_already_resolved_with_different_replay_identity"],
+        attempt_fields=_attempt_replay_identity_fields(replay_digest),
+    )
+
+
+def _pending_candidate_promotion_blockers(
+    candidate: Mapping[str, Any],
+    case_record: Mapping[str, Any],
+    root: Path,
+    artifact_root: str | Path,
+    replay_identity: Mapping[str, Any] | None,
+) -> tuple[list[str], str | None]:
+    try:
+        artifact_root_ref = _corpus_relative_artifact_root(artifact_root, root)
+        artifact_root_path = _resolve_corpus_directory(artifact_root_ref, root)
+        case_errors = _validate_case_record(case_record, corpus_root=root)
+        if case_errors:
+            return [f"case_record_invalid:{error}" for error in case_errors], artifact_root_ref
+        blockers = _pending_candidate_promotion_case_errors(
+            candidate, case_record, corpus_root=root
+        )
+        _case_artifacts_within_root(case_record, root, artifact_root_path)
+    except (CorpusError, OSError, ValueError, TypeError, yaml.YAMLError) as exc:
+        return [f"case_artifact_binding_invalid:{type(exc).__name__}:{exc}"], None
+    if not isinstance(case_record.get("source_evidence"), dict):
+        blockers.append("case_source_evidence_missing")
+    if not isinstance(replay_identity, Mapping):
+        blockers.append("exact_replay_identity_missing")
+    elif (
+        replay_identity.get("target_revision") != replay_identity.get("replay_revision")
+        or replay_identity.get("target_and_replay_revision_match") is not True
+    ):
+        blockers.append("exact_target_revision_replay_required")
+    return blockers, artifact_root_ref
+
+
+def _persist_pending_historical_candidate_promotion(
+    candidate: Mapping[str, Any],
+    case_record: Mapping[str, Any],
+    corpus: dict[str, Any],
+    *,
+    root: Path,
+    artifact_root_ref: str,
+    replay_identity: Mapping[str, Any],
+    replay_digest: str | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    incoming = copy.deepcopy(dict(case_record))
+    promotion = _pending_candidate_promotion_record(candidate, incoming, replay_identity)
+    incoming["source_evidence"]["pending_historical_candidate_promotion"] = promotion
+
+    prospective = copy.deepcopy(corpus)
+    prospective["pending_historical_candidates"] = [
+        item
+        for item in prospective["pending_historical_candidates"]
+        if item.get("candidate_id") != candidate.get("candidate_id")
+    ]
+    case_id = incoming["case_id"]
+    case_dir = root / "cases" / case_id
+    if case_dir.exists():
+        return _record_pending_candidate_promotion_rejection(
+            corpus,
+            str(candidate["candidate_id"]),
+            case_record,
+            blockers=["case_artifact_destination_exists_without_admitted_case"],
+            attempt_fields=_attempt_replay_identity_fields(replay_digest),
+        )
+
+    try:
+        prospective, receipt = admit_case_record(
+            incoming,
+            prospective,
+            corpus_root=root,
+            artifact_root=artifact_root_ref,
+            source_kind="issue_1501_historical_candidate",
+            source_id=str(candidate["candidate_id"]),
+            attempt_evidence_sha256=replay_digest,
+        )
+        if receipt.get("decision") != "admitted":
+            return _record_pending_candidate_promotion_rejection(
+                corpus,
+                str(candidate["candidate_id"]),
+                case_record,
+                blockers=[
+                    f"case_admission_{blocker}"
+                    for blocker in receipt.get("blockers", ["replay_case_not_admitted"])
+                ],
+                attempt_fields=_attempt_replay_identity_fields(replay_digest),
+            )
+        case_id = incoming["case_id"]
+        admitted_case = next(
+            (item for item in prospective["cases"] if item.get("case_id") == case_id), None
+        )
+        if admitted_case is None:
+            raise CorpusError("successful pending-candidate promotion has no admitted case")
+        promotion["promotion_attempt_id"] = receipt["attempt_id"]
+        promotion["admission_decision"] = receipt["decision"]
+        promotion["promoted_case_id"] = case_id
+        admitted_case["source_evidence"]["pending_historical_candidate_promotion"] = promotion
+
+        resolved_candidate = copy.deepcopy(dict(candidate))
+        resolved_candidate.update(
+            {
+                "schema_version": RESOLVED_HISTORICAL_CANDIDATE_SCHEMA_VERSION,
+                "source_candidate_status": candidate["candidate_status"],
+                "source_admission_status": candidate["admission_status"],
+                "source_input_binding_status": candidate["input_binding_status"],
+                "candidate_status": "promoted_exact_current_replay",
+                "admission_status": "admitted",
+                "input_binding_status": "bound",
+                "planner_status_at_import": copy.deepcopy(candidate["planner_status"]),
+                "promoted_case_id": case_id,
+                "promotion_attempt_id": receipt["attempt_id"],
+                "promotion": copy.deepcopy(promotion),
+            }
+        )
+        resolved_candidate.pop("planner_status", None)
+        prospective["resolved_historical_candidates"] = sorted(
+            [*prospective.get("resolved_historical_candidates", []), resolved_candidate],
+            key=lambda item: item["candidate_id"],
+        )
+        validate_corpus(prospective, corpus_root=root)
+        receipt["case_id"] = case_id
+        return prospective, receipt
+    except (CorpusError, OSError, ValueError, TypeError, yaml.YAMLError) as exc:
+        _remove_new_case_directory(case_dir)
+        return _record_pending_candidate_promotion_rejection(
+            corpus,
+            str(candidate["candidate_id"]),
+            case_record,
+            blockers=[f"promotion_commit_failed:{type(exc).__name__}:{exc}"],
+            attempt_fields=_attempt_replay_identity_fields(replay_digest),
+        )
+
+
+def _remove_new_case_directory(case_dir: Path) -> None:
+    shutil.rmtree(case_dir, ignore_errors=True)
+    try:
+        case_dir.parent.rmdir()
+    except OSError:
+        pass
+
+
+def _pending_candidate_promotion_record(
+    candidate: Mapping[str, Any],
+    case: Mapping[str, Any],
+    replay_identity: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "schema_version": PENDING_HISTORICAL_PROMOTION_SCHEMA_VERSION,
+        "candidate_id": candidate["candidate_id"],
+        "source_issue": candidate["source_issue"],
+        "source_case_id": candidate["source_case_id"],
+        "source_run_id": candidate["source_run_id"],
+        "candidate_case_record_sha256": candidate["candidate_case_record_sha256"],
+        "source_discovery_sha256": hashlib.sha256(
+            _stable_json(candidate["candidate_case_record"]["discovery"]).encode("utf-8")
+        ).hexdigest(),
+        "source_candidate_status": candidate["candidate_status"],
+        "source_admission_status": candidate["admission_status"],
+        "source_input_binding_status": candidate["input_binding_status"],
+        "input_binding_status": "bound",
+        "target_revision": replay_identity["target_revision"],
+        "replay_identity": copy.deepcopy(dict(replay_identity)),
+        "replay_identity_sha256": replay_identity["identity_sha256"],
+        "promotion_attempt_id": None,
+        "admission_decision": "pending",
+        "promoted_case_id": case.get("case_id"),
+    }
+
+
+def _corpus_relative_artifact_root(artifact_root: str | Path, root: Path) -> str:
+    path = Path(artifact_root).expanduser()
+    if path.is_absolute():
+        try:
+            return path.resolve().relative_to(root.resolve()).as_posix()
+        except ValueError as exc:
+            raise CorpusError("case artifact root escapes corpus root") from exc
+    return PurePosixPath(str(artifact_root)).as_posix()
+
+
+def _record_pending_candidate_promotion_rejection(
+    corpus: dict[str, Any],
+    candidate_id: str,
+    case_record: Any,
+    *,
+    blockers: Sequence[str],
+    attempt_fields: Mapping[str, Any] | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    identity = (
+        case_record.get("effective_scenario_sha256")
+        if isinstance(case_record, Mapping)
+        and isinstance(case_record.get("effective_scenario_sha256"), str)
+        else None
+    )
+    return _record_attempt(
+        corpus,
+        source_kind="issue_1501_historical_candidate",
+        source_id=candidate_id,
+        decision="rejected",
+        blockers=list(blockers),
+        candidate_identity=identity,
+        near_duplicate_report=(
+            _near_duplicate_report(case_record, corpus.get("cases", []))
+            if isinstance(case_record, Mapping)
+            else _unassessed_near_duplicates()
+        ),
+        attempt_fields=attempt_fields,
+    )
 
 
 def _historical_candidate_promotion_blockers(
@@ -11286,8 +11996,8 @@ def _record_attempt(
     decision: str,
     blockers: list[str],
     candidate_identity: str | None,
-    duplicate_case_id: str | None = None,
     near_duplicate_report: Mapping[str, Any],
+    attempt_fields: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     attempt = {
         "schema_version": ATTEMPT_SCHEMA_VERSION,
@@ -11296,14 +12006,30 @@ def _record_attempt(
         "decision": decision,
         "blockers": sorted(set(blockers)),
         "candidate_identity": candidate_identity,
-        "duplicate_case_id": duplicate_case_id,
+        "duplicate_case_id": None,
         "near_duplicate_report": dict(near_duplicate_report),
     }
+    extra = dict(attempt_fields or {})
+    if not set(extra).issubset({"duplicate_case_id", "replay_identity_sha256"}):
+        raise CorpusError("admission attempt has unsupported extra identity fields")
+    if extra.get("duplicate_case_id") is not None:
+        attempt["duplicate_case_id"] = extra["duplicate_case_id"]
+    if extra.get("replay_identity_sha256") is not None:
+        replay_identity_sha256 = extra["replay_identity_sha256"]
+        if not _is_sha256(replay_identity_sha256):
+            raise CorpusError("admission attempt replay identity must be a SHA-256 digest")
+        attempt["replay_identity_sha256"] = replay_identity_sha256
     attempt["attempt_id"] = hashlib.sha256(_stable_json(attempt).encode("utf-8")).hexdigest()
     corpus["admission_attempts"] = _append_unique(
         corpus, "admission_attempts", attempt, key="attempt_id"
     )["admission_attempts"]
     return corpus, {**attempt, "case_id": None}
+
+
+def _attempt_replay_identity_fields(replay_identity_sha256: str | None) -> dict[str, str]:
+    if replay_identity_sha256 is None:
+        return {}
+    return {"replay_identity_sha256": replay_identity_sha256}
 
 
 def _near_duplicate_report(

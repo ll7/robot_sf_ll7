@@ -747,6 +747,252 @@
         "additionalProperties": false
       }
     },
+    "resolved_historical_candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "candidate_id",
+          "source_issue",
+          "source_case_id",
+          "source_run_id",
+          "effective_scenario_sha256",
+          "candidate_case_record_sha256",
+          "candidate_status",
+          "source_candidate_status",
+          "admission_status",
+          "source_admission_status",
+          "input_binding_status",
+          "source_input_binding_status",
+          "feasibility",
+          "planner_status_at_import",
+          "admission_attempt_id",
+          "promotion_attempt_id",
+          "promoted_case_id",
+          "promotion",
+          "identity",
+          "source_packet_artifacts",
+          "candidate_artifacts",
+          "artifact_paths",
+          "candidate_case_record"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": "adversarial-resolved-historical-candidate.v1"
+          },
+          "candidate_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "source_issue": {
+            "const": 1501
+          },
+          "source_case_id": {
+            "const": "issue_1501/failure_0002"
+          },
+          "source_run_id": {
+            "const": "issue_9645_bounded_pilot"
+          },
+          "effective_scenario_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "candidate_case_record_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "candidate_status": {
+            "const": "promoted_exact_current_replay"
+          },
+          "source_candidate_status": {
+            "const": "pending_exact_historical_input_binding"
+          },
+          "admission_status": {
+            "const": "admitted"
+          },
+          "source_admission_status": {
+            "const": "not_admitted"
+          },
+          "input_binding_status": {
+            "const": "bound"
+          },
+          "source_input_binding_status": {
+            "const": "unknown_historical"
+          },
+          "feasibility": {
+            "type": "object",
+            "required": [
+              "verdict",
+              "reason_codes"
+            ],
+            "properties": {
+              "verdict": {
+                "const": "unknown"
+              },
+              "reason_codes": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "planner_status_at_import": {
+            "type": "object",
+            "required": [
+              "status",
+              "valid_observation_count",
+              "reason_codes"
+            ],
+            "properties": {
+              "status": {
+                "const": "not_evaluated"
+              },
+              "valid_observation_count": {
+                "const": 0
+              },
+              "reason_codes": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "admission_attempt_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "promotion_attempt_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "promoted_case_id": {
+            "type": "string",
+            "pattern": "^case-[0-9a-f]{64}$"
+          },
+          "promotion": {
+            "type": "object",
+            "required": [
+              "schema_version",
+              "candidate_id",
+              "source_issue",
+              "source_case_id",
+              "source_run_id",
+              "candidate_case_record_sha256",
+              "source_discovery_sha256",
+              "source_candidate_status",
+              "source_admission_status",
+              "source_input_binding_status",
+              "input_binding_status",
+              "target_revision",
+              "replay_identity",
+              "replay_identity_sha256",
+              "promotion_attempt_id",
+              "admission_decision",
+              "promoted_case_id"
+            ],
+            "properties": {
+              "schema_version": {
+                "const": "adversarial-pending-historical-candidate-promotion.v1"
+              },
+              "candidate_id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "source_issue": {
+                "const": 1501
+              },
+              "source_case_id": {
+                "const": "issue_1501/failure_0002"
+              },
+              "source_run_id": {
+                "const": "issue_9645_bounded_pilot"
+              },
+              "candidate_case_record_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "source_discovery_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "source_candidate_status": {
+                "const": "pending_exact_historical_input_binding"
+              },
+              "source_admission_status": {
+                "const": "not_admitted"
+              },
+              "source_input_binding_status": {
+                "const": "unknown_historical"
+              },
+              "input_binding_status": {
+                "const": "bound"
+              },
+              "target_revision": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "replay_identity": {
+                "type": "object",
+                "minProperties": 1
+              },
+              "replay_identity_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "promotion_attempt_id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "admission_decision": {
+                "enum": [
+                  "admitted",
+                  "duplicate"
+                ]
+              },
+              "promoted_case_id": {
+                "type": "string",
+                "pattern": "^case-[0-9a-f]{64}$"
+              }
+            },
+            "additionalProperties": false
+          },
+          "identity": {
+            "type": "object",
+            "minProperties": 1
+          },
+          "source_packet_artifacts": {
+            "type": "array",
+            "minItems": 11,
+            "items": {
+              "type": "object"
+            }
+          },
+          "candidate_artifacts": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object"
+            }
+          },
+          "artifact_paths": {
+            "type": "object",
+            "minProperties": 1
+          },
+          "candidate_case_record": {
+            "type": "object",
+            "minProperties": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    },
     "admission_attempts": {
       "type": "array",
       "items": {

@@ -14,6 +14,7 @@ import unicodedata
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -1424,6 +1425,23 @@ performance:
     assert not _is_expected_historical_malformed_v2_blocker(
         evidence, body, blocker.replace(parsed.errors[0], "different parser error")
     )
+    identity_mutations = (
+        ("pr number", replace(evidence, pr_number=9855)),
+        (
+            "base SHA",
+            replace(evidence, base_sha="d" * 40, merge_base_sha="d" * 40),
+        ),
+        ("merge commit SHA", replace(evidence, merge_commit_sha="e" * 40)),
+        ("merge parent SHA", replace(evidence, merge_parent_shas=("f" * 40,))),
+        (
+            "merge-base SHA",
+            SimpleNamespace(**{**vars(evidence), "merge_base_sha": "0" * 40}),
+        ),
+    )
+    for field, mutated_evidence in identity_mutations:
+        assert not _is_expected_historical_malformed_v2_blocker(
+            mutated_evidence, body, blocker
+        ), field
 
 
 def test_historical_pr_evidence_rejects_malformed_identity_and_file_binding() -> None:

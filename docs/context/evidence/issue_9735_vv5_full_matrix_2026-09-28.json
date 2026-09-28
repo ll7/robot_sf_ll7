@@ -1,0 +1,325 @@
+{
+  "claim_boundary": "Ten synthetic fixture classes on one source; differing checks and some one-seed/component-only probes. No nominal release rows or final 0.0.8 gate sensitivity.",
+  "evidence_tier": "diagnostic_fixture_only",
+  "matrix": [
+    {
+      "boundary": "Synthetic checker fixture; no nominal episode.",
+      "check": "spawn_validity",
+      "clean": {
+        "invalid_run": false,
+        "overlap": false
+      },
+      "detected": true,
+      "fault": "reset_pedestrian_overlap",
+      "mutant": {
+        "invalid_run": true,
+        "obstacle_overlap": false,
+        "overlap": true,
+        "pedestrian_overlap": true,
+        "respawn_overlap_collisions": 0
+      },
+      "packet": "first"
+    },
+    {
+      "boundary": "Synthetic respawn event plus matching collision, without placement execution.",
+      "check": "spawn_validity",
+      "clean": {
+        "invalid_run": false,
+        "overlap": false
+      },
+      "detected": true,
+      "fault": "respawn_onto_robot",
+      "mutant": {
+        "invalid_run": true,
+        "obstacle_overlap": false,
+        "overlap": false,
+        "pedestrian_overlap": false,
+        "respawn_overlap_collisions": 1
+      },
+      "packet": "first"
+    },
+    {
+      "boundary": "Synthetic checker fixture; no nominal episode.",
+      "check": "spawn_validity",
+      "clean": {
+        "invalid_run": false,
+        "overlap": false
+      },
+      "detected": true,
+      "fault": "robot_start_inside_wall_radius",
+      "mutant": {
+        "invalid_run": true,
+        "obstacle_overlap": true,
+        "overlap": true,
+        "pedestrian_overlap": false,
+        "respawn_overlap_collisions": 0
+      },
+      "packet": "first"
+    },
+    {
+      "boundary": "Component-level force check, not a nominal episode or release admission.",
+      "check": "social_force obstacle-force resolution invariance (relative change <= 0.25)",
+      "clean": {
+        "coarse_force_xy": [
+          0.0,
+          -0.1783699180077421
+        ],
+        "fine_force_xy": [
+          0.0,
+          -0.1783699180077421
+        ],
+        "pass": true,
+        "relative_change": 0.0,
+        "version": "resolution_independent_v2"
+      },
+      "detected": true,
+      "fault": "per_cell_wall_force_sum",
+      "mutant": {
+        "coarse_force_xy": [
+          -1.5751654956763783e-06,
+          -84.95835987913597
+        ],
+        "fine_force_xy": [
+          -3.3443592659804233e-06,
+          -117.73470177733864
+        ],
+        "pass": false,
+        "relative_change": 0.2783915141704758,
+        "version": "grid_cell_sum_v1"
+      },
+      "packet": "force"
+    },
+    {
+      "boundary": "Component-level speed-cap check; no hybrid episode or doorway collision outcome is inferred.",
+      "check": "hybrid clearance cap and real-drive stopping-distance invariant",
+      "clean": {
+        "pass": true,
+        "planner_decel_mps2": 1.0,
+        "variant": "hybrid_rule_v4_clearance_braking"
+      },
+      "detected": true,
+      "fault": "centre_distance_threshold_and_wrong_braking",
+      "mutant": {
+        "pass": false,
+        "planner_decel_mps2": 2.5,
+        "variant": "hybrid_rule_v3_teb_like_rollout"
+      },
+      "packet": "remaining",
+      "samples": [
+        {
+          "center_distance_m": 1.4500000000000002,
+          "clean_level": "stop",
+          "clean_stopping_distance_m": 0.0,
+          "clean_v4_cap_mps": 0.0,
+          "mutant_stopping_distance_m": 0.24,
+          "mutant_v3_cap_mps": 0.6,
+          "surface_clearance_m": 0.05
+        },
+        {
+          "center_distance_m": 3.4499999999999997,
+          "clean_level": "braking",
+          "clean_stopping_distance_m": 1.9499999999999995,
+          "clean_v4_cap_mps": 1.8773719933285187,
+          "mutant_stopping_distance_m": 2.2,
+          "mutant_v3_cap_mps": 2.0,
+          "surface_clearance_m": 2.05
+        }
+      ]
+    },
+    {
+      "boundary": "The geometric subcheck sees the injected gap. The full clean oracle is blocked by unrelated ancillary missing-data status and is not counted as a full-oracle detection.",
+      "check": "route_clearance + spawn_matrix_preflight",
+      "clean": {
+        "oracle_full_status": "blocked",
+        "oracle_geometric_feasible": true,
+        "preflight_status": "valid",
+        "route_gate": "pass"
+      },
+      "detected": true,
+      "fault": "infeasible_gap",
+      "inconclusive_checks": [
+        "feasibility_oracle_full_verdict"
+      ],
+      "mutant": {
+        "oracle_full_status": "infeasible_by_construction",
+        "oracle_geometric_feasible": false,
+        "preflight_status": "blocked",
+        "route_gate": "blocked"
+      },
+      "packet": "geometry_radius"
+    },
+    {
+      "boundary": "Synthetic planner config; no planner episode. Geometry checks use simulator radius.",
+      "check": "prediction_planner physical-unit audit",
+      "clean": {
+        "drive_radius_m": 1.0,
+        "planner_radius_m": 1.0,
+        "row_anomaly_findings": [],
+        "row_anomaly_gate_blocked": false,
+        "unit_audit_violations": []
+      },
+      "detected": true,
+      "fault": "planner_only_radius_halved",
+      "missed_checks": [
+        "release_row_anomalies"
+      ],
+      "mutant": {
+        "drive_radius_m": 1.0,
+        "planner_radius_m": 0.5,
+        "row_anomaly_findings": [],
+        "row_anomaly_gate_blocked": false,
+        "unit_audit_violations": [
+          [
+            "robot_radius_below_drive",
+            0.5
+          ]
+        ]
+      },
+      "packet": "geometry_radius"
+    },
+    {
+      "baseline_goal": {
+        "final_goal_distance_m": 0.3874204890000046,
+        "final_position_xy": [
+          7.612579510999995,
+          0.0
+        ],
+        "initial_goal_distance_m": 8.0,
+        "path_length_m": 7.612579510999995,
+        "route_complete": true,
+        "steps": 79
+      },
+      "boundary": "Short kinematic control _trace, not simulator/drive dynamics or a release episode. The diagnostic uses one paired seed with min_paired_cells=1; the nominal gate requires its pinned matrix.",
+      "check": "paired pedestrian-free baseline regression",
+      "clean": {
+        "_trace": {
+          "final_goal_distance_m": 0.30000255562563005,
+          "final_position_xy": [
+            7.69999744437437,
+            0.0
+          ],
+          "initial_goal_distance_m": 8.0,
+          "path_length_m": 7.69999744437437,
+          "route_complete": true,
+          "steps": 81
+        },
+        "finding_ids": [],
+        "gate_blocked": false,
+        "pass": true
+      },
+      "detected": true,
+      "fault": "planner_goal_direction_flipped",
+      "mutant": {
+        "_trace": {
+          "final_goal_distance_m": 16.84531076371346,
+          "final_position_xy": [
+            -8.827593544566334,
+            0.7723925329455198
+          ],
+          "initial_goal_distance_m": 8.0,
+          "path_length_m": 8.922420879438826,
+          "route_complete": false,
+          "steps": 120
+        },
+        "finding_ids": [
+          "pedestrian_free_baseline_regression"
+        ],
+        "gate_blocked": true,
+        "pass": false
+      },
+      "packet": "remaining"
+    },
+    {
+      "boundary": "Factory wiring and one force evaluation, not a pedestrian trajectory/contact trial. Zero force reduces to valid zero metrics, so this production metric path misses the disabled component.",
+      "check": "robot_force_reductions with no expected-active roster binding",
+      "clean": {
+        "component_ids": [
+          "ped_robot:robot_0"
+        ],
+        "force_xy": [
+          1.7146776406035662,
+          0.0
+        ],
+        "impulse_total": 0.17146776406035663,
+        "metrics_validator_pass": true,
+        "prf_active": true
+      },
+      "detected": false,
+      "fault": "pedestrian_robot_force_disabled",
+      "mutant": {
+        "component_ids": [],
+        "force_xy": [
+          0.0,
+          0.0
+        ],
+        "impulse_total": 0.0,
+        "metrics_validator_pass": true,
+        "prf_active": false
+      },
+      "packet": "force",
+      "proposed_check": "Bind approved per-scenario PRF-active state to runtime config and component roster across exposed steps; allow legitimate zero force."
+    },
+    {
+      "boundary": "Synthetic checker fixture; no nominal episode.",
+      "check": "release_row_anomalies",
+      "clean": {
+        "finding_ids": [],
+        "gate_blocked": false,
+        "total_collision_count": 1.0
+      },
+      "detected": false,
+      "fault": "collision_total_doubled",
+      "mutant": {
+        "component_sum": 1.0,
+        "finding_ids": [],
+        "gate_blocked": false,
+        "total_collision_count": 2.0
+      },
+      "packet": "first"
+    }
+  ],
+  "missed": [
+    "pedestrian_robot_force_disabled",
+    "collision_total_doubled"
+  ],
+  "packet_sha256": {
+    "first": "5b8e842b9d2372bd412ec8cc7a2a572d981e28a86314ccebd8601892b2ca85f8",
+    "force": "1fbd4867a5e76b1c2040472d1b02a85aa9a4d31f5297b41c0ff31038e548ecae",
+    "geometry_radius": "7681164b41e7310d28b432b24dad838d229caf79ae1fa956eeead857a1889976",
+    "remaining": "f0ced154af47cdd0a27de448151a34506959c761d0eb5c786e9b99ae3c37470b"
+  },
+  "release_admitted": false,
+  "schema_version": "issue_9735_full_fault_matrix_diagnostic.v1",
+  "sensitivity": {
+    "detected": 8,
+    "fraction": 0.8,
+    "injected": 10
+  },
+  "source_commit": "7c1b714b8bef4e0a80de334172e4bf03c3339a4b",
+  "source_sha256": {
+    "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml": "daa1f670b377e62128c5292e09412781dba9d17699b92100c7771ff5d255e374",
+    "configs/algos/hybrid_rule_v4_clearance_braking.yaml": "f0c3d5ceafaf9d47d08b1f6a6b34b73af917d3d48a0f4b51bc1ab22fbd6bf5ad",
+    "configs/algos/prediction_planner_camera_ready.yaml": "a5f3775110b7c1351e183016afe8a17348a66d35088eeb6ff55a182dc924a481",
+    "configs/scenarios/single/francis2023_narrow_doorway.yaml": "d7b52f76128f366a74801c2441cb47e3f4af588c64566fb044eb3e2c54e43671",
+    "maps/svg_maps/classic_head_on_corridor.svg": "89f439ac1f04561e0cd550c16be01a9674dc6fe80ba196f0dcc8f8f3c641f11b",
+    "maps/svg_maps/francis2023/francis2023_narrow_doorway.svg": "7538ed173d462a5107afc1a1e43b5b2e6d2bc5c9604035cdec9a551e20a8b15e",
+    "robot_sf/analysis_workbench/release_row_anomalies.py": "049ed97cd5c388cc743bfbb130c1c9dcb2c73752adaa8b699613849b0f9e2759",
+    "robot_sf/benchmark/camera_ready/_route_clearance.py": "e9a3dbab89a645be16bb7887bc83c927bc606cb63c678cf15d803c5afaa06f6c",
+    "robot_sf/benchmark/map_runner/map_runner.py": "08bf0112606e9a2acb37b0ede7c47f6c185735766bfc78497b17a1359e4a9265",
+    "robot_sf/benchmark/metrics.py": "75267cd03d206a1108815c923cffbb98da2a80d46e2edfbb85107e799120d957",
+    "robot_sf/benchmark/spawn_preflight.py": "8ea2389cd80bc39c3b69dc2c6ad1da02ed951e6cad9cd6e3f37c7c118e52b01b",
+    "robot_sf/benchmark/spawn_validity.py": "161e5c0d36c0446f89f7bfbf25348cbd67a9840f83967dcd08c26ced24967de2",
+    "robot_sf/ped_npc/ped_robot_force.py": "73ec0e40987f1a2636e970dcc3640377070af784346b55c08484692fbee1c70e",
+    "robot_sf/planner/hybrid_rule_local_planner.py": "d7ef14e4e2b08c908b77f367146b18dc51fac006c19086b262f9b90b426635a5",
+    "robot_sf/planner/socnav_base.py": "8996966c44a5ddbbcb7f4457490da99db96d1c3b11ef8b8bf23d4aefa72ca199",
+    "robot_sf/planner/socnav_prediction.py": "71b6f2f1f112b458aaa2cd414be3cffaf00e942c7198d9d25f28eebeab64178e",
+    "robot_sf/planner/socnav_social_force.py": "916375822242e8e9358a87481e1ea5236e9cdde99cf7578270114084ec0a750e",
+    "robot_sf/robot/differential_drive.py": "ca53fadbe446b13d4e9946510296e5dd8e489667d9d9cf76d648e68bfbca3c1c",
+    "robot_sf/scenario_certification/feasibility_oracle.py": "41e0f90daeff3448ab6669146d046cb92cfc866e3f78dc2f9b1f6f0042526930",
+    "robot_sf/sim/simulator.py": "eb39a4c1c9deb28af90a33b0586e2fca02f66aa495afe052d7476a2bdb39c993",
+    "robot_sf/sim/spawn_validation.py": "fe211644ab9e7f80d65e4c97230c0d880c1d6ed62db6588103ac52d9deedd13b",
+    "scripts/validation/run_issue_9735_fault_injection.py": "80c267edfe642fc193552092ec2adc6d66727c5e9d617ecdd24dce78fec5ebc4",
+    "scripts/validation/run_issue_9735_geometry_radius_diagnostic.py": "8e5eade9e4f8130eec47a42052f614995f26e483d42d9149a03166ad9488ac3d",
+    "tests/metamorphic/test_planner_unit_consistency.py": "7c1ee006e4b61a37c290a5be4ce734f1be02abc880ddb7ba202c73803e987465"
+  }
+}

@@ -79,6 +79,28 @@ def _baseline_kinematics(planner: str) -> dict[str, Any]:
     }
 
 
+def _action_trace(count: int) -> dict[str, Any]:
+    return {
+        "schema_version": "simulation-step-trace.v1",
+        "dt": 0.1,
+        "steps": [
+            {
+                "step": index,
+                "time_s": (index + 1) * 0.1,
+                "planner": {
+                    "event": "step",
+                    "selected_action": {"linear_velocity": 0.5, "angular_velocity": 0.0},
+                    "applied_environment_action": {
+                        "linear_velocity": 0.5,
+                        "angular_velocity": 0.0,
+                    },
+                },
+            }
+            for index in range(count)
+        ],
+    }
+
+
 def test_campaign_failure_keeps_error_and_seals_receipt(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -348,7 +370,7 @@ def _complete_synthetic_campaign() -> tuple[
                             ),
                             "doorway_pair_receipt": receipt,
                             "planner_runtime": {},
-                            "simulation_step_trace": {"steps": [{}]},
+                            "simulation_step_trace": _action_trace(100),
                             "planner_decision_trace": {"steps": [{}]},
                         },
                         "integrity": {"contradictions": []},
@@ -380,6 +402,7 @@ def test_actor_present_confirmation_rejects_fallback_and_custody_faults() -> Non
     for row in rows:
         row["horizon"] = 10
         row["steps"] = 5
+        row["algorithm_metadata"]["simulation_step_trace"] = _action_trace(5)
         row["status"] = "failure"  # short-horizon timeout is not a success claim
         row["termination_reason"] = "max_steps"
 
@@ -439,6 +462,7 @@ def test_confirmation_separates_baseline_auxiliary_telemetry_from_execution() ->
     for row in rows:
         row["horizon"] = 10
         row["steps"] = 5
+        row["algorithm_metadata"]["simulation_step_trace"] = _action_trace(5)
         row["status"] = "failure"
         metadata = row["algorithm_metadata"]
         metadata["planner_decision_trace"]["steps"] = []
@@ -455,6 +479,36 @@ def test_confirmation_separates_baseline_auxiliary_telemetry_from_execution() ->
     assert result["admit_h400"] is True
     assert all(not item["blockers"] for item in result["rows"])
     assert all(len(item["ancillary_telemetry_gaps"]) == 3 for item in result["rows"])
+
+    for corrupted_steps in (
+        [{}],
+        rows[0]["algorithm_metadata"]["simulation_step_trace"]["steps"][:-1],
+    ):
+        corrupted = deepcopy(rows)
+        corrupted[0]["algorithm_metadata"]["simulation_step_trace"]["steps"] = corrupted_steps
+        rejected = doorway_campaign.assess_confirmation_rows(
+            corrupted, cells, pairs, source_sha="d" * 40, manifest_sha256="manifest"
+        )
+        assert rejected["admit_h400"] is False
+        assert "missing_or_invalid_simulation_action_trace" in rejected["rows"][0]["blockers"]
+
+    absent_action = deepcopy(rows)
+    absent_action[0]["algorithm_metadata"]["simulation_step_trace"]["steps"][0]["planner"].pop(
+        "applied_environment_action"
+    )
+    rejected_action = doorway_campaign.assess_confirmation_rows(
+        absent_action, cells, pairs, source_sha="d" * 40, manifest_sha256="manifest"
+    )
+    assert rejected_action["admit_h400"] is False
+    assert "missing_or_invalid_simulation_action_trace" in rejected_action["rows"][0]["blockers"]
+
+    wrong_clock = deepcopy(rows)
+    wrong_clock[0]["algorithm_metadata"]["simulation_step_trace"]["steps"][0]["time_s"] = 0.2
+    rejected_clock = doorway_campaign.assess_confirmation_rows(
+        wrong_clock, cells, pairs, source_sha="d" * 40, manifest_sha256="manifest"
+    )
+    assert rejected_clock["admit_h400"] is False
+    assert "missing_or_invalid_simulation_action_trace" in rejected_clock["rows"][0]["blockers"]
 
     degraded = deepcopy(rows)
     degraded[0]["algorithm_metadata"]["simulation_step_trace"]["steps"][0] = {
@@ -974,7 +1028,7 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
                                 else doorway_application.EMPTY_PLANNER_CONFIG_HASH
                             ),
                             "doorway_pair_receipt": receipt,
-                            "simulation_step_trace": {"steps": [{}]},
+                            "simulation_step_trace": _action_trace(100),
                             "planner_decision_trace": {"steps": [{}]},
                         },
                         "integrity": {"contradictions": []},
@@ -1057,6 +1111,14 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
         "missing_planner_decision_trace" in missing_trace["row_inventory"][0]["exclusion_reasons"]
     )
     rows[0]["algorithm_metadata"]["planner_decision_trace"]["steps"] = [{}]
+    rows[0]["algorithm_metadata"]["simulation_step_trace"]["steps"] = [{}]
+    missing_actions = analyze_rows(rows, cells, pairs)
+    assert missing_actions["native_rows"] == 17
+    assert (
+        "missing_or_invalid_simulation_action_trace"
+        in missing_actions["row_inventory"][0]["exclusion_reasons"]
+    )
+    rows[0]["algorithm_metadata"]["simulation_step_trace"] = _action_trace(100)
     inputs = tmp_path / "inputs"
     inputs.mkdir()
     for name in ("application_manifest.yaml", "episode.schema.v1.json"):
@@ -1072,6 +1134,7 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
     for row in confirmation_rows:
         row["horizon"] = 10
         row["steps"] = 5
+        row["algorithm_metadata"]["simulation_step_trace"] = _action_trace(5)
         row["status"] = "failure"
         row["termination_reason"] = "max_steps"
     confirmation_lines = [json.dumps(row, sort_keys=True) + "\n" for row in confirmation_rows]

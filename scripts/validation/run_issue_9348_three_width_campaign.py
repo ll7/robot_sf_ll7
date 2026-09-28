@@ -187,6 +187,51 @@ def _command_execution_mode(metadata: dict[str, Any]) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def _valid_action_trace(trace: Any, row: dict[str, Any] | None) -> bool:
+    """Require one finite selected and applied planner action per executed step."""
+    if (
+        not isinstance(trace, dict)
+        or trace.get("schema_version") != "simulation-step-trace.v1"
+        or not isinstance(trace.get("dt"), (int, float))
+        or isinstance(trace["dt"], bool)
+        or not math.isclose(trace["dt"], _DT, rel_tol=0.0, abs_tol=1.0e-12)
+    ):
+        return False
+    steps = trace.get("steps")
+    if (
+        row is None
+        or not isinstance(row.get("steps"), int)
+        or isinstance(row["steps"], bool)
+        or row["steps"] < 1
+        or not isinstance(steps, list)
+        or len(steps) != row["steps"]
+    ):
+        return False
+    for index, item in enumerate(steps):
+        if not isinstance(item, dict) or item.get("step") != index:
+            return False
+        time_s = item.get("time_s")
+        if (
+            not isinstance(time_s, (int, float))
+            or isinstance(time_s, bool)
+            or not math.isclose(time_s, (index + 1) * _DT, rel_tol=0.0, abs_tol=1.0e-9)
+        ):
+            return False
+        planner = item.get("planner")
+        if not isinstance(planner, dict) or planner.get("event") != "step":
+            return False
+        for key in ("selected_action", "applied_environment_action"):
+            action = planner.get(key)
+            if not isinstance(action, dict) or any(
+                not isinstance(action.get(field), (int, float))
+                or isinstance(action.get(field), bool)
+                or not math.isfinite(action[field])
+                for field in ("linear_velocity", "angular_velocity")
+            ):
+                return False
+    return True
+
+
 def _execution_runtime_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     """Select execution-bearing fields for canonical fallback scanning."""
     runtime_fields = {
@@ -266,12 +311,8 @@ def _trace_exclusion_reasons(
     trace = metadata.get("simulation_step_trace")
     planner_trace = metadata.get("planner_decision_trace")
     reasons = []
-    if (
-        not isinstance(trace, dict)
-        or not isinstance(trace.get("steps"), list)
-        or not trace["steps"]
-    ):
-        reasons.append("missing_simulation_step_trace")
+    if not _valid_action_trace(trace, row):
+        reasons.append("missing_or_invalid_simulation_action_trace")
     if not isinstance(planner_trace, dict) or not isinstance(planner_trace.get("steps"), list):
         reasons.append("missing_planner_decision_trace")
     else:

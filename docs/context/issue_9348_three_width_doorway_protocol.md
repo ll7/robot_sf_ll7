@@ -21,7 +21,9 @@ frozen planners, seeds and widths. It requires the declared execution path
 (`goal` native commands, `social_force` through its documented adapter), a
 nonempty simulation/action trace, typed valid spawn clearance, no execution
 fallback/degraded marker, exact source/config identity, and six matching
-reset/RNG receipt groups. These H10 rows are setup
+reset/RNG receipt groups. The simulation trace must contain one indexed step
+per executed row step, each with finite selected and applied planner commands;
+placeholder or truncated traces block. These H10 rows are setup
 diagnostics only; a red row blocks H400 before its first episode. Raw rows,
 source/config/asset hashes, the report
 and checksums go to an explicit durable result root; the private operations

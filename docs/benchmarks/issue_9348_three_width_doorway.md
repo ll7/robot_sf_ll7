@@ -90,9 +90,11 @@ each mechanism claim to a recorded trace before promoting the slice. Only rows
 with the expected `goal` native-command mode or documented Social Force adapter,
 valid typed spawn clearance, nonempty simulation/action steps, and no runtime
 fallback marker may enter the complete-pair comparison. These baseline planners
-have empty specialized internal-decision arrays by design. The report lists
-unavailable reset sampler/route and unrelated paired-effect telemetry as
-ancillary coverage gaps. Unexpected adapters, fallback, degraded and incomplete
+have empty specialized internal-decision arrays by design. The raw trace must
+carry one indexed simulation step with finite selected and applied action fields
+for each executed row step; placeholders and truncated traces are excluded.
+The report lists unavailable reset sampler/route and unrelated paired-effect
+telemetry as ancillary coverage gaps. Unexpected adapters, fallback, degraded and incomplete
 rows are excluded; no physical doorway or deployment safety claim follows from
 this simulator-only comparison.
 The report's legacy `native_rows` count means eligible baseline rows under

@@ -1576,6 +1576,16 @@ class TestDependencyBlockedStateLabel:
             {"state:ready", "state:blocked-dependency"} & issue_implementability.BLOCKING_LABELS
         )
 
+    def test_dependency_label_blocks_ready_issue_end_to_end(self) -> None:
+        """A ready issue with the dependency qualifier is blocked, not claimable."""
+        report = evaluate_issue(
+            _issue(labels=["state:ready", "state:blocked-dependency"]), _claim()
+        )
+
+        assert report["classification"] == "blocked"
+        assert report["admission_reason"] == "blocked"
+        assert report["write_allowed"] is False
+
     def test_existing_blocked_labels_are_unchanged(self) -> None:
         """The new entry must not swallow the vocabulary it was added beside."""
         for label in (

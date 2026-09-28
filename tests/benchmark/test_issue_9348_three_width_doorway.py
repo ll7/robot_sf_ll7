@@ -485,6 +485,45 @@ def test_actor_present_confirmation_rejects_fallback_and_custody_faults() -> Non
     assert assess(rows, wrong_pairs)["admit_h400"] is False
 
 
+@pytest.mark.parametrize("digest_field", ["map_sha256", "scenario_sha256"])
+def test_pair_asset_digests_must_match_generated_cells(digest_field: str) -> None:
+    """A self-consistent receipt cannot substitute for the generated asset bytes."""
+    rows, cells, pairs = _complete_synthetic_campaign()
+    short_rows = deepcopy(rows)
+    for row in short_rows:
+        row["horizon"] = 10
+        row["steps"] = 5
+        row["algorithm_metadata"]["simulation_step_trace"] = _action_trace(5)
+        row["status"] = "failure"
+        row["termination_reason"] = "max_steps"
+
+    forged_pairs = deepcopy(pairs)
+    forged_digest = "e" * 64
+    for pair in forged_pairs["pairs"]:
+        for pair_cell in pair["cells"]:
+            if pair_cell["gap_width_m"] == 2.2:
+                pair_cell[digest_field] = forged_digest
+    if digest_field == "map_sha256":
+        for row, cell in zip(short_rows, cells, strict=True):
+            if cell["gap_width_m"] == 2.2:
+                row["algorithm_metadata"]["doorway_pair_receipt"]["map_sha256"] = forged_digest
+
+    confirmation = doorway_campaign.assess_confirmation_rows(
+        short_rows,
+        cells,
+        forged_pairs,
+        source_sha="d" * 40,
+        manifest_sha256="manifest",
+    )
+    assert confirmation["admit_h400"] is False
+    assert (
+        "pair manifest asset digest differs from generated cell custody"
+        in confirmation["pair_errors"]
+    )
+    with pytest.raises(ValueError, match="verified reset pairs"):
+        analyze_rows(rows, cells, forged_pairs)
+
+
 def test_confirmation_separates_baseline_auxiliary_telemetry_from_execution() -> None:
     """Empty baseline decisions and unavailable sampler telemetry are not fallback."""
     rows, cells, pairs = _complete_synthetic_campaign()
@@ -1154,6 +1193,7 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
     inputs.mkdir()
     for name in ("application_manifest.yaml", "episode.schema.v1.json"):
         (inputs / name).write_text("frozen input\n", encoding="utf-8")
+    pairs["manifest_sha256"] = _sha256(inputs / "application_manifest.yaml")
     lines = [json.dumps(row, sort_keys=True) + "\n" for row in rows]
     (tmp_path / "episodes.jsonl").write_text("".join(lines), encoding="utf-8")
     for cell, line in zip(cells, lines, strict=True):
@@ -1218,6 +1258,16 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
             "cells": cells,
         },
     )
+    _write_checksums(tmp_path)
+    assert verify_campaign_bundle(tmp_path)["native_rows"] == 18
+    pair_manifest_path = tmp_path / "pair_manifest.json"
+    pair_manifest_payload = json.loads(pair_manifest_path.read_text(encoding="utf-8"))
+    pair_manifest_payload["manifest_sha256"] = "f" * 64
+    write_json(pair_manifest_path, pair_manifest_payload)
+    _write_checksums(tmp_path)
+    with pytest.raises(ValueError, match="copied scientific input digest"):
+        verify_campaign_bundle(tmp_path)
+    write_json(pair_manifest_path, pairs)
     _write_checksums(tmp_path)
     assert verify_campaign_bundle(tmp_path)["native_rows"] == 18
     run_manifest_path = tmp_path / "run_manifest.json"

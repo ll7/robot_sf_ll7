@@ -538,6 +538,34 @@ def _confirmation_row_blockers(
     return sorted(set(reasons))
 
 
+def _pair_asset_errors(pair_manifest: dict[str, Any], cells: list[dict[str, Any]]) -> list[str]:
+    """Bind every declared pair asset digest to the generated campaign cells."""
+    expected = {
+        (cell.get("planner"), cell.get("seed"), cell.get("gap_width_m")): cell for cell in cells
+    }
+    observed: dict[tuple[Any, Any, Any], dict[str, Any]] = {}
+    for pair in pair_manifest.get("pairs", []):
+        if not isinstance(pair, dict) or not isinstance(pair.get("cells"), list):
+            return ["pair manifest asset entries are malformed"]
+        for pair_cell in pair["cells"]:
+            if not isinstance(pair_cell, dict):
+                return ["pair manifest asset entries are malformed"]
+            identity = (pair.get("planner"), pair.get("seed"), pair_cell.get("gap_width_m"))
+            if identity in observed:
+                return ["pair manifest asset identities are duplicated"]
+            observed[identity] = pair_cell
+    if set(observed) != set(expected):
+        return ["pair manifest asset identities differ from generated cells"]
+    for identity, cell in expected.items():
+        paired = observed[identity]
+        if any(
+            paired.get(field) != cell.get(field)
+            for field in ("variant_id", "map_sha256", "scenario_sha256")
+        ):
+            return ["pair manifest asset digest differs from generated cell custody"]
+    return []
+
+
 def assess_confirmation_rows(
     rows: list[dict[str, Any]],
     cells: list[dict[str, Any]],
@@ -557,6 +585,7 @@ def assess_confirmation_rows(
     ):
         raise ValueError("confirmation probe requires all 18 frozen identities")
     pair_errors = check_pair_receipts(pair_manifest)
+    pair_errors.extend(_pair_asset_errors(pair_manifest, cells))
     if pair_manifest.get("manifest_sha256") != manifest_sha256:
         raise ValueError("confirmation pair manifest checksum identity mismatch")
     receipts = {
@@ -776,7 +805,12 @@ def analyze_rows(
     Returns:
         Complete descriptive and paired-uncertainty report.
     """
-    if len(rows) != 18 or len(cells) != 18 or check_pair_receipts(pair_manifest):
+    if (
+        len(rows) != 18
+        or len(cells) != 18
+        or check_pair_receipts(pair_manifest)
+        or _pair_asset_errors(pair_manifest, cells)
+    ):
         raise ValueError("doorway report requires 18 rows and six verified reset pairs")
     expected = {(p, s, w) for p in _PLANNERS for s in _SEEDS for w in _WIDTHS}
     identities = [(c["planner"], c["seed"], c["gap_width_m"]) for c in cells]
@@ -964,6 +998,8 @@ def verify_campaign_bundle(root: Path) -> dict[str, Any]:
         raise ValueError("doorway source tree custody differs from the declared source commit")
     if (
         sha256_file(root / "inputs/application_manifest.yaml")
+        != run_manifest.get("application_manifest_sha256")
+        or _json(root / "pair_manifest.json").get("manifest_sha256")
         != run_manifest.get("application_manifest_sha256")
         or sha256_file(root / "inputs/episode.schema.v1.json")
         != run_manifest.get("episode_schema_sha256")

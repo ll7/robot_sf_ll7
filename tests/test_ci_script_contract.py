@@ -5669,6 +5669,11 @@ def test_coverage_docs_match_effective_source_scope() -> None:
     assert 'source = ["robot_sf", "fast-pysf/pysocialforce"]' in cov_guide_text
     assert "fast-pysf/pysocialforce" in coverage_run["source"]
     assert 'cmd+=("--cov=robot_sf" "--cov-report=html" "--cov-report=json")' in wrapper_text
+    assert "--cov=robot_sf/gym_env" in cov_guide_text
+    assert "--cov=robot_sf/benchmark" in cov_guide_text
+    assert "--cov=robot_sf/analysis_workbench --cov-branch" in cov_guide_text
+    assert "coverage report -m" in cov_guide_text
+    assert "Coverage.py imports dotted source names" in cov_guide_text
     assert "Only the `robot_sf/` package" in cov_guide_text
     assert "not included in the local wrapper report" in cov_guide_text
     assert "measure only the `robot_sf/` package" in dev_guide_text

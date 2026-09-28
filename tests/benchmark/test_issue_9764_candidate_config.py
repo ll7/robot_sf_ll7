@@ -5,6 +5,7 @@ from pathlib import Path
 import yaml
 
 from robot_sf.benchmark.camera_ready._config import load_campaign_config
+from robot_sf.training.scenario_loader import load_scenarios
 
 
 def test_versioned_candidate_resolves_wrapped_kernel_on_both_sides() -> None:
@@ -17,10 +18,12 @@ def test_versioned_candidate_resolves_wrapped_kernel_on_both_sides() -> None:
     )
 
     assert cfg.name.endswith("v0_0_8_candidate")
-    scenario = yaml.safe_load(cfg.scenario_matrix_path.read_text(encoding="utf-8"))
-    assert scenario["scenario_overrides"]["simulation_config"][
-        "social_force_kernel_version"
-    ] == "wrapped_v2"
+    scenarios = load_scenarios(cfg.scenario_matrix_path)
+    assert scenarios
+    assert all(
+        scenario["simulation_config"]["social_force_kernel_version"] == "wrapped_v2"
+        for scenario in scenarios
+    )
 
     planner = next(planner for planner in cfg.planners if planner.key == "social_force")
     assert planner.algo_config_path is not None

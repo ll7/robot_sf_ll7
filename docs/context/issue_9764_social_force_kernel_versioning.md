@@ -17,16 +17,19 @@ shape.
 `configs/algos/social_force_resolution_independent_v2_kernel_legacy_v1.yaml` and
 `configs/algos/social_force_resolution_independent_v2_kernel_wrapped_v2.yaml` are matched diagnostic
 configs. `configs/scenarios/classic_interactions_francis2023_goal_zone_entry_kernel_wrapped_v2.yaml`
-is the corresponding simulator-side diagnostic matrix. The pinned 0.0.7 matrix
+is the corresponding simulator-side candidate matrix. The pinned 0.0.7 matrix
 `configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml` remains byte-identical
 to its published SHA-256 `03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c`.
 
 ## Release boundary
 
 The 0.0.8 plan in #9668 requires the existing 0.0.7 metrics to reproduce and describes the new force
-metrics and SNQI-v2 fields as the additions. The kernel correction can change simulation forces, so
-its use in that campaign must pass the row-equivalence gate; a mismatch is a stop condition. The
-paired kernel configs above are diagnostic inputs and do not alter the frozen 0.0.7 input or claim
+metrics and SNQI-v2 fields as the additions. The kernel correction can change simulation forces.
+A distinct 0.0.8 candidate input,
+`configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml`,
+binds `wrapped_v2` in both the planner and scenario matrix. Its use as release evidence still
+requires the #9668 row-equivalence gate; a mismatch is a stop condition. The paired kernel configs
+above are diagnostic inputs and do not alter the frozen 0.0.7 input or claim
 that the 0.0.8 equivalence gate passed. The separate #9758 pedestrian-contact question remains
 unresolved by this angle correction.
 
@@ -36,66 +39,30 @@ Focused regression tests cover both kernel implementations, the explicit selecto
 default behavior, and metadata omission when the selector is absent. No general planner, pedestrian,
 or dissertation claim follows from those tests.
 
-## Paired source-pinned diagnostic — 2026-09-28
+## Quarantine and replacement diagnostic — 2026-09-28
 
-The two versioned kernel configs were run on source commit
-`450ca42b7b98026949992284d37520322d14ed82`, using worktree-asserted imports, two scenarios, seeds
-111–113, `horizon=600`, `dt=0.1`, one worker, and recorded forces plus simulation-step traces. Each
-arm wrote six episodes; both completed without run failures. Scenario and metric parameters match
-except for the selector-dependent algorithm-config hash and kernel-version field. Every episode row
-records the expected source commit and kernel selector.
+The earlier paired runs on seeds 111–113 used the reserved #9668 evaluation range. Their episode
+records, comparison, interaction counts, and #9758 recheck are **quarantined and uncited**. They
+remain in the private host bundle `issue9764-social-force-kernel-paired-diagnostic-450ca42b` for
+custody only, with a `QUARANTINED.md` marker. No report should cite those values. The FIX review
+classified this as a process slip, with no #9668 exception needed after replacement.
 
-The source commit predates PR-base refresh and is not in the current PR ancestry. Its implementation,
-config, scenario, and test files were compared with current-base implementation commit
-`1340824b69d8cc6c059e2f0de41865bfb60310bb`; all compared files are byte-identical. The focused
-regression suite was rerun after that transplant on PR head
-`d1c83ea367aaf9b950b0dc7907fccc58aee69309` (85 passed, 1 expected xfail).
+The paired diagnostic input files now select seeds 103–105 for the same two scenarios. The rerun
+uses the committed source `cb5399fcedcb8b968f3ea74fe6b24fd5d16eeda8`, 600 steps, 0.1 s
+step time, one worker, recorded forces and simulation-step traces. Its private bundle key is
+`issue9764-social-force-kernel-paired-diagnostic-safe-103-105-cb5399fc`.
 
-| Scenario | Seed | Legacy | Wrapped | Steps (legacy/wrapped) | Maximum recorded position difference |
-|---|---:|---|---|---:|---:|
-| `classic_group_crossing_medium` | 111 | success | success | 183/183 | 0.0666880473 m |
-| `classic_group_crossing_medium` | 112 | success | success | 183/183 | 0.234921857 m |
-| `classic_group_crossing_medium` | 113 | success | success | 192/192 | 0.335183203 m |
-| `classic_head_on_corridor_medium` | 111 | collision | collision | 181/180 | 0.346257723 m |
-| `classic_head_on_corridor_medium` | 112 | success | success | 309/308 | 1.27508777 m |
-| `classic_head_on_corridor_medium` | 113 | success | success | 316/314 | 0.970636728 m |
+Both arms completed six episodes, all with terminal status and the expected selector and source
+commit in each row. The paired analyzer verified equal scenario and metric parameters apart from
+selector-dependent provenance, matched map identity, aligned trace times, and six matching terminal
+outcomes. Five pairs ended in success in both arms; one pair ended in collision in both arms. The
+largest same-index recorded robot or pedestrian position difference over common trace prefixes was
+0.675855495 m. Several metrics changed. These observations are bounded to these six pairs.
 
-Terminal outcomes matched in all six pairs. Values for energy, mean clearance, curvature, mean
-pedestrian force, total robot-attributable force impulse, and active robot-force mean changed in all
-six pairs. Position differences compare same-index trace states over each pair's common prefix; they
-do not identify a causal interaction. This small diagnostic is not a 0.0.7 release-row comparison,
-statistical estimate, or SNQI-equivalence result.
-
-The exact runtime `SocialForce` inputs were captured in a second pass, with episode and step tags;
-the six episode identities, full step ranges, selector metadata, source commit, and equality of
-instrumented versus original metrics/traces were verified. On each captured state, both kernels
-were evaluated for each directed pedestrian pair inside the recorded 20 m activation threshold,
-with the recorded factor 5.1 applied. At the declared `>1e-12` force-vector difference threshold,
-265 of 12,916 candidate directed interactions on legacy-arm states and 245 of 12,842 on wrapped-arm
-states differed. Of those, 112 and 63 respectively changed from legacy force norm `<=1e-12` to
-wrapped norm `>1e-12`. These counts repeat directed pairs per simulation step; they are
-counterfactual kernel-sensitivity counts on the two recorded trajectories, not unique pairs or a
-population frequency. Per-episode counts are in the raw `interaction_counts.json` and
-`interaction_counts.md` files.
-
-The separate #9758 `surface_v3` rollout was also re-run through the existing `_rollout_v3` test
-helper with both explicit kernel selectors. The selector appeared in planner diagnostics, and the
-rollout values matched exactly across selectors. Standing-pedestrian minimum clearance/final speed
-were 0.397368619862 m / 0.015908807501 m/s at `dt=0.1` and 0.398551836827 m / 0.017524083907 m/s
-at `dt=0.05`; crossing-pedestrian minimum clearance was 0.117046958640 m / 0.194831537657 m.
-Clearance exceeded 0.05 m in each case and standing speed remained below 0.05 m/s. This rechecks
-only the opt-in `surface_v3` planner path, which is separate from the pair-kernel branch.
-
-Raw artifacts are retained in the author's private host store under the logical bundle key
-`issue9764-social-force-kernel-paired-diagnostic-450ca42b`; `SHA256SUMS` verifies all 44 listed
-files. The legacy and wrapped episode files have
-SHA-256 values `f4faf49f0646457eadb33da0700a9425d4f6292b6b64a7e7ed41300595ed11a6` and
-`9351259aa243a7ab78cadd2d819d86ae3fb7201504f306582e71f9c1da6c3a15`; the compact summary has
-SHA-256 `a9ce8f7ef9f4b21fb832f571bd021dde32328e075ad61978ca1a1670125572d3`. The `#9758` recheck
-receipt has SHA-256 `36a6944f5fc6f90914328377a2d6d45113cd17eafd92a9d8418501362d41c983`; the interaction
-count JSON and Markdown reports have SHA-256 `81c41f1c94d4b8fb51c36888f8ed8efb5ecc4fb6593d2f79a1cf5d0e89dd9e57` and
-`0d8ea181ed575631106ee149d7d3f2aae09e16fdcc2e783a267395987722130c`. These raw files remain
-local-host, `durable-required-private` diagnostic artifacts; they are not a published evidence bundle.
-An initial context-capture harness attempt wrote no episode rows because it read a step index that the
-runner helper does not accept; the failure and its empty outputs are preserved, and the corrected
-capture pass completed with all calls tagged and verified.
+The private bundle contains the raw episode rows, provenance receipts, logs, analyzer, comparison,
+manifest, and `SHA256SUMS` for all ten files. The legacy and wrapped episode files have SHA-256
+`ef231fb80c23b24a1e01f2d80ec4661c93687e2fd37ab91c4d098ad6f5b79a21` and
+`4b139f40bd5a3bf6ac1683d989e04643e4dfbf0366f31e437a48b2f8410bb02e`; the comparison
+has SHA-256 `e5cd2d275608a33f5dbc165e861f912e276e8118291e7b9e6a954fadf2bd0a6c`.
+`sha256sum -c SHA256SUMS` passed for the new bundle. This remains diagnostic-only, with no
+release-row equivalence or paper-facing claim.

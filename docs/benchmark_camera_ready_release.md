@@ -42,7 +42,7 @@ this release, including when calibration emits a warning.
 
 Use an immutable benchmark-data tag that carries the H600/S30 identity:
 
-- `paper-matrix-v2-h600-s30-<commit-sha12>`
+- `paper-matrix-v2-h600-s30-<full-40-character-commit-sha>`
 
 Keep software/package tags (for example, `0.0.3`) in their separate release
 lane. Do not derive a package version from the benchmark-data tag.
@@ -50,10 +50,14 @@ lane. Do not derive a package version from the benchmark-data tag.
 ## Zenodo Boundary
 
 The benchmark-data publication requires a fresh Zenodo concept and a new
-version DOI after the final bundle is validated. Do not reuse historical
-concepts `10.5281/zenodo.19482025` or `10.5281/zenodo.19563812`, and do not
-assume GitHub-to-Zenodo automation is enabled. Until a real record exists, keep
-the manifest DOI as a pending placeholder.
+version Digital Object Identifier (DOI). For a new v0.2 release, reserve its
+empty draft before campaign execution because the returned DOI is part of the
+resolved identity; upload files only after the GitHub tag and release assets
+pass exact readback.
+Do not reuse historical concepts `10.5281/zenodo.19482025` or
+`10.5281/zenodo.19563812`, and do not assume GitHub-to-Zenodo automation is
+enabled. Until a real record exists, keep the manifest DOI as a pending
+placeholder.
 
 That rule applies to a new scientific campaign. A derived-metadata-only repair
 of an already published campaign uses a new linked version inside that
@@ -176,6 +180,70 @@ as a blocked doctor result.
 
 ## Command Path
 
+0. Freeze the v0.2 source identity and reserve the empty draft before campaign
+execution. Do this once from the reviewed tooling checkout while the frozen
+source checkout is exact and clean; `bootstrap-metadata` verifies the tracked
+template, full-SHA tag, and first-parent base and leaves only the two DOI tokens
+pending in the description:
+
+```bash
+set -euo pipefail
+# Keep this file outside Git with mode 0600; never print its contents.
+ZENODO_TOKEN_FILE=/home/<user>/.config/robot-sf/zenodo.token
+FROZEN_SOURCE_ROOT=<absolute-untouched-source-checkout>
+TOOLING_ROOT=<reviewed-checkout-containing-the-Zenodo-CLI>
+RELEASE_PREFIX=paper-matrix-v2-h600-s30
+SOURCE_SHA="$(git -C "$FROZEN_SOURCE_ROOT" rev-parse --verify HEAD^{commit})"
+RELEASE_TAG="${RELEASE_PREFIX}-${SOURCE_SHA}"
+ZENODO_STATE="$FROZEN_SOURCE_ROOT/output/release/zenodo-deposition.json"
+BOOTSTRAP_METADATA="$FROZEN_SOURCE_ROOT/output/release/zenodo_metadata.bootstrap.json"
+RELEASE_IDENTITY="$FROZEN_SOURCE_ROOT/output/release/release_identity.resolved.json"
+ZENODO_METADATA="$FROZEN_SOURCE_ROOT/output/release/zenodo_metadata.resolved.json"
+TRACKED_RELEASE_TEMPLATE="$FROZEN_SOURCE_ROOT/configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml"
+mkdir -p "$FROZEN_SOURCE_ROOT/output/release"
+
+uv run --project "$TOOLING_ROOT" python \
+  "$TOOLING_ROOT/scripts/tools/resolve_benchmark_release_identity.py" \
+  bootstrap-metadata \
+  --template "$TRACKED_RELEASE_TEMPLATE" \
+  --output "$BOOTSTRAP_METADATA" \
+  --source-commit "$SOURCE_SHA" \
+  --release-tag "$RELEASE_TAG" \
+  --repository-root "$FROZEN_SOURCE_ROOT"
+
+# This POST allocates a DOI even if the draft remains unpublished. Never retry
+# an uncertain reservation; locate and recover that exact draft first.
+uv run --project "$TOOLING_ROOT" robot-sf release zenodo reserve \
+  --token-file "$ZENODO_TOKEN_FILE" \
+  --state "$ZENODO_STATE" \
+  --metadata "$BOOTSTRAP_METADATA"
+DEPOSITION_ID="$(jq -er '.deposition_id' "$ZENODO_STATE")"
+RESERVED_CONCEPT_DOI="10.5281/zenodo.$(jq -er '.concept_record_id' "$ZENODO_STATE")"
+RESERVED_VERSION_DOI="$(jq -er '.doi' "$ZENODO_STATE")"
+
+uv run --project "$TOOLING_ROOT" python \
+  "$TOOLING_ROOT/scripts/tools/resolve_benchmark_release_identity.py" generate \
+  --template "$TRACKED_RELEASE_TEMPLATE" \
+  --output "$RELEASE_IDENTITY" \
+  --source-commit "$SOURCE_SHA" \
+  --release-tag "$RELEASE_TAG" \
+  --concept-doi "$RESERVED_CONCEPT_DOI" \
+  --version-doi "$RESERVED_VERSION_DOI" \
+  --repository-root "$FROZEN_SOURCE_ROOT"
+uv run --project "$TOOLING_ROOT" python \
+  "$TOOLING_ROOT/scripts/tools/resolve_benchmark_release_identity.py" verify \
+  --identity "$RELEASE_IDENTITY" \
+  --repository-root "$FROZEN_SOURCE_ROOT"
+```
+
+Reproduce both generated metadata files and the resolved identity in a
+disposable cold checkout at the same repository-relative output paths before
+campaign admission. The generated identity is the manifest for campaign runs
+and the saved pre-tag doctor. If reusing an already-reserved draft, skip
+`reserve`; use only its reviewed DOI pair and deposition ID. Do not use the
+bootstrap repair mode for an existing draft unless its exact metadata was
+created from this bootstrap artifact.
+
 1. Dry-run validation + command plan:
 
 ```bash
@@ -186,7 +254,39 @@ uv run python scripts/tools/publish_camera_ready_release.py \
   --output-json output/benchmarks/camera_ready/<campaign_id>/reports/release_publish_plan.json
 ```
 
-2. Execute asset upload (first publication: create the draft release first):
+After campaign evidence is frozen and before step 2 creates the GitHub draft,
+run the passing pre-tag release doctor described in
+[`RELEASE.md`](RELEASE.md#publication). It checks that both the planned tag and
+release are unused, so save its JSON report and checksum before creating the
+draft. Also retain the exact local asset names, byte sizes, and
+SHA-256 digests while the bundle is available; those values are the readback
+contract after the GitHub release is published. Preserve these small receipts
+with durable release evidence before removing the worktree; `output/` alone is
+not durable.
+
+```bash
+set -euo pipefail
+mkdir -p output/release
+PUBLISH_PLAN=output/benchmarks/camera_ready/<campaign_id>/reports/release_publish_plan.json
+ARCHIVE_PATH="$(jq -er '.archive_path' "$PUBLISH_PLAN")"
+CHECKSUMS_PATH="$(jq -er '.checksums_path' "$PUBLISH_PLAN")"
+MANIFEST_PATH="$(jq -er '.manifest_path' "$PUBLISH_PLAN")"
+test -f "$ARCHIVE_PATH" && test -f "$CHECKSUMS_PATH" && test -f "$MANIFEST_PATH"
+{
+  wc -c -- "$ARCHIVE_PATH" "$CHECKSUMS_PATH" "$MANIFEST_PATH"
+  sha256sum -- "$ARCHIVE_PATH" "$CHECKSUMS_PATH" "$MANIFEST_PATH"
+} > output/release/github_assets_pre_tag.txt
+sha256sum output/release/github_assets_pre_tag.txt \
+  > output/release/github_assets_pre_tag.txt.sha256
+```
+
+Use the paths from the dry-run `release_publish_plan.json`, not the raw path
+strings in `campaign_summary.json`: the helper has already resolved each path
+against the validated campaign and repository roots and records the resulting
+absolute paths in its plan output.
+
+2. Execute asset upload into the draft (the draft does not yet materialize the
+Git tag):
 
 ```bash
 uv run python scripts/tools/publish_camera_ready_release.py \
@@ -216,58 +316,205 @@ planned `gh release create`/`gh release upload` commands without touching GitHub
 For an erratum, the detached `publication_custody.json` is also checked against
 the local archive, manifest, checksums, source SHA, and canonical custody fields
 before a draft can be created or reused.
-The helper never reserves, uploads to, or publishes Zenodo. Use the direct
-Zenodo CLI for the reserved deposition after the bundle has passed the
-independent cold check:
+
+After reviewing and publishing the GitHub draft through the approved release
+workflow, verify the tag and public release readback before any Zenodo file
+upload. Publishing the draft materializes the tag. Use the full source SHA and
+tag from the resolved release identity, not the current branch tip:
 
 ```bash
+set -euo pipefail
+SOURCE_SHA=<full source SHA from the resolved release identity>
+RELEASE_TAG=<exact tag from the resolved release identity>
+
+git fetch --no-tags origin \
+  "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+test "$(git rev-parse "${RELEASE_TAG}^{commit}")" = "$SOURCE_SHA"
+gh release view "$RELEASE_TAG" --repo ll7/robot_sf_ll7 \
+  --json tagName,isDraft,assets \
+  --jq '{tagName,isDraft,assets:[.assets[] | {name,size,state,digest}]}'
+```
+
+Require the exact tag and source SHA, `isDraft: false`, and exactly the
+archive, `checksums.sha256`, and `publication_manifest.json` assets. Each asset
+must have `state: uploaded`; compare its size and `sha256:` digest with the
+local asset inventory recorded before tag creation. Stop before Zenodo upload
+on any mismatch. Do not rerun `release doctor` here: its unused-tag failure is
+expected after publication and cannot replace this exact-tag/asset readback.
+
+The GitHub helper never reserves, uploads to, or publishes Zenodo. The draft
+and resolved DOI identity were established in step 0. For the first repair of a
+new bootstrap-reserved draft, pass the exact bootstrap file; after a successful
+repair, a retry preview omits that file and must report `already_matching`.
+
+After the exact GitHub tag, source commit, release visibility, and three assets
+have passed readback above, reconcile the same Zenodo draft reserved in step 0
+(or the already-existing reviewed draft, if one was reused) before uploading
+files. Do not reserve at this stage. If the draft or its local state is missing,
+stop and locate/recover the exact existing reservation; never create a
+replacement DOI to repair uncertain local state. Preview and, when required,
+repair the empty draft's version/date and only explicitly reviewed metadata
+drift, then `recover` the local state. Upload the archive and both companions,
+run `verify`, publish once, then run `verify` and the anonymous
+`audit-published` check. Run the commands below as separate operator steps,
+pausing after metadata preview to inspect the complete before/after diff before
+deciding whether to apply a repair.
+
+```bash
+set -euo pipefail
 # Keep this file outside Git with mode 0600; never print its contents.
 ZENODO_TOKEN_FILE=/home/<user>/.config/robot-sf/zenodo.token
-ZENODO_STATE=output/release/zenodo-deposition.json
-ZENODO_MANIFEST=configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml
-ZENODO_METADATA=configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.json
+FROZEN_SOURCE_ROOT=<absolute-untouched-source-checkout>
+TOOLING_ROOT=<reviewed-checkout-containing-the-Zenodo-CLI>
+ZENODO_STATE="$FROZEN_SOURCE_ROOT/output/release/zenodo-deposition.json"
+ZENODO_BOOTSTRAP_METADATA="$FROZEN_SOURCE_ROOT/output/release/zenodo_metadata.bootstrap.json"
+ZENODO_MANIFEST="$FROZEN_SOURCE_ROOT/output/release/release_identity.resolved.json"
+ZENODO_METADATA="$FROZEN_SOURCE_ROOT/output/release/zenodo_metadata.resolved.json"
+ZENODO_ARCHIVE=<exact-publication-bundle-archive-path>
+ZENODO_CHECKSUMS=<exact-publication-bundle-checksums-path>
+ZENODO_PUBLICATION_MANIFEST=<exact-publication-bundle-manifest-path>
+VERSION=<reviewed-release-version>
+PUBLICATION_DATE=<reviewed-YYYY-MM-DD>
 
-uv run robot-sf release zenodo reserve \
+cd "$TOOLING_ROOT"
+DEPOSITION_ID="$(jq -er '.deposition_id' "$ZENODO_STATE")"
+
+# Preview and validate this exact empty draft before recovering local state.
+# Stop if it is published, has files, names another concept/DOI, or has any
+# unreviewed metadata drift. For a fresh draft reserved in step 0, the bootstrap
+# input permits only replacement of the two DOI tokens and reviewed version/date.
+uv run robot-sf release zenodo repair-draft-metadata \
   --token-file "$ZENODO_TOKEN_FILE" \
-  --state "$ZENODO_STATE" \
-  --metadata "$ZENODO_METADATA"
+  --repository-root "$FROZEN_SOURCE_ROOT" \
+  --manifest "$ZENODO_MANIFEST" \
+  --metadata "$ZENODO_METADATA" \
+  --bootstrap-metadata "$ZENODO_BOOTSTRAP_METADATA" \
+  --deposition-id "$DEPOSITION_ID" \
+  --version "$VERSION" \
+  --publication-date "$PUBLICATION_DATE"
 
-# If this unpublished draft still exists but its local state was lost, recover
-# that exact deposition instead of reserving a second DOI. This performs one
-# authenticated read and fails closed on any manifest, metadata, DOI, or state drift.
+# Apply only after reviewing the complete DOI-token description diff, the
+# version/date overlay, all source identity values, and both metadata hashes.
+# Any unrelated drift or non-empty draft is a stop.
+uv run robot-sf release zenodo repair-draft-metadata \
+  --token-file "$ZENODO_TOKEN_FILE" \
+  --repository-root "$FROZEN_SOURCE_ROOT" \
+  --manifest "$ZENODO_MANIFEST" \
+  --metadata "$ZENODO_METADATA" \
+  --bootstrap-metadata "$ZENODO_BOOTSTRAP_METADATA" \
+  --deposition-id "$DEPOSITION_ID" \
+  --version "$VERSION" \
+  --publication-date "$PUBLICATION_DATE" \
+  --expected-bootstrap-metadata-sha256 <reviewed-bootstrap-metadata-sha256> \
+  --expected-remote-metadata-sha256 <reviewed-preview-digest> \
+  --expected-remote-source-tag <reviewed-preview-source-tag> \
+  --expected-remote-source-sha <reviewed-preview-source-sha> \
+  --expected-remote-base-sha <reviewed-preview-base-sha> \
+  --apply
+
+# Re-read the now-matching draft and write fresh local state before upload.
 uv run robot-sf release zenodo recover \
   --token-file "$ZENODO_TOKEN_FILE" \
   --state "$ZENODO_STATE" \
+  --repository-root "$FROZEN_SOURCE_ROOT" \
   --manifest "$ZENODO_MANIFEST" \
   --metadata "$ZENODO_METADATA" \
-  --deposition-id <existing-unpublished-deposition-id>
+  --deposition-id "$DEPOSITION_ID"
 
 uv run robot-sf release zenodo upload \
   --token-file "$ZENODO_TOKEN_FILE" \
   --state "$ZENODO_STATE" \
+  --repository-root "$FROZEN_SOURCE_ROOT" \
   --manifest "$ZENODO_MANIFEST" \
-  output/benchmarks/publication/<campaign_id>_publication_bundle.tar.gz
+  "$ZENODO_ARCHIVE" \
+  "$ZENODO_CHECKSUMS" \
+  "$ZENODO_PUBLICATION_MANIFEST"
 
 uv run robot-sf release zenodo verify \
   --token-file "$ZENODO_TOKEN_FILE" \
   --state "$ZENODO_STATE" \
+  --repository-root "$FROZEN_SOURCE_ROOT" \
   --manifest "$ZENODO_MANIFEST" \
-  --metadata "$ZENODO_METADATA"
+  --metadata "$ZENODO_METADATA" \
+  --expected-version "$VERSION" \
+  --expected-publication-date "$PUBLICATION_DATE"
 
 # Run only after acceptance and independent cold verification pass.
 uv run robot-sf release zenodo publish \
   --token-file "$ZENODO_TOKEN_FILE" \
   --state "$ZENODO_STATE" \
+  --repository-root "$FROZEN_SOURCE_ROOT" \
   --manifest "$ZENODO_MANIFEST" \
-  --metadata "$ZENODO_METADATA"
+  --metadata "$ZENODO_METADATA" \
+  --expected-version "$VERSION" \
+  --expected-publication-date "$PUBLICATION_DATE"
 
 # Mandatory post-publication check; require a passing published-record receipt.
 uv run robot-sf release zenodo verify \
   --token-file "$ZENODO_TOKEN_FILE" \
   --state "$ZENODO_STATE" \
+  --repository-root "$FROZEN_SOURCE_ROOT" \
   --manifest "$ZENODO_MANIFEST" \
-  --metadata "$ZENODO_METADATA"
+  --metadata "$ZENODO_METADATA" \
+  --expected-version "$VERSION" \
+  --expected-publication-date "$PUBLICATION_DATE"
 ```
+
+For a new bootstrap-reserved draft, repair may replace only the paired
+`{{concept_doi}}` and `{{version_doi}}` tokens with the exact DOIs frozen in the
+resolved identity, plus the Zenodo-only `version` and `publication_date`
+overlay. It requires the bootstrap file SHA-256, remote metadata preview SHA-256,
+and reviewed source tag/SHA/base values; all other metadata keys, description
+prose, relation inventory, deposition identity, unpublished state, and empty
+file inventory must match exactly before any PUT. The update response and a
+fresh GET must then match the resolved metadata and overlay exactly. It does not
+edit the resolved metadata file or its copy inside the immutable archive.
+Keep draft editing exclusive to this operator through the apply/readback step;
+the fresh pre-write read and PUT are separate remote requests.
+
+For a compatible draft that predates bootstrap reservation, omit
+`--bootstrap-metadata`; that existing repair path allows only reviewed source
+tag/SHA/base drift plus the same version/date overlay. If a draft was already
+repaired before an interrupted handoff, omit `--bootstrap-metadata` for the
+retry preview; require `already_matching` and skip `--apply` before continuing
+with `recover`. Record the preview and resulting metadata diff. Before upload,
+require the archive SHA-256 to match the frozen release identity and GitHub
+asset digest, then verify the extracted payload with
+`sha256sum -c checksums.sha256`; stop on any mismatch. Use the reviewed tooling
+checkout for the CLI and pass `--repository-root "$FROZEN_SOURCE_ROOT"` on
+each manifest-bound command so all operations validate the untouched
+exact-source identity. If the exact deposition or reserved DOI pair is already
+known, do not reserve a second one; use that reviewed identity and recover the
+same draft. If a successful reservation's response or local state write is
+uncertain, stop and locate that exact draft before proceeding—never retry the
+reservation blindly.
+
+### DOI resolution after publication
+
+A reserved version DOI is already bound to the draft but normally does not
+resolve through `doi.org` until Zenodo publishes the record. Do not make DOI
+resolver success a pre-publication gate. After the Zenodo `publish` request,
+run the post-publication `verify` above and the anonymous
+[`audit-published`](#cold-verification-and-exact-identity-checks) audit below;
+then check DOI resolution separately from the public record URL:
+
+```bash
+set -euo pipefail
+curl --location --max-time 30 --output /dev/null \
+  --write-out 'DOI resolver HTTP %{http_code}\n' \
+  "https://doi.org/<version-doi>"
+curl --max-time 30 --output /dev/null \
+  --write-out 'Zenodo record HTTP %{http_code}\n' \
+  "https://zenodo.org/records/<record-id>"
+```
+
+If `doi.org` returns 404 while the direct Zenodo record URL and public file
+audit succeed, report **“record public, DOI resolution pending”** and share
+`https://zenodo.org/records/<record-id>`. Do not submit `publish` again, create
+a `new-version`, edit the published record, or reserve a replacement DOI to
+work around resolver delay. If registration remains unresolved when you
+recheck after a delay, hand it to Zenodo support and leave the published
+record untouched.
 
 For the September 2026 derived-metadata successor, keep the generic v0.2
 manifest above out of the post-reservation commands and bind the reserved DOI
@@ -341,14 +588,17 @@ final remote revision or exact snapshot digest/state. `verify` is read-only
 and must check
 the title, dataset type, GPL-3.0-only license, creator union, exact source tag,
 and concept/version DOI distinction. `publish` is irreversible; never run it
-for a draft with missing files, unaccepted rows, or an unresolved DOI.
+for a draft with missing files, unaccepted rows, or an unbound or mismatched
+concept/version DOI. The reserved DOI itself need not resolve before
+publication; check resolver status separately afterward.
 The publisher performs a mandatory fresh draft verification immediately before
 the irreversible request. The documented legacy [Zenodo deposition actions
 API](https://developers.zenodo.org/#depositions-actions-publish) exposes no
 conditional compare-and-publish precondition, so a final time-of-check/time-of-use
 window remains. Run the authenticated `zenodo verify` command again immediately
 after publication and require its published-record receipt to pass before
-treating the DOI as accepted.
+treating the Zenodo record as accepted. DOI resolver status is a separate
+post-publication check.
 
 Disable or remove the specific GitHub-to-Zenodo webhook through repository
 settings or the approved GitHub API operation immediately before GitHub

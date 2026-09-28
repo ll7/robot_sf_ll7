@@ -59,6 +59,12 @@ _RELEASE_IDENTITY_TOKENS = {
     "{{concept_doi}}": "concept_doi",
     "{{version_doi}}": "version_doi",
 }
+_DOI_PENDING_TOKENS = frozenset({"{{concept_doi}}", "{{version_doi}}"})
+_BOOTSTRAP_IDENTITY_TOKENS = {
+    "{{release_tag}}": "release_tag",
+    "{{source_sha}}": "source_commit",
+    "{{latest_main_base_commit}}": "latest_main_base_commit",
+}
 DIAGNOSTIC_STRESS_RELEASE_KIND = "benchmark-stress-smoke"
 STRESS_SMOKE_CONTRACT_SCHEMA_VERSION = "hybrid-release-stress-smoke.v1"
 STRESS_SMOKE_SOURCE_POLICY = "exact-immutable-worktree-sha-required"
@@ -364,6 +370,36 @@ def _replace_identity_tokens(value: Any, replacements: Mapping[str, str]) -> Any
             resolved = resolved.replace(token, replacements[field])
         if re.search(r"\{\{[^{}]+\}\}", resolved):
             raise ValueError("resolved release identity retains an unresolved template token")
+        return resolved
+    return value
+
+
+def _replace_bootstrap_identity_tokens(
+    value: Any,
+    replacements: Mapping[str, str],
+) -> Any:
+    """Resolve source identity while retaining only the two reserved DOI slots.
+
+    Returns:
+        Copy-safe metadata whose DOI slots remain explicit bootstrap tokens.
+    """
+    if isinstance(value, dict):
+        resolved_mapping: dict[str, Any] = {}
+        for key, item in value.items():
+            resolved_key = _replace_bootstrap_identity_tokens(str(key), replacements)
+            if resolved_key in resolved_mapping:
+                raise ValueError("bootstrap identity token resolution creates a duplicate key")
+            resolved_mapping[resolved_key] = _replace_bootstrap_identity_tokens(item, replacements)
+        return resolved_mapping
+    if isinstance(value, list):
+        return [_replace_bootstrap_identity_tokens(item, replacements) for item in value]
+    if isinstance(value, str):
+        resolved = value
+        for token, field in _BOOTSTRAP_IDENTITY_TOKENS.items():
+            resolved = resolved.replace(token, replacements[field])
+        remaining = re.findall(r"\{\{[^{}]+\}\}", resolved)
+        if any(token not in _DOI_PENDING_TOKENS for token in remaining):
+            raise ValueError("bootstrap metadata contains an unsupported unresolved template token")
         return resolved
     return value
 
@@ -2990,6 +3026,111 @@ def _rollback_materialized_outputs(
         )
 
 
+def write_release_bootstrap_metadata(
+    *,
+    template_path: Path,
+    output_path: Path,
+    source_commit: str,
+    release_tag: str,
+    repository_root: Path | None = None,
+) -> dict[str, str]:
+    """Render DOI-pending Zenodo metadata for one exact, clean release source.
+
+    The output is suitable only for the first unbound Zenodo reservation. It
+    resolves the source SHA, first-parent base, and release tag from the
+    tracked v0.2 templates while preserving exactly one ``{{concept_doi}}``
+    and one ``{{version_doi}}`` token in the description. The final manifest
+    identity must still be generated after Zenodo returns those DOI values.
+
+    Returns:
+        Source identity and SHA-256 of the canonical bootstrap metadata file.
+    """
+    root = (repository_root or get_repository_root()).resolve()
+    template = _safe_repository_file(
+        Path(template_path), root, field_name="release identity template"
+    )
+    output = _safe_identity_output(Path(output_path), root, field_name="bootstrap metadata output")
+    _, _, metadata_template_bytes = _identity_template_payload(
+        template,
+        repository_root=root,
+    )
+    normalized_source = _require_clean_exact_checkout(
+        root,
+        source_commit=source_commit,
+        template_path=template,
+    )
+    normalized_tag = str(release_tag).strip()
+    _require_source_derived_release_tag(
+        root,
+        release_tag=normalized_tag,
+        source_commit=normalized_source,
+    )
+    latest_main_base_commit = _source_first_parent(root, normalized_source)
+    try:
+        metadata_template_payload = json.loads(metadata_template_bytes)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("publication metadata template must be valid UTF-8 JSON") from exc
+    if not isinstance(metadata_template_payload, dict):
+        raise ValueError("publication metadata template must be a JSON object")
+    bootstrap_payload = _replace_bootstrap_identity_tokens(
+        metadata_template_payload,
+        {
+            "release_tag": normalized_tag,
+            "source_commit": normalized_source,
+            "latest_main_base_commit": latest_main_base_commit,
+        },
+    )
+    if not isinstance(bootstrap_payload, dict):  # pragma: no cover - recursive shape guard
+        raise ValueError("bootstrap publication metadata must be a JSON object")
+    metadata = bootstrap_payload.get("metadata")
+    description = metadata.get("description") if isinstance(metadata, Mapping) else None
+    if not isinstance(description, str):
+        raise ValueError("bootstrap publication metadata must contain a description")
+    canonical_bytes = _canonical_json_bytes(bootstrap_payload)
+    canonical_text = canonical_bytes.decode("utf-8")
+    if any(description.count(token) != 1 for token in _DOI_PENDING_TOKENS) or any(
+        canonical_text.count(token) != 1 for token in _DOI_PENDING_TOKENS
+    ):
+        raise ValueError(
+            "bootstrap metadata must retain exactly one concept DOI and version DOI token"
+        )
+    metadata_sha256 = hashlib.sha256(canonical_bytes).hexdigest()
+    with tempfile.TemporaryDirectory(prefix="release-bootstrap-metadata-") as scratch:
+        scratch_path = Path(scratch) / "zenodo_metadata.bootstrap.json"
+        scratch_path.write_bytes(canonical_bytes)
+        try:
+            load_dataset_metadata(
+                scratch_path,
+                expected_source_tag=normalized_tag,
+                expected_metadata_sha256=metadata_sha256,
+            )
+        except ZenodoPublisherError as exc:
+            raise ValueError(f"bootstrap Zenodo metadata is invalid: {exc}") from exc
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    original = output.read_bytes() if output.is_file() else None
+    if original is not None and original != canonical_bytes:
+        raise ValueError(f"refusing to overwrite stale bootstrap metadata output: {output.name}")
+    _atomic_write_bytes(output, canonical_bytes)
+    try:
+        _require_clean_exact_checkout(
+            root,
+            source_commit=normalized_source,
+            template_path=template,
+        )
+    except (OSError, ValueError) as exc:
+        _rollback_materialized_outputs({output: original})
+        raise ValueError("release source changed while bootstrap metadata was written") from exc
+
+    return {
+        "source_commit": normalized_source,
+        "latest_main_base_commit": latest_main_base_commit,
+        "release_tag": normalized_tag,
+        "metadata_path": _repository_relative_value(output, root),
+        "metadata_sha256": metadata_sha256,
+    }
+
+
 def write_resolved_release_identity(
     *,
     template_path: Path,
@@ -3278,5 +3419,6 @@ __all__ = [
     "validate_release_planner_roster",
     "validate_stress_smoke_runtime_identity",
     "verify_resolved_release_identity",
+    "write_release_bootstrap_metadata",
     "write_resolved_release_identity",
 ]

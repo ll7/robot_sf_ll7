@@ -2814,6 +2814,14 @@ def _set_simulation_override_attr(
             attr,
             normalize_goal_completion_policy(overrides[attr]),
         )
+    elif attr == "robot_goal_sampling_policy":
+        from robot_sf.nav.map_config import normalize_robot_goal_sampling_policy  # noqa: PLC0415
+
+        setattr(
+            config.sim_config,
+            attr,
+            normalize_robot_goal_sampling_policy(overrides[attr]),
+        )
     elif attr in {
         "pedestrian_uncertainty_envelope_enabled",
         "oracle_force_trace_enabled",
@@ -2943,6 +2951,7 @@ def _apply_simulation_overrides(
         "pedestrian_uncertainty_alpha_mps",
         "goal_radius",
         "goal_completion_policy",
+        "robot_goal_sampling_policy",
         "pedestrian_model",
         "ttc_predictive_force",
         "zanlungo_collision_prediction",

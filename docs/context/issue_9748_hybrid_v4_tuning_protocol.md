@@ -52,18 +52,21 @@ The scenario identities, parameter values, and seed list are frozen by the
 tracked v1 manifests before tuning begins. At the pre-tuning gate, record the
 SHA-256 of the development campaign config and scenario manifest, the source
 commit, and the exact candidate config path/hash mapping in the tuning log.
-Any change to a scenario, seed, candidate config, or loader after that point
-requires a new protocol version and a fresh review. This implementation
+Any change to a scenario, seed, candidate config, loader, or runtime resolver
+after that point requires a new protocol version and a fresh review. This implementation
 intentionally records no run hash or tuning result.
 
 The source commit also binds the transitive files resolved from those inputs:
 included scenario YAML files, their referenced map files, and every candidate
 `base_config_path`. It also binds the canonical campaign and scenario loader
 implementations (`camera_ready/_config.py`, `_config_types.py`, `_util.py`, and
-`training/scenario_loader.py`). The validator checks their tracked bytes at
-both the frozen source commit and the current checkout. Changing an included
-scenario, map, inherited planner config, or loader therefore invalidates the
-log even when the direct manifest and candidate YAML hashes remain unchanged.
+`training/scenario_loader.py`) and runtime candidate-resolution modules
+(`map_runner_policies/map_runner_policy_resolution.py` and
+`policy_search_manifest.py`). The validator checks their tracked bytes at both
+the frozen source commit and the current checkout. Changing an included
+scenario, map, inherited planner config, loader, or candidate resolver therefore
+invalidates the log even when the direct manifest and candidate YAML hashes
+remain unchanged.
 
 ## Structured tuning-log contract
 

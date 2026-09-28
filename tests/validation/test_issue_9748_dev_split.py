@@ -633,6 +633,8 @@ def test_tuning_log_rejects_source_commit_sibling_to_log_commit(
         "robot_sf/benchmark/camera_ready/_config_types.py",
         "robot_sf/benchmark/camera_ready/_util.py",
         "robot_sf/training/scenario_loader.py",
+        "robot_sf/benchmark/map_runner_policies/map_runner_policy_resolution.py",
+        "robot_sf/benchmark/policy_search_manifest.py",
     ],
 )
 def test_tuning_log_rejects_changed_transitive_inputs_after_source_commit(

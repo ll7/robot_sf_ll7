@@ -144,6 +144,8 @@ _TUNING_LOADER_RELATIVE_PATHS = (
     "robot_sf/benchmark/camera_ready/_config_types.py",
     "robot_sf/benchmark/camera_ready/_util.py",
     "robot_sf/training/scenario_loader.py",
+    "robot_sf/benchmark/map_runner_policies/map_runner_policy_resolution.py",
+    "robot_sf/benchmark/policy_search_manifest.py",
 )
 
 

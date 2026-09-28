@@ -8,7 +8,11 @@ import numpy as np
 import pytest
 from pysocialforce import Simulator_v2 as Simulator
 from pysocialforce import forces
-from pysocialforce.config import SimulatorConfig
+from pysocialforce.config import (
+    SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1,
+    SOCIAL_FORCE_KERNEL_WRAPPED_V2,
+    SimulatorConfig,
+)
 from pysocialforce.map_config import MapDefinition
 from pysocialforce.ped_grouping import PedestrianGroupings, PedestrianStates
 
@@ -137,6 +141,68 @@ def test_social_force(generate_scene: Simulator):
             ]
         )
     )
+
+
+def test_social_force_kernel_versions_preserve_legacy_and_wrap_shortest_angle():
+    """The corrected scalar kernel is explicit and rotation-equivariant."""
+    position_difference = np.asarray([-2.0, -0.05])
+    velocity_difference = np.asarray([-1.2, 0.9])
+    parameters = (2, 3, 2.0, 0.35)
+
+    implicit_legacy = forces.social_force_ped_ped(
+        position_difference, velocity_difference, *parameters
+    )
+    explicit_legacy = forces.social_force_ped_ped(
+        position_difference, velocity_difference, *parameters, False
+    )
+    np.testing.assert_array_equal(implicit_legacy, explicit_legacy)
+
+    wrapped_reference = None
+    for angle in (0.0, 0.3, np.pi / 2.0, np.pi, -np.pi / 2.0):
+        rotation = np.asarray([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
+        force = forces.social_force_ped_ped(
+            position_difference @ rotation.T,
+            velocity_difference @ rotation.T,
+            *parameters,
+            True,
+        )
+        unrotated = np.asarray(force) @ rotation
+        if wrapped_reference is None:
+            wrapped_reference = unrotated
+        np.testing.assert_allclose(unrotated, wrapped_reference, rtol=0.0, atol=1e-12)
+    assert np.linalg.norm(wrapped_reference) > 1e-3
+
+    config = SimulatorConfig().social_force_config
+    assert str(config.kernel_version) == SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1
+    assert config.social_force_kernel_resolution_mode == "defaulted_missing"
+    config.kernel_version = SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    assert str(config.kernel_version) == SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    assert config.social_force_kernel_resolution_mode == "explicit"
+    with pytest.raises(ValueError, match="unsupported social-force kernel version"):
+        config.kernel_version = "unknown_v9"
+
+
+def test_social_force_config_selects_wrapped_pedestrian_simulator_kernel():
+    """The configured fast-pysf simulator path uses the explicit angle-kernel version."""
+    raw_states = np.zeros((2, 7))
+    raw_states[:, :4] = np.asarray([[0.0, 0.0, 0.0, 0.0], [2.0, 0.05, -1.2, 0.9]])
+
+    def populate(_sim_config: SimulatorConfig, _map_def: MapDefinition):
+        states = PedestrianStates(raw_states)
+        return states, PedestrianGroupings(states, {}), []
+
+    scene = Simulator(populate=populate)
+    config = scene.config.social_force_config
+    config.factor = 1.0
+    force = forces.DebuggableForce(forces.SocialForce(config, scene.peds))
+
+    config.kernel_version = SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1
+    legacy = force(debug=True)
+    config.kernel_version = SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    wrapped = force(debug=True)
+
+    assert np.linalg.norm(legacy[0]) < 1e-100
+    assert np.linalg.norm(wrapped[0]) > 1e-3
 
 
 def test_gil_releasing_social_force_preserves_output_and_allows_parallel_steps():

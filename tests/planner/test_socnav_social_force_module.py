@@ -1,6 +1,7 @@
 """Focused coverage for the extracted SocialForce planner-family module."""
 
 import numpy as np
+from pysocialforce.config import SOCIAL_FORCE_KERNEL_WRAPPED_V2
 
 from robot_sf.planner import socnav
 from robot_sf.planner import socnav_social_force as sf
@@ -54,3 +55,17 @@ def test_adapter_constructs_finite_action_via_facade() -> None:
     v, w = adapter.plan(obs)
     assert np.isfinite(v)
     assert np.isfinite(w)
+
+
+def test_kernel_provenance_is_absent_for_legacy_default_and_present_when_selected() -> None:
+    """Missing selectors keep legacy diagnostics unchanged; opt-in runs identify the kernel."""
+    legacy = sf.SocialForcePlannerAdapter(sf.SocNavPlannerConfig()).diagnostics()
+    assert "kernel_version" not in legacy
+    assert "social_force_kernel" not in legacy
+
+    wrapped = sf.SocialForcePlannerAdapter(
+        sf.SocNavPlannerConfig(social_force_kernel_version=SOCIAL_FORCE_KERNEL_WRAPPED_V2)
+    ).diagnostics()
+    assert wrapped["kernel_version"] == SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    assert wrapped["kernel_resolution_mode"] == "explicit"
+    assert wrapped["social_force_kernel"]["angle_wrap"] is True

@@ -309,6 +309,7 @@ def run_campaign(  # noqa: PLR0913
     compute_aggregates_with_ci: Callable[..., dict[str, Any]] | None = None,
     export_publication_bundle: Callable[..., Any] | None = None,
     arm_isolation: str | None = None,
+    allow_development_tuning: bool = False,
 ) -> dict[str, Any]:
     """Execute a camera-ready planner campaign and emit campaign artifacts.
 
@@ -330,17 +331,33 @@ def run_campaign(  # noqa: PLR0913
         export_publication_bundle: Optional publication bundle collaborator override.
         arm_isolation: Optional override for arm isolation mode ("in_process" or "subprocess").
             If None, uses cfg.arm_isolation (issue #4826).
+        allow_development_tuning: Explicit opt-in required for campaigns marked development-only.
 
     Returns:
         Campaign execution summary with output paths and high-level counters.
 
     Raises:
+        PermissionError: When a development-only campaign is run without explicit opt-in.
         OrcaRvo2PreflightError: When enabled ORCA-dependent planners require ``rvo2`` but it is
             not importable.
         RouteClearanceError: When any scenario route centerline lies closer to a static obstacle
             than the robot radius, making the route geometrically impossible to follow without
             collision.
     """
+    if cfg.development_only:
+        if (
+            not cfg.not_release_evidence
+            or cfg.evidence_class != "development_tuning_only"
+            or not cfg.claim_boundary
+        ):
+            raise ValueError("development-only campaign metadata is incomplete")
+        if not allow_development_tuning:
+            raise PermissionError(
+                "development-only campaign execution requires explicit authorization; "
+                "after the protocol is reviewed and frozen, pass allow_development_tuning=True"
+            )
+    elif allow_development_tuning:
+        raise ValueError("allow_development_tuning applies only to a development-only campaign")
     dependencies = _resolve_campaign_runtime_dependencies(
         prepare_campaign_preflight=prepare_campaign_preflight,
         run_batch=run_batch,

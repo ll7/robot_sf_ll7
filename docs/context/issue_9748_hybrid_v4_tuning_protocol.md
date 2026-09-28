@@ -55,19 +55,69 @@ SHAs in the tuning log. Any change to a scenario, seed, candidate config, or
 loader after that point requires a new protocol version and a fresh review.
 This implementation intentionally records no run hash or tuning result.
 
+The release side is pinned to the accepted 0.0.7 inputs:
+
+| Input | SHA-256 |
+| --- | --- |
+| Campaign config template `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml` | `7dc9a2dd9df8585593c9bc8ecc001bed0d2ddff4ebb3803dfb92e8dad8762881` |
+| Executed scenario matrix `configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml` | `03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c` |
+| Seed-set file `configs/benchmarks/seed_sets_v1.yaml` | `3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6` |
+| Canonical `paper_eval_s30` schedule (seeds 111–140) | `ecbca1eaa1e3c0615d4d9eec8b3d59ec8432529fd9398482250e6f1c7e0abfe1` |
+
+The checker verifies those bytes and the effective seed-set contents. It also
+checks every resolved release scenario row for a development-seed overlap, so
+a scenario fixture that introduces seed 1001–1030 fails even when its scenario
+IDs do not overlap.
+
 ## Structured tuning-log contract
 
-Each tuning log must be YAML or JSON with the following top-level shape:
+Each tuning log must be YAML or JSON with schema
+`issue_9748.tuning_log.v2`. It binds the campaign and scenario files, the
+accepted release inputs, and the two approved candidate templates to the
+checker output. The source commit must exist in the local Git object database
+and contain the exact frozen config, matrix, seed-set, and candidate bytes.
+Each trial records its approved candidate, base template hash, complete
+effective config snapshot and canonical hash, scenario identities, seeds, and
+a checksummed artifact file in a durable location outside the repository
+worktree. The checker reads that file and verifies its SHA-256. A remote run
+service URI by itself is insufficient because this offline checker cannot
+establish that the referenced run or artifact still exists. Candidate names
+are required; an arbitrary algorithm or an omitted candidate is rejected.
 
 ```yaml
-schema_version: issue_9748.tuning_log.v1
+schema_version: issue_9748.tuning_log.v2
+source_commit: 0123456789abcdef0123456789abcdef01234567
+input_bindings:
+  development_campaign_config_path: configs/benchmarks/issue_9748_hybrid_v4_dev_split_v1.yaml
+  development_campaign_config_sha256: <checker output>
+  development_scenario_matrix_path: configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml
+  development_scenario_matrix_sha256: <checker output>
+  release_campaign_config_path: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
+  release_campaign_config_sha256: <checker output>
+  release_scenario_matrix_path: configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml
+  release_scenario_matrix_sha256: <checker output>
+  release_seed_set_path: configs/benchmarks/seed_sets_v1.yaml
+  release_seed_set_file_sha256: <checker output>
+  release_seed_schedule_sha256: <checker output>
+  candidate_template_paths:
+    hybrid_rule_v4_fast_progress_static_escape_s30_h600_release: configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release.yaml
+    hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release: configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release.yaml
+  candidate_template_sha256:
+    hybrid_rule_v4_fast_progress_static_escape_s30_h600_release: <checker output>
+    hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release: <checker output>
 entries:
-  - candidate: hybrid_rule_v4_fast_progress_static_escape_s30_h600_release
+  - trial_id: trial-001
+    candidate: hybrid_rule_v4_fast_progress_static_escape_s30_h600_release
+    base_candidate_config_sha256: <checker output>
+    effective_candidate_config:
+      # Complete effective candidate config for this trial.
+      parameters: {example_parameter: 0.0}
+    effective_candidate_config_sha256: <canonical JSON SHA-256>
     scenario_ids:
       - issue_9748_dev_classic_doorway_medium
     seeds: [1001, 1002]
-    # Optional typed fields may include seed, scenario_seed, seed_range,
-    # resolved_seeds, scenario_id, or scenario_ids.
+    run_artifact_ref: file:///durable/artifacts/issue-9748/trial-001.tar.zst
+    run_artifact_sha256: <exact artifact SHA-256>
     notes: "Free-form rationale may mention the held-out range."
 ```
 
@@ -83,6 +133,13 @@ parsed as admissions, so mentioning held-out values does not create a false
 violation. Malformed logs, missing typed seed fields, and non-string structured
 scenario IDs fail closed.
 
+The effective config snapshot must hash to its declared digest, each base
+template digest must match an approved candidate, and the source commit must
+contain every frozen input byte. The run artifact URI must resolve to an
+existing file outside the checkout, and its recorded SHA-256 must match the
+file bytes. Copy remote artifacts to the durable shared artifact root before
+validating the log; do not substitute an unverifiable service URI.
+
 Run the checker with:
 
 ```bash
@@ -96,6 +153,13 @@ scenario loader and loads the campaign through the camera-ready config loader.
 Its success status means that the protocol is structurally valid; it is not
 evidence that tuning ran, that a candidate improved, or that a release arm is
 accepted.
+
+`load_campaign_config` retains the development-only and claim-boundary markers
+without adding them to historical dataclass serialization. The direct campaign
+runner refuses a development-only config unless the caller explicitly passes
+`--allow-development-tuning` (CLI) or `allow_development_tuning=True` (Python).
+That opt-in is for use only after the protocol is reviewed and frozen; it does
+not authorize a trial by itself or promote its output to release evidence.
 
 ## Held-out process and claim boundary
 

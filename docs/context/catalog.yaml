@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-09-25
+updated_at: 2026-09-28
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -40,6 +40,10 @@ entries:
   status: current
   freshness: maintained
   area: agent_workflow
+- path: docs/context/issue_9748_hybrid_v4_tuning_protocol.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
 - path: docs/context/issue_8829_compute_window_capacity_planner.md
   status: current
   freshness: maintained

@@ -126,6 +126,15 @@ def _config_hash_payload(cfg: Any) -> dict[str, Any]:
     if getattr(cfg, "tuning_run_provenance", None) is None:
         # Preserve hashes for legacy configs that predate the optional prospective block.
         payload.pop("tuning_run_provenance", None)
+    if getattr(cfg, "development_only", False):
+        payload.update(
+            {
+                "development_only": True,
+                "not_release_evidence": True,
+                "evidence_class": cfg.evidence_class,
+                "claim_boundary": cfg.claim_boundary,
+            }
+        )
     return _jsonable_repo_relative(payload)
 
 

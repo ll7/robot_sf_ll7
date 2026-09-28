@@ -7,7 +7,7 @@ objects to keep earlier import paths working without behavior changes.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -252,3 +252,42 @@ class CampaignConfig:
     # changed path after loading.
     source_config_path: Path | None = None
     source_config_sha256: str | None = None
+    # Issue #9748 development-only fields are InitVars to keep historical
+    # campaign serialization byte-stable when these keys are absent.
+    development_only_input: InitVar[bool] = field(default=False, kw_only=True)
+    not_release_evidence_input: InitVar[bool] = field(default=False, kw_only=True)
+    evidence_class_input: InitVar[str | None] = field(default=None, kw_only=True)
+    claim_boundary_input: InitVar[str | None] = field(default=None, kw_only=True)
+
+    def __post_init__(
+        self,
+        development_only_input: bool,
+        not_release_evidence_input: bool,
+        evidence_class_input: str | None,
+        claim_boundary_input: str | None,
+    ) -> None:
+        """Retain development execution metadata outside legacy dataclass payloads."""
+        object.__setattr__(self, "_development_only", development_only_input)
+        object.__setattr__(self, "_not_release_evidence", not_release_evidence_input)
+        object.__setattr__(self, "_evidence_class", evidence_class_input)
+        object.__setattr__(self, "_claim_boundary", claim_boundary_input)
+
+    @property
+    def development_only(self) -> bool:
+        """Whether this campaign is restricted to explicitly authorized tuning."""
+        return self._development_only
+
+    @property
+    def not_release_evidence(self) -> bool:
+        """Whether this campaign is forbidden from supporting release claims."""
+        return self._not_release_evidence
+
+    @property
+    def evidence_class(self) -> str | None:
+        """Return the configured evidence class when the campaign declares one."""
+        return self._evidence_class
+
+    @property
+    def claim_boundary(self) -> str | None:
+        """Return the declared claim boundary for development-only execution."""
+        return self._claim_boundary

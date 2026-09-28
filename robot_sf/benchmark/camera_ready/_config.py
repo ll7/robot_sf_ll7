@@ -1597,6 +1597,9 @@ def _assemble_campaign_config(
     Returns:
         Fully constructed campaign configuration dataclass.
     """
+    development_only, not_release_evidence, evidence_class, claim_boundary = (
+        _parse_development_execution_metadata(payload)
+    )
     return CampaignConfig(
         name=parsed.name,
         scenario_matrix_path=parsed.scenario_matrix_path,
@@ -1674,7 +1677,44 @@ def _assemble_campaign_config(
         ),
         source_config_path=config_path,
         source_config_sha256=source_config_sha256,
+        development_only_input=development_only,
+        not_release_evidence_input=not_release_evidence,
+        evidence_class_input=evidence_class,
+        claim_boundary_input=claim_boundary,
     )
+
+
+def _parse_development_execution_metadata(
+    payload: Mapping[str, Any],
+) -> tuple[bool, bool, str | None, str | None]:
+    """Validate and return development-only execution metadata.
+
+    Returns:
+        Development-only status, release-evidence prohibition, evidence class, and claim boundary.
+    """
+    development_only = payload.get("development_only", False)
+    if type(development_only) is not bool:
+        raise TypeError("Campaign 'development_only' must be a boolean when provided")
+    if not development_only:
+        if (
+            payload.get("not_release_evidence") is True
+            or payload.get("evidence_class") == "development_tuning_only"
+        ):
+            raise ValueError("development evidence metadata requires development_only: true")
+        return False, False, None, None
+
+    not_release_evidence = payload.get("not_release_evidence")
+    evidence_class = payload.get("evidence_class")
+    claim_boundary = payload.get("claim_boundary")
+    if not_release_evidence is not True:
+        raise ValueError("development-only campaign must declare not_release_evidence: true")
+    if evidence_class != "development_tuning_only":
+        raise ValueError(
+            "development-only campaign evidence_class must be 'development_tuning_only'"
+        )
+    if not isinstance(claim_boundary, str) or not claim_boundary.strip():
+        raise ValueError("development-only campaign must declare a non-empty claim_boundary")
+    return True, True, evidence_class, claim_boundary.strip()
 
 
 def load_campaign_config(path: Path, *, repository_root: Path | None = None) -> CampaignConfig:

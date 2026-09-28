@@ -86,6 +86,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Execution mode: full run or preflight-only artifact generation.",
     )
     parser.add_argument(
+        "--allow-development-tuning",
+        action="store_true",
+        help=(
+            "Explicitly authorize execution of a development-only tuning campaign after its "
+            "protocol has been reviewed and frozen. This does not promote results to release evidence."
+        ),
+    )
+    parser.add_argument(
         "--checkpoint-preflight-mode",
         choices=("metadata_only", "enforced_staged"),
         default="metadata_only",
@@ -177,15 +185,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 ),
             }
         else:
-            result = run_campaign(
-                cfg,
-                output_root=args.output_root,
-                label=args.label,
-                campaign_id=args.campaign_id,
-                skip_publication_bundle=bool(args.skip_publication_bundle),
-                invoked_command=invoked_command,
-                arm_isolation=args.arm_isolation,
-            )
+            run_options = {
+                "output_root": args.output_root,
+                "label": args.label,
+                "campaign_id": args.campaign_id,
+                "skip_publication_bundle": bool(args.skip_publication_bundle),
+                "invoked_command": invoked_command,
+                "arm_isolation": args.arm_isolation,
+            }
+            if args.allow_development_tuning:
+                run_options["allow_development_tuning"] = True
+            result = run_campaign(cfg, **run_options)
     except OrcaRvo2PreflightError as exc:
         result = {
             "mode": args.mode,

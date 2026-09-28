@@ -5,6 +5,11 @@ safety strata, development-only calibration, mandatory weight-family diagnostics
 and the boundary against human-comfort or deployment claims:
 [snqi_v2_spec.md](snqi_v2_spec.md).
 
+Issue #9748 hybrid v4 tuning split: author-approved scenario-parameter variants,
+separate development seeds, pinned 0.0.7 release inputs, hash-bound tuning logs,
+and an explicit development-only execution gate:
+[issue_9748_hybrid_v4_tuning_protocol.md](issue_9748_hybrid_v4_tuning_protocol.md).
+
 Issue #9762 versioned goal-zone route-margin successors: historical SVG, registry,
 waiver, and 0.0.7 input bytes remain unchanged; the future matrix verifies robot-radius
 margins through the scenario loader:

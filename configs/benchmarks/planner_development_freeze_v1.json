@@ -1,0 +1,43 @@
+{
+  "schema_version": "planner-development-freeze.v1",
+  "stage": "pre-tuning definition freeze",
+  "author_decision": "https://github.com/ll7/robot_sf_ll7/issues/9748#issuecomment-5864715937",
+  "registered_on": "2026-09-28",
+  "source_commit": "6fb2cfdd9fdad68858c9559de0170a0e7aca5e3f",
+  "review_requirement": "Materialized definitions must be reviewed and merged before tuning. This record does not assert review approval or a final planner freeze.",
+  "split_config": "configs/benchmarks/planner_development_split_v1.yaml",
+  "split_config_sha256": "fad29a4956aceac5e5289ce86ec1c2d6648b28f29fcbc67a1ad7dc9bfcc59d52",
+  "scenario_file": "configs/benchmarks/planner_tuning/development_scenarios_v1.yaml",
+  "scenario_file_sha256": "c1efbfc1a8226562aa5748c55adcb8eee66432d7db29a779b64b85c10069c198",
+  "row_hash_encoding": "SHA-256 of UTF-8 JSON, sort_keys=True, separators=(comma, colon), ensure_ascii=False, allow_nan=False",
+  "variants": [
+    {
+      "name": "dev_v1__classic_doorway_medium",
+      "source_scenario": "classic_doorway_medium",
+      "definition_sha256": "f85519488c0bd768f1ea19bdbcb5c1f8d0de483973c0ee7ad7169c6e45a7ef34",
+      "map_file": "maps/svg_maps/classic_doorway.svg",
+      "map_git_blob_sha1": "1d41fe2ea0e704337143367e45501a41d85b4778"
+    },
+    {
+      "name": "dev_v1__classic_group_crossing_medium",
+      "source_scenario": "classic_group_crossing_medium",
+      "definition_sha256": "6ad1db4ff3b53da53f02ae52095b8e0796128704ef3d5821db8ec090ab9db637",
+      "map_file": "maps/svg_maps/classic_group_crossing.svg",
+      "map_git_blob_sha1": "4d622d60a96c50904f024800b8ca7eab4667cdae"
+    },
+    {
+      "name": "dev_v1__francis2023_perpendicular_traffic",
+      "source_scenario": "francis2023_perpendicular_traffic",
+      "definition_sha256": "230b2577442f48d8f1980878ee4f17958e7ebfbedf1318518208cfe86d8fb267",
+      "map_file": "maps/svg_maps/francis2023/francis2023_perpendicular_traffic.svg",
+      "map_git_blob_sha1": "357ef43b94d4376e306b913ed0d42b1d44d35404"
+    },
+    {
+      "name": "dev_v1__francis2023_crowd_navigation",
+      "source_scenario": "francis2023_crowd_navigation",
+      "definition_sha256": "62b0ac29bdbd725433289730a3b926d0fc4d3afcd9df507ee60e21d62ea19be2",
+      "map_file": "maps/svg_maps/francis2023/francis2023_crowd_navigation.svg",
+      "map_git_blob_sha1": "37720d5cfdae0d0d5d30f75aa52633cead9d7b36"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "schema_version": "planner-tuning-log.v1",
+  "split": "planner_development_v1",
+  "scenario_file_sha256": "c1efbfc1a8226562aa5748c55adcb8eee66432d7db29a779b64b85c10069c198",
+  "trials": []
+}

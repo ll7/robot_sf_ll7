@@ -1,0 +1,10 @@
+# Split contract, not a runnable planner campaign or a release manifest.
+schema_version: planner-development-split.v1
+name: planner_development_v1
+purpose: planner_tuning
+paper_facing: false
+scenario_matrix: configs/benchmarks/planner_tuning/development_scenarios_v1.yaml
+seed_policy:
+  mode: fixed-list
+  seeds: [1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014, 1015, 1016, 1017, 1018, 1019, 1020, 1021, 1022, 1023, 1024, 1025, 1026, 1027, 1028, 1029, 1030]
+freeze_manifest: configs/benchmarks/planner_development_freeze_v1.json

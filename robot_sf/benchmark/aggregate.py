@@ -34,7 +34,7 @@ from robot_sf.benchmark.errors import (
 from robot_sf.benchmark.grouping import EFFECTIVE_REPORT_GROUP_KEY, resolve_report_group_key
 from robot_sf.benchmark.metric_layers import MetricSourceBinding  # noqa: TC001
 from robot_sf.benchmark.metrics import snqi as snqi_fn
-from robot_sf.benchmark.spawn_validity import record_has_spawn_overlap, spawn_validity_counts
+from robot_sf.benchmark.spawn_validity import record_has_invalid_spawn, spawn_validity_counts
 from robot_sf.benchmark.thresholds import validate_threshold_parameter_consistency
 
 if TYPE_CHECKING:
@@ -253,12 +253,12 @@ def _record_is_evidence_eligible(record: dict[str, Any]) -> bool:
     ``evidence_eligible=false`` in its structured provenance. Its diagnostics
     remain available in episode JSONL, but its metrics must not enter aggregate
     evidence summaries (issue #6190). Records without that explicit marker keep
-    the legacy eligible behavior. Rows marked invalid for a spawn overlap
-    (issue #9725) are excluded the same way.
+    the legacy eligible behavior. Rows marked invalid for a spawn overlap or
+    unmeasured reset clearance are excluded the same way (issues #9725/#9861).
     """
-    if record_has_spawn_overlap(record):
-        # Issue #9725: a reset or respawn overlap is a simulator spawn defect; the
-        # row stays in episode JSONL but must not enter planner rates.
+    if record_has_invalid_spawn(record):
+        # Issues #9725/#9861: an invalid or unmeasured spawn stays in episode
+        # JSONL but must not enter planner rates.
         return False
     algorithm_metadata = record.get("algorithm_metadata")
     if not isinstance(algorithm_metadata, dict):
@@ -966,8 +966,9 @@ def _compute_aggregates_and_contributors(  # noqa: PLR0913
             "policy": (
                 "Rows with algorithm_metadata.foresight_prediction.evidence_eligible=false "
                 "are excluded from benchmark evidence aggregation. Rows with "
-                "spawn_validity.invalid_run=true (invalid_reason=spawn_overlap) are "
-                "excluded as simulator spawn defects."
+                "spawn_validity.invalid_run=true are excluded when a reset "
+                "overlaps, reset clearance is unavailable, or a respawn collision "
+                "is attributed to the simulator."
             ),
         },
         "spawn_validity": spawn_validity_meta,

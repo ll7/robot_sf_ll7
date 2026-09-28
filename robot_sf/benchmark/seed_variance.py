@@ -19,8 +19,7 @@ from robot_sf.benchmark.aggregate import (
     observation_track_group_label,
 )
 from robot_sf.benchmark.grouping import resolve_report_group_key
-from robot_sf.benchmark.spawn_validity import record_has_spawn_overlap
-from robot_sf.nav.spawn_clearance import SPAWN_OVERLAP_INVALID_REASON
+from robot_sf.benchmark.spawn_validity import record_has_invalid_spawn
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -388,8 +387,8 @@ def build_seed_variability_rows(
     ] = defaultdict(lambda: defaultdict(list))
 
     for record in records:
-        if record_has_spawn_overlap(record):
-            # Issue #9725: spawn-overlap rows are simulator defects, not seed variance.
+        if record_has_invalid_spawn(record):
+            # Issues #9725/#9861: invalid or unmeasured starts are not seed variance.
             continue
         scenario_id = str(record.get("scenario_id") or "unknown")
         planner_key = str(
@@ -539,8 +538,8 @@ def build_seed_episode_rows(
         For canonical per-episode collision status, consumers should read
         ``outcome.collision_event`` from source ``episodes.jsonl``.
 
-    Rows carry ``invalid_run``/``invalid_reason``; spawn-overlap rows (issue #9725)
-    are listed but must be dropped before computing any rate, see
+    Rows carry ``invalid_run``/``invalid_reason``; invalid spawn rows are listed
+    but must be dropped before computing any rate, see
     :func:`seed_episode_row_is_valid`.
 
     Returns:
@@ -599,11 +598,13 @@ def build_seed_episode_rows(
                     "near_miss": _coerce_float(flat.get("near_misses")),
                     "time_to_goal": _coerce_float(flat.get("time_to_goal_norm")),
                     "snqi": _coerce_float(flat.get("snqi")),
-                    # Issue #9725: spawn-overlap rows stay listed for traceability but
-                    # must not enter rates; readers filter with seed_episode_row_is_valid.
-                    "invalid_run": record_has_spawn_overlap(record),
+                    # Invalid spawn rows stay listed for traceability but must not
+                    # enter rates; readers filter with seed_episode_row_is_valid.
+                    "invalid_run": record_has_invalid_spawn(record),
                     "invalid_reason": (
-                        SPAWN_OVERLAP_INVALID_REASON if record_has_spawn_overlap(record) else ""
+                        record.get("spawn_validity", {}).get("invalid_reason")
+                        if record_has_invalid_spawn(record)
+                        else ""
                     ),
                     **_taxonomy_from_record(record, flat),
                     **_interaction_exposure_from_flat(flat),

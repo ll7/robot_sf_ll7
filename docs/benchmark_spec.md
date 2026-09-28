@@ -301,6 +301,12 @@ Full details live in
 * `outcome.collision_event`: canonical per-episode collision event flag for new episode outputs.
 * `event_ledger.collision_events`: typed exact collision-event records (`EpisodeEventLedger.v2`)
   carrying partner type/id, collision time, relative contact speed, and source provenance.
+* `spawn_validity.v2`: reset overlap and unavailable reset clearance invalidate an episode
+  regardless of its observed route outcome. Attributed route-end respawn contact invalidates
+  an incomplete route. Invalid rows remain in raw episode records with their reason but are
+  excluded from nominal rates and SNQI-v2 calibration. The event ledger preserves an observed
+  `goal_reached` alongside `invalid_run` only when the versioned spawn block explains the
+  invalid start; that pair is not a successful benchmark row.
 * `metrics.collisions`: collision count metric based on distance thresholds. For schema v1 episode
   outputs it must agree with `outcome.collision_event`: positive when the canonical event is true
   and zero when the canonical event is false.

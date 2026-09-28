@@ -484,6 +484,8 @@ Primary locations:
   + `campaign.started_at_utc`
   + `campaign.finished_at_utc`
   + `campaign.runtime_sec`
+  + `campaign.total_episodes` (retained episode JSONL rows)
+  + `campaign.episodes_written_this_invocation`
   + `campaign.episodes_per_second`
   + `runs[].started_at_utc`
   + `runs[].finished_at_utc`
@@ -498,7 +500,11 @@ Primary locations:
   + `started_at_utc`
   + `finished_at_utc`
   + `runtime_sec`
+  + `total_episodes`
+  + `episodes_written_this_invocation`
   + `episodes_per_second`
+  + `throughput_definition` (campaign-wide newly written rows across planner arms,
+    not per-arm throughput)
   + `seed_policy.*`
   + `preflight_artifacts.*`
 * `output/benchmarks/camera_ready/<campaign_id>/preflight/validate_config.json`
@@ -512,6 +518,40 @@ Primary locations:
 * `output/benchmarks/camera_ready/<campaign_id>/reports/campaign_report.md`
   + command in header
   + per-planner timing columns in the summary table
+
+Per-arm `runs[].summary.runtime_sec` and `episodes_per_second` bracket the actual `run_batch`
+work and its status classification in both in-process and subprocess isolation modes. The timer
+starts immediately before batch execution and is sampled after it returns; the campaign-level
+`runtime_sec` remains a wider interval from preflight through the outcome snapshot, as described
+below. A cached `skip-complete` arm retains its saved per-arm timing/rate as historical data and
+reports zero `episodes_written_this_invocation` for the current campaign; it does not rewrite the
+cached `summary.json`.
+
+In `run_meta.json`, `episodes_per_second` is the campaign-wide count of rows newly written during
+this invocation divided by the recorded campaign runtime:
+`episodes_written_this_invocation / runtime_sec`. The numerator sums each planner-arm run's
+`summary.episodes_written_this_invocation`; on a resumed partial arm this is the number of rows
+added by this invocation, and a fully cached `skip-complete` arm contributes zero even when its
+stored `summary.written` is nonzero from an earlier invocation. `total_episodes` separately counts
+all serialized episode rows retained in the arm JSONL artifacts, including rows from prior
+invocations. Both values count rows, not necessarily distinct logical episode identities.
+The campaign arm rollup uses the same distinction: `episodes_written` is this invocation's write
+count and `episodes_total` is the retained-row count. The Markdown report labels these columns
+`written this invocation` and `retained rows`; legacy summaries without the explicit invocation
+field use their available `written` count as a compatibility fallback, then the retained total for
+older summaries that have no `written` field. Current campaign paths normalize cached summaries
+with an explicit zero before rollup.
+`throughput_definition` names the numerator, retained-count, and denominator fields, identifies
+the numerator unit as `episode_rows`, and sets its scope to `campaign_all_planner_arms`; the rate
+is not an individual planner-arm throughput value. Its declared unit is `episode_rows/second`.
+This records the operational rate basis and does not replace per-run status or benchmark-evidence
+gates.
+The current denominator semantics are `campaign_elapsed_through_outcome_snapshot`: monotonic
+elapsed time starts immediately before campaign preflight and includes planner execution, optional
+SNQI-v2 row enrichment when enabled (including its writes), post-run integrity/fairness, and initial
+table/breakdown writes; it is sampled for the outcome snapshot after those stages. It excludes later
+diagnostic/report and publication-finalization writes, so it is not end-to-end command wall time.
+Keep this descriptor aligned with the outcome-snapshot boundary if the producer lifecycle moves.
 
 ## Fixed-Scenario Multi-Seed Variability
 

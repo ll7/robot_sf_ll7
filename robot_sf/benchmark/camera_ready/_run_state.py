@@ -381,6 +381,61 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
 _MAX_FIRST_ERROR_LEN = 200
 
 
+def _episode_jsonl_snapshot(path: Path) -> tuple[int, int, int, int, int] | None:
+    """Return the file identity needed to measure rows appended by one runner call."""
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return None
+    if not path.is_file():
+        return None
+    return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns
+
+
+def _count_episode_rows_written_since(
+    path: Path,
+    before: tuple[int, int, int, int, int] | None,
+) -> int:
+    """Count completed JSONL rows written before a runner failure.
+
+    Returns:
+        Number of newline-terminated rows added since the snapshot.
+    """
+    after = _episode_jsonl_snapshot(path)
+    if after is None or before == after:
+        return 0
+
+    start_offset = 0
+    if before is not None and before[:2] == after[:2] and after[2] >= before[2]:
+        start_offset = before[2]
+
+    with path.open("rb") as handle:
+        handle.seek(start_offset)
+        appended = handle.read()
+    # The benchmark writer terminates each serialized record with a newline;
+    # an incomplete final fragment is not a completed episode row.
+    return appended.count(b"\n")
+
+
+def _arm_episode_counts(summary: Mapping[str, Any]) -> tuple[int, int]:
+    """Return invocation-written and retained row counts for one arm."""
+    legacy_written_value = summary.get("written")
+    invocation_written_value = summary.get("episodes_written_this_invocation")
+    if invocation_written_value is None:
+        invocation_written_value = legacy_written_value
+    if invocation_written_value is None:
+        invocation_written_value = summary.get("episodes_total")
+    episodes_written = int(invocation_written_value) if invocation_written_value is not None else 0
+
+    retained_value = summary.get("episodes_total")
+    if retained_value is None:
+        retained_value = legacy_written_value
+    if retained_value is None:
+        retained_value = episodes_written
+    episodes_total = int(retained_value) if retained_value is not None else 0
+    return episodes_written, episodes_total
+
+
 def _build_arm_rollup(run_entries: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """Build per-arm rollup for the top-level campaign summary.
 
@@ -397,10 +452,7 @@ def _build_arm_rollup(run_entries: Sequence[Mapping[str, Any]]) -> list[dict[str
         summary = entry.get("summary") or {}
         failures = summary.get("failures") or []
         status = str(entry.get("status", "unknown"))
-        written_value = summary.get("written")
-        if written_value is None:
-            written_value = summary.get("episodes_total")
-        episodes_written = int(written_value) if written_value is not None else 0
+        episodes_written, episodes_total = _arm_episode_counts(summary)
         failed_jobs_value = summary.get("failed_jobs")
         episodes_failed = int(failed_jobs_value) if failed_jobs_value is not None else 0
 
@@ -430,6 +482,7 @@ def _build_arm_rollup(run_entries: Sequence[Mapping[str, Any]]) -> list[dict[str
             "kinematics": str(planner_info.get("kinematics", "unknown")),
             "status": status,
             "episodes_written": episodes_written,
+            "episodes_total": episodes_total,
             "episodes_failed": episodes_failed,
         }
         if first_error is not None:

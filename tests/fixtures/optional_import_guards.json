@@ -6,7 +6,7 @@
     "ModuleNotFoundError"
   ],
   "spelling_key": "Caught exception type names, sorted and joined by '+'. The 'as <alias>' name is intentionally NOT part of the key.",
-  "total_guards": 132,
+  "total_guards": 131,
   "spellings": {
     "AttributeError+ImportError": {
       "count_ceiling": 3,
@@ -17,7 +17,7 @@
       "samples": [
         "robot_sf/baselines/sicnav.py:378",
         "robot_sf/benchmark/latency/latency_stress.py:826",
-        "robot_sf/planner/socnav_base.py:890"
+        "robot_sf/planner/socnav_base.py:1051"
       ]
     },
     "AttributeError+ImportError+IndexError+KeyError+OSError+RuntimeError+TypeError+ValueError": {
@@ -57,7 +57,7 @@
       "blessed": true,
       "note": "Blessed broad catch: defensive best-effort boundary. Very broad; do not extend further without strong justification.",
       "samples": [
-        "robot_sf/planner/socnav_base.py:755"
+        "robot_sf/planner/socnav_base.py:916"
       ]
     },
     "AttributeError+ImportError+OSError": {
@@ -187,9 +187,9 @@
         "robot_sf/planner/ompl_smoke.py:42",
         "robot_sf/planner/ompl_smoke.py:254",
         "robot_sf/planner/recurrent_ppo_learned_adapter.py:40",
-        "robot_sf/planner/socnav.py:93",
-        "robot_sf/planner/socnav.py:101",
-        "robot_sf/planner/socnav.py:106",
+        "robot_sf/planner/socnav.py:96",
+        "robot_sf/planner/socnav.py:104",
+        "robot_sf/planner/socnav.py:109",
         "robot_sf/planner/socnav_prediction.py:129",
         "robot_sf/planner/theta_star_v2.py:34",
         "robot_sf/render/audit_workbench_launch.py:336",
@@ -217,16 +217,6 @@
         "robot_sf/benchmark/cli.py:3403",
         "robot_sf/benchmark/full_classic/visual_deps.py:45",
         "robot_sf/benchmark/orca_preflight.py:91"
-      ]
-    },
-    "ImportError+OSError+RuntimeError+ValueError": {
-      "count_ceiling": 1,
-      "has_as_count": 1,
-      "pragma_no_cover_count": 0,
-      "blessed": true,
-      "note": "Blessed broad catch: defensive ingest boundary. Review carefully.",
-      "samples": [
-        "robot_sf/benchmark/camera_ready/resource_lifecycle.py:284"
       ]
     },
     "ImportError+ParquetDependencyError": {
@@ -275,7 +265,7 @@
       "blessed": true,
       "note": "Pure optional-import (ModuleNotFoundError spelling). Prefer robot_sf.common.optional_import.try_import for new plain cases.",
       "samples": [
-        "robot_sf/benchmark/parquet_export.py:24",
+        "robot_sf/benchmark/parquet_export.py:25",
         "robot_sf/common/hardware.py:129",
         "robot_sf/planner/learned_gmm_predictor.py:97",
         "robot_sf/planner/learned_short_horizon_predictor.py:427",

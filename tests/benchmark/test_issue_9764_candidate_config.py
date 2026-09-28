@@ -32,15 +32,29 @@ def test_versioned_candidate_resolves_wrapped_kernel_on_both_sides() -> None:
 
 
 def test_007_inputs_remain_byte_identical() -> None:
-    """The candidate must not alter frozen scenario or planner inputs."""
+    """Frozen 0.0.7 inputs remain pinned separately from the mutable 0.0.8 template."""
     import hashlib
 
     root = Path(__file__).resolve().parents[2]
+    release_manifest = yaml.safe_load(
+        (root / "configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
     expected = {
         "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml": "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c",
         "configs/algos/social_force_resolution_independent_v2.yaml": "4d32a90dd58c3e0273c175ee03d4de018e0d370e8a3892230942d21ca4a5a81d",
-        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml": "7dc9a2dd9df8585593c9bc8ecc001bed0d2ddff4ebb3803dfb92e8dad8762881",
+        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml": "aa3057faeeefbd2ced41e3e093da32d1705270330cb1c124bc0b3558f8f88afd",
     }
+    assert release_manifest["canonical_campaign_config"] == (
+        "../paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml"
+    )
+    assert (
+        release_manifest["campaign_config_sha256"]
+        == expected[
+            "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml"
+        ]
+    )
     for path, digest in expected.items():
         assert hashlib.sha256((root / path).read_bytes()).hexdigest() == digest
 

@@ -172,6 +172,26 @@ def _checkpoint_provenance() -> list[dict[str, Any]]:
 
 def _native_outcome(identity: dict[str, Any], packet: dict[str, Any]) -> dict[str, Any]:
     metrics = _protocol_metrics()
+    controls = identity["runtime_controls"]
+    target_speed = controls.get("desired_speed_mean")
+    target_std = controls.get("desired_speed_std")
+    realized_speed = 0.5 if target_speed is None else target_speed
+    diagnostics = {
+        "configured_desired_speed_mean_m_s": target_speed,
+        "configured_desired_speed_std_m_s": target_std,
+        "realized_desired_speed_mean_m_s": realized_speed,
+        "realized_desired_speed_std_m_s": 0.0 if target_std is None else target_std,
+        "initial_spawn_speed_mean_m_s": 0.5,
+        "initial_spawn_speed_peak_m_s": 0.5,
+        "time_to_desired_speed_target_seconds": None if target_speed is None else 1.0,
+        "acceleration_transient_steps": None if target_speed is None else 10,
+        "desired_speed_activation_fraction": None if target_speed is None else 1.0,
+        "runtime_max_speed_m_s_by_pedestrian": {"p0": realized_speed},
+        "initial_spawn_velocity_xy_by_pedestrian": {"p0": [0.5, 0.0]},
+        "final_post_integration_velocity_xy_by_pedestrian": {
+            "p0": [realized_speed, 0.0]
+        },
+    }
     return {
         "identity_key": identity["identity_key"],
         "terminal_status": campaign.SUCCESS_STATUS,
@@ -182,6 +202,7 @@ def _native_outcome(identity: dict[str, Any], packet: dict[str, Any]) -> dict[st
             "scenario_source_sha256": identity["scenario_source_sha256"],
             "regime_id": identity["regime_id"],
             "planner_id": identity["planner_id"],
+            "planner_algorithm": "fake-native-planner",
             "planner_config_sha256": identity["planner_config_sha256"],
             "seed": identity["seed"],
             "horizon_steps": identity["horizon_steps"],
@@ -198,6 +219,9 @@ def _native_outcome(identity: dict[str, Any], packet: dict[str, Any]) -> dict[st
             "intervention_status": (
                 "not_applicable" if identity["regime_id"] == "legacy_default" else "activated"
             ),
+            "diagnostics": diagnostics,
+            "trace_sha256": "d" * 64,
+            "checkpoint_provenance": _checkpoint_provenance(),
             "metrics": metrics,
         },
     }
@@ -308,6 +332,23 @@ def test_fake_native_runtime_accounts_all_rows_once() -> None:
     assert all(row["metrics"] == _protocol_metrics() for row in report["rows"])
 
 
+@pytest.mark.parametrize("missing_field", ("diagnostics", "trace_sha256", "checkpoint_provenance"))
+def test_accounting_rejects_native_success_without_complete_provenance(
+    missing_field: str,
+) -> None:
+    packet = _packet()
+    outcomes = [_native_outcome(identity, packet) for identity in packet["identities"]]
+    outcomes[0]["provenance"].pop(missing_field)
+
+    report = campaign.account_production_rows(
+        packet, outcomes, source_commit=packet["source_commit"]
+    )
+
+    assert report["admissible"] is False
+    assert report["complete_native"] is False
+    assert report["terminal_status_counts"]["provenance_invalid"] == 1
+
+
 def test_fallback_row_is_recorded_but_never_admitted() -> None:
     packet = _packet()
     outcomes = [_native_outcome(identity, packet) for identity in packet["identities"]]
@@ -368,7 +409,12 @@ def test_intervention_not_activated_cannot_be_native_success() -> None:
     assert row["missingness"] == "intervention_not_activated"
 
 
-def _fake_native_record(*, preferred_speed: float = 0.65) -> dict[str, Any]:
+def _fake_native_record(
+    *,
+    preferred_speed: float = 0.65,
+    initial_speed: float = 0.5,
+    transition_actor_id: str = "p0",
+) -> dict[str, Any]:
     return {
         "metrics": _protocol_metrics(),
         "algorithm_metadata": {
@@ -376,13 +422,15 @@ def _fake_native_record(*, preferred_speed: float = 0.65) -> dict[str, Any]:
             "planner_kinematics": {"execution_mode": "native"},
             "simulation_step_trace": {
                 "dt": 0.1,
-                "reset": {"pedestrians": [{"actor_id": "p0", "velocity": [0.5, 0.0]}]},
+                "reset": {
+                    "pedestrians": [{"actor_id": "p0", "velocity": [initial_speed, 0.0]}]
+                },
                 "steps": [
                     {
                         "oracle_transition_trace": {
                             "transitions": [
                                 {
-                                    "simulator_pedestrian_id": "p0",
+                                    "simulator_pedestrian_id": transition_actor_id,
                                     "dynamics": {"preferred_speed_mps": preferred_speed},
                                     "post_integration": {"velocity_xy": [preferred_speed, 0.0]},
                                 }
@@ -427,6 +475,33 @@ def test_fixed_native_record_adapter_uses_trace_not_executor_flag() -> None:
     assert outcome["metrics"] == _protocol_metrics()
     assert outcome["provenance"]["metrics"] == _protocol_metrics()
     assert "executor_flag" not in outcome["provenance"]
+
+
+@pytest.mark.parametrize(
+    ("record", "message"),
+    (
+        (_fake_native_record(initial_speed=1.2), "frozen released spawn-speed contract"),
+        (_fake_native_record(transition_actor_id="p9"), "actor identities differ from the reset"),
+    ),
+)
+def test_native_record_rejects_spawn_or_trace_actor_contract_drift(
+    record: dict[str, Any], message: str
+) -> None:
+    packet = _packet()
+    identity = next(
+        item for item in packet["identities"] if item["regime_id"] == "slow_distributed"
+    )
+
+    with pytest.raises(campaign.CampaignAdapterError, match=message):
+        campaign._native_outcome_from_record(
+            identity,
+            record,
+            source_commit=packet["source_commit"],
+            manifest_hash=packet["manifest_hash"],
+            planner_algorithm="fake-native-planner",
+            robot_speed_cap_m_s=2.0,
+            checkpoint_provenance=_checkpoint_provenance(),
+        )
 
 
 def test_native_record_projects_established_raw_metric_contract() -> None:

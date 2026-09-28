@@ -1514,6 +1514,21 @@ def _native_outcome_status(
     ):
         return "provenance_invalid"
     try:
+        normalized_provenance = _journal_provenance(
+            provenance, str(expected["identity_key"])
+        )
+        _validate_journal_success_provenance(
+            normalized_provenance,
+            str(expected["identity_key"]),
+            packet_context={
+                "source_commit": source_commit,
+                "manifest_hash": manifest_hash,
+                "protocol_semantic_hash": EXPECTED_PROTOCOL_SEMANTIC_HASH,
+            },
+        )
+    except CampaignAdapterError:
+        return "provenance_invalid"
+    try:
         _validated_protocol_metrics(
             provenance.get("metrics"),
             field="row.provenance.metrics",
@@ -1996,6 +2011,92 @@ def _extract_protocol_metrics(  # noqa: C901, PLR0912, PLR0915
     return values, None
 
 
+def _validate_trace_actor_and_spawn_contract(record: Mapping[str, Any]) -> None:
+    """Require every reset actor and the frozen spawn speed in native trace evidence."""
+    metadata = _mapping(record.get("algorithm_metadata"), "record.algorithm_metadata")
+    trace = _mapping(metadata.get("simulation_step_trace"), "simulation_step_trace")
+    reset = _mapping(trace.get("reset"), "simulation_step_trace.reset")
+    reset_pedestrians = reset.get("pedestrians")
+    _require(
+        isinstance(reset_pedestrians, list) and bool(reset_pedestrians),
+        "reset pedestrian state is unavailable",
+    )
+
+    protocol = load_protocol(DEFAULT_PROTOCOL_CONFIG)
+    speed_contract = _mapping(
+        protocol.get("pedestrian_speed_contract"), "pedestrian_speed_contract"
+    )
+    spawn_contract = _mapping(speed_contract.get("spawn"), "pedestrian_speed_contract.spawn")
+    _require(
+        spawn_contract.get("initial_speed_binding") == "released_default"
+        and spawn_contract.get("change_forbidden") is True,
+        "frozen released spawn-speed contract is not valid",
+    )
+    expected_spawn_speed = _finite_metric(
+        spawn_contract.get("initial_speed_m_s"),
+        "pedestrian_speed_contract.spawn.initial_speed_m_s",
+    )
+
+    reset_actor_ids: set[str] = set()
+    for index, raw_pedestrian in enumerate(reset_pedestrians):
+        pedestrian = _mapping(raw_pedestrian, f"reset.pedestrians[{index}]")
+        raw_id = pedestrian.get("actor_id", pedestrian.get("id"))
+        _require(raw_id is not None, "reset pedestrian id is missing")
+        actor_id = str(raw_id)
+        _require(actor_id and actor_id not in reset_actor_ids, "reset pedestrian ids duplicate")
+        reset_actor_ids.add(actor_id)
+
+        velocity = pedestrian.get("velocity")
+        _require(
+            isinstance(velocity, Sequence)
+            and not isinstance(velocity, (str, bytes, bytearray))
+            and len(velocity) == 2,
+            "reset pedestrian velocity is invalid",
+        )
+        speed = math.hypot(
+            _finite_metric(velocity[0], "reset pedestrian velocity x"),
+            _finite_metric(velocity[1], "reset pedestrian velocity y"),
+        )
+        _require(
+            math.isclose(speed, expected_spawn_speed, rel_tol=0.0, abs_tol=1e-9),
+            "reset pedestrian speed differs from the frozen released spawn-speed contract",
+        )
+
+    steps = trace.get("steps")
+    _require(isinstance(steps, list) and bool(steps), "simulation_step_trace.steps is empty")
+    for step_index, raw_step in enumerate(steps):
+        step = _mapping(raw_step, f"simulation_step_trace.steps[{step_index}]")
+        transition_trace = _mapping(
+            step.get("oracle_transition_trace"),
+            f"simulation_step_trace.steps[{step_index}].oracle_transition_trace",
+        )
+        transitions = transition_trace.get("transitions")
+        _require(
+            isinstance(transitions, list) and bool(transitions),
+            f"trace step {step_index} has no oracle transitions",
+        )
+        step_actor_ids: set[str] = set()
+        for transition_index, raw_transition in enumerate(transitions):
+            transition = _mapping(
+                raw_transition,
+                f"simulation_step_trace.steps[{step_index}].transitions[{transition_index}]",
+            )
+            actor_id = transition.get("simulator_pedestrian_id")
+            _require(
+                isinstance(actor_id, str) and actor_id,
+                f"trace step {step_index} pedestrian id is missing",
+            )
+            _require(
+                actor_id not in step_actor_ids,
+                f"trace step {step_index} pedestrian ids duplicate",
+            )
+            step_actor_ids.add(actor_id)
+        _require(
+            step_actor_ids == reset_actor_ids,
+            f"trace step {step_index} actor identities differ from the reset actor set",
+        )
+
+
 def _native_outcome_from_record(
     identity: Mapping[str, Any],
     record: Mapping[str, Any],
@@ -2044,6 +2145,7 @@ def _native_outcome_from_record(
         extract_activation_diagnostics,
     )
 
+    _validate_trace_actor_and_spawn_contract(record)
     diagnostics = extract_activation_diagnostics(record, identity)
     treated = identity["regime_id"] != "legacy_default"
     activated = not treated or (

@@ -326,7 +326,18 @@ def test_evidence_bundle_command_creates_manifest_and_checksums(tmp_path: Path, 
         "summary.json",
         "trace_manifest.yaml",
     ]
+    assert [entry["location"] for entry in manifest["files"]] == [
+        "payload/claim_boundary.md",
+        "payload/metric_table.csv",
+        "payload/summary.json",
+        "payload/trace_manifest.yaml",
+    ]
     checksums = checksums_path.read_text(encoding="utf-8")
+    assert "  payload/summary.json\n" in checksums
+    assert "  payload/metric_table.csv\n" in checksums
+    assert {line.split(maxsplit=1)[1] for line in checksums.splitlines()} == {
+        f"payload/{entry['path']}" for entry in manifest["files"]
+    }
     checksum_entries = {
         relative_path: digest
         for line in checksums.splitlines()
@@ -338,6 +349,9 @@ def test_evidence_bundle_command_creates_manifest_and_checksums(tmp_path: Path, 
         "payload/summary.json",
         "payload/trace_manifest.yaml",
     }
+    for entry in manifest["files"]:
+        relative_path = f"payload/{entry['path']}"
+        assert checksum_entries[relative_path] == entry["sha256"]
     for relative_path, expected_digest in checksum_entries.items():
         actual_digest = hashlib.sha256((bundle_dir / relative_path).read_bytes()).hexdigest()
         assert actual_digest == expected_digest

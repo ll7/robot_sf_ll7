@@ -64,8 +64,7 @@ Each bundle writes:
 - `payload/`: exactly the selected compact files;
 - `evidence_bundle_manifest.json`: `schema_version: evidence_bundle.v1`, command, commit,
   claim boundary, source root, file index, sizes, SHA-256 hash checksums, and policy caveats;
-- `checksums.sha256`: bundle-root-relative checksum lines for every payload file, so
-  `sha256sum -c checksums.sha256` works from the bundle root.
+- `checksums.sha256`: the canonical publisher emits bundle-root-relative `payload/...` paths, so `sha256sum -c checksums.sha256` works from the bundle root. The integrity checker also accepts payload-relative entries used by existing gallery bundles.
 
 The schema contract lives at `robot_sf/benchmark/schemas/evidence_bundle.v1.json`.
 
@@ -125,6 +124,13 @@ See also: [Artifact Retention, Preservation, and Cleanup Guide](../artifact_rete
 for retention classes, preservation proof, and cleanup-eligibility workflows.
 
 ## Current Bundles
+
+- `issue_9656_hard_case_mining_2026-09-24/`: compact diagnostic-only mining result over the
+  checksum-pinned Release 0.0.2 bundle. It binds 36 deterministic selector cases to source row
+  hashes and materialized one-seed replay inputs, preserves 241 collision-event/count
+  inconsistencies, and records four revision-divergent attempts with per-metric comparisons and
+  refreshed unavailable-execution-evidence statuses. Raw release data and generated episode
+  outputs remain outside git.
 
 - `issue_9647_gallery_smoke_2026-09-26/`: one-case replay and renderer smoke on code revision
   `4b9617338ecbaf6bd3612b4d8c5269f993581a0a`, based on main `7815da2`. The case is a tracked

@@ -14,13 +14,15 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 9647
-latest_reviewed_date: 2026-09-27
-latest_reviewed_by: Independent read-only Codex reviewer; exact #9645 packet revision ff84feb83a30e47f7b57d9b83b78c0f830d31f8e accepted with bounded methodological caveats.
+latest_reconciliation_issue: 9645
+latest_reviewed_date: 2026-09-28
+latest_reviewed_by: >-
+  Independent exact reviewers verified the #9656 packet and #9645 source packet; this records
+  the autonomous combined-tree baseline refresh and claims no maintainer sign-off.
 latest_review_actor: Codex autonomous lead; no maintainer sign-off is claimed.
 latest_evidence_tree_refresh_issue: 9645
 latest_evidence_tree_refresh_files_added: 398
-latest_evidence_tree_refresh_sha256: d697025cf311b40c9c853eebfc810f2ca649cba302585e211be0eb68952596fb
+latest_evidence_tree_refresh_sha256: dadd4c5cb72f5f57a61b2ecf4ccee43628b40ea25693cdef6946ec45bda8f205
 evidence_tree_refresh_addenda:
   - issue: 9647
     reviewed_date: 2026-09-26
@@ -73,41 +75,47 @@ evidence_tree_refresh_addenda:
       bytes. The sidecars mark AI-generated images as needing review; this addendum makes no new
       interpretation or benchmark claim. The refreshed machine baseline retains 438 findings and
       changes only the evidence-tree manifest for these three tracked files.
-  - issue: 9645
+  - issue: 9656
     reviewed_date: 2026-09-27
     previous:
       count: 2465
       sha256: 7253f1cc2eb98da8e6ddd3acdab31c59efaf534968f782c69933c89232132dd0
     candidate:
-      count: 2863
-      sha256: d697025cf311b40c9c853eebfc810f2ca649cba302585e211be0eb68952596fb
+      count: 2475
+      sha256: df403f7cc9982246fd776c1e13cef5fb1426575dddeb23ce9cd0db4c769b3f4f
+    files_added: 10
+    finding_delta: none
+    decision: >-
+      Verified the five checksummed #9656 packet files and their five exact-byte evidence-review
+      sidecars against the merged #9808 main tree. The regenerated candidate baseline retains 438
+      findings across 98 files with no new or increased per-code finding; this refresh binds the
+      combined evidence-tree path set only and introduces no finding disposition or scientific claim.
+  - issue: 9645
+    reviewed_date: 2026-09-28
+    previous:
+      count: 2475
+      sha256: df403f7cc9982246fd776c1e13cef5fb1426575dddeb23ce9cd0db4c769b3f4f
+    candidate:
+      count: 2873
+      sha256: dadd4c5cb72f5f57a61b2ecf4ccee43628b40ea25693cdef6946ec45bda8f205
     files_added: 398
     finding_delta: none
     decision: >-
-      Recomputed the evidence-tree candidate after rebasing #9645 onto current main. The candidate
-      adds 398 tracked evidence paths to the 2,465-file current-main tree. The generated registry
-      projection remains 438 findings across 98 files, with zero active strict-CI findings; this
-      baseline change is limited to the evidence-tree manifest. An independent read-only review
-      accepted the exact source packet at revision ff84feb83a30e47f7b57d9b83b78c0f830d31f8e and
-      verified its recorded payload checksums. The review found all 64 bounded evaluations had
-      unknown criticality; no counterexample was admitted, and the fixed-seed pilot does not support
-      a claim that none exists. Missing severe-intrusion data can produce a zero-valued source-revision
-      safety composite, so those scores are not safety evidence. Dynamic feasibility remains unknown
-      and historical #1501 input binding remains unverified. This candidate is not a maintainer
-      approval or a planner-safety claim.
+      Recomputed the evidence-tree candidate after integrating #9656 and refreshing #9645 onto
+      main at db2eeb71ccb2bce8621a06eaf0557597273c611f. The current-main tree contains 2,475
+      tracked evidence paths; this branch adds 398 #9645 packet paths for a 2,873-file candidate.
+      The evidence-registry projection remains 438 findings across 98 files with zero active
+      strict-CI findings. The #9656 packet was independently checksum-audited; the #9645 packet
+      has 394 passing checksums and independent source-packet review. This changes the evidence-tree
+      manifest only and makes no new scientific or planner-safety claim.
 latest_refresh_review_addendum: >-
-  Evidence-tree refresh addendum (Issue #9645; candidate recomputed on current main at
-  d0acb1c0d5e9e293165bafa4dbc95a4b34d9e255): the packet adds 398 tracked evidence paths to the
-  2,465-file current-main tree, producing 2,863 files at SHA-256
-  d697025cf311b40c9c853eebfc810f2ca649cba302585e211be0eb68952596fb. The evidence-registry
-  projection remains 438 findings across 98 files and strict CI has zero active findings; only the
-  evidence-tree manifest changes. An independent read-only review accepted the exact source packet at
-  revision ff84feb83a30e47f7b57d9b83b78c0f830d31f8e and verified its recorded payload checksums. The
-  bounded search evaluated 64 candidates; criticality was unknown for every candidate, none was
-  admitted, and no conclusion that counterexamples do not exist is supported. Missing
-  severe-intrusion data can produce a zero-valued source-revision safety composite, so those scores
-  are not safety evidence. Historical #1501 input binding and dynamic feasibility remain unknown,
-  and that case is not admitted.
+  Combined evidence-tree refresh for #9645 after #9656 merged. Current main db2eeb71ccb2bce8621a06eaf0557597273c611f
+  contains 2,475 tracked evidence paths. The #9645 packet adds 398 tracked paths, resulting in
+  2,873 files with SHA-256 dadd4c5cb72f5f57a61b2ecf4ccee43628b40ea25693cdef6946ec45bda8f205. The ratchet remains 438 findings across 98 files
+  with no new per-file/code finding; the strict policy has zero active findings. This is a path
+  inventory refresh only. The #9656 packet's five payload digests and five review sidecars
+  were independently verified; the #9645 packet has 394 passing checksums and independent
+  exact-packet review. No campaign, simulation, replay, or new safety claim is added by this update.
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
@@ -259,6 +267,34 @@ decision_summary: >-
   the compact tracked bundle, resolving 23 prior missing-location findings. The seven-file demo
   bundle adds no current evidence-registry findings. The machine baseline drops from 461 findings
   across 102 files to 438 across 98 files; the result remains diagnostic plumbing evidence only.
+  Issue #9656 evidence-tree addendum (2026-09-25): the checksum-pinned historical hard-case packet
+  contributes five diagnostic packet paths under `issue_9656_hard_case_mining_2026-09-24/`:
+  `checksums.sha256`, `evidence_bundle_manifest.json`, and payload
+  `current_head_no_replay_manifest.json`, `report.md`, and `summary.json`. Five adjacent
+  `evidence-review-marker.v1` sidecars bind those exact bytes without modifying the packet. An
+  independent exact-head review at `5ab13d21f56ec6f2c3c3dd9312bc1e2ae5650eb1` verified the packet,
+  sidecar digests, test-fixture writer exemption, and candidate/frozen-base report, and conditionally
+  approved only the tree-manifest refresh after this companion update. Its separate catalog finding
+  was repaired by registering all five sidecars in `docs/context/catalog.yaml` at
+  `97a581a85fefae082922c20290ccdaed473b67c3`. The reviewed candidate adds five paths to the prior
+  baseline tree (2428 files / `4159317c0c3ae61d519788cd1050e8a6f724322c37e8cc2446f4dd8b8809d5b6`
+  to 2433 / `71237cccbc8e6fa3f14a8548a264d0eda3ac30b1b6e368bb72a8bef7d6675022`); from frozen base,
+  the complete packet tree is 2423 files / `c5d2440137291b0eb83416894ba10dcd32aacc24a23946b7a67ef99b0c961222`
+  to 2433. The evidence scan remains at 438 findings across 98 files with no new or increased
+  per-code finding, and no #9656 path has a finding. Refresh the machine baseline only to bind this
+  five-sidecar path-set change. The diagnostic-only historical claim boundary is preserved; no
+  finding disposition or strict-CI exclusion is added.
+  Prior-main reconciliation (2026-09-25): the source packet was merged onto frozen main
+  `61c9db79ba9b37d0668c0a93a72bd9b89ad3405b`. Relative to that base, the only evidence-tree
+  additions are the same five packet files and five SHA-bound sidecars listed above; there are no
+  evidence-tree removals. The tree at that prior-main reconciliation was 2427 files /
+  `2d0a52ac85a26ecedca6e4779c4e486acc999e8aef4d0f0ac88acf026ae1300c`; the merged candidate is
+  2437 files / `105bdffc3c3a47967360ed41c7a43b4e4042cb42cc511cb50265095fc66d7347`. The three
+  payload checksums and all five sidecar artifact paths, schema markers, and byte digests were
+  verified. Candidate projection retains 438 findings across 98 files, with all 171 finding rows
+  unchanged and no #9656 path finding. This refresh binds the merged path set only; it does not
+  alter finding dispositions or strict-CI exclusions.
+  Combined-main reconciliation (2026-09-27): base a0ba60cd contains the #9647 gallery evidence and already binds 2465 evidence-tree paths at SHA-256 7253f1cc2eb98da8e6ddd3acdab31c59efaf534968f782c69933c89232132dd0. This candidate retains those bytes and adds the five checksum-pinned #9656 packet files plus five exact-byte review sidecars, yielding 2475 paths at SHA-256 df403f7cc9982246fd776c1e13cef5fb1426575dddeb23ce9cd0db4c769b3f4f. The ratchet retains 438 findings across 98 files with no new or increased finding. The refresh binds the combined path inventory only; it introduces no new finding disposition or scientific claim.
 #8237 disposition: remediate. The E_release_checklist digest in the
 #4683 assurance-case example was recomputed against the exact final-head
 # docs/RELEASE.md bytes and is already current at this head. No

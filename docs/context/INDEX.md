@@ -9,14 +9,22 @@ Issue relationship contract and migration audit:
 [issue_relationships.md](issue_relationships.md).
 
 Issue #9645 bounded falsification pilot: the four native Random/TPE runs completed 64
-distinct candidates but found no critical case and made no best-so-far progress. This is a
-diagnostic-only **NO-GO for scaling #9648 under the tested fixed-seed domain**, not a claim that
+distinct candidates but observed no collisions or near misses; criticality remained unknown for
+all candidates because severe-intrusion evidence is missing. All method/seed curves tied at 0.0.
+This is a diagnostic-only **NO-GO for scaling #9648 under the tested fixed-seed domain**, not a claim that
 the search cannot find counterexamples. A tracked #1501 collision was regenerated and replayed
 twice at its recorded source revision `58e516aa4f69ff3098bf518199f483006589758c`; this was not a
 replay under the current source. Task feasibility remains unknown without a successful reference
 planner. See the [pilot receipt](evidence/issue_9645_bounded_falsification_2026-09-24/payload/report.md),
 [convergence report](evidence/issue_9645_bounded_falsification_2026-09-24/payload/convergence_report.md),
 and [machine-readable evidence bundle](evidence/issue_9645_bounded_falsification_2026-09-24/evidence_bundle_manifest.json).
+
+Issue #9656 historical benchmark hard-case mining: 36 source-linked cases from the checksum-pinned
+Release 0.0.2 bundle, one-seed scenario/config snapshots, a 241-row collision-event/count
+inconsistency, and four revision-divergent replay comparisons. Diagnostic-only; no real-world
+safety claim or corpus admission:
+[issue_9656_hard_case_mining.md](issue_9656_hard_case_mining.md),
+[compact evidence](evidence/issue_9656_hard_case_mining_2026-09-24/payload/summary.json).
 
 September 2026 S30/H600 benchmark-data erratum successor: the frozen correction contract
 (version DOI `10.5281/zenodo.22265925`, `...-erratum.1` tag, orchestration SHA

@@ -47,6 +47,12 @@ opt-in, domain-gated runtime correction boundary. This is a compatibility and im
 note only; it does not establish physical, safety, benchmark, or paper-facing evidence:
 [issue_8222_obstacle_force_compatibility.md](issue_8222_obstacle_force_compatibility.md).
 
+Issue #9764 social-force pair-kernel versioning: preserve the unwrapped historical default, expose
+the wrapped successor explicitly, and keep the bounded paired-run results diagnostic-only until the
+#9668 release-row equivalence gate passes. Raw run files remain in private host custody under a
+logical bundle key; they are not a published evidence bundle:
+[issue_9764_social_force_kernel_versioning.md](issue_9764_social_force_kernel_versioning.md).
+
 Scenario-window preparation packet (RW-01—RW-08): source-contract repairs, typed native
 continuation snapshot inventory, deterministic relevance-window selector, explicit unsafe-crop
 refusal, and gated experiment/dossier boundary. Preparation-only; no shortened benchmark or

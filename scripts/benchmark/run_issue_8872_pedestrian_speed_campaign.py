@@ -6,9 +6,11 @@ map-runner execution path, not a scheduler launcher.  The production identities
 are always compiled by ``check_issue_6561_pedestrian_speed_protocol.compile_manifest``.
 A production packet is accepted only when the current preserved #8871 activation
 receipt, the verified #6102 integrity receipt, native planner/checkpoint preflight,
-all six private admission predicates, and an ephemeral private-ops token digest
-are bound to the same packet.  ``run-production`` never imports an arbitrary
-executor or submits Slurm work.
+all six private admission predicates, and the authorization receipt are bound to
+the same packet.  ``run-production`` is intentionally disabled: it fails closed
+before reading a token, opening execution paths, or invoking a runner until
+trusted private-ops authenticated-signer verification is configured.  It never
+imports an arbitrary executor or submits Slurm work.
 
 The command modes are intentionally separate:
 
@@ -21,15 +23,13 @@ The command modes are intentionally separate:
     Validate every admission receipt and write one immutable packet.  It does
     not execute rows or submit work.
 ``run-production``
-    Require a validated packet and an ephemeral private-ops token, then invoke
-    the fixed native ``map_runner_episode.run_map_episode`` path and record one
-    terminal status/missingness value for every expected identity.  Any
-    fallback, degraded, non-native, duplicate, missing, provenance-invalid,
-    or intervention-not-activated row makes the report non-admissible.
+    Always fail closed after packet validation.  The fixed native runner,
+    execution token, and execution paths remain unreachable until trusted
+    private-ops authenticated-signer verification is configured.
 
 The private operations layer is responsible for translating its host-specific
 checks into the normalized receipt shapes documented in the context note and
-for issuing the ephemeral token.  Preparation status remains
+for providing the future authenticated authorization.  Preparation status remains
 ``PREPARATION_INCOMPLETE`` while the scientific #8871 activation gate is not
 an ``activation_pass``; the fixed public executor does not override that gate.
 """
@@ -165,6 +165,7 @@ AUTHORIZATION_KEYS = frozenset(
 )
 SAFE_JOURNAL_REFERENCE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 SAFE_REASON_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
+SAFE_DECISION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 
 class CampaignAdapterError(ValueError):
@@ -673,7 +674,19 @@ def _validate_authorization(
     _require("authorized" not in value, "self-authenticated authorization flag is forbidden")
     _require(value.get("scope") == "run-production", "production authorization scope drifted")
     _require(value.get("issuer") == "private-ops", "production authorization issuer drifted")
-    _require_nonempty_string(value.get("decision_id"), "production_authorization.decision_id")
+    decision_id = _require_nonempty_string(
+        value.get("decision_id"), "production_authorization.decision_id"
+    )
+    decision_id_lower = decision_id.lower()
+    _require(
+        bool(SAFE_DECISION_ID.fullmatch(decision_id))
+        and ".." not in decision_id
+        and not any(
+            marker in decision_id_lower
+            for marker in ("token", "secret", "credential", "bearer", "private")
+        ),
+        "production_authorization.decision_id is not a safe public identifier",
+    )
     _require_digest(value.get("token_sha256"), "production_authorization.token_sha256")
     _require_digest(
         value.get("token_binding_sha256"),
@@ -807,12 +820,12 @@ def inspect_packet(
     """Return a non-executing readiness result without weakening strict execution gates."""
     try:
         manifest = validate_production_packet(packet, config_path=config_path)
-    except CampaignAdapterError as exc:
+    except Exception:  # noqa: BLE001 - diagnostics must not echo untrusted validation details
         return {
             "ready": False,
-            "manifest_hash": packet.get("manifest_hash"),
+            "manifest_hash": None,
             "expected_rows": EXPECTED_ROWS,
-            "reason": str(exc),
+            "reason": "production packet rejected",
         }
     return {
         "ready": False,
@@ -1797,7 +1810,12 @@ def run_production(
     lock_path: str | Path,
     _episode_runner: Callable[..., Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Run the fixed native executor with durable, no-retry accounting."""
+    """Fail closed until trusted private-ops authenticated-signer verification exists.
+
+    Packet validation is the only work performed.  Token access, execution-path
+    preparation, journal writes, and the native runner remain unreachable while
+    the authenticated authorization contract is not configured.
+    """
     manifest = validate_production_packet(packet, config_path=config_path)
     raise CampaignAdapterError(PRODUCTION_EXECUTION_DISABLED_REASON)
     _validate_token_binding(
@@ -2013,7 +2031,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     render_parser.add_argument("--production-authorization", type=Path, required=True)
     render_parser.add_argument("--output", type=Path, required=True)
 
-    run_parser = subparsers.add_parser("run-production", help="execute the fixed native runner")
+    run_parser = subparsers.add_parser(
+        "run-production",
+        help="disabled until trusted private-ops signer verification is configured",
+    )
     run_parser.add_argument("--packet", type=Path, required=True)
     run_parser.add_argument("--checkpoint-root", type=Path, required=True)
     run_parser.add_argument("--output", type=Path, required=True)
@@ -2022,7 +2043,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     run_parser.add_argument(
         "--token-env",
         default=PRODUCTION_TOKEN_ENV,
-        help="environment variable containing the ephemeral private-ops token",
+        help="reserved compatibility option; the disabled route never reads a token",
     )
 
     reconcile_parser = subparsers.add_parser(
@@ -2070,27 +2091,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             return 0
         if args.mode == "run-production":
-            packet = _load_json(args.packet, "production packet")
-            token = os.environ.get(args.token_env)
-            _require(
-                token is not None,
-                f"missing private-ops token environment {args.token_env}",
-            )
-            report = run_production(
-                packet,
-                token,
-                checkpoint_root=args.checkpoint_root,
-                output_path=args.output,
-                journal_path=args.journal,
-                lock_path=args.lock,
-            )
-            print(
-                json.dumps(
-                    _summary("run-production", report, output=args.output),
-                    sort_keys=True,
-                )
-            )
-            return 0 if report["admissible"] else 2
+            raise CampaignAdapterError(PRODUCTION_EXECUTION_DISABLED_REASON)
         if args.mode == "reconcile":
             summary = reconcile_execution_journal(args.journal, expected_rows=args.expected_rows)
             print(json.dumps(summary, sort_keys=True))

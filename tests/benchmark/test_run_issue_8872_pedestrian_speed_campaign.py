@@ -175,6 +175,54 @@ def test_packet_binds_exact_compiled_manifest_and_all_gates() -> None:
     assert "authenticated authorization" in readiness["reason"]
 
 
+@pytest.mark.parametrize(
+    "bad_decision_id",
+    ("../../private/ops", TOKEN, "secret-token", "a" * 65),
+)
+def test_authorization_decision_id_is_safe_and_not_secret_material(
+    bad_decision_id: str,
+) -> None:
+    packet = _packet()
+    packet["production_authorization"]["decision_id"] = bad_decision_id
+    packet["packet_sha256"] = campaign._canonical_hash(campaign._packet_core(packet))
+
+    with pytest.raises(campaign.CampaignAdapterError, match="decision_id") as exc_info:
+        campaign.validate_production_packet(packet)
+    assert bad_decision_id not in str(exc_info.value)
+
+
+def test_inspect_packet_redacts_unvalidated_manifest_and_exception_details() -> None:
+    packet = _packet()
+    untrusted_manifest = "/private/cluster/secret-manifest"
+    packet["manifest_hash"] = untrusted_manifest
+    packet["packet_sha256"] = campaign._canonical_hash(campaign._packet_core(packet))
+
+    result = campaign.inspect_packet(packet)
+
+    assert result == {
+        "ready": False,
+        "manifest_hash": None,
+        "expected_rows": campaign.EXPECTED_ROWS,
+        "reason": "production packet rejected",
+    }
+    assert untrusted_manifest not in campaign.json.dumps(result, sort_keys=True)
+
+
+def test_inspect_packet_redacts_raw_validation_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def reject_packet(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise campaign.CampaignAdapterError("invalid packet at /private/cluster/packet.json")
+
+    monkeypatch.setattr(campaign, "validate_production_packet", reject_packet)
+
+    result = campaign.inspect_packet({"manifest_hash": "/private/cluster/packet.json"})
+
+    assert result["manifest_hash"] is None
+    assert result["reason"] == "production packet rejected"
+    assert "/private/cluster" not in campaign.json.dumps(result, sort_keys=True)
+
+
 def test_packet_rejects_non_passing_activation_receipt() -> None:
     packet = _packet()
     packet["activation_receipt"]["verdict"] = "invalid_transient"
@@ -461,6 +509,41 @@ def test_self_minted_authorization_cannot_enter_production_runner(tmp_path: Any)
         )
     assert not (tmp_path / "run.jsonl").exists()
     assert not (tmp_path / "receipt.json").exists()
+
+
+def test_run_production_cli_fails_before_token_or_packet_access(
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        campaign,
+        "_load_json",
+        lambda *_args, **_kwargs: pytest.fail("disabled route accessed a packet"),
+    )
+    private_packet = str(tmp_path / "private" / "packet.json")
+
+    assert (
+        campaign.main(
+            [
+                "run-production",
+                "--packet",
+                private_packet,
+                "--checkpoint-root",
+                str(tmp_path / "checkpoints"),
+                "--output",
+                str(tmp_path / "receipt.json"),
+                "--journal",
+                str(tmp_path / "run.jsonl"),
+                "--lock",
+                str(tmp_path / "run.lock"),
+            ]
+        )
+        == 2
+    )
+    rendered = capsys.readouterr().out
+    assert campaign.PRODUCTION_EXECUTION_DISABLED_REASON in rendered
+    assert private_packet not in rendered
 
 
 def test_fixed_executor_fake_runner_receives_bound_native_identity(

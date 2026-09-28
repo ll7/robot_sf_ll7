@@ -64,6 +64,7 @@ build_image() {
 FROM ghcr.io/actions/actions-runner@sha256:0cfdcc701ce933c6d243c6b0b2da767366dc9f2e99961d4c3754b0b78084cdda
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake ffmpeg gh \
     libglib2.0-0t64 libgl1 fonts-dejavu-core jq poppler-utils iputils-ping curl \
     && rm -rf /var/lib/apt/lists/* \
     && usermod -G '' runner \

@@ -163,6 +163,15 @@ def test_container_setup_keeps_ephemeral_and_no_host_mounts() -> None:
     assert "/var/run/docker.sock" not in script
 
 
+def test_container_image_preloads_routed_job_tools() -> None:
+    """Pin native builds, video output, and release hydration to image packages."""
+    script = SETUP_SCRIPT.read_text(encoding="utf-8")
+    apt_packages = script.split("apt-get install -y --no-install-recommends", 1)[1].split(
+        "&& rm -rf /var/lib/apt/lists/*", 1
+    )[0]
+    assert {"build-essential", "cmake", "ffmpeg", "gh"} <= set(apt_packages.split())
+
+
 def test_job_started_hook_path_has_runner_accepted_extension() -> None:
     """The runner rejects hook paths without .sh/.ps1/.js and fails every job."""
     script = SETUP_SCRIPT.read_text(encoding="utf-8")

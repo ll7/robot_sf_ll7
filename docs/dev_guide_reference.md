@@ -656,16 +656,27 @@ was running. Use `scripts/dev/check_prepublication_state.py` around expensive pu
 3. Treat `superseded` and `blocked` as fail-closed stops. Treat `refresh-required` as stale
    evidence; run `sync --integrate` only from a clean worktree, resolve conflicts if needed, then
    rerun readiness and capture a new baseline.
-4. A `blocked` result with reason `undeclared_stack` is a distinct ancestry failure, not a
-   `sync --integrate` case. It means the branch's merge base is older than the live `origin/main`
-   tip, usually because `main` advanced after an earlier merge of `main` into the branch
-   (issue #8864). Reconstruct only the intended commits on current `origin/main`
-   (`git rebase --onto origin/main <merge-base> <branch>`, or recreate the branch from
-   `origin/main` and re-apply the intended changes), then regenerate generated files such as
-   `scripts/validation/docstring_todo_baseline.json`. A rebase or re-creation moves the head, so
-   the local readiness stamp must be refreshed before publication. A canonical
-   `## Stack Declaration` is the alternative only for a genuine stack over a declared parent PR;
-   an ordinary stale-`main` branch must be rebased.
+4. A blocked ancestry result is distinct from a `sync --integrate` case. `undeclared_stack`
+   means inherited non-main ancestry is ambiguous; a canonical `## Stack Declaration` is
+   permitted only for a genuine stack over a declared parent PR. `stale_main_base` means the
+   checked proof found a single-parent chain based on an ancestor of current `origin/main`, with
+   every subject explicitly ending in the current issue marker. Reconstruct that chain with:
+
+   ```bash
+   uv run python scripts/dev/check_prepublication_state.py reconstruct \
+     --issue <number> \
+     --source-branch <current-branch> \
+     --new-branch <new-local-branch>
+   ```
+
+   The command requires a clean worktree, fetches `origin/main`, rejects local or remote branch
+   collisions, replays the verified commits in order, and checks the ordered stable patch-ID list.
+   It does not push. On success it leaves the checkout on the new local branch and reports the
+   source and replacement SHAs; run readiness again and capture a fresh pre-publication snapshot.
+   On replay conflict or failed verification it aborts the cherry-pick, returns to the source
+   branch, and deletes the replacement branch it created. Missing/foreign issue markers, merge
+   commits, or unavailable ancestry proof remain `undeclared_stack` and are not reconstructed.
+   Subject markers are an explicit attribution declaration, not cryptographic proof of ownership.
 
 The gate records the exact before/after SHAs, any newly opened covering PR, and any merged PR that
 explicitly closes the issue. An open PR is matched only when its title or body contains an explicit

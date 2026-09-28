@@ -379,11 +379,18 @@ refreshes `origin/main`, records the exact base, remote-branch, and local-HEAD S
 that the claimed issue remains open and has not gained a new explicit same-repository covering PR
 or merged closing PR. A `ready` result is the only publication-permitting result; `superseded` and
 `blocked` stop the route, while `refresh-required` requires `sync --integrate` (or an explicit
-manual merge), a fresh readiness run, and a new snapshot. A `blocked` result whose reason is
-`undeclared_stack` instead requires rebasing the intended commits onto the live `origin/main` tip
-(or a genuine declared stack) before a fresh readiness run and snapshot; `sync --integrate` does
-not clear it. The integration path uses ordinary Git merges and never resets or deletes the
-worktree. Under exhausted GraphQL quota, the gate may record
+manual merge), a fresh readiness run, and a new snapshot. A `blocked` result with reason
+`stale_main_base_reconstruction_required` identifies an explicitly issue-attributed linear chain
+whose old merge base is an ancestor of current `origin/main`. From a clean checkout of that source
+branch, run `uv run python scripts/dev/check_prepublication_state.py reconstruct` with `--issue <number>`,
+`--source-branch <source>`, and `--new-branch <replacement>` to replay onto fetched `origin/main`. The
+command leaves the source ref unchanged, checks ordered stable patch IDs, never pushes, and rolls
+back the new branch and checkout if replay or verification fails. Commit subject markers are an
+explicit attribution declaration, not cryptographic proof. Other `undeclared_stack` ancestry,
+including missing/foreign markers, merge commits, or unavailable graph proof, stays fail-closed
+and requires manual maintainer reconstruction or a genuine declared stack; `sync --integrate` does
+not clear either ancestry blocker. The integration path uses ordinary Git merges and never resets
+or deletes the worktree. Under exhausted GraphQL quota, the gate may record
 an auditable REST source for issue state, open-covering-PR, or closing-PR discovery in
 `remote_state_sources`; auth, malformed-response, and truncated-inventory failures still block
 publication. The shared REST fallback currently reads up to 50 pages of 100 pull requests; a cap

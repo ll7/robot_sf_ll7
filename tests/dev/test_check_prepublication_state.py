@@ -1299,6 +1299,81 @@ def test_undeclared_stack_ancestry_blocks_pre_publication() -> None:
     assert result["ancestry"]["state"] == "undeclared_stack"
 
 
+def test_stale_main_base_has_a_distinct_prepublication_blocker() -> None:
+    result = gate.evaluate_state(
+        _snapshot(), _snapshot(ancestry={"state": "stale_main_base", "remediation": "reconstruct"})
+    )
+
+    assert result["decision"] == "blocked"
+    assert result["reason"] == "stale_main_base_reconstruction_required"
+    assert result["ancestry"]["state"] == "stale_main_base"
+
+
+def test_capture_reports_stale_main_reconstruction_reason(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    snapshot = _snapshot(
+        issue=9393,
+        issue_state="OPEN",
+        ancestry={"state": "stale_main_base"},
+    )
+    monkeypatch.setattr(gate, "_normalize_repo_argument", lambda repo, remote: repo)
+    monkeypatch.setattr(gate, "_git_branch", lambda: "issue-9393-source")
+    monkeypatch.setattr(gate, "collect_live_state", lambda **_: snapshot)
+
+    exit_code = gate.main(
+        [
+            "capture",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--issue",
+            "9393",
+            "--snapshot-path",
+            str(tmp_path / "snapshot.json"),
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == gate.EXIT_CODES["blocked"]
+    assert payload["reason"] == "stale_main_base_reconstruction_required"
+
+
+def test_unavailable_ancestry_proof_remains_undeclared_and_blocking(monkeypatch) -> None:
+    commit_sha = "c" * 40
+    merge_base_sha = "a" * 40
+    main_tip_sha = "b" * 40
+    monkeypatch.setattr(
+        gate,
+        "collect_ancestry_facts",
+        lambda **_: (
+            {
+                "main_tip_sha": main_tip_sha,
+                "merge_base_sha": merge_base_sha,
+                "commits": [f"{commit_sha} fix: issue work (#9393)"],
+                "commit_records": [
+                    {
+                        "sha": commit_sha,
+                        "parents": [merge_base_sha],
+                        "subject": "fix: issue work (#9393)",
+                    }
+                ],
+                "merge_base_is_ancestor_of_main": None,
+                "merge_base_ancestry_error": "proof command unavailable",
+                "changed_paths": ["issue.txt"],
+            },
+            None,
+        ),
+    )
+    snapshot = gate._record_ancestry(
+        _snapshot(issue=9393, local_head_sha=commit_sha, base_ref="main")
+    )
+
+    assert snapshot["ancestry"]["state"] == "undeclared_stack"
+    assert snapshot["ancestry"]["ancestry_proof_errors"] == {
+        "merge_base_ancestry_error": "proof command unavailable"
+    }
+
+
 def test_mismatched_declaration_blocks_pre_publication() -> None:
     """A mismatched stack declaration must fail closed before PR creation."""
     result = gate.evaluate_state(
@@ -1639,6 +1714,168 @@ def real_git_repo(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(gate, "_fetch_claim_ref", lambda **_: {"claimed": False, "sha": None})
 
     return SimpleNamespace(remote=remote_dir, worker=worker_dir, initial_main_sha=initial_main_sha)
+
+
+def _git_test(worker: Path, *args: str) -> str:
+    """Run a Git command in a real-git fixture and return trimmed stdout."""
+    result = subprocess.run(["git", *args], cwd=worker, capture_output=True, text=True, check=True)
+    return result.stdout.strip()
+
+
+def _make_stale_issue_branch(
+    worker: Path,
+    *,
+    branch: str = "issue-9393-source",
+    source_messages: list[tuple[str, str, str]],
+    advance_main: bool = True,
+) -> str:
+    """Create and publish an old-base branch, then advance remote main."""
+    _git_test(worker, "checkout", "-b", branch)
+    for filename, contents, subject in source_messages:
+        (worker / filename).write_text(contents, encoding="utf-8")
+        _git_test(worker, "add", filename)
+        _git_test(worker, "commit", "-m", subject)
+    source_sha = _git_test(worker, "rev-parse", "HEAD")
+    _git_test(worker, "push", "-u", "origin", branch)
+    _git_test(worker, "checkout", "main")
+    if advance_main:
+        (worker / "main-advance.txt").write_text("advance main\n", encoding="utf-8")
+        _git_test(worker, "add", "main-advance.txt")
+        _git_test(worker, "commit", "-m", "chore: advance main")
+        _git_test(worker, "push", "origin", "main")
+    _git_test(worker, "checkout", branch)
+    return source_sha
+
+
+def test_reconstruct_replays_stale_issue_chain_and_preserves_source_ref(
+    real_git_repo, monkeypatch, capsys
+) -> None:
+    worker = real_git_repo.worker
+    monkeypatch.chdir(worker)
+    source_sha = _make_stale_issue_branch(
+        worker,
+        source_messages=[("issue.txt", "issue work\n", "fix: issue work (#9393)")],
+    )
+
+    exit_code = gate.main(
+        [
+            "reconstruct",
+            "--issue",
+            "9393",
+            "--source-branch",
+            "issue-9393-source",
+            "--new-branch",
+            "issue-9393-reconstructed",
+        ]
+    )
+
+    result = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert result["decision"] == "reconstructed"
+    assert result["source_ref_unchanged"] is True
+    assert result["push_performed"] is False
+    assert result["source_patch_ids"] == result["replacement_patch_ids"]
+    assert result["replacement_state"] == "clean"
+    assert result["source_head_sha"] == source_sha
+    assert _git_test(worker, "branch", "--show-current") == "issue-9393-reconstructed"
+    assert _git_test(worker, "rev-parse", "refs/heads/issue-9393-source") == source_sha
+    assert _git_test(worker, "rev-parse", "refs/remotes/origin/issue-9393-source") == source_sha
+
+
+def test_reconstruct_refuses_foreign_parent_before_creating_replacement(
+    real_git_repo, monkeypatch, capsys
+) -> None:
+    worker = real_git_repo.worker
+    monkeypatch.chdir(worker)
+    source_sha = _make_stale_issue_branch(
+        worker,
+        source_messages=[
+            ("foreign.txt", "foreign work\n", "fix: inherited parent (#7777)"),
+            ("issue.txt", "issue work\n", "fix: issue work (#9393)"),
+        ],
+    )
+
+    exit_code = gate.main(
+        [
+            "reconstruct",
+            "--issue",
+            "9393",
+            "--source-branch",
+            "issue-9393-source",
+            "--new-branch",
+            "issue-9393-reconstructed",
+        ]
+    )
+
+    result = json.loads(capsys.readouterr().out)
+    assert exit_code == gate.EXIT_CODES["blocked"]
+    assert "not an attributable stale-main chain" in result["error"]
+    assert "refs/heads/issue-9393-reconstructed" not in _git_test(worker, "show-ref")
+    assert _git_test(worker, "branch", "--show-current") == "issue-9393-source"
+    assert _git_test(worker, "rev-parse", "refs/heads/issue-9393-source") == source_sha
+
+
+def test_reconstruct_requires_clean_worktree_and_rejects_dirty_state(
+    real_git_repo, monkeypatch, capsys
+) -> None:
+    worker = real_git_repo.worker
+    monkeypatch.chdir(worker)
+    (worker / "untracked.txt").write_text("dirty\n", encoding="utf-8")
+
+    exit_code = gate.main(
+        [
+            "reconstruct",
+            "--issue",
+            "9393",
+            "--source-branch",
+            "main",
+            "--new-branch",
+            "issue-9393-reconstructed",
+        ]
+    )
+
+    result = json.loads(capsys.readouterr().out)
+    assert exit_code == gate.EXIT_CODES["blocked"]
+    assert "clean tracked and untracked worktree" in result["error"]
+    assert "issue-9393-reconstructed" not in _git_test(worker, "branch", "--list")
+    assert _git_test(worker, "branch", "--show-current") == "main"
+
+
+def test_reconstruct_conflict_rolls_back_replacement_and_restores_source(
+    real_git_repo, monkeypatch, capsys
+) -> None:
+    worker = real_git_repo.worker
+    monkeypatch.chdir(worker)
+    source_sha = _make_stale_issue_branch(
+        worker,
+        source_messages=[("shared.txt", "source version\n", "fix: issue work (#9393)")],
+    )
+    _git_test(worker, "checkout", "main")
+    (worker / "shared.txt").write_text("main version\n", encoding="utf-8")
+    _git_test(worker, "add", "shared.txt")
+    _git_test(worker, "commit", "-m", "chore: conflict on main")
+    _git_test(worker, "push", "origin", "main")
+    _git_test(worker, "checkout", "issue-9393-source")
+
+    exit_code = gate.main(
+        [
+            "reconstruct",
+            "--issue",
+            "9393",
+            "--source-branch",
+            "issue-9393-source",
+            "--new-branch",
+            "issue-9393-reconstructed",
+        ]
+    )
+
+    result = json.loads(capsys.readouterr().out)
+    assert exit_code == gate.EXIT_CODES["blocked"]
+    assert "rollback" in result["error"]
+    assert _git_test(worker, "branch", "--show-current") == "issue-9393-source"
+    assert _git_test(worker, "rev-parse", "refs/heads/issue-9393-source") == source_sha
+    assert "issue-9393-reconstructed" not in _git_test(worker, "branch", "--list")
+    assert _git_test(worker, "status", "--porcelain") == ""
 
 
 def test_real_git_unpushed_branch_sync_integrates_main_and_is_ready(

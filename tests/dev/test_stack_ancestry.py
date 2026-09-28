@@ -12,6 +12,8 @@ import json
 import subprocess
 from typing import TYPE_CHECKING, Any
 
+import pytest
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -195,6 +197,68 @@ def test_clean_replacement_without_declaration_passes() -> None:
     result = _classify(base_ref="main", merge_base_sha=MAIN_TIP, commits=CLEAN_COMMITS)
 
     assert result["state"] == "clean"
+
+
+def _stale_main_inputs(**overrides: Any) -> dict[str, Any]:
+    """Build the structured proof for one issue-attributed stale-main commit."""
+    inputs: dict[str, Any] = {
+        "head_sha": CHILD_HEAD,
+        "merge_base_sha": PARENT_HEAD,
+        "main_tip_sha": MAIN_TIP,
+        "commits": [f"{CHILD_HEAD} fix: intended change (#9393)"],
+        "issue_number": 9393,
+        "merge_base_is_ancestor_of_main": True,
+        "commit_records": [
+            {
+                "sha": CHILD_HEAD,
+                "parents": [PARENT_HEAD],
+                "subject": "fix: intended change (#9393)",
+            }
+        ],
+    }
+    inputs.update(overrides)
+    return inputs
+
+
+def test_stale_main_base_requires_current_issue_marker_and_linear_proof() -> None:
+    result = _classify(**_stale_main_inputs())
+
+    assert result["state"] == "stale_main_base"
+    assert result["state"] in BLOCKING_STATES
+    assert "reconstruct" in result["remediation"]
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {
+            "commit_records": [
+                {"sha": CHILD_HEAD, "parents": [PARENT_HEAD], "subject": "fix: foreign (#9999)"}
+            ]
+        },
+        {
+            "commit_records": [
+                {"sha": CHILD_HEAD, "parents": [PARENT_HEAD], "subject": "fix: missing marker"}
+            ]
+        },
+        {
+            "commit_records": [
+                {
+                    "sha": CHILD_HEAD,
+                    "parents": [PARENT_HEAD, OTHER_HEAD],
+                    "subject": "fix: merge (#9393)",
+                }
+            ]
+        },
+        {"merge_base_is_ancestor_of_main": None},
+        {"merge_base_is_ancestor_of_main": False},
+        {"issue_number": None},
+    ],
+)
+def test_unproven_stale_main_remains_undeclared(overrides: dict[str, Any]) -> None:
+    result = _classify(**_stale_main_inputs(**overrides))
+
+    assert result["state"] == "undeclared_stack"
 
 
 # ---------------------------------------------------------------------------
@@ -517,6 +581,37 @@ def test_collect_ancestry_facts_reports_contaminated_merge_base(tmp_path: Path) 
         parent_state="open",
     )
     assert declared["state"] == "stacked"
+
+
+def test_collect_ancestry_facts_preserves_unavailable_stale_proof_as_fail_closed(
+    tmp_path: Path,
+) -> None:
+    _init_repo(tmp_path)
+    shas = json.loads(tmp_path.joinpath("shas.json").read_text(encoding="utf-8"))
+
+    def unavailable_ancestor_proof(
+        args: list[str], worktree: Path
+    ) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["merge-base", "--is-ancestor"]:
+            return subprocess.CompletedProcess(args, 128, "", "proof command unavailable")
+        return subprocess.run(
+            ["git", "-C", str(worktree), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    facts, error = collect_ancestry_facts(
+        head_sha=shas["child"],
+        base_ref="main",
+        worktree=tmp_path,
+        git_runner=unavailable_ancestor_proof,
+    )
+
+    assert error is None
+    assert facts is not None
+    assert facts["merge_base_is_ancestor_of_main"] is None
+    assert facts["merge_base_ancestry_error"] == "proof command unavailable"
 
 
 def test_collect_ancestry_facts_rejects_bad_inputs(tmp_path: Path) -> None:

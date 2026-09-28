@@ -40,6 +40,8 @@ Classification (pure, unit-testable)
   merge-ready until the parent merges and the child is re-evaluated against
   current ``main`` (then only its residual diff remains, i.e. ``clean``).
 - ``undeclared_stack`` — non-``main`` ancestry is present with no declaration.
+- ``stale_main_base`` — an explicitly issue-attributed, linear branch was based
+  on an ancestor of current ``origin/main``; reconstruct it before publication.
   FAILS before PR creation and before ``merge-ready``.
 - ``mismatched_declaration`` — a declaration is present but the declared parent
   PR/head does not match the actual ancestry.  FAILS closed.
@@ -80,7 +82,9 @@ _SECTION_HEADING_RE = re.compile(r"^##\s+Stack\s+Declaration\s*$", re.IGNORECASE
 _NEXT_SECTION_HEADING_RE = re.compile(r"^##\s+.*$", re.MULTILINE)
 
 # States that fail closed before PR creation and before ``merge-ready``.
-BLOCKING_STATES = frozenset({"undeclared_stack", "mismatched_declaration", "parent_invalidated"})
+BLOCKING_STATES = frozenset(
+    {"undeclared_stack", "stale_main_base", "mismatched_declaration", "parent_invalidated"}
+)
 # States that must never be independently merged.
 NOT_INDEPENDENTLY_MERGEABLE_STATES = frozenset({"stacked", "parent_merged"})
 
@@ -194,7 +198,86 @@ def _parent_pr_in_commits(parent_pr: int, commits: list[str]) -> bool:
     return any(needle in commit for commit in commits)
 
 
-def ancestry_state(  # noqa: PLR0913 - explicit pure-classifier inputs (issue #7515)
+def _stale_main_proof(
+    *,
+    head_sha: str,
+    merge_base_sha: str,
+    commits: list[str],
+    issue_number: int | None,
+    merge_base_is_ancestor_of_main: bool | None,
+    commit_records: list[dict[str, Any]] | None,
+) -> bool:
+    """Return whether commit subjects and graph facts support stale-main replay.
+
+    This is an explicit attribution contract, not cryptographic proof of issue
+    ownership.  The structured parent list proves only that the enumerated
+    commits form one linear chain rooted at the recorded merge base.
+    """
+    if (
+        issue_number is None
+        or issue_number < 1
+        or merge_base_is_ancestor_of_main is not True
+        or not commit_records
+        or len(commit_records) != len(commits)
+    ):
+        return False
+
+    previous = merge_base_sha.lower()
+    marker = f"(#{issue_number})"
+    for record in commit_records:
+        sha = str(record.get("sha") or "").lower()
+        parents = record.get("parents")
+        subject = record.get("subject")
+        if (
+            not _FULL_SHA_RE.fullmatch(sha)
+            or not isinstance(parents, list)
+            or len(parents) != 1
+            or str(parents[0]).lower() != previous
+            or not isinstance(subject, str)
+            or not subject.endswith(marker)
+        ):
+            return False
+        previous = sha
+    return previous == head_sha.lower()
+
+
+def _unattributed_ancestry_state(
+    *,
+    diagnostic: dict[str, Any],
+    head_sha: str,
+    merge_base_sha: str,
+    commits: list[str],
+    issue_number: int | None,
+    merge_base_is_ancestor_of_main: bool | None,
+    commit_records: list[dict[str, Any]] | None,
+) -> dict[str, Any]:
+    """Classify un-declared ancestry as attributable stale-main or ambiguous."""
+    if _stale_main_proof(
+        head_sha=head_sha,
+        merge_base_sha=merge_base_sha,
+        commits=commits,
+        issue_number=issue_number,
+        merge_base_is_ancestor_of_main=merge_base_is_ancestor_of_main,
+        commit_records=commit_records,
+    ):
+        diagnostic["remediation"] = (
+            f"branch is based on stale main and every source commit declares issue "
+            f"#{issue_number}; reconstruct the verified linear chain onto current "
+            f"origin/main with check_prepublication_state.py reconstruct before publication"
+        )
+        return {"state": "stale_main_base", **diagnostic}
+
+    diagnostic["remediation"] = (
+        "branch carries commits not reachable from origin/main with no stack "
+        "declaration; rebase the intended work onto origin/main "
+        "(git rebase --onto origin/main <merge-base> <branch>) and keep only the "
+        "intended commits, or add the canonical ## Stack Declaration binding the "
+        "parent PR and parent head SHA"
+    )
+    return {"state": "undeclared_stack", **diagnostic}
+
+
+def ancestry_state(  # noqa: C901, PLR0913 - explicit fail-closed states and inputs
     *,
     head_sha: str,
     base_ref: str,
@@ -205,6 +288,9 @@ def ancestry_state(  # noqa: PLR0913 - explicit pure-classifier inputs (issue #7
     parent_state: str = "",
     parent_merged: bool = False,
     parent_head_changed: bool = False,
+    issue_number: int | None = None,
+    merge_base_is_ancestor_of_main: bool | None = None,
+    commit_records: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Classify branch ancestry into a deterministic, fail-closed state.
 
@@ -215,6 +301,9 @@ def ancestry_state(  # noqa: PLR0913 - explicit pure-classifier inputs (issue #7
     ``parent_merged`` whether the parent was merged, and
     ``parent_head_changed`` whether the parent's live head no longer equals the
     declared head.
+    ``issue_number``, ``merge_base_is_ancestor_of_main``, and ``commit_records``
+    are required together to distinguish a safely attributable stale-main
+    branch from ambiguous stacked ancestry.
 
     Returns a dict with ``state`` plus diagnostic fields consumed by the CLI and
     the pre-PR gate (issue #7515 item 5).
@@ -252,15 +341,31 @@ def ancestry_state(  # noqa: PLR0913 - explicit pure-classifier inputs (issue #7
     # the live merge base is an older commit than current ``origin/main``.  The
     # enumeration contains commits that were never merged to main, so a
     # machine-readable declaration is required (issue #7515).
-    if declaration is None:
+    if declaration is None and _stale_main_proof(
+        head_sha=head_sha,
+        merge_base_sha=merge_base_sha,
+        commits=commits,
+        issue_number=issue_number,
+        merge_base_is_ancestor_of_main=merge_base_is_ancestor_of_main,
+        commit_records=commit_records,
+    ):
         diagnostic["remediation"] = (
-            "branch carries commits not reachable from origin/main with no stack "
-            "declaration; rebase the intended work onto origin/main "
-            "(git rebase --onto origin/main <merge-base> <branch>) and keep only the "
-            "intended commits, or add the canonical ## Stack Declaration binding the "
-            "parent PR and parent head SHA"
+            f"branch is based on stale main and every source commit declares issue "
+            f"#{issue_number}; reconstruct the verified linear chain onto current "
+            f"origin/main with check_prepublication_state.py reconstruct before publication"
         )
-        return {"state": "undeclared_stack", **diagnostic}
+        return {"state": "stale_main_base", **diagnostic}
+
+    if declaration is None:
+        return _unattributed_ancestry_state(
+            diagnostic=diagnostic,
+            head_sha=head_sha,
+            merge_base_sha=merge_base_sha,
+            commits=commits,
+            issue_number=issue_number,
+            merge_base_is_ancestor_of_main=merge_base_is_ancestor_of_main,
+            commit_records=commit_records,
+        )
 
     # Parent lifecycle failures invalidate the declaration before content checks.
     # An empty ``parent_state`` means the lifecycle was not evaluated (the pre-PR
@@ -347,7 +452,50 @@ def _default_git(args: list[str], worktree: Path) -> subprocess.CompletedProcess
     )
 
 
-def collect_ancestry_facts(
+def _structured_commit_records(
+    *,
+    main_ref: str,
+    head_sha: str,
+    worktree: Path,
+    git_runner: Callable[[list[str], Path], subprocess.CompletedProcess[str]],
+) -> tuple[list[dict[str, Any]] | None, str | None]:
+    """Read oldest-first commit IDs, parents, and subjects without abbreviations."""
+    result = git_runner(
+        ["log", "--reverse", "--format=%H%x1f%P%x1f%s", f"{main_ref}..{head_sha}"],
+        worktree,
+    )
+    if result.returncode != 0:
+        return None, result.stderr.strip() or "git log structured ancestry failed"
+    records: list[dict[str, Any]] = []
+    for line in result.stdout.splitlines():
+        fields = line.split("\x1f", 2)
+        if len(fields) != 3:
+            return None, "git log returned malformed structured ancestry"
+        records.append(
+            {
+                "sha": fields[0],
+                "parents": fields[1].split() if fields[1].strip() else [],
+                "subject": fields[2],
+            }
+        )
+    return records, None
+
+
+def _prove_merge_base_ancestor(
+    *,
+    merge_base_sha: str,
+    main_ref: str,
+    worktree: Path,
+    git_runner: Callable[[list[str], Path], subprocess.CompletedProcess[str]],
+) -> tuple[bool | None, str | None]:
+    """Return whether the merge base is proven reachable from current main."""
+    result = git_runner(["merge-base", "--is-ancestor", merge_base_sha, main_ref], worktree)
+    if result.returncode not in {0, 1}:
+        return None, result.stderr.strip() or "cannot prove merge-base ancestry"
+    return result.returncode == 0, None
+
+
+def collect_ancestry_facts(  # noqa: C901 - explicit fail-closed Git proof stages
     *,
     head_sha: str,
     base_ref: str,
@@ -393,6 +541,22 @@ def collect_ancestry_facts(
         return None, log.stderr.strip() or "git log failed"
     commits = [line for line in log.stdout.splitlines() if line.strip()]
 
+    commit_records, record_error = _structured_commit_records(
+        main_ref=main_ref,
+        head_sha=head_sha,
+        worktree=worktree,
+        git_runner=git_runner,
+    )
+    if commit_records is not None and len(commit_records) != len(commits):
+        commit_records = None
+        record_error = "structured commit count differs from the ancestry log"
+    merge_base_is_ancestor, ancestry_error = _prove_merge_base_ancestor(
+        merge_base_sha=merge_base_sha,
+        main_ref=main_ref,
+        worktree=worktree,
+        git_runner=git_runner,
+    )
+
     paths, path_error = _changed_paths(
         worktree,
         main_ref=main_ref,
@@ -411,6 +575,10 @@ def collect_ancestry_facts(
         "main_tip_sha": main_tip_sha,
         "merge_base_sha": merge_base_sha,
         "commits": commits,
+        "commit_records": commit_records,
+        "commit_records_error": record_error,
+        "merge_base_is_ancestor_of_main": merge_base_is_ancestor,
+        "merge_base_ancestry_error": ancestry_error,
         "changed_paths": paths,
     }, None
 

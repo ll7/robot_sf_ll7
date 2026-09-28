@@ -12,11 +12,11 @@ non-``main`` ancestry that is undeclared, mismatched, or whose declared parent
 is invalid.  ``evaluate_state`` incorporates the snapshot's recorded
 ``ancestry`` block (populated by ``collect_live_state`` via
 ``scripts.dev.stack_ancestry``): a blocking ancestry state
-(``undeclared_stack`` / ``mismatched_declaration`` / ``parent_invalidated``)
-produces the new ``undeclared_stack_ancestry`` reason and blocks before PR
-creation, while a declared stack (``stacked``) is permitted to proceed to
-publication but is never independently merge-ready (see
-``scripts.dev.pr_loop_policy``).
+(``undeclared_stack`` / ``stale_main_base`` / ``mismatched_declaration`` /
+``parent_invalidated``) blocks before PR creation. An attributable stale-main
+branch gets its own reason and can be replayed to a new branch with
+``reconstruct``. Declared stacks remain permitted to proceed to publication but
+are never independently merge-ready (see ``scripts.dev.pr_loop_policy``).
 """
 
 from __future__ import annotations
@@ -812,7 +812,11 @@ def _record_ancestry(snapshot: dict[str, Any]) -> dict[str, Any]:
     base_ref = str(snapshot.get("base_ref") or "")
     remote = str(snapshot.get("remote") or "origin")
     if not head_sha or not base_ref:
-        snapshot["ancestry"] = {"state": "unknown", "error": "snapshot lacks head/base ref"}
+        snapshot["ancestry"] = {
+            "state": "undeclared_stack",
+            "error": "snapshot lacks head/base ref",
+            "remediation": "cannot prove ancestry; publication remains blocked",
+        }
         return snapshot
     facts, error = collect_ancestry_facts(
         head_sha=head_sha,
@@ -821,12 +825,20 @@ def _record_ancestry(snapshot: dict[str, Any]) -> dict[str, Any]:
         remote=remote,
     )
     if error or facts is None:
-        snapshot["ancestry"] = {"state": "unknown", "error": error}
+        snapshot["ancestry"] = {
+            "state": "undeclared_stack",
+            "error": error or "cannot prove branch ancestry",
+            "remediation": "cannot prove ancestry; publication remains blocked",
+        }
         return snapshot
     declaration_text = str(snapshot.get("stack_declaration") or "")
     declaration, parse_error = parse_stack_declaration(declaration_text)
     if parse_error:
-        snapshot["ancestry"] = {"state": "unknown", "error": parse_error}
+        snapshot["ancestry"] = {
+            "state": "undeclared_stack",
+            "error": parse_error,
+            "remediation": "cannot validate stack declaration; publication remains blocked",
+        }
         return snapshot
     state = ancestry_state(
         head_sha=head_sha,
@@ -835,7 +847,19 @@ def _record_ancestry(snapshot: dict[str, Any]) -> dict[str, Any]:
         merge_base_sha=facts["merge_base_sha"],
         commits=facts["commits"],
         declaration=declaration,
+        issue_number=_issue_number(snapshot.get("issue", "")),
+        merge_base_is_ancestor_of_main=facts.get("merge_base_is_ancestor_of_main"),
+        commit_records=facts.get("commit_records"),
     )
+    proof_errors = {
+        name: str(facts[name])
+        for name in ("commit_records_error", "merge_base_ancestry_error")
+        if facts.get(name)
+    }
+    if proof_errors and facts["commits"] and facts["merge_base_sha"] != facts["main_tip_sha"]:
+        state["state"] = "undeclared_stack"
+        state["remediation"] = "cannot prove stale-main ancestry; publication remains blocked"
+        state["ancestry_proof_errors"] = proof_errors
     state["unexpected_paths"] = facts["changed_paths"]
     snapshot["ancestry"] = state
     return snapshot
@@ -978,7 +1002,11 @@ def evaluate_state(baseline: dict[str, Any], current: dict[str, Any]) -> dict[st
             baseline,
             current,
             decision="blocked",
-            reason="undeclared_stack_ancestry",
+            reason=(
+                "stale_main_base_reconstruction_required"
+                if ancestry_state_value == "stale_main_base"
+                else "undeclared_stack_ancestry"
+            ),
             extra={"ancestry": current.get("ancestry")},
         )
 
@@ -1211,6 +1239,277 @@ def _integrate_targets(
     }
 
 
+def _stable_patch_id(commit_sha: str) -> str:
+    """Return one commit's stable patch ID, rejecting empty/unreadable patches."""
+    patch = _run(["git", "show", "--format=", "--binary", "--no-ext-diff", commit_sha]).stdout
+    result = subprocess.run(
+        ["git", "patch-id", "--stable"],
+        input=patch,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=DEFAULT_TIMEOUT_SECONDS,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "git patch-id failed"
+        raise GateError(detail)
+    rows = [line.split() for line in result.stdout.splitlines() if line.strip()]
+    if len(rows) != 1 or len(rows[0]) < 2:
+        raise GateError(f"commit {commit_sha} has no single stable patch ID")
+    return rows[0][0]
+
+
+def _branch_ref_exists(branch: str) -> bool:
+    """Return whether a local branch ref exists, failing on other Git errors."""
+    result = _run(["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"], check=False)
+    if result.returncode not in {0, 1}:
+        detail = result.stderr.strip() or result.stdout.strip() or "git show-ref failed"
+        raise GateError(detail)
+    return result.returncode == 0
+
+
+def _rollback_reconstruction(
+    source_branch: str, replacement_branch: str, expected_source_sha: str
+) -> dict[str, Any]:
+    """Abort an in-progress replay, return to source, and remove our new branch."""
+    abort = _run(["git", "cherry-pick", "--abort"], check=False)
+    replacement_ref = f"refs/heads/{replacement_branch}"
+    replacement_sha = _git_sha(replacement_ref) if _branch_ref_exists(replacement_branch) else None
+    owns_replacement = (
+        replacement_sha is not None
+        and _git_branch() == replacement_branch
+        and _git_head_sha() == replacement_sha
+    )
+    checkout = _run(["git", "checkout", source_branch], check=False)
+    if checkout.returncode != 0:
+        detail = checkout.stderr.strip() or checkout.stdout.strip() or "checkout failed"
+        return {"ok": False, "step": "restore_source_branch", "detail": detail}
+    deleted = replacement_sha is None
+    if replacement_sha is not None and not owns_replacement:
+        return {
+            "ok": False,
+            "step": "replacement_branch_changed",
+            "source_restored": _git_branch() == source_branch,
+            "replacement_branch_preserved": True,
+        }
+    if replacement_sha is not None:
+        delete = _run(["git", "update-ref", "-d", replacement_ref, replacement_sha], check=False)
+        deleted = delete.returncode == 0
+        if not deleted:
+            detail = delete.stderr.strip() or delete.stdout.strip() or "branch deletion failed"
+            return {"ok": False, "step": "delete_replacement_branch", "detail": detail}
+    restored_sha = _git_sha(f"refs/heads/{source_branch}")
+    return {
+        "ok": deleted and restored_sha == expected_source_sha,
+        "source_restored": _git_branch() == source_branch and restored_sha == expected_source_sha,
+        "source_head_sha": restored_sha,
+        "cherry_pick_abort_returncode": abort.returncode,
+        "replacement_branch_deleted": deleted,
+    }
+
+
+def _validate_reconstruction_request(args: argparse.Namespace) -> dict[str, Any]:
+    """Validate current checkout, branch names, worktree, and target collisions."""
+    issue = _issue_number(args.issue)
+    remote = str(args.remote or "").strip()
+    if not remote:
+        raise GateError("remote must not be empty")
+    source_branch = args.source_branch or _git_branch()
+    replacement_branch = str(args.new_branch or "").strip()
+    if source_branch != _git_branch():
+        raise GateError("checkout the source branch before reconstruction")
+    for label, branch in (("source", source_branch), ("replacement", replacement_branch)):
+        if (
+            not _SAFE_BRANCH_RE.fullmatch(branch)
+            or ".." in branch
+            or "@{" in branch
+            or _run(["git", "check-ref-format", "--branch", branch], check=False).returncode != 0
+        ):
+            raise GateError(f"invalid or unsafe {label} branch name: {branch!r}")
+    if source_branch == replacement_branch:
+        raise GateError("replacement branch must differ from the source branch")
+    if _tree_state() != "clean":
+        raise GateError("reconstruction requires a clean tracked and untracked worktree")
+    if _branch_ref_exists(replacement_branch):
+        raise GateError(f"replacement branch already exists locally: {replacement_branch}")
+
+    remote_ref = f"refs/heads/{replacement_branch}"
+    remote_check = _run(["git", "ls-remote", "--heads", remote, remote_ref], check=False)
+    if remote_check.returncode != 0:
+        detail = (
+            remote_check.stderr.strip() or remote_check.stdout.strip() or "remote lookup failed"
+        )
+        raise GateError(f"cannot check replacement branch collision: {detail}")
+    if any(line.split() for line in remote_check.stdout.splitlines()):
+        raise GateError(f"replacement branch already exists on {remote}: {replacement_branch}")
+    return {
+        "issue": issue,
+        "remote": remote,
+        "source_branch": source_branch,
+        "replacement_branch": replacement_branch,
+    }
+
+
+def _prepare_stale_source(request: dict[str, Any]) -> dict[str, Any]:
+    """Fetch main and require a fully proven, issue-attributed stale-main source."""
+    issue = int(request["issue"])
+    remote = str(request["remote"])
+    source_branch = str(request["source_branch"])
+    source_sha = _git_sha(f"refs/heads/{source_branch}")
+    main_ref = f"refs/remotes/{remote}/main"
+    _run(
+        [
+            "git",
+            "fetch",
+            "--no-tags",
+            remote,
+            f"refs/heads/main:{main_ref}",
+        ]
+    )
+    if _git_sha(f"refs/heads/{source_branch}") != source_sha:
+        raise GateError("source branch moved during fetch; no reconstruction was started")
+    facts, error = collect_ancestry_facts(
+        head_sha=source_sha,
+        base_ref="main",
+        worktree=Path.cwd(),
+        remote=remote,
+        main_ref=main_ref,
+    )
+    if error or facts is None:
+        raise GateError(error or "cannot establish source ancestry")
+    source_state = ancestry_state(
+        head_sha=source_sha,
+        base_ref="main",
+        main_tip_sha=facts["main_tip_sha"],
+        merge_base_sha=facts["merge_base_sha"],
+        commits=facts["commits"],
+        issue_number=issue,
+        merge_base_is_ancestor_of_main=facts.get("merge_base_is_ancestor_of_main"),
+        commit_records=facts.get("commit_records"),
+    )
+    if source_state["state"] != "stale_main_base":
+        raise GateError(
+            "source is not an attributable stale-main chain; "
+            f"ancestry state is {source_state['state']}"
+        )
+    source_records = facts.get("commit_records")
+    if not isinstance(source_records, list) or not source_records:
+        raise GateError("source ancestry records are unavailable")
+    source_commits = [str(record["sha"]) for record in source_records]
+    source_patch_ids = [_stable_patch_id(commit) for commit in source_commits]
+    return {
+        **request,
+        "source_sha": source_sha,
+        "main_ref": main_ref,
+        "main_tip_sha": str(facts["main_tip_sha"]),
+        "source_commits": source_commits,
+        "source_patch_ids": source_patch_ids,
+    }
+
+
+def _verify_reconstruction(plan: dict[str, Any]) -> dict[str, Any]:
+    """Verify exact source/main refs, clean state, linear replay ancestry, and patch IDs."""
+    source_branch = str(plan["source_branch"])
+    remote = str(plan["remote"])
+    main_ref = str(plan["main_ref"])
+    main_tip_sha = str(plan["main_tip_sha"])
+    if _git_sha(main_ref) != main_tip_sha:
+        raise GateError("origin/main moved during replay; candidate was rolled back")
+    if _git_sha(f"refs/heads/{source_branch}") != plan["source_sha"]:
+        raise GateError("source branch ref changed during replay; candidate was rolled back")
+    if _tree_state() != "clean":
+        raise GateError("replay left a dirty worktree")
+
+    replacement_head = _git_head_sha()
+    replacement_facts, replacement_error = collect_ancestry_facts(
+        head_sha=replacement_head,
+        base_ref="main",
+        worktree=Path.cwd(),
+        remote=remote,
+        main_ref=main_ref,
+    )
+    if replacement_error or replacement_facts is None:
+        raise GateError(replacement_error or "cannot verify replacement ancestry")
+    replacement_state = ancestry_state(
+        head_sha=replacement_head,
+        base_ref="main",
+        main_tip_sha=replacement_facts["main_tip_sha"],
+        merge_base_sha=replacement_facts["merge_base_sha"],
+        commits=replacement_facts["commits"],
+        issue_number=int(plan["issue"]),
+        merge_base_is_ancestor_of_main=replacement_facts.get("merge_base_is_ancestor_of_main"),
+        commit_records=replacement_facts.get("commit_records"),
+    )
+    replacement_commits = [
+        str(record["sha"]) for record in replacement_facts.get("commit_records", [])
+    ]
+    replacement_patch_ids = [_stable_patch_id(commit) for commit in replacement_commits]
+    if replacement_patch_ids != plan["source_patch_ids"]:
+        raise GateError("ordered stable patch IDs changed during replay")
+    if replacement_state["state"] != "clean":
+        raise GateError(
+            "replacement does not classify clean against current origin/main; "
+            f"state is {replacement_state['state']}"
+        )
+    return {
+        "replacement_head": replacement_head,
+        "replacement_patch_ids": replacement_patch_ids,
+        "replacement_state": replacement_state["state"],
+    }
+
+
+def _perform_reconstruction(plan: dict[str, Any]) -> dict[str, Any]:
+    """Replay verified commits and roll back our local branch on any failed proof."""
+    replacement_branch = str(plan["replacement_branch"])
+    replacement_created = False
+    try:
+        _run(["git", "checkout", "--no-track", "-b", replacement_branch, str(plan["main_ref"])])
+        replacement_created = True
+        for commit in plan["source_commits"]:
+            replay = _run(["git", "cherry-pick", "--no-edit", commit], check=False)
+            if replay.returncode != 0:
+                detail = replay.stderr.strip() or replay.stdout.strip() or "cherry-pick failed"
+                raise GateError(f"replay conflict or failure at {commit}: {detail}")
+        verified = _verify_reconstruction(plan)
+        return {
+            "decision": "reconstructed",
+            "issue": plan["issue"],
+            "source_branch": plan["source_branch"],
+            "source_head_sha": plan["source_sha"],
+            "replacement_branch": replacement_branch,
+            "replacement_head_sha": verified["replacement_head"],
+            "main_tip_sha": plan["main_tip_sha"],
+            "source_patch_ids": plan["source_patch_ids"],
+            "replacement_patch_ids": verified["replacement_patch_ids"],
+            "source_ref_unchanged": True,
+            "replacement_state": verified["replacement_state"],
+            "attribution_note": (
+                "Commit subjects are an explicit issue attribution declaration, "
+                "not cryptographic proof of ownership."
+            ),
+            "push_performed": False,
+        }
+    except Exception as exc:
+        if not replacement_created:
+            raise
+        rollback = _rollback_reconstruction(
+            str(plan["source_branch"]), replacement_branch, str(plan["source_sha"])
+        )
+        detail = json.dumps(rollback, sort_keys=True)
+        raise GateError(
+            f"reconstruction failed and rollback was attempted: {exc}; rollback={detail}"
+        ) from exc
+
+
+def _handle_reconstruct(args: argparse.Namespace) -> int:
+    """Replay a verified stale-main chain onto current origin/main on a new branch."""
+    request = _validate_reconstruction_request(args)
+    plan = _prepare_stale_source(request)
+    result = _perform_reconstruction(plan)
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return EXIT_CODES["ready"]
+
+
 def _parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
     parser = argparse.ArgumentParser(
@@ -1258,6 +1557,25 @@ def _parser() -> argparse.ArgumentParser:
             "validate non-main ancestry before publication (issue #7515)"
         ),
     )
+
+    reconstruct = subparsers.add_parser(
+        "reconstruct",
+        help=(
+            "replay an explicitly issue-attributed linear stale-main chain onto "
+            "fetched origin/main on a new local branch"
+        ),
+    )
+    reconstruct.add_argument("--issue", type=int, required=True)
+    reconstruct.add_argument(
+        "--source-branch",
+        help="source branch to verify (defaults to the currently checked out branch)",
+    )
+    reconstruct.add_argument(
+        "--new-branch",
+        required=True,
+        help="new local replacement branch; must not exist locally or on the remote",
+    )
+    reconstruct.add_argument("--remote", default="origin")
 
     for name, help_text in (
         ("check", "check a baseline against refreshed remote state"),
@@ -1328,6 +1646,12 @@ def _handle_capture(args: argparse.Namespace) -> int:
     elif snapshot["issue_state"] != "OPEN":
         decision = "superseded" if snapshot["issue_state"] == "CLOSED" else "blocked"
         reason = "issue_closed" if decision == "superseded" else "issue_state_unknown"
+    elif (
+        isinstance(snapshot.get("ancestry"), dict)
+        and snapshot["ancestry"].get("state") == "stale_main_base"
+    ):
+        decision = "blocked"
+        reason = "stale_main_base_reconstruction_required"
     else:
         decision = "ready"
         reason = "baseline_captured"
@@ -1458,7 +1782,11 @@ def _evaluate_post_integration(
             baseline,
             refreshed,
             decision="blocked",
-            reason="undeclared_stack_ancestry",
+            reason=(
+                "stale_main_base_reconstruction_required"
+                if ancestry_state_val == "stale_main_base"
+                else "undeclared_stack_ancestry"
+            ),
             extra={
                 "ancestry": refreshed.get("ancestry"),
                 "integration": integration,
@@ -1625,11 +1953,13 @@ def _handle_check_or_sync(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the capture, check, or sync command."""
+    """Run a pre-publication gate, state refresh, or safe stale-main reconstruction."""
     args = _parser().parse_args(argv)
     try:
         if args.command == "capture":
             return _handle_capture(args)
+        if args.command == "reconstruct":
+            return _handle_reconstruct(args)
         return _handle_check_or_sync(args)
     except GateError as exc:
         decision_path: Path | None = None

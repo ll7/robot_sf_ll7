@@ -436,6 +436,10 @@ _FAST_FILES = {
     "test_pedestrian_removal.py",
     "test_planner_unit_consistency.py",
     "test_replay_determinism.py",
+    # Issue #9759 map-reflection and route-waypoint checks use in-memory maps and
+    # synthetic grids; keep their changed transform/planner branches in fast shards.
+    "test_release_map_mirror.py",
+    "test_grid_route.py",
     # Adversarial evidence packet and gallery tests are deterministic fixture
     # contracts for replay provenance, materialization, and report schemas.
     "test_replay_gallery.py",
@@ -1010,6 +1014,9 @@ _FAST_FILES = {
     # both focused files in the exact-head fast lane.
     "test_maneuver_candidates.py",
     "test_maneuver_candidates_counterexamples.py",
+    # Multimodal arbitration tests are deterministic planner/risk contracts and
+    # cover the issue #8062 selector in exact-head changed-line shards.
+    "test_multimodal_trajectory_arbitration.py",
     # Versioned obstacle-force dispatch tests are deterministic contract
     # coverage for the planner, simulator, and wrapper seams; keep their
     # top-level modules in PR shards so changed coverage cannot exclude them as

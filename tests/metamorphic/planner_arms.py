@@ -39,6 +39,10 @@ RELEASE_TEMPLATE_CAMPAIGN = (
     ROOT / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
 )
 HYBRID_V3_ARM = "hybrid_rule_v3_fast_progress_static_escape"
+# Explicitly bound diagnostic candidate.  It is intentionally absent from
+# ``RELEASE_ARMS`` so this check cannot silently change the official roster.
+HYBRID_V4_DIAGNOSTIC_ARM = "hybrid_rule_v4_fast_progress_static_escape_s30_h600_release"
+HYBRID_V4_DIAGNOSTIC_CONFIG = "configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release.yaml"
 RELEASE_ARMS = ("social_force", "orca", HYBRID_V3_ARM)
 
 MAP_SIZE = 20.0
@@ -113,6 +117,10 @@ def release_arm(key: str) -> tuple[str, dict[str, Any]]:
     Returns:
         Effective algorithm key and config for the synthetic test scenario.
     """
+    if key == HYBRID_V4_DIAGNOSTIC_ARM:
+        return resolve_release_algo_config(
+            "hybrid_rule_local_planner", HYBRID_V4_DIAGNOSTIC_CONFIG, "metamorphic"
+        )
     matches = [entry for entry in release_campaign_planners() if entry["key"] == key]
     assert matches, f"release roster has no arm {key!r}"
     entry = matches[-1]
@@ -376,6 +384,9 @@ def run_arm_episode(
 
     try:
         observation, info = env.reset(seed=seed)
+        bind_env = getattr(policy, "_planner_bind_env", None)
+        if callable(bind_env):
+            bind_env(env)
         reset = getattr(policy, "reset", None)
         if callable(reset):
             try:

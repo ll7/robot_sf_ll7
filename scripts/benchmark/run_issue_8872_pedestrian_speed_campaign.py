@@ -37,8 +37,8 @@ an ``activation_pass``; the fixed public executor does not override that gate.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import fcntl
+import hashlib
 import json
 import os
 import re
@@ -61,32 +61,20 @@ from scripts.validation.check_issue_6561_pedestrian_speed_protocol import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CANARY_CONFIG = (
-    REPO_ROOT / "configs/benchmarks/issue_8871_pedestrian_speed_canary_v1.yaml"
-)
-PRODUCTION_MANIFEST_HASH = (
-    "371f1a0160ec7faf1ade531691f104e2a1c92f7c34857e887ba1ba539e1b5238"
-)
-ROBOT_SPEED_MANIFEST_HASH = (
-    "e32ce197149af62bf366f5ca95abbb42215b379fe7916d916ccdd544dce8666f"
-)
+DEFAULT_CANARY_CONFIG = REPO_ROOT / "configs/benchmarks/issue_8871_pedestrian_speed_canary_v1.yaml"
+PRODUCTION_MANIFEST_HASH = "371f1a0160ec7faf1ade531691f104e2a1c92f7c34857e887ba1ba539e1b5238"
+ROBOT_SPEED_MANIFEST_HASH = "e32ce197149af62bf366f5ca95abbb42215b379fe7916d916ccdd544dce8666f"
 PACKET_SCHEMA_VERSION = "robot_sf.issue_8872_pedestrian_speed_campaign_packet.v1"
 ROW_ACCOUNTING_SCHEMA_VERSION = "robot_sf.issue_8872_pedestrian_speed_row_accounting.v1"
 SMOKE_SCHEMA_VERSION = "robot_sf.issue_8872_pedestrian_speed_smoke.v1"
 ACTIVATION_RECEIPT_SCHEMA_VERSION = "robot_sf.issue_8871_activation_receipt.v1"
 SPEED_INTEGRITY_RECEIPT_SCHEMA_VERSION = "robot_sf.issue_6102_integrity_receipt.v1"
-NATIVE_PREFLIGHT_RECEIPT_SCHEMA_VERSION = (
-    "robot_sf.issue_8872_native_preflight_receipt.v1"
-)
-PRIVATE_ADMISSION_RECEIPT_SCHEMA_VERSION = (
-    "robot_sf.issue_8872_private_admission_receipt.v1"
-)
+NATIVE_PREFLIGHT_RECEIPT_SCHEMA_VERSION = "robot_sf.issue_8872_native_preflight_receipt.v1"
+PRIVATE_ADMISSION_RECEIPT_SCHEMA_VERSION = "robot_sf.issue_8872_private_admission_receipt.v1"
 AUTHORIZATION_RECEIPT_SCHEMA_VERSION = "robot_sf.issue_8872_production_authorization.v1"
 EXPECTED_ROWS = 2160
 PREPARATION_STATUS = "PREPARATION_INCOMPLETE"
-EXPECTED_PROTOCOL_CONFIG = (
-    "configs/benchmarks/issue_6561_pedestrian_speed_protocol.yaml"
-)
+EXPECTED_PROTOCOL_CONFIG = "configs/benchmarks/issue_6561_pedestrian_speed_protocol.yaml"
 REQUIRED_PRIVATE_PREDICATES = (
     "production_wrapper_rehearsal",
     "duplicate_guard",
@@ -131,9 +119,7 @@ FORBIDDEN_TRANSIENT_KEYS = frozenset(
         "worktree",
     }
 )
-SAFE_ARTIFACT_REFERENCE = re.compile(
-    r"^(?:artifact|wandb)://[A-Za-z0-9._/-]+(?::v[0-9]+)?$"
-)
+SAFE_ARTIFACT_REFERENCE = re.compile(r"^(?:artifact|wandb)://[A-Za-z0-9._/-]+(?::v[0-9]+)?$")
 HEX_COMMIT = re.compile(r"^[0-9a-f]{40}$")
 JOURNAL_SCHEMA_VERSION = "robot_sf.issue_8872_pedestrian_speed_execution_journal.v1"
 RECEIPT_SCHEMA_VERSION = "robot_sf.issue_8872_pedestrian_speed_execution_receipt.v1"
@@ -254,9 +240,7 @@ def _git_clean() -> bool:
 
 def _validate_source_checkout(source_commit: str) -> None:
     """Require the packet SHA to resolve to the clean checkout used for execution."""
-    _require(
-        HEX_COMMIT.fullmatch(source_commit) is not None, "source commit is not a SHA-1"
-    )
+    _require(HEX_COMMIT.fullmatch(source_commit) is not None, "source commit is not a SHA-1")
     try:
         resolved = subprocess.check_output(
             [
@@ -271,21 +255,15 @@ def _validate_source_checkout(source_commit: str) -> None:
             stderr=subprocess.STDOUT,
         ).strip()
     except (OSError, subprocess.CalledProcessError) as exc:
-        raise CampaignAdapterError(
-            "source commit does not resolve in the checkout"
-        ) from exc
+        raise CampaignAdapterError("source commit does not resolve in the checkout") from exc
     _require(resolved == source_commit, "source commit does not resolve exactly")
-    _require(
-        _git_head() == source_commit, "source commit differs from checked-out HEAD"
-    )
+    _require(_git_head() == source_commit, "source commit differs from checked-out HEAD")
     _require(_git_clean(), "source checkout is not clean; refuse execution")
 
 
 def _token_binding_digest(token: str, packet_binding_hash: str) -> str:
-    _require(
-        isinstance(token, str) and len(token) >= 32, "execution token is too short"
-    )
-    return hashlib.sha256(f"{token}:{packet_binding_hash}".encode("utf-8")).hexdigest()
+    _require(isinstance(token, str) and len(token) >= 32, "execution token is too short")
+    return hashlib.sha256(f"{token}:{packet_binding_hash}".encode()).hexdigest()
 
 
 def _validate_token_binding(
@@ -293,8 +271,7 @@ def _validate_token_binding(
 ) -> None:
     """Check a private-ops token without storing or printing its value."""
     _require(
-        authorization.get("token_sha256")
-        == hashlib.sha256(token.encode("utf-8")).hexdigest(),
+        authorization.get("token_sha256") == hashlib.sha256(token.encode("utf-8")).hexdigest(),
         "execution token digest does not match private authorization",
     )
     _require(
@@ -323,9 +300,7 @@ def _load_json(path: str | Path, field: str) -> dict[str, Any]:
     try:
         value = json.loads(file_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise CampaignAdapterError(
-            f"cannot read {field}: {exc.__class__.__name__}"
-        ) from exc
+        raise CampaignAdapterError(f"cannot read {field}: {exc.__class__.__name__}") from exc
     return _mapping(value, field)
 
 
@@ -366,9 +341,7 @@ def _packet_binding_hash(manifest: Mapping[str, Any], source_commit: str) -> str
     )
 
 
-def _validate_binding(
-    receipt: Mapping[str, Any], binding_hash: str, field: str
-) -> None:
+def _validate_binding(receipt: Mapping[str, Any], binding_hash: str, field: str) -> None:
     _require(
         receipt.get("packet_binding_hash") == binding_hash,
         f"{field}.packet_binding_hash does not bind the compiled packet",
@@ -399,9 +372,7 @@ def _validate_activation_receipt(
         value.get("verdict") == "activation_pass",
         "#8871 receipt is not activation_pass",
     )
-    _require(
-        value.get("preserved") is True, "#8871 activation receipt is not preserved"
-    )
+    _require(value.get("preserved") is True, "#8871 activation receipt is not preserved")
     _require(value.get("current") is True, "#8871 activation receipt is not current")
     _require(
         value.get("registered_rows_executed") is False,
@@ -419,9 +390,7 @@ def _validate_activation_receipt(
         value.get("production_manifest_hash") == PRODUCTION_MANIFEST_HASH,
         "activation receipt production manifest hash drifted",
     )
-    preservation = _mapping(
-        value.get("preservation"), "activation_receipt.preservation"
-    )
+    preservation = _mapping(value.get("preservation"), "activation_receipt.preservation")
     _require(
         preservation.get("status") == "preserved",
         "activation preservation status is not preserved",
@@ -445,9 +414,7 @@ def _validate_speed_integrity_receipt(
         value.get("schema_version") == SPEED_INTEGRITY_RECEIPT_SCHEMA_VERSION,
         "#6102 integrity receipt schema drifted",
     )
-    _require(
-        value.get("issue") == 6102, "speed integrity receipt must be for issue 6102"
-    )
+    _require(value.get("issue") == 6102, "speed integrity receipt must be for issue 6102")
     _require(
         value.get("status") == "integrity_validated",
         "#6102 integrity receipt is not integrity_validated",
@@ -479,12 +446,8 @@ def _validate_speed_integrity_receipt(
     _require_nonempty_string(
         value.get("artifact_reference"), "speed_integrity_receipt.artifact_reference"
     )
-    _require_digest(
-        value.get("artifact_digest"), "speed_integrity_receipt.artifact_digest"
-    )
-    _validate_receipt_source(
-        value, "speed_integrity_receipt", source_commit, binding_hash
-    )
+    _require_digest(value.get("artifact_digest"), "speed_integrity_receipt.artifact_digest")
+    _validate_receipt_source(value, "speed_integrity_receipt", source_commit, binding_hash)
 
 
 def _validate_native_preflight(
@@ -495,9 +458,7 @@ def _validate_native_preflight(
         value.get("schema_version") == NATIVE_PREFLIGHT_RECEIPT_SCHEMA_VERSION,
         "native preflight receipt schema drifted",
     )
-    _require(
-        value.get("issue") == 8872, "native preflight receipt must be for issue 8872"
-    )
+    _require(value.get("issue") == 8872, "native preflight receipt must be for issue 8872")
     _require(
         value.get("status") == "pass",
         "native planner/checkpoint preflight did not pass",
@@ -535,12 +496,8 @@ def _validate_private_admission(
         value.get("schema_version") == PRIVATE_ADMISSION_RECEIPT_SCHEMA_VERSION,
         "private admission receipt schema drifted",
     )
-    _require(
-        value.get("issue") == 8872, "private admission receipt must be for issue 8872"
-    )
-    _require(
-        value.get("wrapper_status") == "pass", "private wrapper admission did not pass"
-    )
+    _require(value.get("issue") == 8872, "private admission receipt must be for issue 8872")
+    _require(value.get("wrapper_status") == "pass", "private wrapper admission did not pass")
     predicates = _mapping(value.get("predicates"), "private_admission.predicates")
     for predicate in REQUIRED_PRIVATE_PREDICATES:
         _require(
@@ -562,29 +519,17 @@ def _validate_authorization(
         value.get("schema_version") == AUTHORIZATION_RECEIPT_SCHEMA_VERSION,
         "production authorization schema drifted",
     )
-    _require(
-        value.get("issue") == 8872, "production authorization must be for issue 8872"
-    )
-    _require(
-        "authorized" not in value, "self-authenticated authorization flag is forbidden"
-    )
-    _require(
-        value.get("scope") == "run-production", "production authorization scope drifted"
-    )
-    _require(
-        value.get("issuer") == "private-ops", "production authorization issuer drifted"
-    )
-    _require_nonempty_string(
-        value.get("decision_id"), "production_authorization.decision_id"
-    )
+    _require(value.get("issue") == 8872, "production authorization must be for issue 8872")
+    _require("authorized" not in value, "self-authenticated authorization flag is forbidden")
+    _require(value.get("scope") == "run-production", "production authorization scope drifted")
+    _require(value.get("issuer") == "private-ops", "production authorization issuer drifted")
+    _require_nonempty_string(value.get("decision_id"), "production_authorization.decision_id")
     _require_digest(value.get("token_sha256"), "production_authorization.token_sha256")
     _require_digest(
         value.get("token_binding_sha256"),
         "production_authorization.token_binding_sha256",
     )
-    _validate_receipt_source(
-        value, "production_authorization", source_commit, binding_hash
-    )
+    _validate_receipt_source(value, "production_authorization", source_commit, binding_hash)
 
 
 def _packet_core(packet: Mapping[str, Any]) -> dict[str, Any]:
@@ -624,9 +569,7 @@ def _validate_packet_structure(
         "production packet expected row count drifted",
     )
     identities = value.get("identities")
-    _require(
-        isinstance(identities, list), "production packet identities must be a list"
-    )
+    _require(isinstance(identities, list), "production packet identities must be a list")
     _require(
         identities == manifest["identities"],
         "production packet identities drifted from compile_manifest",
@@ -653,9 +596,7 @@ def _validate_packet_structure(
         boundary.get("scheduler_submission") == "private_executor_only",
         "scheduler boundary drifted",
     )
-    _require(
-        boundary.get("default_mode") == "validate", "default mode must remain validate"
-    )
+    _require(boundary.get("default_mode") == "validate", "default mode must remain validate")
     _require(
         boundary.get("production_token_required") is True,
         "production token gate is missing",
@@ -690,19 +631,13 @@ def validate_production_packet(
     for field in receipt_fields:
         _require(field in packet, f"production packet is missing {field}")
         _assert_no_transient_state(packet.get(field), field)
-    _validate_activation_receipt(
-        packet["activation_receipt"], binding_hash, source_commit
-    )
+    _validate_activation_receipt(packet["activation_receipt"], binding_hash, source_commit)
     _validate_speed_integrity_receipt(
         packet["speed_integrity_receipt"], binding_hash, source_commit
     )
     _validate_native_preflight(packet["native_preflight"], binding_hash, source_commit)
-    _validate_private_admission(
-        packet["private_admission"], binding_hash, source_commit
-    )
-    _validate_authorization(
-        packet["production_authorization"], binding_hash, source_commit
-    )
+    _validate_private_admission(packet["private_admission"], binding_hash, source_commit)
+    _validate_authorization(packet["production_authorization"], binding_hash, source_commit)
     return manifest
 
 
@@ -753,21 +688,13 @@ def build_production_packet(
     for field, receipt in receipts.items():
         _assert_no_transient_state(receipt, field)
     _validate_source_checkout(source_commit)
-    _validate_activation_receipt(
-        receipts["activation_receipt"], binding_hash, source_commit
-    )
+    _validate_activation_receipt(receipts["activation_receipt"], binding_hash, source_commit)
     _validate_speed_integrity_receipt(
         receipts["speed_integrity_receipt"], binding_hash, source_commit
     )
-    _validate_native_preflight(
-        receipts["native_preflight"], binding_hash, source_commit
-    )
-    _validate_private_admission(
-        receipts["private_admission"], binding_hash, source_commit
-    )
-    _validate_authorization(
-        receipts["production_authorization"], binding_hash, source_commit
-    )
+    _validate_native_preflight(receipts["native_preflight"], binding_hash, source_commit)
+    _validate_private_admission(receipts["private_admission"], binding_hash, source_commit)
+    _validate_authorization(receipts["production_authorization"], binding_hash, source_commit)
     packet: dict[str, Any] = {
         "schema_version": PACKET_SCHEMA_VERSION,
         "issue": 8872,
@@ -811,10 +738,7 @@ def _native_outcome_status(
         return "fallback"
     if provenance.get("degraded") is True:
         return "degraded"
-    if (
-        provenance.get("execution_mode") != "native"
-        or provenance.get("native") is not True
-    ):
+    if provenance.get("execution_mode") != "native" or provenance.get("native") is not True:
         return "non_native"
     if expected["regime_id"] == "legacy_default":
         if provenance.get("intervention_status") != "not_applicable":
@@ -842,8 +766,7 @@ def _native_outcome_status(
         "runtime_controls": expected["runtime_controls"],
     }
     if any(
-        provenance.get(field) != expected_value
-        for field, expected_value in expected_fields.items()
+        provenance.get(field) != expected_value for field, expected_value in expected_fields.items()
     ):
         return "provenance_invalid"
     _assert_no_transient_state(provenance, "row.provenance")
@@ -874,9 +797,7 @@ def _normalize_outcome(
         return row
 
     if not isinstance(status, str) or status not in TERMINAL_STATUSES:
-        return _row_base(
-            "provenance_invalid", "executor returned an unknown terminal status"
-        )
+        return _row_base("provenance_invalid", "executor returned an unknown terminal status")
     if status != SUCCESS_STATUS:
         return _row_base(status, str(outcome.get("reason") or status))
     provenance = supplied_provenance
@@ -987,9 +908,7 @@ def _validate_identity_contract(
         ),
         None,
     )
-    _require(
-        scenario_spec is not None, "identity scenario is not in the frozen protocol"
-    )
+    _require(scenario_spec is not None, "identity scenario is not in the frozen protocol")
     planner_spec = next(
         (
             dict(item)
@@ -1047,9 +966,7 @@ def _safe_checkpoint_provenance(
             )
             if key in checkpoint
         }
-        for checkpoint in sorted(
-            checkpoints.values(), key=lambda item: str(item.get("model_id"))
-        )
+        for checkpoint in sorted(checkpoints.values(), key=lambda item: str(item.get("model_id")))
     ]
 
 
@@ -1076,13 +993,8 @@ def _native_outcome_from_record(
             "reason": reason or disposition,
         }
     metadata = record.get("algorithm_metadata")
-    kinematics = (
-        metadata.get("planner_kinematics") if isinstance(metadata, Mapping) else None
-    )
-    if (
-        not isinstance(kinematics, Mapping)
-        or kinematics.get("execution_mode") != "native"
-    ):
+    kinematics = metadata.get("planner_kinematics") if isinstance(metadata, Mapping) else None
+    if not isinstance(kinematics, Mapping) or kinematics.get("execution_mode") != "native":
         return {
             "identity_key": identity["identity_key"],
             "terminal_status": "non_native",
@@ -1099,9 +1011,7 @@ def _native_outcome_from_record(
         and float(diagnostics["time_to_desired_speed_target_seconds"]) <= 2.0
     )
     intervention_status = (
-        "not_applicable"
-        if not treated
-        else ("activated" if activated else "not_activated")
+        "not_applicable" if not treated else ("activated" if activated else "not_activated")
     )
     provenance = {
         "identity_key": identity["identity_key"],
@@ -1146,7 +1056,7 @@ def _native_outcome_from_record(
     }
 
 
-def _execute_native_identity(
+def _execute_native_identity(  # noqa: PLR0913
     identity: Mapping[str, Any],
     *,
     source_commit: str,
@@ -1166,16 +1076,14 @@ def _execute_native_identity(
     )
     from scripts.benchmark.run_issue_8871_pedestrian_speed_canary import (
         _bind_checkpoint_paths,
-        _sha256,
         _repo_path,
         _runtime_binding_context,
-        build_execution_scenario,
         _runtime_controls,
+        _sha256,
+        build_execution_scenario,
     )
 
-    scenario_spec, planner_spec, _regime_spec = _validate_identity_contract(
-        identity, protocol
-    )
+    scenario_spec, _planner_spec, _regime_spec = _validate_identity_contract(identity, protocol)
     scenario_id = str(identity["scenario_id"])
     planner_id = str(identity["planner_id"])
     base = scenarios.get(scenario_id)
@@ -1198,23 +1106,15 @@ def _execute_native_identity(
         algo_config=raw_config,
         scenario=base,
     )
-    effective_config = _bind_checkpoint_paths(
-        resolved_algo, effective_config, checkpoints
-    )
+    effective_config = _bind_checkpoint_paths(resolved_algo, effective_config, checkpoints)
     scenario = build_execution_scenario(base, identity)
     controls = _runtime_controls(identity)
     runner = episode_runner or map_runner_episode.run_map_episode
     with _runtime_binding_context(controls, seed=int(identity["seed"])):
-        runtime_config = map_runner_episode._build_env_config(
-            scenario, scenario_path=source_path
-        )
-        observed_cap = float(
-            getattr(runtime_config.robot_config, "max_linear_speed", 0.0)
-        )
+        runtime_config = map_runner_episode._build_env_config(scenario, scenario_path=source_path)
+        observed_cap = float(getattr(runtime_config.robot_config, "max_linear_speed", 0.0))
         _require(
-            observed_cap
-            == float(identity["robot_speed_cap_m_s"])
-            == ROBOT_SPEED_CAP_M_S,
+            observed_cap == float(identity["robot_speed_cap_m_s"]) == ROBOT_SPEED_CAP_M_S,
             "native robot speed cap does not match the frozen identity",
         )
         record = runner(
@@ -1234,9 +1134,7 @@ def _execute_native_identity(
             close_policy=False,
             policy_builder=policy_builder,
         )
-    _require(
-        isinstance(record, Mapping), "native map runner returned a non-mapping record"
-    )
+    _require(isinstance(record, Mapping), "native map runner returned a non-mapping record")
     return _native_outcome_from_record(
         identity,
         record,
@@ -1255,9 +1153,7 @@ def _campaign_lock(lock_path: Path):
         try:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
-            raise CampaignAdapterError(
-                "another #8872 execution holds the campaign lock"
-            ) from exc
+            raise CampaignAdapterError("another #8872 execution holds the campaign lock") from exc
         try:
             yield handle
         finally:
@@ -1268,9 +1164,7 @@ def _read_journal(path: Path) -> list[dict[str, Any]]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError as exc:
-        raise CampaignAdapterError(
-            f"cannot read existing execution journal: {exc}"
-        ) from exc
+        raise CampaignAdapterError(f"cannot read existing execution journal: {exc}") from exc
     events: list[dict[str, Any]] = []
     for line_number, line in enumerate(lines, 1):
         try:
@@ -1295,14 +1189,10 @@ def reconcile_execution_journal(
     _require(path.is_file(), f"execution journal does not exist: {path}")
     events = _read_journal(path)
     started = [
-        str(event.get("identity_key"))
-        for event in events
-        if event.get("event") == "row_started"
+        str(event.get("identity_key")) for event in events if event.get("event") == "row_started"
     ]
     finished = [
-        str(event.get("identity_key"))
-        for event in events
-        if event.get("event") == "row_finished"
+        str(event.get("identity_key")) for event in events if event.get("event") == "row_finished"
     ]
     started_set = set(started)
     finished_set = set(finished)
@@ -1322,19 +1212,13 @@ def reconcile_execution_journal(
     }
 
 
-def _prepare_execution_paths(
-    output_path: Path, journal_path: Path, lock_path: Path
-) -> None:
+def _prepare_execution_paths(output_path: Path, journal_path: Path, lock_path: Path) -> None:
     _require(
         output_path.resolve() not in {journal_path.resolve(), lock_path.resolve()},
         "execution paths collide",
     )
-    _require(
-        journal_path.resolve() != lock_path.resolve(), "journal and lock paths collide"
-    )
-    _require(
-        not output_path.exists(), "refusing duplicate execution: receipt already exists"
-    )
+    _require(journal_path.resolve() != lock_path.resolve(), "journal and lock paths collide")
+    _require(not output_path.exists(), "refusing duplicate execution: receipt already exists")
     if journal_path.exists():
         summary = reconcile_execution_journal(journal_path)
         raise CampaignAdapterError(
@@ -1352,9 +1236,7 @@ def _append_journal_event(handle: Any, event: str, **payload: Any) -> None:
 
 def _atomic_write_json(path: Path, value: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
-    )
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(value, handle, indent=2, sort_keys=True, allow_nan=False)
@@ -1395,13 +1277,13 @@ def run_production(
     lock_path = Path(lock_path)
     _prepare_execution_paths(output_path, journal_path, lock_path)
     checkpoint_root = Path(checkpoint_root).expanduser().resolve()
+    from robot_sf.benchmark.map_runner.map_runner import build_map_policy
     from scripts.benchmark.run_issue_8871_pedestrian_speed_canary import (
         _load_planner_specs,
         _load_scenarios,
         _registry_checkpoint,
         _required_model_ids,
     )
-    from robot_sf.benchmark.map_runner.map_runner import build_map_policy
 
     protocol = load_protocol(config_path)
     scenarios = _load_scenarios(protocol)
@@ -1511,9 +1393,7 @@ def compile_smoke_manifest(*, source_commit: str | None = None) -> dict[str, Any
 
     source_commit = source_commit or _git_head()
     _require_digest(source_commit, "source_commit", length=40)
-    canary = build_manifest(
-        load_canary_config(DEFAULT_CANARY_CONFIG), source_commit=source_commit
-    )
+    canary = build_manifest(load_canary_config(DEFAULT_CANARY_CONFIG), source_commit=source_commit)
     first_scenario = canary["identities"][0]["scenario_id"]
     first_planner = canary["identities"][0]["planner_id"]
     identities = [
@@ -1546,9 +1426,7 @@ def _write_json(path: Path, value: Mapping[str, Any]) -> None:
     _atomic_write_json(path, value)
 
 
-def _summary(
-    mode: str, value: Mapping[str, Any], *, output: Path | None = None
-) -> dict[str, Any]:
+def _summary(mode: str, value: Mapping[str, Any], *, output: Path | None = None) -> dict[str, Any]:
     result = {
         "mode": mode,
         "schema_version": value.get("schema_version"),
@@ -1578,21 +1456,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="mode", required=True)
 
-    validate_parser = subparsers.add_parser(
-        "validate", help="compile or inspect without execution"
-    )
+    validate_parser = subparsers.add_parser("validate", help="compile or inspect without execution")
     validate_parser.add_argument("--config", type=Path, default=DEFAULT_PROTOCOL_CONFIG)
     validate_parser.add_argument("--packet", type=Path)
 
-    smoke_parser = subparsers.add_parser(
-        "smoke", help="build a tiny disjoint diagnostic packet"
-    )
+    smoke_parser = subparsers.add_parser("smoke", help="build a tiny disjoint diagnostic packet")
     smoke_parser.add_argument("--source-commit")
     smoke_parser.add_argument("--output", type=Path)
 
-    render_parser = subparsers.add_parser(
-        "render-production", help="write an admitted packet only"
-    )
+    render_parser = subparsers.add_parser("render-production", help="write an admitted packet only")
     render_parser.add_argument("--source-commit", required=True)
     render_parser.add_argument("--activation-receipt", type=Path, required=True)
     render_parser.add_argument("--speed-integrity-receipt", type=Path, required=True)
@@ -1601,9 +1473,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     render_parser.add_argument("--production-authorization", type=Path, required=True)
     render_parser.add_argument("--output", type=Path, required=True)
 
-    run_parser = subparsers.add_parser(
-        "run-production", help="execute the fixed native runner"
-    )
+    run_parser = subparsers.add_parser("run-production", help="execute the fixed native runner")
     run_parser.add_argument("--packet", type=Path, required=True)
     run_parser.add_argument("--checkpoint-root", type=Path, required=True)
     run_parser.add_argument("--output", type=Path, required=True)
@@ -1636,23 +1506,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             smoke = compile_smoke_manifest(source_commit=args.source_commit)
             if args.output:
                 _write_json(args.output, smoke)
-            print(
-                json.dumps(_summary("smoke", smoke, output=args.output), sort_keys=True)
-            )
+            print(json.dumps(_summary("smoke", smoke, output=args.output), sort_keys=True))
             return 0
         if args.mode == "render-production":
             packet = build_production_packet(
                 source_commit=args.source_commit,
-                activation_receipt=_load_json(
-                    args.activation_receipt, "activation receipt"
-                ),
+                activation_receipt=_load_json(args.activation_receipt, "activation receipt"),
                 speed_integrity_receipt=_load_json(
                     args.speed_integrity_receipt, "speed integrity receipt"
                 ),
                 native_preflight=_load_json(args.native_preflight, "native preflight"),
-                private_admission=_load_json(
-                    args.private_admission, "private admission"
-                ),
+                private_admission=_load_json(args.private_admission, "private admission"),
                 production_authorization=_load_json(
                     args.production_authorization, "production authorization"
                 ),
@@ -1688,9 +1552,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             return 0 if report["admissible"] else 2
         if args.mode == "reconcile":
-            summary = reconcile_execution_journal(
-                args.journal, expected_rows=args.expected_rows
-            )
+            summary = reconcile_execution_journal(args.journal, expected_rows=args.expected_rows)
             print(json.dumps(summary, sort_keys=True))
             return 0
     except CampaignAdapterError as exc:

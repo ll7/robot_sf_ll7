@@ -135,9 +135,7 @@ def _native_outcome(identity: dict[str, Any], packet: dict[str, Any]) -> dict[st
             "fallback": False,
             "degraded": False,
             "intervention_status": (
-                "not_applicable"
-                if identity["regime_id"] == "legacy_default"
-                else "activated"
+                "not_applicable" if identity["regime_id"] == "legacy_default" else "activated"
             ),
         },
     }
@@ -151,10 +149,7 @@ def test_packet_binds_exact_compiled_manifest_and_all_gates() -> None:
     assert packet["unique_identity_count"] == campaign.EXPECTED_ROWS
     assert packet["manifest_hash"] == campaign.PRODUCTION_MANIFEST_HASH
     assert packet["execution_boundary"]["public_repo_submits"] is False
-    assert (
-        campaign.validate_production_packet(packet)["manifest_hash"]
-        == packet["manifest_hash"]
-    )
+    assert campaign.validate_production_packet(packet)["manifest_hash"] == packet["manifest_hash"]
 
 
 def test_packet_rejects_non_passing_activation_receipt() -> None:
@@ -193,9 +188,7 @@ def test_fake_native_runtime_accounts_all_rows_once() -> None:
 
     assert report["admissible"] is True
     assert report["complete_native"] is True
-    assert report["terminal_status_counts"] == {
-        campaign.SUCCESS_STATUS: campaign.EXPECTED_ROWS
-    }
+    assert report["terminal_status_counts"] == {campaign.SUCCESS_STATUS: campaign.EXPECTED_ROWS}
     assert len(report["rows"]) == campaign.EXPECTED_ROWS
     assert all(row["missingness"] is None for row in report["rows"])
 
@@ -214,10 +207,7 @@ def test_fallback_row_is_recorded_but_never_admitted() -> None:
 
     assert report["admissible"] is False
     assert report["terminal_status_counts"]["fallback"] == 1
-    assert (
-        report["terminal_status_counts"][campaign.SUCCESS_STATUS]
-        == campaign.EXPECTED_ROWS - 1
-    )
+    assert report["terminal_status_counts"][campaign.SUCCESS_STATUS] == campaign.EXPECTED_ROWS - 1
 
 
 def test_duplicate_missing_and_unexpected_outcomes_are_accounted() -> None:
@@ -248,9 +238,7 @@ def test_duplicate_missing_and_unexpected_outcomes_are_accounted() -> None:
 def test_intervention_not_activated_cannot_be_native_success() -> None:
     packet = _packet()
     treated_identity = next(
-        identity
-        for identity in packet["identities"]
-        if identity["regime_id"] != "legacy_default"
+        identity for identity in packet["identities"] if identity["regime_id"] != "legacy_default"
     )
     outcome = _native_outcome(treated_identity, packet)
     outcome["provenance"]["intervention_status"] = "not_activated"
@@ -260,11 +248,7 @@ def test_intervention_not_activated_cannot_be_native_success() -> None:
         [outcome],
         source_commit=packet["source_commit"],
     )["rows"]
-    row = next(
-        item
-        for item in rows
-        if item["identity_key"] == treated_identity["identity_key"]
-    )
+    row = next(item for item in rows if item["identity_key"] == treated_identity["identity_key"])
     assert row["terminal_status"] == "intervention_not_activated"
     assert row["missingness"] == "intervention_not_activated"
 
@@ -283,12 +267,8 @@ def _fake_native_record(*, preferred_speed: float = 0.65) -> dict[str, Any]:
                             "transitions": [
                                 {
                                     "simulator_pedestrian_id": "p0",
-                                    "dynamics": {
-                                        "preferred_speed_mps": preferred_speed
-                                    },
-                                    "post_integration": {
-                                        "velocity_xy": [preferred_speed, 0.0]
-                                    },
+                                    "dynamics": {"preferred_speed_mps": preferred_speed},
+                                    "post_integration": {"velocity_xy": [preferred_speed, 0.0]},
                                 }
                             ]
                         }
@@ -315,9 +295,7 @@ def test_fixed_native_record_adapter_uses_trace_not_executor_flag() -> None:
     )
     assert outcome["terminal_status"] == campaign.SUCCESS_STATUS
     assert outcome["provenance"]["runtime_controls"] == identity["runtime_controls"]
-    assert (
-        outcome["provenance"]["diagnostics"]["desired_speed_activation_fraction"] == 1.0
-    )
+    assert outcome["provenance"]["diagnostics"]["desired_speed_activation_fraction"] == 1.0
     assert "executor_flag" not in outcome["provenance"]
 
 
@@ -337,9 +315,7 @@ def test_fixed_executor_fake_runner_receives_bound_native_identity(
         if item["planner_id"] == "orca" and item["regime_id"] == "slow_distributed"
     )
     scenarios = _load_scenarios(protocol)
-    planner_specs = {
-        str(item["planner_id"]): item for item in _load_planner_specs(protocol)
-    }
+    planner_specs = {str(item["planner_id"]): item for item in _load_planner_specs(protocol)}
     observed: dict[str, Any] = {}
 
     def fake_runner(**kwargs: Any) -> dict[str, Any]:
@@ -369,10 +345,7 @@ def test_fixed_executor_fake_runner_receives_bound_native_identity(
     assert observed["horizon"] == identity["horizon_steps"]
     assert observed["dt"] == identity["dt_seconds"]
     assert observed["scenario"]["simulation_config"]["desired_speed_mean"] == 0.65
-    assert (
-        observed["scenario"]["simulation_config"]["desired_speed_seed"]
-        == "episode_seed"
-    )
+    assert observed["scenario"]["simulation_config"]["desired_speed_seed"] == "episode_seed"
     assert observed["runtime_config"].sim_config.desired_speed_seed == identity["seed"]
 
 
@@ -380,9 +353,7 @@ def test_receipt_source_and_artifact_refs_are_cross_bound_and_safe() -> None:
     packet = _packet()
     packet["native_preflight"]["source_commit"] = "b" * 40
     packet["packet_sha256"] = campaign._canonical_hash(campaign._packet_core(packet))
-    with pytest.raises(
-        campaign.CampaignAdapterError, match="does not match production packet"
-    ):
+    with pytest.raises(campaign.CampaignAdapterError, match="does not match production packet"):
         campaign.validate_production_packet(packet)
 
     packet = _packet()
@@ -397,12 +368,8 @@ def test_token_is_bound_to_packet_and_not_self_authenticated() -> None:
     campaign._validate_token_binding(
         packet["production_authorization"], packet["packet_binding_hash"], TOKEN
     )
-    with pytest.raises(
-        campaign.CampaignAdapterError, match="bound to this exact packet"
-    ):
-        campaign._validate_token_binding(
-            packet["production_authorization"], "f" * 64, TOKEN
-        )
+    with pytest.raises(campaign.CampaignAdapterError, match="bound to this exact packet"):
+        campaign._validate_token_binding(packet["production_authorization"], "f" * 64, TOKEN)
 
 
 def test_existing_journal_refuses_retry(tmp_path: Any) -> None:
@@ -411,19 +378,14 @@ def test_existing_journal_refuses_retry(tmp_path: Any) -> None:
     summary = campaign.reconcile_execution_journal(journal, expected_rows=2160)
     assert summary["retry_allowed"] is False
     assert summary["in_flight_identity_keys"] == ["x"]
-    with pytest.raises(
-        campaign.CampaignAdapterError, match="automatic retry is forbidden"
-    ):
-        campaign._prepare_execution_paths(
-            tmp_path / "receipt.json", journal, tmp_path / "run.lock"
-        )
+    with pytest.raises(campaign.CampaignAdapterError, match="automatic retry is forbidden"):
+        campaign._prepare_execution_paths(tmp_path / "receipt.json", journal, tmp_path / "run.lock")
 
 
 def test_smoke_packet_is_tiny_disjoint_and_diagnostic() -> None:
     smoke = campaign.compile_smoke_manifest(source_commit="b" * 40)
     production_keys = {
-        identity["identity_key"]
-        for identity in campaign._compiled_manifest()["identities"]
+        identity["identity_key"] for identity in campaign._compiled_manifest()["identities"]
     }
 
     assert smoke["expected_rows"] == 3

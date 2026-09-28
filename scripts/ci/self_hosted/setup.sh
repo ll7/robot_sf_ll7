@@ -6,13 +6,17 @@ set +x  # A registration token must never appear in a shell trace.
 repo="ll7/robot_sf_ll7"
 label="robot-sf-ci-ephemeral"
 image="robot-sf-ci-runner:2.336.0"
+network="robot-sf-ci-egress"
+network_subnet="172.30.244.0/24"
+network_gateway="172.30.244.1"
+network_bridge="br-robot-sf-ci"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 host="$(hostname -s)"
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/robot-sf-ci-runners"
 
 usage() {
   cat <<'USAGE'
-Usage: setup.sh build | start SLOT | stop SLOT | status SLOT
+Usage: setup.sh build | network | start SLOT | stop SLOT | status SLOT
 
 Build the pinned container image locally, then start one supervisor per slot.
 Slots 1-2 are allowed on imech036 and imech039; slots 1-3 on imech156-u.
@@ -39,7 +43,7 @@ pid_file() { printf '%s/%s.pid' "$state_dir" "$(slot_name "$1")"; }
 log_file() { printf '%s/%s.log' "$state_dir" "$(slot_name "$1")"; }
 
 lock_slot() {
-  mkdir -p -m 700 "$state_dir"
+  install -d -m 700 "$state_dir"
   chmod 700 "$state_dir"
   exec {slot_lock_fd}>"$state_dir/$(slot_name "$1").lock"
   flock -x "$slot_lock_fd"
@@ -58,7 +62,7 @@ build_image() {
 FROM ghcr.io/actions/actions-runner@sha256:0cfdcc701ce933c6d243c6b0b2da767366dc9f2e99961d4c3754b0b78084cdda
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libglib2.0-0t64 libgl1 fonts-dejavu-core jq poppler-utils \
+    libglib2.0-0t64 libgl1 fonts-dejavu-core jq poppler-utils iputils-ping curl \
     && rm -rf /var/lib/apt/lists/* \
     && usermod -G '' runner \
     && rm -f /etc/sudoers \
@@ -66,6 +70,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && cp -a /home/runner/. /opt/robot-sf-runner/ \
     && chown -R runner:runner /opt/robot-sf-runner
 COPY --chown=runner:runner setup.sh /usr/local/bin/robot-sf-runner
+COPY --chown=runner:runner job_started_hook.sh /usr/local/libexec/robot-sf-job-started
+COPY --chown=runner:runner network_probe.sh /usr/local/libexec/robot-sf-network-probe
+ENV ACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/libexec/robot-sf-job-started
 USER 1001:1001
 ENTRYPOINT ["/usr/local/bin/robot-sf-runner", "container"]
 DOCKERFILE
@@ -97,7 +104,8 @@ supervise() {
     # created. The container and its tmpfs disappear after one job.
     if gh api -X POST "repos/$repo/actions/runners/registration-token" --jq .token |
       docker run --rm --interactive --name "$name" \
-        --user 1001:1001 --read-only \
+        --user 1001:1001 --read-only --network "$network" \
+        --dns 1.1.1.1 --dns 9.9.9.9 \
         --tmpfs /home/runner:rw,exec,nosuid,nodev,uid=1001,gid=1001,size=7g \
         --tmpfs /tmp:rw,exec,nosuid,nodev,uid=1001,gid=1001,size=512m \
         --cap-drop ALL --security-opt no-new-privileges \
@@ -110,6 +118,34 @@ supervise() {
     fi
     sleep 15
   done
+}
+
+ensure_network() {
+  local settings
+  if ! docker network inspect "$network" >/dev/null 2>&1; then
+    docker network create --driver bridge --subnet "$network_subnet" \
+      --gateway "$network_gateway" \
+      --opt "com.docker.network.bridge.name=$network_bridge" "$network" >/dev/null
+  fi
+  settings="$(docker network inspect --format '{{json .}}' "$network")"
+  jq -e --arg subnet "$network_subnet" --arg gateway "$network_gateway" \
+    --arg bridge "$network_bridge" \
+    '.Driver == "bridge" and .EnableIPv6 == false and
+     .IPAM.Config[0].Subnet == $subnet and .IPAM.Config[0].Gateway == $gateway and
+     .Options["com.docker.network.bridge.name"] == $bridge' \
+    >/dev/null <<<"$settings" || {
+      echo "Dedicated Docker network has unexpected settings: $network" >&2
+      return 1
+    }
+}
+
+probe_network() {
+  docker run --rm --network "$network" --dns 1.1.1.1 --dns 9.9.9.9 --user 0:0 \
+    --entrypoint /usr/local/libexec/robot-sf-network-probe \
+    "$image" "$network_gateway" 137.250.1.254 || {
+      echo "Network isolation probe failed; refusing to start a runner" >&2
+      return 1
+    }
 }
 
 is_supervisor() {
@@ -132,6 +168,8 @@ start_slot() {
     rm -f "$pid_path"
   fi
   docker image inspect "$image" >/dev/null
+  ensure_network
+  probe_network
   nohup "$script_dir/setup.sh" supervise "$slot" >"$(log_file "$slot")" 2>&1 </dev/null &
   pid=$!
   printf '%s\n' "$pid" >"$pid_path"
@@ -157,6 +195,7 @@ stop_slot() {
 
 case "${1:-}" in
   build) [[ $# -eq 1 ]] || { usage; exit 2; }; build_image ;;
+  network) [[ $# -eq 1 ]] || { usage; exit 2; }; ensure_network ;;
   start|stop|status)
     [[ $# -eq 2 ]] || { usage; exit 2; }
     require_slot "$2"

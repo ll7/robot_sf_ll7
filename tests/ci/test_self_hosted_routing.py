@@ -152,6 +152,9 @@ def test_container_setup_keeps_ephemeral_and_no_host_mounts() -> None:
         "--jq .token |",
         "--rm --interactive",
         "flock -x",
+        '--network "$network"',
+        "probe_network",
+        "ACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/libexec/robot-sf-job-started",
     ):
         assert required in script
     assert "--volume" not in script

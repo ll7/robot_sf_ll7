@@ -407,6 +407,106 @@ def test_render_stored_comparison_reuses_json_without_running_search(
     assert provenance["comparison_sha256"] == hashlib.sha256(source_json.read_bytes()).hexdigest()
 
 
+@pytest.mark.parametrize("collision", ["input_markdown", "input_provenance", "markdown_provenance"])
+def test_render_stored_comparison_rejects_aliased_paths_before_writing(
+    tmp_path: Path, collision: str
+) -> None:
+    """Input and generated artifacts must have distinct file identities."""
+    from scripts.tools import compare_adversarial_samplers as compare_module
+
+    source = tmp_path / "comparison.json"
+    source.write_text(
+        json.dumps(
+            build_comparison_payload(
+                rows=[], objectives=["worst_case_snqi"], budgets=[16], seeds=[1101]
+            )
+        ),
+        encoding="utf-8",
+    )
+    original = source.read_bytes()
+    output = tmp_path / "comparison.md"
+    provenance = tmp_path / "render_provenance.json"
+    if collision == "input_markdown":
+        output = source
+    elif collision == "input_provenance":
+        provenance = source
+    else:
+        provenance = output
+
+    with pytest.raises(ValueError, match="paths must be distinct"):
+        compare_module.render_stored_comparison(
+            comparison_path=source,
+            output_path=output,
+            provenance_path=provenance,
+            repo_root=tmp_path,
+            execution_mode="synthetic",
+        )
+
+    assert source.read_bytes() == original
+    if output != source:
+        assert not output.exists()
+    if provenance not in {source, output}:
+        assert not provenance.exists()
+
+
+def test_render_stored_comparison_rejects_hardlink_alias_before_writing(tmp_path: Path) -> None:
+    """Distinct path spellings that share an inode cannot overwrite the input."""
+    from scripts.tools import compare_adversarial_samplers as compare_module
+
+    source = tmp_path / "comparison.json"
+    source.write_text(
+        json.dumps(
+            build_comparison_payload(
+                rows=[], objectives=["worst_case_snqi"], budgets=[16], seeds=[1101]
+            )
+        ),
+        encoding="utf-8",
+    )
+    original = source.read_bytes()
+    output_alias = tmp_path / "comparison-alias.md"
+    output_alias.hardlink_to(source)
+
+    with pytest.raises(ValueError, match="paths must be distinct"):
+        compare_module.render_stored_comparison(
+            comparison_path=source,
+            output_path=output_alias,
+            provenance_path=None,
+            repo_root=tmp_path,
+            execution_mode="synthetic",
+        )
+
+    assert source.read_bytes() == original
+
+
+def test_render_stored_comparison_rejects_symlink_alias_before_writing(tmp_path: Path) -> None:
+    """A symlinked destination cannot turn the stored input into Markdown."""
+    from scripts.tools import compare_adversarial_samplers as compare_module
+
+    source = tmp_path / "comparison.json"
+    source.write_text(
+        json.dumps(
+            build_comparison_payload(
+                rows=[], objectives=["worst_case_snqi"], budgets=[16], seeds=[1101]
+            )
+        ),
+        encoding="utf-8",
+    )
+    original = source.read_bytes()
+    output_alias = tmp_path / "comparison-alias.md"
+    output_alias.symlink_to(source)
+
+    with pytest.raises(ValueError, match="paths must be distinct"):
+        compare_module.render_stored_comparison(
+            comparison_path=source,
+            output_path=output_alias,
+            provenance_path=None,
+            repo_root=tmp_path,
+            execution_mode="synthetic",
+        )
+
+    assert source.read_bytes() == original
+
+
 def test_issue_5326_orchestrator_writes_durable_table_when_declared(tmp_path: Path) -> None:
     """The Package-B orchestrator emits the durable markdown table when the manifest declares it.
 

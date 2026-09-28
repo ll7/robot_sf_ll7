@@ -9,9 +9,11 @@ from robot_sf.adversarial.certification import passed_status
 from robot_sf.adversarial.config import CandidateEvaluation, CandidateSpec, Pose2D
 from robot_sf.adversarial.objectives import (
     constraints_first_lexicographic_v1,
+    get_objective,
+)
+from robot_sf.adversarial.objectives_v2 import (
     constraints_first_lexicographic_v2,
     constraints_first_outcome_projection_v2,
-    get_objective,
 )
 
 

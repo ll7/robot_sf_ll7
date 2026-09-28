@@ -41,6 +41,7 @@ _FALLBACK_FIELDS = frozenset(
         "reasons",
     }
 )
+_CANONICAL_FALLBACK_FIELDS = frozenset({"used", "count", "first_reason", "reasons"})
 
 
 class ObstacleForceDiagnosticReceiptError(ValueError):
@@ -97,6 +98,16 @@ def _input_digest(
     return hashlib.sha256(_json_bytes(payload, field="input identity")).hexdigest()
 
 
+def _reject_unknown_nested_fallback_fields(nested: Mapping[str, Any]) -> None:
+    """Reject fields that are outside the canonical nested receipt shape."""
+    unknown = set(nested) - _CANONICAL_FALLBACK_FIELDS
+    if unknown:
+        unknown_fields = sorted(str(key) for key in unknown)
+        raise ObstacleForceDiagnosticReceiptError(
+            f"nested fallback contains unknown fields: {unknown_fields}"
+        )
+
+
 def obstacle_force_fallback_from_mapping(
     payload: Mapping[str, Any] | None,
 ) -> Mapping[str, Any] | None:
@@ -115,6 +126,7 @@ def obstacle_force_fallback_from_mapping(
         return None
     nested = payload.get("fallback")
     if isinstance(nested, Mapping):
+        _reject_unknown_nested_fallback_fields(nested)
         return dict(nested)
     if not any(key in payload for key in _FALLBACK_FIELDS):
         return None
@@ -269,7 +281,10 @@ def validate_obstacle_force_diagnostic_receipt(
 
     _validate_receipt_shape(receipt)
     site, law_version, selection_source, parameters_sha256 = _validate_receipt_selection(receipt)
-    fallback = _normalize_fallback(receipt["fallback"])
+    fallback_payload = receipt["fallback"]
+    if isinstance(fallback_payload, Mapping):
+        _reject_unknown_nested_fallback_fields(fallback_payload)
+    fallback = _normalize_fallback(fallback_payload)
     input_identity = _validate_receipt_input_identity(
         receipt,
         site=site,

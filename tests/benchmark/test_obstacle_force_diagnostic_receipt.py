@@ -380,3 +380,15 @@ def test_fallback_from_mapping_prefers_nested_fallback_block() -> None:
     nested = {"used": True, "count": 3}
     assert obstacle_force_fallback_from_mapping({"fallback": nested}) == nested
     assert obstacle_force_fallback_from_mapping(None) is None
+
+
+@pytest.mark.parametrize("unknown_field", ("fallback_used", "degraded", "fallback", "unknown"))
+def test_validate_rejects_unknown_nested_fallback_fields(unknown_field: str) -> None:
+    """Nested receipt fallback status must match the strict schema shape."""
+    receipt = dict(_valid_receipt())
+    fallback = dict(receipt["fallback"])
+    fallback[unknown_field] = True
+    receipt["fallback"] = fallback
+
+    with pytest.raises(ObstacleForceDiagnosticReceiptError, match="unknown fields"):
+        validate_obstacle_force_diagnostic_receipt(receipt)

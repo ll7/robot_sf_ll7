@@ -15,7 +15,7 @@ import json
 import time
 import uuid
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -25,6 +25,11 @@ from gymnasium import spaces
 from loguru import logger
 from shapely.geometry import Polygon as ShapelyPolygon
 
+from robot_sf.benchmark.obstacle_force_diagnostic_receipt import (
+    attach_obstacle_force_diagnostic_receipt,
+    obstacle_force_fallback_from_mapping,
+)
+from robot_sf.benchmark.utils import _git_hash_fallback
 from robot_sf.common.types import Line2D
 from robot_sf.gym_env.base_env import BaseEnv
 from robot_sf.gym_env.env_config import EnvSettings
@@ -446,15 +451,27 @@ def _jsonl_runtime_metadata(
     info: dict[str, Any],
     config_hash: str,
 ) -> dict[str, Any] | None:
-    """Build JSONL runtime metadata with the episode configuration hash.
+    """Build JSONL runtime metadata with a diagnostic identity/fallback receipt.
 
     Returns:
         Runtime metadata for the obstacle-force site, or ``None`` when absent.
     """
     runtime_metadata: dict[str, Any] = {}
-    if "obstacle_force_law" in info:
-        obstacle_metadata = dict(info["obstacle_force_law"])
-        obstacle_metadata.setdefault("config_hash", config_hash)
+    raw_metadata = info.get("obstacle_force_law")
+    if isinstance(raw_metadata, Mapping):
+        obstacle_metadata = dict(raw_metadata)
+        # The caller's identity is authoritative.  Do not let stale aliases
+        # supplied by an upstream info mapping disagree with the receipt.
+        source_commit = _git_hash_fallback()
+        obstacle_metadata["config_hash"] = config_hash
+        obstacle_metadata["source_commit"] = source_commit
+        fallback = obstacle_force_fallback_from_mapping(info.get("obstacle_force_law_diagnostics"))
+        obstacle_metadata = attach_obstacle_force_diagnostic_receipt(
+            obstacle_metadata,
+            config_hash=str(config_hash),
+            source_commit=source_commit,
+            fallback=fallback,
+        )
         runtime_metadata["obstacle_force_law"] = obstacle_metadata
     if "success_definition" in info:
         success_definition = info["success_definition"]

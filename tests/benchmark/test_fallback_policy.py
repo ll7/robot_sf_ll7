@@ -17,6 +17,24 @@ from robot_sf.benchmark.fallback_policy import (
     summarize_campaign_outcome,
     summarize_campaign_status_axes,
 )
+from robot_sf.benchmark.obstacle_force_diagnostic_receipt import (
+    build_obstacle_force_diagnostic_receipt,
+)
+
+
+def _unused_diagnostic_receipt() -> dict[str, object]:
+    """Build a complete canonical receipt for the admission scanner tests."""
+    return build_obstacle_force_diagnostic_receipt(
+        {
+            "site": "fast_pysf",
+            "law_version": "legacy_shifted_gradient_v1",
+            "resolution_mode": "defaulted_missing",
+            "enabled": True,
+            "applied": False,
+        },
+        config_hash="config-9244",
+        source_commit="commit-9244",
+    )
 
 
 @pytest.fixture
@@ -788,6 +806,106 @@ def test_runtime_fallback_marker_allows_nested_empty_reason_with_explicit_false_
         )
         is None
     )
+
+
+def test_runtime_fallback_marker_accepts_unused_diagnostic_receipt() -> None:
+    """Diagnostic receipt fallback state is distinct from runtime status telemetry."""
+    receipt = _unused_diagnostic_receipt()
+    assert (
+        runtime_fallback_or_degraded_marker(
+            {"obstacle_force_law": {"sites": {"fast_pysf": {"diagnostic_receipt": receipt}}}}
+        )
+        is None
+    )
+
+
+def test_runtime_fallback_marker_rejects_used_diagnostic_receipt() -> None:
+    """Used diagnostic fallback remains inadmissible even without legacy aliases."""
+    receipt = _unused_diagnostic_receipt()
+    receipt["fallback"] = {
+        "used": True,
+        "count": 1,
+        "first_reason": "malformed_grid",
+        "reasons": {"malformed_grid": 1},
+    }
+    assert runtime_fallback_or_degraded_marker({"diagnostic_receipt": receipt}) == (
+        "diagnostic_receipt.fallback.used",
+        "true",
+    )
+
+
+def test_runtime_fallback_marker_rejects_malformed_diagnostic_receipt() -> None:
+    """Malformed structured receipt state fails closed rather than being ignored."""
+    receipt = _unused_diagnostic_receipt()
+    receipt["fallback"] = {
+        "used": False,
+        "count": 1,
+        "first_reason": None,
+        "reasons": {},
+    }
+    assert runtime_fallback_or_degraded_marker({"diagnostic_receipt": receipt}) == (
+        "diagnostic_receipt",
+        "invalid",
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("fallback_used", True),
+        ("degraded", True),
+        ("schema_version", "wrong-schema"),
+        ("claim_boundary", "benchmark"),
+    ],
+)
+def test_runtime_fallback_marker_rejects_noncanonical_receipt_fields(field, value) -> None:
+    """Unknown status fields and wrong boundaries cannot hide behind a false receipt."""
+    receipt = _unused_diagnostic_receipt()
+    receipt[field] = value
+    assert runtime_fallback_or_degraded_marker({"diagnostic_receipt": receipt}) == (
+        "diagnostic_receipt",
+        "invalid",
+    )
+
+
+def test_runtime_fallback_marker_rejects_malformed_receipt_identity() -> None:
+    """Receipt identity must pass its deterministic digest check before admission."""
+    receipt = _unused_diagnostic_receipt()
+    receipt["input_identity"] = dict(receipt["input_identity"])
+    receipt["input_identity"]["source_commit"] = "unbound-source"
+    assert runtime_fallback_or_degraded_marker({"diagnostic_receipt": receipt}) == (
+        "diagnostic_receipt",
+        "invalid",
+    )
+
+
+def test_runtime_fallback_marker_accepts_unused_receipt_alias_projection() -> None:
+    """The receipt's lossless false aliases remain neutral runtime metadata."""
+    assert (
+        runtime_fallback_or_degraded_marker(
+            {
+                "fallback": False,
+                "fallback_triggered": False,
+                "fallback_count": 0,
+                "fallback_reason": None,
+                "fallback_reasons": {},
+            }
+        )
+        is None
+    )
+
+
+def test_runtime_fallback_marker_rejects_positive_receipt_alias_projection() -> None:
+    """A positive receipt alias still blocks benchmark admission."""
+    assert runtime_fallback_or_degraded_marker(
+        {
+            "fallback": True,
+            "fallback_triggered": True,
+            "fallback_count": 1,
+            "fallback_reason": "malformed_grid",
+            "fallback_reasons": {"malformed_grid": 1},
+        }
+    ) == ("fallback", "true")
 
 
 def test_summarize_benchmark_availability_rejects_runtime_fallback_marker() -> None:

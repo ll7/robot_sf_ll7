@@ -48,6 +48,7 @@ if str(_REPOSITORY_ROOT) not in sys.path:
 
 RECEIPT_SCHEMA = "single_account_merge_receipt.v1"
 VERIFY_SCHEMA = "single_account_merge_receipt_verification.v1"
+CARRIER_DIAGNOSTICS_SCHEMA = "merge_receipt_carrier_diagnostics.v1"
 # Reasons that only mean another merge advanced base/main after the receipt was built.
 BASE_DRIFT_REASONS = frozenset(
     {"live_current_base_sha_changed", "live_gate_audit_changed", "live_ordinary_cas_changed"}
@@ -469,10 +470,12 @@ def _preserve_classified_review(value: Mapping[str, Any]) -> dict[str, Any]:
     }
     if "precedence" in value:
         preserved["precedence"] = value.get("precedence")
+    if isinstance(value.get("considered"), list):
+        preserved["considered"] = copy.deepcopy(value["considered"])
     return preserved
 
 
-def classify_implementation_review(  # noqa: C901 - precedence and carrier states are explicit.
+def classify_implementation_review(  # noqa: C901, PLR0912 - explicit fail-closed carrier states.
     evidence: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Select the highest-precedence independent implementation review carrier.
@@ -500,17 +503,37 @@ def classify_implementation_review(  # noqa: C901 - precedence and carrier state
         carrier, status, reasons = _direct_review_source(
             direct, head_sha=head_sha, metadata_digest=metadata_digest
         )
+        direct_kind = _string(direct.get("kind") or direct.get("carrier_kind")) or "unknown"
+        if direct_kind not in REVIEW_KIND_RANK:
+            direct_kind = "unknown"
+        direct_identity_source = (
+            direct.get("carrier") if isinstance(direct.get("carrier"), Mapping) else direct
+        )
+        considered = [
+            {
+                "kind": direct_kind,
+                "identity": _identity(direct_identity_source) or None,
+                "status": "accepted" if carrier is not None else status,
+                "reason_codes": sorted(set(reasons)),
+            }
+        ]
         if carrier is not None:
             return {
                 "status": "accepted",
                 "carrier": carrier,
                 "reason_codes": [],
                 "precedence": REVIEW_KIND_RANK[carrier["kind"]],
+                "considered": considered,
             }
-        return {"status": status, "carrier": None, "reason_codes": reasons}
+        return {
+            "status": status,
+            "carrier": None,
+            "reason_codes": reasons,
+            "considered": considered,
+        }
 
     candidates: list[tuple[int, dict[str, Any]]] = []
-    observations: list[tuple[str, list[str]]] = []
+    observations: list[dict[str, Any]] = []
     collections = (
         ("check_run", evidence.get("check_runs")),
         ("review_event", evidence.get("reviews")),
@@ -521,11 +544,25 @@ def classify_implementation_review(  # noqa: C901 - precedence and carrier state
         if raw_items is None:
             continue
         if not isinstance(raw_items, list):
-            observations.append(("malformed", [f"{kind}_collection_malformed"]))
+            observations.append(
+                {
+                    "kind": kind,
+                    "identity": None,
+                    "status": "malformed",
+                    "reason_codes": [f"{kind}_collection_malformed"],
+                }
+            )
             continue
         for raw_item in raw_items:
             if not isinstance(raw_item, Mapping):
-                observations.append(("malformed", [f"{kind}_carrier_malformed"]))
+                observations.append(
+                    {
+                        "kind": kind,
+                        "identity": None,
+                        "status": "malformed",
+                        "reason_codes": [f"{kind}_carrier_malformed"],
+                    }
+                )
                 continue
             carrier, status, reasons = _candidate_state(
                 raw_item,
@@ -534,7 +571,14 @@ def classify_implementation_review(  # noqa: C901 - precedence and carrier state
                 metadata_digest=metadata_digest,
                 waiver_actor=_string(evidence.get("waiver_actor")),
             )
-            observations.append((status, reasons))
+            observations.append(
+                {
+                    "kind": kind,
+                    "identity": _identity(raw_item) or None,
+                    "status": status,
+                    "reason_codes": sorted(set(reasons)),
+                }
+            )
             if carrier is not None:
                 candidates.append((REVIEW_KIND_RANK[kind], carrier))
 
@@ -551,16 +595,23 @@ def classify_implementation_review(  # noqa: C901 - precedence and carrier state
                 "status": "conflicting",
                 "carrier": None,
                 "reason_codes": ["same_precedence_review_carrier_conflict"],
+                "considered": observations,
             }
         return {
             "status": "accepted",
             "carrier": best,
             "reason_codes": [],
             "precedence": best_rank,
+            "considered": observations,
         }
 
     if not observations:
-        return {"status": "missing", "carrier": None, "reason_codes": ["review_carrier_missing"]}
+        return {
+            "status": "missing",
+            "carrier": None,
+            "reason_codes": ["review_carrier_missing"],
+            "considered": [],
+        }
     status_order = (
         "conflicting",
         "dismissed",
@@ -575,11 +626,26 @@ def classify_implementation_review(  # noqa: C901 - precedence and carrier state
     )
     for selected in status_order:
         reasons = sorted(
-            {reason for status, codes in observations if status == selected for reason in codes}
+            {
+                reason
+                for observation in observations
+                if observation["status"] == selected
+                for reason in observation["reason_codes"]
+            }
         )
         if reasons:
-            return {"status": selected, "carrier": None, "reason_codes": reasons}
-    return {"status": "missing", "carrier": None, "reason_codes": ["review_carrier_missing"]}
+            return {
+                "status": selected,
+                "carrier": None,
+                "reason_codes": reasons,
+                "considered": observations,
+            }
+    return {
+        "status": "missing",
+        "carrier": None,
+        "reason_codes": ["review_carrier_missing"],
+        "considered": observations,
+    }
 
 
 def normalize_required_checks(  # noqa: C901, PLR0912 - each hosted-check state remains distinct.
@@ -965,6 +1031,209 @@ def _normalize_review_source(value: Any, *, head_sha: str, metadata_digest: str)
     return {"status": "unavailable", "carrier": None, "reason_codes": ["review_source_unavailable"]}
 
 
+def _base_policy_diagnostic(ordinary_cas: Any) -> dict[str, Any]:
+    """Normalize ordinary-CAS status and reasons for the receipt explanation."""
+    ordinary = ordinary_cas if isinstance(ordinary_cas, Mapping) else {}
+    policy = ordinary.get("base_policy") if isinstance(ordinary.get("base_policy"), Mapping) else {}
+    status = _string(policy.get("status")).lower()
+    if not status:
+        ordinary_status = _string(ordinary.get("status")).lower()
+        status = (
+            "not_required"
+            if ordinary_status == "not_required"
+            else "accepted"
+            if ordinary_status == "accepted"
+            else "unavailable"
+        )
+    reasons = policy.get("reason_codes")
+    if not isinstance(reasons, list):
+        reasons = ordinary.get("reason_codes")
+    reasons = (
+        sorted({item for item in reasons if isinstance(item, str) and item})
+        if isinstance(reasons, list)
+        else []
+    )
+    if not reasons and status not in {"accepted", "not_required"}:
+        reasons = [f"base_policy_{status}"]
+    return {
+        "status": status,
+        "reason_codes": reasons,
+        "expected_shape": "base-policy: ordinary-cas|current-base @ <40-hex current PR head SHA>",
+    }
+
+
+def _considered_review_diagnostics(
+    implementation_review: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Retain each candidate's non-prose identity and outcome for diagnosis."""
+    raw_considered = implementation_review.get("considered")
+    considered: list[dict[str, Any]] = []
+    if isinstance(raw_considered, list):
+        for item in raw_considered:
+            if not isinstance(item, Mapping):
+                continue
+            raw_reasons = item.get("reason_codes")
+            reasons = (
+                sorted({reason for reason in raw_reasons if isinstance(reason, str) and reason})
+                if isinstance(raw_reasons, list)
+                else []
+            )
+            kind = _string(item.get("kind"))
+            if kind not in REVIEW_KIND_RANK:
+                kind = "unknown"
+            status = _string(item.get("status")).lower()
+            if status not in EVIDENCE_STATES:
+                status = "malformed"
+            considered.append(
+                {
+                    "kind": kind,
+                    "identity": _string(item.get("identity")) or None,
+                    "status": status,
+                    "reason_codes": reasons,
+                }
+            )
+    if not considered and isinstance(implementation_review.get("carrier"), Mapping):
+        carrier = implementation_review["carrier"]
+        considered.append(
+            {
+                "kind": _string(carrier.get("kind")) or "unknown",
+                "identity": _string(carrier.get("identity")) or None,
+                "status": "accepted",
+                "reason_codes": [],
+            }
+        )
+    return considered
+
+
+def _implementation_review_diagnostic(implementation_review: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize review status and list each supported authoritative carrier shape."""
+    status = _string(implementation_review.get("status")).lower() or "unavailable"
+    raw_reasons = implementation_review.get("reason_codes")
+    reasons = (
+        sorted({item for item in raw_reasons if isinstance(item, str) and item})
+        if isinstance(raw_reasons, list)
+        else [f"implementation_review_{status}"]
+    )
+    if status == "accepted":
+        reasons = []
+    return {
+        "status": status,
+        "reason_codes": reasons,
+        "considered": _considered_review_diagnostics(implementation_review),
+        "expected_shape": {
+            "check_run": (
+                "approved source and identity; completed status; successful conclusion; "
+                "current full head SHA; current metadata digest"
+            ),
+            "review_event": (
+                "approved independent reviewer; APPROVED state; current full head SHA; "
+                "current metadata digest"
+            ),
+            "static_report": (
+                "approved source and identity; accepted verdict; current full head SHA; "
+                "current metadata digest"
+            ),
+            "machine_comment": (
+                "approved source and identity; single-account-review: accepted @ "
+                "<40-hex head> metadata: <64-hex current metadata digest>"
+            ),
+        },
+    }
+
+
+def _waiver_diagnostic(waiver: Mapping[str, Any]) -> dict[str, Any]:
+    """Explain whether a single-account waiver is unused, valid, or malformed."""
+    reasons: list[str] = []
+    used = waiver.get("used") is True
+    if waiver.get("status") == "malformed":
+        reasons.append("single_account_waiver_malformed")
+    if used:
+        for field, reason in (
+            ("actor", "waiver_actor_missing"),
+            ("reason", "waiver_reason_missing"),
+            ("observed_at", "waiver_timestamp_missing"),
+        ):
+            if not _string(waiver.get(field)):
+                reasons.append(reason)
+    status = "malformed" if reasons else "used" if used else "not_used"
+    return {
+        "status": status,
+        "reason_codes": sorted(set(reasons)),
+        "expected_shape": (
+            "used=false; or used=true with a non-empty actor, reason, and observed_at"
+        ),
+    }
+
+
+def _carrier_diagnostics(
+    *,
+    gate_audit: Any,
+    ordinary_cas: Any,
+    implementation_review: Mapping[str, Any],
+    waiver: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Explain the status and required shape of each merge-admission carrier."""
+    gate = gate_audit if isinstance(gate_audit, Mapping) else {}
+    gate_reasons = gate.get("reasons")
+    gate_reasons = (
+        [item for item in gate_reasons if isinstance(item, str) and item]
+        if isinstance(gate_reasons, list)
+        else []
+    )
+    gate_status = _string(gate.get("gate_verdict_status")).lower() or "unavailable"
+    gate_reason_codes = [item for item in gate_reasons if "gate_verdict" in item]
+    if not gate_reason_codes and gate_status != "accepted":
+        gate_reason_codes = [f"gate_verdict_{gate_status}"]
+
+    metadata_status = _string(gate.get("metadata_verdict_status")).lower() or "unavailable"
+    metadata_reason_codes = [
+        item for item in gate_reasons if "metadata_verdict" in item or "pr_metadata" in item
+    ]
+    if not metadata_reason_codes and metadata_status != "accepted":
+        metadata_reason_codes = [f"pr_metadata_{metadata_status}"]
+
+    return {
+        "schema": CARRIER_DIAGNOSTICS_SCHEMA,
+        "gate_verdict": {
+            "status": gate_status,
+            "reason_codes": sorted(set(gate_reason_codes)),
+            "expected_shape": "gate-verdict: accepted|hold @ <40-hex current PR head SHA>",
+        },
+        "base_policy": _base_policy_diagnostic(ordinary_cas),
+        "pr_metadata": {
+            "status": metadata_status,
+            "reason_codes": sorted(set(metadata_reason_codes)),
+            "expected_shape": (
+                "pr-metadata: reconciled @ <64-hex digest of the live PR title and body>"
+            ),
+        },
+        "implementation_review": _implementation_review_diagnostic(implementation_review),
+        "single_account_waiver": _waiver_diagnostic(waiver),
+    }
+
+
+def _carrier_diagnostic_validation_reasons(receipt: Mapping[str, Any]) -> list[str]:
+    """Verify optional diagnostic text against the authoritative receipt fields."""
+    if "carrier_diagnostics" not in receipt:
+        return []
+    expected = _carrier_diagnostics(
+        gate_audit=receipt.get("gate_audit"),
+        ordinary_cas=receipt.get("ordinary_cas"),
+        implementation_review=(
+            receipt.get("implementation_review")
+            if isinstance(receipt.get("implementation_review"), Mapping)
+            else {}
+        ),
+        waiver=receipt.get("waiver") if isinstance(receipt.get("waiver"), Mapping) else {},
+    )
+    observed = receipt.get("carrier_diagnostics")
+    if not isinstance(observed, Mapping):
+        return ["carrier_diagnostics_malformed"]
+    if _canonical_json(observed) != _canonical_json(expected):
+        return ["carrier_diagnostics_mismatch"]
+    return []
+
+
 def _ordinary_selector_provenance_reasons(  # noqa: C901, PLR0912, PLR0915 - fail closed.
     selector: Mapping[str, Any], receipt: Mapping[str, Any]
 ) -> list[str]:
@@ -1284,6 +1553,12 @@ def build_receipt(  # noqa: PLR0913 - schema fields are intentionally explicit a
         "observed_at": timestamp,
         "merge_result": {"status": "not_applied", "returned_merged_sha": None},
     }
+    receipt["carrier_diagnostics"] = _carrier_diagnostics(
+        gate_audit=receipt["gate_audit"],
+        ordinary_cas=normalized_ordinary_cas,
+        implementation_review=review,
+        waiver=normalized_waiver,
+    )
     if normalized_provenance is not None:
         receipt["evidence_provenance"] = normalized_provenance
     reasons = _premerge_reasons(receipt, structural_only=True)
@@ -1512,6 +1787,7 @@ def validate_receipt(receipt: Any) -> dict[str, Any]:
         reasons.append("receipt_digest_missing_or_malformed")
     elif _string(receipt.get("receipt_digest")).lower() != receipt_digest(receipt).lower():
         reasons.append("receipt_digest_mismatch")
+    reasons.extend(_carrier_diagnostic_validation_reasons(receipt))
     holds = receipt.get("holds")
     if not isinstance(holds, Mapping):
         reasons.append("holds_missing_or_malformed")

@@ -221,6 +221,107 @@ def test_complete_receipt_is_deterministic_and_verifies() -> None:
     assert verify_receipt(first)["passed"] is True
 
 
+def test_receipt_surfaces_status_and_expected_shape_per_carrier_family() -> None:
+    """A blocked receipt explains each carrier family without changing admission."""
+    receipt = _receipt(
+        gate_audit={
+            "schema": "merge_queue_gate.v1",
+            "passed": False,
+            "gate_verdict_status": "malformed",
+            "metadata_verdict_status": "stale",
+            "reasons": [
+                "malformed_exact_head_gate_verdict",
+                "stale_pr_metadata_verdict",
+            ],
+        },
+        ordinary_cas={
+            "status": "blocked",
+            "reason_codes": ["exact_head_ordinary_cas_policy_missing"],
+            "base_policy": {
+                "status": "missing",
+                "policy": "ordinary-cas",
+                "head_sha": HEAD_SHA,
+            },
+        },
+        review_source={
+            "status": "malformed",
+            "carrier": None,
+            "reason_codes": [
+                "review_carrier_head_missing",
+                "review_carrier_metadata_missing",
+            ],
+        },
+        waiver={"used": True, "actor": "", "reason": "bounded waiver"},
+    )
+
+    diagnostics = receipt["carrier_diagnostics"]
+    assert receipt["status"] == "blocked"
+    assert diagnostics["gate_verdict"]["status"] == "malformed"
+    assert diagnostics["gate_verdict"]["reason_codes"] == ["malformed_exact_head_gate_verdict"]
+    assert "gate-verdict: accepted|hold @" in diagnostics["gate_verdict"]["expected_shape"]
+    assert diagnostics["base_policy"]["status"] == "missing"
+    assert diagnostics["pr_metadata"]["status"] == "stale"
+    assert diagnostics["implementation_review"]["status"] == "malformed"
+    assert "review_event" in diagnostics["implementation_review"]["expected_shape"]
+    assert diagnostics["single_account_waiver"]["status"] == "malformed"
+    assert "waiver_actor_missing" in diagnostics["single_account_waiver"]["reason_codes"]
+    assert validate_receipt(receipt)["passed"] is True
+
+
+def test_receipt_carrier_diagnostics_must_match_the_authoritative_fields() -> None:
+    """Explanatory diagnostics cannot contradict the admission evidence in a receipt."""
+    receipt = _receipt()
+    receipt["carrier_diagnostics"]["gate_verdict"]["status"] = "malformed"
+    receipt["receipt_digest"] = receipt_digest(receipt)
+
+    verification = validate_receipt(receipt)
+
+    assert verification["passed"] is False
+    assert "carrier_diagnostics_mismatch" in verification["reasons"]
+
+
+def test_review_diagnostics_name_pending_check_run_and_rejected_candidate() -> None:
+    """Diagnostics distinguish a pending check from a present rejected carrier."""
+    receipt = _receipt(
+        review_source={
+            "status": "malformed",
+            "carrier": None,
+            "reason_codes": ["review_carrier_head_missing"],
+            "considered": [
+                {
+                    "kind": "check_run",
+                    "identity": "pr-contract-check",
+                    "status": "pending",
+                    "reason_codes": ["review_check_run_not_terminal"],
+                },
+                {
+                    "kind": "review_event",
+                    "identity": "ll7",
+                    "status": "malformed",
+                    "reason_codes": ["review_carrier_head_missing"],
+                },
+            ],
+        }
+    )
+
+    considered = receipt["carrier_diagnostics"]["implementation_review"]["considered"]
+
+    assert considered[0]["identity"] == "pr-contract-check"
+    assert considered[0]["status"] == "pending"
+    assert considered[1]["identity"] == "ll7"
+    assert considered[1]["status"] == "malformed"
+    assert validate_receipt(receipt)["passed"] is True
+
+
+def test_legacy_v1_receipt_without_carrier_diagnostics_remains_valid() -> None:
+    """The additive diagnostic field does not make prior v1 receipts unreadable."""
+    receipt = _receipt()
+    receipt.pop("carrier_diagnostics")
+    receipt["receipt_digest"] = receipt_digest(receipt)
+
+    assert validate_receipt(receipt)["passed"] is True
+
+
 def test_ready_receipts_match_the_versioned_json_schema() -> None:
     schema = json.loads(
         Path("scripts/dev/single_account_merge_receipt.v1.schema.json").read_text(encoding="utf-8")
@@ -247,6 +348,7 @@ def test_pre_followup_v1_receipt_is_readable_but_not_merge_authorized() -> None:
     legacy = _receipt()
     legacy.pop("ordinary_cas")
     legacy.pop("closing_discipline")
+    legacy.pop("carrier_diagnostics")
     legacy["receipt_digest"] = receipt_digest(legacy)
 
     Draft202012Validator(schema).validate(legacy)
@@ -756,6 +858,7 @@ def test_legacy_receipt_without_ordinary_cas_remains_verifiable() -> None:
     """The ordinary-CAS extension must not invalidate pre-#7984 v1 receipts."""
     receipt = _receipt()
     receipt.pop("ordinary_cas")
+    receipt.pop("carrier_diagnostics")
     receipt["receipt_digest"] = receipt_digest(receipt)
     live = _live_evidence(_receipt())
     live.pop("ordinary_cas")
@@ -915,6 +1018,14 @@ def test_review_carrier_precedence_and_fail_closed_states() -> None:
         }
     )
     assert pending["status"] == "pending"
+    assert pending["considered"] == [
+        {
+            "kind": "check_run",
+            "identity": "CodeRabbit",
+            "status": "pending",
+            "reason_codes": ["review_check_run_not_terminal"],
+        }
+    ]
 
     self_review = classify_implementation_review(
         {

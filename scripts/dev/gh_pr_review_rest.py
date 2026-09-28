@@ -36,6 +36,7 @@ from scripts.dev._gh_rest import gh_api_get as _gh_api_get
 from scripts.dev._gh_rest import gh_api_review_post as _gh_api_post
 from scripts.dev._gh_rest import parse_json as _parse_json
 from scripts.dev.github_transport_policy import get_transport_contract
+from scripts.dev.lane_markers import review_control_marker_sha_errors
 from scripts.dev.pr_carrier_gate import _declared_base_sha, extract_full_shas
 from scripts.dev.pr_metadata import extract_metadata_digests, metadata_digest
 from scripts.dev.pr_write_guard import DEFAULT_REPO, guard_pr_write, pr_write_lock
@@ -71,7 +72,14 @@ def _validate_review_body_shas(
     expected_head_sha: str,
     observed_base_sha: str | None,
 ) -> dict[str, Any] | None:
-    """Require the live head and reject an unverifiable or mismatched declared base."""
+    """Require marker-bound live-head SHAs and validate the declared base."""
+    marker_sha_errors = review_control_marker_sha_errors(body, expected_head_sha)
+    if marker_sha_errors:
+        return {
+            "status": "error",
+            "error": "; ".join(marker_sha_errors),
+        }
+
     cited_shas = {sha.lower() for sha in extract_full_shas(body)}
     if expected_head_sha.lower() not in cited_shas:
         return {

@@ -197,6 +197,134 @@
       ]
     },
     "gate_audit": {"type": ["object", "null"]},
+    "carrier_diagnostics": {
+      "description": "Optional additive v1 field. These diagnostics explain admission inputs and never grant authority.",
+      "type": "object",
+      "required": [
+        "schema",
+        "gate_verdict",
+        "base_policy",
+        "pr_metadata",
+        "implementation_review",
+        "single_account_waiver"
+      ],
+      "properties": {
+        "schema": {"const": "merge_receipt_carrier_diagnostics.v1"},
+        "gate_verdict": {
+          "type": "object",
+          "required": ["status", "reason_codes", "expected_shape"],
+          "properties": {
+            "status": {
+              "enum": ["accepted", "hold", "missing", "malformed", "ambiguous", "unavailable"]
+            },
+            "reason_codes": {"type": "array", "items": {"type": "string"}},
+            "expected_shape": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        },
+        "base_policy": {
+          "type": "object",
+          "required": ["status", "reason_codes", "expected_shape"],
+          "properties": {
+            "status": {"enum": ["accepted", "missing", "not_required", "unavailable"]},
+            "reason_codes": {"type": "array", "items": {"type": "string"}},
+            "expected_shape": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        },
+        "pr_metadata": {
+          "type": "object",
+          "required": ["status", "reason_codes", "expected_shape"],
+          "properties": {
+            "status": {"enum": ["accepted", "missing", "stale", "unavailable"]},
+            "reason_codes": {"type": "array", "items": {"type": "string"}},
+            "expected_shape": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        },
+        "implementation_review": {
+          "type": "object",
+          "required": ["status", "reason_codes", "considered", "expected_shape"],
+          "properties": {
+            "status": {
+              "enum": [
+                "accepted",
+                "missing",
+                "pending",
+                "unavailable",
+                "stale",
+                "conflicting",
+                "malformed",
+                "superseded",
+                "dismissed",
+                "withdrawn",
+                "failure"
+              ]
+            },
+            "reason_codes": {"type": "array", "items": {"type": "string"}},
+            "considered": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["kind", "identity", "status", "reason_codes"],
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "check_run",
+                      "review_event",
+                      "static_report",
+                      "machine_comment",
+                      "unknown"
+                    ]
+                  },
+                  "identity": {"type": ["string", "null"]},
+                  "status": {
+                    "enum": [
+                      "accepted",
+                      "missing",
+                      "pending",
+                      "unavailable",
+                      "stale",
+                      "conflicting",
+                      "malformed",
+                      "superseded",
+                      "dismissed",
+                      "withdrawn",
+                      "failure"
+                    ]
+                  },
+                  "reason_codes": {"type": "array", "items": {"type": "string"}}
+                },
+                "additionalProperties": false
+              }
+            },
+            "expected_shape": {
+              "type": "object",
+              "required": ["check_run", "review_event", "static_report", "machine_comment"],
+              "properties": {
+                "check_run": {"type": "string", "minLength": 1},
+                "review_event": {"type": "string", "minLength": 1},
+                "static_report": {"type": "string", "minLength": 1},
+                "machine_comment": {"type": "string", "minLength": 1}
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "single_account_waiver": {
+          "type": "object",
+          "required": ["status", "reason_codes", "expected_shape"],
+          "properties": {
+            "status": {"enum": ["used", "not_used", "malformed"]},
+            "reason_codes": {"type": "array", "items": {"type": "string"}},
+            "expected_shape": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "closing_discipline": {
       "description": "Optional for structurally readable pre-follow-up v1 receipts; active validation still requires a passing bound result.",
       "type": "object",

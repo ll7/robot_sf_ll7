@@ -9,8 +9,8 @@ reason codes overwriting primary ones), so every marker has exactly one
 implementation here that both sides share.
 
 ``pr_loop_policy.py`` and ``pr_metadata.py`` re-export these names for
-backward compatibility; new code imports from this module. Marker semantics
-are unchanged: this module only unifies the spelling.
+backward compatibility; new code imports from this module. Canonical marker
+spellings and shared parsing, formatting, and writer-validation rules live here.
 """
 
 from __future__ import annotations
@@ -43,9 +43,18 @@ GATE_VERDICT_RE = _GATE_VERDICT_RE
 # Markdown-style line (after optional list/quote/fence decoration). This keeps
 # prose such as ``keep `gate-verdict: hold`;`` from becoming a malformed event
 # while leaving malformed dedicated trailers fail-closed below.
+# A malformed event remains blocking unless pr_loop_policy can prove that a
+# later trusted event carries the current-head SHA and its review commit is
+# bound to that same full SHA. A later hold remains blocking, and unavailable
+# or ambiguous ordering stays fail-closed.
 _GATE_VERDICT_MARKER_RE = re.compile(
     r"^[ \t]*(?:[-*+>]\s*)*(?:`{1,3}\s*)?"
     r"(?P<marker>gate-verdict\s*:\s*(?P<verdict>accepted|hold)\b)",
+    re.IGNORECASE | re.MULTILINE,
+)
+_BASE_POLICY_MARKER_RE = re.compile(
+    r"^[ \t]*(?:[-*+>]\s*)*(?:`{1,3}\s*)?"
+    r"(?P<marker>base-policy\s*:\s*(?P<policy>ordinary-cas|current-base)\b)",
     re.IGNORECASE | re.MULTILINE,
 )
 _BASE_POLICY_RE = re.compile(
@@ -58,6 +67,7 @@ _EXACT_HEAD_RE = re.compile(
     re.IGNORECASE,
 )
 EXACT_HEAD_RE = _EXACT_HEAD_RE
+_MARKER_SHA_RE = re.compile(r"^\s*@\s*(?P<sha>[0-9a-fA-F]+)\b")
 
 
 def gate_verdict_matches(text: str) -> list[re.Match[str]]:
@@ -66,8 +76,8 @@ def gate_verdict_matches(text: str) -> list[re.Match[str]]:
     The broad SHA carrier parser remains available for provenance inspection, but
     gate-event consumers must not promote inline prose into control state. A
     dedicated marker with an invalid or missing SHA is intentionally omitted here;
-    event consumers that need fail-closed malformed detection inspect the marker
-    stream directly.
+    callers that need fail-closed writer validation use
+    :func:`review_control_marker_sha_errors`.
     """
     if not isinstance(text, str) or not text:
         return []
@@ -77,6 +87,46 @@ def gate_verdict_matches(text: str) -> list[re.Match[str]]:
         if match is not None:
             matches.append(match)
     return matches
+
+
+def review_control_marker_sha_errors(text: str, expected_head_sha: str) -> list[str]:
+    """Return dedicated gate/base markers that lack an exact expected-head SHA.
+
+    Only recognized control markers at the beginning of a Markdown-style line
+    are checked. Inline prose remains explanatory text. A usable SHA is the
+    full 40-character expected PR head; abbreviated or different-head values
+    cannot bind a review marker to the write being published.
+    """
+    if not isinstance(text, str) or not text:
+        return []
+
+    expected_head = expected_head_sha.strip().lower()
+    errors: list[str] = []
+    marker_families = (
+        ("gate-verdict", _GATE_VERDICT_MARKER_RE),
+        ("base-policy", _BASE_POLICY_MARKER_RE),
+    )
+    for marker_name, marker_re in marker_families:
+        for marker in marker_re.finditer(text):
+            line_end = text.find("\n", marker.end())
+            if line_end < 0:
+                line_end = len(text)
+            tail = text[marker.end() : line_end]
+            sha_match = _MARKER_SHA_RE.match(tail)
+            sha = sha_match.group("sha") if sha_match is not None else None
+            if sha is None:
+                reason = "is missing a SHA"
+            elif len(sha) != 40:
+                reason = f"has a non-exact {len(sha)}-character SHA"
+            elif sha.lower() != expected_head:
+                reason = f"has SHA {sha.lower()} that does not match the expected PR head"
+            else:
+                continue
+            errors.append(
+                f"{marker_name} marker {reason}; it must include the full 40-character "
+                f"exact-head SHA matching expected PR head {expected_head}"
+            )
+    return errors
 
 
 # A ``review-claim`` comment announces a lane's mutable-write window; admission

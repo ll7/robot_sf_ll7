@@ -1575,6 +1575,194 @@ def test_current_gate_verdict_status_rejects_malformed_dedicated_marker() -> Non
     assert current_gate_verdict_status(pr, FULL_SHA) == "malformed"
 
 
+def test_later_current_gate_verdict_supersedes_earlier_malformed_marker() -> None:
+    """A proven later current-head carrier repairs an immutable malformed review."""
+    pr = {
+        "number": 3009,
+        "head_sha": FULL_SHA,
+        "reviews": [
+            {
+                "body": "gate-verdict: accepted",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:51Z",
+                "commit": {"oid": FULL_SHA},
+            },
+            {
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:57Z",
+                "commit": {"oid": FULL_SHA},
+            },
+        ],
+    }
+
+    assert current_gate_verdict_status(pr, FULL_SHA) == "accepted"
+
+
+def test_later_hold_supersedes_malformed_and_keeps_gate_blocked() -> None:
+    """Recovery to a valid event must preserve a later HOLD."""
+    pr = {
+        "number": 3010,
+        "head_sha": FULL_SHA,
+        "reviews": [
+            {
+                "body": "gate-verdict: accepted",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:51Z",
+                "commit": {"oid": FULL_SHA},
+            },
+            {
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:57Z",
+                "commit": {"oid": FULL_SHA},
+            },
+            {
+                "body": f"gate-verdict: hold @ {FULL_SHA}",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:34:03Z",
+                "commit": {"oid": FULL_SHA},
+            },
+        ],
+    }
+
+    assert current_gate_verdict_status(pr, FULL_SHA) == "hold"
+
+
+def test_later_current_head_marker_without_review_commit_binding_cannot_recover() -> None:
+    """A trailer SHA alone cannot repair malformed evidence without a bound review commit."""
+    pr = {
+        "number": 3013,
+        "head_sha": FULL_SHA,
+        "reviews": [
+            {
+                "body": "gate-verdict: accepted",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:51Z",
+                "commit": {"oid": FULL_SHA},
+            },
+            {
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:57Z",
+            },
+        ],
+    }
+
+    assert current_gate_verdict_status(pr, FULL_SHA) == "malformed"
+
+
+def test_later_current_head_marker_bound_to_other_commit_cannot_recover() -> None:
+    """A current trailer bound to a different review commit is not recovery evidence."""
+    pr = {
+        "number": 3014,
+        "head_sha": FULL_SHA,
+        "reviews": [
+            {
+                "body": "gate-verdict: accepted",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:51Z",
+                "commit": {"oid": FULL_SHA},
+            },
+            {
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:57Z",
+                "commit": {"oid": "0" * 40},
+            },
+        ],
+    }
+
+    assert current_gate_verdict_status(pr, FULL_SHA) == "malformed"
+
+
+def test_untrusted_later_current_head_marker_cannot_recover_malformed_event() -> None:
+    """A later marker from an untrusted author cannot repair gate evidence."""
+    pr = {
+        "number": 3015,
+        "head_sha": FULL_SHA,
+        "reviews": [
+            {
+                "body": "gate-verdict: accepted",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:51Z",
+                "commit": {"oid": FULL_SHA},
+            },
+            {
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+                "authorAssociation": "CONTRIBUTOR",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:57Z",
+                "commit": {"oid": FULL_SHA},
+            },
+        ],
+    }
+
+    assert current_gate_verdict_status(pr, FULL_SHA) == "malformed"
+
+
+def test_malformed_gate_marker_without_ordering_evidence_remains_blocking() -> None:
+    """An invalid publication time cannot be repaired by a later timestamped event."""
+    pr = {
+        "number": 3011,
+        "head_sha": FULL_SHA,
+        "reviews": [
+            {
+                "body": "gate-verdict: accepted",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "not-a-timestamp",
+                "commit": {"oid": FULL_SHA},
+            },
+            {
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:57Z",
+                "commit": {"oid": FULL_SHA},
+            },
+        ],
+    }
+
+    assert current_gate_verdict_status(pr, FULL_SHA) == "malformed"
+
+
+def test_latest_malformed_gate_marker_stays_blocking() -> None:
+    """A valid earlier event cannot clear a later malformed marker."""
+    pr = {
+        "number": 3012,
+        "head_sha": FULL_SHA,
+        "reviews": [
+            {
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:51Z",
+                "commit": {"oid": FULL_SHA},
+            },
+            {
+                "body": "gate-verdict: accepted",
+                "authorAssociation": "OWNER",
+                "state": "COMMENTED",
+                "submittedAt": "2026-09-12T12:33:57Z",
+                "commit": {"oid": FULL_SHA},
+            },
+        ],
+    }
+
+    assert current_gate_verdict_status(pr, FULL_SHA) == "malformed"
+
+
 def test_classify_explicit_gate_verdict_field_accepted() -> None:
     """A top-level gate_verdict dict should satisfy the gate (snapshot enrichment)."""
     pr = _pr(

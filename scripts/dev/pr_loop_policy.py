@@ -228,6 +228,7 @@ class _GateVerdictEvent:
     position: _MarkerPosition | None
     commit_sha: str | None
     valid: bool
+    recoverable_malformed: bool = False
 
 
 def _marker_publication(entry: dict[str, Any]) -> tuple[datetime | None, bool]:
@@ -695,7 +696,16 @@ def _gate_verdict_events_from_body(
             legacy_order=legacy_order,
         )
         if match is None:
-            events.append(_GateVerdictEvent("", "", position, commit_sha, False))
+            events.append(
+                _GateVerdictEvent(
+                    "",
+                    "",
+                    position,
+                    commit_sha,
+                    False,
+                    recoverable_malformed=evidence_valid,
+                )
+            )
         else:
             events.append(
                 _GateVerdictEvent(
@@ -885,8 +895,22 @@ def _projected_gate_verdict_status(pr: dict[str, Any], head_sha: str) -> str | N
 def _recompute_gate_verdict_status(pr: dict[str, Any], head_sha: str) -> str:
     """Recompute the exact-head gate verdict status from trusted carrier bodies and fields."""
     events = _gate_verdict_events(pr)
-    if any(not event.valid for event in events):
-        return "malformed"
+    current_valid = [
+        event
+        for event in events
+        if event.valid
+        and _sha_matches_head(event.sha, head_sha)
+        and event.commit_sha is not None
+        and re.fullmatch(r"[0-9a-fA-F]{40}", event.commit_sha)
+        and event.commit_sha.lower() == head_sha.lower()
+    ]
+    for event in events:
+        if event.valid:
+            continue
+        if not event.recoverable_malformed or not any(
+            _gate_verdict_is_later(candidate, event) for candidate in current_valid
+        ):
+            return "malformed"
 
     current: list[_GateVerdictEvent] = []
     for event in events:

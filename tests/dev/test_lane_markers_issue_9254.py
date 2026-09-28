@@ -24,6 +24,7 @@ from scripts.dev.lane_markers import (
     invalid_sha_carriers,
     parse_review_claim,
     review_claim_released_shas,
+    review_control_marker_sha_errors,
 )
 
 _HEAD = "9" * 40
@@ -87,6 +88,49 @@ def test_base_policy_round_trip() -> None:
         assert [(c.kind, c.sha) for c in carriers] == [("base-policy", _HEAD)]
     with pytest.raises(ValueError):
         format_base_policy("stale-base", _HEAD)
+
+
+@pytest.mark.parametrize(
+    ("marker", "marker_name"),
+    [
+        ("gate-verdict: accepted", "gate-verdict"),
+        ("gate-verdict: hold @ not-a-sha", "gate-verdict"),
+        ("base-policy: ordinary-cas", "base-policy"),
+        ("base-policy: current-base @ 1234567", "base-policy"),
+        (f"gate-verdict: accepted @ {_OTHER_HEAD}", "gate-verdict"),
+        (f"base-policy: current-base @ {_OTHER_HEAD}", "base-policy"),
+    ],
+)
+def test_review_control_markers_require_full_expected_head_sha(
+    marker: str, marker_name: str
+) -> None:
+    """Recognized dedicated control markers must bind to the expected exact head."""
+    errors = review_control_marker_sha_errors(marker, _HEAD)
+
+    assert len(errors) == 1
+    assert marker_name in errors[0]
+    assert "SHA" in errors[0]
+    assert "full 40-character exact-head SHA" in errors[0]
+    assert _HEAD in errors[0]
+
+
+def test_review_control_marker_sha_validation_ignores_inline_prose() -> None:
+    """Inline examples do not become malformed control markers."""
+    body = (
+        f"Exact head: {_HEAD}\n"
+        "Discussion mentions `gate-verdict: accepted` and `base-policy: ordinary-cas`."
+    )
+
+    assert review_control_marker_sha_errors(body, _HEAD) == []
+
+
+def test_review_control_marker_sha_validation_accepts_canonical_markers() -> None:
+    """Canonical formatted markers bind cleanly to the expected full head."""
+    body = "\n".join(
+        [format_gate_verdict("accepted", _HEAD), format_base_policy("current-base", _HEAD)]
+    )
+
+    assert review_control_marker_sha_errors(body, _HEAD) == []
 
 
 def test_pr_metadata_round_trip() -> None:

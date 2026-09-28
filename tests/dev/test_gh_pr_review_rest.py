@@ -12,6 +12,7 @@ from unittest.mock import patch
 import pytest
 
 from scripts.dev.gh_pr_review_rest import main, post_review
+from scripts.dev.lane_markers import format_base_policy, format_gate_verdict
 from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 
 HEAD_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
@@ -90,6 +91,83 @@ def test_post_review_binds_rest_payload_to_expected_head(tmp_path: Path) -> None
             "commit_id": HEAD_SHA,
         },
     )
+
+
+@pytest.mark.parametrize(
+    ("marker", "marker_name"),
+    [
+        ("gate-verdict: accepted", "gate-verdict"),
+        ("gate-verdict: accepted @ not-a-sha", "gate-verdict"),
+        ("base-policy: ordinary-cas", "base-policy"),
+        ("base-policy: current-base @ 1234567", "base-policy"),
+        (f"gate-verdict: accepted @ {BASE_SHA}", "gate-verdict"),
+        (f"base-policy: current-base @ {BASE_SHA}", "base-policy"),
+    ],
+)
+def test_review_writer_rejects_control_markers_without_expected_head_sha(
+    tmp_path: Path, marker: str, marker_name: str
+) -> None:
+    """Each dedicated control marker must bind to the expected head before POST."""
+    body_file = _write_body(tmp_path, f"Exact-head review evidence for {HEAD_SHA}.\n{marker}")
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch("scripts.dev.gh_pr_review_rest._gh_api_post") as mock_post,
+    ):
+        result = post_review(
+            7571,
+            body_file,
+            expected_head_sha=HEAD_SHA,
+            repo="ll7/robot_sf_ll7",
+        )
+
+    assert result["status"] == "error"
+    assert marker_name in result["error"]
+    assert "SHA" in result["error"]
+    assert "full 40-character exact-head SHA" in result["error"]
+    mock_post.assert_not_called()
+
+
+def test_review_writer_accepts_canonical_markers_and_ignores_inline_examples(
+    tmp_path: Path,
+) -> None:
+    """Canonical control lines remain publishable; inline examples stay prose."""
+    body = "\n".join(
+        [
+            f"Exact-head review evidence for {HEAD_SHA}.",
+            format_gate_verdict("accepted", HEAD_SHA),
+            format_base_policy("current-base", HEAD_SHA),
+            "Examples: `gate-verdict: hold` and `base-policy: ordinary-cas`.",
+        ]
+    )
+    body_file = _write_body(tmp_path, body)
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch("scripts.dev.gh_pr_review_rest._gh_api_get") as mock_metadata,
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_post",
+            return_value=_proc(
+                stdout=json.dumps(
+                    {"id": 13, "commit_id": HEAD_SHA, "html_url": "https://example.test/review/13"}
+                )
+            ),
+        ) as mock_post,
+    ):
+        result = post_review(
+            7571,
+            body_file,
+            expected_head_sha=HEAD_SHA,
+            repo="ll7/robot_sf_ll7",
+        )
+
+    assert result["status"] == "ok"
+    mock_metadata.assert_not_called()
+    mock_post.assert_called_once()
 
 
 @pytest.mark.parametrize("suffix", ["", "\n", "\n\n"])

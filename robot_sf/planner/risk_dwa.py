@@ -109,7 +109,20 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         ped_velocities_raw = ped_state.get("velocities")
         ped_pos = np.asarray([] if ped_positions_raw is None else ped_positions_raw, dtype=float)
         ped_vel = np.asarray([] if ped_velocities_raw is None else ped_velocities_raw, dtype=float)
-        count_raw = self._as_1d_float(ped_state.get("count", []), pad=None)
+        # The shared normalizer fills a missing flat ``pedestrians_count`` with
+        # ``[0]`` for compatibility with other consumers.  Risk-DWA must keep
+        # the distinction at this boundary: only an explicitly supplied count
+        # controls truncation, while absent or empty counts retain the legacy
+        # full-buffer behavior.
+        if "robot" in observation:
+            count_supplied = "count" in ped_state
+            count_value = ped_state.get("count", [])
+        else:
+            count_supplied = "pedestrians_count" in observation
+            count_value = observation.get("pedestrians_count", [])
+        count_raw = (
+            self._as_1d_float(count_value, pad=None) if count_supplied else np.empty(0, dtype=float)
+        )
         ped_count = max(int(count_raw[0]), 0) if count_raw.size else None
         if ped_pos.ndim == 1 and ped_pos.size % 2 == 0:
             ped_pos = ped_pos.reshape(-1, 2)

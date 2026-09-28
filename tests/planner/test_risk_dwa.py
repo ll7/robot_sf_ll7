@@ -354,3 +354,83 @@ def test_risk_dwa_ignores_padded_flat_rows_when_visible_count_is_zero(
         positions.shape == velocities.shape == (0, 2) for positions, velocities in scored_rows
     )
     assert np.all(np.isfinite(command))
+
+
+@pytest.mark.parametrize(
+    ("count_value", "expected_rows"),
+    [
+        (np.asarray([2], dtype=float), 2),
+        (np.asarray([8], dtype=float), 4),
+    ],
+    ids=["positive-count", "overlarge-count"],
+)
+def test_risk_dwa_flat_count_truncates_only_to_available_rows(
+    count_value: np.ndarray, expected_rows: int
+) -> None:
+    """An explicit flat count bounds padded rows without inventing rows."""
+    observation = _flat_observation(
+        heading=float(np.pi / 2.0),
+        pedestrian_velocities=[(2.0, 1.0)] * 4,
+    )
+    observation["pedestrians_count"] = count_value
+
+    _robot_pos, _heading, _goal, ped_pos, ped_vel = RiskDWAPlannerAdapter()._extract_robot_goal_ped(
+        observation
+    )
+
+    assert ped_pos.shape == ped_vel.shape == (expected_rows, 2)
+    np.testing.assert_allclose(ped_pos, np.asarray([[1.0, 0.5]] * expected_rows))
+    np.testing.assert_allclose(ped_vel, np.asarray([[-1.0, 2.0]] * expected_rows))
+
+
+@pytest.mark.parametrize(
+    "count_value", [None, np.asarray([], dtype=float)], ids=["absent", "empty"]
+)
+def test_risk_dwa_flat_missing_or_empty_count_preserves_padded_rows(
+    count_value: np.ndarray | None,
+) -> None:
+    """Flat observations without a usable count retain their full buffers."""
+    observation = _flat_observation(
+        heading=float(np.pi / 2.0),
+        pedestrian_velocities=[(2.0, 1.0)] * 4,
+    )
+    if count_value is None:
+        del observation["pedestrians_count"]
+    else:
+        observation["pedestrians_count"] = count_value
+
+    _robot_pos, _heading, _goal, ped_pos, ped_vel = RiskDWAPlannerAdapter()._extract_robot_goal_ped(
+        observation
+    )
+
+    assert ped_pos.shape == ped_vel.shape == (4, 2)
+    np.testing.assert_allclose(ped_pos, np.asarray([[1.0, 0.5]] * 4))
+    np.testing.assert_allclose(ped_vel, np.asarray([[-1.0, 2.0]] * 4))
+
+
+@pytest.mark.parametrize(
+    "count_value", [None, np.asarray([], dtype=float)], ids=["absent", "empty"]
+)
+def test_risk_dwa_nested_missing_or_empty_count_preserves_padded_rows(
+    count_value: np.ndarray | None,
+) -> None:
+    """Nested observations retain their buffers when count is absent or empty."""
+    observation = _observation(
+        heading=float(np.pi / 2.0),
+        pedestrians=[(1.0, 0.5)] * 4,
+        pedestrian_velocities=[(2.0, 1.0)] * 4,
+    )
+    nested_pedestrians = observation["pedestrians"]
+    assert isinstance(nested_pedestrians, dict)
+    if count_value is None:
+        del nested_pedestrians["count"]
+    else:
+        nested_pedestrians["count"] = count_value
+
+    _robot_pos, _heading, _goal, ped_pos, ped_vel = RiskDWAPlannerAdapter()._extract_robot_goal_ped(
+        observation
+    )
+
+    assert ped_pos.shape == ped_vel.shape == (4, 2)
+    np.testing.assert_allclose(ped_pos, np.asarray([[1.0, 0.5]] * 4))
+    np.testing.assert_allclose(ped_vel, np.asarray([[-1.0, 2.0]] * 4))

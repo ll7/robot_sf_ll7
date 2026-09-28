@@ -3137,7 +3137,7 @@ def test_issue9652_v1_downgrade_cannot_forge_admission_to_unrelated_case(
         decision="duplicate",
         blockers=[],
         candidate_identity=unrelated_case_id.removeprefix("case-"),
-        duplicate_case_id=unrelated_case_id,
+        attempt_fields={"duplicate_case_id": unrelated_case_id},
         near_duplicate_report=counterexample_corpus._unassessed_near_duplicates(),
     )
     candidate["promotion_attempt_id"] = attempt["attempt_id"]
@@ -3209,7 +3209,7 @@ def test_issue9652_v1_candidate_cannot_use_fabricated_binding_to_unrelated_case(
         decision="duplicate",
         blockers=[],
         candidate_identity=case["effective_scenario_sha256"],
-        duplicate_case_id=case["case_id"],
+        attempt_fields={"duplicate_case_id": case["case_id"]},
         near_duplicate_report=counterexample_corpus._unassessed_near_duplicates(),
     )
     candidate["promotion_attempt_id"] = attempt["attempt_id"]

@@ -82,6 +82,20 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _diff_paths(source: Any, target: Any, prefix: str = "") -> set[str]:
+    """Return leaf paths that differ between two nested campaign configs."""
+    if isinstance(source, dict) and isinstance(target, dict):
+        differences: set[str] = set()
+        for key in source.keys() | target.keys():
+            path = f"{prefix}.{key}" if prefix else str(key)
+            if key not in source or key not in target:
+                differences.add(path)
+            else:
+                differences.update(_diff_paths(source[key], target[key], path))
+        return differences
+    return set() if source == target else {prefix}
+
+
 def test_runtime_smoke_is_one_scenario_one_seed_at_h600() -> None:
     """The smoke keeps production horizon/kinematics while bounding cardinality."""
     config = _load_yaml(SMOKE_CONFIG_PATH)
@@ -306,6 +320,37 @@ def test_runtime_smoke_v0_4_matches_campaign_template_and_preserves_v0_3() -> No
     assert smoke["planners"][2]["algo_config"] == (
         "configs/algos/social_force_resolution_independent_v2.yaml"
     )
+
+    expected_config_differences = {
+        "artifact_provenance",
+        "bootstrap_samples",
+        "claim_boundary",
+        "derived_from",
+        "doi",
+        "export_publication_bundle",
+        "name",
+        "overwrite_publication_bundle",
+        "paper_interpretation_profile",
+        "release_kind",
+        "release_status",
+        "release_tag",
+        "resume",
+        "scenario_matrix",
+        "seed_policy.mode",
+        "seed_policy.seed_set",
+        "seed_policy.seeds",
+        "snqi_contract.calibration_trials",
+        "zenodo",
+    }
+    assert _diff_paths(template, smoke) == expected_config_differences
+    assert smoke["record_forces"] is True
+    assert smoke["checkpoint_provenance_enforcement"] == "error"
+    assert smoke["resume"] is False
+    assert smoke["bootstrap_samples"] == 100 < template["bootstrap_samples"]
+    assert smoke["snqi_contract"]["calibration_trials"] == 600
+    assert smoke["export_publication_bundle"] is False
+    assert smoke["overwrite_publication_bundle"] is False
+
     assert cfg.horizon == 600
     assert cfg.dt == 0.1
     assert cfg.workers == 32

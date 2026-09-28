@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+import pytest
+
 from robot_sf.benchmark.episode_input_identity import (
     capture_episode_input_identity,
     reconcile_consumed_map_identity,
@@ -69,6 +71,53 @@ def test_registered_map_identity_uses_registry_bytes_that_resolved_map_id(
     tmp_path: Path, monkeypatch
 ) -> None:
     """A registry edit cannot pair its new digest with a stale cached map path."""
+    scenario_loader._load_map_registry.cache_clear()
+
+
+def test_registry_symlink_keeps_relative_map_path_rooted_at_configured_location(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Registry symlinks retain the canonical loader's relative-path semantics."""
+    configured_dir = tmp_path / "configured"
+    registry_dir = tmp_path / "registry-target"
+    configured_dir.mkdir()
+    registry_dir.mkdir()
+    scenario_path = configured_dir / "scenario.yaml"
+    scenario_path.write_text("scenario fixture\n", encoding="utf-8")
+    (configured_dir / "route.yaml").write_text("route: [1, 2]\n", encoding="utf-8")
+    configured_map = configured_dir / "map.svg"
+    configured_map.write_text("<svg id='configured'/>", encoding="utf-8")
+    target_map = registry_dir / "map.svg"
+    target_map.write_text("<svg id='target'/>", encoding="utf-8")
+    registry_target = registry_dir / "registry.yaml"
+    registry_bytes = b"maps:\n  - map_id: selected\n    path: map.svg\n"
+    registry_target.write_bytes(registry_bytes)
+    registry_link = configured_dir / "registry.yaml"
+    try:
+        registry_link.symlink_to(registry_target)
+    except (NotImplementedError, OSError) as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+    monkeypatch.setenv("ROBOT_SF_MAP_REGISTRY", str(registry_link))
+    scenario_loader._load_map_registry.cache_clear()
+    scenario = {
+        "name": "symlinked-registry",
+        "map_id": "selected",
+        "route_overrides_file": "route.yaml",
+    }
+
+    resolved_map = scenario_loader.resolve_map_id("selected", source=scenario_path)
+    identity = capture_episode_input_identity(
+        scenario, scenario_path=scenario_path, seed=3, run_id="run-symlinked-registry"
+    )
+
+    assets = {asset["role"]: asset["sha256"] for asset in identity["map_assets"]}
+    assert resolved_map == configured_map.resolve()
+    assert identity["status"] == "bound"
+    assert assets == {
+        "map": hashlib.sha256(configured_map.read_bytes()).hexdigest(),
+        "map_registry": hashlib.sha256(registry_bytes).hexdigest(),
+    }
+    assert assets["map"] != hashlib.sha256(target_map.read_bytes()).hexdigest()
     scenario_loader._load_map_registry.cache_clear()
     scenario_path = tmp_path / "scenario.yaml"
     scenario_path.write_text("scenario fixture\n", encoding="utf-8")

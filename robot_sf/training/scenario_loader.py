@@ -1121,14 +1121,13 @@ def resolve_map_id_with_registry_identity(
         tuple[Path, Path, str]: Resolved map path, registry path, and SHA-256
         digest of the registry bytes used to resolve the map.
     """
-    registry_path = _resolve_map_registry_path()
-    if registry_path is None or not registry_path.exists():
+    configured_registry_path = _resolve_map_registry_path()
+    if configured_registry_path is None or not configured_registry_path.exists():
         raise ValueError(
             f"Scenario in '{source}' references map_id '{map_id}', but the map registry is empty."
         )
-    registry_path = registry_path.resolve(strict=True)
-    registry_bytes = registry_path.read_bytes()
-    registry = _parse_map_registry_snapshot(registry_path, registry_bytes)
+    registry_bytes = configured_registry_path.read_bytes()
+    registry = _parse_map_registry_snapshot(configured_registry_path, registry_bytes)
     map_path = _resolve_map_id(
         map_id.strip(),
         map_registry=registry,
@@ -1136,7 +1135,7 @@ def resolve_map_id_with_registry_identity(
         required_profile=required_profile,
     )
     registry_digest = hashlib.sha256(registry_bytes).hexdigest()
-    return map_path, registry_path, registry_digest
+    return map_path, configured_registry_path.resolve(strict=True), registry_digest
 
 
 def _resolve_map_id(

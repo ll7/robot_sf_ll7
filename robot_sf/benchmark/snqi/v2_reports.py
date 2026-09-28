@@ -924,6 +924,16 @@ def _spawn_validity_block(episode: Mapping[str, Any], *, required: bool) -> Any:
     return episode["spawn_validity"]
 
 
+def _validate_spawn_reset_admission(block: Mapping[str, Any], episode: Mapping[str, Any]) -> None:
+    """A completed route cannot validate an overlapping or unmeasured reset."""
+    if block["reset_clearance_status"] != "available":
+        raise ValueError("SNQI-v2 refuses spawn_validity with unavailable reset clearance")
+    if block["reset_overlap"]:
+        raise ValueError("SNQI-v2 inconsistent spawn_validity: reset overlap marked valid")
+    if block["respawn_overlap_collisions"] and not _spawn_route_completed(episode):
+        raise ValueError("SNQI-v2 inconsistent spawn_validity: respawn overlap marked valid")
+
+
 def _validate_spawn_validity(episode: Mapping[str, Any], *, required: bool = False) -> None:
     """Refuse invalid or ambiguous spawn admission while preserving legacy absence."""
     block = _spawn_validity_block(episode, required=required)
@@ -934,6 +944,7 @@ def _validate_spawn_validity(episode: Mapping[str, Any], *, required: bool = Fal
     _validate_spawn_validity_shape(block)
     _validate_spawn_outcome(episode)
     _validate_respawn_attribution(episode, block)
+    _validate_spawn_reset_admission(block, episode)
     if block["invalid_run"]:
         raise ValueError("SNQI-v2 refuses spawn_validity.invalid_run episode")
     if block.get("invalid_reason") is not None:
@@ -950,11 +961,6 @@ def _validate_spawn_validity(episode: Mapping[str, Any], *, required: bool = Fal
         or clearance.get("overlap", reset_overlap) is not reset_overlap
     ):
         raise ValueError("SNQI-v2 inconsistent spawn_validity: reset overlap disagrees")
-    if reset_overlap or respawn_collisions:
-        # The producer exempts completed routes, including earlier collisions;
-        # a non-success termination cannot claim that exception.
-        if not _spawn_route_completed(episode):
-            raise ValueError("SNQI-v2 inconsistent spawn_validity: overlap row marked valid")
 
 
 def validate_episode_execution(

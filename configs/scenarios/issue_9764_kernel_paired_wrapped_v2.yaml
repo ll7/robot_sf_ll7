@@ -8,6 +8,6 @@ select_scenarios:
   - classic_head_on_corridor_medium
   - classic_group_crossing_medium
 scenario_overrides:
-  seeds: [111, 112, 113]
+  seeds: [103, 104, 105]
   simulation_config:
     social_force_kernel_version: wrapped_v2

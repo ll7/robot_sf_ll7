@@ -86,6 +86,11 @@ def test_kernel_selector_preserves_legacy_simulation_and_environment_hashes():
     wrapped.__post_init__()
     assert wrapped.social_force_kernel_version == SOCIAL_FORCE_KERNEL_WRAPPED_V2
     assert wrapped.social_force_kernel_resolution_mode == "explicit"
+    wrapped.sim_time_in_secs = 0
+    with pytest.raises(ValueError, match="Simulation length"):
+        wrapped.__post_init__()
+    assert wrapped.social_force_kernel_version == SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    assert wrapped.social_force_kernel_resolution_mode == "explicit"
 
     positional_ttc = TtcPredictiveForceConfig()
     positional = SimulationSettings(

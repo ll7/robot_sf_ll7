@@ -74,6 +74,14 @@ _APPROVED_008_HYBRID_CONFIGS = {
         "hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release.yaml"
     ),
 }
+_APPROVED_008_HYBRID_ALGO_OVERRIDES = {
+    "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": {
+        "francis2023_leave_group": ("orca", "configs/algos/issue707_orca_tuned.yaml")
+    },
+    "scenario_adaptive_hybrid_orca_v2_collision_guard_v4": {
+        "francis2023_leave_group": ("orca", "configs/algos/issue707_orca_tuned.yaml")
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -165,6 +173,31 @@ def _planner_config_paths(root: Path, config_path: Path) -> set[Path]:
     return paths
 
 
+def _validate_v4_hybrid_manifest(planner_key: str, config_path: Path) -> None:
+    """Reject a v4 slot that would execute an unreviewed algorithm/base pair."""
+    if planner_key not in _APPROVED_008_HYBRID_CONFIGS:
+        return
+    manifest = _load_mapping(config_path)
+    if manifest.get("name") != config_path.stem:
+        raise ValueError(f"v4 hybrid slot {planner_key} has a mismatched config name")
+    if manifest.get("base_config_path") != "configs/algos/hybrid_rule_v4_clearance_braking.yaml":
+        raise ValueError(f"v4 hybrid slot {planner_key} must bind the v4 base config")
+    overrides = manifest.get("scenario_algo_overrides") or {}
+    if not isinstance(overrides, dict) or any(
+        not isinstance(override, dict) for override in overrides.values()
+    ):
+        raise ValueError("v4 hybrid scenario algorithm overrides must be mappings")
+    observed_overrides = {
+        scenario_id: (override.get("algo"), override.get("base_config_path"))
+        for scenario_id, override in overrides.items()
+    }
+    expected_overrides = _APPROVED_008_HYBRID_ALGO_OVERRIDES.get(planner_key, {})
+    if observed_overrides != expected_overrides:
+        raise ValueError(
+            f"v4 hybrid slot {planner_key} has an unapproved scenario algorithm override"
+        )
+
+
 def _expected_input_paths(
     root: Path,
     config_path: Path,
@@ -194,16 +227,9 @@ def _expected_input_paths(
     paths.add(seed_sets_path)
     for planner in planners:
         if planner.get("algo_config"):
-            config_path = _root_file(root, planner["algo_config"], "planner.algo_config")
-            if planner["key"] in _APPROVED_008_HYBRID_CONFIGS:
-                manifest = _load_mapping(config_path)
-                if manifest.get("base_config_path") != (
-                    "configs/algos/hybrid_rule_v4_clearance_braking.yaml"
-                ):
-                    raise ValueError(
-                        f"v4 hybrid slot {planner['key']} must bind the v4 base config"
-                    )
-            paths.update(_planner_config_paths(root, config_path))
+            planner_config_path = _root_file(root, planner["algo_config"], "planner.algo_config")
+            _validate_v4_hybrid_manifest(planner["key"], planner_config_path)
+            paths.update(_planner_config_paths(root, planner_config_path))
     for scenario in scenarios:
         if scenario.get("map_id"):
             raise ValueError("candidate scenarios must resolve to explicit map_file paths")

@@ -300,6 +300,40 @@ def test_candidate_rejects_v4_config_bound_to_historical_v3_base(candidate_repo)
         load_prepublication_candidate(path, repository_root=root)
 
 
+def test_candidate_rejects_jointly_pinned_v3_scenario_algorithm_override(candidate_repo) -> None:
+    root, path, payload = candidate_repo
+    config_path = _APPROVED_008_HYBRID_CONFIGS[
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4"
+    ]
+    manifest_path = root / config_path
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    override = manifest["scenario_algo_overrides"]["francis2023_leave_group"]
+    override["algo"] = "hybrid_rule_local_planner"
+    nested_path = "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml"
+    override["base_config_path"] = nested_path
+    manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+    nested_target = root / nested_path
+    nested_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(SOURCE_ROOT / nested_path, nested_target)
+    payload["sha256_files"][config_path] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    payload["sha256_files"][nested_path] = hashlib.sha256(nested_target.read_bytes()).hexdigest()
+    _git(root, "add", config_path, nested_path)
+    _git(
+        root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "jointly pinned historical scenario override",
+    )
+    payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="unapproved scenario algorithm override"):
+        load_prepublication_candidate(path, repository_root=root)
+
+
 def test_candidate_rejects_jointly_rewritten_scenario_identity(candidate_repo) -> None:
     root, path, payload = candidate_repo
     matrix_path = root / payload["scenario"]["matrix_path"]

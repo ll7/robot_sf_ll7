@@ -1396,6 +1396,16 @@ def _validate_round(  # noqa: C901, PLR0912, PLR0915 - retain every round-local 
     _require_sha(
         planner.get("source_revision"), f"{prefix}.planner.source_revision", _GIT_SHA, errors
     )
+    planner_source_revision = planner.get("source_revision")
+    round_source_revision = data.get("source_revision")
+    if (
+        isinstance(planner_source_revision, str)
+        and _GIT_SHA.fullmatch(planner_source_revision)
+        and isinstance(round_source_revision, str)
+        and _GIT_SHA.fullmatch(round_source_revision)
+        and not _same_text_identity(planner_source_revision, round_source_revision)
+    ):
+        errors.append(f"{prefix}.planner.source_revision does not match enclosing round")
 
     optimization = data.get("optimization")
     if not isinstance(optimization, dict):

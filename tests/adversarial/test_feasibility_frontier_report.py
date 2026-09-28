@@ -1978,6 +1978,33 @@ def test_frontier_report_rejects_bundle_source_revision_mismatch(tmp_path: Path)
         build_frontier_report(payload, evidence_root=tmp_path)
 
 
+def test_frontier_report_rejects_planner_round_source_revision_mismatch(
+    tmp_path: Path,
+) -> None:
+    """Planner-bound evaluation sources cannot override their enclosing round revision."""
+    payload = _evidence(tmp_path)
+    round_data = payload["rounds"][0]
+    planner_source_revision = "e" * 40
+    round_data["planner"]["source_revision"] = planner_source_revision
+    for evaluation in round_data["evaluation_sets"].values():
+        reference = evaluation["artifact"]
+        source_path = tmp_path / reference["path"]
+        source = json.loads(source_path.read_text(encoding="utf-8"))
+        source["source_revision"] = planner_source_revision
+        _write_source_artifact(
+            tmp_path,
+            reference,
+            source,
+            schema_version=frontier_module._EVALUATION_SOURCE_SCHEMA,
+        )
+
+    with pytest.raises(
+        FrontierReportError,
+        match=r"rounds\[0\]\.planner\.source_revision does not match enclosing round",
+    ):
+        build_frontier_report(payload, evidence_root=tmp_path)
+
+
 @pytest.mark.parametrize(
     ("artifact_kind", "payload_field", "message"),
     [

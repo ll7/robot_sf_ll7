@@ -47,9 +47,11 @@ The bundle identifies `experiment_id`, `evidence_kind` (`synthetic_fixture`, `si
 at least two contiguous rounds. Each round records planner/configuration identity, optimization
 method and explicit objective definition/seeds/budget/selection rule, fixed/regression/held-out
 episode rows, and falsification method/objective/search-space/failure predicate/seeds/budget/stop
-reason. The bundle's source revision must match every round's source revision; a future mixed-source
-format must model per-round revisions explicitly rather than relying on the report's single source
-revision field.
+reason. The bundle's source revision must match every round's source revision, and each round's
+planner source revision must match that enclosing round. Evaluation artifacts are bound to the
+round planner revision, so a planner/round mismatch fails closed; a future mixed-source format must
+model per-round revisions explicitly rather than relying on the report's single source revision
+field.
 
 Optimizer, search, evaluation, corpus, replay, and admissibility-evidence artifacts use relative
 paths inside the evidence bundle and carry a full source revision, schema label, role, and SHA-256.

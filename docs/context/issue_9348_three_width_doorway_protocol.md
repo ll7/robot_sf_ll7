@@ -8,7 +8,7 @@ configuration for the 0.0.8 campaign; it reports no comparison result.
 
 Build a serial, fresh-root launcher over the frozen 18 cells, reusing the
 existing geometry preflight, episode runner and one `DoorwayPairingSession`.
-The within-planner width contrast uses only complete, native planner/seed
+The within-planner width contrast uses only complete, valid planner/seed
 pairs. A report must retain per-cell outcomes, failure and exclusion reasons,
 per-cell metric denominators, raw paired differences, paired seed bootstrap
 intervals, explicit degenerate binary-pair handling, and trace references.
@@ -17,9 +17,11 @@ failed or unknown required preflight check stops the run. An expected unavailabl
 `slow_speed_tier` distributional metric may remain an explicit actor-free H1
 fallback/degraded diagnostic after a successful, identity-stable rollout. The
 H400 producer runs a separate actor-present, 18-cell H10 confirmation over the
-frozen planners, seeds and widths. It requires native execution and readiness,
-nonempty traces, no fallback/degraded runtime marker, exact source/config
-identity, and six matching reset/RNG receipt groups. These H10 rows are setup
+frozen planners, seeds and widths. It requires the declared execution path
+(`goal` native commands, `social_force` through its documented adapter), a
+nonempty simulation/action trace, typed valid spawn clearance, no execution
+fallback/degraded marker, exact source/config identity, and six matching
+reset/RNG receipt groups. These H10 rows are setup
 diagnostics only; a red row blocks H400 before its first episode. Raw rows,
 source/config/asset hashes, the report
 and checksums go to an explicit durable result root; the private operations
@@ -129,8 +131,13 @@ at termination, not imputed as a successful arrival time. Execution errors,
 fallback, degraded rows and unavailable cells are counted separately. H1
 execution/binding readiness may record the exact expected unavailable
 distributional metric. The actor-free finding cannot itself admit H400; the
-separate actor-present H10 gate rejects fallback, degraded, missing-trace,
-non-native, or incomplete planner probes.
+separate actor-present H10 gate rejects fallback, degraded, missing simulation
+steps, invalid or unknown spawn validity, unexpected command routes, or
+incomplete planner probes. These baseline planners do not expose specialized
+internal decision steps; an empty `planner_decision_trace.steps` array is
+expected when the simulation/action steps are present. Unavailable reset
+sampler/route object telemetry and unrelated paired-effect wrapper metrics are
+listed as ancillary coverage gaps, not planner fallback.
 
 The three seed IDs alone do **not** prove paired realizations. Before campaign
 submission, each width cell records SHA-256 receipts for the initial

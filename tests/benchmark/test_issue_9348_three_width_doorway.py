@@ -50,6 +50,35 @@ _MANIFEST = _REPO_ROOT / "configs/benchmarks/issue_9348_three_width_doorway_v1.y
 _BASE_MAP = _REPO_ROOT / "maps/svg_maps/francis2023/francis2023_narrow_doorway.svg"
 
 
+def _valid_spawn_block() -> dict[str, Any]:
+    return {
+        "schema_version": "spawn_validity.v1",
+        "reset_clearance_status": "available",
+        "reset_clearance": {
+            "overlap": False,
+            "obstacle_overlap": False,
+            "pedestrian_overlap": False,
+        },
+        "reset_clearance_error": None,
+        "reset_overlap": False,
+        "respawn_overlap_events": [],
+        "respawn_overlap_collisions": [],
+        "invalid_run": False,
+        "invalid_reason": None,
+    }
+
+
+def _baseline_kinematics(planner: str) -> dict[str, Any]:
+    if planner == "goal":
+        return {"execution_mode": "native", "adapter_active": False, "adapter_name": "none"}
+    return {
+        "execution_mode": "adapter",
+        "adapter_active": True,
+        "adapter_name": "SocialForcePlannerAdapter",
+        "projection_documented": True,
+    }
+
+
 def test_campaign_failure_keeps_error_and_seals_receipt(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -299,8 +328,7 @@ def _complete_synthetic_campaign() -> tuple[
                         "scenario_id": scenario_id,
                         "horizon": 400,
                         "status": "success",
-                        "execution_mode": "native",
-                        "readiness_status": "native",
+                        "spawn_validity": _valid_spawn_block(),
                         "episode_id": f"{planner}-{seed}-{asset['gap_width_m']}",
                         "steps": 100,
                         "termination_reason": "success",
@@ -311,6 +339,8 @@ def _complete_synthetic_campaign() -> tuple[
                         },
                         "algorithm_metadata": {
                             "status": "ok",
+                            "canonical_algorithm": planner,
+                            "planner_kinematics": _baseline_kinematics(planner),
                             "config_hash": (
                                 doorway_application.GOAL_PLANNER_CONFIG_HASH
                                 if planner == "goal"
@@ -367,9 +397,26 @@ def test_actor_present_confirmation_rejects_fallback_and_custody_faults() -> Non
     fallback[0]["algorithm_metadata"]["planner_decision_trace"]["steps"][0]["fallback_used"] = True
     assert assess(fallback)["admit_h400"] is False
     assert "fallback_or_degraded_planner_step" in assess(fallback)["rows"][0]["blockers"]
-    absent_axes = deepcopy(rows)
-    absent_axes[0].pop("execution_mode")
-    assert "non_native_execution_mode:None" in assess(absent_axes)["rows"][0]["blockers"]
+    wrong_kinematics = deepcopy(rows)
+    wrong_kinematics[0]["algorithm_metadata"]["planner_kinematics"]["execution_mode"] = "fallback"
+    assert (
+        "planner_kinematics_mode_or_adapter_mismatch"
+        in assess(wrong_kinematics)["rows"][0]["blockers"]
+    )
+    wrong_adapter = deepcopy(rows)
+    wrong_adapter[9]["algorithm_metadata"]["planner_kinematics"]["projection_documented"] = False
+    assert (
+        "social_force_adapter_projection_unverified" in assess(wrong_adapter)["rows"][9]["blockers"]
+    )
+    missing_spawn = deepcopy(rows)
+    missing_spawn[0].pop("spawn_validity")
+    assert "invalid_or_unknown_spawn_validity" in assess(missing_spawn)["rows"][0]["blockers"]
+    unknown_spawn = deepcopy(rows)
+    unknown_spawn[0]["spawn_validity"]["reset_clearance_status"] = "unavailable"
+    assert "invalid_or_unknown_spawn_validity" in assess(unknown_spawn)["rows"][0]["blockers"]
+    overlapping_spawn = deepcopy(rows)
+    overlapping_spawn[0]["spawn_validity"]["invalid_run"] = True
+    assert "invalid_or_unknown_spawn_validity" in assess(overlapping_spawn)["rows"][0]["blockers"]
     wrong_source = deepcopy(rows)
     wrong_source[0]["git_hash"] = "e" * 40
     assert "source_commit_mismatch" in assess(wrong_source)["rows"][0]["blockers"]
@@ -384,6 +431,43 @@ def test_actor_present_confirmation_rejects_fallback_and_custody_faults() -> Non
     wrong_pairs = deepcopy(pairs)
     wrong_pairs["pairs"][0]["cells"][0]["external_rng_state_sha256"] = "x" * 64
     assert assess(rows, wrong_pairs)["admit_h400"] is False
+
+
+def test_confirmation_separates_baseline_auxiliary_telemetry_from_execution() -> None:
+    """Empty baseline decisions and unavailable sampler telemetry are not fallback."""
+    rows, cells, pairs = _complete_synthetic_campaign()
+    for row in rows:
+        row["horizon"] = 10
+        row["steps"] = 5
+        row["status"] = "failure"
+        metadata = row["algorithm_metadata"]
+        metadata["planner_decision_trace"]["steps"] = []
+        metadata["simulation_step_trace"]["reset"] = {
+            "spawn": {"status": "unavailable", "reason": "spawn_sampler_decision_not_retained"},
+            "routes": {"status": "unavailable", "reason": "route_objects_not_retained"},
+        }
+        metadata["paired_effect_metric_producer"] = {
+            "fields": {"stop_yield_latency_s": {"status": "unavailable"}}
+        }
+    result = doorway_campaign.assess_confirmation_rows(
+        rows, cells, pairs, source_sha="d" * 40, manifest_sha256="manifest"
+    )
+    assert result["admit_h400"] is True
+    assert all(not item["blockers"] for item in result["rows"])
+    assert all(len(item["ancillary_telemetry_gaps"]) == 3 for item in result["rows"])
+
+    degraded = deepcopy(rows)
+    degraded[0]["algorithm_metadata"]["simulation_step_trace"]["steps"][0] = {
+        "planner": {"fallback_used": True}
+    }
+    blocked = doorway_campaign.assess_confirmation_rows(
+        degraded, cells, pairs, source_sha="d" * 40, manifest_sha256="manifest"
+    )
+    assert blocked["admit_h400"] is False
+    assert any(
+        reason.startswith("fallback_or_degraded_runtime:")
+        for reason in blocked["rows"][0]["blockers"]
+    )
 
 
 def _assert_paired_report_fields(report: dict[str, Any]) -> None:
@@ -801,7 +885,7 @@ def test_h400_report_excludes_non_native_or_fallback_rows(marker: str) -> None:
     if marker == "nested_runtime":
         rows[0]["algorithm_metadata"]["planner_runtime"] = {"fallback_used": True}
     else:
-        rows[0][marker] = "adapter"
+        rows[0][marker] = "fallback"
 
     report = analyze_rows(rows, cells, pairs)
 
@@ -813,7 +897,12 @@ def test_h400_report_excludes_non_native_or_fallback_rows(marker: str) -> None:
     assert excluded["evidence_status"] == "excluded"
     assert any(
         (
-            f"non_native_{marker}:" in reason
+            (
+                "unexpected_execution_mode:"
+                if marker == "execution_mode"
+                else "non_native_readiness_status:"
+            )
+            in reason
             if marker in {"execution_mode", "readiness_status"}
             else "fallback_or_degraded_runtime" in reason
         )
@@ -861,8 +950,7 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
                         "scenario_id": scenario_id,
                         "horizon": 400,
                         "status": "success" if success else "failure",
-                        "execution_mode": "native",
-                        "readiness_status": "native",
+                        "spawn_validity": _valid_spawn_block(),
                         "episode_id": f"{planner}-{seed}-{width}",
                         "steps": 100,
                         "outcome": {
@@ -878,6 +966,8 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
                         },
                         "algorithm_metadata": {
                             "status": "ok",
+                            "canonical_algorithm": planner,
+                            "planner_kinematics": _baseline_kinematics(planner),
                             "config_hash": (
                                 doorway_application.GOAL_PLANNER_CONFIG_HASH
                                 if planner == "goal"
@@ -959,10 +1049,12 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
     assert degraded["excluded_pair_ids"] == ["goal_pair_00225"]
     rows[0]["algorithm_metadata"]["planner_decision_trace"]["steps"] = []
     empty_trace = analyze_rows(rows, cells, pairs)
-    assert empty_trace["native_rows"] == 17
-    assert any(
-        "missing_or_empty_planner_decision_trace" in reason
-        for reason in empty_trace["row_inventory"][0]["exclusion_reasons"]
+    assert empty_trace["native_rows"] == 18
+    rows[0]["algorithm_metadata"]["planner_decision_trace"].pop("steps")
+    missing_trace = analyze_rows(rows, cells, pairs)
+    assert missing_trace["native_rows"] == 17
+    assert (
+        "missing_planner_decision_trace" in missing_trace["row_inventory"][0]["exclusion_reasons"]
     )
     rows[0]["algorithm_metadata"]["planner_decision_trace"]["steps"] = [{}]
     inputs = tmp_path / "inputs"

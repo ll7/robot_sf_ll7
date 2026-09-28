@@ -129,13 +129,140 @@ def _paired_interval(differences: list[float], *, binary: bool) -> dict[str, Any
     }
 
 
+def _ancillary_telemetry_gaps(metadata: dict[str, Any]) -> list[str]:
+    """List unavailable auxiliary traces without treating them as planner fallback."""
+    gaps: list[str] = []
+    trace = metadata.get("simulation_step_trace")
+    reset = trace.get("reset") if isinstance(trace, dict) else None
+    if isinstance(reset, dict):
+        for key in ("routes", "spawn"):
+            value = reset.get(key)
+            if isinstance(value, dict) and value.get("status") == "unavailable":
+                gaps.append(f"simulation_step_trace.reset.{key}.status=unavailable")
+
+    def _unavailable(value: Any, path: str) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                child = f"{path}.{key}"
+                if key == "status" and item == "unavailable":
+                    gaps.append(f"{child}=unavailable")
+                else:
+                    _unavailable(item, child)
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                _unavailable(item, f"{path}[{index}]")
+
+    _unavailable(metadata.get("paired_effect_metric_producer"), "paired_effect_metric_producer")
+    return sorted(set(gaps))
+
+
+def _valid_spawn_evidence(row: dict[str, Any] | None) -> bool:
+    """Require typed reset clearance and no known spawn-caused contact."""
+    if row is None:
+        return True
+    spawn = row.get("spawn_validity")
+    return (
+        isinstance(spawn, dict)
+        and spawn.get("schema_version") == "spawn_validity.v1"
+        and spawn.get("reset_clearance_status") == "available"
+        and isinstance(spawn.get("reset_clearance"), dict)
+        and spawn["reset_clearance"].get("overlap") is False
+        and spawn["reset_clearance"].get("obstacle_overlap") is False
+        and spawn["reset_clearance"].get("pedestrian_overlap") is False
+        and spawn.get("reset_clearance_error") is None
+        and spawn.get("reset_overlap") is False
+        and spawn.get("invalid_run") is False
+        and spawn.get("invalid_reason") is None
+        and isinstance(spawn.get("respawn_overlap_events"), list)
+        and isinstance(spawn.get("respawn_overlap_collisions"), list)
+        and not spawn["respawn_overlap_collisions"]
+    )
+
+
+def _command_execution_mode(metadata: dict[str, Any]) -> str | None:
+    kinematics = metadata.get("planner_kinematics")
+    if not isinstance(kinematics, dict):
+        return None
+    value = kinematics.get("execution_mode")
+    return value if isinstance(value, str) else None
+
+
+def _execution_runtime_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Select execution-bearing fields for canonical fallback scanning."""
+    runtime_fields = {
+        "status",
+        "fallback_used",
+        "fallback_or_degraded",
+        "degraded",
+        "planner_kinematics",
+        "planner_diagnostics",
+        "planner_runtime",
+        "planner_decision_trace",
+        "distributional_disruption",
+        "guard_stats",
+        "shield_stats",
+        "native_command",
+    }
+    runtime_metadata = {
+        key: value for key, value in metadata.items() if key in runtime_fields or "fallback" in key
+    }
+    trace = metadata.get("simulation_step_trace")
+    if isinstance(trace, dict):
+        runtime_metadata["simulation_step_trace"] = {"steps": trace.get("steps")}
+    return runtime_metadata
+
+
+def _baseline_execution_reasons(
+    metadata: dict[str, Any], row: dict[str, Any] | None, expected_algorithm: str | None
+) -> list[str]:
+    """Bind each baseline to its declared command route, without requiring absent row axes."""
+    expected = {
+        "goal": ("native", False, "none"),
+        "social_force": ("adapter", True, "SocialForcePlannerAdapter"),
+    }.get(expected_algorithm)
+    kinematics = metadata.get("planner_kinematics")
+    reasons = []
+    if (
+        expected is None
+        or not isinstance(kinematics, dict)
+        or (
+            kinematics.get("execution_mode"),
+            kinematics.get("adapter_active"),
+            kinematics.get("adapter_name"),
+        )
+        != expected
+    ):
+        reasons.append("planner_kinematics_mode_or_adapter_mismatch")
+    if (
+        expected_algorithm == "social_force"
+        and isinstance(kinematics, dict)
+        and (kinematics.get("projection_documented") is not True)
+    ):
+        reasons.append("social_force_adapter_projection_unverified")
+    if metadata.get("canonical_algorithm") != expected_algorithm:
+        reasons.append("canonical_planner_identity_mismatch")
+    if (
+        row is not None
+        and row.get("execution_mode") is not None
+        and (expected is None or row["execution_mode"] != expected[0])
+    ):
+        reasons.append(f"unexpected_execution_mode:{row.get('execution_mode')!r}")
+    if (
+        row is not None
+        and row.get("readiness_status") is not None
+        and (row["readiness_status"] != "native")
+    ):
+        reasons.append(f"non_native_readiness_status:{row.get('readiness_status')!r}")
+    return reasons
+
+
 def _trace_exclusion_reasons(
     metadata: dict[str, Any],
     *,
     row: dict[str, Any] | None = None,
     expected_algorithm: str | None = None,
 ) -> list[str]:
-    """Flag missing traces or canonical runtime fallback markers."""
+    """Flag invalid baseline execution and actual runtime fallback markers."""
     trace = metadata.get("simulation_step_trace")
     planner_trace = metadata.get("planner_decision_trace")
     reasons = []
@@ -145,13 +272,11 @@ def _trace_exclusion_reasons(
         or not trace["steps"]
     ):
         reasons.append("missing_simulation_step_trace")
-    if (
-        not isinstance(planner_trace, dict)
-        or not isinstance(planner_trace.get("steps"), list)
-        or not planner_trace["steps"]
-    ):
-        reasons.append("missing_or_empty_planner_decision_trace")
+    if not isinstance(planner_trace, dict) or not isinstance(planner_trace.get("steps"), list):
+        reasons.append("missing_planner_decision_trace")
     else:
+        # Goal and Social Force expose no specialized internal decisions. Their
+        # empty arrays are expected; simulation_step_trace is the action record.
         for step in planner_trace["steps"]:
             if isinstance(step, dict) and (
                 step.get("fallback_used") is True
@@ -160,17 +285,20 @@ def _trace_exclusion_reasons(
             ):
                 reasons.append("fallback_or_degraded_planner_step")
                 break
+    reasons.extend(_baseline_execution_reasons(metadata, row, expected_algorithm))
+    if not _valid_spawn_evidence(row):
+        reasons.append("invalid_or_unknown_spawn_validity")
+    # Scan execution-bearing fields only. Reset routes/spawn report whether
+    # sampler objects were retained, and paired-effect fields describe separate
+    # wrapper endpoints; neither reports planner fallback. Their unavailable
+    # statuses are retained separately in ancillary_telemetry_gaps.
     runtime_payload = {
         "row": {
             "execution_mode": row.get("execution_mode") if row is not None else None,
             "readiness_status": row.get("readiness_status") if row is not None else None,
         },
-        "algorithm_metadata": metadata,
+        "algorithm_metadata": _execution_runtime_metadata(metadata),
     }
-    if row is not None and row.get("execution_mode") != "native":
-        reasons.append(f"non_native_execution_mode:{row.get('execution_mode')!r}")
-    if row is not None and row.get("readiness_status") != "native":
-        reasons.append(f"non_native_readiness_status:{row.get('readiness_status')!r}")
     if row is not None and "planner_runtime" in row:
         runtime_payload["planner_runtime"] = row["planner_runtime"]
     runtime_marker = runtime_fallback_or_degraded_marker(
@@ -246,6 +374,8 @@ def _row_inventory_item(
         "steps": row.get("steps"),
         "evidence_status": "native" if not reasons else "excluded",
         "exclusion_reasons": reasons,
+        "command_execution_mode": _command_execution_mode(metadata),
+        "ancillary_telemetry_gaps": _ancillary_telemetry_gaps(metadata),
         "trace_path": f"episodes.jsonl:line:{cell['line_number']}:algorithm_metadata.simulation_step_trace.steps",
         "trace_steps": len(trace.get("steps", [])) if isinstance(trace, dict) else 0,
     }
@@ -374,6 +504,7 @@ def assess_confirmation_rows(
     inventory = []
     for row, cell, identity in zip(rows, cells, identities, strict=True):
         planner, seed, width = identity
+        metadata = row.get("algorithm_metadata")
         reasons = _confirmation_row_blockers(
             row, cell, receipts.get(identity), source_sha=source_sha
         )
@@ -382,8 +513,14 @@ def assess_confirmation_rows(
                 "planner": planner,
                 "seed": seed,
                 "gap_width_m": width,
-                "status": "native" if not reasons else "diagnostic",
+                "status": "eligible" if not reasons else "diagnostic",
                 "blockers": sorted(set(reasons)),
+                "command_execution_mode": _command_execution_mode(metadata)
+                if isinstance(metadata, dict)
+                else None,
+                "ancillary_telemetry_gaps": _ancillary_telemetry_gaps(
+                    metadata if isinstance(metadata, dict) else {}
+                ),
             }
         )
     return {
@@ -399,7 +536,7 @@ def assess_confirmation_rows(
         "planned_rows": 18,
         "pair_errors": pair_errors,
         "rows": inventory,
-        "admit_h400": not pair_errors and all(item["status"] == "native" for item in inventory),
+        "admit_h400": not pair_errors and all(item["status"] == "eligible" for item in inventory),
     }
 
 
@@ -630,6 +767,10 @@ def analyze_rows(
         "planned_rows": 18,
         "observed_rows": len(rows),
         "native_rows": len(valid),
+        "native_rows_semantics": (
+            "eligible baseline rows: goal native commands or declared Social Force adapter; "
+            "not a claim that both planners use native command mode"
+        ),
         "excluded_rows": 18 - len(valid),
         "excluded_pair_ids": excluded_pair_ids,
         "failure_cases": failure_cases,

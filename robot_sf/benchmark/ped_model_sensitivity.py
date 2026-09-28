@@ -78,6 +78,18 @@ def build_pedestrian_model_provenance(
         "evaluation_model": evaluation_model,
         "source": "simulation_config.pedestrian_model",
     }
+    kernel_resolution_mode = getattr(
+        sim_config,
+        "social_force_kernel_resolution_mode",
+        "defaulted_missing",
+    )
+    if kernel_resolution_mode != "defaulted_missing":
+        selector_payload.update(
+            {
+                "social_force_kernel_version": str(sim_config.social_force_kernel_version),
+                "social_force_kernel_resolution_mode": str(kernel_resolution_mode),
+            }
+        )
     return {
         "schema_version": PEDESTRIAN_MODEL_SCHEMA_VERSION,
         **selector_payload,

@@ -11,7 +11,9 @@ Event-specific rules preserved from the workflow:
 
 - ``coverage-gate`` is required only for non-pull_request events;
 - ``changed-coverage-gate`` is required only for pull_request / merge_group;
-- all other required jobs are always required.
+- three expensive PR jobs may be skipped only with a complete-file-list path
+  selection output explicitly marking each one irrelevant; every other job
+  remains required.
 """
 
 from __future__ import annotations
@@ -108,7 +110,11 @@ def normalize_needs(raw_results: dict[str, Any]) -> dict[str, Any]:
 
 
 def evaluate_needs(
-    results: dict[str, Any], event_name: str, *, treat_cancelled_as_superseded: bool = False
+    results: dict[str, Any],
+    event_name: str,
+    *,
+    treat_cancelled_as_superseded: bool = False,
+    lane_outputs: dict[str, str] | None = None,
 ) -> list[str]:
     """Return the failing job names for *results* under *event_name*.
 
@@ -122,8 +128,21 @@ def evaluate_needs(
     superseded run red.
     """
     failures: list[str] = []
+    optional_pr_jobs = {
+        "examples-smoke": "examples_smoke",
+        "notebooks-smoke": "notebooks_smoke",
+        "xdist-scratch-isolation": "xdist_scratch_isolation",
+    }
     for job in REQUIRED_JOBS:
         result = results.get(job)
+        if (
+            event_name == "pull_request"
+            and result == "skipped"
+            and lane_outputs is not None
+            and job in optional_pr_jobs
+            and lane_outputs.get(optional_pr_jobs[job]) == "false"
+        ):
+            continue
         if result == "cancelled" and treat_cancelled_as_superseded:
             continue
         if result != "success":
@@ -157,6 +176,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--event-name", required=True, help="GitHub event name (e.g. pull_request)")
     parser.add_argument(
+        "--lane-outputs", default="{}", help="JSON outputs from heavy PR path selection"
+    )
+    parser.add_argument(
         "--treat-cancelled-as-superseded",
         action="store_true",
         help=(
@@ -168,16 +190,23 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         results = json.loads(args.results)
+        lane_outputs = json.loads(args.lane_outputs)
     except json.JSONDecodeError as exc:
         print(f"ERROR: --results is not valid JSON: {exc}", file=sys.stderr)
         return 2
     if not isinstance(results, dict):
         print("ERROR: --results must be a JSON object", file=sys.stderr)
         return 2
+    if not isinstance(lane_outputs, dict):
+        print("ERROR: --lane-outputs must be a JSON object", file=sys.stderr)
+        return 2
 
     results = normalize_needs(results)
     failures = evaluate_needs(
-        results, args.event_name, treat_cancelled_as_superseded=args.treat_cancelled_as_superseded
+        results,
+        args.event_name,
+        treat_cancelled_as_superseded=args.treat_cancelled_as_superseded,
+        lane_outputs=lane_outputs,
     )
     for job in failures:
         print(f"{job} finished with {results.get(job, 'missing')}", file=sys.stderr)

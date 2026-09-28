@@ -1080,10 +1080,10 @@ def test_spawn_validity_rejects_nested_clearance_drift(entrypoint, key, value):
 @pytest.mark.parametrize(
     "ped_x,obstacle_clearance", [(2.0, 1.0), (0.0, 1.0), (2.0, -0.1), (None, float("inf"))]
 )
-def test_spawn_validity_accepts_actual_reset_clearance_producer(
+def test_spawn_validity_checks_actual_reset_clearance_producer(
     monkeypatch, ped_x, obstacle_clearance
 ):
-    """Actual reset producer output retains its score/anchors for completed routes."""
+    """Actual reset overlap blocks score and anchors even for completed routes."""
     from types import SimpleNamespace
 
     from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
@@ -1103,8 +1103,14 @@ def test_spawn_validity_accepts_actual_reset_clearance_producer(
     expected_anchors = derive_calibration_anchors(rows, **kwargs)
     for row in rows:
         row["spawn_validity"] = build_spawn_validity(clearance, [], route_complete=True)
-    assert score_episode(rows[0], fixture_spec())["metrics"] == expected_score["metrics"]
-    assert derive_calibration_anchors(rows, **kwargs) == expected_anchors
+    if clearance["overlap"]:
+        with pytest.raises(ValueError, match="spawn_validity"):
+            score_episode(rows[0], fixture_spec())
+        with pytest.raises(ValueError, match="spawn_validity"):
+            derive_calibration_anchors(rows, **kwargs)
+    else:
+        assert score_episode(rows[0], fixture_spec())["metrics"] == expected_score["metrics"]
+        assert derive_calibration_anchors(rows, **kwargs) == expected_anchors
 
 
 @pytest.mark.parametrize("entrypoint", ["score", "calibration"])
@@ -1316,8 +1322,8 @@ def test_spawn_validity_completed_exception_requires_consistent_outcome(entrypoi
 
 
 @pytest.mark.parametrize("prior_collision", [False, True])
-def test_spawn_validity_preserves_producer_completed_route_exception(prior_collision):
-    """The producer permits a completed route despite reset-overlap telemetry."""
+def test_spawn_validity_completed_route_cannot_override_invalid_reset(prior_collision):
+    """The producer rejects reset overlap regardless of the observed route outcome."""
     from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
     from robot_sf.benchmark.spawn_validity import build_spawn_validity
 
@@ -1325,8 +1331,6 @@ def test_spawn_validity_preserves_producer_completed_route_exception(prior_colli
     if prior_collision:
         for row in rows:
             row["metrics"]["total_collision_count"] = 1
-    expected_score = score_episode(rows[0], fixture_spec())
-    expected_anchors = derive_calibration_anchors(rows, **kwargs)
     for row in rows:
         row["spawn_validity"] = build_spawn_validity(
             spawn_clearance_fixture(overlap=True), [], route_complete=True
@@ -1336,8 +1340,35 @@ def test_spawn_validity_preserves_producer_completed_route_exception(prior_colli
             "collision_event": prior_collision,
             "timeout_event": False,
         }
-    assert score_episode(rows[0], fixture_spec())["metrics"] == expected_score["metrics"]
-    assert derive_calibration_anchors(rows, **kwargs) == expected_anchors
+    with pytest.raises(ValueError, match="spawn_validity"):
+        score_episode(rows[0], fixture_spec())
+    with pytest.raises(ValueError, match="spawn_validity"):
+        derive_calibration_anchors(rows, **kwargs)
+
+
+@pytest.mark.parametrize("entrypoint", ["score", "calibration"])
+@pytest.mark.parametrize("reset_kind", ["unmeasured", "overlap"])
+def test_spawn_validity_forged_valid_reset_is_rejected(entrypoint, reset_kind):
+    """A false invalid flag cannot admit an unknown or overlapping reset."""
+    from robot_sf.benchmark.snqi.v2_calibration import derive_calibration_anchors
+    from robot_sf.benchmark.spawn_validity import build_spawn_validity
+
+    rows, kwargs = calibration_records()
+    block = (
+        build_spawn_validity(None, [], reset_clearance_error="probe failed")
+        if reset_kind == "unmeasured"
+        else build_spawn_validity(spawn_clearance_fixture(overlap=True), [], route_complete=True)
+    )
+    block.update(invalid_run=False, invalid_reason=None)
+    rows[0]["spawn_validity"] = block
+    with pytest.raises(
+        ValueError,
+        match="unavailable reset clearance|reset overlap marked valid",
+    ):
+        if entrypoint == "score":
+            score_episode(rows[0], fixture_spec())
+        else:
+            derive_calibration_anchors(rows, **kwargs)
 
 
 @pytest.mark.parametrize("clearance", [spawn_clearance_fixture(), None])
@@ -1356,9 +1387,15 @@ def test_spawn_validity_accepts_absent_legacy_and_valid_producer_block(clearance
     for row in rows:
         row["spawn_validity"] = build_spawn_validity(clearance, [])
         row["outcome"] = {"route_complete": True, "collision_event": False, "timeout_event": False}
-    scored = score_episode(rows[0], fixture_spec())
-    assert scored["metrics"] == legacy_score["metrics"]
-    assert derive_calibration_anchors(rows, **kwargs)["calibration"]["episode_count"] == 1344
+    if clearance is None:
+        with pytest.raises(ValueError, match="spawn_validity"):
+            score_episode(rows[0], fixture_spec())
+        with pytest.raises(ValueError, match="spawn_validity"):
+            derive_calibration_anchors(rows, **kwargs)
+    else:
+        scored = score_episode(rows[0], fixture_spec())
+        assert scored["metrics"] == legacy_score["metrics"]
+        assert derive_calibration_anchors(rows, **kwargs)["calibration"]["episode_count"] == 1344
 
 
 @pytest.mark.parametrize("block", [{"invalid_run": True}, {"invalid_run": "false"}, None])

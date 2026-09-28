@@ -242,14 +242,41 @@ The release entrypoint:
 2. rejects a missing, stale, config-mismatched, or non-submit-safe checkpoint receipt,
 3. rejects same-campaign resume unless a fresh, hash-bound receipt classifies the
    interruption as infrastructure-only with the source/config/checkpoint inputs unchanged,
-4. runs preflight through the existing camera-ready stack,
-5. runs the canonical campaign,
-6. fails closed unless the exact 14-arm, 48-scenario, 30-seed, H600 identity
+4. checks reset clearance, footprint reachability, passage widths, and early pedestrian
+   respawns against the manifest's exact scenario matrix and resolved seed set,
+5. runs preflight through the existing camera-ready stack,
+6. runs the canonical campaign,
+7. fails closed unless the exact 14-arm, 48-scenario, 30-seed, H600 identity
    product succeeds once at one source commit with no fallback, degraded,
    failed, or unavailable evidence,
-7. injects benchmark-release provenance into campaign artifacts,
-8. exports a publication bundle only for benchmark-valid runs,
-9. writes archival release metadata under `<campaign_root>/release/`.
+8. injects benchmark-release provenance into campaign artifacts,
+9. exports a publication bundle only for benchmark-valid runs,
+10. writes archival release metadata under `<campaign_root>/release/`.
+
+The matrix setup gate uses the release manifest's checksummed matrix and seed set without
+development-matrix or seed overrides. It requires 0.10 m surface clearance and checks the robot
+footprint through every navigator waypoint in order on a 0.10 m occupancy grid, then holds the
+robot stationary for 20 steps to catch early route-end respawn overlap. JSON and Markdown reports
+are retained under
+`<campaign_root>/reports/spawn_matrix_preflight.v1.{json,md}`. A blocked row stops the release
+before planner execution. Their recorded SHA-256 digests are checked again after the campaign and
+in the publication bundle. These reports are setup diagnostics; they are not planner-performance,
+navigation-success, or release-success evidence. A declared
+`expected_outcome: infeasible_safe_hold` is labelled as an infeasibility probe only when the
+separate, checksummed manifest has `release_kind: benchmark-infeasibility-probe`. Its report
+remains blocked for release admission. The nominal benchmark-data manifest rejects that
+declaration even when geometry is infeasible; it needs a versioned feasible successor.
+
+To inspect the same manifest gate directly, use the manifest-bound command and provide both report
+paths:
+
+```bash
+uv run python scripts/benchmark/preflight_spawn_clearance.py \
+  --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
+  --workers 4 \
+  --json-output output/preflight/spawn_matrix_preflight.v1.json \
+  --markdown-output output/preflight/spawn_matrix_preflight.v1.md
+```
 
 The entrypoint is intentionally a release wrapper, not a second benchmark
 execution engine.

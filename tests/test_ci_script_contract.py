@@ -2836,7 +2836,18 @@ def test_worktree_shared_venv_pin_manifest_policy(
     """Only actual dev declarations select a pin; ambiguous or malformed input fails closed."""
     repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path)
     (repo / "pyproject.toml").write_text(manifest, encoding="utf-8")
-    before = {path: path.read_bytes() for path in repo.rglob("*") if path.is_file()}
+
+    def snapshot_repo_files() -> dict[Path, bytes]:
+        # Git may create/remove this transient maintenance lock while the helper runs.
+        # It is not durable repo state; continue checking every other file byte-for-byte.
+        maintenance_lock = repo / ".git" / "objects" / "maintenance.lock"
+        return {
+            path: path.read_bytes()
+            for path in repo.rglob("*")
+            if path.is_file() and path != maintenance_lock
+        }
+
+    before = snapshot_repo_files()
     result = subprocess.run(
         [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(venv), "--", "ruff", "check", "."],
         cwd=repo,
@@ -2856,7 +2867,7 @@ def test_worktree_shared_venv_pin_manifest_policy(
         assert "uv-reached" in result.stderr
         expected = "reason=unpinned" if disposition == "unpinned" else "pin==0.16.5"
         assert expected in result.stderr
-    assert {path: path.read_bytes() for path in repo.rglob("*") if path.is_file()} == before
+    assert snapshot_repo_files() == before
 
 
 @pytest.mark.parametrize("failure", ["encoding", "permission"])

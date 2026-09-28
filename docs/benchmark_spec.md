@@ -301,6 +301,14 @@ Full details live in
 * `outcome.collision_event`: canonical per-episode collision event flag for new episode outputs.
 * `event_ledger.collision_events`: typed exact collision-event records (`EpisodeEventLedger.v2`)
   carrying partner type/id, collision time, relative contact speed, and source provenance.
+* `spawn_validity.v2`: reset overlap and unavailable reset clearance invalidate an episode
+  regardless of its observed route outcome. Attributed route-end respawn contact invalidates
+  an incomplete route. Invalid rows remain in raw episode records with their reason but are
+  excluded from nominal rates and SNQI-v2 calibration. The event ledger preserves an observed
+  `goal_reached` alongside `invalid_run` only when the versioned spawn block explains the
+  invalid start; that pair is not a successful benchmark row. Rate readers also
+  exclude inconsistent v2 reset telemetry even when its `invalid_run` flag says
+  false. Historical v1 rows retain their original diagnostic comparison behavior.
 * `metrics.collisions`: collision count metric based on distance thresholds. For schema v1 episode
   outputs it must agree with `outcome.collision_event`: positive when the canonical event is true
   and zero when the canonical event is false.
@@ -379,6 +387,17 @@ Full details live in
 Each episode record is schema-validated against
 `robot_sf/benchmark/schemas/episode.schema.v1.json` and includes:
 * `scenario_id`,  `seed`,  `scenario_params`,  `metrics`, timing fields
+* Map-runner episodes also include the `episode_runtime_input_identity.v1` extension, described by
+  `robot_sf/benchmark/schemas/episode_runtime_input_identity.v1.json`. It contains
+  `runtime_input_records`: producer-captured hashes and paths for
+  the map and route files consumed while building that episode's environment. These records are
+  covered by the episode-store digest in result provenance; consumers that need external-resource
+  identity must keep older rows without them as unknown. The extension also provides
+  `selected_map_identity` when the producer can bind the realized map ID to exactly one
+  parser-captured map resource. This distinguishes a selected map from the full closure of a default
+  map pool. Admissibility comparisons require matching map ID, digest, and source role across
+  executions; missing, ambiguous, or mismatched selected-map provenance remains unknown. Absolute
+  paths support producer-to-candidate binding but are not compared across checkouts.
 * `algorithm_metadata.baseline_category` (`diagnostic|classical|learning`) and
   `algorithm_metadata.policy_semantics`
 * `algorithm_metadata.planner_kinematics` including `execution_mode` (`native|adapter|mixed`) and

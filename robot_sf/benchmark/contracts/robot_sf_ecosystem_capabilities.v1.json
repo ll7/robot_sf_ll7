@@ -1,14 +1,14 @@
 {
   "registry_schema_version": "robot_sf_ecosystem_capabilities.v1",
-  "contract_version": "1.0.0",
+  "contract_version": "1.1.0",
   "producer": {
     "producer_id": "robot_sf",
     "repository_url": "https://github.com/ll7/robot_sf_ll7",
     "supported_python_input_id": "producer.python.requires"
   },
   "change": {
-    "declared_type": "initial",
-    "based_on_contract_digest": null
+    "declared_type": "additive",
+    "based_on_contract_digest": "7f8c8a9668966462cf1ed03ebeb2da1da27a75704c6180e662beabc4e9361258"
   },
   "authoritative_inputs": [
     {
@@ -71,6 +71,12 @@
       "input_id": "schema.episode.v1",
       "kind": "json_schema",
       "path": "robot_sf/benchmark/schemas/episode.schema.v1.json",
+      "selector": "$"
+    },
+    {
+      "input_id": "schema.episode_runtime_input_identity.v1",
+      "kind": "json_schema",
+      "path": "robot_sf/benchmark/schemas/episode_runtime_input_identity.v1.json",
       "selector": "$"
     },
     {
@@ -256,6 +262,15 @@
       "semantics_id": "robot_sf.schema.episode.record_semantics.v1",
       "location": "robot_sf/benchmark/schemas/episode.schema.v1.json",
       "authority": ["schema.episode.v1"]
+    },
+    {
+      "capability_id": "robot_sf.schema.episode_runtime_input_identity.v1",
+      "kind": "schema",
+      "interface_version": "1.0.0",
+      "status": "beta",
+      "semantics_id": "robot_sf.schema.episode.runtime_input_identity.record_semantics.v1",
+      "location": "robot_sf/benchmark/schemas/episode_runtime_input_identity.v1.json",
+      "authority": ["schema.episode_runtime_input_identity.v1"]
     },
     {
       "capability_id": "robot_sf.schema.evidence_bundle.v1",

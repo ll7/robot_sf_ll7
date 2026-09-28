@@ -1,6 +1,8 @@
 """Fail-closed identity tests for the separately staged 0.0.7 force observer."""
 
+import hashlib
 import importlib.util
+import json
 import sys
 import threading
 from pathlib import Path
@@ -61,6 +63,7 @@ def _capture() -> dict:
                 "step": 0,
                 "step_entry_positions": [[0.0, 0.0], [1.0, 0.0]],
                 "force_input_positions": [[0.0, 0.0], [1.0, 0.0]],
+                "force_time_simulator_positions": [[0.0, 0.0], [1.0, 0.0]],
                 "post_step_positions": [[0.1, 0.0], [1.1, 0.0]],
                 "total_forces": [[1.0, 0.0], [2.0, 0.0]],
                 "robot_forces": [[0.2, 0.0], [0.3, 0.0]],
@@ -68,6 +71,101 @@ def _capture() -> dict:
             }
         ],
     }
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("metrics", "min_separation_corrupted_m"),
+        (
+            "algorithm_metadata",
+            "tracking_precision",
+            "min_separation_corrupted_m",
+        ),
+    ],
+)
+def test_binds_frozen_positive_infinity_diagnostic_sentinel(path: tuple[str, ...]) -> None:
+    row = _row()
+    parent = row
+    for key in path[:-1]:
+        parent = parent.setdefault(key, {})
+    parent[path[-1]] = float("inf")
+    expected_finite_or_sentinel_hash = observer.canonical_episode_record_sha256(row)
+
+    bound = observer.bind_episode(_capture(), row)
+
+    assert bound["episode_record_canonical_sha256"] == expected_finite_or_sentinel_hash
+    assert parent[path[-1]] == float("inf")
+
+
+def test_finite_row_canonical_bytes_are_unchanged() -> None:
+    row = _row()
+    legacy_bytes = json.dumps(row, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+
+    assert observer.canonical_episode_record_bytes(row) == legacy_bytes
+    assert observer.canonical_episode_record_sha256(row) == hashlib.sha256(legacy_bytes).hexdigest()
+
+
+def test_reserved_infinity_token_cannot_alias_a_raw_diagnostic_object() -> None:
+    row = _row()
+    row["metrics"] = {"min_separation_corrupted_m": dict(observer._CANONICAL_POSITIVE_INFINITY)}
+
+    with pytest.raises(ValueError, match="reserved canonical infinity token"):
+        observer.canonical_episode_record_sha256(row)
+
+
+def test_importing_observer_as_a_module_does_not_install_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ISSUE9671_OBSERVER_OUTPUT", str(tmp_path / "sidecars"))
+    monkeypatch.setenv(
+        "ISSUE9671_OBSERVER_SHA256", hashlib.sha256(OBSERVER.read_bytes()).hexdigest()
+    )
+    spec = importlib.util.spec_from_file_location("issue_9671_observer_import_test", OBSERVER)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module._OBSERVER is None
+    assert not (tmp_path / "sidecars").exists()
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("metrics", "min_separation_corrupted_m"), float("nan")),
+        (("metrics", "min_separation_corrupted_m"), float("-inf")),
+        (("metrics", "other_diagnostic"), float("inf")),
+        (
+            (
+                "algorithm_metadata",
+                "simulation_step_trace",
+                "steps",
+                0,
+                "planner",
+                "ammv",
+                "pedestrian_force_vectors",
+                0,
+                0,
+            ),
+            float("inf"),
+        ),
+    ],
+)
+def test_rejects_other_non_finite_episode_values(path: tuple[str | int, ...], value: float) -> None:
+    row = _row()
+    parent = row
+    for key in path[:-1]:
+        parent = parent.setdefault(key, {}) if isinstance(parent, dict) else parent[key]
+    parent[path[-1]] = value
+
+    with pytest.raises(ValueError, match="non-finite"):
+        observer.canonical_episode_record_sha256(row)
+
+
+def test_force_vectors_remain_finite_checked() -> None:
+    with pytest.raises(observer.ObserverIdentityError, match="non-finite vector"):
+        observer._vectors([[float("inf"), 0.0]])
 
 
 def test_records_full_clean_frozen_source_state(
@@ -157,11 +255,34 @@ def test_binds_each_force_slot_to_reset_actor_id() -> None:
     assert bound["steps"][0]["actor_ids"] == bound["actor_ids"]
 
 
-@pytest.mark.parametrize("field", ["step_entry_positions", "force_input_positions"])
+@pytest.mark.parametrize(
+    "field",
+    ["step_entry_positions", "force_input_positions", "force_time_simulator_positions"],
+)
 def test_rejects_permuted_force_slots(field: str) -> None:
     capture = _capture()
     capture["steps"][0][field].reverse()
     with pytest.raises(observer.ObserverIdentityError, match="positions"):
+        observer.bind_episode(capture, _row())
+
+
+def test_accepts_behavior_respawn_before_force_evaluation() -> None:
+    capture = _capture()
+    force_time_positions = [[10.0, 0.0], [11.0, 0.0]]
+    capture["steps"][0]["force_time_simulator_positions"] = force_time_positions
+    capture["steps"][0]["force_input_positions"] = force_time_positions
+
+    bound = observer.bind_episode(capture, _row())
+
+    assert bound["steps"][0]["step_entry_positions"] == [[0.0, 0.0], [1.0, 0.0]]
+    assert bound["steps"][0]["force_input_positions"] == force_time_positions
+
+
+def test_rejects_force_input_that_does_not_match_force_time_state() -> None:
+    capture = _capture()
+    capture["steps"][0]["force_time_simulator_positions"] = [[10.0, 0.0], [11.0, 0.0]]
+
+    with pytest.raises(observer.ObserverIdentityError, match="force input positions"):
         observer.bind_episode(capture, _row())
 
 
@@ -209,6 +330,7 @@ def test_rejects_changed_component_roster_on_second_step() -> None:
     second["step"] = 1
     second["step_entry_positions"] = [[0.1, 0.0], [1.1, 0.0]]
     second["force_input_positions"] = [[0.1, 0.0], [1.1, 0.0]]
+    second["force_time_simulator_positions"] = [[0.1, 0.0], [1.1, 0.0]]
     second["component_ids"] = ["ped_robot:robot_1"]
     capture["steps"].append(second)
     row = _row()
@@ -376,6 +498,42 @@ def test_live_dispatch_rejects_module_swap_with_spoofed_paths(
         sys.settrace(previous)
 
 
+def test_live_dispatch_rejects_unsupported_ped_simulator_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source_root = tmp_path / "frozen"
+    simulator_path = source_root / observer.SIM_FILE
+    simulator_path.parent.mkdir(parents=True)
+    simulator_path.write_text(
+        "class Simulator:\n"
+        "    def step_once(self):\n"
+        "        return None\n"
+        "class PedSimulator:\n"
+        "    def step_once(self):\n"
+        "        return None\n"
+    )
+    module_name = observer.SOURCE_MODULES[observer.SIM_FILE]
+    module = ModuleType(module_name)
+    module.__file__ = str(simulator_path)
+    exec(  # noqa: S102 - generate exact-name methods for the observer contract test
+        compile(simulator_path.read_text(), str(simulator_path), "exec"), vars(module)
+    )
+    monkeypatch.setitem(sys.modules, module_name, module)
+    watched = observer.ForceObserver(
+        tmp_path,
+        {},
+        source_root,
+        observer._compiled_target_codes(source_root, observer.SIM_FILE),
+    )
+    previous = sys.gettrace()
+    try:
+        sys.settrace(watched)
+        with pytest.raises(observer.ObserverIdentityError, match="unexpected function"):
+            module.PedSimulator().step_once()
+    finally:
+        sys.settrace(previous)
+
+
 def test_copies_actual_last_forces_without_reinvoking_provider(tmp_path: Path) -> None:
     component = PedRobotForce.__new__(PedRobotForce)
     component.component_type = "pedestrian_robot"
@@ -394,3 +552,55 @@ def test_copies_actual_last_forces_without_reinvoking_provider(tmp_path: Path) -
     )
     watched._force_event(frame, component.last_forces)
     assert watched.force_returns[id(component)]["forces"] == [[0.2, 0.0], [0.3, 0.0]]
+
+
+def test_captures_force_time_simulator_slot_state(tmp_path: Path) -> None:
+    component = PedRobotForce.__new__(PedRobotForce)
+    component.component_type = "pedestrian_robot"
+    component.component_id = "ped_robot:robot_0"
+    component.last_forces = np.asarray([[0.2, 0.0], [0.3, 0.0]])
+    component.config = SimpleNamespace(
+        is_active=True,
+        robot_radius=1.0,
+        activation_threshold=2.0,
+        force_multiplier=10.0,
+    )
+    watched = observer.ForceObserver(tmp_path, {}, tmp_path, {})
+    watched.episode = {"steps": []}
+    watched.step = {
+        "step": 0,
+        "step_entry_positions": [[0.0, 0.0], [1.0, 0.0]],
+    }
+    force_time_positions = np.asarray([[10.0, 0.0], [11.0, 0.0]])
+    watched._force_event(
+        SimpleNamespace(
+            f_locals={
+                "self": component,
+                "ped_positions": force_time_positions,
+                "robot_pos": np.asarray([2.0, 0.0]),
+            }
+        ),
+        component.last_forces,
+    )
+
+    class Simulator(SimpleNamespace):
+        pass
+
+    simulator = Simulator(
+        ped_pos=force_time_positions,
+        pysf_sim=SimpleNamespace(forces=[component]),
+        last_ped_forces=np.asarray([[1.0, 0.0], [2.0, 0.0]]),
+    )
+
+    watched._step_event(
+        SimpleNamespace(
+            f_locals={"self": simulator},
+            f_lineno=observer.FORCE_LINES["Simulator"],
+        ),
+        "line",
+    )
+
+    assert watched.step["force_time_simulator_positions"] == [
+        [10.0, 0.0],
+        [11.0, 0.0],
+    ]

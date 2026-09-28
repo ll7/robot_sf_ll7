@@ -21,6 +21,22 @@ _DEFAULT_MAX_LINEAR_SPEED = 1.2
 _DEFAULT_OBSTACLE_CLEARANCE_WEIGHT = 1.2
 
 
+def _ego_velocity_to_world(velocity: np.ndarray, heading: float) -> np.ndarray:
+    """Convert SocNav robot-ego-frame velocities to world-frame vectors.
+
+    Returns:
+        np.ndarray: World-frame velocity vectors with the input shape.
+    """
+    if velocity.size == 0:
+        return velocity
+    cos_h = float(np.cos(heading))
+    sin_h = float(np.sin(heading))
+    world = np.empty_like(velocity, dtype=float)
+    world[:, 0] = cos_h * velocity[:, 0] - sin_h * velocity[:, 1]
+    world[:, 1] = sin_h * velocity[:, 0] + cos_h * velocity[:, 1]
+    return world
+
+
 def _safe_mean(values: np.ndarray) -> float:
     """Return finite mean or ``0.0`` for empty/invalid arrays."""
     if values.size == 0:
@@ -93,22 +109,40 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         ped_velocities_raw = ped_state.get("velocities")
         ped_pos = np.asarray([] if ped_positions_raw is None else ped_positions_raw, dtype=float)
         ped_vel = np.asarray([] if ped_velocities_raw is None else ped_velocities_raw, dtype=float)
-        count_raw = self._as_1d_float(ped_state.get("count", [0.0]), pad=1)
-        ped_count = max(int(count_raw[0]), 0)
+        # The shared normalizer fills a missing flat ``pedestrians_count`` with
+        # ``[0]`` for compatibility with other consumers.  Risk-DWA must keep
+        # the distinction at this boundary: only an explicitly supplied count
+        # controls truncation, while absent or empty counts retain the legacy
+        # full-buffer behavior.
+        if "robot" in observation:
+            count_value = ped_state.get("count")
+        else:
+            count_value = observation.get("pedestrians_count")
+        count_raw = (
+            self._as_1d_float(count_value, pad=None)
+            if count_value is not None
+            else np.empty(0, dtype=float)
+        )
+        ped_count = max(int(count_raw[0]), 0) if count_raw.size else None
         if ped_pos.ndim == 1 and ped_pos.size % 2 == 0:
             ped_pos = ped_pos.reshape(-1, 2)
         if ped_vel.ndim == 1 and ped_vel.size % 2 == 0:
             ped_vel = ped_vel.reshape(-1, 2)
         if ped_pos.ndim != 2 or ped_pos.shape[-1] != 2:
             ped_pos = np.zeros((0, 2), dtype=float)
-        elif ped_count > 0:
-            ped_pos = ped_pos[:ped_count]
+        elif ped_count is not None:
+            ped_pos = ped_pos[: min(ped_count, ped_pos.shape[0])]
         if ped_vel.ndim != 2 or ped_vel.shape[-1] != 2:
             ped_vel = np.zeros_like(ped_pos)
-        elif ped_count > 0:
-            ped_vel = ped_vel[:ped_count]
+        elif ped_count is not None:
+            ped_vel = ped_vel[: min(ped_count, ped_vel.shape[0])]
         if ped_vel.shape[0] != ped_pos.shape[0]:
             ped_vel = np.zeros_like(ped_pos)
+        else:
+            # SocNav positions are world-frame, while pedestrian velocities are
+            # rotated into the robot ego frame by the observation producer.
+            # Risk-DWA's forecast and TTC calculations operate in world-frame.
+            ped_vel = _ego_velocity_to_world(ped_vel, heading)
 
         return robot_pos, heading, goal, ped_pos, ped_vel
 

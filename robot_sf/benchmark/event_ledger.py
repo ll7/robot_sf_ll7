@@ -7,7 +7,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from robot_sf.benchmark.spawn_validity import record_has_spawn_overlap
+from robot_sf.benchmark.spawn_validity import (
+    RESET_CLEARANCE_UNAVAILABLE_REASON,
+    SPAWN_VALIDITY_SCHEMA_VERSION,
+    record_has_invalid_spawn,
+)
 from robot_sf.common.validation import finite_float as _finite_float
 from robot_sf.nav.spawn_clearance import SPAWN_OVERLAP_INVALID_REASON
 
@@ -314,7 +318,9 @@ def build_event_ledger(
             "source": occlusion_near_miss_source or "missing",
         },
     }
-    spawn_overlap = record_has_spawn_overlap(record)
+    spawn_invalid = record_has_invalid_spawn(record)
+    spawn_block = record.get("spawn_validity")
+    spawn_block = spawn_block if isinstance(spawn_block, Mapping) else {}
     exact = ExactEvents(
         collision=_bool_at(outcome, "collision_event") or termination_reason == "collision",
         goal_reached=_bool_at(outcome, "route_complete") or termination_reason == "success",
@@ -322,7 +328,7 @@ def build_event_ledger(
         or termination_reason in {"max_steps", "truncated"},
         invalid_run=termination_reason == "error"
         or record.get("status") in {"error", "invalid"}
-        or spawn_overlap,
+        or spawn_invalid,
     )
     surrogate = SurrogateEvents(
         near_miss=near_miss_value is not None and near_miss_value > 0.0,
@@ -355,9 +361,10 @@ def build_event_ledger(
         provenance={"source": "episode_record"},
     )
     payload = ledger.to_dict()
-    if spawn_overlap:
-        # Issue #9725: the outcome is caused by a spawn overlap, not the planner.
-        payload["provenance"]["invalid_reason"] = SPAWN_OVERLAP_INVALID_REASON
+    if spawn_invalid:
+        # The observed route outcome is preserved even when the start is invalid.
+        payload["provenance"]["invalid_reason"] = spawn_block.get("invalid_reason")
+        payload["provenance"]["spawn_validity_schema_version"] = spawn_block.get("schema_version")
     if safety_wrapper is not None:
         payload["provenance"]["safety_wrapper"] = safety_wrapper
     if cbf_safety_filter is not None:
@@ -400,7 +407,19 @@ def reconcile_event_ledger(ledger: Mapping[str, Any]) -> list[str]:
     collision_metric = _finite_float(reconciliation.get("collision_metric_value"))
     if bool(exact.get("collision")) and (collision_metric is None or collision_metric <= 0.0):
         violations.append("exact collision event requires collision metric > 0")
-    if bool(exact.get("goal_reached")) and bool(exact.get("invalid_run")):
+    provenance = ledger.get("provenance")
+    provenance = provenance if isinstance(provenance, Mapping) else {}
+    invalid_start_with_observed_goal = provenance.get(
+        "spawn_validity_schema_version"
+    ) == SPAWN_VALIDITY_SCHEMA_VERSION and provenance.get("invalid_reason") in {
+        SPAWN_OVERLAP_INVALID_REASON,
+        RESET_CLEARANCE_UNAVAILABLE_REASON,
+    }
+    if (
+        bool(exact.get("goal_reached"))
+        and bool(exact.get("invalid_run"))
+        and not invalid_start_with_observed_goal
+    ):
         violations.append("goal_reached and invalid_run are mutually exclusive")
     missing_definitions = [
         name

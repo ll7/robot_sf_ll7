@@ -47,9 +47,9 @@ and downstream tooling.
 
 | Key | Shape | Description |
 | --- | --- | --- |
-| `robot.position` | `(2,)` | Robot position `(x, y)` clipped to 50m |
+| `robot.position` | `(2,)` | Robot position `(x, y)` clipped to a per-axis representable bound of at least 50 m, expanded to the map dimensions on larger maps |
 | `robot.heading` | `(1,)` | Heading in radians, wrapped to `[-pi, pi]` |
-| `robot.speed` | `(2,)` | Robot speed contract `(linear_speed, angular_speed)` |
+| `robot.speed` | `(2,)` | Pair copied from the selected robot model's `current_speed`; component meanings and units are model-specific (see the flat-field note below) |
 | `robot.velocity_xy` | `(2,)` | Robot translational velocity `(vx, vy)` in world coordinates |
 | `robot.angular_velocity` | `(1,)` | Robot yaw rate in radians per second |
 | `robot.radius` | `(1,)` | Robot radius |
@@ -60,7 +60,7 @@ and downstream tooling.
 | `pedestrians.radius` | `(1,)` | Ped radius |
 | `pedestrians.count` | `(1,)` | Count of visible pedestrians |
 | `pedestrians.track_id` | `(max_pedestrians,)` | Optional episode-local observation-derived IDs; `-1` means padded or unavailable |
-| `map.size` | `(2,)` | Map width/height capped to 50m |
+| `map.size` | `(2,)` | Declared map width and height in meters |
 | `sim.timestep` | `(1,)` | Simulation step duration in seconds |
 
 `max_pedestrians` is derived from `SimulationSettings.max_total_pedestrians` or defaults to 64.
@@ -84,8 +84,70 @@ when disabled, so existing observations and learned checkpoints keep their origi
 
 ### Flattened Keys (SB3 Compatibility)
 
-When using StableBaselines3, nested dicts are flattened with underscore separators
-by `robot_sf/gym_env/robot_env.py`. Example: `robot.position` becomes `robot_position`.
+When `RobotEnv` constructs a flat SOCNAV observation, nested dicts are flattened with
+underscore separators by `robot_sf/gym_env/robot_env.py` (including when occupancy-grid
+leaves are added). The production wrapper uses these same leaf names. It only renames keys
+and preserves the leaf values; it does not translate, rotate, subtract robot velocity,
+rescale, or normalize them. For example, `robot.position` becomes `robot_position` with the
+same world/map coordinates.
+
+### Standard Flat SOCNAV Map-Runner Fields
+
+The following table characterizes the producer-to-flat-adapter contract for the standard
+SOCNAV leaves. Vector fields use the shape shown; one-element scalar fields retain their
+array shape in the observation payload.
+
+| Flat key | Source key | Shape | Frame / unit | Contract |
+| --- | --- | --- | --- | --- |
+| `robot_position` | `robot.position` | `(2,)` | world/map XY, m | Robot position, clipped per axis to `[0, max(50 m, corresponding map dimension)]`. |
+| `robot_heading` | `robot.heading` | `(1,)` | world/map orientation, rad | Robot heading wrapped to `[-pi, pi]`. |
+| `robot_speed` | `robot.speed` | `(2,)` | kinematic-model-specific component units | Pair copied from the selected robot model's `current_speed`; see the model-specific note below. |
+| `robot_velocity_xy` | `robot.velocity_xy` | `(2,)` | world/map XY, m/s | Robot translational velocity in world coordinates; no ego rotation or robot-velocity subtraction is applied. |
+| `robot_angular_velocity` | `robot.angular_velocity` | `(1,)` | rad/s | Robot yaw rate. |
+| `robot_radius` | `robot.radius` | `(1,)` | m | Robot radius. |
+| `goal_current` | `goal.current` | `(2,)` | world/map XY, m | Current goal position, clipped per axis to `[0, max(50 m, corresponding map dimension)]`. |
+| `goal_next` | `goal.next` | `(2,)` | world/map XY, m | Next goal position clipped to the same per-axis representable bound, or zero when no next goal is available. |
+| `pedestrians_positions` | `pedestrians.positions` | `(max_pedestrians, 2)` | world/map XY, m | Visible pedestrian positions clipped to the same per-axis representable bound, sorted and padded with zero rows. |
+| `pedestrians_velocities` | `pedestrians.velocities` | `(max_pedestrians, 2)` | robot-ego XY, m/s | Source world velocities rotated by negative robot heading only; robot translational velocity is not subtracted. Padded rows are zero. |
+| `pedestrians_radius` | `pedestrians.radius` | `(1,)` | m | Shared pedestrian radius used by the observation contract. |
+| `pedestrians_count` | `pedestrians.count` | `(1,)` | dimensionless count | Number of visible, presented pedestrian rows before padding. |
+| `map_size` | `map.size` | `(2,)` | world/map extent XY, m | Declared map width and height. |
+| `sim_timestep` | `sim.timestep` | `(1,)` | s | Simulation step duration. |
+
+`robot_speed` is not a universal `(linear_speed, angular_speed)` pair. For example,
+`BicycleDriveRobot.current_speed` returns `(velocity, orient)` (m/s, rad), while
+`HolonomicDriveRobot.current_speed` returns `(linear_speed, angular_speed)` (m/s, rad/s).
+Use the selected robot model's contract when interpreting these components. The separate
+`robot_velocity_xy` field is the world-frame translational velocity.
+
+The position bound uses `max(SOCNAV_POSITION_CAP_M, map dimension)` independently for each
+axis, with `SOCNAV_POSITION_CAP_M = 50 m`. On maps smaller than that floor, the representable
+position range can therefore extend beyond the declared `map_size`; this is a clipping bound,
+not a claim that those coordinates lie inside the physical map.
+
+The producer may expose additional opt-in leaves (for example, observation-derived
+`pedestrians_track_id` or `route_waypoints`); those are outside this standard field set and
+must retain their own explicit contract. This table is a producer-to-flat-adapter
+characterization slice for issue #9786. It does not certify the downstream planner
+consumers or resolve issue #9752.
+
+### Optional Occupancy-Grid Leaves
+
+When `use_occupancy_grid=True` and `include_grid_in_observation=True`, `RobotEnv` adds the
+following already-flat leaves. The raster frame and origin are condition-dependent, so
+consumers must read the metadata on the same observation rather than infer a frame from the
+tensor shape.
+
+| Flat key | Source key | Shape | Frame / unit | Contract |
+| --- | --- | --- | --- | --- |
+| `occupancy_grid` | `RobotEnv.occupancy_grid.to_observation()` | `(channels, height, width)` | raster values, dimensionless `[0, 1]` | Occupancy raster. Its axes and origin use robot-ego XY when `occupancy_grid_meta_use_ego_frame=1`; otherwise they use world/map XY. |
+| `occupancy_grid_meta_origin` | `OccupancyGrid.metadata_observation().origin` | `(2,)` | raster-frame XY, m | Lower-left raster origin. It is ego-frame centered when the ego flag is set; in world-frame mode it is zero or robot-centered according to `occupancy_grid_meta_center_on_robot`. |
+| `occupancy_grid_meta_resolution` | `OccupancyGrid.metadata_observation().resolution` | `(1,)` | m/cell | Physical cell resolution. |
+| `occupancy_grid_meta_size` | `OccupancyGrid.metadata_observation().size` | `(2,)` | raster extents, m | Physical width and height represented by the raster. |
+| `occupancy_grid_meta_use_ego_frame` | `OccupancyGrid.metadata_observation().use_ego_frame` | `(1,)` | boolean encoded as `0`/`1` | Selects robot-ego axes/origin versus world/map axes/origin for the raster. |
+| `occupancy_grid_meta_center_on_robot` | `OccupancyGrid.metadata_observation().center_on_robot` | `(1,)` | boolean encoded as `0`/`1` | In world-frame mode, selects a robot-centered origin without rotating the world axes. |
+| `occupancy_grid_meta_channel_indices` | `OccupancyGrid.metadata_observation().channel_indices` | `(4,)` | integer indices, dimensionless | Channel lookup in canonical order `(obstacles, pedestrians, robot, combined)`; `-1` means unavailable. |
+| `occupancy_grid_meta_robot_pose` | `OccupancyGrid.metadata_observation().robot_pose` | `(3,)` | world/map XY, m + heading, rad | World-frame robot pose used to generate the raster, including when the raster itself is ego-frame. |
 
 ## Opt-in Observation-Derived Pedestrian Tracking
 

@@ -634,6 +634,7 @@ class RobotEnv(BaseEnv):
         self._action_latency_queue: deque[tuple[Any, ...]] = deque()
         self._reset_action_latency_queue()
         self.applied_seed: int | None = None
+        self._crowd_established_by_seeded_reset = False
         self._latest_observation: Any = None
         # Enable occupancy grid overlay visualization if requested
         if self.sim_ui and getattr(env_config, "show_occupancy_grid", False):
@@ -648,6 +649,25 @@ class RobotEnv(BaseEnv):
         self._grid_obstacle_cache_key: _GridObstacleCacheKey | None = None
         self._grid_obstacle_cache_value: _GridObstacleCacheValue | None = None
         self._prime_snqi_proxy_state()
+
+    def _apply_reset_seed(self, seed: int | None) -> None:
+        """Record the reset seed and replay directly-constructed crowd sampling (issue #9760).
+
+        A directly-constructed env samples its crowd from an unseeded RNG at
+        construction. Its first seeded reset re-runs construction-time
+        population under the seeded context, and subsequent seeded resets repeat
+        that sampling so later reset work consumes the same RNG sequence.
+        Factory-seeded envs (applied_seed already set before reset) keep their
+        construction crowd, preserving legacy replay bytes. Must run inside the
+        seeded RNG context.
+        """
+        if seed is None:
+            return
+        repopulate_crowd = self.applied_seed is None or self._crowd_established_by_seeded_reset
+        self.applied_seed = int(seed)
+        if repopulate_crowd:
+            self.simulator.repopulate_crowd()
+            self._crowd_established_by_seeded_reset = True
 
     def _reset_action_latency_queue(self) -> None:
         """Clear queued controls and prime the configured delay with zero commands."""
@@ -1206,10 +1226,8 @@ class RobotEnv(BaseEnv):
         Returns:
             tuple: ``(obs, info)`` with the initial observation and placeholder info dict.
         """
-        if seed is not None:
-            self.applied_seed = int(seed)
-
         with global_reset_seed(seed):
+            self._apply_reset_seed(seed)
             super().reset(seed=seed, options=options)
             self._telemetry_episode_id += 1
             # Reset last_action

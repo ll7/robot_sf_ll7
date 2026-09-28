@@ -5,6 +5,50 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
+# Issue #9763: this script calls Python helpers with bare `python3`. On a nonlogin
+# remote shell that can resolve to an interpreter older than the repository's
+# `requires-python = ">=3.11"`, and `pr_gate_lease.py` imports `datetime.UTC`
+# (3.11+). The failure then surfaces only after the script has entered creation
+# and mutated state. Select and validate one supported interpreter up front, and
+# use that same interpreter for every helper call.
+ROBOT_SF_MIN_PYTHON_MINOR=11
+resolve_supported_python() {
+  local candidate resolved
+  # An explicit override wins so an operator can pin a known-good interpreter.
+  # Otherwise try the ambient `python3` first: callers legitimately place a
+  # purpose-built `python3` shim on PATH, and preferring a versioned name would
+  # silently bypass it. The versioned names are the fallback for exactly the
+  # reported case, where the nonlogin default `python3` is too old.
+  local candidates=()
+  if [[ -n "${ROBOT_SF_PYTHON:-}" ]]; then
+    candidates=("$ROBOT_SF_PYTHON")
+  else
+    candidates=(python3 python3.13 python3.12 python3.11)
+  fi
+  for candidate in "${candidates[@]}"; do
+    resolved="$(command -v "$candidate" 2>/dev/null)" || continue
+    [[ -n "$resolved" ]] || continue
+    if "$resolved" -c "import sys; raise SystemExit(0 if sys.version_info[:2] >= (3, ${ROBOT_SF_MIN_PYTHON_MINOR}) else 1)" >/dev/null 2>&1; then
+      printf '%s\n' "$resolved"
+      return 0
+    fi
+  done
+  return 1
+}
+
+if ! pr_ready_python="$(resolve_supported_python)"; then
+  {
+    echo "Error: no supported Python interpreter found (need >= 3.${ROBOT_SF_MIN_PYTHON_MINOR})." >&2
+    echo "Tried: ${ROBOT_SF_PYTHON:-python3, python3.13, python3.12, python3.11}" >&2
+    echo "This repository declares requires-python >= 3.11 and its worktree helpers" >&2
+    echo "import datetime.UTC, which needs 3.11 or newer." >&2
+    echo "Fix: activate a supported interpreter, or set ROBOT_SF_PYTHON=/path/to/python." >&2
+  } >&2
+  # Fail before any capacity, lock, or worktree mutation.
+  exit 2
+fi
+export ROBOT_SF_PYTHON="$pr_ready_python"
+
 show_help() {
   cat <<'EOF'
 Usage: scripts/dev/create_worktree.sh --path PATH --branch BRANCH [options]
@@ -158,7 +202,7 @@ if [[ -n "$receipt_path" && -z "$task_id" ]]; then
 fi
 
 if [[ -n "$receipt_path" ]]; then
-  if ! receipt_path="$(python3 "$SCRIPT_DIR/worktree_receipt.py" resolve-path --receipt "$receipt_path")"; then
+  if ! receipt_path="$("$pr_ready_python" "$SCRIPT_DIR/worktree_receipt.py" resolve-path --receipt "$receipt_path")"; then
     exit 2
   fi
 fi
@@ -181,7 +225,7 @@ validate_target_preflight() {
   if [[ -n "$minimum_free_bytes" ]]; then
     capacity_args+=(--minimum-free-bytes "$minimum_free_bytes")
   fi
-  python3 "$SCRIPT_DIR/check_worktree_capacity.py" "${capacity_args[@]}"
+  "$pr_ready_python" "$SCRIPT_DIR/check_worktree_capacity.py" "${capacity_args[@]}"
 }
 
 if [[ "$dry_run" -eq 1 ]]; then
@@ -200,7 +244,7 @@ if [[ "$locked_transaction" -eq 1 ]]; then
     echo "create_worktree: it requires the portable helper's inherited repository lock" >&2
     exit 2
   fi
-  if ! python3 "$SCRIPT_DIR/worktree_creation_lock.py" --verify-fd "$worktree_lock_path" "$lock_fd"; then
+  if ! "$pr_ready_python" "$SCRIPT_DIR/worktree_creation_lock.py" --verify-fd "$worktree_lock_path" "$lock_fd"; then
     echo "create_worktree: --__locked-transaction requires ownership of the repository lock" >&2
     exit 2
   fi
@@ -226,12 +270,12 @@ report_and_exec() {
     (
       cd -- "$worktree_path"
       if [[ -n "$receipt_path" ]]; then
-        python3 "$SCRIPT_DIR/worktree_receipt.py" check --receipt "$receipt_path" --worktree . --json
+        "$pr_ready_python" "$SCRIPT_DIR/worktree_receipt.py" check --receipt "$receipt_path" --worktree . --json
       fi
       if [[ "$worktree_mode" == "review" ]]; then
         # Bind the optional first command to the real process boundary. Later
         # commands must remain descendants of this process to retain it.
-        exec python3 "$SCRIPT_DIR/review_worktree_guard.py" run \
+        exec "$pr_ready_python" "$SCRIPT_DIR/review_worktree_guard.py" run \
           --worktree "$worktree_path" -- "${command_args[@]}"
       fi
       exec "${command_args[@]}"
@@ -240,7 +284,7 @@ report_and_exec() {
 }
 
 lease_file_for_worktree() {
-  python3 - "$worktree_path" "$git_common_dir" <<'PY'
+  "$pr_ready_python" - "$worktree_path" "$git_common_dir" <<'PY'
 import hashlib
 import sys
 from pathlib import Path
@@ -256,7 +300,7 @@ remove_file() {
   # The portable lock fallback deliberately supports a minimal PATH without
   # the ``rm`` utility. Keep file cleanup on the Python runtime already needed
   # by the fallback, while preserving ``rm -f``'s missing-file behavior.
-  python3 - "$1" <<'PY'
+  "$pr_ready_python" - "$1" <<'PY'
 import sys
 from pathlib import Path
 
@@ -272,7 +316,7 @@ release_task_lease() {
     return 0
   fi
 
-  if python3 "$SCRIPT_DIR/pr_gate_lease.py" release --worktree "$worktree_path" >/dev/null; then
+  if "$pr_ready_python" "$SCRIPT_DIR/pr_gate_lease.py" release --worktree "$worktree_path" >/dev/null; then
     return 0
   fi
 
@@ -422,7 +466,7 @@ run_locked_transaction() {
     # The lease helper reuses the inherited repository lock. Creating the lease
     # before this transaction releases the lock closes the add->claim cleanup gap,
     # and it must exist before review mode so the guard can verify task ownership.
-    if python3 "$SCRIPT_DIR/pr_gate_lease.py" create \
+    if "$pr_ready_python" "$SCRIPT_DIR/pr_gate_lease.py" create \
       --worktree "$worktree_path" --gate-id "$task_id" --owner "$task_id"; then
       :
     else
@@ -433,7 +477,7 @@ run_locked_transaction() {
       fi
       return "$lease_create_rc"
     fi
-    if python3 "$SCRIPT_DIR/pr_gate_lease.py" is-active --worktree "$worktree_path"; then
+    if "$pr_ready_python" "$SCRIPT_DIR/pr_gate_lease.py" is-active --worktree "$worktree_path"; then
       :
     else
       local lease_observation_rc=$?
@@ -458,7 +502,7 @@ run_locked_transaction() {
     if [[ -n "$task_id" ]]; then
       review_guard_args+=(--task-id "$task_id")
     fi
-    if python3 "$SCRIPT_DIR/review_worktree_guard.py" configure "${review_guard_args[@]}"; then
+    if "$pr_ready_python" "$SCRIPT_DIR/review_worktree_guard.py" configure "${review_guard_args[@]}"; then
       :
     else
       local review_guard_rc=$?
@@ -475,7 +519,7 @@ run_locked_transaction() {
         receipt_args+=(--allowed-path "$scope_glob")
       done
     fi
-    if python3 "$SCRIPT_DIR/worktree_receipt.py" create "${receipt_args[@]}"; then
+    if "$pr_ready_python" "$SCRIPT_DIR/worktree_receipt.py" create "${receipt_args[@]}"; then
       :
     else
       local receipt_rc=$?
@@ -537,7 +581,7 @@ else
     done
   fi
   python_lock_rc=0
-  python3 "$SCRIPT_DIR/worktree_creation_lock.py" "$worktree_lock_path" -- \
+  "$pr_ready_python" "$SCRIPT_DIR/worktree_creation_lock.py" "$worktree_lock_path" -- \
     "$SCRIPT_DIR/create_worktree.sh" "${locked_args[@]}" || python_lock_rc=$?
   if [[ "$python_lock_rc" -ne 0 ]]; then
     exit "$python_lock_rc"

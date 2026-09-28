@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
 
-from robot_sf.nav.map_config import MapDefinitionPool, serialize_map
+from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool, serialize_map
 from robot_sf.nav.svg_map_parser import convert_map
 
 MAPS_ROOT = Path(__file__).resolve().parents[1] / "robot_sf" / "maps"
@@ -56,6 +57,89 @@ def test_json_only_map_folder_is_rejected(tmp_path: Path) -> None:
     (tmp_path / "legacy.json").write_text("{}", encoding="utf-8")
 
     with pytest.raises(ValueError, match="empty"):
+        MapDefinitionPool(maps_folder=str(tmp_path))
+
+
+def test_source_capture_skips_unreadable_maps_and_rejects_empty_pool(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Opt-in input capture fails closed when every default SVG is unreadable."""
+    import builtins
+
+    unreadable_map = tmp_path / "unreadable.svg"
+    unreadable_map.write_text("<svg />", encoding="utf-8")
+    pool = MapDefinitionPool(maps_folder=str(tmp_path), map_defs={"preloaded": object()})
+    original_open = builtins.open
+
+    def fail_map_read(file, *args, **kwargs):
+        if Path(file) == unreadable_map:
+            raise PermissionError("fixture map is unreadable")
+        return original_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", fail_map_read)
+
+    with pytest.raises(ValueError, match="Map pool is empty"):
+        pool.load_map_definitions_with_source_records()
+
+    assert pool.map_defs == {}
+    assert pool.source_input_records == []
+
+
+def test_source_capture_records_the_exact_svg_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The opt-in pool loader records the exact bytes passed to the SVG parser."""
+    svg_path = tmp_path / "captured.svg"
+    svg_path.write_text(
+        """
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     width="20" height="10" viewBox="0 0 20 10">
+  <rect inkscape:label="robot_spawn_zone" x="1" y="1" width="1" height="1" />
+  <rect inkscape:label="robot_goal_zone" x="17" y="1" width="1" height="1" />
+  <path inkscape:label="robot_route_0_0" d="M 1 1 L 10 1 L 18 1" />
+</svg>
+        """.strip(),
+        encoding="utf-8",
+    )
+    source_bytes = svg_path.read_bytes()
+    pool = MapDefinitionPool(maps_folder=str(tmp_path), map_defs={"preloaded": object()})
+    parser_inputs: list[bytes | None] = []
+
+    def record_parser_input(
+        source_path: str, *, source_bytes: bytes | None = None
+    ) -> MapDefinition | None:
+        parser_inputs.append(source_bytes)
+        return convert_map(source_path, source_bytes=source_bytes)
+
+    monkeypatch.setattr("robot_sf.nav.svg_map_parser.convert_map", record_parser_input)
+
+    pool.load_map_definitions_with_source_records()
+
+    assert parser_inputs == [source_bytes]
+    assert list(pool.map_defs) == ["captured"]
+    assert pool.source_input_records == [
+        {
+            "role": "default_map_pool",
+            "sha256": hashlib.sha256(source_bytes).hexdigest(),
+            "path": str(svg_path.resolve()),
+            "map_id": "captured",
+            "parser": "svg",
+        }
+    ]
+
+
+def test_ordinary_map_loading_still_propagates_oserror(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The non-capture loader retains its established unreadable-map error behavior."""
+    (tmp_path / "unreadable.svg").write_text("<svg />", encoding="utf-8")
+
+    def fail_parse(_svg_path: str) -> None:
+        raise PermissionError("fixture map is unreadable")
+
+    monkeypatch.setattr("robot_sf.nav.svg_map_parser.convert_map", fail_parse)
+
+    with pytest.raises(PermissionError, match="fixture map is unreadable"):
         MapDefinitionPool(maps_folder=str(tmp_path))
 
 

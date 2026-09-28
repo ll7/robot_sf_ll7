@@ -27,6 +27,7 @@ from robot_sf.benchmark.artifact_publication import (
     export_publication_bundle,
     verify_publication_bundle_preflight,
 )
+from robot_sf.benchmark.camera_ready._run_state import _campaign_id
 from robot_sf.benchmark.camera_ready_campaign import (
     load_campaign_config,
     prepare_campaign_preflight,
@@ -64,6 +65,13 @@ from robot_sf.benchmark.release_resume_admission import (
 from robot_sf.benchmark.runtime_smoke_admission import (
     RuntimeSmokeAdmissionError,
     validate_runtime_smoke_result,
+)
+from robot_sf.benchmark.spawn_preflight import (
+    DEFAULT_CLEARANCE_MARGIN_M,
+    DEFAULT_GRID_RESOLUTION_M,
+    DEFAULT_RESPAWN_WINDOW_STEPS,
+    run_manifest_preflight,
+    write_preflight_reports,
 )
 from robot_sf.common.artifact_paths import get_artifact_category_path, get_repository_root
 
@@ -305,6 +313,75 @@ def _fixed_campaign_root(*, output_root: Path | None, campaign_id: str) -> Path:
     if not candidate.is_relative_to(base):
         raise ReleaseResumeAdmissionError("campaign_id resolves outside the campaign output root")
     return candidate
+
+
+def _run_spawn_matrix_preflight(
+    *,
+    manifest: Any,
+    campaign_root: Path,
+    source_commit: str | None,
+    workers: int,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Run the manifest-bound geometry gate and retain both reports with the campaign."""
+    report = run_manifest_preflight(
+        manifest,
+        workers=workers,
+        clearance_margin_m=DEFAULT_CLEARANCE_MARGIN_M,
+        respawn_window_steps=DEFAULT_RESPAWN_WINDOW_STEPS,
+        grid_resolution_m=DEFAULT_GRID_RESOLUTION_M,
+        source_commit=source_commit,
+    )
+    reports_dir = campaign_root / "reports"
+    json_path = reports_dir / "spawn_matrix_preflight.v1.json"
+    markdown_path = reports_dir / "spawn_matrix_preflight.v1.md"
+    json_sha256, markdown_sha256 = write_preflight_reports(
+        report,
+        json_path=json_path,
+        markdown_path=markdown_path,
+    )
+    summary = {
+        "status": report.get("status", "invalid"),
+        "schema_version": report.get("schema_version"),
+        "evidence_class": "preflight_diagnostic_only",
+        "json_path": "reports/spawn_matrix_preflight.v1.json",
+        "json_sha256": json_sha256,
+        "markdown_path": "reports/spawn_matrix_preflight.v1.md",
+        "markdown_sha256": markdown_sha256,
+        "scenario_count": report.get("scenario_count", 0),
+        "seed_count": report.get("seed_count", 0),
+        "cell_count": report.get("cell_count", 0),
+        "blocked_cell_count": report.get("blocked_cell_count", 0),
+        "input_error": report.get("input_error"),
+    }
+    return summary, report
+
+
+def _assert_spawn_preflight_report_identity(campaign_root: Path, summary: dict[str, Any]) -> None:
+    """Fail if retained preflight reports differ from their release-result digests."""
+    for path_key, digest_key, relative_path in (
+        ("json_path", "json_sha256", "reports/spawn_matrix_preflight.v1.json"),
+        ("markdown_path", "markdown_sha256", "reports/spawn_matrix_preflight.v1.md"),
+    ):
+        expected_digest = summary.get(digest_key)
+        if summary.get(path_key) != relative_path or not isinstance(expected_digest, str):
+            raise ReleaseArtifactIdentityError(f"invalid spawn preflight {path_key} identity")
+        try:
+            actual_digest = sha256_file(
+                resolve_campaign_artifact_path(campaign_root, relative_path)
+            )
+        except (OSError, ValueError) as exc:
+            raise ReleaseArtifactIdentityError(
+                f"spawn preflight report is missing or unreadable: {relative_path}"
+            ) from exc
+        if actual_digest != expected_digest:
+            raise ReleaseArtifactIdentityError(
+                f"spawn preflight report digest changed: {relative_path}"
+            )
+
+
+def _assert_publication_spawn_preflight_identity(bundle_dir: Path, summary: dict[str, Any]) -> None:
+    """Read back the copied reports inside the bundle's payload directory."""
+    _assert_spawn_preflight_report_identity(bundle_dir / "payload", summary)
 
 
 def _admit_release_resume(
@@ -1329,11 +1406,39 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
                 "Authoritative staged-checkpoint receipt admitted: submit_safe=true; "
                 "metadata-only checkpoint resolvability remains a diagnostic."
             )
+        campaign_id = args.campaign_id or _campaign_id(cfg, label=args.label)
+        campaign_root = _fixed_campaign_root(
+            output_root=args.output_root,
+            campaign_id=campaign_id,
+        )
+        spawn_preflight_summary, spawn_preflight_report = _run_spawn_matrix_preflight(
+            manifest=manifest,
+            campaign_root=campaign_root,
+            source_commit=runtime_source_commit,
+            workers=4,
+        )
+        if spawn_preflight_report.get("status") != "valid":
+            preflight_payload = {
+                "mode": "preflight",
+                "status": "spawn_matrix_preflight_failed",
+                "status_reason": spawn_preflight_report.get("input_error")
+                or f"{spawn_preflight_summary['blocked_cell_count']} matrix cells are blocked",
+                "benchmark_success": False,
+                "campaign_execution_status": "not_started",
+                "evidence_status": "blocked",
+                "manifest_validation": validation,
+                "resolved_manifest": resolved_manifest,
+                "campaign_id": campaign_id,
+                "spawn_matrix_preflight": spawn_preflight_summary,
+                "release_exit_code": 2,
+            }
+            print(json.dumps(preflight_payload, indent=2))
+            return 2
         prepared = prepare_campaign_preflight(
             cfg,
             output_root=args.output_root,
             label=args.label,
-            campaign_id=args.campaign_id,
+            campaign_id=campaign_id,
             invoked_command=invoked_command,
             authoritative_checkpoint_admission=authoritative_checkpoint_admission,
         )
@@ -1342,6 +1447,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
             "mode": "preflight",
             "manifest_validation": validation,
             "resolved_manifest": resolved_manifest,
+            "spawn_matrix_preflight": spawn_preflight_summary,
             "campaign_id": prepared["campaign_id"],
             "campaign_root": str(prepared["campaign_root"]),
             "validate_config_path": str(prepared["validate_config_path"]),
@@ -1362,6 +1468,20 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         if stress_smoke:
             preflight_payload["runtime_source_commit"] = runtime_source_commit
             preflight_payload["stress_smoke_runtime_identity"] = runtime_source_admission
+        if spawn_preflight_report.get("status") != "valid":
+            preflight_payload.update(
+                {
+                    "status": "spawn_matrix_preflight_failed",
+                    "status_reason": spawn_preflight_report.get("input_error")
+                    or f"{spawn_preflight_summary['blocked_cell_count']} matrix cells are blocked",
+                    "benchmark_success": False,
+                    "campaign_execution_status": "not_started",
+                    "evidence_status": "blocked",
+                    "release_exit_code": 2,
+                }
+            )
+            print(json.dumps(preflight_payload, indent=2))
+            return 2
         print(json.dumps(preflight_payload, indent=2))
         return 0 if validation["status"] == "valid" else 2
 
@@ -1499,11 +1619,45 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         else {"status": "fresh_campaign", "resume_same_campaign": False}
     )
 
+    campaign_id = args.campaign_id or _campaign_id(cfg, label=args.label)
+    campaign_root = _fixed_campaign_root(
+        output_root=args.output_root,
+        campaign_id=campaign_id,
+    )
+    spawn_preflight_summary, spawn_preflight_report = _run_spawn_matrix_preflight(
+        manifest=manifest,
+        campaign_root=campaign_root,
+        source_commit=runtime_source_commit,
+        workers=4,
+    )
+    result["campaign_id"] = campaign_id
+    result["spawn_matrix_preflight"] = spawn_preflight_summary
+    if spawn_preflight_report.get("status") != "valid":
+        reason = spawn_preflight_report.get("input_error") or (
+            f"{spawn_preflight_summary['blocked_cell_count']} matrix cells are blocked"
+        )
+        result.update(
+            {
+                "benchmark_success": False,
+                "release_benchmark_success": False,
+                "status": "spawn_matrix_preflight_failed",
+                "status_reason": reason,
+                "campaign_execution_status": "not_started",
+                "evidence_status": "blocked",
+                "release_status": "spawn_matrix_preflight_failed",
+                "release_status_reason": reason,
+                "release_exit_code": 2,
+            }
+        )
+        _write_json(campaign_root / "release" / "release_result.json", result)
+        print(json.dumps(result, indent=2))
+        return 2
+
     run_payload = run_campaign(
         cfg,
         output_root=args.output_root,
         label=args.label,
-        campaign_id=args.campaign_id,
+        campaign_id=campaign_id,
         skip_publication_bundle=True,
         invoked_command=invoked_command,
     )
@@ -1530,6 +1684,8 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         _write_json(release_dir / "release_result.json", result)
         print(json.dumps(result, indent=2))
         return 2
+
+    result["spawn_matrix_preflight"] = spawn_preflight_summary
 
     post_manifest_validation: dict[str, Any] | None = None
     if stress_smoke:
@@ -1579,6 +1735,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
     try:
         _merge_release_provenance(campaign_root, release_provenance)
         _assert_no_historical_release_identity(campaign_root)
+        _assert_spawn_preflight_report_identity(campaign_root, spawn_preflight_summary)
     except ReleaseArtifactIdentityError as exc:
         reason = str(exc)
         result.update(
@@ -1749,6 +1906,10 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
 
     if release_benchmark_success and publication_requested:
         try:
+            try:
+                _assert_spawn_preflight_report_identity(campaign_root, spawn_preflight_summary)
+            except ReleaseArtifactIdentityError as exc:
+                raise PublicationPreflightError(str(exc)) from exc
             # The first export discovers the deterministic bundle descriptor.  Then write that
             # descriptor and the final release result into the source campaign before exporting
             # again.  Repeat until the descriptor is stable so the bundle contains the same
@@ -1773,6 +1934,12 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
                 )
             result["publication_bundle"] = publication_payload
             _assert_no_historical_release_identity(Path(publication_payload["bundle_dir"]))
+            try:
+                _assert_publication_spawn_preflight_identity(
+                    Path(publication_payload["bundle_dir"]), spawn_preflight_summary
+                )
+            except ReleaseArtifactIdentityError as exc:
+                raise PublicationPreflightError(str(exc)) from exc
             _run_publication_preflight(Path(publication_payload["bundle_dir"]))
         except ReleaseArtifactIdentityError as exc:
             result["publication_bundle"] = None

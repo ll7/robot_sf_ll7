@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -22,6 +23,7 @@ import numpy as np
 FROZEN_SOURCE = "07f7e8d43084de748915e1b1eb8b2a1603357c6e"
 FROZEN_SOURCE_TREE_OID = "3771a78a019823b816cca27a625ec6f29fe93d22"
 SOURCE_STATE_SCHEMA = "issue-9671-frozen-source-state.v1"
+SIDECAR_SCHEMA = "issue-9671-robot-force-observer.v2"
 EMPTY_STATUS_SHA256 = hashlib.sha256(b"").hexdigest()
 FORCE_FILE = "robot_sf/ped_npc/ped_robot_force.py"
 SIM_FILE = "robot_sf/sim/simulator.py"
@@ -33,14 +35,68 @@ SOURCE_MODULES = {
 }
 TARGET_QUALNAMES = {
     FORCE_FILE: ("PedRobotForce.__call__",),
-    SIM_FILE: ("Simulator.step_once", "PedSimulator.step_once"),
+    # The pinned 0.0.7 map-runner instantiates Simulator. PedSimulator exposes
+    # pedestrian slots that omit ego while PedRobotForce returns rows including
+    # ego, so its force arrays cannot be bound to the trace actor roster.
+    SIM_FILE: ("Simulator.step_once",),
     RUNNER_FILE: ("run_map_episode",),
 }
-FORCE_LINES = {"Simulator": 1699, "PedSimulator": 2087}
+FORCE_LINES = {"Simulator": 1699}
+_POSITIVE_INFINITY_PATHS = frozenset(
+    {
+        ("metrics", "min_separation_corrupted_m"),
+        (
+            "algorithm_metadata",
+            "tracking_precision",
+            "min_separation_corrupted_m",
+        ),
+    }
+)
+_CANONICAL_POSITIVE_INFINITY = {"$robot_sf_nonfinite_float_v1": "positive_infinity"}
 
 
 class ObserverIdentityError(RuntimeError):
     """A force slot cannot be bound to a stable trace actor."""
+
+
+def _canonical_episode_record_value(value: Any, path: tuple[Any, ...] = ()) -> Any:
+    """Copy a row for strict JSON hashing, admitting only known diagnostic +inf sentinels."""
+    if isinstance(value, float):
+        if math.isfinite(value):
+            return value
+        if value == math.inf and path in _POSITIVE_INFINITY_PATHS:
+            return dict(_CANONICAL_POSITIVE_INFINITY)
+        raise ValueError(f"unsupported non-finite episode record value at {path!r}")
+    if isinstance(value, dict):
+        if path in _POSITIVE_INFINITY_PATHS and value == _CANONICAL_POSITIVE_INFINITY:
+            raise ValueError(f"reserved canonical infinity token in raw row at {path!r}")
+        return {
+            key: _canonical_episode_record_value(item, (*path, key)) for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            _canonical_episode_record_value(item, (*path, index))
+            for index, item in enumerate(value)
+        ]
+    if isinstance(value, tuple):
+        return tuple(
+            _canonical_episode_record_value(item, (*path, index))
+            for index, item in enumerate(value)
+        )
+    return value
+
+
+def canonical_episode_record_bytes(row: dict[str, Any]) -> bytes:
+    """Return deterministic strict-JSON bytes without modifying the producer row."""
+    canonical_row = _canonical_episode_record_value(row)
+    return json.dumps(
+        canonical_row, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode()
+
+
+def canonical_episode_record_sha256(row: dict[str, Any]) -> str:
+    """Hash the canonical episode-record bytes shared by observer and validators."""
+    return hashlib.sha256(canonical_episode_record_bytes(row)).hexdigest()
 
 
 def _frozen_source_state(source: Path) -> dict[str, Any]:
@@ -124,10 +180,13 @@ def _same(actual: Any, expected: Any, label: str) -> None:
 
 
 def bind_episode(capture: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]:
-    """Bind pre-step force slots to reset IDs and every later trace state.
+    """Bind simulator slots to reset IDs and every later trace state.
 
-    Equality is intentional: an approximate position match could accept two
-    nearby actors in a permutation. Unobservable population changes fail closed.
+    The force kernel runs after behavior updates. Its input positions therefore
+    bind to the simulator's force-time slot state, not the pre-behavior step
+    entry or the prior trace row. Equality is intentional: an approximate match
+    could accept two nearby actors in a permutation. Unobservable population
+    changes fail closed.
     """
     trace = row["algorithm_metadata"]["simulation_step_trace"]
     reset = trace["reset"]["pedestrians"]
@@ -150,8 +209,11 @@ def bind_episode(capture: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]
         _same(sample["step"], index, "capture step index")
         _same([ped["actor_id"] for ped in step["pedestrians"]], actors, "actor IDs")
         _same(sample["step_entry_positions"], prior, "pre-step positions")
-        _same(sample["force_input_positions"], prior, "force input positions")
-        _require_distinct(sample["force_input_positions"])
+        _same(
+            sample["force_input_positions"],
+            sample["force_time_simulator_positions"],
+            "force input positions",
+        )
         _same(sample["post_step_positions"], _positions(step["pedestrians"]), "post-step positions")
         _same(
             sample["total_forces"],
@@ -168,14 +230,12 @@ def bind_episode(capture: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]
         bound_steps.append({"step": index, "actor_ids": actors, **sample})
         prior = _positions(step["pedestrians"])
     return {
-        "schema_version": "issue-9671-robot-force-observer.v1",
+        "schema_version": SIDECAR_SCHEMA,
         "episode_id": row["episode_id"],
         "scenario_id": row["scenario_id"],
         "seed": row["seed"],
         "algorithm": row["algo"],
-        "episode_record_canonical_sha256": hashlib.sha256(
-            json.dumps(row, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
-        ).hexdigest(),
+        "episode_record_canonical_sha256": canonical_episode_record_sha256(row),
         "actor_ids": actors,
         "steps": bound_steps,
     }
@@ -328,6 +388,7 @@ class ForceObserver:
             if len(self.force_returns) != len(components):
                 raise ObserverIdentityError("robot force call count differs from roster")
             count = len(self.step["step_entry_positions"])
+            force_time_positions = _vectors(simulator.ped_pos, count)
             values = np.zeros((count, 2), dtype=float)
             input_positions = None
             component_ids = []
@@ -339,6 +400,11 @@ class ForceObserver:
                 if input_positions is None:
                     input_positions = sample["positions"]
                 _same(sample["positions"], input_positions, "force component slot positions")
+                _same(
+                    sample["positions"],
+                    force_time_positions,
+                    "force input positions",
+                )
                 values += np.asarray(sample["forces"], dtype=float)
                 component_ids.append(getattr(component, "component_id", None))
                 component_inputs.append(sample)
@@ -348,6 +414,7 @@ class ForceObserver:
             if self.component_object_ids is None:
                 self.component_object_ids = object_ids
             _same(object_ids, self.component_object_ids, "robot force component object roster")
+            self.step["force_time_simulator_positions"] = force_time_positions
             self.step["force_input_positions"] = input_positions
             self.step["robot_forces"] = _vectors(values, count)
             self.step["component_ids"] = component_ids
@@ -441,4 +508,4 @@ def install_from_environment() -> ForceObserver | None:
     return observer
 
 
-_OBSERVER = install_from_environment()
+_OBSERVER = install_from_environment() if __name__ == "sitecustomize" else None

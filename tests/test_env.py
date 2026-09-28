@@ -2,12 +2,39 @@
 
 from typing import cast
 
+import numpy as np
 import pytest
 from gymnasium import spaces
 
 from robot_sf.gym_env.pedestrian_env import PedestrianEnv
 from robot_sf.gym_env.robot_env import RobotEnv
 from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
+
+
+def test_direct_construction_same_reset_seed_gives_identical_crowd():
+    """Two directly-constructed envs with the same reset(seed) share initial crowd (issue #9760)."""
+    env_a = RobotEnv()
+    env_a.reset(seed=123)
+    env_b = RobotEnv()
+    env_b.reset(seed=123)
+    np.testing.assert_array_equal(
+        np.asarray(env_a.simulator.ped_pos), np.asarray(env_b.simulator.ped_pos)
+    )
+
+
+def test_direct_construction_changed_reset_seed_repopulates_crowd():
+    """A later explicit seed replaces the crowd with that seed's population."""
+    env_reseeded = RobotEnv()
+    env_reseeded.reset(seed=123)
+    env_reseeded.reset(seed=456)
+
+    env_reference = RobotEnv()
+    env_reference.reset(seed=456)
+
+    np.testing.assert_array_equal(
+        np.asarray(env_reseeded.simulator.ped_pos),
+        np.asarray(env_reference.simulator.ped_pos),
+    )
 
 
 def test_can_create_env():

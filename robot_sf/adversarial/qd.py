@@ -21,8 +21,10 @@ not camera-ready findings.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from itertools import count
 from pathlib import Path
@@ -43,11 +45,13 @@ from robot_sf.adversarial.samplers import (
     CoordinateRefinementSampler,
     RandomCandidateSampler,
 )
+from robot_sf.adversarial.scenario_admissibility import validate_scenario_admissibility
 
 if TYPE_CHECKING:
     from robot_sf.adversarial.certification import CertificationStatus
 
 QD_ARCHIVE_SCHEMA_VERSION = "adversarial_qd_archive.v1"
+QD_COMPARISON_SCHEMA_VERSION = "adversarial_qd_comparison.v1"
 
 _BEHAVIOR_AXES = ("distance_to_human_min", "time_to_collision_min")
 
@@ -358,6 +362,10 @@ class QDSearchResult:
     archive: QDArchive
     num_evaluated: int
     num_admitted: int
+    num_proposed: int = 0
+    num_admissibility_rejected: int = 0
+    pre_evaluation_rejections: tuple[Mapping[str, Any], ...] = ()
+    admissibility_records: tuple[Mapping[str, Any], ...] = ()
 
     def to_json(self) -> dict[str, Any]:
         """Return a JSON-serializable result payload."""
@@ -365,7 +373,11 @@ class QDSearchResult:
         payload["search_summary"] = {
             "num_evaluated": self.num_evaluated,
             "num_admitted": self.num_admitted,
+            "num_admissibility_rejected": self.num_admissibility_rejected,
+            "num_proposed": self.num_proposed,
         }
+        payload["pre_evaluation_rejections"] = [dict(row) for row in self.pre_evaluation_rejections]
+        payload["admissibility_records"] = [dict(row) for row in self.admissibility_records]
         return payload
 
 
@@ -374,6 +386,8 @@ def run_map_elites(
     *,
     evaluator: QDEvaluator,
     certifier: Any | None = None,
+    admissibility_precheck: Callable[[QDSearchConfig, CandidateSpec], Mapping[str, Any] | None]
+    | None = None,
     emitters: list[QDEmitter] | None = None,
     archive: QDArchive | None = None,
 ) -> QDSearchResult:
@@ -387,6 +401,13 @@ def run_map_elites(
             campaign integration.
         certifier: Optional callable (candidate) -> CertificationStatus; when omitted
             the evaluation's own certification status is used as the gate.
+        admissibility_precheck: Optional cheap candidate-level check that returns the versioned
+            `scenario_admissibility.v1` verdict before the evaluator runs. Explicit structural or
+            geometric/kinodynamic exclusions are recorded and skipped only when `case_id` matches
+            `qd_candidate_case_id(candidate)`; unknown, missing, invalid, or mismatched verdicts
+            continue to the evaluator. A raised exception is recorded as unavailable evidence and
+            also continues to the evaluator so one broken precheck does not consume the remaining
+            search budget.
         emitters: Optional list of emitters; defaults to Random + CoordinateRefinement.
         archive: Optional live archive shared with stateful emitters. Its grid and
             certification policy must match ``config``.
@@ -400,24 +421,48 @@ def run_map_elites(
     )
     if not active_emitters:
         raise ValueError("emitters must contain at least one emitter")
-    if archive is None:
-        archive = QDArchive(grid=config.grid, require_certification=config.require_certification)
-    elif (
-        archive.grid != config.grid or archive.require_certification != config.require_certification
-    ):
-        raise ValueError("archive grid and certification policy must match QDSearchConfig")
+    archive = _resolve_archive(config, archive)
 
     num_evaluated = 0
     num_admitted = 0
+    num_admissibility_rejected = 0
+    pre_evaluation_rejections: list[Mapping[str, Any]] = []
+    admissibility_records: list[Mapping[str, Any]] = []
 
     for index in range(config.budget):
         emitter = active_emitters[index % len(active_emitters)]
         candidate = emitter.sample()
+        candidate_case_id = qd_candidate_case_id(candidate)
+        precheck_error_type: str | None = None
+        try:
+            verdict = admissibility_precheck(config, candidate) if admissibility_precheck else None
+        except Exception as exc:  # noqa: BLE001 - an advisory precheck must not abort the budget
+            verdict = None
+            precheck_error_type = type(exc).__name__
+        admissibility_record = dict(
+            _admissibility_record(
+                candidate,
+                verdict,
+                candidate_case_id=candidate_case_id,
+                precheck_configured=admissibility_precheck is not None,
+                precheck_error_type=precheck_error_type,
+            )
+        )
+        admissibility_records.append(admissibility_record)
+        if _scenario_admissibility_payload_rejects(verdict, expected_case_id=candidate_case_id):
+            num_admissibility_rejected += 1
+            pre_evaluation_rejections.append(
+                {
+                    "candidate": candidate.to_json(),
+                    "scenario_admissibility": dict(verdict),
+                    "stage": "pre_evaluation",
+                }
+            )
+            continue
+        num_evaluated += 1
         evaluation = evaluator(config, candidate)
         if evaluation.objective_value is None:
-            score = objective_fn(evaluation)
-            evaluation = evaluation.with_objective(score)
-        num_evaluated += 1
+            evaluation = evaluation.with_objective(objective_fn(evaluation))
 
         cert_status = (
             certifier(candidate) if certifier is not None else evaluation.certification_status
@@ -440,9 +485,105 @@ def run_map_elites(
 
     return QDSearchResult(
         archive=archive,
+        num_proposed=config.budget,
         num_evaluated=num_evaluated,
         num_admitted=num_admitted,
+        num_admissibility_rejected=num_admissibility_rejected,
+        pre_evaluation_rejections=tuple(pre_evaluation_rejections),
+        admissibility_records=tuple(admissibility_records),
     )
+
+
+def _resolve_archive(config: QDSearchConfig, archive: QDArchive | None) -> QDArchive:
+    """Create a matching archive or reject a caller-supplied incompatible one."""
+    if archive is None:
+        return QDArchive(grid=config.grid, require_certification=config.require_certification)
+    if archive.grid != config.grid or archive.require_certification != config.require_certification:
+        raise ValueError("archive grid and certification policy must match QDSearchConfig")
+    return archive
+
+
+def _admissibility_record(
+    candidate: CandidateSpec,
+    verdict: Any,
+    *,
+    candidate_case_id: str,
+    precheck_configured: bool,
+    precheck_error_type: str | None = None,
+) -> Mapping[str, Any]:
+    """Preserve each verdict or its explicit unavailable/invalid state beside the candidate."""
+    record: dict[str, Any] = {
+        "candidate": candidate.to_json(),
+        "candidate_case_id": candidate_case_id,
+    }
+    if verdict is None:
+        record.update(
+            {
+                "status": "unavailable",
+                "reason_code": (
+                    "admissibility_precheck_raised"
+                    if precheck_error_type is not None
+                    else "admissibility_verdict_unavailable"
+                    if precheck_configured
+                    else "admissibility_precheck_not_configured"
+                ),
+            }
+        )
+        if precheck_error_type is not None:
+            record["error_type"] = precheck_error_type
+        return record
+    if not isinstance(verdict, Mapping):
+        record.update(
+            {
+                "status": "invalid",
+                "reason_code": "admissibility_verdict_not_mapping",
+                "value_type": type(verdict).__name__,
+            }
+        )
+        return record
+    try:
+        validate_scenario_admissibility(verdict)
+    except ValueError as exc:
+        record.update(
+            {
+                "status": "invalid",
+                "reason_code": "admissibility_verdict_schema_invalid",
+                "validation_error": str(exc),
+            }
+        )
+        return record
+    if verdict.get("case_id") != candidate_case_id:
+        record.update(
+            {
+                "status": "invalid",
+                "reason_code": "admissibility_candidate_identity_mismatch",
+                "scenario_admissibility": dict(verdict),
+            }
+        )
+        return record
+    record.update({"status": "available", "scenario_admissibility": dict(verdict)})
+    return record
+
+
+def _scenario_admissibility_payload_rejects(payload: Any, *, expected_case_id: str) -> bool:
+    """Recognize only an explicit exclusion disposition from the feasibility adapter."""
+    if not isinstance(payload, Mapping):
+        return False
+    try:
+        validate_scenario_admissibility(payload)
+    except ValueError:
+        return False
+    return (
+        payload.get("case_id") == expected_case_id and payload.get("search_disposition") == "reject"
+    )
+
+
+def qd_candidate_case_id(candidate: CandidateSpec) -> str:
+    """Return a deterministic case ID binding an admissibility verdict to one candidate."""
+    encoded = json.dumps(
+        candidate.to_json(), sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+    return f"qd-candidate-{hashlib.sha256(encoded).hexdigest()}"
 
 
 def _default_emitters(search_space: SearchSpaceConfig, *, seed: int) -> list[QDEmitter]:
@@ -509,7 +650,7 @@ def production_qd_evaluator(
 
 @dataclass(frozen=True)
 class QDComparisonRow:
-    """One row of an equal-budget QD vs single-objective comparison."""
+    """One row of an equal-proposal-budget comparison."""
 
     method: str
     budget: int
@@ -536,7 +677,7 @@ class QDComparisonRow:
 
 @dataclass(frozen=True)
 class QDComparisonReport:
-    """Equal-budget comparison of MAP-Elites against a single-objective baseline."""
+    """Equal-proposal-budget comparison of MAP-Elites and a single-objective baseline."""
 
     qd: QDComparisonRow
     single_objective: QDComparisonRow
@@ -545,8 +686,9 @@ class QDComparisonReport:
     def to_json(self) -> dict[str, Any]:
         """Return a JSON-serializable comparison report."""
         return {
-            "schema_version": QD_ARCHIVE_SCHEMA_VERSION,
-            "comparison_type": "equal_budget_qd_vs_single_objective",
+            "schema_version": QD_COMPARISON_SCHEMA_VERSION,
+            "comparison_type": "equal_proposal_budget_qd_vs_single_objective",
+            "budget_basis": "proposed_candidate_slots",
             "grid": self.grid,
             "rows": {
                 "map_elites": self.qd.to_json(),
@@ -571,12 +713,19 @@ def compare_qd_vs_single_objective(
     require_certification: bool = False,
     behavior_descriptor: BehaviorDescriptorFn = default_behavior_descriptor,
 ) -> QDComparisonReport:
-    """Build an equal-budget comparison of QD diversity vs the single-objective baseline.
+    """Build an equal-proposal-budget comparison of QD and a single-objective baseline.
 
     The single-objective baseline is summarised by how many *distinct certified
-    failure mechanisms* its evaluated candidates would have populated into the same
-    grid (a fair, budget-matched diversity yardstick), not by its best objective value.
+    failure mechanisms* its candidate attempts would have populated into the same grid.
+    Pre-evaluation exclusions can reduce QD evaluator calls; both proposal and evaluator
+    counts remain visible, and this report does not claim matched simulator calls.
     """
+    if isinstance(budget, bool) or not isinstance(budget, int) or budget < 1:
+        raise ValueError("proposal budget must be a positive integer")
+    if qd_result.num_proposed != budget or len(single_objective_evaluations) != budget:
+        raise ValueError(
+            "proposal-budget comparison requires the declared budget to match both proposal counts"
+        )
     qd_row = QDComparisonRow(
         method="map_elites",
         budget=budget,
@@ -626,6 +775,7 @@ def compare_qd_vs_single_objective(
 
 __all__ = [
     "QD_ARCHIVE_SCHEMA_VERSION",
+    "QD_COMPARISON_SCHEMA_VERSION",
     "BehaviorDescriptorFn",
     "GridSpec",
     "QDArchive",
@@ -639,6 +789,7 @@ __all__ = [
     "compare_qd_vs_single_objective",
     "default_behavior_descriptor",
     "production_qd_evaluator",
+    "qd_candidate_case_id",
     "run_map_elites",
     "write_qd_archive",
 ]

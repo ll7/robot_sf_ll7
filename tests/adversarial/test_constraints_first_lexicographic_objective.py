@@ -177,6 +177,94 @@ def test_constraints_first_v2_keeps_partial_negative_safety_evidence_unknown(
     assert constraints_first_lexicographic_v1(evaluation) is not None
 
 
+def test_constraints_first_v2_orders_path_efficiency_within_soft_tier(tmp_path: Path) -> None:
+    """Lower path efficiency raises soft criticality when higher tiers are equal."""
+    record: dict[str, object] = {
+        "outcome": {
+            "route_complete": True,
+            "collision_event": False,
+            "severe_intrusion_event": False,
+            "timeout_event": False,
+        },
+        "metrics": {
+            "success": True,
+            "collisions": 0,
+            "near_misses": 0,
+            "snqi": 1.0,
+            "path_efficiency": 0.2,
+        },
+    }
+    low_efficiency = _evaluation(tmp_path, "low_efficiency", record)
+    metrics = record["metrics"]
+    assert isinstance(metrics, dict)
+    metrics["path_efficiency"] = 0.9
+    high_efficiency = _evaluation(tmp_path, "high_efficiency", record)
+
+    low_score = constraints_first_lexicographic_v2(low_efficiency)
+    high_score = constraints_first_lexicographic_v2(high_efficiency)
+
+    assert low_score is not None and high_score is not None
+    assert 0.0 <= high_score < low_score < 1.0
+
+
+def test_constraints_first_v2_preserves_disjoint_failure_tiers(tmp_path: Path) -> None:
+    metrics = {
+        "success": False,
+        "collisions": 0,
+        "near_misses": 0,
+        "snqi": 1.0,
+        "path_efficiency": 0.9,
+    }
+    collision = _evaluation(
+        tmp_path,
+        "safety_failure",
+        {
+            "outcome": {
+                "route_complete": False,
+                "collision_event": True,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {**metrics, "collisions": 1},
+        },
+    )
+    liveness = _evaluation(
+        tmp_path,
+        "liveness_failure",
+        {
+            "outcome": {
+                "route_complete": False,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": True,
+            },
+            "metrics": metrics,
+        },
+    )
+    clean = _evaluation(
+        tmp_path,
+        "clean",
+        {
+            "outcome": {
+                "route_complete": True,
+                "collision_event": False,
+                "severe_intrusion_event": False,
+                "timeout_event": False,
+            },
+            "metrics": {**metrics, "success": True},
+        },
+    )
+
+    safety_score = constraints_first_lexicographic_v2(collision)
+    liveness_score = constraints_first_lexicographic_v2(liveness)
+    clean_score = constraints_first_lexicographic_v2(clean)
+
+    assert safety_score is not None and 4.0 <= safety_score < 5.0
+    assert liveness_score is not None and 2.0 <= liveness_score < 3.0
+    assert clean_score is not None and 0.0 <= clean_score < 1.0
+    assert safety_score > liveness_score > clean_score
+
+
 @pytest.mark.parametrize(
     "record",
     (

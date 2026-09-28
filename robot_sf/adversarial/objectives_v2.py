@@ -7,6 +7,7 @@ continue to resolve to the code that was actually frozen.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any
 
 from robot_sf.adversarial.io import read_first_jsonl_record
@@ -14,7 +15,6 @@ from robot_sf.adversarial.objectives import (
     _consistent_boolean_alias,
     _success_metric_matches_route_complete,
     _valid_constraints_metric,
-    constraints_first_lexicographic_score,
     register_objective,
 )
 
@@ -126,6 +126,72 @@ def constraints_first_outcome_projection_v2(record: dict[str, Any]) -> dict[str,
     }
 
 
+def _optional_numeric_metric(
+    value: Any, *, minimum: float | None = None, maximum: float | None = None
+) -> tuple[float | None, bool]:
+    """Return a finite optional metric and whether its supplied value is valid."""
+    if value is None:
+        return None, True
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None, False
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        return None, False
+    if minimum is not None and parsed < minimum:
+        return None, False
+    if maximum is not None and parsed > maximum:
+        return None, False
+    return parsed, True
+
+
+def _soft_degradation_components(comfort: dict[str, Any]) -> list[float] | None:
+    """Convert available soft metrics to bounded adversarial-score components."""
+    components: list[float] = []
+    near_misses, valid = _optional_numeric_metric(comfort.get("near_misses"), minimum=0.0)
+    if not valid:
+        return None
+    if near_misses is not None:
+        components.append(near_misses / (1.0 + near_misses))
+
+    snqi, valid = _optional_numeric_metric(comfort.get("snqi"))
+    if not valid:
+        return None
+    if snqi is not None:
+        components.append(1.0 / (1.0 + max(0.0, snqi)))
+
+    path_efficiency, valid = _optional_numeric_metric(
+        comfort.get("path_efficiency"), minimum=0.0, maximum=1.0
+    )
+    if not valid:
+        return None
+    if path_efficiency is not None:
+        components.append(1.0 - path_efficiency)
+    return components
+
+
+def constraints_first_lexicographic_score_v2(outcome: dict[str, Any]) -> float | None:
+    """Score v2 outcomes with disjoint safety/liveness tiers and efficiency degradation."""
+    if outcome.get("status") != "observed":
+        return None
+    safety_failure = outcome.get("collision_or_severe_intrusion")
+    liveness_failure = outcome.get("liveness_or_goal_completion")
+    if not isinstance(safety_failure, bool) or not isinstance(liveness_failure, bool):
+        return None
+    comfort = outcome.get("comfort_and_efficiency")
+    if not isinstance(comfort, dict):
+        return None
+    components = _soft_degradation_components(comfort)
+    if components is None:
+        return None
+
+    soft_component = min(0.999, max(components, default=0.0))
+    if safety_failure:
+        return float(4.0 + soft_component)
+    if liveness_failure:
+        return float(2.0 + soft_component)
+    return float(soft_component)
+
+
 def constraints_first_lexicographic_v2(evaluation: CandidateEvaluation) -> float | None:
     """Score available planner executions by safety, liveness, then soft degradation.
 
@@ -162,7 +228,7 @@ def constraints_first_lexicographic_v2(evaluation: CandidateEvaluation) -> float
     projection = constraints_first_outcome_projection_v2(record)
     if projection["status"] != "observed":
         return None
-    return constraints_first_lexicographic_score(projection)
+    return constraints_first_lexicographic_score_v2(projection)
 
 
 def register_constraints_first_lexicographic_v2() -> None:

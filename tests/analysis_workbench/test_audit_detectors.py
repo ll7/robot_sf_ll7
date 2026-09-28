@@ -756,6 +756,8 @@ def test_detector_validation_helpers_reject_untrusted_declarations() -> None:
 
 def test_detector_admission_and_outcome_surfaces_fail_closed() -> None:
     """Nested status, fallback, and compatibility projections cannot be hidden."""
+    assert detectors.execution_admission_failure([]) == ("error", "row_malformed")
+    assert detectors.execution_admission_failure({"status": "collision"}) is None
     assert detectors._counter_failure(False, path="counter") is None
     assert detectors._counter_failure(True, path="counter") == ("unavailable", "counter_nonzero")
     assert detectors._counter_failure(-1, path="counter") == ("error", "counter_malformed")

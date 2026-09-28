@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from robot_sf.gym_env.robot_env import _FlatteningObservationWrapper
 from robot_sf.gym_env.unified_config import ObservationVisibilitySettings, RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.obstacle import Obstacle
@@ -147,6 +148,85 @@ def test_socnav_observation_rotates_pedestrian_velocities_to_ego_frame() -> None
         obs["pedestrians"]["velocities"][:2],
         np.array([[0.0, -1.0], [2.0, 0.0]], dtype=np.float32),
         atol=1e-6,
+    )
+
+
+def test_flat_socnav_observation_preserves_declared_frames() -> None:
+    """Production flat SOCNAV leaves preserve source frames and declared units."""
+    heading = np.pi / 2.0
+    source_ped_velocity = np.array([1.2, -0.4], dtype=np.float32)
+    source_robot_velocity = np.array([0.75, 1.25], dtype=np.float32)
+    simulator = _build_socnav_simulator(
+        [[5.0, 4.0]],
+        [source_ped_velocity.tolist()],
+    )
+    robot = simulator.robots[0]
+    robot.pose = ((4.0, 3.0), heading)
+    robot.current_speed = np.array([0.8, 0.15], dtype=np.float32)
+    source_robot_speed = robot.current_speed.copy()
+    robot.state = SimpleNamespace(velocity_xy=source_robot_velocity)
+    simulator.goal_pos = [np.array([8.0, 7.0], dtype=np.float32)]
+    simulator.next_goal_pos = [np.array([6.0, 6.0], dtype=np.float32)]
+
+    flat_obs = _FlatteningObservationWrapper(
+        SocNavObservationFusion(
+            simulator=simulator,
+            env_config=RobotSimulationConfig(),
+            max_pedestrians=2,
+        )
+    ).next_obs()
+
+    assert set(flat_obs) == {
+        "robot_position",
+        "robot_heading",
+        "robot_speed",
+        "robot_velocity_xy",
+        "robot_angular_velocity",
+        "robot_radius",
+        "goal_current",
+        "goal_next",
+        "pedestrians_positions",
+        "pedestrians_velocities",
+        "pedestrians_radius",
+        "pedestrians_count",
+        "map_size",
+        "sim_timestep",
+    }
+    np.testing.assert_allclose(flat_obs["robot_position"], [4.0, 3.0])
+    np.testing.assert_allclose(flat_obs["goal_current"], [8.0, 7.0])
+    np.testing.assert_allclose(flat_obs["goal_next"], [6.0, 6.0])
+    np.testing.assert_allclose(flat_obs["pedestrians_positions"][0], [5.0, 4.0])
+    np.testing.assert_array_equal(flat_obs["pedestrians_positions"][1], [0.0, 0.0])
+    np.testing.assert_array_equal(flat_obs["robot_speed"], source_robot_speed)
+    np.testing.assert_allclose(flat_obs["robot_velocity_xy"], source_robot_velocity)
+
+    cos_h = np.cos(heading)
+    sin_h = np.sin(heading)
+    expected_ped_ego_velocity = np.array(
+        [
+            cos_h * source_ped_velocity[0] + sin_h * source_ped_velocity[1],
+            -sin_h * source_ped_velocity[0] + cos_h * source_ped_velocity[1],
+        ],
+        dtype=np.float32,
+    )
+    np.testing.assert_allclose(
+        flat_obs["pedestrians_velocities"][0],
+        expected_ped_ego_velocity,
+        atol=1e-6,
+    )
+    np.testing.assert_array_equal(flat_obs["pedestrians_velocities"][1], [0.0, 0.0])
+    relative_ped_ego_velocity = np.array(
+        [
+            cos_h * (source_ped_velocity[0] - source_robot_velocity[0])
+            + sin_h * (source_ped_velocity[1] - source_robot_velocity[1]),
+            -sin_h * (source_ped_velocity[0] - source_robot_velocity[0])
+            + cos_h * (source_ped_velocity[1] - source_robot_velocity[1]),
+        ],
+        dtype=np.float32,
+    )
+    assert not np.allclose(
+        flat_obs["pedestrians_velocities"][0],
+        relative_ped_ego_velocity,
     )
 
 

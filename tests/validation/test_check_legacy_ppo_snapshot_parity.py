@@ -73,12 +73,90 @@ def _durable_entry(
     return entry
 
 
+def _configure_synthetic_inventory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[Path, Path, str]:
+    """Configure one checksummed in-tree row for deterministic CLI inventory tests."""
+    repo_root = tmp_path / "synthetic-repo"
+    model_dir = repo_root / "model"
+    model_dir.mkdir(parents=True)
+    model_id = "legacy_ppo_synthetic_inventory"
+    source_paths = (
+        "model/synthetic-checkpoint.meta",
+        "model/synthetic-checkpoint.index",
+    )
+    component_bytes = {
+        source_paths[0]: b"synthetic-checkpoint-meta",
+        source_paths[1]: b"synthetic-checkpoint-index",
+    }
+    for relative_path, contents in component_bytes.items():
+        (repo_root / relative_path).write_bytes(contents)
+
+    archive_bytes = b"synthetic-release-bundle"
+    entry = _durable_entry(
+        model_id,
+        repo_root / source_paths[0],
+        sha256=hashlib.sha256(archive_bytes).hexdigest(),
+        kind="multi_file_bundle",
+    )
+    release = entry["github_release"]
+    release["asset_name"] = f"{model_id}.tar.gz"
+    release["url"] = (
+        "https://github.com/ll7/robot_sf_ll7/releases/download/"
+        f"{release['tag']}/{release['asset_name']}"
+    )
+    release["size_bytes"] = len(archive_bytes)
+    release["bundle_files"] = list(source_paths)
+    release["per_file_sha256"] = {
+        Path(relative_path).name: hashlib.sha256(contents).hexdigest()
+        for relative_path, contents in component_bytes.items()
+    }
+    entry["local_path"] = source_paths[0]
+    registry_path = repo_root / "model" / "registry.yaml"
+    _write_registry(registry_path, [entry])
+
+    checkpoint = checker.DurableLegacyCheckpoint(
+        model_id=model_id,
+        source_paths=source_paths,
+        kind="multi_file_bundle",
+    )
+    monkeypatch.setattr(checker, "SUPPORTED_LEGACY_PPO_MODEL_IDS", (model_id,))
+    monkeypatch.setattr(checker, "DURABLE_LEGACY_CHECKPOINTS", (checkpoint,))
+    original_build_inventory = checker.build_inventory
+
+    def build_synthetic_inventory(**kwargs: object) -> tuple[checker.SnapshotRow, ...]:
+        return original_build_inventory(
+            supported_model_ids=checker.SUPPORTED_LEGACY_PPO_MODEL_IDS,
+            durable_checkpoints=checker.DURABLE_LEGACY_CHECKPOINTS,
+            **kwargs,
+        )
+
+    monkeypatch.setattr(checker, "build_inventory", build_synthetic_inventory)
+    return repo_root, registry_path, model_id
+
+
+def _forbid_release_hydration(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Fail ordinary inventory tests if they enter either release-download path."""
+    calls: list[str] = []
+
+    def unexpected(*_args: object, **_kwargs: object) -> None:
+        calls.append("release hydration")
+        raise AssertionError("ordinary inventory attempted live release hydration")
+
+    monkeypatch.setattr(checker, "_resolve_single_file_release_hydration", unexpected)
+    monkeypatch.setattr(checker, "_download_from_github_release", unexpected)
+    monkeypatch.setattr(model_registry, "_download_from_github_release", unexpected)
+    return calls
+
+
 def test_inventory_marks_supported_legacy_registry_entries() -> None:
     """Repo registry should keep all supported legacy PPO rows durable."""
     repo_root = Path(__file__).resolve().parents[2]
     rows = checker.build_inventory(
         repo_root=repo_root,
         registry_path=repo_root / "model" / "registry.yaml",
+        durable_checkpoints=(),
     )
 
     supported = {
@@ -109,21 +187,17 @@ def test_inventory_fails_supported_entry_without_durable_release(tmp_path: Path)
     assert "sha256" in target.reason
 
 
-def test_inventory_marks_all_durable_legacy_checkpoints_supported_and_verified() -> None:
-    """Every Phase-A durable legacy checkpoint must resolve, byte-match, and be durable."""
+def test_durable_legacy_inventory_metadata_is_complete() -> None:
+    """Every durable legacy registry entry has inventory-ready release metadata."""
     repo_root = Path(__file__).resolve().parents[2]
-    rows = checker.build_inventory(
-        repo_root=repo_root,
-        registry_path=repo_root / "model" / "registry.yaml",
-    )
-    by_id = {row.identifier: row for row in rows}
+    registry = load_registry(repo_root / "model" / "registry.yaml")
 
-    assert {cp.model_id for cp in checker.DURABLE_LEGACY_CHECKPOINTS}.issubset(by_id)
     for cp in checker.DURABLE_LEGACY_CHECKPOINTS:
-        row = by_id[cp.model_id]
-        assert row.status == "supported", (cp.model_id, row)
-        assert row.checksum_status == "verified", (cp.model_id, row)
-        assert row.durable_uri.startswith("https://github.com/"), (cp.model_id, row)
+        entry = registry[cp.model_id]
+        assert checker._durable_release_reason(entry, require_immutable_version=True) == "", (
+            cp.model_id
+        )
+        assert checker._release_uri(entry).startswith("https://github.com/"), cp.model_id
 
 
 def test_durable_legacy_entries_declare_legacy_non_track_claim_boundary() -> None:
@@ -518,31 +592,46 @@ def test_no_root_local_legacy_zips_remain_in_unsupported_guard() -> None:
     assert previously_unsupported.issubset(durable_sources)
 
 
-def test_cli_json_inventory_reports_ok_for_repo_registry(
+def test_cli_json_inventory_reports_ok_for_synthetic_registry(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Inventory-only JSON output should be parseable and pass for the repo registry."""
-    repo_root = Path(__file__).resolve().parents[2]
+    """Inventory-only JSON output should pass without live release hydration."""
+    repo_root, registry_path, model_id = _configure_synthetic_inventory(tmp_path, monkeypatch)
+    hydration_calls = _forbid_release_hydration(monkeypatch)
 
     exit_code = checker.main(
         [
             "--repo-root",
             str(repo_root),
             "--registry-path",
-            str(repo_root / "model" / "registry.yaml"),
+            str(registry_path),
             "--json",
         ]
     )
 
     payload = json.loads(capsys.readouterr().out)
-    assert exit_code == 0
-    assert payload["schema"] == "legacy_ppo_snapshot_parity.v1"
-    assert payload["status"] == "ok"
-    assert payload["blocking_rows"] == []
-    durable_ids = {cp.model_id for cp in checker.DURABLE_LEGACY_CHECKPOINTS}
-    durable_rows = [row for row in payload["inventory"] if row["identifier"] in durable_ids]
-    assert len(durable_rows) == len(durable_ids)
-    assert all(row["durable_uri"].startswith("https://github.com/") for row in durable_rows)
+    context = json.dumps(
+        {"exit_code": exit_code, "blocking_rows": payload.get("blocking_rows"), "payload": payload},
+        indent=2,
+        sort_keys=True,
+    )
+    assert exit_code == 0, context
+    assert payload["schema"] == "legacy_ppo_snapshot_parity.v1", context
+    assert payload["status"] == "ok", context
+    assert payload["blocking_rows"] == [], context
+    rows = [
+        row
+        for row in payload["inventory"]
+        if row["identifier"] == model_id and row.get("checksum_status")
+    ]
+    assert len(rows) == 1, context
+    row = rows[0]
+    assert row["status"] == "supported", context
+    assert row["checksum_status"] == "verified", context
+    assert row["durable_uri"].startswith("https://github.com/"), context
+    assert hydration_calls == []
 
 
 def test_cli_release_hydration_requires_an_empty_isolated_cache(
@@ -596,30 +685,77 @@ def test_cli_release_hydration_requires_an_empty_isolated_cache(
     assert captured["cache_dir"] == empty_cache.resolve()
 
 
+@pytest.mark.parametrize("cache_state", ("empty", "populated"))
 def test_cli_inventory_honors_explicit_repo_root_outside_checkout(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    cache_state: str,
 ) -> None:
-    """An explicit repo root must anchor GA3C's relative resolver path."""
-    repo_root = Path(__file__).resolve().parents[2]
-    monkeypatch.chdir(tmp_path)
+    """The real relative-path resolver finds the local bundle from an outside caller."""
+    repo_root, registry_path, model_id = _configure_synthetic_inventory(tmp_path, monkeypatch)
+    caller_root = tmp_path / "caller"
+    caller_root.mkdir()
+    monkeypatch.chdir(caller_root)
+    cache_dir = repo_root / "output" / "model_cache" / model_id
+    cache_dir.mkdir(parents=True)
+    if cache_state == "populated":
+        (cache_dir / "unrelated-cache-marker").write_text("existing", encoding="utf-8")
+    hydration_calls = _forbid_release_hydration(monkeypatch)
+    resolver_calls: list[dict[str, object]] = []
+    original_resolve_model_path = checker.resolve_model_path
+
+    def tracked_resolve_model_path(*args: object, **kwargs: object) -> Path:
+        resolved = original_resolve_model_path(*args, **kwargs)  # type: ignore[arg-type]
+        resolver_calls.append({"args": args, "kwargs": kwargs, "resolved": resolved})
+        return resolved
+
+    monkeypatch.setattr(checker, "resolve_model_path", tracked_resolve_model_path)
 
     exit_code = checker.main(
         [
             "--repo-root",
             str(repo_root),
             "--registry-path",
-            str(repo_root / "model" / "registry.yaml"),
+            str(registry_path),
             "--json",
         ]
     )
 
     payload = json.loads(capsys.readouterr().out)
-    assert exit_code == 0
-    assert payload["blocking_rows"] == []
-    ga3c_row = next(row for row in payload["inventory"] if row["identifier"] == "ga3c_cadrl_iros18")
-    assert ga3c_row["checksum_status"] == "verified"
+    context = json.dumps(
+        {"exit_code": exit_code, "blocking_rows": payload.get("blocking_rows"), "payload": payload},
+        indent=2,
+        sort_keys=True,
+    )
+    assert exit_code == 0, context
+    assert payload["status"] == "ok", context
+    assert payload["blocking_rows"] == [], context
+    rows = [
+        row
+        for row in payload["inventory"]
+        if row["identifier"] == model_id and row.get("checksum_status")
+    ]
+    assert len(rows) == 1, context
+    row = rows[0]
+    assert row["status"] == "supported", context
+    assert row["checksum_status"] == "verified", context
+    assert row["durable_uri"].startswith("https://github.com/"), context
+    assert "resolver returned the in-tree checkpoint path" in row["checksum_detail"], context
+    assert "multi-file bundle byte-match" in row["checksum_detail"], context
+    assert hydration_calls == []
+    expected_path = repo_root / "model" / "synthetic-checkpoint.meta"
+    assert resolver_calls == [
+        {
+            "args": (model_id,),
+            "kwargs": {
+                "registry_path": registry_path,
+                "allow_download": False,
+                "cache_dir": None,
+            },
+            "resolved": expected_path,
+        }
+    ]
 
 
 def test_repo_root_resolution_normalizes_downloaded_relative_path(

@@ -1,0 +1,40 @@
+agent_run:
+  schema_version: agent-run-manifest.v1
+  objective: "Run and audit the issue 9759 pinned hybrid v3/v4 reflection diagnostic matrix."
+  tool: codex
+  model: "Not recorded in producer run metadata."
+  tool_version: "Codex desktop; exact version not recorded."
+  permission_mode: auto
+  worktree: "../robot_sf_ll7.worktrees/issue-9759-hybrid-v4-mirror-diagnostic-20260927-r1"
+  workflow_run_id: ""
+  workflow_name: ""
+  declared_agent_count: null
+  actual_agent_count: null
+  commands_run:
+    - "issue_9759_hybrid_mirror_diagnostic.py --workers 12 --resume --output-dir <private local run directory>; exact argv and environment are retained in private run_meta.json."
+    - "Integrity audit: issue-specific row/provenance validation, terminal checks, summary recomputation, paired-row recomputation, and preflight replay; detailed raw output remains private."
+    - "uv run pytest -q tests/benchmark/test_issue_9759_hybrid_mirror_diagnostic.py tests/benchmark/test_release_map_mirror.py tests/planner/test_grid_route.py tests/planner/test_hybrid_rule_v4_clearance_braking.py tests/metamorphic/test_mirror_symmetry.py tests/dev/test_check_fast_lane_routing.py"
+    - "uv run ruff check and uv run ruff format --check for the 10 Python paths recorded in the initial focused run."
+    - "Final code-head hygiene at ded907320c08b95c121be67063cb1c093a5b4939: uv run ruff check and uv run ruff format --check across all 12 Python paths changed from origin/main."
+    - "uv run python scripts/dev/check_base_drift.py against origin/main 6b24bc1bb93d4912f65be58bd3be7acf4d4899e1."
+  tests_run:
+    - "Current-base focused mirror/planner/routing suite at 89b31c20035b1823c2586f4152c187182aa06661: 89 passed, 3 strict expected xfails."
+    - "Ruff check and format passed for all 12 changed Python files at code head ded907320c08b95c121be67063cb1c093a5b4939; base-drift check reported current at 6b24bc1bb93d4912f65be58bd3be7acf4d4899e1."
+  external_pages_accessed: []
+  trace_or_log_refs:
+    - "Stored privately: .git/codex-agent-runs/active/issue-9759/diagnostic/rebased-head-4fc1a1d4/run.log"
+    - "Stored privately: .git/codex-agent-runs/active/issue-9759/diagnostic/rebased-head-4fc1a1d4/resume2.log"
+    - "Stored privately: .git/codex-agent-runs/active/issue-9759/diagnostic/rebased-head-4fc1a1d4/resume3.log"
+  trace_redaction_checked: false
+  cost_or_credit_cap: "Not recorded."
+  stop_reason: completed
+  retries: 0
+  partial_failures:
+    - "600 reflected episode rows were explicitly excluded by the preflight bounds guard; the final matrix is partial."
+    - "Nine preflight clearance diagnostic floats varied on replay while digests, statuses, failed cells, overlap predicates, and eligibility stayed stable."
+  evidence_produced:
+    - "docs/context/evidence/issue_9759_hybrid_mirror_diagnostic_2026-09-28/payload/summary.json (diagnostic-only summary)"
+    - "docs/context/evidence/issue_9759_hybrid_mirror_diagnostic_2026-09-28/payload/report.md (reviewable result and limitations)"
+    - "docs/context/evidence/issue_9759_hybrid_mirror_diagnostic_2026-09-28/payload/private_artifact_hashes.json (local-only artifact hashes and locators)"
+  human_validity_check: "Pending maintainer review of the source issue, exact producer provenance, and result bundle."
+  remaining_risk: "Partial coverage excludes 600 reflected rows; raw logs are private and were not inspected for redaction; aggregate outcomes do not identify the cause of mismatches."

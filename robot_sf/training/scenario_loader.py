@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import os
 from collections.abc import Iterable, Mapping
@@ -64,6 +65,7 @@ class ScenarioManifestSource:
 
     path: Path
     data: Any
+    content_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -88,12 +90,25 @@ class ScenarioValidationReport:
     raw_entry_count: int
 
 
-class _ScenarioValidationMapping(dict[str, Any]):
-    """Expanded scenario mapping carrying its manifest source internally."""
+class _ScenarioSourceMapping(dict[str, Any]):
+    """Expanded scenario mapping carrying parse-source identity internally."""
 
-    def __init__(self, scenario: Mapping[str, Any], *, source_file: Path) -> None:
+    def __init__(
+        self,
+        scenario: Mapping[str, Any],
+        *,
+        source_file: Path,
+        manifest_sources: tuple[tuple[str, str], ...] | None = None,
+        source_row_sha256: str | None = None,
+        current_row_sha256: str | None = None,
+    ) -> None:
         super().__init__(scenario)
         self._scenario_source_file = source_file
+        self._scenario_manifest_sources = manifest_sources
+        self._scenario_source_row_sha256 = source_row_sha256
+        self._scenario_current_row_sha256 = (
+            current_row_sha256 if current_row_sha256 is not None else source_row_sha256
+        )
 
 
 @dataclass
@@ -122,6 +137,31 @@ def _load_yaml_documents(path: Path) -> Any:
     """
     with path.open("r", encoding="utf-8") as handle:
         return yaml.safe_load(handle)
+
+
+def _load_yaml_documents_with_digest(path: Path) -> tuple[Any, str]:
+    """Parse YAML from one byte buffer and return that buffer's digest.
+
+    Returns:
+        Parsed YAML value and the SHA-256 of the exact bytes parsed.
+    """
+    content = path.read_bytes()
+    return yaml.safe_load(content.decode("utf-8")), hashlib.sha256(content).hexdigest()
+
+
+def _load_yaml_for_scenario_expansion(
+    path: Path,
+    *,
+    capture_digest: bool,
+) -> tuple[Any, str | None]:
+    """Load legacy YAML normally or capture exact parse bytes for validation callers.
+
+    Returns:
+        Parsed YAML document and an optional digest of the exact bytes consumed.
+    """
+    if capture_digest:
+        return _load_yaml_documents_with_digest(path)
+    return _load_yaml_documents(path), None
 
 
 def _load_scenario_manifest(
@@ -240,7 +280,14 @@ def load_scenarios(path: str | Path, *, base_dir: Path | None = None) -> list[Ma
         root = base_dir.resolve()
         if not root.exists():
             raise ValueError(f"Scenario base_dir does not exist: {root}")
-    return _load_scenarios_recursive(resolved, visited=set(), root=root)
+    manifest_sources: list[ScenarioManifestSource] = []
+    scenarios = _load_scenarios_recursive(
+        resolved,
+        visited=set(),
+        root=root,
+        manifest_sources=manifest_sources,
+    )
+    return _bind_scenario_manifest_sources(scenarios, manifest_sources, fallback_source=resolved)
 
 
 def load_scenarios_for_validation(
@@ -302,13 +349,77 @@ def load_scenarios_for_validation(
         )
 
     return ScenarioValidationReport(
-        scenarios=scenarios,
+        scenarios=_bind_scenario_manifest_sources(
+            scenarios,
+            collector.manifest_sources,
+            fallback_source=resolved,
+        ),
         manifest_sources=collector.manifest_sources,
         entry_issues=collector.entry_issues,
         load_issues=collector.load_issues,
         load_error=None,
         raw_entry_count=collector.raw_entry_count,
     )
+
+
+def _bind_scenario_manifest_sources(
+    scenarios: list[Mapping[str, Any]],
+    manifest_sources: list[ScenarioManifestSource],
+    *,
+    fallback_source: Path,
+) -> list[Mapping[str, Any]]:
+    """Attach the exact parsed manifest closure to every expanded scenario row.
+
+    Returns:
+        Scenario rows carrying parse-time source identity as internal attributes.
+    """
+    binding: tuple[tuple[str, str], ...] | None = None
+    if manifest_sources and all(source.content_sha256 is not None for source in manifest_sources):
+        source_digests: dict[str, str] = {}
+        for source in manifest_sources:
+            path = source.path.resolve().as_posix()
+            digest = str(source.content_sha256).lower()
+            if path in source_digests and source_digests[path] != digest:
+                break
+            source_digests[path] = digest
+        else:
+            binding = tuple(sorted(source_digests.items()))
+    bound_scenarios: list[Mapping[str, Any]] = []
+    for scenario in scenarios:
+        source_file = getattr(scenario, "_scenario_source_file", fallback_source)
+        if not isinstance(source_file, Path):
+            source_file = fallback_source
+        bound_scenarios.append(
+            _ScenarioSourceMapping(
+                scenario,
+                source_file=source_file,
+                manifest_sources=binding,
+                source_row_sha256=scenario_mapping_sha256(scenario),
+            )
+        )
+    return bound_scenarios
+
+
+def scenario_mapping_sha256(scenario: Mapping[str, Any]) -> str | None:
+    """Hash one expanded scenario mapping with deterministic JSON encoding.
+
+    The digest binds the normalized row values to the source manifest closure. A value that
+    cannot be represented as finite JSON receives no identity and therefore cannot support
+    oracle classification.
+
+    Returns:
+        SHA-256 hex digest, or ``None`` when the mapping is not canonical finite JSON.
+    """
+    try:
+        canonical = json.dumps(
+            dict(scenario),
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except (TypeError, ValueError):
+        return None
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _load_scenarios_recursive(
@@ -318,6 +429,7 @@ def _load_scenarios_recursive(
     root: Path,
     map_search_paths: list[Path] | None = None,
     collector: _ScenarioValidationCollector | None = None,
+    manifest_sources: list[ScenarioManifestSource] | None = None,
 ) -> list[Mapping[str, Any]]:
     """Load scenarios from path, expanding any include references.
 
@@ -326,13 +438,19 @@ def _load_scenarios_recursive(
     """
     resolved = path.resolve()
     issues_before = collector.issue_count if collector is not None else 0
+    source_sink = collector.manifest_sources if collector is not None else manifest_sources
     if resolved in visited:
         raise ValueError(f"Scenario include cycle detected at '{resolved}'.")
     visited.add(resolved)
     try:
-        data = _load_yaml_documents(resolved)
-        if collector is not None:
-            collector.manifest_sources.append(ScenarioManifestSource(resolved, data))
+        data, content_sha256 = _load_yaml_for_scenario_expansion(
+            resolved,
+            capture_digest=source_sink is not None,
+        )
+        if source_sink is not None:
+            source_sink.append(
+                ScenarioManifestSource(resolved, data, content_sha256=content_sha256)
+            )
         scenarios, includes, local_map_search_paths = _load_scenario_manifest(
             data,
             source=resolved,
@@ -354,6 +472,7 @@ def _load_scenarios_recursive(
                         root=root,
                         map_search_paths=effective_search_paths,
                         collector=collector,
+                        manifest_sources=manifest_sources,
                     )
                 )
             except (OSError, ValueError, RuntimeError, TypeError, yaml.YAMLError) as exc:
@@ -583,14 +702,13 @@ def _apply_scenario_overrides(
     if not overrides:
         return scenarios
     merged = [_deep_merge_mapping(scenario, overrides) for scenario in scenarios]
-    if collector is not None:
-        merged = [
-            _ScenarioValidationMapping(
-                scenario,
-                source_file=_scenario_validation_source(original, source),
-            )
-            for original, scenario in zip(scenarios, merged, strict=True)
-        ]
+    merged = [
+        _ScenarioSourceMapping(
+            scenario,
+            source_file=_scenario_validation_source(original, source),
+        )
+        for original, scenario in zip(scenarios, merged, strict=True)
+    ]
     return _normalize_scenarios(
         merged,
         source=source,
@@ -687,11 +805,10 @@ def _apply_scenario_overrides_by_name(
             merged.append(scenario)
             continue
         merged_scenario = _deep_merge_mapping(scenario, overrides_by_name[override_name])
-        if collector is not None:
-            merged_scenario = _ScenarioValidationMapping(
-                merged_scenario,
-                source_file=_scenario_validation_source(scenario, source),
-            )
+        merged_scenario = _ScenarioSourceMapping(
+            merged_scenario,
+            source_file=_scenario_validation_source(scenario, source),
+        )
         merged.append(merged_scenario)
 
     if unused:
@@ -1081,9 +1198,7 @@ def _normalize_scenarios(
                 map_registry=map_registry,
             )
             normalized.append(
-                _ScenarioValidationMapping(normalized_scenario, source_file=scenario_source)
-                if collector is not None
-                else normalized_scenario
+                _ScenarioSourceMapping(normalized_scenario, source_file=scenario_source)
             )
         except (OSError, TypeError, ValueError, RuntimeError, yaml.YAMLError) as exc:
             if collector is None:
@@ -1099,11 +1214,7 @@ def _normalize_scenarios(
             # Keep malformed mappings available for the validator and asset
             # classifier; only non-mapping rows are omitted from the expanded
             # mapping list because they cannot produce a scenario summary.
-            normalized.append(
-                _ScenarioValidationMapping(dict(scenario), source_file=scenario_source)
-                if collector is not None
-                else dict(scenario)
-            )
+            normalized.append(_ScenarioSourceMapping(dict(scenario), source_file=scenario_source))
     return normalized
 
 
@@ -1464,9 +1575,68 @@ def select_scenario(
     return scenarios[0]
 
 
-@lru_cache(maxsize=256)
 def _load_map_definition(map_path: str, geometry_contract: str = "legacy") -> MapDefinition | None:
-    """Load and convert a map definition, caching by absolute path and geometry contract.
+    """Load the current map snapshot, using content rather than path as cache identity.
+
+    Returns:
+        MapDefinition | None: Parsed map definition for supported map formats.
+    """
+    definition, _source_sha256 = _load_map_definition_with_digest(
+        map_path, geometry_contract=geometry_contract
+    )
+    return definition
+
+
+def _load_map_definition_with_digest(
+    map_path: str, *, geometry_contract: str = "legacy"
+) -> tuple[MapDefinition | None, str | None]:
+    """Load and convert one map using a content-bound cache key.
+
+    The wrapper reads the source once to derive its content key. The cached parser
+    reads a second immutable byte buffer, verifies that it has the same digest, and
+    parses that buffer. A concurrent replacement therefore either retries against
+    the new content or fails closed; it cannot return a stale path-only cache entry.
+
+    Returns:
+        Parsed map definition and the digest of the immutable bytes it parsed.
+    """
+    from robot_sf.nav.nav_types import (  # noqa: PLC0415
+        SUPPORTED_GEOMETRY_CONTRACTS,
+    )
+
+    if geometry_contract not in SUPPORTED_GEOMETRY_CONTRACTS:
+        raise ValueError(
+            f"Unknown geometry_contract {geometry_contract!r} for map {map_path!r}. "
+            f"Supported contracts: {sorted(SUPPORTED_GEOMETRY_CONTRACTS)}."
+        )
+    path = Path(map_path).resolve()
+    for _attempt in range(3):
+        try:
+            source_bytes = path.read_bytes()
+        except OSError:
+            logger.warning("Scenario map file not found or unreadable: {}", path)
+            return None, None
+        content_sha256 = hashlib.sha256(source_bytes).hexdigest()
+        try:
+            definition = _load_map_definition_cached(str(path), geometry_contract, content_sha256)
+        except _MapFileChangedDuringLoad:
+            continue
+        return definition, content_sha256
+    logger.warning("Scenario map file changed repeatedly while loading: {}", path)
+    return None, None
+
+
+class _MapFileChangedDuringLoad(RuntimeError):
+    """Signal a source replacement between the cache-key read and parser snapshot."""
+
+
+@lru_cache(maxsize=256)
+def _load_map_definition_cached(
+    map_path: str,
+    geometry_contract: str,
+    content_sha256: str,
+) -> MapDefinition | None:
+    """Parse a map snapshot, caching by path, geometry contract, and source digest.
 
     The cache size is set to 256 to accommodate all unique maps across typical
     multi-scenario SAC training runs. ``classic_interactions.yaml`` alone
@@ -1492,18 +1662,23 @@ def _load_map_definition(map_path: str, geometry_contract: str = "legacy") -> Ma
         )
 
     path = Path(map_path)
-    if not path.exists():
-        logger.warning("Scenario map file not found: {}", path)
-        return None
+    try:
+        source_bytes = path.read_bytes()
+    except OSError as exc:
+        raise _MapFileChangedDuringLoad from exc
+    if hashlib.sha256(source_bytes).hexdigest() != content_sha256:
+        raise _MapFileChangedDuringLoad
     if path.suffix.lower() == ".svg":
-        return convert_map(str(path), geometry_contract=geometry_contract)
+        return convert_map(
+            str(path), geometry_contract=geometry_contract, source_bytes=source_bytes
+        )
     if path.suffix.lower() in {".json", ".yaml", ".yml"}:
         if geometry_contract != GEOMETRY_CONTRACT_LEGACY:
             raise ValueError(
                 f"geometry_contract {geometry_contract!r} is only supported for SVG maps; "
                 f"map {map_path!r} is {path.suffix.lower()} and uses the legacy map format."
             )
-        data = _load_yaml_documents(path)
+        data = yaml.safe_load(source_bytes.decode("utf-8"))
         if not isinstance(data, dict):
             logger.warning("Map definition '{}' must contain a mapping.", path)
             return None
@@ -1516,6 +1691,7 @@ def build_robot_config_from_scenario(
     scenario: Mapping[str, Any],
     *,
     scenario_path: Path,
+    runtime_input_records: list[dict[str, str]] | None = None,
 ) -> RobotSimulationConfig:
     """Create a ``RobotSimulationConfig`` derived from a scenario definition.
 
@@ -1525,6 +1701,8 @@ def build_robot_config_from_scenario(
         scenario_path: Path to the scenario YAML file, not its containing directory.
             Relative map and route-override references are resolved from
             ``scenario_path.parent``.
+        runtime_input_records: Optional sink for exact map/route byte identities consumed
+            while building the configuration.
 
     Returns:
         RobotSimulationConfig: Config populated with overrides and map pool.
@@ -1535,22 +1713,84 @@ def build_robot_config_from_scenario(
     _reject_required_platform_semantic_consumers(scenario)
 
     config = RobotSimulationConfig()
+    consumed_inputs: list[dict[str, str]] | None = [] if runtime_input_records is not None else None
     _apply_simulation_overrides(config, scenario.get("simulation_config", {}))
     _apply_robot_overrides(config, scenario.get("robot_config", {}))
     _apply_observation_visibility_overrides(
         config,
         scenario.get("observation_visibility"),
     )
-    _apply_map_pool(config, scenario, scenario_path)
+    _apply_map_pool(config, scenario, scenario_path, consumed_inputs)
     _apply_generated_replay_runtime(config, scenario.get("generated_replay"))
-    _apply_route_overrides(config, scenario.get("route_overrides_file"), scenario_path)
+    _apply_route_overrides(
+        config,
+        scenario.get("route_overrides_file"),
+        scenario_path,
+        consumed_inputs,
+        scenario_id=_scenario_runtime_identity(scenario),
+    )
     _apply_single_pedestrian_overrides(
         config,
         scenario.get("single_pedestrians"),
         default_hold_ref_point=_scenario_conflict_point(scenario),
     )
     _apply_social_group_overrides(config, scenario.get("social_groups"))
+    if "_diagnostic_remove_pedestrian_actors" in scenario:
+        if scenario.get("_diagnostic_remove_pedestrian_actors") is not True:
+            raise ValueError("_diagnostic_remove_pedestrian_actors must be true when provided")
+        _remove_pedestrian_actors_for_diagnostic_variant(config)
+    if runtime_input_records is not None and consumed_inputs is not None:
+        runtime_input_records.extend(consumed_inputs)
     return config
+
+
+def _remove_pedestrian_actors_for_diagnostic_variant(
+    config: RobotSimulationConfig,
+) -> None:
+    """Remove effective pedestrian actors from a transient diagnostic config.
+
+    Scenario-level empty overrides cannot remove actors authored by a map or generated
+    replay, and a forced population can synthesize actors even at zero density. Clone the
+    loaded maps before clearing explicit actors and planner-visible groups so cached map
+    definitions remain unchanged.
+    """
+    map_pool = getattr(config, "map_pool", None)
+    map_defs = getattr(map_pool, "map_defs", None)
+    if not isinstance(map_defs, dict) or not map_defs:
+        raise ValueError("actor-free diagnostic variant requires a loaded map pool")
+    config.map_pool.map_defs = {
+        map_id: _remove_map_pedestrian_actors(map_def) for map_id, map_def in map_defs.items()
+    }
+    difficulty = config.sim_config.difficulty
+    if (
+        not isinstance(difficulty, int)
+        or isinstance(difficulty, bool)
+        or not 0 <= difficulty < len(config.sim_config.ped_density_by_difficulty)
+    ):
+        raise ValueError("actor-free diagnostic variant has an unresolved difficulty index")
+    config.sim_config.ped_density_by_difficulty[difficulty] = 0.0
+    config.sim_config.population_size = None
+
+
+def _remove_map_pedestrian_actors(map_def: MapDefinition) -> MapDefinition:
+    """Clone one effective map and clear its explicit pedestrians and group context.
+
+    Returns:
+        A cloned map with no explicit pedestrian actors or social-group context.
+    """
+    clone = deepcopy(map_def)
+    clone.single_pedestrians = []
+    clone.social_groups = []
+    return clone
+
+
+def _scenario_runtime_identity(scenario: Mapping[str, Any]) -> str:
+    """Return the stable scenario identifier used by runtime input records."""
+    for key in ("name", "scenario_id", "id"):
+        value = scenario.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "unknown"
 
 
 def _apply_generated_replay_runtime(config: RobotSimulationConfig, runtime: object) -> None:
@@ -1868,7 +2108,13 @@ def _apply_robot_overrides(
 
 
 def resolve_map_definition(
-    map_file: str | None, *, scenario_path: Path, geometry_contract: str = "legacy"
+    map_file: str | None,
+    *,
+    scenario_path: Path,
+    geometry_contract: str = "legacy",
+    runtime_input_records: list[dict[str, str]] | None = None,
+    scenario_id: str = "unknown",
+    map_id: str | None = None,
 ) -> MapDefinition | None:
     """Resolve and load a map definition from a scenario map file reference.
 
@@ -1887,7 +2133,24 @@ def resolve_map_definition(
             map_file,
             scenario_path,
         )
-    return _load_map_definition(str(candidate), geometry_contract)
+    resolved = candidate.resolve()
+    if runtime_input_records is None:
+        return _load_map_definition(str(resolved), geometry_contract)
+    definition, source_sha256 = _load_map_definition_with_digest(
+        str(resolved), geometry_contract=geometry_contract
+    )
+    if runtime_input_records is not None and definition is not None and source_sha256 is not None:
+        runtime_input_records.append(
+            {
+                "role": "map_file",
+                "scenario_id": scenario_id,
+                "sha256": source_sha256,
+                "path": resolved.as_posix(),
+                "parser": ("svg" if resolved.suffix.lower() == ".svg" else "legacy_serialized_map"),
+                **({"map_id": map_id.strip()} if map_id and map_id.strip() else {}),
+            }
+        )
+    return definition
 
 
 def apply_single_pedestrian_overrides(
@@ -2712,6 +2975,7 @@ def _apply_map_pool(
     config: RobotSimulationConfig,
     scenario: Mapping[str, Any],
     scenario_path: Path,
+    runtime_input_records: list[dict[str, str]] | None,
 ) -> None:
     """Load a scenario map file into the config map pool.
 
@@ -2744,8 +3008,27 @@ def _apply_map_pool(
             f"Scenario '{scenario_name}': map_geometry_contract {geometry_contract!r} "
             "requires an explicit SVG map_file."
         )
+    if not map_file:
+        map_id_without_file = scenario.get("map_id")
+        if map_id_without_file:
+            # The loader currently leaves the default pool active for this shape;
+            # input_identity classifies it unavailable because the named resource
+            # cannot be bound to a concrete file.
+            return
+        if runtime_input_records is not None:
+            scenario_id = _scenario_runtime_identity(scenario)
+            config.map_pool.load_map_definitions_with_source_records()
+            runtime_input_records.extend(
+                {**record, "scenario_id": scenario_id}
+                for record in config.map_pool.source_input_records
+            )
     map_def = resolve_map_definition(
-        map_file, scenario_path=scenario_path, geometry_contract=geometry_contract
+        map_file,
+        scenario_path=scenario_path,
+        geometry_contract=geometry_contract,
+        runtime_input_records=runtime_input_records,
+        scenario_id=_scenario_runtime_identity(scenario),
+        map_id=(str(scenario.get("map_id")) if isinstance(scenario.get("map_id"), str) else None),
     )
     if map_def is None:
         if map_file:
@@ -2886,13 +3169,31 @@ def apply_route_overrides(
     map_def.__post_init__()
 
 
-def _load_route_override_payload(route_overrides_path: Path) -> Mapping[str, Any]:
+def _load_route_override_payload(
+    route_overrides_path: Path,
+    *,
+    runtime_input_records: list[dict[str, str]] | None = None,
+    scenario_id: str = "unknown",
+) -> Mapping[str, Any]:
     """Load route override payload from YAML artifact file.
 
     Returns:
         Mapping[str, Any]: Payload containing robot_routes/ped_routes lists.
     """
-    data = yaml.safe_load(route_overrides_path.read_text(encoding="utf-8")) or {}
+    if runtime_input_records is not None:
+        source_bytes = route_overrides_path.read_bytes()
+        runtime_input_records.append(
+            {
+                "role": "route_overrides_file",
+                "scenario_id": scenario_id,
+                "sha256": hashlib.sha256(source_bytes).hexdigest(),
+                "path": route_overrides_path.resolve().as_posix(),
+                "parser": "yaml",
+            }
+        )
+        data = yaml.safe_load(source_bytes.decode("utf-8")) or {}
+    else:
+        data = yaml.safe_load(route_overrides_path.read_text(encoding="utf-8")) or {}
     if not isinstance(data, Mapping):
         raise ValueError(f"Route override file must contain a mapping: {route_overrides_path}")
     if "route_payload" in data:
@@ -2907,6 +3208,9 @@ def _apply_route_overrides(
     config: RobotSimulationConfig,
     route_overrides_file: Any,
     scenario_path: Path,
+    runtime_input_records: list[dict[str, str]] | None = None,
+    *,
+    scenario_id: str = "unknown",
 ) -> None:
     """Apply route overrides artifact to the active scenario map."""
     if route_overrides_file is None:
@@ -2922,7 +3226,11 @@ def _apply_route_overrides(
         raise ValueError(f"route_overrides_file does not exist: {route_overrides_path}")
     map_name, map_def = next(iter(config.map_pool.map_defs.items()))
     map_copy = deepcopy(map_def)
-    payload = _load_route_override_payload(route_overrides_path)
+    payload = _load_route_override_payload(
+        route_overrides_path,
+        runtime_input_records=runtime_input_records,
+        scenario_id=scenario_id,
+    )
     apply_route_overrides(map_copy, payload)
     config.map_pool.map_defs[map_name] = map_copy
 
@@ -2930,19 +3238,19 @@ def _apply_route_overrides(
 def map_cache_info() -> dict[str, int]:
     """Return hit/miss/eviction statistics for the map-definition cache.
 
-    Useful for diagnosing cache churn during multi-scenario training runs.
+    Useful for diagnosing content-keyed cache churn during multi-scenario runs.
     Example::
 
         from robot_sf.training.scenario_loader import map_cache_info
 
         info = map_cache_info()
-        # {'hits': 42, 'misses': 12, 'maxsize': 64, 'currsize': 12}
+        # {'hits': 42, 'misses': 12, 'maxsize': 256, 'currsize': 12}
 
     Returns:
         dict[str, int]: Mapping of ``hits``, ``misses``, ``maxsize``, and
         ``currsize`` from the underlying LRU cache.
     """
-    ci = _load_map_definition.cache_info()
+    ci = _load_map_definition_cached.cache_info()
     return {
         "hits": ci.hits,
         "misses": ci.misses,

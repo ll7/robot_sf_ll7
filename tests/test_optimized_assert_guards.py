@@ -78,14 +78,34 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
         raise RuntimeError(f"{label}: expected {exc_type.__name__}, no exception raised")
 
 
-    for label, preflight in (
-        ("issue_5303_v1_preflight", preflight_issue_5303_contract),
-        ("issue_5303_v2_preflight", preflight_issue_5303_powered_contract),
+    v1_result = preflight_issue_5303_contract(repo_root=Path.cwd())
+    if v1_result.ready or not v1_result.blocked:
+        raise RuntimeError(
+            "issue_5303_v1_preflight: frozen historical contract must remain blocked "
+            f"after its runner provenance changed: {v1_result.blockers}"
+        )
+    failed_v1_checks = sorted(
+        name for name, ok in v1_result.checks.items() if not ok
+    )
+    if failed_v1_checks != ["input_provenance_hashes"]:
+        raise RuntimeError(
+            "issue_5303_v1_preflight: expected only the frozen runner provenance "
+            f"mismatch, got failed checks {failed_v1_checks}: {v1_result.blockers}"
+        )
+    if not any(
+        "input provenance SHA-256 mismatch for 'adversarial_search_runner'" in blocker
+        for blocker in v1_result.blockers
     ):
-        result = preflight(repo_root=Path.cwd())
-        if not result.ready:
-            raise RuntimeError(f"{label}: preflight blocked: {result.blockers}")
-        print(f"PASS {label}: ready")
+        raise RuntimeError(
+            "issue_5303_v1_preflight: missing adversarial runner provenance blocker: "
+            f"{v1_result.blockers}"
+        )
+    print("PASS issue_5303_v1_preflight: blocked on runner provenance mismatch")
+
+    v2_result = preflight_issue_5303_powered_contract(repo_root=Path.cwd())
+    if not v2_result.ready:
+        raise RuntimeError(f"issue_5303_v2_preflight: preflight blocked: {v2_result.blockers}")
+    print("PASS issue_5303_v2_preflight: ready")
 
     terminal_mapping_errors = downstream_activation_errors(object())
     if terminal_mapping_errors != ["terminal result must be a mapping"]:
@@ -159,7 +179,7 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
     )
 
     original_converter = svg.SvgMapConverter
-    svg.SvgMapConverter = lambda _path, *, geometry_contract: SimpleNamespace(
+    svg.SvgMapConverter = lambda _path, *, geometry_contract, source_bytes=None: SimpleNamespace(
         map_definition=object()
     )
     try:
@@ -355,7 +375,7 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
 )
 
 _EXPECTED_MARKERS = (
-    "PASS issue_5303_v1_preflight: ready",
+    "PASS issue_5303_v1_preflight: blocked on runner provenance mismatch",
     "PASS issue_5303_v2_preflight: ready",
     "PASS issue_5303_terminal_mapping: fail-closed",
     "PASS tie_aware_interval_bounds: TieAwareRankingError",

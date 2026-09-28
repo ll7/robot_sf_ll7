@@ -103,6 +103,8 @@ planners:
   - key: socnav_sampling
     algo: socnav_sampling
     planner_group: experimental
+    # Issues #9727/#9746: bounded_v2 sampling heuristic (footprint sweep, speed cap).
+    algo_config: configs/algos/socnav_sampling_bounded_v2.yaml
     benchmark_profile: experimental
     socnav_missing_prereq_policy: fail-fast
 

@@ -14,6 +14,8 @@ plus one real end-to-end rollout for integration coverage.
 
 from __future__ import annotations
 
+import hashlib
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +47,10 @@ from robot_sf.scenario_certification.feasibility_oracle import (
     run_envelope_sensitivity_sweep,
     run_feasibility_oracle,
 )
+from robot_sf.scenario_certification.input_identity import (
+    scenario_input_identity,
+    scenario_manifest_records_match,
+)
 from robot_sf.scenario_certification.v1 import (
     CERT_SCHEMA_VERSION,
     GEOMETRICALLY_INFEASIBLE,
@@ -52,6 +58,7 @@ from robot_sf.scenario_certification.v1 import (
     RouteCertificate,
     ScenarioCertificate,
 )
+from robot_sf.training.scenario_loader import load_scenarios_for_validation
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCENARIO_PATH = _REPO_ROOT / "configs/scenarios/archetypes/classic_head_on_corridor.yaml"
@@ -130,6 +137,18 @@ def _scenario(
     }
 
 
+def _successful_rollout(steps: int, *, horizon: int = 500) -> dict[str, Any]:
+    """Return an explicit successful, non-fallback reference rollout record."""
+    return {
+        "steps": steps,
+        "horizon": horizon,
+        "status": "success",
+        "termination_reason": "success",
+        "fallback_or_degraded": False,
+        "outcome": {"route_complete": True},
+    }
+
+
 def _oracle_config(radii: tuple[float, ...] = (1.0, 0.5)) -> FeasibilityOracleConfig:
     return FeasibilityOracleConfig(scenario_path=_SCENARIO_PATH, envelope_radii_m=radii)
 
@@ -158,6 +177,56 @@ def test_make_envelope_scenario_rejects_non_positive_radius() -> None:
         make_envelope_scenario(_scenario(), envelope_radius_m=0.0)
 
 
+def test_parse_time_row_mutation_blocks_certifier_and_envelope_probe_is_bound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A changed expanded row cannot inherit the source manifest's certification."""
+    report = load_scenarios_for_validation(_SCENARIO_PATH)
+    scenario = report.scenarios[0]
+    scenario_id = str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"))
+    identity = scenario_input_identity(
+        _SCENARIO_PATH,
+        scenario_id=scenario_id,
+        validation_report=report,
+    )
+    assert identity["status"] == "available"
+    assert isinstance(identity.get("scenario_row_sha256"), str)
+    assert scenario_manifest_records_match(identity, scenario)
+
+    scenario["simulation_config"]["max_episode_steps"] += 1
+    assert not scenario_manifest_records_match(identity, scenario)
+    with pytest.raises(ValueError, match="scenario row changed after parse"):
+        make_envelope_scenario(scenario, envelope_radius_m=0.5)
+    certifier_called = False
+
+    def unexpected_certifier(*_args, **_kwargs):
+        nonlocal certifier_called
+        certifier_called = True
+        pytest.fail("certifier must not see a post-parse row mutation")
+
+    monkeypatch.setattr(feasibility_oracle, "_default_certifier", unexpected_certifier)
+    margin = feasibility_oracle._geometric_margin(
+        scenario,
+        scenario_path=_SCENARIO_PATH,
+        envelope_radius_m=1.0,
+        certifier=unexpected_certifier,
+        require_runtime_input_binding=True,
+    )
+    assert margin.classification == "blocked:scenario_manifest_parse_identity_mismatch"
+    assert margin.runtime_input_identity_stable is False
+    assert not certifier_called
+
+    fresh_report = load_scenarios_for_validation(_SCENARIO_PATH)
+    fresh_scenario = fresh_report.scenarios[0]
+    fresh_id = scenario_input_identity(
+        _SCENARIO_PATH,
+        scenario_id=scenario_id,
+        validation_report=fresh_report,
+    )
+    envelope = make_envelope_scenario(fresh_scenario, envelope_radius_m=0.5)
+    assert scenario_manifest_records_match(fresh_id, envelope)
+
+
 # ---------------------------------------------------------------------------
 # run_feasibility_oracle - margin reporting
 # ---------------------------------------------------------------------------
@@ -167,7 +236,7 @@ def test_oracle_reports_corridor_vs_envelope_margin_for_feasible_route() -> None
     """A feasible route reports corridor width, envelope diameter, and their margin."""
 
     def runner(_s, _seed, _horizon, _algo):
-        return {"steps": 200, "horizon": 500, "outcome": {"route_complete": True}}
+        return _successful_rollout(200)
 
     verdict = run_feasibility_oracle(
         _scenario(),
@@ -217,7 +286,12 @@ def test_oracle_reports_time_truncated_when_geometric_ok_but_rollout_times_out()
     """A geometrically feasible route that times out is time-truncated."""
 
     def runner(_s, _seed, _horizon, _algo):
-        return {"steps": 500, "horizon": 500, "termination_reason": "max_steps"}
+        return {
+            "steps": 500,
+            "horizon": 500,
+            "termination_reason": "max_steps",
+            "fallback_or_degraded": False,
+        }
 
     verdict = run_feasibility_oracle(
         _scenario(),
@@ -234,11 +308,85 @@ def test_oracle_reports_time_truncated_when_geometric_ok_but_rollout_times_out()
     assert verdict.completion.min_completion_steps is None
 
 
+def test_oracle_preserves_fallback_metadata_and_blocks_tainted_completion() -> None:
+    """A successful-looking fallback rollout remains blocked with its observation retained."""
+    record = _successful_rollout(200)
+    record["algorithm_metadata"] = {
+        "status": "ok",
+        "fallback_or_degraded": True,
+    }
+
+    verdict = run_feasibility_oracle(
+        _scenario(),
+        config=_oracle_config(),
+        envelope_radius_m=1.0,
+        episode_runner=lambda *_args: record,
+        certifier=lambda _s, _p: _certificate(VALID),
+    )
+
+    assert verdict.status == BLOCKED
+    assert verdict.feasible is None
+    assert verdict.completion.status == "blocked"
+    assert verdict.completion.route_completion_feasible is None
+    assert verdict.completion.observed_route_completion_feasible is True
+    assert verdict.completion.fallback_or_degraded is True
+    assert verdict.completion.fallback_marker == "algorithm_metadata.fallback_or_degraded=true"
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_blocker"),
+    [
+        ("blocked_status", "inconsistent_rollout_completion_record"),
+        ("source_blocker", "inconsistent_rollout_completion_record"),
+        ("collision_termination", "inconsistent_rollout_completion_record"),
+        ("exceeds_horizon", "inconsistent_rollout_completion_record"),
+        ("mismatched_horizon", "inconsistent_rollout_completion_record"),
+        ("contradictory_flag", "inconsistent_rollout_completion_record"),
+        ("missing_fallback_state", "rollout_fallback_status_unavailable"),
+    ],
+)
+def test_oracle_blocks_contradictory_or_incompletely_bound_completion(
+    mutation: str, expected_blocker: str
+) -> None:
+    """Only a consistent successful record with explicit clean runtime status can pass."""
+    record = _successful_rollout(200)
+    if mutation == "blocked_status":
+        record["status"] = "blocked"
+    elif mutation == "source_blocker":
+        record["blocker"] = "reference_runtime_blocked"
+    elif mutation == "collision_termination":
+        record["termination_reason"] = "collision"
+    elif mutation == "exceeds_horizon":
+        record["steps"] = 501
+    elif mutation == "mismatched_horizon":
+        record["horizon"] = 499
+    elif mutation == "contradictory_flag":
+        record["route_complete"] = False
+    else:
+        record.pop("fallback_or_degraded")
+
+    verdict = run_feasibility_oracle(
+        _scenario(),
+        config=_oracle_config(),
+        envelope_radius_m=1.0,
+        episode_runner=lambda *_args: record,
+        certifier=lambda _s, _p: _certificate(VALID),
+    )
+
+    assert verdict.status == BLOCKED
+    assert verdict.feasible is None
+    assert verdict.completion.status == "blocked"
+    assert verdict.completion.route_completion_feasible is None
+    assert verdict.completion.blocker == expected_blocker
+    if mutation == "source_blocker":
+        assert verdict.completion.rollout_blocker == "reference_runtime_blocked"
+
+
 def test_oracle_corridor_margin_is_none_when_no_static_obstacles() -> None:
     """An empty obstacle set yields None corridor width (no clearance reported)."""
 
     def runner(_s, _seed, _horizon, _algo):
-        return {"outcome": {"route_complete": True}, "steps": 100}
+        return _successful_rollout(100)
 
     verdict = run_feasibility_oracle(
         _scenario(),
@@ -260,7 +408,7 @@ def test_oracle_fails_closed_when_certifier_raises() -> None:
         raise RuntimeError("boom")
 
     def runner(_s, _seed, _horizon, _algo):
-        return {"outcome": {"route_complete": True}, "steps": 100}
+        return _successful_rollout(100)
 
     verdict = run_feasibility_oracle(
         _scenario(),
@@ -304,7 +452,7 @@ def test_envelope_sweep_classifies_feasible_when_nominal_envelope_feasible() -> 
     """A nominal-feasible cell is classified feasible."""
 
     def runner(_s, _seed, _horizon, _algo):
-        return {"outcome": {"route_complete": True}, "steps": 200}
+        return _successful_rollout(200)
 
     verdict = run_envelope_sensitivity_sweep(
         _scenario(),
@@ -348,7 +496,7 @@ def test_envelope_sweep_classifies_envelope_sensitive_hard() -> None:
         return _certificate(VALID)
 
     def runner(_s, _seed, _horizon, _algo):
-        return {"outcome": {"route_complete": True}, "steps": 200}
+        return _successful_rollout(200)
 
     verdict = run_envelope_sensitivity_sweep(
         _scenario(),
@@ -369,7 +517,7 @@ def test_envelope_sweep_blocks_when_nominal_verdict_is_blocked() -> None:
         raise RuntimeError("cert boom")
 
     def runner(_s, _seed, _horizon, _algo):
-        return {"outcome": {"route_complete": True}, "steps": 200}
+        return _successful_rollout(200)
 
     verdict = run_envelope_sensitivity_sweep(
         _scenario(),
@@ -648,7 +796,7 @@ scenarios:
     )
 
     def runner(_scenario, _seed, _horizon, _algo):
-        return {"steps": 200, "outcome": {"route_complete": True}}
+        return _successful_rollout(200)
 
     report = build_issue_5574_feasibility_report(
         scenario_path,
@@ -665,6 +813,113 @@ scenarios:
     assert [cell["rollout_seed"] for cell in report["cells"]] == [17, 13]
     assert all(cell["issue"] == "5574" for cell in report["cells"])
     assert all(cell["nominal_verdict"]["issue"] == "5574" for cell in report["cells"])
+    expected_source_digest = hashlib.sha256(scenario_path.read_bytes()).hexdigest()
+    assert report["source_artifact_sha256"] == expected_source_digest
+    assert report["source_artifact_identity_stable"] is True
+    assert all(cell["source_artifact_sha256"] == expected_source_digest for cell in report["cells"])
+    assert all(cell["source_artifact_identity_stable"] is True for cell in report["cells"])
+
+
+def test_issue_5574_report_marks_source_manifest_changed_during_run(tmp_path: Path) -> None:
+    """A concurrent manifest edit makes the producer report unusable as bound evidence."""
+    scenario_path = tmp_path / "candidates.yaml"
+    source = "scenarios:\n  - name: cell_a\n    seeds: [13]\n"
+    scenario_path.write_text(source, encoding="utf-8")
+
+    def runner(_scenario, _seed, _horizon, _algo):
+        scenario_path.write_text(source + "# changed during oracle run\n", encoding="utf-8")
+        return _successful_rollout(2)
+
+    report = build_issue_5574_feasibility_report(
+        scenario_path,
+        scenario_ids=("cell_a",),
+        envelope_radii_m=(1.0, 0.5),
+        episode_runner=runner,
+        certifier=lambda _scenario, _path: _certificate(VALID),
+    )
+
+    assert report["source_artifact_sha256"] == hashlib.sha256(source.encode()).hexdigest()
+    assert report["source_artifact_identity_stable"] is False
+    assert report["cells"][0]["source_artifact_identity_stable"] is False
+
+
+def test_issue_5574_report_rejects_aba_include_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An oracle sweep cannot bind an include snapshot restored after its parse."""
+    scenario_path = tmp_path / "root.yaml"
+    included_path = tmp_path / "included.yaml"
+    scenario_path.write_text("includes: [included.yaml]\n", encoding="utf-8")
+    original_bytes = b"scenarios:\n  - name: case-static\n    marker: restored-A\n    seeds: [13]\n"
+    consumed_bytes = b"scenarios:\n  - name: case-static\n    marker: consumed-B\n    seeds: [13]\n"
+    included_path.write_bytes(original_bytes)
+    original_read_bytes = Path.read_bytes
+    swapped = False
+    loaded_markers: list[str] = []
+
+    def read_with_aba(path: Path) -> bytes:
+        nonlocal swapped
+        if path == included_path and not swapped:
+            swapped = True
+            included_path.write_bytes(consumed_bytes)
+            consumed = original_read_bytes(path)
+            included_path.write_bytes(original_bytes)
+            return consumed
+        return original_read_bytes(path)
+
+    def sweep(scenario: Any, **_kwargs: Any) -> EnvelopeSensitivityVerdict:
+        loaded_markers.append(str(scenario["marker"]))
+        return _envelope_verdict("case-static", category=FEASIBLE)
+
+    monkeypatch.setattr(Path, "read_bytes", read_with_aba)
+    monkeypatch.setattr(feasibility_oracle, "run_envelope_sensitivity_sweep", sweep)
+
+    report = build_issue_5574_feasibility_report(
+        scenario_path,
+        scenario_ids=("case-static",),
+        envelope_radii_m=(1.0, 0.5),
+    )
+
+    assert loaded_markers == ["consumed-B"]
+    assert included_path.read_bytes() == original_bytes
+    assert report["source_artifact_identity_stable"] is True
+    assert report["cells"][0]["effective_input_identity_stable"] is False
+    assert report["cells"][0]["effective_input_sha256"] is None
+
+
+def test_issue_5574_report_marks_referenced_map_change_unstable(tmp_path: Path) -> None:
+    """Map mutation is detected even when the scenario manifest itself is unchanged."""
+    scenario_path = tmp_path / "candidates.yaml"
+    map_path = tmp_path / "map.svg"
+    shutil.copyfile(_REPO_ROOT / "maps/svg_maps/classic_head_on_corridor.svg", map_path)
+    source = """scenarios:
+  - name: cell_a
+    map_file: map.svg
+    simulation_config:
+      max_episode_steps: 500
+    robot_config: {}
+    metadata:
+      archetype: head_on_corridor
+    seeds: [13]
+"""
+    scenario_path.write_text(source, encoding="utf-8")
+
+    def runner(_scenario, _seed, _horizon, _algo):
+        map_path.write_bytes(map_path.read_bytes() + b"\n<!-- concurrent edit -->\n")
+        return _successful_rollout(200)
+
+    report = build_issue_5574_feasibility_report(
+        scenario_path,
+        scenario_ids=("cell_a",),
+        envelope_radii_m=(1.0, 0.5),
+        episode_runner=runner,
+        certifier=lambda _scenario, _path: _certificate(VALID),
+    )
+
+    assert report["source_artifact_identity_stable"] is True
+    assert report["cells"][0]["source_artifact_identity_stable"] is True
+    assert report["cells"][0]["effective_input_identity_stable"] is False
+    assert report["cells"][0]["effective_input_sha256"] is None
 
 
 def test_issue_5574_report_rejects_missing_candidate_cell(tmp_path: Path) -> None:
@@ -680,7 +935,7 @@ def test_issue_5574_report_rejects_missing_candidate_cell(tmp_path: Path) -> Non
             scenario_path,
             scenario_ids=("missing",),
             envelope_radii_m=(1.0, 0.5),
-            episode_runner=lambda *_args: {"steps": 1, "outcome": {"route_complete": True}},
+            episode_runner=lambda *_args: _successful_rollout(1),
             certifier=lambda _scenario, _path: _certificate(VALID),
         )
 
@@ -749,6 +1004,8 @@ def test_oracle_end_to_end_on_committed_head_on_corridor_scenario() -> None:
     # The corridor width must exceed the envelope diameter when the route is feasible,
     # and the corridor-envelope margin must equal corridor_width - diameter.
     geom = verdict.geometric
+    assert geom.runtime_input_identity_stable is True
+    assert geom.route_geometrically_feasible is not None
     if geom.route_geometrically_feasible and geom.min_corridor_width_m is not None:
         assert geom.min_corridor_width_m > geom.envelope_diameter_m
         assert geom.corridor_envelope_margin_m == pytest.approx(

@@ -15,6 +15,7 @@ updates:
         applies-to: "version-updates"
         patterns:
           - "black"
+          - "hypothesis"
           - "isort"
           - "mypy"
           - "pre-commit"

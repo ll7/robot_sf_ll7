@@ -439,6 +439,10 @@ def test_agents_md_task_scoped_context_and_mode_specific_sync() -> None:
     )
     assert "## Branch synchronization" in lifecycle_text
     assert "merge `origin/main` into the implementation branch" in lifecycle_text
+    assert "gate_worktree_guard.py preflight" in lifecycle_text
+    assert "including a proven orphan" in lifecycle_text
+    assert "Do not delete or move a lock" in lifecycle_text
+    assert "update_pr_branch_safely.sh` runs this preflight automatically" in lifecycle_text
     assert "review_worktree_guard.py" in lifecycle_text
     assert "#8321" in lifecycle_text
 

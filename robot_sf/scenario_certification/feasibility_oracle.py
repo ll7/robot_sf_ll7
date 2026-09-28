@@ -35,6 +35,7 @@ issue #3484 diagnostics and the static MAPF oracle do not provide.
 
 from __future__ import annotations
 
+import hashlib
 import math
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
@@ -44,6 +45,7 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
 from robot_sf.benchmark.utils import _git_hash_fallback
 from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
@@ -54,6 +56,11 @@ from robot_sf.scenario_certification.feasibility_diagnostics import (
     DIAGNOSTIC_CLAIM_BOUNDARY,
     SOLVABLE_ROUTE_CLASSES,
     make_actor_free_scenario,
+)
+from robot_sf.scenario_certification.input_identity import (
+    runtime_input_records_match,
+    scenario_input_identity,
+    scenario_manifest_records_match,
 )
 from robot_sf.scenario_certification.v1 import (
     GEOMETRICALLY_INFEASIBLE,
@@ -66,7 +73,13 @@ from robot_sf.scenario_certification.v1 import (
     certify_scenario,
     measure_planned_path_clearance,
 )
-from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
+from robot_sf.training.scenario_loader import (
+    _ScenarioSourceMapping,
+    build_robot_config_from_scenario,
+    load_scenarios,
+    load_scenarios_for_validation,
+    scenario_mapping_sha256,
+)
 
 FEASIBILITY_ORACLE_SCHEMA = "scenario_feasibility_oracle.v1"
 ENVELOPE_SENSITIVITY_SCHEMA = "envelope_sensitivity_axis.v1"
@@ -161,6 +174,7 @@ class GeometricMargin:
     shortest_path_length_m: float | None
     classification: str
     benchmark_eligibility: str
+    runtime_input_identity_stable: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,6 +203,11 @@ class CompletionMargin:
     termination_reason: str | None
     status: str
     blocker: str | None = None
+    fallback_or_degraded: bool | None = None
+    fallback_marker: str | None = None
+    observed_route_completion_feasible: bool | None = None
+    rollout_blocker: str | None = None
+    runtime_input_identity_stable: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,7 +278,27 @@ def make_envelope_scenario(
     """
     if not math.isfinite(float(envelope_radius_m)) or envelope_radius_m <= 0.0:
         raise ValueError("envelope_radius_m must be finite, positive, and non-zero")
-    mutated = deepcopy(dict(scenario))
+    source_row_digest: str | None = None
+    if isinstance(scenario, _ScenarioSourceMapping):
+        source_row_digest = getattr(scenario, "_scenario_source_row_sha256", None)
+        expected_current_row_digest = getattr(scenario, "_scenario_current_row_sha256", None)
+        if (
+            not isinstance(expected_current_row_digest, str)
+            or not expected_current_row_digest
+            or scenario_mapping_sha256(scenario) != expected_current_row_digest
+        ):
+            raise ValueError("scenario row changed after parse; cannot apply envelope override")
+    mutated_values = deepcopy(dict(scenario))
+    if isinstance(scenario, _ScenarioSourceMapping):
+        mutated = _ScenarioSourceMapping(
+            mutated_values,
+            source_file=scenario._scenario_source_file,
+            manifest_sources=scenario._scenario_manifest_sources,
+            source_row_sha256=source_row_digest,
+            current_row_sha256=getattr(scenario, "_scenario_current_row_sha256", None),
+        )
+    else:
+        mutated = mutated_values
     robot_cfg = dict(mutated.get("robot_config") or {})
     robot_cfg["radius"] = float(envelope_radius_m)
     mutated["robot_config"] = robot_cfg
@@ -267,6 +306,8 @@ def make_envelope_scenario(
     metadata["envelope_probe_radius_m"] = float(envelope_radius_m)
     metadata["diagnostic_claim_boundary"] = DIAGNOSTIC_CLAIM_BOUNDARY
     mutated["metadata"] = metadata
+    if isinstance(mutated, _ScenarioSourceMapping):
+        mutated._scenario_current_row_sha256 = scenario_mapping_sha256(mutated)
     return mutated
 
 
@@ -284,7 +325,9 @@ def run_feasibility_oracle(
     traversal (rollout) and reports both margins.
 
     Args:
-        scenario: Scenario mapping (already envelope-overridden or nominal).
+        scenario: Loader-returned scenario mapping (already envelope-overridden or nominal). The
+            default certifier blocks rows without parse-time manifest identity or whose source
+            manifest closure has changed since loading.
         config: Oracle configuration (scenario path, rollout seed/algo).
         envelope_radius_m: Robot envelope radius used for this verdict.
         episode_runner: Optional injected scripted rollout runner; defaults to the
@@ -302,6 +345,7 @@ def run_feasibility_oracle(
         scenario_path=config.scenario_path,
         envelope_radius_m=envelope_radius_m,
         certifier=certify,
+        require_runtime_input_binding=certifier is None,
     )
     completion = _completion_margin(
         scenario,
@@ -432,7 +476,28 @@ def build_issue_5574_feasibility_report(  # noqa: C901
     if any(radius >= radii[0] for radius in radii[1:]):
         raise ValueError("envelope_radii_m reduced probes must be smaller than nominal")
 
-    scenarios = load_scenarios(source)
+    validation_report = load_scenarios_for_validation(source)
+    if validation_report.load_error is not None:
+        raise ValueError(f"Scenario config could not be loaded: {validation_report.load_error}")
+    load_issues = [*validation_report.entry_issues, *validation_report.load_issues]
+    if load_issues:
+        issue = load_issues[0]
+        raise ValueError(
+            "Scenario config expansion was incomplete: "
+            f"{issue.source}:{issue.index}: {issue.message}"
+        )
+    root_source = next(
+        (item for item in validation_report.manifest_sources if item.path.resolve() == source),
+        None,
+    )
+    source_artifact_sha256 = root_source.content_sha256 if root_source is not None else None
+    input_identities_before = {
+        scenario_id: scenario_input_identity(
+            source, scenario_id=scenario_id, validation_report=validation_report
+        )
+        for scenario_id in requested_ids
+    }
+    scenarios = validation_report.scenarios
     by_id: dict[str, Mapping[str, Any]] = {}
     for scenario in scenarios:
         scenario_id = _scenario_id(scenario)
@@ -461,9 +526,41 @@ def build_issue_5574_feasibility_report(  # noqa: C901
         )
         cell = envelope_sensitivity_verdict_to_dict(verdict, issue="5574")
         cell["scenario_manifest"] = source.as_posix()
+        cell["source_artifact_sha256"] = source_artifact_sha256
         cell["rollout_algo"] = rollout_algo
         cell["rollout_seed"] = selected_seed
         cells.append(cell)
+
+    source_artifact_identity_stable = (
+        source_artifact_sha256 is not None and source_artifact_sha256 == _file_sha256(source)
+    )
+    input_identities_after = {
+        scenario_id: scenario_input_identity(
+            source, scenario_id=scenario_id, validation_report=validation_report
+        )
+        for scenario_id in requested_ids
+    }
+    for cell in cells:
+        cell["source_artifact_identity_stable"] = source_artifact_identity_stable
+        scenario_id = str(cell["scenario_id"])
+        identity_before = input_identities_before[scenario_id]
+        identity_after = input_identities_after[scenario_id]
+        effective_input_identity_stable = (
+            source_artifact_identity_stable
+            and identity_before.get("status") == "available"
+            and identity_after.get("status") == "available"
+            and identity_before.get("effective_input_sha256") is not None
+            and identity_before.get("effective_input_sha256")
+            == identity_after.get("effective_input_sha256")
+            and cell.get("runtime_input_identity_stable") is True
+        )
+        cell["effective_input_sha256"] = (
+            identity_before.get("effective_input_sha256")
+            if effective_input_identity_stable
+            else None
+        )
+        cell["effective_input_identity_stable"] = effective_input_identity_stable
+        cell["effective_input_files"] = identity_before.get("files", [])
 
     return {
         "schema_version": ISSUE_5574_REPORT_SCHEMA,
@@ -471,11 +568,32 @@ def build_issue_5574_feasibility_report(  # noqa: C901
         "review_marker": "AI-GENERATED NEEDS-REVIEW",
         "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
         "scenario_manifest": source.as_posix(),
+        "source_artifact_sha256": source_artifact_sha256,
+        "source_artifact_identity_stable": source_artifact_identity_stable,
+        "runtime_input_identity_stable": all(
+            cell.get("runtime_input_identity_stable") is True for cell in cells
+        ),
         "scenario_ids": list(requested_ids),
         "envelope_radii_m": list(radii),
         "rollout_algo": rollout_algo,
         "cells": cells,
     }
+
+
+def _file_sha256(path: Path) -> str | None:
+    """Hash one oracle source manifest.
+
+    Returns:
+        SHA-256 digest, or ``None`` if the source becomes unavailable.
+    """
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError:
+        return None
+    return digest.hexdigest()
 
 
 def annotate_zero_completion_cells(
@@ -550,6 +668,7 @@ def envelope_sensitivity_verdict_to_dict(
     Returns:
         Versioned ``envelope_sensitivity_axis.v1`` payload.
     """
+    all_verdicts = (verdict.nominal_verdict, *verdict.reduced_verdicts)
     return {
         "schema_version": ENVELOPE_SENSITIVITY_SCHEMA,
         "issue": issue,
@@ -562,6 +681,9 @@ def envelope_sensitivity_verdict_to_dict(
         "reduced_verdicts": [
             feasibility_verdict_to_dict(v, issue=issue) for v in verdict.reduced_verdicts
         ],
+        "runtime_input_identity_stable": all(
+            _verdict_runtime_input_identity_stable(item) for item in all_verdicts
+        ),
     }
 
 
@@ -586,7 +708,21 @@ def feasibility_verdict_to_dict(
         "status": verdict.status,
         "geometric": _geometric_margin_to_dict(verdict.geometric),
         "completion": _completion_margin_to_dict(verdict.completion),
+        "runtime_input_identity_stable": _verdict_runtime_input_identity_stable(verdict),
     }
+
+
+def _verdict_runtime_input_identity_stable(verdict: FeasibilityVerdict) -> bool:
+    """Check the exact map/route inputs used by every executed oracle lane.
+
+    Returns:
+        ``True`` only when each executed lane matched its declared input closure.
+    """
+    if verdict.geometric.runtime_input_identity_stable is not True:
+        return False
+    if verdict.geometric.route_geometrically_feasible is False:
+        return True
+    return verdict.completion.runtime_input_identity_stable is True
 
 
 # ---------------------------------------------------------------------------
@@ -594,12 +730,13 @@ def feasibility_verdict_to_dict(
 # ---------------------------------------------------------------------------
 
 
-def _geometric_margin(
+def _geometric_margin(  # noqa: C901 - the evidence gates remain explicit and fail-closed.
     scenario: Mapping[str, Any],
     *,
     scenario_path: Path,
     envelope_radius_m: float,
     certifier: Callable[[Mapping[str, Any], Path], ScenarioCertificate],
+    require_runtime_input_binding: bool = False,
 ) -> GeometricMargin:
     """Build the geometric route-clearance margin from the route certificate.
 
@@ -607,13 +744,66 @@ def _geometric_margin(
         Geometric margin with corridor-vs-envelope reporting.
     """
     envelope_diameter_m = 2.0 * float(envelope_radius_m)
+    identity_before: Mapping[str, Any] | None = None
+    consumed_runtime_inputs: list[dict[str, str]] | None = None
+    if require_runtime_input_binding:
+        identity_before = scenario_input_identity(
+            scenario_path,
+            scenario_id=_scenario_id(scenario),
+        )
+        if identity_before.get("status") != "available":
+            return _blocked_geometric_margin(
+                envelope_radius_m,
+                "runtime_input_identity_unavailable",
+            )
+        if not scenario_manifest_records_match(identity_before, scenario):
+            return _blocked_geometric_margin(
+                envelope_radius_m,
+                "scenario_manifest_parse_identity_mismatch",
+            )
     try:
-        certificate = certifier(scenario, scenario_path)
+        if require_runtime_input_binding:
+            consumed_runtime_inputs = []
+            certificate = _default_certifier(
+                scenario,
+                scenario_path,
+                runtime_input_records=consumed_runtime_inputs,
+            )
+        else:
+            certificate = certifier(scenario, scenario_path)
     except Exception as exc:  # noqa: BLE001 - oracle must fail closed on certifier errors.
         return _blocked_geometric_margin(envelope_radius_m, str(exc))
 
     classification = str(certificate.classification)
     eligibility = str(certificate.benchmark_eligibility)
+    if require_runtime_input_binding:
+        identity_after = scenario_input_identity(
+            scenario_path,
+            scenario_id=_scenario_id(scenario),
+        )
+        consumed_inputs_match = (
+            identity_before is not None
+            and consumed_runtime_inputs is not None
+            and runtime_input_records_match(
+                identity_before,
+                consumed_runtime_inputs,
+                scenario_id=_scenario_id(scenario),
+            )
+        )
+        runtime_input_identity_stable = (
+            identity_before is not None
+            and _scenario_input_identity_matches(identity_before, identity_after)
+            and scenario_manifest_records_match(identity_before, scenario)
+            and consumed_inputs_match
+            and _certificate_matches_scenario_input_identity(certificate, identity_before)
+        )
+        if not runtime_input_identity_stable:
+            return _blocked_geometric_margin(
+                envelope_radius_m,
+                "runtime_input_identity_changed_or_unavailable",
+            )
+    else:
+        runtime_input_identity_stable = certificate.evidence.get("runtime_input_identity_stable")
     route_checks = _aggregate_route_checks(certificate)
     min_clearance = _optional_float(route_checks.get("minimum_static_clearance_m"))
     shortest_path = _optional_float(route_checks.get("shortest_path_length_m"))
@@ -647,7 +837,74 @@ def _geometric_margin(
         shortest_path_length_m=shortest_path,
         classification=classification,
         benchmark_eligibility=eligibility,
+        runtime_input_identity_stable=(
+            runtime_input_identity_stable
+            if isinstance(runtime_input_identity_stable, bool)
+            else None
+        ),
     )
+
+
+def _scenario_input_identity_matches(before: Mapping[str, Any], after: Mapping[str, Any]) -> bool:
+    """Bind legacy v1 certificate evidence to a stable adapter-owned input closure.
+
+    Returns:
+        ``True`` when both snapshots identify the same complete source/input closure.
+    """
+    if before.get("status") != "available" or after.get("status") != "available":
+        return False
+    if before.get("source_artifact_sha256") != after.get("source_artifact_sha256"):
+        return False
+    before_row_digest = before.get("scenario_row_sha256")
+    if not isinstance(before_row_digest, str) or not before_row_digest:
+        return False
+    if before_row_digest != after.get("scenario_row_sha256"):
+        return False
+    requires_closure = before.get("requires_effective_input_binding") is True
+    if after.get("requires_effective_input_binding") is not requires_closure:
+        return False
+    if not requires_closure:
+        return True
+    effective_before = before.get("effective_input_sha256")
+    return (
+        isinstance(effective_before, str)
+        and bool(effective_before)
+        and effective_before == after.get("effective_input_sha256")
+    )
+
+
+def _certificate_matches_scenario_input_identity(
+    certificate: ScenarioCertificate,
+    identity: Mapping[str, Any],
+) -> bool:
+    """Check producer-owned identity fields when present; legacy v1 leaves them absent.
+
+    Returns:
+        ``True`` when present producer fields agree with the adapter-owned identity.
+    """
+    evidence = certificate.evidence
+    if not isinstance(evidence, Mapping):
+        return False
+    if evidence.get("runtime_input_identity_stable") is False:
+        return False
+    source_digest = evidence.get("source_artifact_sha256")
+    if "source_artifact_sha256" in evidence and source_digest != identity.get(
+        "source_artifact_sha256"
+    ):
+        return False
+    effective_digest = evidence.get("effective_input_sha256")
+    producer_effective_fields = any(
+        field in evidence for field in ("effective_input_sha256", "effective_input_identity_stable")
+    )
+    if producer_effective_fields:
+        if effective_digest != identity.get("effective_input_sha256"):
+            return False
+        if (
+            identity.get("requires_effective_input_binding") is True
+            and evidence.get("effective_input_identity_stable") is not True
+        ):
+            return False
+    return True
 
 
 def _blocked_geometric_margin(envelope_radius_m: float, blocker: str) -> GeometricMargin:
@@ -662,6 +919,7 @@ def _blocked_geometric_margin(envelope_radius_m: float, blocker: str) -> Geometr
         shortest_path_length_m=None,
         classification=f"blocked:{blocker}",
         benchmark_eligibility="blocked",
+        runtime_input_identity_stable=False,
     )
 
 
@@ -696,6 +954,7 @@ def _completion_margin(
             termination_reason=None,
             status="failed",
             blocker="route_geometrically_infeasible_no_traversal_path",
+            runtime_input_identity_stable=geometric.runtime_input_identity_stable,
         )
 
     try:
@@ -712,10 +971,104 @@ def _completion_margin(
             termination_reason=None,
             status="blocked",
             blocker=f"rollout_error: {exc}",
+            runtime_input_identity_stable=False,
         )
+
+    runtime_records = record.get("_scenario_runtime_input_records")
+    scenario_id = _scenario_id(scenario)
+    input_identity = scenario_input_identity(config.scenario_path, scenario_id=scenario_id)
+    runtime_input_stable = (
+        isinstance(runtime_records, list)
+        and all(isinstance(item, Mapping) for item in runtime_records)
+        and runtime_input_records_match(
+            input_identity,
+            runtime_records,
+            scenario_id=scenario_id,
+        )
+    )
 
     completed, termination = _rollout_route_complete(record)
     steps = _optional_int(record.get("steps"))
+    fallback_or_degraded, fallback_marker = _rollout_fallback_state(record)
+    raw_blocker = record.get("blocker") or record.get("route_follow_blocker")
+    rollout_blocker = (
+        raw_blocker.strip() if isinstance(raw_blocker, str) and raw_blocker.strip() else None
+    )
+    explicit_status = str(record.get("status") or "").strip().lower()
+    termination_status = str(termination or "").strip().lower()
+    record_horizon_value = record.get("horizon_steps", record.get("horizon"))
+    record_horizon = _optional_int(record_horizon_value)
+    completion_flags = _explicit_route_completion_flags(record)
+    flag_conflict = len(set(completion_flags)) > 1
+    horizon_conflict = (
+        horizon_steps is None
+        or horizon_steps <= 0
+        or record_horizon is None
+        or record_horizon != horizon_steps
+    )
+    success_terminations = {
+        "success",
+        "goal_reached",
+        "route_complete",
+        "completed",
+        "route_follow_reached_destination",
+    }
+    failure_statuses = {"failed", "failure", "collision", "error", "blocked"}
+    status_conflict = (
+        (
+            completed is True
+            and (
+                termination_status not in success_terminations
+                or explicit_status in failure_statuses
+                or rollout_blocker is not None
+                or horizon_conflict
+                or steps is None
+                or steps <= 0
+                or steps > horizon_steps
+            )
+        )
+        or (
+            completed is False
+            and (
+                termination_status in success_terminations
+                or explicit_status in {"passed", "success", "completed", "ok"}
+                or explicit_status in {"blocked", "error", "invalid"}
+                or rollout_blocker is not None
+                or horizon_conflict
+            )
+        )
+        or explicit_status in {"blocked", "error", "invalid"}
+        or flag_conflict
+    )
+    if (
+        status_conflict
+        or fallback_or_degraded is not False
+        or (episode_runner is None and not runtime_input_stable)
+    ):
+        blocker = (
+            "inconsistent_rollout_completion_record"
+            if status_conflict
+            else "rollout_fallback_or_degraded"
+            if fallback_or_degraded is True
+            else "runtime_input_identity_unavailable"
+            if episode_runner is None and not runtime_input_stable
+            else "rollout_fallback_status_unavailable"
+        )
+        return CompletionMargin(
+            route_completion_feasible=None,
+            min_completion_steps=None,
+            horizon_steps=horizon_steps,
+            completion_horizon_margin_steps=None,
+            kinematic_min_steps_lower_bound=kinematic_floor,
+            termination_reason=termination,
+            status="blocked",
+            blocker=blocker,
+            fallback_or_degraded=fallback_or_degraded,
+            fallback_marker=fallback_marker,
+            observed_route_completion_feasible=completed,
+            rollout_blocker=rollout_blocker,
+            runtime_input_identity_stable=runtime_input_stable,
+        )
     min_completion_steps = steps if completed and steps is not None else None
     completion_horizon_margin_steps: int | None
     if min_completion_steps is not None and horizon_steps is not None:
@@ -739,7 +1092,52 @@ def _completion_margin(
         termination_reason=termination,
         status=status,
         blocker=None if completed is not None else "unknown_rollout_outcome",
+        fallback_or_degraded=fallback_or_degraded,
+        fallback_marker=fallback_marker,
+        observed_route_completion_feasible=completed,
+        rollout_blocker=rollout_blocker,
+        runtime_input_identity_stable=runtime_input_stable,
     )
+
+
+def _rollout_fallback_state(record: Mapping[str, Any]) -> tuple[bool | None, str | None]:
+    """Return canonical fallback state and marker location from a rollout record."""
+    marker = runtime_fallback_or_degraded_marker(record)
+    if marker is not None:
+        path, value = marker
+        return True, f"{path}={value}"
+    for view in (record, record.get("algorithm_metadata")):
+        if not isinstance(view, Mapping):
+            continue
+        for key in (
+            "fallback_or_degraded",
+            "fallback",
+            "fallback_triggered",
+            "degraded",
+            "fallback_used",
+        ):
+            value = view.get(key)
+            if isinstance(value, bool):
+                return value, None if not value else f"{key}=true"
+    return None, None
+
+
+def _explicit_route_completion_flags(record: Mapping[str, Any]) -> list[bool]:
+    """Collect explicit route/success booleans so contradictory runner fields fail closed.
+
+    Returns:
+        Explicit boolean values from the runner's outcome, root, and metrics mappings.
+    """
+    flags: list[bool] = []
+    views = (record.get("outcome"), record, record.get("metrics"))
+    for view in views:
+        if not isinstance(view, Mapping):
+            continue
+        for key in ("route_complete", "goal_reached", "success"):
+            flag = _bool_flag(view.get(key))
+            if flag is not None:
+                flags.append(flag)
+    return flags
 
 
 def _combine_into_verdict(
@@ -814,13 +1212,24 @@ def _annotation_for_category(category: str) -> str:
     return PLANNER_LIMITED
 
 
-def _default_certifier(scenario: Mapping[str, Any], scenario_path: Path) -> ScenarioCertificate:
-    """Default route certifier adapter (keyword-only ``scenario_path`` bridge).
+def _default_certifier(
+    scenario: Mapping[str, Any],
+    scenario_path: Path,
+    *,
+    runtime_input_records: list[dict[str, str]] | None = None,
+) -> ScenarioCertificate:
+    """Default route certifier adapter with optional exact input capture.
 
     Returns:
         Scenario certificate from the canonical ``certify_scenario`` certifier.
     """
-    return certify_scenario(scenario, scenario_path=scenario_path)
+    if runtime_input_records is None:
+        return certify_scenario(scenario, scenario_path=scenario_path)
+    return certify_scenario(
+        scenario,
+        scenario_path=scenario_path,
+        runtime_input_records=runtime_input_records,
+    )
 
 
 def _default_actor_free_runner(config: FeasibilityOracleConfig) -> EpisodeRunner:
@@ -843,17 +1252,35 @@ def _default_actor_free_runner(config: FeasibilityOracleConfig) -> EpisodeRunner
         """Return the result of one actor-free diagnostic rollout run via ``_run_map_episode``."""
         scenario_payload = deepcopy(dict(scenario))
         scenario_payload["seeds"] = [int(seed)]
-        return _run_map_episode(
-            scenario_payload,
-            int(seed),
-            horizon=horizon,
-            dt=None,
-            record_forces=False,
-            snqi_weights=None,
-            snqi_baseline=None,
-            algo=algo,
-            scenario_path=config.scenario_path,
+        runtime_input_records: list[dict[str, str]] = []
+        record = dict(
+            _run_map_episode(
+                scenario_payload,
+                int(seed),
+                horizon=horizon,
+                dt=None,
+                record_forces=False,
+                snqi_weights=None,
+                snqi_baseline=None,
+                algo=algo,
+                scenario_path=config.scenario_path,
+                runtime_input_records=runtime_input_records,
+            )
         )
+        record["_scenario_runtime_input_records"] = runtime_input_records
+        metadata = record.get("algorithm_metadata")
+        if (
+            algo == "goal"
+            and isinstance(metadata, Mapping)
+            and str(metadata.get("status", "")).strip().lower() == "ok"
+            and runtime_fallback_or_degraded_marker(metadata) is None
+            and _rollout_fallback_state(record)[0] is None
+        ):
+            record["algorithm_metadata"] = {
+                **dict(metadata),
+                "fallback_or_degraded": False,
+            }
+        return record
 
     return _run
 
@@ -1100,6 +1527,7 @@ def _geometric_margin_to_dict(margin: GeometricMargin) -> dict[str, Any]:
         "shortest_path_length_m": margin.shortest_path_length_m,
         "classification": margin.classification,
         "benchmark_eligibility": margin.benchmark_eligibility,
+        "runtime_input_identity_stable": margin.runtime_input_identity_stable,
     }
 
 
@@ -1114,6 +1542,11 @@ def _completion_margin_to_dict(margin: CompletionMargin) -> dict[str, Any]:
         "termination_reason": margin.termination_reason,
         "status": margin.status,
         "blocker": margin.blocker,
+        "fallback_or_degraded": margin.fallback_or_degraded,
+        "fallback_marker": margin.fallback_marker,
+        "observed_route_completion_feasible": margin.observed_route_completion_feasible,
+        "rollout_blocker": margin.rollout_blocker,
+        "runtime_input_identity_stable": margin.runtime_input_identity_stable,
     }
 
 
@@ -1231,6 +1664,7 @@ def make_route_follow_episode_runner(
                 "algo": ROUTE_FOLLOW_ALGO,
                 "route_complete": None if status == "blocked" else route_complete,
                 "steps": result["steps_used"],
+                "horizon": max_steps,
                 "status": status,
                 "termination_reason": result["termination_reason"],
                 "collision_seen": result["collision_seen"],
@@ -1238,6 +1672,7 @@ def make_route_follow_episode_runner(
                 "waypoint_count": len(target_waypoints),
                 "stateful": result.get("stateful", True),
                 "route_follow_blocker": result.get("blocker"),
+                "fallback_or_degraded": False,
                 "route_follow_provenance": (
                     "single continuous episode; pose + remaining horizon preserved "
                     "across certified waypoints (issue #5636)"

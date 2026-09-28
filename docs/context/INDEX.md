@@ -1,7 +1,24 @@
 # Context Retrieval Index
 
+Issue #9667 Social Navigation Quality Index version 2 (SNQI-v2): declared weights,
+safety strata, development-only calibration, mandatory weight-family diagnostics,
+and the boundary against human-comfort or deployment claims:
+[snqi_v2_spec.md](snqi_v2_spec.md).
+
+Issue #9762 versioned goal-zone route-margin successors: historical SVG, registry,
+waiver, and 0.0.7 input bytes remain unchanged; the future matrix verifies robot-radius
+margins through the scenario loader:
+[issue_9762_goal_zone_route_margin.md](issue_9762_goal_zone_route_margin.md).
+
 Issue relationship contract and migration audit:
 [issue_relationships.md](issue_relationships.md).
+
+Issue #9656 historical benchmark hard-case mining: 36 source-linked cases from the checksum-pinned
+Release 0.0.2 bundle, one-seed scenario/config snapshots, a 241-row collision-event/count
+inconsistency, and four revision-divergent replay comparisons. Diagnostic-only; no real-world
+safety claim or corpus admission:
+[issue_9656_hard_case_mining.md](issue_9656_hard_case_mining.md),
+[compact evidence](evidence/issue_9656_hard_case_mining_2026-09-24/payload/summary.json).
 
 September 2026 S30/H600 benchmark-data erratum successor: the frozen correction contract
 (version DOI `10.5281/zenodo.22265925`, `...-erratum.1` tag, orchestration SHA

@@ -1,0 +1,78 @@
+{
+  "bundle_name": "issue_9647_gallery_smoke_2026-09-26",
+  "claim_boundary": "diagnostic_only_historical_fixture_changed_revision_outcome_reproduction_render_only_dynamic_feasibility_unknown",
+  "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/materialize_adversarial_replay_gallery.py tests/fixtures/adversarial_replay_gallery/issue_1501_compat/manifest.json --out output/adversarial-replay-gallery/issue-9647-smoke-4b96173 --top-k 1",
+  "commit": "4b9617338ecbaf6bd3612b4d8c5269f993581a0a",
+  "created_at_utc": "2026-09-26T15:43:33.522710Z",
+  "derived_rendering": {
+    "command": "uv run python scripts/tools/render_recorded_replay_trace.py --trace docs/context/evidence/issue_9647_gallery_smoke_2026-09-26/payload/cases/case_0000_01595b2ea612/replay/simulation_step_trace.json --provenance docs/context/evidence/issue_9647_gallery_smoke_2026-09-26/payload/cases/case_0000_01595b2ea612/replay/trace_provenance.json --out output/adversarial-replay-gallery/issue-9647-render-only-20260926",
+    "dynamics_executed": false,
+    "map_overlay_status": "unavailable_no_map_asset_passed_to_render_only_renderer",
+    "mode": "stored_trace_only",
+    "renderer_commit": "d0a8ccf822c48ae7d61dae361440e7335ee43013",
+    "repeat_render_byte_identity": true,
+    "video_status": "unavailable_pygame_missing_moviepy_unavailable"
+  },
+  "files": [
+    {
+      "kind": "plots",
+      "path": "cases/case_0000_01595b2ea612/figures/filmstrip.png",
+      "sha256": "71c7006c987248678c7092f5df404575c95c6709f3216052b3d441b6e39d7992",
+      "size_bytes": 56809
+    },
+    {
+      "kind": "plots",
+      "path": "cases/case_0000_01595b2ea612/figures/still_9.png",
+      "sha256": "85367fab5491af5de2c2ebfcc87bd4d544e3e26802bd45319f2e304d56dfc7ee",
+      "size_bytes": 54761
+    },
+    {
+      "kind": "plots",
+      "path": "cases/case_0000_01595b2ea612/figures/trajectory.png",
+      "sha256": "e02b7223606b256ca5f708b6d405e381efd27e0de9a925923a05537a457cc55f",
+      "size_bytes": 81127
+    },
+    {
+      "kind": "trace",
+      "path": "cases/case_0000_01595b2ea612/replay/simulation_step_trace.json",
+      "sha256": "d12df9eb2030a29eae8cea8cc1bc5b042c9865bd9b9afcca8d83ed3da5872788",
+      "size_bytes": 31827
+    },
+    {
+      "kind": "provenance",
+      "path": "cases/case_0000_01595b2ea612/replay/trace_provenance.json",
+      "sha256": "5f2ac197e51e629c023c1ecbbb669d4f2ccc69e6c5bc4ee2b211c21e43407d23",
+      "size_bytes": 3859
+    },
+    {
+      "kind": "misc",
+      "path": "evidence_promotion/receipt.md",
+      "sha256": "bd8a505942c6981633a4e5da901dfa180152900dd7f8e4625ebb9f5a83930bbd",
+      "size_bytes": 4981
+    },
+    {
+      "kind": "provenance",
+      "path": "evidence_promotion/render_only_provenance.json",
+      "sha256": "c6bf1b6cbae10b3c5dc7f0ec5bc7604dbc2b1509bf30d639fc46780b82500acc",
+      "size_bytes": 4770
+    },
+    {
+      "kind": "aggregates",
+      "path": "evidence_promotion/summary.json",
+      "sha256": "583a60f1d326d6a7c27dd141e913bfc9f803b199abcee8c7a96c56ce30cabc2c",
+      "size_bytes": 3776
+    }
+  ],
+  "location": "Every files[].path is relative to the tracked payload/ directory in this bundle; adjacent checksums.sha256 verifies the payload members.",
+  "policy": {
+    "large_raw_artifacts": "excluded",
+    "output_tree_mirroring": "forbidden",
+    "paper_or_benchmark_claim": "not_established_by_bundle_alone"
+  },
+  "schema_version": "evidence_bundle.v1",
+  "source_root": "output/adversarial-replay-gallery/issue-9647-smoke-4b96173",
+  "totals": {
+    "file_count": 8,
+    "total_bytes": 241910
+  }
+}

@@ -838,6 +838,27 @@ def _admission_failure(  # noqa: C901, PLR0912
     return None
 
 
+def execution_admission_failure(
+    row: Mapping[str, Any], *, check_nonfinite: bool = True
+) -> tuple[str, str] | None:
+    """Expose the shared execution-status and fallback admission policy.
+
+    Args:
+        row: One recorded episode mapping.
+        check_nonfinite: Whether non-finite values anywhere in the row are an
+            admission error. Row-only release analysis may disable this when
+            individual summary metrics are explicitly treated as unavailable.
+
+    Returns:
+        ``(status, reason)`` for an unavailable or malformed execution row,
+        or ``None`` when the row is admissible.
+    """
+
+    if not isinstance(row, Mapping):
+        return "error", "row_malformed"
+    return _admission_failure(row, check_nonfinite=check_nonfinite)
+
+
 def _outcome(row: Mapping[str, Any]) -> Mapping[str, Any]:  # noqa: C901, PLR0912
     value = row.get("outcome")
     if isinstance(value, Mapping):
@@ -3398,6 +3419,7 @@ __all__ = [
     "detect",
     "detector_registry",
     "evaluate_detector",
+    "execution_admission_failure",
     "normalize_detector_ids",
     "registry_document",
     "run_detector",

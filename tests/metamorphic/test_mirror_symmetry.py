@@ -456,7 +456,6 @@ def test_diagnostic_hybrid_v4_trace_is_mirror_equivariant() -> None:
         _assert_arm_equivariant(base, transformed, name)
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=_BRANCH_CUT_REASON)
 def test_social_force_pair_kernel_is_rotation_equivariant() -> None:
     """Rotating a robot-pedestrian pair rotates its force (release v2 kernel parameters)."""
     config = SocNavPlannerConfig()

@@ -119,7 +119,10 @@ def _temporary_checkout_root(tmp_path: Path, monkeypatch: Any) -> None:
 
 
 def _episode(
-    *, revision: str | None = "a" * 40, config_hash: str = "test-algo-config"
+    *,
+    revision: str | None = "a" * 40,
+    config_hash: str = "test-algo-config",
+    execution_mode: str = "native",
 ) -> dict[str, Any]:
     record: dict[str, Any] = {
         "episode_id": "test_episode",
@@ -128,7 +131,7 @@ def _episode(
         "algo": "goal",
         "algorithm_metadata": {
             "status": "ok",
-            "planner_kinematics": {"execution_mode": "native"},
+            "planner_kinematics": {"execution_mode": execution_mode},
             "config_hash": config_hash,
         },
         "status": "failure",
@@ -156,6 +159,7 @@ def _source_manifest(
     *,
     source_revision: str | None = "a" * 40,
     manifest_revision: str | None = None,
+    execution_mode: str = "native",
 ) -> Path:
     bundle = tmp_path / "candidate_0000"
     bundle.mkdir()
@@ -174,7 +178,12 @@ def _source_manifest(
         _certification_status(_scenario_certificate()), scenario_path
     )
     episode_path = bundle / "episode_records.jsonl"
-    episode_path.write_text(json.dumps(_episode(revision=source_revision)) + "\n", encoding="utf-8")
+    episode_path.write_text(
+        json.dumps(_episode(revision=source_revision, execution_mode=execution_mode)) + "\n",
+        encoding="utf-8",
+    )
+    source_readiness = "native" if execution_mode == "native" else "adapter"
+    analysis_eligible = execution_mode == "native"
     payload = {
         "schema_version": "adversarial-search-manifest.v1",
         "config": {
@@ -190,9 +199,13 @@ def _source_manifest(
                 "candidate": candidate,
                 "objective_value": 4.5,
                 "analysis_eligibility": {
+                    "schema_version": "search_analysis_eligibility.v1",
                     "eligible": True,
                     "certificate_ok": True,
-                    "execution_mode": "native",
+                    "reason_codes": [],
+                    "trace_present": True,
+                    "execution_mode": execution_mode,
+                    "objective_scored": True,
                 },
                 "certification_status": certification_status,
                 "failure_attribution": {
@@ -201,8 +214,8 @@ def _source_manifest(
                     "reasons": ["source episode records collision"],
                     "details": {
                         "termination_reason": "collision",
-                        "execution_mode": "native",
-                        "readiness_status": "native",
+                        "execution_mode": execution_mode,
+                        "readiness_status": source_readiness,
                         "availability_status": "available",
                     },
                 },
@@ -216,6 +229,10 @@ def _source_manifest(
         ],
         "summary": {"num_candidates": 1},
     }
+    eligibility = payload["candidates"][0]["analysis_eligibility"]
+    eligibility["eligible"] = analysis_eligible
+    if not analysis_eligible:
+        eligibility["reason_codes"] = ["execution_mode_not_native"]
     if manifest_revision is not None:
         payload["source_revision"] = manifest_revision
     manifest_path = tmp_path / "search_manifest.json"
@@ -224,9 +241,12 @@ def _source_manifest(
 
 
 def _replay_episode(
-    *, revision: str | None = "a" * 40, config_hash: str = "test-algo-config"
+    *,
+    revision: str | None = "a" * 40,
+    config_hash: str = "test-algo-config",
+    execution_mode: str = "native",
 ) -> dict[str, Any]:
-    record = _episode(revision=revision, config_hash=config_hash)
+    record = _episode(revision=revision, config_hash=config_hash, execution_mode=execution_mode)
     record["algorithm_metadata"]["simulation_step_trace"] = {
         "schema_version": "simulation-step-trace.v1",
         "dt": 0.1,
@@ -247,7 +267,10 @@ def _replay_episode(
 
 
 def _runner_summary(
-    *, preflight_status: str = "ok", failures: list[dict[str, str]] | None = None
+    *,
+    preflight_status: str = "ok",
+    failures: list[dict[str, str]] | None = None,
+    execution_mode: str = "native",
 ) -> dict[str, Any]:
     """Build a canonical map-runner summary with its matching availability receipt."""
     failures = failures or []
@@ -260,7 +283,7 @@ def _runner_summary(
         "preflight": {"status": preflight_status},
         "algorithm_metadata_contract": {
             "status": "ok",
-            "planner_kinematics": {"execution_mode": "native"},
+            "planner_kinematics": {"execution_mode": execution_mode},
         },
     }
     summary["benchmark_availability"] = availability_payload(summary)
@@ -278,6 +301,7 @@ def _install_fake_replay(  # noqa: PLR0913 - fixture knobs keep synthetic replay
     checkout_revision: str | None = None,
     rendered_map_paths: list[Path | None] | None = None,
     vary_runtime_receipts: bool = False,
+    replay_execution_mode: str = "native",
 ) -> list[dict[str, Any]]:
     calls: list[dict[str, Any]] = []
 
@@ -290,7 +314,11 @@ def _install_fake_replay(  # noqa: PLR0913 - fixture knobs keep synthetic replay
             }
         )
         scenarios = yaml.safe_load(scenario_path.read_text(encoding="utf-8"))["scenarios"]
-        record = _replay_episode(revision=revision, config_hash=replay_config_hash)
+        record = _replay_episode(
+            revision=revision,
+            config_hash=replay_config_hash,
+            execution_mode=replay_execution_mode,
+        )
         record["scenario_id"] = scenarios[0]["name"]
         if vary_runtime_receipts:
             run_number = len(calls)
@@ -303,7 +331,7 @@ def _install_fake_replay(  # noqa: PLR0913 - fixture knobs keep synthetic replay
             record["outcome"]["collision_event"] = False
             record["metrics"]["collisions"] = 0
         kwargs["out_path"].write_text(json.dumps(record) + "\n", encoding="utf-8")
-        summary = runner_summary or _runner_summary()
+        summary = runner_summary or _runner_summary(execution_mode=replay_execution_mode)
         if vary_runtime_receipts:
             run_number = len(calls)
             summary = dict(summary)
@@ -863,13 +891,15 @@ def test_gallery_excludes_source_rows_without_native_available_execution(
     assert result["summary"]["dispositions"][expected_disposition] == 1
 
 
-def test_gallery_excludes_source_runtime_fallback_even_if_manifest_says_native(
+@pytest.mark.parametrize("execution_mode", ["native", "mixed"])
+def test_gallery_excludes_source_runtime_fallback_even_if_manifest_says_available(
     tmp_path: Path,
+    execution_mode: str,
 ) -> None:
-    manifest = _source_manifest(tmp_path)
+    manifest = _source_manifest(tmp_path, execution_mode=execution_mode)
     payload = json.loads(manifest.read_text(encoding="utf-8"))
     episode_path = Path(payload["candidates"][0]["episode_record_path"])
-    episode = _episode()
+    episode = _episode(execution_mode=execution_mode)
     episode["algorithm_metadata"]["planner_runtime"] = {"fallback_used": True}
     episode_path.write_text(json.dumps(episode) + "\n", encoding="utf-8")
 
@@ -2087,14 +2117,101 @@ def test_gallery_rejects_runtime_fallback_marker_even_when_row_matches(
     assert case["replay"]["outcome_matches"] is True
 
 
-def test_gallery_rejects_adapter_mode_replay_even_when_source_was_native(
-    tmp_path: Path, monkeypatch: Any
+@pytest.mark.parametrize("execution_mode", ["adapter", "mixed"])
+def test_gallery_keeps_adapter_and_mixed_runtime_fallback_unavailable(
+    tmp_path: Path, monkeypatch: Any, execution_mode: str
 ) -> None:
-    manifest = _source_manifest(tmp_path)
-    summary = _runner_summary()
-    summary["algorithm_metadata_contract"]["planner_kinematics"]["execution_mode"] = "adapter"
+    manifest = _source_manifest(tmp_path, execution_mode=execution_mode)
+    summary = _runner_summary(execution_mode=execution_mode)
+    summary["algorithm_metadata_contract"]["planner_runtime"] = {"fallback_used": True}
     summary["benchmark_availability"] = availability_payload(summary)
-    _install_fake_replay(monkeypatch, runner_summary=summary)
+    _install_fake_replay(
+        monkeypatch,
+        runner_summary=summary,
+        replay_execution_mode=execution_mode,
+    )
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "output" / "gallery", video=False
+    )
+
+    case = result["cases"][0]
+    assert case["replay_match"] == "unavailable"
+    assert case["replay"]["availability_error"] == "replay_benchmark_unavailable"
+
+
+@pytest.mark.parametrize(
+    ("preflight_status", "expected_error"),
+    [
+        ("fallback", "replay_preflight_not_successful"),
+        ("skipped", "replay_preflight_not_successful"),
+    ],
+)
+@pytest.mark.parametrize("execution_mode", ["adapter", "mixed"])
+def test_gallery_keeps_adapter_and_mixed_fallback_or_degraded_preflight_unavailable(
+    tmp_path: Path,
+    monkeypatch: Any,
+    execution_mode: str,
+    preflight_status: str,
+    expected_error: str,
+) -> None:
+    manifest = _source_manifest(tmp_path, execution_mode=execution_mode)
+    summary = _runner_summary(preflight_status=preflight_status, execution_mode=execution_mode)
+    _install_fake_replay(
+        monkeypatch,
+        runner_summary=summary,
+        replay_execution_mode=execution_mode,
+    )
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "output" / "gallery", video=False
+    )
+
+    case = result["cases"][0]
+    assert case["replay_match"] == "unavailable"
+    assert case["replay"]["availability_error"] == expected_error
+
+
+@pytest.mark.parametrize("execution_mode", ["adapter", "mixed"])
+def test_gallery_replays_supported_adapter_and_mixed_modes(
+    tmp_path: Path, monkeypatch: Any, execution_mode: str
+) -> None:
+    manifest = _source_manifest(tmp_path, execution_mode=execution_mode)
+    summary = _runner_summary(execution_mode=execution_mode)
+    _install_fake_replay(
+        monkeypatch,
+        runner_summary=summary,
+        replay_execution_mode=execution_mode,
+    )
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "output" / "gallery", video=False
+    )
+
+    case = result["cases"][0]
+    assert result["summary"]["selected_case_count"] == 1
+    assert case["replay_match"] == "match"
+    assert case["replay"]["benchmark_availability"]["execution_mode"] == execution_mode
+    assert case["replay"]["benchmark_availability"]["readiness_status"] == "adapter"
+
+
+@pytest.mark.parametrize(
+    ("source_mode", "replay_mode"),
+    [("native", "adapter"), ("adapter", "mixed"), ("mixed", "adapter")],
+)
+def test_gallery_rejects_replay_summary_mode_mismatch(
+    tmp_path: Path,
+    monkeypatch: Any,
+    source_mode: str,
+    replay_mode: str,
+) -> None:
+    manifest = _source_manifest(tmp_path, execution_mode=source_mode)
+    summary = _runner_summary(execution_mode=replay_mode)
+    _install_fake_replay(
+        monkeypatch,
+        runner_summary=summary,
+        replay_execution_mode=replay_mode,
+    )
 
     result = replay_gallery.build_replay_gallery(
         manifest, tmp_path / "output" / "gallery", video=False
@@ -2103,14 +2220,146 @@ def test_gallery_rejects_adapter_mode_replay_even_when_source_was_native(
     case = result["cases"][0]
     assert case["replay_match"] == "unavailable"
     assert case["verification_status"] == "replay_execution_unavailable"
-    assert case["replay"]["availability_error"] == "replay_execution_mode_not_native"
+    assert case["replay"]["availability_error"] == "replay_execution_mode_mismatch"
 
 
-def test_gallery_rejects_fallback_marker_in_replay_episode_row(
-    tmp_path: Path, monkeypatch: Any
+def test_gallery_rejects_replay_episode_mode_mismatch(tmp_path: Path, monkeypatch: Any) -> None:
+    manifest = _source_manifest(tmp_path, execution_mode="adapter")
+    summary = _runner_summary(execution_mode="adapter")
+    _install_fake_replay(
+        monkeypatch,
+        runner_summary=summary,
+        replay_execution_mode="mixed",
+    )
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "output" / "gallery", video=False
+    )
+
+    case = result["cases"][0]
+    assert case["replay_match"] == "unavailable"
+    assert case["verification_status"] == "replay_execution_unavailable"
+    assert case["replay"]["availability_error"] == "replay_episode_execution_mode_mismatch"
+
+
+@pytest.mark.parametrize(
+    ("execution_mode", "expected_error"),
+    [
+        ("unknown", "replay_execution_mode_unknown"),
+        ("experimental", "replay_execution_mode_unsupported"),
+    ],
+)
+def test_replay_availability_rejects_unknown_or_unsupported_mode(
+    execution_mode: str,
+    expected_error: str,
 ) -> None:
-    manifest = _source_manifest(tmp_path)
-    _install_fake_replay(monkeypatch)
+    summary = _runner_summary(execution_mode=execution_mode)
+
+    _availability, error = replay_gallery._replay_availability(
+        summary, expected_execution_mode="adapter"
+    )
+
+    assert error == expected_error
+
+
+def test_gallery_rejects_misreported_adapter_readiness(
+    tmp_path: Path,
+) -> None:
+    manifest = _source_manifest(tmp_path, execution_mode="adapter")
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["candidates"][0]["failure_attribution"]["details"]["readiness_status"] = "native"
+    manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "output" / "gallery", render=False, video=False
+    )
+
+    assert result["summary"]["selected_case_count"] == 0
+    assert result["summary"]["dispositions"]["source_readiness_execution_mode_mismatch"] == 1
+
+
+def test_gallery_rejects_adapter_source_episode_with_native_metadata(
+    tmp_path: Path,
+) -> None:
+    manifest = _source_manifest(tmp_path, execution_mode="adapter")
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    episode_path = Path(payload["candidates"][0]["episode_record_path"])
+    episode_path.write_text(json.dumps(_episode()) + "\n", encoding="utf-8")
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "output" / "gallery", render=False, video=False
+    )
+
+    assert result["summary"]["selected_case_count"] == 0
+    assert result["summary"]["dispositions"]["source_execution_mode_mismatch"] == 1
+
+
+def test_gallery_requires_analysis_eligibility_mode_to_match_source_mode(
+    tmp_path: Path,
+) -> None:
+    manifest = _source_manifest(tmp_path, execution_mode="adapter")
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["candidates"][0]["analysis_eligibility"]["execution_mode"] = "mixed"
+    manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "output" / "gallery", render=False, video=False
+    )
+
+    assert result["summary"]["selected_case_count"] == 0
+    assert result["summary"]["dispositions"]["analysis_ineligible"] == 1
+
+
+def test_gallery_keeps_adapter_native_only_analysis_exclusions_fail_closed(
+    tmp_path: Path,
+) -> None:
+    manifest = _source_manifest(tmp_path, execution_mode="adapter")
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    eligibility = payload["candidates"][0]["analysis_eligibility"]
+    eligibility["reason_codes"] = ["execution_mode_not_native", "objective_unscored"]
+    manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "output" / "gallery", render=False, video=False
+    )
+
+    assert result["summary"]["selected_case_count"] == 0
+    assert result["summary"]["dispositions"]["analysis_ineligible"] == 1
+
+
+@pytest.mark.parametrize(
+    ("execution_mode", "expected_disposition"),
+    [
+        ("unknown", "source_execution_mode_unknown"),
+        ("experimental", "source_execution_mode_unsupported"),
+    ],
+)
+def test_gallery_rejects_unknown_or_unsupported_source_execution_mode(
+    tmp_path: Path,
+    execution_mode: str,
+    expected_disposition: str,
+) -> None:
+    manifest = _source_manifest(tmp_path, execution_mode=execution_mode)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    eligibility = payload["candidates"][0]["analysis_eligibility"]
+    eligibility["eligible"] = True
+    eligibility["reason_codes"] = []
+    manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = replay_gallery.build_replay_gallery(
+        manifest, tmp_path / "output" / "gallery", render=False, video=False
+    )
+
+    assert result["summary"]["selected_case_count"] == 0
+    assert result["summary"]["dispositions"][expected_disposition] == 1
+
+
+@pytest.mark.parametrize("execution_mode", ["native", "adapter", "mixed"])
+def test_gallery_rejects_fallback_marker_in_replay_episode_row(
+    tmp_path: Path, monkeypatch: Any, execution_mode: str
+) -> None:
+    manifest = _source_manifest(tmp_path, execution_mode=execution_mode)
+    _install_fake_replay(monkeypatch, replay_execution_mode=execution_mode)
     fake_run_batch = replay_gallery.run_batch
 
     def replay_with_row_fallback(scenario_path: Path, **kwargs: Any) -> dict[str, Any]:

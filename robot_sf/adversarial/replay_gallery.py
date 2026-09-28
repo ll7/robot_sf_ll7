@@ -83,6 +83,12 @@ _REPLAY_MANIFEST_VARIABILITY = {
 }
 _REVISION_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 _MAX_PED_TRACK_SPEED_MPS = 12.0
+_SUPPORTED_EXECUTION_MODES = frozenset({"native", "adapter", "mixed"})
+_READINESS_BY_EXECUTION_MODE = {
+    "native": "native",
+    "adapter": "adapter",
+    "mixed": "adapter",
+}
 _CERTIFICATE_ELIGIBILITY_BY_CLASSIFICATION = {
     "valid": "eligible",
     "hard_but_solvable": "eligible",
@@ -461,7 +467,7 @@ def _prepare_candidate(  # noqa: C901, PLR0912, PLR0915 - keep ordered validatio
     if candidate_payload.get("error"):
         return None, _accounting_row(index, candidate_payload, "evaluation_failed")
     eligibility = candidate_payload.get("analysis_eligibility")
-    if not isinstance(eligibility, dict) or eligibility.get("eligible") is not True:
+    if not _gallery_analysis_eligible(candidate_payload, eligibility):
         return None, _accounting_row(index, candidate_payload, "analysis_ineligible")
     objective_value = _finite_number(candidate_payload.get("objective_value"))
     if objective_value is None:
@@ -624,6 +630,8 @@ def _prepare_candidate(  # noqa: C901, PLR0912, PLR0915 - keep ordered validatio
     source_availability_problem = _source_availability_problem(candidate_payload, source_record)
     if source_availability_problem is not None:
         return None, _accounting_row(index, candidate_payload, source_availability_problem)
+    source_attribution = candidate_payload["failure_attribution"]
+    source_execution_mode = source_attribution["details"]["execution_mode"]
     try:
         _candidate_spec(candidate)
     except (TypeError, ValueError, OverflowError):
@@ -652,6 +660,7 @@ def _prepare_candidate(  # noqa: C901, PLR0912, PLR0915 - keep ordered validatio
         "episode_path": episode_path,
         "scenario_path": scenario_path,
         "source_record": source_record,
+        "source_execution_mode": source_execution_mode,
         "source_episode_sha256": source_episode_sha256,
         "source_revision": source_revision,
         "source_root": source_root,
@@ -784,7 +793,10 @@ def _run_selected_candidate(selected: dict[str, Any], context: _ReplayContext) -
         return _complete_case(result, case_dir, context.output_dir)
 
     replay_record = _read_single_episode(episode_records)
-    replay_availability, replay_availability_error = _replay_availability(replay_summary)
+    expected_execution_mode = selected["source_execution_mode"]
+    replay_availability, replay_availability_error = _replay_availability(
+        replay_summary, expected_execution_mode=expected_execution_mode
+    )
     if replay_record is None:
         result["verification_status"] = (
             "replay_execution_unavailable"
@@ -798,7 +810,9 @@ def _run_selected_candidate(selected: dict[str, Any], context: _ReplayContext) -
             "availability_error": replay_availability_error,
         }
         return _complete_case(result, case_dir, context.output_dir)
-    replay_record_availability_error = _replay_record_availability(replay_record)
+    replay_record_availability_error = _replay_record_availability(
+        replay_record, expected_execution_mode=expected_execution_mode
+    )
     if replay_availability_error is None:
         replay_availability_error = replay_record_availability_error
 
@@ -1264,8 +1278,10 @@ def _replay_verification_status(  # noqa: C901, PLR0913 - preserve explicit prov
     return "match", "verified"
 
 
-def _replay_availability(  # noqa: C901 - keep independent runner evidence gates explicit
+def _replay_availability(  # noqa: C901, PLR0912 - keep independent runner evidence gates explicit
     summary: Any,
+    *,
+    expected_execution_mode: str,
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Require a successful canonical runner receipt before treating a replay as evidence."""
     if not isinstance(summary, dict):
@@ -1287,8 +1303,12 @@ def _replay_availability(  # noqa: C901 - keep independent runner evidence gates
     execution_mode = resolve_execution_mode(algorithm_contract)
     if execution_mode == "unknown":
         return None, "replay_execution_mode_unknown"
-    if execution_mode != "native":
-        return None, "replay_execution_mode_not_native"
+    if expected_execution_mode not in _SUPPORTED_EXECUTION_MODES:
+        return None, "source_execution_mode_unsupported"
+    if execution_mode not in _SUPPORTED_EXECUTION_MODES:
+        return None, "replay_execution_mode_unsupported"
+    if execution_mode != expected_execution_mode:
+        return None, "replay_execution_mode_mismatch"
 
     try:
         expected = availability_payload(summary)
@@ -1299,20 +1319,33 @@ def _replay_availability(  # noqa: C901 - keep independent runner evidence gates
         return None, "replay_benchmark_availability_missing_or_malformed"
     if any(reported.get(key) != value for key, value in expected.items()):
         return expected, "replay_benchmark_availability_mismatch"
+    if expected["execution_mode"] != expected_execution_mode:
+        return expected, "replay_benchmark_availability_mode_mismatch"
     if expected["benchmark_success"] is not True or expected["availability_status"] != "available":
         return expected, "replay_benchmark_unavailable"
     if expected["readiness_status"] in {"fallback", "degraded"}:
         return expected, "replay_benchmark_degraded"
+    if expected["readiness_status"] != _READINESS_BY_EXECUTION_MODE[expected_execution_mode]:
+        return expected, "replay_readiness_execution_mode_mismatch"
     return expected, None
 
 
-def _replay_record_availability(record: dict[str, Any]) -> str | None:
-    """Reject episode-row execution metadata that contradicts native replay provenance."""
+def _replay_record_availability(
+    record: dict[str, Any], *, expected_execution_mode: str
+) -> str | None:
+    """Require episode-row execution metadata to match the source replay mode."""
     metadata = record.get("algorithm_metadata")
     if not isinstance(metadata, dict) or str(metadata.get("status", "")).strip().lower() != "ok":
         return "replay_episode_algorithm_metadata_unavailable"
-    if resolve_execution_mode(metadata) != "native":
-        return "replay_episode_execution_mode_not_native"
+    if expected_execution_mode not in _SUPPORTED_EXECUTION_MODES:
+        return "source_execution_mode_unsupported"
+    execution_mode = resolve_execution_mode(metadata)
+    if execution_mode == "unknown":
+        return "replay_episode_execution_mode_unknown"
+    if execution_mode not in _SUPPORTED_EXECUTION_MODES:
+        return "replay_episode_execution_mode_unsupported"
+    if execution_mode != expected_execution_mode:
+        return "replay_episode_execution_mode_mismatch"
     if _runtime_algorithm_fallback_marker(record) is not None:
         return "replay_episode_runtime_fallback_or_degraded"
     return None
@@ -2943,7 +2976,7 @@ def _source_identity_matches(
 def _source_availability_problem(
     candidate_payload: dict[str, Any], record: dict[str, Any]
 ) -> str | None:
-    """Reject a critical source row unless canonical availability says it ran natively."""
+    """Reject a source row unless mode, readiness, availability, and episode evidence agree."""
     eligibility = candidate_payload.get("analysis_eligibility")
     attribution = candidate_payload.get("failure_attribution")
     details = attribution.get("details") if isinstance(attribution, dict) else None
@@ -2961,10 +2994,16 @@ def _source_availability_problem(
     if availability_status != "available":
         normalized = availability_status.strip().lower().replace("-", "_")
         return f"source_availability_{normalized}"
-    if readiness_status != "native":
-        return "source_readiness_not_native"
-    if execution_mode != "native" or eligibility.get("execution_mode") != execution_mode:
-        return "source_execution_mode_not_native_or_mismatched"
+    if execution_mode not in _SUPPORTED_EXECUTION_MODES:
+        return (
+            "source_execution_mode_unknown"
+            if execution_mode == "unknown"
+            else "source_execution_mode_unsupported"
+        )
+    if eligibility.get("execution_mode") != execution_mode:
+        return "source_execution_mode_mismatch"
+    if readiness_status != _READINESS_BY_EXECUTION_MODE[execution_mode]:
+        return "source_readiness_execution_mode_mismatch"
 
     metadata = record.get("algorithm_metadata")
     if not isinstance(metadata, dict) or str(metadata.get("status", "")).strip().lower() != "ok":
@@ -2974,6 +3013,36 @@ def _source_availability_problem(
     if _runtime_algorithm_fallback_marker(record) is not None:
         return "source_runtime_fallback_or_degraded"
     return None
+
+
+def _gallery_analysis_eligible(candidate_payload: dict[str, Any], eligibility: Any) -> bool:
+    """Honor normal eligibility and the exact native-only exclusion for adapter replays.
+
+    Search analysis eligibility intentionally admits only native execution for optimizer-facing
+    analysis. The gallery may still replay an adapter or mixed source that was excluded solely by
+    that rule, because it independently rechecks source availability, readiness, episode metadata,
+    and the matching replay before exposing a case.
+    """
+    if not isinstance(eligibility, dict):
+        return False
+    if eligibility.get("eligible") is True:
+        return True
+    if eligibility.get("eligible") is not False:
+        return False
+
+    attribution = candidate_payload.get("failure_attribution")
+    details = attribution.get("details") if isinstance(attribution, dict) else None
+    execution_mode = details.get("execution_mode") if isinstance(details, dict) else None
+    return (
+        eligibility.get("schema_version") == "search_analysis_eligibility.v1"
+        and isinstance(execution_mode, str)
+        and execution_mode in {"adapter", "mixed"}
+        and eligibility.get("execution_mode") == execution_mode
+        and eligibility.get("reason_codes") == ["execution_mode_not_native"]
+        and eligibility.get("certificate_ok") is True
+        and eligibility.get("trace_present") is True
+        and eligibility.get("objective_scored") is True
+    )
 
 
 def _runtime_algorithm_fallback_marker(record: dict[str, Any]) -> tuple[str, str] | None:

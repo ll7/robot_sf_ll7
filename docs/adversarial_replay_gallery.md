@@ -116,7 +116,8 @@ resolved map registry and map SVG digests are recorded beside the certificate pr
 
 ## Selection and replay checks
 
-The selector requires an analysis-eligible row and a passed `scenario_cert.v1` receipt containing
+The selector requires either an analysis-eligible row or a schema-backed `adapter`/`mixed` row
+excluded solely by the native-only analysis rule, plus a passed `scenario_cert.v1` receipt containing
 exactly one certificate that validates against the canonical schema, matches the candidate
 scenario's name/id, names that exact scenario file in `source`, and has an
 `evidence.scenario_fingerprint` matching the canonical loader-normalized scenario mapping. Its
@@ -135,12 +136,17 @@ The selector also requires a finite objective, one unambiguous source episode, a
 one-scenario YAML input, matching scenario and seed identity, candidate parameters matching the
 generated scenario metadata, and a recomputed effective-scenario hash matching the search manifest.
 The source failure attribution must agree
-with the canonical episode. Source availability must explicitly report `available`, native
-readiness, and native execution mode in both the attribution and eligibility receipts; the source
-episode must also report successful algorithm metadata with no fallback/degraded runtime marker.
-Missing, fallback, degraded, or inconsistent source availability stays in candidate accounting and
-cannot be selected as a critical discovery. Successful episodes are accounted as
-`source_episode_not_a_failure` and are not shown as falsification cases.
+with the canonical episode. Source availability must explicitly report `available` and mode-matched
+readiness: `native` for `native`, or `adapter` for `adapter` and `mixed`. The mode in the
+attribution, analysis-eligibility receipt, and source episode metadata must agree exactly. The
+native-only analysis-eligibility receipt may exclude an adapter or mixed row only for its sole
+`execution_mode_not_native` reason; the gallery still checks its certificate, objective, source
+availability, readiness, and episode metadata independently. Replay runner availability and its
+episode record must then report the same exact mode as the source. The source episode must have
+successful algorithm metadata and no fallback/degraded runtime marker. Missing, unknown,
+unsupported, unavailable, fallback, degraded, or inconsistent source/replay evidence stays in
+candidate accounting and cannot be shown as a replay-verified case. Successful episodes are
+accounted as `source_episode_not_a_failure` and are not shown as falsification cases.
 The fallback scan checks algorithm metadata but ignores unsupported statuses in the paired-metric
 and simulation-step-trace diagnostic products. Those statuses do not by themselves mean planner
 execution fell back; explicit fallback or degraded markers remain disqualifying.
@@ -160,12 +166,13 @@ planner's outcome. It records a step trace for visualization. The replay is comp
 source episode's identity, canonical outcomes, registered objective value, and the configured
 absolute tolerance.
 
-`replay_match: match` means identity, exact categorical outcome/failure attribution, and objective
-projection agree and the canonical runner reports an available, successful replay. Matching
-objective projections cannot hide a different termination reason, event flag, or primary failure.
-Fallback, skipped, failed, missing, or inconsistent runner availability keeps the case `unavailable`,
-even when the other comparisons agree; those diagnostics and the runner summary remain in the case
-manifest.
+`replay_match: match` means identity, exact categorical outcome/failure attribution, objective
+projection, and source/replay execution mode agree, and the canonical runner reports an available,
+successful replay with mode-consistent readiness. `native` requires `native` readiness; `adapter`
+and `mixed` require `adapter` readiness. Matching objective projections cannot hide a different
+termination reason, event flag, primary failure, or execution mode. Fallback, skipped, failed,
+missing, or inconsistent runner availability keeps the case `unavailable`, even when the other
+comparisons agree; those diagnostics and the runner summary remain in the case manifest.
 
 `verification_status: verified` additionally requires a known source revision from the episode
 record or, if absent there, from the manifest. If both provide a revision, they must agree. The
@@ -209,6 +216,8 @@ A replay at a changed revision is evidence that the reported outcome was reprodu
 not an exact-source replay. The gallery does not infer a search method from file names, reconstruct
 missing models, admit cases into the regression corpus, or establish real-world safety. A run with
 zero selected cases is a valid result when no eligible attributed failures were present.
+An `adapter` or `mixed` mode is benchmark execution metadata; it does not prove a particular solver
+ran, scenario feasibility, planner improvement, or real-world safety.
 
 ## Manifest reproducibility
 

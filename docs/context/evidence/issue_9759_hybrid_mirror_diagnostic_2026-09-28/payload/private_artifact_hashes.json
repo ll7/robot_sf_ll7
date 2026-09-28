@@ -5,32 +5,32 @@
     {
       "name": "episodes.jsonl",
       "size_bytes": 10130626,
-      "sha256": "b0c4b24a1f9384c0fd37108c69c6aece4f888acc24edfa008754569a26f33a4b",
-      "private_locator": ".git/codex-agent-runs/active/issue-9759/diagnostic/rebased-head-4fc1a1d4/episodes.jsonl"
+      "private_locator": ".git/codex-agent-runs/active/issue-9759/diagnostic/rebased-head-4fc1a1d4/episodes.jsonl",
+      "digest_hex": "b0c4b24a1f9384c0fd37108c69c6aece4f888acc24edfa008754569a26f33a4b"
     },
     {
       "name": "pairs.jsonl",
       "size_bytes": 4347345,
-      "sha256": "27d3917766923d54797c0ef0ce7f8bc1279878e9b427d35d27604dd3467fd8ab",
-      "private_locator": ".git/codex-agent-runs/active/issue-9759/diagnostic/rebased-head-4fc1a1d4/pairs.jsonl"
+      "private_locator": ".git/codex-agent-runs/active/issue-9759/diagnostic/rebased-head-4fc1a1d4/pairs.jsonl",
+      "digest_hex": "27d3917766923d54797c0ef0ce7f8bc1279878e9b427d35d27604dd3467fd8ab"
     },
     {
       "name": "preflight.json",
       "size_bytes": 81582,
-      "sha256": "2e599f8f85a28415a43b17172b1c6ed0543f5655c0b99ad464bd292d5327bfcf",
-      "private_locator": ".git/codex-agent-runs/active/issue-9759/diagnostic/rebased-head-4fc1a1d4/preflight.json"
+      "private_locator": ".git/codex-agent-runs/active/issue-9759/diagnostic/rebased-head-4fc1a1d4/preflight.json",
+      "digest_hex": "2e599f8f85a28415a43b17172b1c6ed0543f5655c0b99ad464bd292d5327bfcf"
     },
     {
       "name": "summary.json",
       "size_bytes": 1228,
-      "sha256": "514aca636d5ae9ac0603a77a18e99a89f01101eb3a2995f492c989f9ef19eaf7",
-      "private_locator": ".git/codex-agent-runs/active/issue-9759/diagnostic/rebased-head-4fc1a1d4/summary.json"
+      "private_locator": ".git/codex-agent-runs/active/issue-9759/diagnostic/rebased-head-4fc1a1d4/summary.json",
+      "digest_hex": "514aca636d5ae9ac0603a77a18e99a89f01101eb3a2995f492c989f9ef19eaf7"
     },
     {
       "name": "run_meta.json",
       "size_bytes": 2949,
-      "sha256": "c4b83f3d039b538cb2613c4341604729b3a2a7f9f61ef247e1d5cb013724dd41",
-      "private_locator": ".git/codex-agent-runs/active/issue-9759/diagnostic/rebased-head-4fc1a1d4/run_meta.json"
+      "private_locator": ".git/codex-agent-runs/active/issue-9759/diagnostic/rebased-head-4fc1a1d4/run_meta.json",
+      "digest_hex": "c4b83f3d039b538cb2613c4341604729b3a2a7f9f61ef247e1d5cb013724dd41"
     }
   ]
 }

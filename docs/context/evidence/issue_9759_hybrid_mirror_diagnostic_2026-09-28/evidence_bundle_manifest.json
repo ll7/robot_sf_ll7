@@ -1,6 +1,6 @@
 {
   "schema_version": "evidence_bundle.v1",
-  "created_at_utc": "2026-09-28T05:09:25.583489Z",
+  "created_at_utc": "2026-09-28T05:25:14.287211Z",
   "bundle_name": "issue_9759_hybrid_mirror_diagnostic_2026-09-28",
   "source_root": "docs/context/evidence/issue_9759_hybrid_mirror_diagnostic_2026-09-28/payload",
   "command": "issue_9759_hybrid_mirror_diagnostic.py --workers 12 --resume --output-dir <private local run directory>; exact argv and environment are retained in private run_meta.json",
@@ -13,7 +13,7 @@
   },
   "totals": {
     "file_count": 4,
-    "total_bytes": 10509
+    "total_bytes": 10529
   },
   "files": [
     {
@@ -25,8 +25,8 @@
     },
     {
       "path": "private_artifact_hashes.json",
-      "size_bytes": 1489,
-      "sha256": "51869f2d6c6c15b81e55b99d51c49666966da79bf0aab5918cb88fb3c91f982b",
+      "size_bytes": 1509,
+      "sha256": "da11045f53d5a8845c8ad23ef4d72a5e080640977326c21589865613d78651fd",
       "kind": "misc",
       "location": "payload/private_artifact_hashes.json"
     },

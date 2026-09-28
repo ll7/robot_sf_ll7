@@ -208,6 +208,20 @@ def test_adapter_builds_network_input_and_agent_states(monkeypatch) -> None:
     assert selected_states[:, -1].tolist() == pytest.approx([1.4, 0.4])
 
 
+def test_network_input_converts_ego_velocity_before_goal_frame_projection() -> None:
+    """SA-CADRL's network features use global velocities projected into the goal frame."""
+    adapter = sacadrl.SACADRLPlannerAdapter(allow_fallback=True)
+    observation = _observation(goal=(4.0, 0.0), pedestrians=[[1.0, 0.0]])
+    observation["robot"]["heading"] = np.asarray([np.pi / 2.0])
+    observation["pedestrians"]["velocities"] = np.asarray([[1.25, -0.5]])
+
+    network_input, _pref_speed, _distance = adapter._build_network_input(observation)
+
+    # Five scalar fields precede flattened 7-column agent states; columns 2:4
+    # are the pedestrian velocity projected onto goal-parallel and goal-lateral.
+    np.testing.assert_allclose(network_input[0, 7:9], [0.5, 1.25], rtol=0.0, atol=1e-6)
+
+
 def test_checkpoint_resolution_hashes_bundle_and_fails_closed(tmp_path: Path, monkeypatch) -> None:
     """Checkpoint resolution retains suffix handling, provenance hashing, and fail-closed errors."""
     prefix = tmp_path / "model"

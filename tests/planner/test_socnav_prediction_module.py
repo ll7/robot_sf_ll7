@@ -76,6 +76,32 @@ def test_prediction_adapter_importable_and_instantiable() -> None:
     assert adapter.get_forecast_variant_execution_mode() == "native"
 
 
+def test_predictive_model_input_preserves_ego_pedestrian_velocity(monkeypatch) -> None:
+    """Predictive features retain SOCNAV ego velocities instead of rotating them again."""
+    adapter = prediction.PredictionPlannerAdapter(allow_fallback=True)
+    monkeypatch.setattr(adapter, "_ensure_model", lambda: None)
+    ego_velocity = np.asarray([[1.25, -0.5]], dtype=np.float32)
+    observation = {
+        "robot": {
+            "position": np.asarray([1.0, 2.0], dtype=np.float32),
+            "heading": np.asarray([np.pi / 2.0], dtype=np.float32),
+            "speed": np.asarray([0.3, 0.1], dtype=np.float32),
+        },
+        "goal": {"current": np.asarray([5.0, 6.0], dtype=np.float32)},
+        "pedestrians": {
+            "positions": np.asarray([[2.0, 3.0]], dtype=np.float32),
+            "velocities": ego_velocity,
+            "count": np.asarray([1], dtype=np.float32),
+        },
+    }
+
+    state, mask, _robot_pos, _heading = adapter._build_model_input(observation)
+
+    assert mask[0] == 1.0
+    assert np.count_nonzero(mask[1:]) == 0
+    np.testing.assert_array_equal(state[0, 2:4], ego_velocity[0])
+
+
 def test_bench_sampling_adapter_importable_and_instantiable() -> None:
     """The upstream-delegating bench adapter remains constructible in fallback mode."""
     adapter = prediction.SocNavBenchSamplingAdapter(allow_fallback=True)

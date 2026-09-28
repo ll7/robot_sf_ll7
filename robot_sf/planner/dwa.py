@@ -329,11 +329,11 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             )
 
         # Clearance scoring saturates at clearance_distance after subtracting the
-        # robot radius. Search far enough in meters to cover every obstacle that
-        # can affect either the safety test or score, independent of cell size.
-        max_relevant_distance = float(self.config.clearance_distance) + float(
-            self.config.robot_radius
-        )
+        # robot radius, while the feasibility check uses safety_margin. Search far
+        # enough to cover both boundaries, independent of cell size.
+        max_relevant_distance = max(
+            float(self.config.clearance_distance), float(self.config.safety_margin)
+        ) + float(self.config.robot_radius)
         physical_radius_cells = math.ceil(max_relevant_distance / resolution) + 1
         # Retain the legacy knob as a minimum crop size for config compatibility;
         # larger crops cannot change the score beyond max_relevant_distance.

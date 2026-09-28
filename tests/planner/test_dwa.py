@@ -176,6 +176,45 @@ def test_dwa_obstacle_clearance_saturates_far_occupied_cells_to_infinity() -> No
     assert math.isinf(clearance)
 
 
+def test_dwa_obstacle_crop_covers_safety_margin_beyond_clearance_distance() -> None:
+    """Safety-relevant obstacles remain infeasible when safety exceeds scoring range."""
+    config = DWAPlannerConfig(
+        clearance_distance=1.0,
+        safety_margin=2.0,
+        robot_radius=0.25,
+        obstacle_search_cells=1,
+    )
+    planner = DWAPlannerAdapter(config)
+    grid = np.zeros((1, 20, 20), dtype=float)
+    # At 0.25 m/cell this cell is 1.75 m from the rollout point. The old crop
+    # reached only six cells for clearance_distance=1.0, so it omitted this
+    # obstacle even though its post-radius clearance is below safety_margin.
+    grid[0, 10, 17] = 1.0
+    meta = {
+        "origin": np.asarray([-2.5, -2.5], dtype=float),
+        "resolution": np.asarray([0.25], dtype=float),
+        "size": np.asarray([5.0, 5.0], dtype=float),
+        "use_ego_frame": np.asarray([0.0], dtype=float),
+        "channel_indices": np.asarray([-1, -1, -1, 0], dtype=int),
+    }
+    grid_payload = (grid, meta)
+    point = np.zeros(2, dtype=float)
+
+    clearance = planner._min_obstacle_clearance(point, grid_payload=grid_payload)
+    score = planner._rollout_score(
+        robot_pos=point,
+        heading=0.0,
+        goal=np.asarray([3.0, 0.0], dtype=float),
+        pedestrian_positions=np.empty((0, 2), dtype=float),
+        pedestrian_velocities=np.empty((0, 2), dtype=float),
+        command=(0.0, 0.0),
+        grid_payload=grid_payload,
+    )
+
+    assert clearance == pytest.approx(1.75)
+    assert score == float("-inf")
+
+
 def test_dwa_prediction_scoring_is_opt_in_in_canonical_configs() -> None:
     """Canonical DWA configs retain exact defaults and make forecasting explicit."""
     config_dir = Path(__file__).resolve().parents[2] / "configs" / "algos"

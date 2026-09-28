@@ -151,7 +151,12 @@ jobs:
   fast-feedback:
     needs: dispatch-ownership
     if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
-    runs-on: ubuntu-latest
+    # Default-off rollout switch keeps CI hosted until runners are reviewed and
+    # installed. Both the original actor and rerun initiator must be the author.
+    # Forks, bots, privileged events, and manual dispatches stay hosted.
+    runs-on: ${{ vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7')) && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
     timeout-minutes: 45
     # Split every event across four runners. Pull requests retain their fast-only
     # shards; all events publish unique coverage data so the exact-head changed-
@@ -184,6 +189,8 @@ jobs:
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
+        with:
+          install-system-packages: ${{ runner.environment == 'github-hosted' && 'true' || 'false' }}
 
       - name: Prime uv cache metadata for offline software-candidate checks
         run: |
@@ -489,7 +496,9 @@ jobs:
   smoke-artifacts:
     needs: dispatch-ownership
     if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7')) && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -497,6 +506,8 @@ jobs:
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
+        with:
+          install-system-packages: ${{ runner.environment == 'github-hosted' && 'true' || 'false' }}
 
       - name: Validation smoke tests
         id: smoke_tests
@@ -676,7 +687,9 @@ jobs:
   wheel-smoke-install:
     needs: dispatch-ownership
     if: needs.dispatch-ownership.outputs.run_full_ci == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7')) && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
     # Leave smoke-test headroom after an observed ~18-minute setup (#8631).
     timeout-minutes: 30
     steps:
@@ -685,6 +698,8 @@ jobs:
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
+        with:
+          install-system-packages: ${{ runner.environment == 'github-hosted' && 'true' || 'false' }}
 
       - name: Build wheel
         run: uv build
@@ -708,7 +723,9 @@ jobs:
     if: >-
       needs.dispatch-ownership.outputs.run_full_ci == 'true' &&
       (github.event_name != 'pull_request' || needs.dispatch-ownership.outputs.examples_smoke == 'true')
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7')) && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
     timeout-minutes: 30
     steps:
       - name: Checkout (attempt 1)
@@ -751,6 +768,7 @@ jobs:
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
         with:
+          install-system-packages: ${{ runner.environment == 'github-hosted' && 'true' || 'false' }}
           # The examples manifest needs plotting/benchmark/PPO dependencies,
           # not the unrelated all-extras GPU, Ray, TensorFlow, SocNav, or
           # browser stacks that can exhaust the setup timeout before tests run.
@@ -764,7 +782,9 @@ jobs:
     if: >-
       needs.dispatch-ownership.outputs.run_full_ci == 'true' &&
       (github.event_name != 'pull_request' || needs.dispatch-ownership.outputs.notebooks_smoke == 'true')
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.ROBOT_SF_SELF_HOSTED_CI_ENABLED == 'true' && github.repository == 'll7/robot_sf_ll7' && github.actor == 'll7' && github.triggering_actor == 'll7' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'll7/robot_sf_ll7')) && 'robot-sf-ci-ephemeral' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -772,6 +792,8 @@ jobs:
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
+        with:
+          install-system-packages: ${{ runner.environment == 'github-hosted' && 'true' || 'false' }}
 
       - name: Notebook smoke tests
         run: scripts/dev/ci_driver.sh notebooks-smoke

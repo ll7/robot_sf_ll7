@@ -860,7 +860,7 @@ def _journal_provenance(  # noqa: C901, PLR0912
                 "journal provenance identity contract is invalid",
             )
     for field in ("scenario_source_sha256", "planner_config_sha256"):
-        if field in normalized:
+        if field in normalized and normalized[field] is not None:
             _require_digest(normalized[field], f"journal provenance {field}")
     for field in ("protocol_semantic_hash", "manifest_hash", "trace_sha256"):
         if field in normalized:
@@ -1514,9 +1514,7 @@ def _native_outcome_status(
     ):
         return "provenance_invalid"
     try:
-        normalized_provenance = _journal_provenance(
-            provenance, str(expected["identity_key"])
-        )
+        normalized_provenance = _journal_provenance(provenance, str(expected["identity_key"]))
         _validate_journal_success_provenance(
             normalized_provenance,
             str(expected["identity_key"]),

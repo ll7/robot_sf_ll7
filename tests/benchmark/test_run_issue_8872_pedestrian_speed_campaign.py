@@ -188,9 +188,7 @@ def _native_outcome(identity: dict[str, Any], packet: dict[str, Any]) -> dict[st
         "desired_speed_activation_fraction": None if target_speed is None else 1.0,
         "runtime_max_speed_m_s_by_pedestrian": {"p0": realized_speed},
         "initial_spawn_velocity_xy_by_pedestrian": {"p0": [0.5, 0.0]},
-        "final_post_integration_velocity_xy_by_pedestrian": {
-            "p0": [realized_speed, 0.0]
-        },
+        "final_post_integration_velocity_xy_by_pedestrian": {"p0": [realized_speed, 0.0]},
     }
     return {
         "identity_key": identity["identity_key"],
@@ -422,9 +420,7 @@ def _fake_native_record(
             "planner_kinematics": {"execution_mode": "native"},
             "simulation_step_trace": {
                 "dt": 0.1,
-                "reset": {
-                    "pedestrians": [{"actor_id": "p0", "velocity": [initial_speed, 0.0]}]
-                },
+                "reset": {"pedestrians": [{"actor_id": "p0", "velocity": [initial_speed, 0.0]}]},
                 "steps": [
                     {
                         "oracle_transition_trace": {

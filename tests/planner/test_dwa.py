@@ -130,6 +130,52 @@ def test_dwa_obstacle_clearance_accepts_precomputed_grid_without_observation() -
     )
 
 
+def test_dwa_obstacle_clearance_converts_world_point_for_ego_grid() -> None:
+    """Clearance geometry uses the robot pose when occupancy data is ego-framed."""
+    planner = DWAPlannerAdapter()
+    grid = np.zeros((1, 10, 10), dtype=float)
+    # In the ego grid this occupied cell spans x=[0.5, 1.0], y=[-1.5, -1.0].
+    grid[0, 1, 5] = 1.0
+    meta = {
+        "origin": np.asarray([-2.0, -2.0], dtype=float),
+        "resolution": np.asarray([0.5], dtype=float),
+        "size": np.asarray([5.0, 5.0], dtype=float),
+        "use_ego_frame": np.asarray([1.0], dtype=float),
+        "robot_pose": np.asarray([0.0, 0.0, np.pi / 2.0], dtype=float),
+        "channel_indices": np.asarray([-1, -1, -1, 0], dtype=int),
+    }
+
+    # (1, 0) world coordinates become (0, -1) in the robot frame, yielding
+    # 0.5 m clearance to the occupied cell's left edge.
+    clearance = planner._min_obstacle_clearance(
+        np.asarray([1.0, 0.0], dtype=float), grid_payload=(grid, meta)
+    )
+
+    assert clearance == pytest.approx(0.5)
+
+
+def test_dwa_obstacle_clearance_saturates_far_occupied_cells_to_infinity() -> None:
+    """An occupied cell in the crop beyond the scoring range has no clearance score."""
+    planner = DWAPlannerAdapter(
+        DWAPlannerConfig(clearance_distance=1.0, robot_radius=0.25, obstacle_search_cells=10)
+    )
+    grid = np.zeros((1, 20, 20), dtype=float)
+    grid[0, 10, 15] = 1.0
+    meta = {
+        "origin": np.asarray([-10.0, -10.0], dtype=float),
+        "resolution": np.asarray([1.0], dtype=float),
+        "size": np.asarray([20.0, 20.0], dtype=float),
+        "use_ego_frame": np.asarray([0.0], dtype=float),
+        "channel_indices": np.asarray([-1, -1, -1, 0], dtype=int),
+    }
+
+    clearance = planner._min_obstacle_clearance(
+        np.asarray([0.0, 0.0], dtype=float), grid_payload=(grid, meta)
+    )
+
+    assert math.isinf(clearance)
+
+
 def test_dwa_prediction_scoring_is_opt_in_in_canonical_configs() -> None:
     """Canonical DWA configs retain exact defaults and make forecasting explicit."""
     config_dir = Path(__file__).resolve().parents[2] / "configs" / "algos"

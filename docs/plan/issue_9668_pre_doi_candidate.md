@@ -16,6 +16,9 @@ archive remains the comparison baseline at SHA-256
 The earlier 18-arm proposal in #9751 is superseded: arm keys remain paired
 identities while corrected implementation/config versions are recorded separately.
 Any additional v3/v4 arm comparison uses a diagnostic manifest outside this grid.
+The four historical hybrid keys in the main grid bind explicit, hashed v4
+configurations for nominal corrected behavior; v3 remains only in the frozen
+predecessor or a separately labelled diagnostic comparison.
 The historical 2 m doorway reference is a separate infeasibility probe, not a
 nominal feasible doorway result. The 48-identity main grid needs a versioned
 feasible successor for that scenario, with unchanged route-completion success

@@ -481,10 +481,14 @@ def _validate_successor_row(  # noqa: C901 - each provenance assertion fails ind
     provenance = recorded["provenance"]
     if not isinstance(scenario, dict) or not isinstance(metadata, dict):
         raise ValueError(f"0.0.8 row lacks effective planner provenance at {slot}")
-    if scenario.get("name", scenario.get("id", scenario.get("scenario_id"))) != slot[2]:
+    if not any(field in scenario for field in ("name", "id", "scenario_id")) or any(
+        scenario[field] != slot[2] for field in ("name", "id", "scenario_id") if field in scenario
+    ):
         raise ValueError(f"0.0.8 row scenario provenance differs from run slot at {slot}")
     for field, expected in planner["scenario"].items():
-        if field not in {"seed", "seeds"} and scenario.get(field) != expected:
+        if field not in {"seed", "seeds"} and (
+            field not in scenario or scenario[field] != expected
+        ):
             raise ValueError(f"0.0.8 row {field} differs from pinned scenario at {slot}")
     if recorded["algo"] != planner["algo"] or scenario.get("algo") != planner["algo"]:
         raise ValueError(f"0.0.8 row algorithm differs from configured planner at {slot}")

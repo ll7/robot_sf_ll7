@@ -902,6 +902,19 @@ def test_forged_row_map_with_recomputed_self_hash_exits_two(tmp_path: Path, monk
     assert not (output / "report.json").exists()
 
 
+def test_row_identity_alias_must_match_pinned_scenario(tmp_path: Path) -> None:
+    row = _row("s1", 111)
+    bundle, digest = _archive(tmp_path, [row])
+    root = _root(tmp_path, [row])
+    path = root / "runs/goal__differential_drive/episodes.jsonl"
+    forged = json.loads(path.read_text())
+    forged["scenario_params"]["id"] = "s2"
+    forged["config_hash"] = _config_hash(forged["scenario_params"])
+    path.write_text(json.dumps(forged) + "\n")
+    with pytest.raises(ValueError, match="scenario provenance differs from run slot"):
+        _compare(bundle, root, digest)
+
+
 def test_goal_row_under_v4_run_directory_exits_two(tmp_path: Path, monkeypatch) -> None:
     row = _row("s1", 111)
     bundle, digest = _archive(tmp_path, [row])

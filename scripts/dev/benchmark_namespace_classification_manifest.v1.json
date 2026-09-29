@@ -231,6 +231,7 @@
     "relevance_windows.py",
     "release_acceptance.py",
     "release_assurance_case.py",
+    "release_candidate.py",
     "release_doctor.py",
     "release_erratum.py",
     "release_gates.py",

@@ -39,13 +39,34 @@ policy and supplemental groups, and stores the runner program under
 the image sets `ACTIONS_RUNNER_HOOK_JOB_STARTED` to its path. Refresh and review
 the digest and package set when the runner version changes; `--disableupdate`
 makes image updates explicit.
+The image pins Node.js 22.23.2 from the official archive and checks its SHA-256;
+Ubuntu's Node 18 package cannot parse the browser-runtime test modules.
 
-Each job gets a new container with a read-only root, a tmpfs home/work directory
-and `/tmp`, UID/GID 1001, no Linux capabilities, no privilege escalation, no
-host bind mounts, no Docker socket, and limits of 4 CPUs, 8 GiB RAM, and 512
-processes. The runner executes at `nice 10`. Its ephemeral registration handles
-one job; `docker run --rm` destroys the container, and the supervisor creates
-the next one. Both runner and probe use the dedicated IPv4 Docker bridge
+Each job gets a new container with a read-only root, a 2 GiB tmpfs at
+`/home/runner` for runner binaries and the Python tool cache, a 512 MiB tmpfs
+at `/tmp`, and a 512 MiB tmpfs at `/home/runner/_work/_temp` for `RUNNER_TEMP`.
+The nested tmpfs covers the runner's temporary directory even though its
+parent, `/home/runner/_work`, is a fresh anonymous Docker volume. The checkout,
+virtual environment, uv and pip caches, and build scratch use that volume.
+`RUNNER_TOOL_CACHE` points into `/home/runner`; `TMPDIR`, `PIP_CACHE_DIR`, and
+`UV_CACHE_DIR` point into the per-job volume so wheel builds and pip installs do
+not fill the 512 MiB `/tmp` tmpfs. Tmpfs usage counts against the container's
+8 GiB memory limit. The [pinned checkout action](https://github.com/actions/checkout/blob/3d3c42e5aac5ba805825da76410c181273ba90b1/src/git-auth-helper.ts)
+briefly writes its token under `RUNNER_TEMP` even when credential persistence is
+disabled; a host crash cannot leave that file in the anonymous volume. There
+is a read-only image symlink from `/opt/hostedtoolcache` to `RUNNER_TOOL_CACHE`:
+the setup-python binary embeds the former path in its ELF RUNPATH, and tests
+that clear their environment still need to load its adjacent `libpython`.
+There is no volume source or host bind mount, so jobs never share a workspace. The
+container uses UID/GID 1001, no Linux capabilities, no privilege escalation,
+no Docker socket, and limits of 4 CPUs, 8 GiB RAM, and 512 processes. The
+runner executes at `nice 10`. Pytest uses at most two workers; OpenBLAS and OpenMP use one
+thread per worker so they fit under the process limit. Its ephemeral
+registration handles one job; `docker run --rm`
+destroys the container and its anonymous volume, and the supervisor creates
+the next one. Compare `docker volume ls` before and after a job to confirm
+cleanup. If a host crash leaves an unused volume, `docker volume prune` is the
+cleanup command. Both runner and probe use the dedicated IPv4 Docker bridge
 `robot-sf-ci-egress` (`172.30.244.0/24`, gateway `172.30.244.1`, bridge
 `br-robot-sf-ci`). IPv6 is disabled. Before starting a slot, `setup.sh start`
 checks that a probe container cannot ping the host gateway or a University of
@@ -53,7 +74,12 @@ Augsburg address, and can reach GitHub and PyPI over HTTPS. The supervisor
 repeats the network configuration check and isolation probe before each
 replacement container. If either check fails, it logs the failure and retries
 after 60 seconds without requesting a registration token or starting a runner.
-The probe does not replace the host firewall rules below.
+Before fetching each registration token, the supervisor holds a host-local
+disk-admission lock and requires 20 GiB free per running slot plus the new slot
+on Docker's root filesystem (`docker info -f '{{.DockerRootDir}}'` and `df`).
+If the disk check fails or cannot read capacity, it logs the failure and retries
+after 60 seconds. The probe does not replace the host firewall
+rules below.
 
 ## One-time host firewall setup (author action)
 

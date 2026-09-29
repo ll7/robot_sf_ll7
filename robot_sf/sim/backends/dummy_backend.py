@@ -14,7 +14,9 @@ import numpy as np
 
 from robot_sf.nav.map_config import (
     GOAL_COMPLETION_POLICY_WAYPOINT_RADIUS_V1,
+    ROBOT_GOAL_SAMPLING_FOOTPRINT_CLEARANCE_V1,
     normalize_goal_completion_policy,
+    normalize_robot_goal_sampling_policy,
 )
 from robot_sf.nav.navigation import RouteNavigator, sample_route
 
@@ -35,6 +37,8 @@ class DummySimulator:
         step_dt: float = 0.1,
         goal_proximity_threshold: float = 1.0,
         goal_completion_policy: str | None = None,
+        robot_goal_sampling_policy: str | None = None,
+        robot_radius: float | None = None,
     ):
         """Initialize the deterministic dummy simulator.
 
@@ -44,6 +48,8 @@ class DummySimulator:
             step_dt: Fixed dummy timestep in seconds.
             goal_proximity_threshold: Goal completion tolerance.
             goal_completion_policy: Optional versioned route-success policy override.
+            robot_goal_sampling_policy: Optional versioned final-target sampling policy.
+            robot_radius: Required robot footprint radius when corrected sampling is selected.
         """
         self.map_def = map_def
         self.seed = seed
@@ -54,6 +60,10 @@ class DummySimulator:
         self.goal_completion_policy = normalize_goal_completion_policy(
             goal_completion_policy if goal_completion_policy is not None else map_policy
         )
+        self.robot_goal_sampling_policy = normalize_robot_goal_sampling_policy(
+            robot_goal_sampling_policy
+        )
+        self.robot_radius = robot_radius
         self.timestep = 0
         self.robots = [_MockRobot()]
         self.robot_navs = [
@@ -70,10 +80,16 @@ class DummySimulator:
         """Reset simulator to initial state."""
         self.timestep = 0
         self.rng = np.random.default_rng(self.seed)
+        sampling_kwargs = (
+            {
+                "robot_goal_sampling_policy": self.robot_goal_sampling_policy,
+                "robot_radius": self.robot_radius,
+            }
+            if self.robot_goal_sampling_policy == ROBOT_GOAL_SAMPLING_FOOTPRINT_CLEARANCE_V1
+            else {}
+        )
         route = sample_route(
-            self.map_def,
-            None,
-            completion_policy=self.goal_completion_policy,
+            self.map_def, None, completion_policy=self.goal_completion_policy, **sampling_kwargs
         )
         navigator = self.robot_navs[0]
         navigator.new_route(
@@ -202,6 +218,8 @@ def dummy_factory(env_config: EnvSettings, map_def: MapDefinition, _peds: bool) 
         step_dt=getattr(sim_settings, "time_per_step_in_secs", 0.1),
         goal_proximity_threshold=getattr(sim_settings, "goal_radius", 1.0),
         goal_completion_policy=getattr(sim_settings, "goal_completion_policy", None),
+        robot_goal_sampling_policy=getattr(sim_settings, "robot_goal_sampling_policy", None),
+        robot_radius=getattr(getattr(env_config, "robot_config", None), "radius", None),
     )
 
 

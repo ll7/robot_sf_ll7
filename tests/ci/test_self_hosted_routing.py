@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 from typing import Any
 
@@ -125,6 +126,27 @@ def test_unset_rollout_switch_keeps_trusted_jobs_hosted() -> None:
         )
 
 
+def test_routed_jobs_do_not_persist_checkout_credentials() -> None:
+    """No routed checkout may leave its job token in the disk-backed work volume."""
+    jobs = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))["jobs"]
+    routed = {
+        name: job
+        for name, job in jobs.items()
+        if "robot-sf-ci-ephemeral" in str(job.get("runs-on", ""))
+    }
+    assert set(ROUTED_JOBS) <= routed.keys()
+    for name, job in routed.items():
+        checkouts = [
+            step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@")
+        ]
+        assert checkouts, name
+        for step in checkouts:
+            assert (step.get("with") or {}).get("persist-credentials") is False, (
+                name,
+                step.get("name"),
+            )
+
+
 def test_routed_jobs_skip_package_install_only_on_self_hosted() -> None:
     """The image owns system packages; hosted fallback keeps its existing setup."""
     jobs = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))["jobs"]
@@ -150,17 +172,82 @@ def test_container_setup_keeps_ephemeral_and_no_host_mounts() -> None:
         "--tmpfs /home/runner:",
         "--cpus 4 --memory 8g",
         "--jq .token |",
-        "--rm --interactive",
+        "--rm --detach --interactive",
         "flock -x",
         '--network "$network"',
         "probe_network",
+        "check_docker_disk",
         "ACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/libexec/robot-sf-job-started.sh",
         "--ephemeral --disableupdate --replace",
     ):
         assert required in script
     assert "--volume" not in script
-    assert "--mount" not in script
+    assert re.findall(r"--mount(?:\s+|=)([^\s\\]+)", script) == [
+        "type=volume,dst=/home/runner/_work"
+    ]
+    assert re.search(r"(?<!\S)-v(?:\s|=)", script) is None
+    assert "src=" not in script
+    assert "source=" not in script
     assert "/var/run/docker.sock" not in script
+    # actions/setup-python's Linux executable embeds /opt/hostedtoolcache in
+    # RUNPATH; keep it resolvable when a test launches Python with a clean env.
+    assert "ln -s /home/runner/_tool /opt/hostedtoolcache" in script
+    for environment in (
+        "RUNNER_TEMP=/home/runner/_work/_temp",
+        "RUNNER_TOOL_CACHE=/home/runner/_tool",
+        "UV_CACHE_DIR=/home/runner/_work/_uv_cache",
+        "TMPDIR=/home/runner/_work/_tmp",
+        "PIP_CACHE_DIR=/home/runner/_work/_pip_cache",
+        "PYTEST_NUM_WORKERS=2",
+        "OPENBLAS_NUM_THREADS=1",
+        "OMP_NUM_THREADS=1",
+    ):
+        assert environment in script
+
+
+def test_runner_temporary_paths_resolve_to_intended_mounts() -> None:
+    """Credential scratch stays in memory; build scratch has volume capacity."""
+    script = SETUP_SCRIPT.read_text(encoding="utf-8")
+    assert "--work _work" in script
+    docker_run = script.split("if ! docker run", 1)[1].split('"$image" "$name"', 1)[0]
+    mounts = [
+        (spec.split(":", 1)[0], "tmpfs") for spec in re.findall(r"--tmpfs\s+([^\s\\]+)", docker_run)
+    ]
+    mounts += [
+        (destination, "volume")
+        for destination in re.findall(r"--mount\s+type=volume,dst=([^\s\\]+)", docker_run)
+    ]
+    environment = dict(re.findall(r"--env\s+([A-Z_]+)=([^\s\\]+)", docker_run))
+
+    def filesystem(path: str) -> str:
+        candidates = [
+            (len(destination), kind)
+            for destination, kind in mounts
+            if path == destination or path.startswith(f"{destination}/")
+        ]
+        assert candidates, path
+        return max(candidates)[1]
+
+    assert environment["RUNNER_TEMP"] == "/home/runner/_work/_temp"
+    for key in ("RUNNER_TEMP", "RUNNER_TOOL_CACHE"):
+        assert filesystem(environment[key]) == "tmpfs", key
+    assert filesystem("/home/runner/_work") == "volume"
+    for key in ("TMPDIR", "PIP_CACHE_DIR", "UV_CACHE_DIR"):
+        assert filesystem(environment[key]) == "volume", key
+
+
+def test_container_image_preloads_routed_job_tools() -> None:
+    """Pin native builds, video output, and release hydration to image packages."""
+    script = SETUP_SCRIPT.read_text(encoding="utf-8")
+    apt_packages = script.split("apt-get install -y --no-install-recommends", 1)[1].split(
+        "&& rm -rf /var/lib/apt/lists/*", 1
+    )[0]
+    assert {"build-essential", "cmake", "ffmpeg", "gh", "git-lfs"} <= set(apt_packages.split())
+    assert "https://nodejs.org/dist/v22.23.2/node-v22.23.2-linux-x64.tar.gz" in script
+    assert "b294a556e639d64338823920e5866c21c02741742d2e1529ee1a225c1ec9252a" in script
+    assert "sha256sum -c -" in script
+    for tool in ("node", "npm", "npx"):
+        assert f"ln -s /opt/node/bin/{tool} /usr/local/bin/{tool}" in script
 
 
 def test_job_started_hook_path_has_runner_accepted_extension() -> None:

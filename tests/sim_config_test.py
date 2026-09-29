@@ -49,8 +49,11 @@ def test_kernel_selector_preserves_legacy_simulation_and_environment_hashes():
     legacy = SimulationSettings()
     assert legacy.social_force_kernel_resolution_mode == "defaulted_missing"
     assert "social_force_kernel_version" not in asdict(legacy)
+    legacy_settings_payload = asdict(legacy)
+    # This newer field is omitted by the environment hash serializer for legacy configs.
+    legacy_settings_payload.pop("robot_goal_sampling_policy")
     serialized_settings = json.dumps(
-        asdict(legacy), sort_keys=True, separators=(",", ":"), default=str
+        legacy_settings_payload, sort_keys=True, separators=(",", ":"), default=str
     )
     assert hashlib.sha256(serialized_settings.encode()).hexdigest() == (
         "3862ea280966a4e790715babbb7567cbf121031eb38374b08264e4f4d3626be0"

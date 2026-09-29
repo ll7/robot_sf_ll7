@@ -71,6 +71,7 @@ from robot_sf.nav.map_config import (
     MapDefinition,
     SocialGroupDefinition,
     normalize_goal_completion_policy,
+    normalize_robot_goal_sampling_policy,
 )
 from robot_sf.nav.navigation import (
     RouteNavigator,
@@ -561,6 +562,7 @@ class Simulator:
     goal_proximity_threshold: float
     random_start_pos: bool
     goal_completion_policy: str = field(init=False)
+    robot_goal_sampling_policy: str = field(init=False)
     robot_navs: list[RouteNavigator] = field(init=False)
     pysf_sim: PySFSimulator = field(init=False)
     pysf_state: PedestrianStates = field(init=False)
@@ -631,6 +633,9 @@ class Simulator:
         map_policy = getattr(self.map_def, "goal_completion_policy", None)
         self.goal_completion_policy = normalize_goal_completion_policy(
             configured_policy if configured_policy is not None else map_policy
+        )
+        self.robot_goal_sampling_policy = normalize_robot_goal_sampling_policy(
+            getattr(self.config, "robot_goal_sampling_policy", None)
         )
 
         self.sampler_capture = self._new_sampler_capture()
@@ -1741,6 +1746,7 @@ class Simulator:
                     None if self.random_start_pos else i,
                     completion_policy=self.goal_completion_policy,
                     robot_radius=float(robot.config.radius),
+                    robot_goal_sampling_policy=self.robot_goal_sampling_policy,
                 )
                 nav.new_route(
                     waypoints[1:],
@@ -2098,6 +2104,9 @@ class PedSimulator(Simulator):
         self.goal_completion_policy = normalize_goal_completion_policy(
             configured_policy if configured_policy is not None else map_policy
         )
+        self.robot_goal_sampling_policy = normalize_robot_goal_sampling_policy(
+            getattr(self.config, "robot_goal_sampling_policy", None)
+        )
 
         # NOTE (issue #4618 R2): the pedestrian-centric simulator intentionally
         # diverges from Simulator's heterogeneous-population wiring, and the
@@ -2239,6 +2248,7 @@ class PedSimulator(Simulator):
                     None if self.random_start_pos else i,
                     completion_policy=self.goal_completion_policy,
                     robot_radius=float(robot.config.radius),
+                    robot_goal_sampling_policy=self.robot_goal_sampling_policy,
                 )
                 nav.new_route(
                     waypoints[1:],

@@ -13,6 +13,7 @@ import io
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -22,8 +23,16 @@ from typing import Any
 import numpy as np
 
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
-from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
+from robot_sf.benchmark.map_runner.map_runner import (
+    SocialForcePlannerAdapter as _SocialForcePlannerAdapter,
+)
+from robot_sf.benchmark.map_runner.map_runner import (
+    _build_common_adapter_policy,
+    _build_policy,
+    _run_map_episode,
+)
 from robot_sf.benchmark.map_runner.map_runner_jsonl import write_validated_to_handle
+from robot_sf.benchmark.map_runner_policies import goal as _goal_policy_builder
 from robot_sf.benchmark.schema_validator import load_schema
 from robot_sf.benchmark.three_width_doorway_application import (
     DEFAULT_MANIFEST_PATH,
@@ -45,9 +54,43 @@ _WIDTHS = (2.2, 2.8, 3.6)
 _PLANNERS = ("goal", "social_force")
 _SEEDS = (225, 226, 227)
 _HORIZON = 400
+_CONFIRMATION_HORIZON = 10
 _DT = 0.1
 _BOOTSTRAP_DRAWS = 10000
 _BOOTSTRAP_SEED = 9348
+_PLANNER_INVOCATION_TRACE_SCHEMA = "issue_9348_planner_invocation.v1"
+_ACTION_CONVERSION_TRACE_SCHEMA = "policy-action-conversion.v1"
+_GOAL_POLICY_CALLABLE_IDENTITY = {
+    "module": "robot_sf.benchmark.map_runner_policies.goal",
+    "qualname": "build.<locals>._policy",
+    "implementation_id": "goal_policy_builder.policy.v1",
+}
+_SOCIAL_FORCE_POLICY_CALLABLE_IDENTITY = {
+    "module": "robot_sf.benchmark.map_runner.map_runner",
+    "qualname": "_build_common_adapter_policy.<locals>._policy",
+    "implementation_id": "common_adapter_policy.policy.v1",
+}
+_SOCIAL_FORCE_ADAPTER_IDENTITY = {
+    "module": "robot_sf.planner.socnav_social_force",
+    "class": "SocialForcePlannerAdapter",
+}
+
+
+def _nested_policy_code(builder: Any) -> Any:
+    """Return the builder's nested policy code object for runtime identity checks."""
+    code = getattr(builder, "__code__", None)
+    candidates = [
+        item
+        for item in getattr(code, "co_consts", ())
+        if getattr(item, "co_name", None) == "_policy"
+    ]
+    if len(candidates) != 1:
+        raise RuntimeError("baseline policy builder has no unique nested _policy code object")
+    return candidates[0]
+
+
+_GOAL_POLICY_CODE = _nested_policy_code(_goal_policy_builder.build)
+_SOCIAL_FORCE_POLICY_CODE = _nested_policy_code(_build_common_adapter_policy)
 _ENDPOINTS = {
     "success": ("success", "binary"),
     "total_collisions": ("total_collision_count", "runner_count"),
@@ -69,6 +112,26 @@ def _source_identity() -> str:
     if _git("status", "--porcelain", "--untracked-files=no"):
         raise ValueError("doorway campaign requires a clean tracked source tree")
     return _git("rev-parse", "HEAD")
+
+
+def _source_tree_custody(source_sha: str) -> dict[str, Any]:
+    """Describe the complete tracked Git tree that produced a campaign bundle.
+
+    Returns:
+        The commit tree object, digest of its recursive entry manifest, and entry count.
+    """
+    if re.fullmatch(r"[0-9a-f]{40}", source_sha) is None:
+        raise ValueError("doorway campaign source commit must be a lowercase Git SHA-1")
+    tree_oid = _git("rev-parse", f"{source_sha}^{{tree}}")
+    entries = subprocess.check_output(
+        ["git", "ls-tree", "-r", "-z", "--full-tree", source_sha],
+        cwd=_ROOT,
+    )
+    return {
+        "git_tree_oid": tree_oid,
+        "entry_manifest_sha256": hashlib.sha256(entries).hexdigest(),
+        "tracked_entry_count": sum(bool(entry) for entry in entries.split(b"\0")),
+    }
 
 
 def _json(path: Path) -> dict[str, Any]:
@@ -128,29 +191,504 @@ def _paired_interval(differences: list[float], *, binary: bool) -> dict[str, Any
     }
 
 
+def _ancillary_telemetry_gaps(metadata: dict[str, Any]) -> list[str]:
+    """List unavailable auxiliary traces without treating them as planner fallback."""
+    gaps: list[str] = []
+    trace = metadata.get("simulation_step_trace")
+    reset = trace.get("reset") if isinstance(trace, dict) else None
+    if isinstance(reset, dict):
+        for key in ("routes", "spawn"):
+            value = reset.get(key)
+            if isinstance(value, dict) and value.get("status") == "unavailable":
+                gaps.append(f"simulation_step_trace.reset.{key}.status=unavailable")
+
+    def _unavailable(value: Any, path: str) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                child = f"{path}.{key}"
+                if key == "status" and item == "unavailable":
+                    gaps.append(f"{child}=unavailable")
+                else:
+                    _unavailable(item, child)
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                _unavailable(item, f"{path}[{index}]")
+
+    _unavailable(metadata.get("paired_effect_metric_producer"), "paired_effect_metric_producer")
+    return sorted(set(gaps))
+
+
+def _valid_spawn_evidence(row: dict[str, Any] | None) -> bool:
+    """Require typed reset clearance and no known spawn-caused contact."""
+    if row is None:
+        return True
+    spawn = row.get("spawn_validity")
+    # v1 is retained for historical traces; current benchmark rows use v2.
+    return (
+        isinstance(spawn, dict)
+        and spawn.get("schema_version") in {"spawn_validity.v1", "spawn_validity.v2"}
+        and spawn.get("reset_clearance_status") == "available"
+        and isinstance(spawn.get("reset_clearance"), dict)
+        and spawn["reset_clearance"].get("overlap") is False
+        and spawn["reset_clearance"].get("obstacle_overlap") is False
+        and spawn["reset_clearance"].get("pedestrian_overlap") is False
+        and spawn.get("reset_clearance_error") is None
+        and spawn.get("reset_overlap") is False
+        and spawn.get("invalid_run") is False
+        and spawn.get("invalid_reason") is None
+        and isinstance(spawn.get("respawn_overlap_events"), list)
+        and isinstance(spawn.get("respawn_overlap_collisions"), list)
+        and not spawn["respawn_overlap_collisions"]
+    )
+
+
+def _command_execution_mode(metadata: dict[str, Any]) -> str | None:
+    kinematics = metadata.get("planner_kinematics")
+    if not isinstance(kinematics, dict):
+        return None
+    value = kinematics.get("execution_mode")
+    return value if isinstance(value, str) else None
+
+
+def _valid_action_trace(trace: Any, row: dict[str, Any] | None) -> bool:
+    """Require one finite selected and applied planner action per executed step."""
+    if (
+        not isinstance(trace, dict)
+        or trace.get("schema_version") != "simulation-step-trace.v1"
+        or not isinstance(trace.get("dt"), (int, float))
+        or isinstance(trace["dt"], bool)
+        or not math.isclose(trace["dt"], _DT, rel_tol=0.0, abs_tol=1.0e-12)
+    ):
+        return False
+    steps = trace.get("steps")
+    if (
+        row is None
+        or not isinstance(row.get("steps"), int)
+        or isinstance(row["steps"], bool)
+        or row["steps"] < 1
+        or not isinstance(steps, list)
+        or len(steps) != row["steps"]
+    ):
+        return False
+    for index, item in enumerate(steps):
+        if not isinstance(item, dict) or item.get("step") != index:
+            return False
+        time_s = item.get("time_s")
+        if (
+            not isinstance(time_s, (int, float))
+            or isinstance(time_s, bool)
+            or not math.isclose(time_s, (index + 1) * _DT, rel_tol=0.0, abs_tol=1.0e-9)
+        ):
+            return False
+        planner = item.get("planner")
+        if not isinstance(planner, dict) or planner.get("event") != "step":
+            return False
+        for key in ("selected_action", "applied_environment_action"):
+            action = planner.get(key)
+            if not isinstance(action, dict) or any(
+                not isinstance(action.get(field), (int, float))
+                or isinstance(action.get(field), bool)
+                or not math.isfinite(action[field])
+                for field in ("linear_velocity", "angular_velocity")
+            ):
+                return False
+    return True
+
+
+def _runtime_command_payload(command: Any) -> dict[str, float] | None:
+    """Normalize one returned baseline command for invocation custody."""
+    if isinstance(command, np.ndarray):
+        command = command.tolist()
+    if isinstance(command, (list, tuple)) and len(command) >= 2:
+        values = (command[0], command[1])
+        if all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in values):
+            numbers = tuple(float(value) for value in values)
+            if all(math.isfinite(value) for value in numbers):
+                return {
+                    "linear_velocity": numbers[0],
+                    "angular_velocity": numbers[1],
+                }
+    return None
+
+
+def _runtime_callable_identity(policy: Any) -> dict[str, str | None]:
+    """Return readable markers plus builder-code identity for one constructed callable."""
+    code = getattr(policy, "__code__", None)
+    globals_dict = getattr(policy, "__globals__", None)
+    if code is _GOAL_POLICY_CODE and globals_dict is _goal_policy_builder.build.__globals__:
+        implementation_id = "goal_policy_builder.policy.v1"
+    elif (
+        code is _SOCIAL_FORCE_POLICY_CODE
+        and globals_dict is _build_common_adapter_policy.__globals__
+    ):
+        implementation_id = "common_adapter_policy.policy.v1"
+    else:
+        implementation_id = "unrecognized"
+    return {
+        "module": getattr(policy, "__module__", None),
+        "qualname": getattr(policy, "__qualname__", None),
+        "implementation_id": implementation_id,
+    }
+
+
+def _runtime_policy_route(policy: Any) -> dict[str, Any]:
+    """Read route and implementation identity from the constructed callable."""
+    policy_identity = _runtime_callable_identity(policy)
+    adapter = getattr(policy, "_planner_adapter", None)
+    adapter_type = type(adapter) if adapter is not None else None
+    expected_social_force_adapter = adapter_type is _SocialForcePlannerAdapter
+    adapter_identity = {
+        "module": getattr(adapter_type, "__module__", None),
+        "class": getattr(adapter_type, "__qualname__", None),
+        "verified_type": expected_social_force_adapter,
+    }
+    goal_callable = (
+        policy_identity["implementation_id"] == "goal_policy_builder.policy.v1"
+        and policy_identity["module"] == _GOAL_POLICY_CALLABLE_IDENTITY["module"]
+        and policy_identity["qualname"] == _GOAL_POLICY_CALLABLE_IDENTITY["qualname"]
+    )
+    social_force_route = (
+        policy_identity["implementation_id"] == "common_adapter_policy.policy.v1"
+        and policy_identity["module"] == _SOCIAL_FORCE_POLICY_CALLABLE_IDENTITY["module"]
+        and policy_identity["qualname"] == _SOCIAL_FORCE_POLICY_CALLABLE_IDENTITY["qualname"]
+        and expected_social_force_adapter
+        and adapter_identity["module"] == _SOCIAL_FORCE_ADAPTER_IDENTITY["module"]
+        and adapter_identity["class"] == _SOCIAL_FORCE_ADAPTER_IDENTITY["class"]
+    )
+    if goal_callable and adapter is None:
+        execution_mode = "native"
+    elif social_force_route:
+        execution_mode = "adapter"
+    else:
+        # A no-adapter callable is not native merely because the marker is absent.
+        # Unknown adapter/callable combinations are likewise not admissible baselines.
+        execution_mode = "unknown"
+    if adapter is None:
+        adapter_name = "none"
+        adapter_active = False
+    else:
+        adapter_name = type(adapter).__name__
+        adapter_active = True
+    return {
+        "execution_mode": execution_mode,
+        "adapter_active": adapter_active,
+        "adapter_name": adapter_name,
+        "policy_callable": policy_identity,
+        "planner_adapter": {
+            "present": adapter is not None,
+            **adapter_identity,
+        },
+    }
+
+
+def _observed_baseline_policy_builder(
+    algo: str,
+    algo_config: dict[str, Any],
+    **kwargs: Any,
+) -> tuple[Any, dict[str, Any]]:
+    """Build a baseline and retain callable route/command evidence per invocation."""
+    policy, metadata = _build_policy(algo, algo_config, **kwargs)
+    if algo not in _PLANNERS or not isinstance(metadata, dict):
+        return policy, metadata
+
+    invocation_steps: list[dict[str, Any]] = []
+    metadata["planner_invocation_trace"] = {
+        "schema_version": _PLANNER_INVOCATION_TRACE_SCHEMA,
+        "source": "constructed_policy_callable",
+        "steps": invocation_steps,
+    }
+
+    def observed_policy(observation: Any) -> Any:
+        """Invoke the constructed policy and retain its route and returned command."""
+        step = len(invocation_steps)
+        route_before = _runtime_policy_route(policy)
+        try:
+            command = policy(observation)
+        except Exception as exc:
+            invocation_steps.append(
+                {
+                    "step": step,
+                    "event": "invocation",
+                    "route_before": route_before,
+                    "route_after": _runtime_policy_route(policy),
+                    "status": "error",
+                    "error_type": type(exc).__name__,
+                    "command": None,
+                }
+            )
+            raise
+        invocation_steps.append(
+            {
+                "step": step,
+                "event": "invocation",
+                "route_before": route_before,
+                "route_after": _runtime_policy_route(policy),
+                "status": "returned",
+                "command": _runtime_command_payload(command),
+            }
+        )
+        return command
+
+    if hasattr(policy, "__dict__"):
+        observed_policy.__dict__.update(policy.__dict__)
+    return observed_policy, metadata
+
+
+def _execution_runtime_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Select execution-bearing fields for canonical fallback scanning."""
+    runtime_fields = {
+        "status",
+        "fallback_used",
+        "fallback_or_degraded",
+        "degraded",
+        "planner_kinematics",
+        "planner_diagnostics",
+        "planner_runtime",
+        "planner_decision_trace",
+        "distributional_disruption",
+        "guard_stats",
+        "shield_stats",
+        "native_command",
+    }
+    runtime_metadata = {
+        key: value for key, value in metadata.items() if key in runtime_fields or "fallback" in key
+    }
+    trace = metadata.get("simulation_step_trace")
+    if isinstance(trace, dict):
+        runtime_metadata["simulation_step_trace"] = {"steps": trace.get("steps")}
+    return runtime_metadata
+
+
+def _baseline_route_reasons(metadata: dict[str, Any], expected_algorithm: str | None) -> list[str]:
+    """Check the observed planner identity and command route against the baseline contract."""
+    expected = {
+        "goal": ("native", False, "none"),
+        "social_force": ("adapter", True, "SocialForcePlannerAdapter"),
+    }.get(expected_algorithm)
+    kinematics = metadata.get("planner_kinematics")
+    reasons = []
+    if (
+        expected is None
+        or not isinstance(kinematics, dict)
+        or (
+            kinematics.get("execution_mode"),
+            kinematics.get("adapter_active"),
+            kinematics.get("adapter_name"),
+        )
+        != expected
+    ):
+        reasons.append("planner_kinematics_mode_or_adapter_mismatch")
+    if (
+        expected_algorithm == "social_force"
+        and isinstance(kinematics, dict)
+        and (kinematics.get("projection_documented") is not True)
+    ):
+        reasons.append("social_force_adapter_projection_unverified")
+    if metadata.get("canonical_algorithm") != expected_algorithm:
+        reasons.append("canonical_planner_identity_mismatch")
+    return reasons
+
+
+def _planner_invocation_reasons(
+    metadata: dict[str, Any], row: dict[str, Any] | None, expected_algorithm: str | None
+) -> list[str]:
+    """Require per-step route and command evidence from the constructed policy."""
+    trace = metadata.get("planner_invocation_trace")
+    reasons: list[str] = []
+    if (
+        not isinstance(trace, dict)
+        or trace.get("schema_version") != _PLANNER_INVOCATION_TRACE_SCHEMA
+        or trace.get("source") != "constructed_policy_callable"
+    ):
+        return ["missing_or_invalid_planner_invocation_trace"]
+    steps = trace.get("steps")
+    expected_route = {
+        "goal": {
+            "execution_mode": "native",
+            "adapter_active": False,
+            "adapter_name": "none",
+            "policy_callable": _GOAL_POLICY_CALLABLE_IDENTITY,
+            "planner_adapter": {
+                "present": False,
+                "module": None,
+                "class": None,
+                "verified_type": False,
+            },
+        },
+        "social_force": {
+            "execution_mode": "adapter",
+            "adapter_active": True,
+            "adapter_name": "SocialForcePlannerAdapter",
+            "policy_callable": _SOCIAL_FORCE_POLICY_CALLABLE_IDENTITY,
+            "planner_adapter": {
+                "present": True,
+                **_SOCIAL_FORCE_ADAPTER_IDENTITY,
+                "verified_type": True,
+            },
+        },
+    }.get(expected_algorithm)
+    if (
+        row is None
+        or not isinstance(row.get("steps"), int)
+        or isinstance(row["steps"], bool)
+        or row["steps"] < 1
+        or not isinstance(steps, list)
+        or len(steps) != row["steps"]
+        or expected_route is None
+    ):
+        return ["missing_or_invalid_planner_invocation_trace"]
+    simulation_trace = metadata.get("simulation_step_trace")
+    simulation_steps = simulation_trace.get("steps") if isinstance(simulation_trace, dict) else None
+
+    def _route_matches(route: Any) -> bool:
+        return isinstance(route, dict) and all(
+            route.get(key) == value for key, value in expected_route.items()
+        )
+
+    for index, item in enumerate(steps):
+        if not isinstance(item, dict) or item.get("step") != index:
+            reasons.append("invalid_planner_invocation_step_binding")
+            break
+        if (
+            item.get("event") != "invocation"
+            or item.get("status") != "returned"
+            or not _route_matches(item.get("route_before"))
+            or not _route_matches(item.get("route_after"))
+        ):
+            reasons.append("planner_invocation_route_mismatch")
+            break
+        if not isinstance(simulation_steps, list) or index >= len(simulation_steps):
+            reasons.append("planner_invocation_action_binding_missing")
+            break
+        simulation_step = simulation_steps[index]
+        selected = simulation_step.get("planner", {}).get("selected_action")
+        applied = simulation_step.get("planner", {}).get("applied_environment_action")
+        conversion = simulation_step.get("planner", {}).get("action_conversion")
+        command = item.get("command")
+        if (
+            not isinstance(selected, dict)
+            or not isinstance(command, dict)
+            or any(
+                not isinstance(command.get(field), (int, float))
+                or isinstance(command.get(field), bool)
+                or not math.isfinite(float(command[field]))
+                for field in ("linear_velocity", "angular_velocity")
+            )
+            or any(
+                not isinstance(selected.get(field), (int, float))
+                or isinstance(selected.get(field), bool)
+                or not math.isfinite(float(selected[field]))
+                for field in ("linear_velocity", "angular_velocity")
+            )
+            or any(
+                not math.isclose(
+                    float(command[field]), float(selected[field]), rel_tol=0.0, abs_tol=1.0e-9
+                )
+                for field in ("linear_velocity", "angular_velocity")
+            )
+        ):
+            reasons.append("planner_invocation_action_binding_mismatch")
+            break
+        if not _action_conversion_matches(selected, applied, conversion):
+            reasons.append("planner_invocation_action_conversion_mismatch")
+            break
+    return sorted(set(reasons))
+
+
+def _action_conversion_matches(selected: Any, applied: Any, conversion: Any) -> bool:
+    """Verify the recorded differential-drive command-to-acceleration transform."""
+    if (
+        not isinstance(selected, dict)
+        or not isinstance(applied, dict)
+        or not isinstance(conversion, dict)
+        or conversion.get("schema_version") != _ACTION_CONVERSION_TRACE_SCHEMA
+        or conversion.get("kind") != "unicycle_velocity_to_acceleration"
+        or conversion.get("input_units") != {"linear_velocity": "m/s", "angular_velocity": "rad/s"}
+        or conversion.get("output_units")
+        != {"linear_velocity": "m/s^2", "angular_velocity": "rad/s^2"}
+        or not isinstance(conversion.get("dt_s"), (int, float))
+        or isinstance(conversion.get("dt_s"), bool)
+        or not math.isclose(conversion["dt_s"], _DT, rel_tol=0.0, abs_tol=1.0e-12)
+        or not isinstance(conversion.get("pre_step_speed"), dict)
+    ):
+        return False
+    previous = conversion["pre_step_speed"]
+    fields = ("linear_velocity", "angular_velocity")
+    if any(
+        not isinstance(previous.get(field), (int, float))
+        or isinstance(previous.get(field), bool)
+        or not math.isfinite(float(previous[field]))
+        or not isinstance(selected.get(field), (int, float))
+        or isinstance(selected.get(field), bool)
+        or not math.isfinite(float(selected[field]))
+        or not isinstance(applied.get(field), (int, float))
+        or isinstance(applied.get(field), bool)
+        or not math.isfinite(float(applied[field]))
+        for field in fields
+    ):
+        return False
+    return all(
+        math.isclose(
+            float(applied[field]),
+            (float(selected[field]) - float(previous[field])) / _DT,
+            rel_tol=0.0,
+            abs_tol=1.0e-8,
+        )
+        for field in fields
+    )
+
+
+def _observed_execution_mode(
+    metadata: dict[str, Any], row: dict[str, Any] | None, expected_algorithm: str | None
+) -> str | None:
+    """Return the route observed on every invocation, or ``None`` when unavailable."""
+    if _planner_invocation_reasons(metadata, row, expected_algorithm):
+        return None
+    trace = metadata["planner_invocation_trace"]
+    return trace["steps"][0]["route_after"]["execution_mode"] if trace["steps"] else None
+
+
+def _baseline_execution_reasons(
+    metadata: dict[str, Any], row: dict[str, Any] | None, expected_algorithm: str | None
+) -> list[str]:
+    """Require explicit row-level execution and readiness axes for every baseline."""
+    expected = {
+        "goal": ("native", False, "none"),
+        "social_force": ("adapter", True, "SocialForcePlannerAdapter"),
+    }.get(expected_algorithm)
+    reasons = _baseline_route_reasons(metadata, expected_algorithm)
+    reasons.extend(_planner_invocation_reasons(metadata, row, expected_algorithm))
+    observed_mode = _observed_execution_mode(metadata, row, expected_algorithm)
+    if row is None or not isinstance(row.get("execution_mode"), str):
+        reasons.append("missing_execution_mode")
+    elif expected is None or row["execution_mode"] != expected[0]:
+        reasons.append(f"unexpected_execution_mode:{row.get('execution_mode')!r}")
+    elif observed_mode is None or row["execution_mode"] != observed_mode:
+        reasons.append("execution_mode_not_bound_to_runtime_invocation")
+    if row is None or not isinstance(row.get("readiness_status"), str):
+        reasons.append("missing_readiness_status")
+    elif expected is None or row["readiness_status"] != expected[0]:
+        reasons.append(f"unexpected_readiness_status:{row.get('readiness_status')!r}")
+    return reasons
+
+
 def _trace_exclusion_reasons(
     metadata: dict[str, Any],
     *,
     row: dict[str, Any] | None = None,
     expected_algorithm: str | None = None,
 ) -> list[str]:
-    """Flag missing traces or canonical runtime fallback markers."""
+    """Flag invalid baseline execution and actual runtime fallback markers."""
     trace = metadata.get("simulation_step_trace")
     planner_trace = metadata.get("planner_decision_trace")
     reasons = []
-    if (
-        not isinstance(trace, dict)
-        or not isinstance(trace.get("steps"), list)
-        or not trace["steps"]
-    ):
-        reasons.append("missing_simulation_step_trace")
-    if (
-        not isinstance(planner_trace, dict)
-        or not isinstance(planner_trace.get("steps"), list)
-        or not planner_trace["steps"]
-    ):
-        reasons.append("missing_or_empty_planner_decision_trace")
+    if not _valid_action_trace(trace, row):
+        reasons.append("missing_or_invalid_simulation_action_trace")
+    if not isinstance(planner_trace, dict) or not isinstance(planner_trace.get("steps"), list):
+        reasons.append("missing_planner_decision_trace")
     else:
+        # Goal and Social Force expose no specialized internal decisions. Their
+        # empty arrays are expected; simulation_step_trace is the action record.
         for step in planner_trace["steps"]:
             if isinstance(step, dict) and (
                 step.get("fallback_used") is True
@@ -159,17 +697,20 @@ def _trace_exclusion_reasons(
             ):
                 reasons.append("fallback_or_degraded_planner_step")
                 break
+    reasons.extend(_baseline_execution_reasons(metadata, row, expected_algorithm))
+    if not _valid_spawn_evidence(row):
+        reasons.append("invalid_or_unknown_spawn_validity")
+    # Scan execution-bearing fields only. Reset routes/spawn report whether
+    # sampler objects were retained, and paired-effect fields describe separate
+    # wrapper endpoints; neither reports planner fallback. Their unavailable
+    # statuses are retained separately in ancillary_telemetry_gaps.
     runtime_payload = {
         "row": {
             "execution_mode": row.get("execution_mode") if row is not None else None,
             "readiness_status": row.get("readiness_status") if row is not None else None,
         },
-        "algorithm_metadata": metadata,
+        "algorithm_metadata": _execution_runtime_metadata(metadata),
     }
-    if row is not None and row.get("execution_mode") != "native":
-        reasons.append(f"non_native_execution_mode:{row.get('execution_mode')!r}")
-    if row is not None and row.get("readiness_status") != "native":
-        reasons.append(f"non_native_readiness_status:{row.get('readiness_status')!r}")
     if row is not None and "planner_runtime" in row:
         runtime_payload["planner_runtime"] = row["planner_runtime"]
     runtime_marker = runtime_fallback_or_degraded_marker(
@@ -181,6 +722,91 @@ def _trace_exclusion_reasons(
         marker_path, marker_value = runtime_marker
         reasons.append(f"fallback_or_degraded_runtime:{marker_path}={marker_value}")
     return reasons
+
+
+def _record_baseline_execution_axes(row: dict[str, Any], expected_algorithm: str) -> None:
+    """Record runtime route evidence and derive readiness from the episode evidence."""
+    metadata = row.get("algorithm_metadata")
+    if not isinstance(metadata, dict):
+        row.pop("execution_mode", None)
+        row["readiness_status"] = "unknown"
+        return
+
+    declared_execution_mode = _command_execution_mode(metadata)
+    execution_mode = _observed_execution_mode(metadata, row, expected_algorithm)
+    if execution_mode is not None:
+        row["execution_mode"] = execution_mode
+    else:
+        row.pop("execution_mode", None)
+
+    route_reasons = _baseline_route_reasons(metadata, expected_algorithm)
+    invocation_reasons = _planner_invocation_reasons(metadata, row, expected_algorithm)
+    trace = metadata.get("simulation_step_trace")
+    planner_trace = metadata.get("planner_decision_trace")
+    action_trace_valid = _valid_action_trace(trace, row)
+    decision_trace_present = isinstance(planner_trace, dict) and isinstance(
+        planner_trace.get("steps"), list
+    )
+    spawn_valid = _valid_spawn_evidence(row)
+    runtime_payload = {
+        "row": {"execution_mode": execution_mode},
+        "algorithm_metadata": _execution_runtime_metadata(metadata),
+    }
+    if "planner_runtime" in row:
+        runtime_payload["planner_runtime"] = row["planner_runtime"]
+    runtime_marker = runtime_fallback_or_degraded_marker(
+        runtime_payload,
+        expected_algorithm=expected_algorithm,
+        algorithm_metadata=metadata,
+    )
+
+    readiness_blockers = list(route_reasons) + invocation_reasons
+    if metadata.get("status") != "ok":
+        readiness_blockers.append("planner_status_not_ok")
+    if not action_trace_valid:
+        readiness_blockers.append("missing_or_invalid_simulation_action_trace")
+    if not decision_trace_present:
+        readiness_blockers.append("missing_planner_decision_trace")
+    if not spawn_valid:
+        readiness_blockers.append("invalid_or_unknown_spawn_validity")
+    if runtime_marker is not None:
+        readiness_blockers.append("fallback_or_degraded_runtime_marker")
+
+    # Readiness names the intended route that completed with complete evidence:
+    # Goal is native, while Social Force's source-backed adapter is its intended
+    # route. Either route becomes unknown when evidence is incomplete or degraded.
+    expected_readiness = {
+        "goal": "native",
+        "social_force": "adapter",
+    }.get(expected_algorithm)
+    readiness_status = expected_readiness if not readiness_blockers else "unknown"
+    row["readiness_status"] = readiness_status
+    metadata["baseline_readiness"] = {
+        "schema_version": "issue_9348_baseline_readiness.v1",
+        "status": readiness_status,
+        "expected_algorithm": expected_algorithm,
+        "declared_execution_mode": declared_execution_mode,
+        "observed_execution_mode": execution_mode,
+        "planner_status": metadata.get("status"),
+        "action_trace_status": "complete" if action_trace_valid else "invalid_or_missing",
+        # Empty is valid for these baselines: their selected/applied actions are
+        # recorded per step in simulation_step_trace, not as internal decisions.
+        "decision_trace_status": (
+            "missing"
+            if not decision_trace_present
+            else "empty_expected_for_baseline"
+            if not planner_trace["steps"]
+            else "present"
+        ),
+        "spawn_validity_schema": (
+            row.get("spawn_validity", {}).get("schema_version")
+            if isinstance(row.get("spawn_validity"), dict)
+            else None
+        ),
+        "spawn_validity_status": "available" if spawn_valid else "invalid_or_missing",
+        "runtime_marker": list(runtime_marker) if runtime_marker is not None else None,
+        "blockers": sorted(set(readiness_blockers)),
+    }
 
 
 def _row_inventory_item(
@@ -245,25 +871,290 @@ def _row_inventory_item(
         "steps": row.get("steps"),
         "evidence_status": "native" if not reasons else "excluded",
         "exclusion_reasons": reasons,
+        "command_execution_mode": _observed_execution_mode(metadata, row, planner),
+        "ancillary_telemetry_gaps": _ancillary_telemetry_gaps(metadata),
         "trace_path": f"episodes.jsonl:line:{cell['line_number']}:algorithm_metadata.simulation_step_trace.steps",
         "trace_steps": len(trace.get("steps", [])) if isinstance(trace, dict) else 0,
     }
 
 
-def _require_confirmation_preflight(preflight: dict[str, Any]) -> None:
-    """Admit H400 only after H1 diagnostics are clear for confirmation."""
+def _require_h1_preflight(preflight: dict[str, Any]) -> None:
+    """Require bounded H1 geometry/binding evidence, retaining its oracle diagnostic."""
     checks = preflight.get("checks")
     if not isinstance(checks, dict):
         raise ValueError("doorway confirmation preflight checks are unavailable")
     expected_fallbacks = checks.get("oracle_expected_fallbacks")
     if not isinstance(expected_fallbacks, list):
         raise ValueError("doorway confirmation fallback admission check is unavailable")
-    if expected_fallbacks:
-        raise ValueError(
-            "doorway H400 confirmation refuses oracle_expected_fallbacks from H1 preflight"
-        )
+    if expected_fallbacks not in (
+        [],
+        [
+            {
+                "variant_id": "gap_3p60__depth_1p00",
+                "reason": "expected_distributional_metric_unavailable",
+                "marker": (
+                    "metrics.distributional_disruption.missing_data."
+                    "slow_speed_tier.status=unavailable"
+                ),
+            }
+        ],
+    ):
+        raise ValueError("doorway H1 oracle has an undeclared fallback or degraded diagnostic")
     if preflight.get("go") is not True:
         raise ValueError("doorway geometry/oracle preflight did not admit policy execution")
+    for field in (
+        "baseline_passes",
+        "all_widths_positive_clearance",
+        "oracle_available_for_every_variant",
+        "oracle_required_checks_known",
+        "h1_execution_binding_ready",
+        "planner_records_are_not_run",
+        "no_campaign_evidence",
+    ):
+        if checks.get(field) is not True:
+            raise ValueError(f"doorway H1 preflight lacks required check: {field}")
+    if checks.get("variant_count") != 3:
+        raise ValueError("doorway H1 preflight must retain three widths")
+
+
+def _confirmation_row_blockers(
+    row: dict[str, Any],
+    cell: dict[str, Any],
+    receipt: dict[str, Any] | None,
+    *,
+    source_sha: str,
+) -> list[str]:
+    """Reject any short probe without native planner and exact reset custody."""
+    planner, seed = cell["planner"], cell["seed"]
+    metadata = row.get("algorithm_metadata")
+    reasons = []
+    if not isinstance(metadata, dict):
+        reasons.append("missing_algorithm_metadata")
+        metadata = {}
+    expected_hash = {"goal": GOAL_PLANNER_CONFIG_HASH, "social_force": EMPTY_PLANNER_CONFIG_HASH}[
+        planner
+    ]
+    if metadata.get("config_hash") != expected_hash:
+        reasons.append("planner_config_hash_mismatch")
+    if (row.get("algo"), row.get("seed"), row.get("scenario_id"), row.get("horizon")) != (
+        planner,
+        seed,
+        cell.get("scenario_id"),
+        _CONFIRMATION_HORIZON,
+    ):
+        reasons.append("episode_identity_or_horizon_mismatch")
+    if row.get("git_hash") != source_sha:
+        reasons.append("source_commit_mismatch")
+    observed = metadata.get("doorway_pair_receipt")
+    if (
+        not isinstance(receipt, dict)
+        or not isinstance(observed, dict)
+        or any(
+            observed.get(key) != receipt.get(key)
+            for key in (
+                "map_sha256",
+                "initial_actor_state_sha256",
+                "external_rng_state_sha256",
+                "non_width_config_sha256",
+            )
+        )
+    ):
+        reasons.append("paired_reset_receipt_mismatch")
+    if not isinstance(row.get("steps"), int) or not 1 <= row["steps"] <= _CONFIRMATION_HORIZON:
+        reasons.append("invalid_confirmation_step_count")
+    reasons.extend(_trace_exclusion_reasons(metadata, row=row, expected_algorithm=planner))
+    if metadata.get("status") != "ok":
+        reasons.append("planner_status_not_ok")
+    if row.get("status") not in {"success", "collision", "failure"}:
+        reasons.append("unknown_episode_status")
+    if isinstance(row.get("integrity"), dict) and row["integrity"].get("contradictions"):
+        reasons.append("episode_integrity_contradiction")
+    return sorted(set(reasons))
+
+
+def _pair_asset_errors(pair_manifest: dict[str, Any], cells: list[dict[str, Any]]) -> list[str]:
+    """Bind every declared pair asset digest to the generated campaign cells."""
+    expected = {
+        (cell.get("planner"), cell.get("seed"), cell.get("gap_width_m")): cell for cell in cells
+    }
+    observed: dict[tuple[Any, Any, Any], dict[str, Any]] = {}
+    for pair in pair_manifest.get("pairs", []):
+        if not isinstance(pair, dict) or not isinstance(pair.get("cells"), list):
+            return ["pair manifest asset entries are malformed"]
+        for pair_cell in pair["cells"]:
+            if not isinstance(pair_cell, dict):
+                return ["pair manifest asset entries are malformed"]
+            identity = (pair.get("planner"), pair.get("seed"), pair_cell.get("gap_width_m"))
+            if identity in observed:
+                return ["pair manifest asset identities are duplicated"]
+            observed[identity] = pair_cell
+    if set(observed) != set(expected):
+        return ["pair manifest asset identities differ from generated cells"]
+    for identity, cell in expected.items():
+        paired = observed[identity]
+        if any(
+            paired.get(field) != cell.get(field)
+            for field in ("variant_id", "map_sha256", "scenario_sha256")
+        ):
+            return ["pair manifest asset digest differs from generated cell custody"]
+    return []
+
+
+def assess_confirmation_rows(
+    rows: list[dict[str, Any]],
+    cells: list[dict[str, Any]],
+    pair_manifest: dict[str, Any],
+    *,
+    source_sha: str,
+    manifest_sha256: str,
+) -> dict[str, Any]:
+    """Classify a separate actor-present H10 probe before H400 dispatch."""
+    expected = {(p, s, w) for p in _PLANNERS for s in _SEEDS for w in _WIDTHS}
+    identities = [(c.get("planner"), c.get("seed"), c.get("gap_width_m")) for c in cells]
+    if (
+        len(rows) != 18
+        or len(cells) != 18
+        or set(identities) != expected
+        or len(set(identities)) != 18
+    ):
+        raise ValueError("confirmation probe requires all 18 frozen identities")
+    pair_errors = check_pair_receipts(pair_manifest)
+    pair_errors.extend(_pair_asset_errors(pair_manifest, cells))
+    if pair_manifest.get("manifest_sha256") != manifest_sha256:
+        raise ValueError("confirmation pair manifest checksum identity mismatch")
+    receipts = {
+        (pair["planner"], pair["seed"], cell["gap_width_m"]): cell
+        for pair in pair_manifest["pairs"]
+        for cell in pair["cells"]
+    }
+    inventory = []
+    for row, cell, identity in zip(rows, cells, identities, strict=True):
+        planner, seed, width = identity
+        metadata = row.get("algorithm_metadata")
+        reasons = _confirmation_row_blockers(
+            row, cell, receipts.get(identity), source_sha=source_sha
+        )
+        inventory.append(
+            {
+                "planner": planner,
+                "seed": seed,
+                "gap_width_m": width,
+                "status": "eligible" if not reasons else "diagnostic",
+                "blockers": sorted(set(reasons)),
+                "command_execution_mode": _observed_execution_mode(metadata, row, planner)
+                if isinstance(metadata, dict)
+                else None,
+                "ancillary_telemetry_gaps": _ancillary_telemetry_gaps(
+                    metadata if isinstance(metadata, dict) else {}
+                ),
+            }
+        )
+    return {
+        "schema_version": "issue_9348_confirmation_preflight.v1",
+        "claim_boundary": "actor-present H10 probe only; no H400 outcome or width effect",
+        "source_commit": source_sha,
+        "application_manifest_sha256": manifest_sha256,
+        "planner_config_hashes": {
+            "goal": GOAL_PLANNER_CONFIG_HASH,
+            "social_force": EMPTY_PLANNER_CONFIG_HASH,
+        },
+        "probe_horizon_steps": _CONFIRMATION_HORIZON,
+        "planned_rows": 18,
+        "pair_errors": pair_errors,
+        "rows": inventory,
+        "admit_h400": not pair_errors and all(item["status"] == "eligible" for item in inventory),
+    }
+
+
+def _require_confirmation_preflight(
+    preflight: dict[str, Any], confirmation: dict[str, Any]
+) -> None:
+    """Keep actor-free oracle findings outside a strict actor-present gate."""
+    _require_h1_preflight(preflight)
+    if confirmation.get("schema_version") != "issue_9348_confirmation_preflight.v1":
+        raise ValueError("doorway actor-present confirmation report is unavailable")
+    if confirmation.get("admit_h400") is not True:
+        raise ValueError(
+            "doorway actor-present confirmation has fallback, degraded, or incomplete rows"
+        )
+
+
+def _run_actor_present_confirmation(
+    manifest: dict[str, Any],
+    assets: list[dict[str, Any]],
+    output_root: Path,
+    *,
+    source_sha: str,
+    manifest_sha256: str,
+) -> dict[str, Any]:
+    """Run and preserve 18 short planner probes with independent pair receipts."""
+    session = DoorwayPairingSession()
+    schema = load_schema(_SCHEMA)
+    rows: list[dict[str, Any]] = []
+    cells: list[dict[str, Any]] = []
+    raw_path = output_root / "confirmation_episodes.jsonl"
+    configs = manifest["_resolved"]["planner_configs"]
+    hashes = manifest["_resolved"]["planner_config_hashes"]
+    with raw_path.open("x", encoding="utf-8") as handle:
+        for planner in _PLANNERS:
+            for seed in _SEEDS:
+                for asset in assets:
+                    scenario_path = Path(asset["scenario_path"])
+                    scenario = load_scenarios(scenario_path)[0]
+                    receipt_hook = session.hook(
+                        planner=planner,
+                        seed=seed,
+                        map_sha256=asset["map_sha256"],
+                        non_width_config_sha256=non_width_config_sha256(
+                            scenario, planner=planner, planner_config_hash=hashes[planner]
+                        ),
+                    )
+                    row = _run_map_episode(
+                        scenario,
+                        seed,
+                        horizon=_CONFIRMATION_HORIZON,
+                        dt=_DT,
+                        record_forces=True,
+                        snqi_weights=None,
+                        snqi_baseline=None,
+                        algo=planner,
+                        scenario_path=scenario_path,
+                        algo_config=dict(configs[planner]),
+                        algo_config_path=None,
+                        record_planner_decision_trace=True,
+                        record_simulation_step_trace=True,
+                        pair_reset_hook=receipt_hook,
+                        policy_builder=_observed_baseline_policy_builder,
+                    )
+                    _record_baseline_execution_axes(row, planner)
+                    serialized = io.StringIO()
+                    write_validated_to_handle(serialized, schema, row)
+                    line = serialized.getvalue()
+                    handle.write(line)
+                    handle.flush()
+                    rows.append(row)
+                    cells.append(
+                        {
+                            "planner": planner,
+                            "seed": seed,
+                            "gap_width_m": asset["gap_width_m"],
+                            "variant_id": asset["variant_id"],
+                            "scenario_id": scenario["name"],
+                            "scenario_sha256": asset["scenario_sha256"],
+                            "map_sha256": asset["map_sha256"],
+                            "line_number": len(rows),
+                            "line_sha256": hashlib.sha256(line.encode()).hexdigest(),
+                        }
+                    )
+    pairs = session.fill_pair_manifest(build_pair_manifest(assets, _SEEDS, manifest_sha256))
+    write_json(output_root / "confirmation_pair_manifest.json", pairs)
+    report = assess_confirmation_rows(
+        rows, cells, pairs, source_sha=source_sha, manifest_sha256=manifest_sha256
+    )
+    report["cells"] = cells
+    report["episodes_jsonl_sha256"] = sha256_file(raw_path)
+    write_json(output_root / "confirmation_preflight.json", report)
+    return report
 
 
 def _contrast_endpoint(
@@ -350,7 +1241,12 @@ def analyze_rows(
     Returns:
         Complete descriptive and paired-uncertainty report.
     """
-    if len(rows) != 18 or len(cells) != 18 or check_pair_receipts(pair_manifest):
+    if (
+        len(rows) != 18
+        or len(cells) != 18
+        or check_pair_receipts(pair_manifest)
+        or _pair_asset_errors(pair_manifest, cells)
+    ):
         raise ValueError("doorway report requires 18 rows and six verified reset pairs")
     expected = {(p, s, w) for p in _PLANNERS for s in _SEEDS for w in _WIDTHS}
     identities = [(c["planner"], c["seed"], c["gap_width_m"]) for c in cells]
@@ -404,6 +1300,10 @@ def analyze_rows(
         "planned_rows": 18,
         "observed_rows": len(rows),
         "native_rows": len(valid),
+        "native_rows_semantics": (
+            "eligible baseline rows: goal native commands or declared Social Force adapter; "
+            "not a claim that both planners use native command mode"
+        ),
         "excluded_rows": 18 - len(valid),
         "excluded_pair_ids": excluded_pair_ids,
         "failure_cases": failure_cases,
@@ -459,6 +1359,39 @@ def _verify_generated_assets(root: Path, cells: list[dict[str, Any]]) -> None:
             raise ValueError("doorway generated asset digest differs from row custody")
 
 
+def _verify_confirmation_files(
+    root: Path, *, source_sha: str, manifest_sha256: str
+) -> dict[str, Any]:
+    """Rebuild short-probe admission from raw rows and sealed pair receipts."""
+    report = _json(root / "confirmation_preflight.json")
+    cells = report.get("cells")
+    if not isinstance(cells, list) or len(cells) != 18:
+        raise ValueError("doorway confirmation cell custody is incomplete")
+    _verify_generated_assets(root, cells)
+    raw_path = root / "confirmation_episodes.jsonl"
+    if sha256_file(raw_path) != report.get("episodes_jsonl_sha256"):
+        raise ValueError("doorway confirmation raw episode checksum mismatch")
+    lines = raw_path.read_text(encoding="utf-8").splitlines(keepends=True)
+    if len(lines) != 18 or any(
+        cell.get("line_number") != number
+        or hashlib.sha256(line.encode()).hexdigest() != cell.get("line_sha256")
+        for number, (line, cell) in enumerate(zip(lines, cells, strict=True), start=1)
+    ):
+        raise ValueError("doorway confirmation line identity or digest mismatch")
+    rebuilt = assess_confirmation_rows(
+        [json.loads(line) for line in lines],
+        cells,
+        _json(root / "confirmation_pair_manifest.json"),
+        source_sha=source_sha,
+        manifest_sha256=manifest_sha256,
+    )
+    rebuilt["cells"] = cells
+    rebuilt["episodes_jsonl_sha256"] = sha256_file(raw_path)
+    if report != {"review_marker": review_marker_json(), **rebuilt}:
+        raise ValueError("doorway confirmation report differs from sealed raw probes")
+    return rebuilt
+
+
 def verify_campaign_bundle(root: Path) -> dict[str, Any]:
     """Read back every produced file and row against sealed SHA-256 receipts.
 
@@ -494,8 +1427,15 @@ def verify_campaign_bundle(root: Path) -> dict[str, Any]:
     ):
         raise ValueError("doorway bundle file checksum or full-tree coverage mismatch")
     run_manifest = _json(root / "run_manifest.json")
+    source_sha = run_manifest.get("source_commit")
+    if not isinstance(source_sha, str) or run_manifest.get(
+        "source_tree_custody"
+    ) != _source_tree_custody(source_sha):
+        raise ValueError("doorway source tree custody differs from the declared source commit")
     if (
         sha256_file(root / "inputs/application_manifest.yaml")
+        != run_manifest.get("application_manifest_sha256")
+        or _json(root / "pair_manifest.json").get("manifest_sha256")
         != run_manifest.get("application_manifest_sha256")
         or sha256_file(root / "inputs/episode.schema.v1.json")
         != run_manifest.get("episode_schema_sha256")
@@ -504,7 +1444,12 @@ def verify_campaign_bundle(root: Path) -> dict[str, Any]:
         or (root / "inputs/social_force.yaml").exists()
     ):
         raise ValueError("doorway copied scientific input digest mismatch")
-    _require_confirmation_preflight(_json(root / "preflight.json"))
+    confirmation = _verify_confirmation_files(
+        root,
+        source_sha=run_manifest["source_commit"],
+        manifest_sha256=run_manifest["application_manifest_sha256"],
+    )
+    _require_confirmation_preflight(_json(root / "preflight.json"), confirmation)
     pair_manifest = _json(root / "pair_manifest.json")
     raw_path = root / "episodes.jsonl"
     if sha256_file(raw_path) != run_manifest.get("episodes_jsonl_sha256"):
@@ -537,6 +1482,7 @@ def run_campaign(manifest_path: Path, output_root: Path) -> Path:
         Path to the completed result root.
     """
     source_sha = _source_identity()
+    source_tree_custody = _source_tree_custody(source_sha)
     manifest_path = manifest_path.resolve()
     manifest = load_three_width_manifest(manifest_path)
     output_root = output_root.resolve()
@@ -548,7 +1494,7 @@ def run_campaign(manifest_path: Path, output_root: Path) -> Path:
         shutil.copy2(manifest_path, output_root / "inputs/application_manifest.yaml")
         preflight = run_three_width_preflight(manifest_path, output_dir=output_root / "assets")
         write_json(output_root / "preflight.json", preflight)
-        _require_confirmation_preflight(preflight)
+        _require_h1_preflight(preflight)
         assets = [
             record["assets"]
             | {"variant_id": record["variant_id"], "gap_width_m": record["geometry"]["gap_width_m"]}
@@ -558,6 +1504,14 @@ def run_campaign(manifest_path: Path, output_root: Path) -> Path:
         planner_configs = manifest["_resolved"]["planner_configs"]
         planner_config_hashes = manifest["_resolved"]["planner_config_hashes"]
         shutil.copy2(_SCHEMA, output_root / "inputs/episode.schema.v1.json")
+        confirmation = _run_actor_present_confirmation(
+            manifest,
+            assets,
+            output_root,
+            source_sha=source_sha,
+            manifest_sha256=sha256_file(manifest_path),
+        )
+        _require_confirmation_preflight(preflight, confirmation)
         schema = load_schema(_SCHEMA)
         rows: list[dict[str, Any]] = []
         cells: list[dict[str, Any]] = []
@@ -593,7 +1547,9 @@ def run_campaign(manifest_path: Path, output_root: Path) -> Path:
                             record_planner_decision_trace=True,
                             record_simulation_step_trace=True,
                             pair_reset_hook=receipt_hook,
+                            policy_builder=_observed_baseline_policy_builder,
                         )
+                        _record_baseline_execution_axes(row, planner)
                         serialized = io.StringIO()
                         write_validated_to_handle(serialized, schema, row)
                         line = serialized.getvalue()
@@ -624,6 +1580,7 @@ def run_campaign(manifest_path: Path, output_root: Path) -> Path:
             {
                 "schema_version": "issue_9348_three_width_run.v1",
                 "source_commit": source_sha,
+                "source_tree_custody": source_tree_custody,
                 "application_manifest_path": manifest_path.as_posix(),
                 "application_manifest_sha256": sha256_file(manifest_path),
                 "planner_config_hash": dict(planner_config_hashes),
@@ -644,6 +1601,7 @@ def run_campaign(manifest_path: Path, output_root: Path) -> Path:
                 {
                     "schema_version": "issue_9348_run_failure.v1",
                     "source_commit": source_sha,
+                    "source_tree_custody": source_tree_custody,
                     "error_type": type(error).__name__,
                     "error": str(error),
                 },

@@ -241,6 +241,7 @@ class _CollisionEventContext:
     map_def: Any
     robot_radius: float
     ped_radius: float
+    capture_robot_speed: bool = False
 
 
 def _point_to_segment_distance(point: np.ndarray, segment: Any) -> float:
@@ -306,6 +307,20 @@ def _point_inside_map_bounds(point: np.ndarray, map_def: Any) -> bool:
     return 0.0 <= float(point[0]) <= float(width) and 0.0 <= float(point[1]) <= float(height)
 
 
+def _measured_robot_speed(
+    robot_pos: np.ndarray, previous_robot_pos: np.ndarray | None, dt_seconds: float
+) -> float | None:
+    """Return measured step speed, or None when displacement cannot prove it.
+
+    Returns:
+        Finite nonnegative robot speed in metres per second, when measurable.
+    """
+    if previous_robot_pos is None or not math.isfinite(dt_seconds) or dt_seconds <= 0.0:
+        return None
+    speed = float(np.linalg.norm((robot_pos - previous_robot_pos) / dt_seconds))
+    return speed if math.isfinite(speed) else None
+
+
 def _step_collision_events(
     *,
     step_idx: int,
@@ -323,6 +338,7 @@ def _step_collision_events(
         robot_velocity = (robot_pos - previous_robot_pos) / context.dt_seconds
     else:
         robot_velocity = np.zeros(2, dtype=float)
+    measured_robot_speed = _measured_robot_speed(robot_pos, previous_robot_pos, context.dt_seconds)
 
     if bool(meta.get("is_pedestrian_collision", False)):
         ped_array = np.asarray(ped_positions, dtype=float).reshape(-1, 2)
@@ -365,17 +381,19 @@ def _step_collision_events(
                     ped_array[ped_index] - previous_ped_positions[ped_index]
                 ) / context.dt_seconds
             relative_speed = float(np.linalg.norm(robot_velocity - ped_velocity))
-        events.append(
-            {
-                "collision_partner_type": "pedestrian",
-                "collision_partner_id": partner_id,
-                "contact_partner_ids": contact_partner_ids,
-                "collision_time": collision_time,
-                "relative_speed_at_contact": relative_speed,
-                "clearance_series_source": "runtime.step.pedestrian_positions",
-                "exact_event_source": "runtime.step.meta.is_pedestrian_collision",
-            }
-        )
+        event = {
+            "collision_partner_type": "pedestrian",
+            "collision_partner_id": partner_id,
+            "contact_partner_ids": contact_partner_ids,
+            "collision_time": collision_time,
+            "relative_speed_at_contact": relative_speed,
+            "clearance_series_source": "runtime.step.pedestrian_positions",
+            "exact_event_source": "runtime.step.meta.is_pedestrian_collision",
+        }
+        if context.capture_robot_speed:
+            event["robot_speed_at_contact_m_s"] = measured_robot_speed
+            event["contact_step_index"] = step_idx
+        events.append(event)
 
     if bool(meta.get("is_obstacle_collision", False)):
         bounds = list(getattr(context.map_def, "bounds", [])) if context.map_def is not None else []
@@ -398,20 +416,22 @@ def _step_collision_events(
                 prefix="obstacle" if partner_type == "static_geometry" else "boundary",
             )
         )
-        events.append(
-            {
-                "collision_partner_type": partner_type,
-                "collision_partner_id": partner_id,
-                "collision_time": collision_time,
-                "relative_speed_at_contact": float(np.linalg.norm(robot_velocity)),
-                "clearance_series_source": (
-                    "runtime.step.map.obstacles"
-                    if partner_type in {"static_geometry", "goal_artifact"}
-                    else "runtime.step.map.bounds"
-                ),
-                "exact_event_source": "runtime.step.meta.is_obstacle_collision",
-            }
-        )
+        event = {
+            "collision_partner_type": partner_type,
+            "collision_partner_id": partner_id,
+            "collision_time": collision_time,
+            "relative_speed_at_contact": float(np.linalg.norm(robot_velocity)),
+            "clearance_series_source": (
+                "runtime.step.map.obstacles"
+                if partner_type in {"static_geometry", "goal_artifact"}
+                else "runtime.step.map.bounds"
+            ),
+            "exact_event_source": "runtime.step.meta.is_obstacle_collision",
+        }
+        if context.capture_robot_speed:
+            event["robot_speed_at_contact_m_s"] = measured_robot_speed
+            event["contact_step_index"] = step_idx
+        events.append(event)
 
     return events
 
@@ -2149,6 +2169,7 @@ class _StepSimResult:
     step_visibility_reason: str | None
     selected_action_payload: dict[str, Any]
     applied_environment_action_payload: dict[str, Any]
+    action_conversion_payload: dict[str, Any] | None
     actuation_step: Any
     planner_step_decision: dict[str, Any] | None
 
@@ -2422,6 +2443,7 @@ def _finite_positive_float(value: Any) -> float | None:
 def _make_collision_event_context(
     config: RobotSimulationConfig,
     map_def: Any,
+    scenario: Mapping[str, Any] | None = None,
 ) -> _CollisionEventContext:
     """Build the per-episode collision-event typing context.
 
@@ -2435,11 +2457,15 @@ def _make_collision_event_context(
     robot_radius = float(robot_radius_val if robot_radius_val is not None else 1.0)
     ped_radius_val = getattr(config.sim_config, "ped_radius", 0.4)
     ped_radius = float(ped_radius_val if ped_radius_val is not None else 0.4)
+    attribution_version = (scenario or {}).get("collision_attribution_version")
+    if attribution_version not in (None, "v1"):
+        raise ValueError(f"unsupported collision_attribution_version: {attribution_version!r}")
     return _CollisionEventContext(
         dt_seconds=float(config.sim_config.time_per_step_in_secs),
         map_def=map_def,
         robot_radius=robot_radius,
         ped_radius=ped_radius,
+        capture_robot_speed=attribution_version == "v1",
     )
 
 
@@ -2633,20 +2659,34 @@ def _step_convert_and_execute(
     policy_command: Any,
     step_is_native: bool,
     env: Any,
-) -> tuple[Any, float, bool, bool, dict[str, Any], dict[str, Any], dict[str, Any]]:
+) -> tuple[Any, float, bool, bool, dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
     """Convert command to env action, execute step, and update state.obs.
 
     Returns:
         Tuple of (obs, reward, terminated, truncated, info, selected_action_payload,
-        applied_environment_action_payload).
+        applied_environment_action_payload, action_conversion_payload).
     """
     selected_action_payload = _command_action_payload(policy_command)
     state.ammv_command_actions.append(selected_action_payload)
+    action_conversion_payload: dict[str, Any] = {}
     action_conversion_start = time.perf_counter() if slc.active_harness is not None else None
     if step_is_native:
         # Policy already outputs native env actions (e.g. delta velocities);
         # skip the absolute->delta conversion done by _policy_command_to_env_action.
         action = np.asarray(policy_command, dtype=np.float32)
+        action_conversion_payload.update(
+            {
+                "schema_version": "policy-action-conversion.v1",
+                "kind": "native_environment_action_passthrough",
+            }
+        )
+    elif slc.record_simulation_step_trace:
+        action = _policy_command_to_env_action(
+            env=env,
+            config=slc.config,
+            command=policy_command,
+            conversion_trace=action_conversion_payload,
+        )
     else:
         action = _policy_command_to_env_action(
             env=env,
@@ -2670,6 +2710,7 @@ def _step_convert_and_execute(
         info,
         selected_action_payload,
         applied_environment_action_payload,
+        action_conversion_payload,
     )
 
 
@@ -2811,6 +2852,8 @@ def _step_build_simulation_trace(
         "selected_action": sim.selected_action_payload,
         "applied_environment_action": sim.applied_environment_action_payload,
     }
+    if sim.action_conversion_payload:
+        planner_payload["action_conversion"] = sim.action_conversion_payload
     if sim.actuation_step is not None:
         planner_payload["amv"] = {
             "requested_linear_m_s": float(sim.actuation_step.requested_command[0]),
@@ -3466,6 +3509,7 @@ def _execute_step_loop(
             info,
             sel_payload,
             applied_environment_action_payload,
+            action_conversion_payload,
         ) = _step_convert_and_execute(
             state,
             slc,
@@ -3497,6 +3541,7 @@ def _execute_step_loop(
             step_visibility_reason=s_reason,
             selected_action_payload=sel_payload,
             applied_environment_action_payload=applied_environment_action_payload,
+            action_conversion_payload=action_conversion_payload,
             actuation_step=actuation_step,
             planner_step_decision=planner_step_decision,
         )
@@ -3558,7 +3603,9 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
             single_pedestrian_vru_metadata=args.single_pedestrian_vru_metadata,
             hybrid_source_field=args.hybrid_source_field,
             active_harness=active_harness,
-            collision_event_context=_make_collision_event_context(args.config, state.map_def),
+            collision_event_context=_make_collision_event_context(
+                args.config, state.map_def, args.scenario
+            ),
         )
         _execute_step_loop(
             state,

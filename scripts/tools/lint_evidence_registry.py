@@ -684,7 +684,15 @@ def _synthetic_commit_findings(display_path: Path, value: Any) -> list[dict[str,
 def _artifact_path(
     mapping: Mapping[str, Any], ancestors: tuple[Mapping[str, Any], ...]
 ) -> str | None:
-    """Find an artifact path, including explicit evidence-bundle source roots."""
+    """Find an artifact path, including candidate configs and evidence-bundle source roots."""
+    if any(
+        isinstance(candidates := parent.get("candidate_configs"), Mapping)
+        and any(candidate is mapping for candidate in candidates.values())
+        for parent in ancestors
+    ):
+        candidate_paths = _string_values(mapping, {"path"})
+        if candidate_paths:
+            return candidate_paths[0]
     paths = _string_values(mapping, ARTIFACT_PATH_KEYS)
     for value in paths:
         if value and (not value.startswith("configs/") or value == mapping.get("resolved_path")):

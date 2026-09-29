@@ -33,6 +33,8 @@ ROOT = Path(__file__).resolve().parents[2]
 CAMPAIGN_PATH = ROOT / "configs/benchmarks/issue_9748_hybrid_v4_dev_split_v1.yaml"
 SEARCH_PATH = ROOT / "configs/policy_search/issue_9748_v4_tuning_search_v1.yaml"
 SCHEMA_PATH = ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json"
+# Camera-ready's map runner anchors repository-relative map_file paths here.
+SCENARIO_ANCHOR = ROOT / "scoped_scenarios.json"
 LOG_SCHEMA = "issue_9748.tuning_log.v1"
 SEARCH_SCHEMA = "issue_9748.v4_search.v1"
 TUNABLE = frozenset(
@@ -144,7 +146,7 @@ def _effective_config_hash(
 def _run_cell(
     job: tuple[dict[str, Any], int, dict[str, Any], str, str, int, float],
 ) -> dict[str, Any]:
-    scenario, seed, manifest, candidate_path, matrix_path, horizon, dt = job
+    scenario, seed, manifest, candidate_path, scenario_anchor, horizon, dt = job
     started = time.perf_counter()
     try:
         from robot_sf.benchmark.map_runner.map_runner import build_map_policy
@@ -159,7 +161,7 @@ def _run_cell(
             snqi_weights=None,
             snqi_baseline=None,
             algo="hybrid_rule_local_planner",
-            scenario_path=Path(matrix_path),
+            scenario_path=Path(scenario_anchor),
             algo_config=manifest,
             algo_config_path=candidate_path,
             policy_builder=build_map_policy,
@@ -405,7 +407,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
                             seed,
                             manifest,
                             str(candidate_path),
-                            str(cfg.scenario_matrix_path),
+                            str(SCENARIO_ANCHOR),
                             cfg.horizon,
                             cfg.dt,
                         )

@@ -555,7 +555,7 @@ def _manifest_with_seed_policy(seed_policy: dict[str, object]):
 
 def test_release_input_resolver_rejects_fixed_list_that_differs_from_resolved_seeds() -> None:
     """A fixed list of [111] cannot stand in for the resolved 111-140 evaluation seeds."""
-    manifest = _manifest_with_seed_policy(  # seed-holdout: synthetic-fixture
+    manifest = _manifest_with_seed_policy(
         {"mode": "fixed-list", "seeds": [111]}  # seed-holdout: synthetic-fixture
     )
 

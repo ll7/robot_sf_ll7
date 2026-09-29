@@ -160,11 +160,14 @@ Detailed fields and comparator invocation are in
 Stage 3 reconstructs each row's H600 horizon, 0.1-second step, runtime
 algorithm, robot configuration, scenario payload, planner configuration hash,
 force-recording setting, and other declared run controls from that clean,
-source-bound campaign. Row-file hashes alone cannot admit substituted
-controls. The post-run finalizer reruns this comparator and revalidates the
-scientific-candidate identity before promoting it to
-`accepted_pre_publication`. No runner or finalizer step authorizes a tag,
-Zenodo upload, or DOI.
+source-bound campaign. It also checks row algorithm metadata and run provenance
+against scoped hashes reconstructed by the detached, exact-source runner.
+Row-file hashes alone cannot admit substituted controls. The post-run finalizer
+keeps the candidate pending while metric equivalence, robot-force validation,
+and full release acceptance run; only then does it revalidate and promote the
+scientific candidate to `accepted_pre_publication`. Its post-run gate reports
+are separate from the runner's original candidate-gate receipts. No runner or
+finalizer step authorizes a tag, Zenodo upload, or DOI.
 
 After the author approves the publication steps and real concept/version DOI
 coordinates are bound in a clean-source resolved identity, create a derivative

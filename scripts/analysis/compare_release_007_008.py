@@ -48,6 +48,10 @@ from scripts.analysis.compare_issue_9431_release import (
     EXPECTED_SEEDS,
     _execution_audit,
 )
+from scripts.analysis.compare_release_0_0_7_to_0_0_8 import (
+    _matches_config_path,
+    _runtime_successor_identity,
+)
 
 REPORT_SCHEMA = "release_007_008_comparison.v1"
 CANDIDATE_SCHEMA = "release_007_008_candidate_identity.v1"
@@ -633,6 +637,11 @@ def _candidate_run_controls(  # noqa: C901, PLR0912, PLR0915 - one audited sourc
         arm_controls[planner.key] = {
             "horizon": horizon,
             "dt": dt,
+            "planner_config_path": (
+                config_path.relative_to(source_root.resolve()).as_posix()
+                if config_path is not None
+                else None
+            ),
             "record_forces": campaign.record_forces,
             "record_planner_decision_trace": campaign.record_planner_decision_trace,
             "record_simulation_step_trace": campaign.record_simulation_step_trace,
@@ -647,7 +656,76 @@ def _candidate_run_controls(  # noqa: C901, PLR0912, PLR0915 - one audited sourc
             "safety_wrapper": safety_wrapper,
             "policy_configs": policy_configs,
         }
-    return {"scenarios": scenario_controls, "arms": arm_controls}
+    campaign_config_hash, _, _, scoped_hashes, _ = _runtime_successor_identity(
+        source_root,
+        identity["source_sha"],
+        identity["effective_config_path"],
+        {},
+    )
+    expected_scopes = {(planner.key, "differential_drive") for planner in campaign.planners}
+    if set(scoped_hashes) != expected_scopes:
+        raise ValueError("pinned runner scopes differ from candidate campaign arms")
+    return {
+        "source_sha": identity["source_sha"],
+        "campaign_config_hash": campaign_config_hash,
+        "scoped_hashes": scoped_hashes,
+        "scenarios": scenario_controls,
+        "arms": arm_controls,
+    }
+
+
+def _candidate_algorithm_metadata_issues(
+    row: Mapping[str, Any], expected_algo: str, policy_config: Mapping[str, Any]
+) -> list[str]:
+    """Bind serialized algorithm metadata to the source-resolved policy config."""
+    metadata = row.get("algorithm_metadata")
+    if not isinstance(metadata, Mapping):
+        return ["algorithm_metadata is missing or malformed"]
+    issues = []
+    if metadata.get("algorithm") != expected_algo:
+        issues.append("algorithm_metadata.algorithm differs from pinned planner")
+    if metadata.get("config") != policy_config:
+        issues.append("algorithm_metadata.config differs from pinned planner config")
+    if metadata.get("config_hash") != _config_hash(policy_config):
+        issues.append("algorithm_metadata.config_hash differs from pinned planner config")
+    return issues
+
+
+def _candidate_runner_provenance_issues(
+    row: Mapping[str, Any],
+    *,
+    arm: str,
+    expected_algo: str,
+    arm_control: Mapping[str, Any],
+    expected: Mapping[str, Any],
+) -> list[str]:
+    """Bind row provenance to the detached runner's exact source and scope."""
+    provenance = row.get("provenance")
+    if not isinstance(provenance, Mapping):
+        return ["runner provenance is missing or malformed"]
+    issues = []
+    if provenance.get("commit_hash") != expected.get("source_sha"):
+        issues.append("runner provenance commit_hash differs from pinned source")
+    config_identity = provenance.get("config_identity")
+    if not isinstance(config_identity, Mapping):
+        return [*issues, "runner provenance config_identity is missing or malformed"]
+    if config_identity.get("algo") != expected_algo:
+        issues.append("runner config_identity.algo differs from pinned planner")
+    if not _matches_config_path(
+        config_identity.get("algo_config_path"), arm_control["planner_config_path"]
+    ):
+        issues.append("runner config_identity.algo_config_path differs from pinned source")
+    pinned_scope = expected.get("scoped_hashes", {}).get((arm, "differential_drive"))
+    if config_identity.get("scenario_matrix_hash") != pinned_scope:
+        issues.append(
+            "runner config_identity.scenario_matrix_hash differs from pinned scoped runner"
+        )
+    for field in ("campaign_config_hash", "config_hash"):
+        if field in config_identity and config_identity[field] != expected.get(
+            "campaign_config_hash"
+        ):
+            issues.append(f"runner config_identity.{field} differs from pinned campaign config")
+    return issues
 
 
 def _candidate_run_control_issues(  # noqa: C901 - compare every execution field together
@@ -689,6 +767,16 @@ def _candidate_run_control_issues(  # noqa: C901 - compare every execution field
         )
         policy_config = _apply_scenario_uncertainty_envelope_config(
             expected_algo, policy_config, scenario_with_seed
+        )
+        issues.extend(_candidate_algorithm_metadata_issues(row, expected_algo, policy_config))
+        issues.extend(
+            _candidate_runner_provenance_issues(
+                row,
+                arm=arm,
+                expected_algo=expected_algo,
+                arm_control=arm_control,
+                expected=expected,
+            )
         )
         expected_params = _scenario_identity_payload(
             scenario_with_seed,

@@ -202,7 +202,7 @@
       "kind": "file",
       "manifest_field": "release_checklist_path",
       "path": "docs/RELEASE.md",
-      "sha256": "788b93ebaac13dbad641626ef4c2f9100541f92badd90d02b16a33bd4fbd12bf"
+      "sha256": "b9614e0390bc4b4f100a09513cbee90ccc27f85dca8c9d20e6599056bf3b6c5b"
     },
     {
       "description": "Citation metadata referenced by the release manifest.",
@@ -210,7 +210,7 @@
       "kind": "file",
       "manifest_field": "citation_path",
       "path": "CITATION.cff",
-      "sha256": "4b33345db1a493381e52fc88ce5b8dd19b1b0305c6d3bc34cf4856034d7021b8"
+      "sha256": "57ca7cb7f1a8fd99cd2e24f5f5322f83611cad40841e4f9fbdb742ba309c73c2"
     },
     {
       "description": "Social Navigation Quality Index weights referenced by the manifest.",

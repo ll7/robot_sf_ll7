@@ -500,7 +500,7 @@ def _versioned_v4_fixture(tmp_path: Path) -> tuple[Path, Path, dict, str]:
     return source, identity_path, identity, target_old
 
 
-def _run_control_fixture(tmp_path: Path) -> dict:
+def _run_control_fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     source = tmp_path / "run-control-source"
     matrix = source / "configs/matrix.yaml"
     campaign = source / "configs/campaign.yaml"
@@ -538,6 +538,7 @@ def _run_control_fixture(tmp_path: Path) -> dict:
         )
     )
     identity = {
+        "source_sha": "a" * 40,
         "effective_config_path": "configs/campaign.yaml",
         "scenario_matrix": {
             "path": "configs/matrix.yaml",
@@ -546,6 +547,17 @@ def _run_control_fixture(tmp_path: Path) -> dict:
         "scenario_ids": ["doorway"],
         "_effective_algorithms": {"fixture_arm": {"doorway": "goal"}},
     }
+    monkeypatch.setattr(
+        comparator,
+        "_runtime_successor_identity",
+        lambda *_args: (
+            "b" * 64,
+            "c" * 64,
+            {},
+            {("fixture_arm", "differential_drive"): "d" * 64},
+            set(),
+        ),
+    )
     return comparator._candidate_run_controls(identity, source)
 
 
@@ -573,18 +585,53 @@ def _run_control_fixture(tmp_path: Path) -> dict:
             lambda row: row["scenario_params"].update({"algo": "social_force"}),
             "source-bound campaign, planner, and scenario",
         ),
+        (
+            lambda row: row["provenance"]["config_identity"].update(
+                {"scenario_matrix_hash": "e" * 64}
+            ),
+            "scenario_matrix_hash differs from pinned scoped runner",
+        ),
+        (
+            lambda row: row["provenance"]["config_identity"].update(
+                {"algo_config_path": "configs/algos/unpinned.yaml"}
+            ),
+            "algo_config_path differs from pinned source",
+        ),
+        (
+            lambda row: row["provenance"].update({"commit_hash": "f" * 40}),
+            "commit_hash differs from pinned source",
+        ),
+        (
+            lambda row: row["provenance"]["config_identity"].update(
+                {"campaign_config_hash": "e" * 64}
+            ),
+            "campaign_config_hash differs from pinned campaign config",
+        ),
+        (
+            lambda row: row["algorithm_metadata"].update({"config_hash": "e" * 64}),
+            "algorithm_metadata.config_hash differs from pinned planner config",
+        ),
     ],
 )
 def test_candidate_run_controls_reject_rehashed_control_changes(
-    tmp_path: Path, mutate, reason: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutate, reason: str
 ) -> None:
-    controls = _run_control_fixture(tmp_path)
+    controls = _run_control_fixture(tmp_path, monkeypatch)
     scenario = controls["scenarios"]["doorway"]
     scenario_with_seed = comparator._scenario_with_episode_seed_defaults(
         scenario["scenario"], seed=111
     )
     arm_control = controls["arms"]["fixture_arm"]
     policy = arm_control["policy_configs"]["doorway"]
+    effective_policy_config = comparator._apply_planner_selector_v2_context(
+        policy["algo"],
+        dict(policy["policy_config"]),
+        scenario=scenario_with_seed,
+        seed=111,
+    )
+    effective_policy_config = comparator._apply_scenario_uncertainty_envelope_config(
+        policy["algo"], effective_policy_config, scenario_with_seed
+    )
     params = comparator._scenario_identity_payload(
         scenario_with_seed,
         algo=policy["algo"],
@@ -609,6 +656,22 @@ def test_candidate_run_controls_reject_rehashed_control_changes(
         "result_provenance": {
             "config_hash": comparator._config_hash(params),
             "simulator_settings": {"horizon": 600, "dt": 0.1},
+        },
+        "algorithm_metadata": {
+            "algorithm": policy["algo"],
+            "config": effective_policy_config,
+            "config_hash": comparator._config_hash(effective_policy_config),
+        },
+        "provenance": {
+            "commit_hash": controls["source_sha"],
+            "config_identity": {
+                "algo": policy["algo"],
+                "algo_config_path": arm_control["planner_config_path"],
+                "scenario_matrix_hash": controls["scoped_hashes"][
+                    ("fixture_arm", "differential_drive")
+                ],
+                "campaign_config_hash": controls["campaign_config_hash"],
+            },
         },
         "scenario_params": params,
     }

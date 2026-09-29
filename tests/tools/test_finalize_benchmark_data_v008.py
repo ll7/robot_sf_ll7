@@ -75,6 +75,41 @@ def _stage3_gate(command: list[str], *, baseline_sha: str) -> None:
     _write_json(Path(command[command.index("--report-json") + 1]), report)
 
 
+def _write_postrun_promotion_gate_report(output: Path, candidate_root: Path) -> None:
+    if output.name == "postrun_metric_equivalence.json":
+        _write_json(
+            output,
+            {
+                "status": "mismatch",
+                "baseline_archive_sha256": finalizer.BASELINE_ARCHIVE_SHA256,
+                "baseline_source_sha": finalizer.BASELINE_SOURCE_SHA,
+                "candidate_source_sha": SOURCE_SHA,
+                "expected_rows": finalizer.EXPECTED_EPISODES,
+                "baseline_rows": finalizer.EXPECTED_EPISODES,
+                "candidate_rows": finalizer.EXPECTED_EPISODES,
+                "paired_rows": finalizer.EXPECTED_EPISODES,
+                "robot_force_metrics": {
+                    "status": "pass",
+                    "checked_rows": finalizer.EXPECTED_EPISODES,
+                    "failed_rows": 0,
+                },
+            },
+        )
+    elif output.name == "postrun_robot_force_validation.json":
+        equivalence = candidate_root / "reports/postrun_metric_equivalence.json"
+        _write_json(
+            output,
+            {
+                "classification": "release_robot_force_validation",
+                "episodes": finalizer.EXPECTED_EPISODES,
+                "source_commit": SOURCE_SHA,
+                "equivalence_report_sha256": finalizer._sha256(equivalence),
+            },
+        )
+    else:
+        _write_json(output, {"status": "pass"})
+
+
 def _tree_snapshot(root: Path) -> dict[str, bytes]:
     """Capture regular-file bytes for producer immutability assertions."""
     return {
@@ -374,6 +409,7 @@ def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
         "load_release_campaign_config",
         lambda _: CampaignConfig(name="synthetic", scenario_matrix_path=Path("s"), planners=()),
     )
+
     monkeypatch.setattr(
         finalizer,
         "validate_full_benchmark_release_acceptance",
@@ -396,6 +432,15 @@ def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
     )
     assert receipt["raw_episode_sha256"] == finalizer._raw_episode_hashes(producer)
     assert receipt["raw_episode_sha256"] == finalizer._raw_episode_hashes(tmp_path / "derivative")
+    assert receipt["release_acceptance_sha256"] == finalizer._sha256(
+        tmp_path / "derivative/reports/release_acceptance.json"
+    )
+    assert (
+        finalizer._read_mapping(tmp_path / "derivative/release/scientific_candidate_result.json")[
+            "status"
+        ]
+        == "accepted_pre_publication"
+    )
     assert _tree_snapshot(producer) == producer_snapshot
     assert (tmp_path / "derivative/reports/stage3_comparison.json").is_file()
     assert (tmp_path / "derivative/reports/stage3_findings.jsonl").is_file()
@@ -463,11 +508,17 @@ def test_finalize_copies_accepted_producer_before_postrun_gates(
             _stage3_gate(command, baseline_sha=finalizer.BASELINE_ARCHIVE_SHA256)
         else:
             output = Path(command[command.index("--output") + 1])
-            _write_json(output, {"status": "pass"})
+            _write_postrun_promotion_gate_report(output, candidate)
         log_path.write_text("gate passed\n", encoding="utf-8")
 
     def acceptance(root: Path, **kwargs: object) -> dict:
         assert root == candidate
+        assert (
+            finalizer._read_mapping(candidate / "release/scientific_candidate_result.json")[
+                "status"
+            ]
+            == "stage3_pending"
+        )
         assert calls == [
             "compare_release_007_008.py",
             "check_release_metric_equivalence.py",
@@ -477,6 +528,12 @@ def test_finalize_copies_accepted_producer_before_postrun_gates(
 
     def publish(root: Path, result: dict, checked_manifest: object) -> Path:
         assert root == candidate
+        assert (
+            finalizer._read_mapping(candidate / "release/scientific_candidate_result.json")[
+                "status"
+            ]
+            == "accepted_pre_publication"
+        )
         assert result == original
         assert checked_manifest is manifest
         archive = tmp_path / "candidate.tar.gz"
@@ -493,7 +550,10 @@ def test_finalize_copies_accepted_producer_before_postrun_gates(
         baseline_archive=baseline,
         expected_source_sha=SOURCE_SHA,
     )
-    assert verified_candidate_pairs == [(candidate, SOURCE_SHA, manifest)]
+    assert verified_candidate_pairs == [
+        (candidate, SOURCE_SHA, manifest),
+        (candidate, SOURCE_SHA, manifest),
+    ]
     assert result["publication_archive_sha256"] == finalizer._sha256(tmp_path / "candidate.tar.gz")
     assert json.loads((producer / "release" / "release_result.json").read_text()) == original
     assert (
@@ -508,6 +568,12 @@ def test_finalize_copies_accepted_producer_before_postrun_gates(
     promoted = finalizer._read_mapping(candidate / "release" / "scientific_candidate_result.json")
     assert promoted["status"] == "accepted_pre_publication"
     assert promoted["stage3_status"] == "passed"
+    assert promoted["full_release_acceptance_sha256"] == finalizer._sha256(
+        candidate / "reports/postrun_release_acceptance.json"
+    )
+    assert result["scientific_candidate_result_sha256"] == finalizer._sha256(
+        candidate / "release/scientific_candidate_result.json"
+    )
     assert (tmp_path / "candidate.finalization_receipt.json").is_file()
 
 
@@ -700,6 +766,18 @@ def test_postrun_gate_failure_invalidates_only_candidate(
 ) -> None:
     producer = tmp_path / "producer"
     original = _producer(producer)
+    _write_json(
+        producer / "release/scientific_candidate.json",
+        {"schema_version": "benchmark-scientific-candidate.v1", "source_sha": SOURCE_SHA},
+    )
+    _write_json(
+        producer / "release/scientific_candidate_result.json",
+        {
+            "schema_version": "benchmark-scientific-candidate-result.v1",
+            "source_sha": SOURCE_SHA,
+            "status": "stage3_pending",
+        },
+    )
     baseline = tmp_path / "predecessor.tar.gz"
     baseline.write_bytes(b"frozen predecessor fixture")
     monkeypatch.setattr(finalizer, "BASELINE_ARCHIVE_SHA256", finalizer._sha256(baseline))
@@ -718,9 +796,21 @@ def test_postrun_gate_failure_invalidates_only_candidate(
     )
     monkeypatch.setattr(
         finalizer,
-        "_run_gate",
-        lambda command, log: (_ for _ in ()).throw(ValueError("equivalence mismatch")),
+        "_require_scientific_candidate",
+        lambda _root, source, _manifest: (
+            {"source_sha": source},
+            {"source_sha": source, "status": "stage3_pending"},
+        ),
     )
+
+    def fail_equivalence(command: list[str], log_path: Path) -> None:
+        if Path(command[1]).name == "compare_release_007_008.py":
+            _stage3_gate(command, baseline_sha=finalizer.BASELINE_ARCHIVE_SHA256)
+            log_path.write_text("Stage 3 passed\n", encoding="utf-8")
+            return
+        raise ValueError("equivalence mismatch")
+
+    monkeypatch.setattr(finalizer, "_run_gate", fail_equivalence)
     candidate = tmp_path / "candidate"
     with pytest.raises(ValueError, match="equivalence mismatch"):
         finalizer.finalize(
@@ -733,7 +823,11 @@ def test_postrun_gate_failure_invalidates_only_candidate(
     assert json.loads((producer / "release" / "release_result.json").read_text()) == original
     rejected = json.loads((candidate / "release" / "release_result.json").read_text())
     assert rejected["release_benchmark_success"] is False
-    assert rejected["finalization_failed_stage"] == "stage3_comparison"
+    assert rejected["finalization_failed_stage"] == "metric_equivalence"
+    scientific = json.loads(
+        (candidate / "release/scientific_candidate_result.json").read_text(encoding="utf-8")
+    )
+    assert scientific["status"] == "stage3_pending"
 
 
 def test_publication_export_failure_is_recorded_in_candidate(
@@ -944,7 +1038,9 @@ def test_receipt_write_failure_invalidates_candidate(
         if Path(command[1]).name == "compare_release_007_008.py":
             _stage3_gate(command, baseline_sha=finalizer.BASELINE_ARCHIVE_SHA256)
         else:
-            _write_json(Path(command[command.index("--output") + 1]), {"status": "pass"})
+            _write_postrun_promotion_gate_report(
+                Path(command[command.index("--output") + 1]), candidate
+            )
         log_path.write_text("pass\n", encoding="utf-8")
 
     def publish(root: Path, result: dict, manifest: object) -> Path:

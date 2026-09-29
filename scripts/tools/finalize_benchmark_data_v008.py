@@ -231,16 +231,61 @@ def _require_stage3_comparison(  # noqa: C901
 
 
 def _promote_scientific_candidate_result(
-    candidate_root: Path, stage3_receipt: dict[str, Any]
+    candidate_root: Path,
+    stage3_receipt: dict[str, Any],
+    *,
+    acceptance_report: Path,
+    equivalence_report: Path | None = None,
+    robot_force_report: Path | None = None,
 ) -> dict[str, Any]:
-    """Promote a pending candidate only after the Stage-3 receipt passes."""
+    """Promote only after Stage 3 and all requested release acceptance gates pass."""
     result_path = candidate_root / "release/scientific_candidate_result.json"
     result = _read_mapping(result_path)
-    if result.get("status") not in {"stage3_pending", "accepted_pre_publication"}:
+    if result.get("status") != "stage3_pending":
         raise ValueError("scientific candidate is not waiting at the Stage-3 boundary")
     source_sha = result.get("source_sha")
-    if source_sha is not None and source_sha != stage3_receipt["candidate_source_sha"]:
+    if not isinstance(source_sha, str) or source_sha != stage3_receipt.get("candidate_source_sha"):
         raise ValueError("scientific candidate source differs from Stage-3 receipt")
+    if not acceptance_report.is_file():
+        raise ValueError("full release acceptance report is missing before scientific promotion")
+    acceptance = _read_mapping(acceptance_report)
+    if acceptance.get("status") != "valid":
+        raise ValueError("full release acceptance report is not valid before scientific promotion")
+
+    if (equivalence_report is None) != (robot_force_report is None):
+        raise ValueError("post-run equivalence and robot-force reports must be paired")
+    postrun_gate_hashes: dict[str, str] = {}
+    if equivalence_report is not None and robot_force_report is not None:
+        equivalence = _read_mapping(equivalence_report)
+        force = _read_mapping(robot_force_report)
+        force_metrics = equivalence.get("robot_force_metrics")
+        if (
+            equivalence.get("status") not in {"pass", "mismatch"}
+            or equivalence.get("baseline_archive_sha256") != BASELINE_ARCHIVE_SHA256
+            or equivalence.get("baseline_source_sha") != BASELINE_SOURCE_SHA
+            or equivalence.get("candidate_source_sha") != source_sha
+            or equivalence.get("expected_rows") != EXPECTED_EPISODES
+            or equivalence.get("baseline_rows") != EXPECTED_EPISODES
+            or equivalence.get("candidate_rows") != EXPECTED_EPISODES
+            or equivalence.get("paired_rows") != EXPECTED_EPISODES
+            or not isinstance(force_metrics, dict)
+            or force_metrics.get("status") != "pass"
+            or force_metrics.get("checked_rows") != EXPECTED_EPISODES
+            or force_metrics.get("failed_rows") != 0
+        ):
+            raise ValueError("post-run metric/robot-force gate report is not accepted")
+        equivalence_sha = _sha256(equivalence_report)
+        if (
+            force.get("classification") != "release_robot_force_validation"
+            or force.get("episodes") != EXPECTED_EPISODES
+            or force.get("source_commit") != source_sha
+            or force.get("equivalence_report_sha256") != equivalence_sha
+        ):
+            raise ValueError("post-run robot-force report is detached from accepted equivalence")
+        postrun_gate_hashes = {
+            "postrun_metric_equivalence_sha256": equivalence_sha,
+            "postrun_robot_force_validation_sha256": _sha256(robot_force_report),
+        }
     result.update(
         {
             "status": "accepted_pre_publication",
@@ -249,6 +294,8 @@ def _promote_scientific_candidate_result(
             "stage3_candidate_identity_sha256": stage3_receipt["candidate_identity_sha256"],
             "stage3_attribution_ledger_sha256": stage3_receipt["attribution_ledger_sha256"],
             "stage3_findings_sha256": stage3_receipt["findings_sha256"],
+            "full_release_acceptance_sha256": _sha256(acceptance_report),
+            **postrun_gate_hashes,
         }
     )
     _write_json(result_path, result)
@@ -256,14 +303,22 @@ def _promote_scientific_candidate_result(
 
 
 def _require_scientific_candidate_pair(
-    candidate_root: Path, source_sha: str, manifest: Any
+    candidate_root: Path,
+    source_sha: str,
+    manifest: Any,
+    *,
+    verify_producer_sidecars: bool = True,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Require and reverify the paired science identity before any promotion."""
     identity_path = candidate_root / "release/scientific_candidate.json"
     result_path = candidate_root / "release/scientific_candidate_result.json"
     if not identity_path.is_file() or not result_path.is_file():
         raise ValueError("scientific candidate identity and result must be paired")
-    return _require_scientific_candidate(candidate_root, source_sha, manifest)
+    if verify_producer_sidecars:
+        return _require_scientific_candidate(candidate_root, source_sha, manifest)
+    return _require_scientific_candidate(
+        candidate_root, source_sha, manifest, verify_producer_sidecars=False
+    )
 
 
 def _promote_scientific_candidate(
@@ -271,10 +326,48 @@ def _promote_scientific_candidate(
     stage3_receipt: dict[str, Any],
     source_sha: str,
     manifest: Any,
+    *,
+    acceptance_report: Path,
+    equivalence_report: Path | None = None,
+    robot_force_report: Path | None = None,
+    verify_producer_sidecars: bool = True,
 ) -> dict[str, Any]:
-    """Reverify the bound pair, then promote it after the Stage-3 receipt."""
+    """Reverify the bound pair, then promote only after all supplied gates pass."""
+    _require_scientific_candidate_pair(
+        candidate_root,
+        source_sha,
+        manifest,
+        verify_producer_sidecars=verify_producer_sidecars,
+    )
+    return _promote_scientific_candidate_result(
+        candidate_root,
+        stage3_receipt,
+        acceptance_report=acceptance_report,
+        equivalence_report=equivalence_report,
+        robot_force_report=robot_force_report,
+    )
+
+
+def _reset_scientific_candidate_to_stage3_pending(
+    candidate_root: Path, source_sha: str, manifest: Any
+) -> None:
+    """Keep a derivative pending while its finalizer-specific gates are running."""
     _require_scientific_candidate_pair(candidate_root, source_sha, manifest)
-    return _promote_scientific_candidate_result(candidate_root, stage3_receipt)
+    result_path = candidate_root / "release/scientific_candidate_result.json"
+    result = _read_mapping(result_path)
+    result["status"] = "stage3_pending"
+    result["stage3_status"] = "pending"
+    for field in (
+        "stage3_comparison_sha256",
+        "stage3_candidate_identity_sha256",
+        "stage3_attribution_ledger_sha256",
+        "stage3_findings_sha256",
+        "full_release_acceptance_sha256",
+        "postrun_metric_equivalence_sha256",
+        "postrun_robot_force_validation_sha256",
+    ):
+        result.pop(field, None)
+    _write_json(result_path, result)
 
 
 def _require_producer(producer_root: Path, source_sha: str) -> dict[str, Any]:
@@ -470,7 +563,11 @@ def _require_scientific_report_identities(  # noqa: C901, PLR0912
 
 
 def _require_scientific_candidate(  # noqa: C901, PLR0912
-    producer_root: Path, source_sha: str, manifest: Any
+    producer_root: Path,
+    source_sha: str,
+    manifest: Any,
+    *,
+    verify_producer_sidecars: bool = True,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Reverify accepted pre-publication custody and DOI-bound science identity."""
     identity_path = producer_root / "release/scientific_candidate.json"
@@ -548,7 +645,7 @@ def _require_scientific_candidate(  # noqa: C901, PLR0912
             f"{Path(raw_name).parent.as_posix()}/summary.json",
         )
     )
-    if (
+    if verify_producer_sidecars and (
         not isinstance(sidecars, dict)
         or set(sidecars) != expected_sidecars
         or any(
@@ -814,9 +911,11 @@ def finalize(  # noqa: PLR0913
     )
     stage3_source_root = (candidate_source_root or get_repository_root()).resolve()
     stage3_log = candidate_root.parent / f"{candidate_root.name}.stage3_comparison.log"
-    equivalence = report_dir / "metric_equivalence.json"
-    equivalence_log = candidate_root.parent / f"{candidate_root.name}.equivalence.log"
-    force_log = candidate_root.parent / f"{candidate_root.name}.robot_force.log"
+    equivalence = report_dir / "postrun_metric_equivalence.json"
+    equivalence_log = candidate_root.parent / f"{candidate_root.name}.postrun_equivalence.log"
+    force_report = report_dir / "postrun_robot_force_validation.json"
+    force_log = candidate_root.parent / f"{candidate_root.name}.postrun_robot_force.log"
+    acceptance_report = report_dir / "postrun_release_acceptance.json"
     stage = "stage3_comparison"
     try:
         _run_stage3_comparator(
@@ -833,13 +932,7 @@ def finalize(  # noqa: PLR0913
             paths=stage3_paths,
         )
         _materialize_stage3_artifacts(candidate_root, stage3_paths, stage3_receipt)
-        stage = "scientific_candidate_promotion"
-        _promote_scientific_candidate(
-            candidate_root,
-            stage3_receipt,
-            expected_source_sha,
-            manifest,
-        )
+        _reset_scientific_candidate_to_stage3_pending(candidate_root, expected_source_sha, manifest)
         stage = "metric_equivalence"
         _run_gate(
             [
@@ -882,7 +975,7 @@ def finalize(  # noqa: PLR0913
                 "--equivalence-report",
                 str(equivalence),
                 "--output",
-                str(report_dir / "robot_force_validation.json"),
+                str(force_report),
             ],
             force_log,
         )
@@ -894,6 +987,17 @@ def finalize(  # noqa: PLR0913
         )
         if acceptance.get("status") != "valid":
             raise ValueError("post-copy full release acceptance failed")
+        _write_json(acceptance_report, acceptance)
+        stage = "scientific_candidate_promotion"
+        _promote_scientific_candidate(
+            candidate_root,
+            stage3_receipt,
+            expected_source_sha,
+            manifest,
+            acceptance_report=acceptance_report,
+            equivalence_report=equivalence,
+            robot_force_report=force_report,
+        )
         stage = "publication_bundle"
         archive = _publish_copy(candidate_root, producer_result, manifest)
         stage = "finalization_receipt"
@@ -908,14 +1012,18 @@ def finalize(  # noqa: PLR0913
             "candidate_release_result_sha256": _sha256(
                 candidate_root / "release" / "release_result.json"
             ),
+            "scientific_candidate_result_sha256": _sha256(
+                candidate_root / "release/scientific_candidate_result.json"
+            ),
             "equivalence_report_sha256": _sha256(equivalence),
             "equivalence_log_sha256": _sha256(equivalence_log),
             "stage3_comparison_sha256": stage3_receipt["comparison_report_sha256"],
             "stage3_candidate_identity_sha256": stage3_receipt["candidate_identity_sha256"],
             "stage3_attribution_ledger_sha256": stage3_receipt["attribution_ledger_sha256"],
             "stage3_findings_sha256": stage3_receipt["findings_sha256"],
-            "robot_force_validation_sha256": _sha256(report_dir / "robot_force_validation.json"),
+            "robot_force_validation_sha256": _sha256(force_report),
             "robot_force_log_sha256": _sha256(force_log),
+            "release_acceptance_sha256": _sha256(acceptance_report),
             "publication_archive_sha256": _sha256(archive),
             "publication_archive": str(archive),
         }
@@ -1006,6 +1114,7 @@ def finalize_pre_doi_candidate(  # noqa: C901, PLR0912, PLR0913, PLR0915
     if _raw_episode_hashes(stage_root) != original_raw:
         raise ValueError("raw episode bytes changed during derivative copy")
     stage_root.rename(candidate_root)
+    _require_scientific_candidate_pair(candidate_root, expected_source_sha, manifest)
     stage = "publication_identity"
     try:
         derivative_stage3_paths = _materialize_stage3_artifacts(
@@ -1017,12 +1126,7 @@ def finalize_pre_doi_candidate(  # noqa: C901, PLR0912, PLR0913, PLR0915
             expected_source_sha=expected_source_sha,
             paths=derivative_stage3_paths,
         )
-        _promote_scientific_candidate(
-            candidate_root,
-            stage3_receipt,
-            expected_source_sha,
-            manifest,
-        )
+        _reset_scientific_candidate_to_stage3_pending(candidate_root, expected_source_sha, manifest)
         resolved = manifest.resolved_manifest_payload
         _write_json(candidate_root / "release/release_manifest.resolved.json", resolved)
         provenance = build_release_provenance(
@@ -1045,6 +1149,15 @@ def finalize_pre_doi_candidate(  # noqa: C901, PLR0912, PLR0913, PLR0915
         if acceptance.get("status") != "valid":
             raise ValueError("DOI-bound derivative failed full release acceptance")
         _write_json(candidate_root / "reports/release_acceptance.json", acceptance)
+        stage = "scientific_candidate_promotion"
+        _promote_scientific_candidate(
+            candidate_root,
+            stage3_receipt,
+            expected_source_sha,
+            manifest,
+            acceptance_report=candidate_root / "reports/release_acceptance.json",
+            verify_producer_sidecars=False,
+        )
         summary = _read_mapping(candidate_root / "reports/campaign_summary.json")
         campaign = summary.get("campaign")
         if not isinstance(campaign, dict) or campaign.get("benchmark_success") is not True:
@@ -1081,6 +1194,9 @@ def finalize_pre_doi_candidate(  # noqa: C901, PLR0912, PLR0913, PLR0915
             "stage3_candidate_identity_sha256": stage3_receipt["candidate_identity_sha256"],
             "stage3_attribution_ledger_sha256": stage3_receipt["attribution_ledger_sha256"],
             "stage3_findings_sha256": stage3_receipt["findings_sha256"],
+            "release_acceptance_sha256": _sha256(
+                candidate_root / "reports/release_acceptance.json"
+            ),
             "publication_identity_sha256": _sha256(resolved_identity),
             "raw_episode_sha256": original_raw,
             "publication_archive_sha256": _sha256(archive),

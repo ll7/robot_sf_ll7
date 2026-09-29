@@ -51,8 +51,21 @@ It requires H600, dt=0.1, the source-resolved planner algorithm and algorithm
 config hash, robot kinematics/command mode, scenario payload, force-recording
 and declared observation/trace/safety controls to match. It verifies the row
 and result-provenance config hashes against the reconstructed scenario
-parameters. A row-file checksum therefore proves byte custody but does not
-substitute for run-control validation.
+parameters. A detached runtime resolver checks the row's run commit, algorithm
+and config path, per-arm `scenario_matrix_hash`, and any declared campaign
+config hashes against the exact source checkout; algorithm metadata must also
+match the resolved implementation config and hash. A row-file checksum
+therefore proves byte custody but does not substitute for run-control
+validation.
+
+The post-run finalizer leaves `scientific_candidate_result.json` at
+`stage3_pending` while it reruns metric equivalence, robot-force validation,
+and full release acceptance. It writes those post-run reports separately from
+the runner's original scientific-candidate gate reports. Promotion to
+`accepted_pre_publication` occurs only after those gates pass and their report
+identities are checked. The DOI-bound derivative repeats full release
+acceptance before promoting its copied candidate state; a failed gate leaves
+that derivative unaccepted and preserves the producer.
 
 `versioned_changes` names each correction with a unique `id`, `kind`
 (`source`, `config`, `map`, `model`, or `planner`), `version`, `old_identity`, and

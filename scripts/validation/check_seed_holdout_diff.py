@@ -2,6 +2,9 @@
 
 This is a diff gate, not an audit of historical releases or archived evidence.
 See issue #9668 for the evaluation split and anchor barrier.
+
+Accepted syntactic limits: quoted seed values on continuation lines of multiline
+JSON lists and seeds passed through environment variables need exact-head review.
 """
 
 from __future__ import annotations
@@ -20,7 +23,7 @@ RELEASE_CONFIGS = frozenset(
     }
 )
 MARKER = re.compile(r"#\s*seed-holdout:\s*(?:setup-only|synthetic-fixture)\b")
-FILE_MARKER = re.compile(r"\s*#\s*seed-holdout:\s*(?:setup-only|synthetic-fixture)\s*")
+BLOCK_MARKER = re.compile(r"\s*#\s*seed-holdout:\s*(setup-only|synthetic-fixture)\s+(begin|end)\s*")
 SEED = re.compile(
     r"(?<![\w.])(?:11[1-9]|12\d|13\d|140)(?![\w.])"  # seed-holdout: synthetic-fixture
 )
@@ -35,8 +38,7 @@ SCENARIO_SEEDS = re.compile(r"(?i)\bscenario\s*\[\s*['\"]seeds?['\"]\s*\]\s*=")
 EPISODE_SEED_LOOP = re.compile(
     r"\bfor\s+seed\s+in\s+range\s*\([^)]*\)\s*:\s*.*\brun_episode\s*\(\s*seed\b"
 )
-SAMPLER_CLI_DEFAULT = re.compile(r"\bseeds?\s*=\s*\(?\s*args\.seed\s+or\b")
-SAMPLER_SINGLE_CLI_DEFAULT = re.compile(r"\bseed\s*=\s*\(\s*args\.seed\s+or\b")
+RANGE = re.compile(r"\brange\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)")
 YAML_RANGE_BOUND = re.compile(r"^\s*(?:-\s*)?(?:min|max|low|high)\s*:", re.I)
 CLI_SEED = re.compile(r"(?<![\w-])--seeds?(?:\s+|=)")
 SEED_PARAM = re.compile(r"(?i)\bparametrize\s*\(\s*['\"][^'\"]*\bseed\b")
@@ -93,9 +95,55 @@ def _non_episode_seed(path: str, text: str, before: list[str], after: list[str])
         declarations = [line for line in before if line.lstrip().startswith("def ")]
         if declarations and declarations[-1].lstrip().startswith("def candidate_repo("):
             return True
-    return path == "scripts/tools/compare_adversarial_samplers.py" and bool(
-        SAMPLER_CLI_DEFAULT.search(text) or SAMPLER_SINGLE_CLI_DEFAULT.search(text)
+    if path != "scripts/tools/compare_adversarial_samplers.py":
+        return False
+    if text.strip() == "seeds = args.seed or [123]":  # seed-holdout: synthetic-fixture
+        return True
+    if text.strip() != "seed=(args.seed or [123])[0],":  # seed-holdout: synthetic-fixture
+        return False
+    # This keyword is the SearchConfig sampler RNG default, not an episode call.
+    for previous in reversed(before):
+        if re.search(r"\b(?:run_episode|SearchConfig\.from_files)\s*\(", previous):
+            return "SearchConfig.from_files(" in previous
+    return False
+
+
+def _range_overlaps_holdout(text: str) -> bool:
+    """Recognize literal two-bound ranges, whose stop bound is exclusive."""
+    return any(
+        int(match.group(1)) <= 140 and int(match.group(2)) > 111 for match in RANGE.finditer(text)
     )
+
+
+def _marked_block_lines(lines: list[str]) -> set[int]:
+    """Only complete, matching marker pairs exempt their enclosed lines."""
+    marked: set[int] = set()
+    opened: tuple[str, int] | None = None
+    for number, line in enumerate(lines, 1):
+        marker = BLOCK_MARKER.fullmatch(line)
+        if marker is None:
+            continue
+        kind, boundary = marker.groups()
+        if boundary == "begin":
+            opened = (kind, number) if opened is None else None
+        elif opened is not None and opened[0] == kind:
+            marked.update(range(opened[1] + 1, number))
+            opened = None
+    return marked
+
+
+def _seed_range_context(text: str, before: list[str]) -> bool:
+    """Recognize a range inside a nearby seed list or parametrization."""
+    if not _range_overlaps_holdout(text):
+        return False
+    if SEED_PARAM.search("\n".join(before[-12:] + [text])):
+        return True
+    for previous in reversed(before[-12:]):
+        if SEED_FIELD.search(previous):
+            return True
+        if previous.strip().startswith((")", "]", "}")) or re.match(r"^\s*[\w.]+\s*=", previous):
+            break
+    return False
 
 
 def _yaml_seed_range_bound(path: str, text: str, before: list[str]) -> bool:
@@ -127,6 +175,7 @@ def _seed_context(path: str, text: str, before: list[str], after: list[str]) -> 
         or SEED_CONSTANT.search(text)
         or SEED_PARAM.search(text)
         or _yaml_seed_range_bound(path, text, before)
+        or _seed_range_context(text, before)
     ):
         return True
     # YAML block lists and multiline pytest parametrizations put the value on
@@ -158,7 +207,7 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
     path = ""
     line_number = 0
     before: list[str] = []
-    file_marked = False
+    marked_block_lines: set[int] = set()
     file_lines: list[str] = []
     for row in diff.splitlines():
         if row.startswith("+++ b/"):
@@ -167,7 +216,7 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
             file_lines = (
                 file_path.read_text(errors="replace").splitlines() if file_path.is_file() else []
             )
-            file_marked = any(FILE_MARKER.fullmatch(line) for line in file_lines[:30])
+            marked_block_lines = _marked_block_lines(file_lines)
             before = []
         elif row.startswith("@@ "):
             match = HUNK.match(row)
@@ -180,9 +229,9 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
             if (
                 _eligible(path)
                 and path not in RELEASE_CONFIGS
-                and not file_marked
+                and line_number not in marked_block_lines
                 and not MARKER.search(content)
-                and SEED.search(content)
+                and (SEED.search(content) or _range_overlaps_holdout(content))
                 and _seed_context(path, content, before, file_lines[line_number:])
             ):
                 findings.append(Finding(path, line_number, content.strip()))

@@ -1,6 +1,6 @@
 """Regression cases for the #9668 evaluation seed diff gate."""
 
-# seed-holdout: synthetic-fixture
+# seed-holdout: synthetic-fixture begin
 
 from pathlib import Path
 
@@ -130,6 +130,34 @@ def test_multiline_parametrize_fails(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
+    ("context", "added"),
+    [
+        ('@pytest.mark.parametrize(\n    "seed",', "    list(range(111, 141)),"),
+        ('@pytest.mark.parametrize(\n    "seed",', "    list(range(100, 150)),"),
+        ("seeds = [", "    *range(100, 150),"),
+        ("seeds = list(", "    range(120, 130)"),
+    ],
+)
+def test_multiline_seed_range_overlapping_holdout_fails(
+    tmp_path: Path, context: str, added: str
+) -> None:
+    path = "tests/benchmark/test_pilot.py"
+    findings = check_diff(_diff(path, added, context=context), tmp_path)
+    assert len(findings) == 1
+
+
+@pytest.mark.parametrize("bounds", ["range(100, 111)", "range(141, 150)"])
+def test_multiline_seed_range_outside_holdout_passes(tmp_path: Path, bounds: str) -> None:
+    diff = _diff("tests/benchmark/test_pilot.py", bounds, context="seeds = [")
+    assert check_diff(diff, tmp_path) == []
+
+
+def test_unrelated_range_overlap_passes(tmp_path: Path) -> None:
+    diff = _diff("tests/benchmark/test_pilot.py", "    list(range(100, 150)),")
+    assert check_diff(diff, tmp_path) == []
+
+
+@pytest.mark.parametrize(
     ("path", "added"),
     [
         ("configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml", "seeds: [111, 140]"),
@@ -147,12 +175,51 @@ def test_allowed_or_unrelated_values_pass(tmp_path: Path, path: str, added: str)
     assert check_diff(_diff(path, added), tmp_path) == []
 
 
-def test_file_marker_passes(tmp_path: Path) -> None:
+def test_bounded_setup_marker_passes(tmp_path: Path) -> None:
     path = "tests/benchmark/test_setup.py"
     file = tmp_path / path
     file.parent.mkdir(parents=True)
-    file.write_text("# seed-holdout: setup-only\nseed = 111\n")
-    assert check_diff(_diff(path, "seed = 111"), tmp_path) == []
+    file.write_text(
+        "# seed-holdout: setup-only begin\nseed = 111\n# seed-holdout: setup-only end\n"
+    )
+    diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -1,0 +2 @@\n+seed = 111\n"
+    assert check_diff(diff, tmp_path) == []
+
+
+@pytest.mark.parametrize("kind", ["setup-only", "synthetic-fixture"])
+def test_marker_block_does_not_exempt_later_episode(tmp_path: Path, kind: str) -> None:
+    path = "tests/benchmark/test_mixed.py"
+    file = tmp_path / path
+    file.parent.mkdir(parents=True)
+    file.write_text(
+        f"# seed-holdout: {kind} begin\n"
+        "seed = 111\n"
+        f"# seed-holdout: {kind} end\n"
+        "run_episode(seed=112)\n"
+    )
+    diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -3,0 +4 @@\n+run_episode(seed=112)\n"
+    assert [(finding.line, finding.text) for finding in check_diff(diff, tmp_path)] == [
+        (4, "run_episode(seed=112)")
+    ]
+
+
+@pytest.mark.parametrize("header", ["setup-only", "synthetic-fixture"])
+def test_undelimited_header_does_not_exempt_later_line(tmp_path: Path, header: str) -> None:
+    path = "tests/benchmark/test_mixed.py"
+    file = tmp_path / path
+    file.parent.mkdir(parents=True)
+    file.write_text(f"# seed-holdout: {header}\nrun_episode(seed=112)\n")
+    diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -1,0 +2 @@\n+run_episode(seed=112)\n"
+    assert len(check_diff(diff, tmp_path)) == 1
+
+
+def test_unclosed_marker_does_not_exempt_later_line(tmp_path: Path) -> None:
+    path = "tests/benchmark/test_mixed.py"
+    file = tmp_path / path
+    file.parent.mkdir(parents=True)
+    file.write_text("# seed-holdout: setup-only begin\nrun_episode(seed=112)\n")
+    diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -1,0 +2 @@\n+run_episode(seed=112)\n"
+    assert len(check_diff(diff, tmp_path)) == 1
 
 
 def test_inline_marker_does_not_exempt_whole_file(tmp_path: Path) -> None:
@@ -191,8 +258,9 @@ def test_moved_sampler_defaults_are_not_new_seeds(tmp_path: Path) -> None:
     path = "scripts/tools/compare_adversarial_samplers.py"
     diff = (
         f"diff --git a/{path} b/{path}\n+++ b/{path}\n"
-        "@@ -1216,0 +1480 @@\n"
-        "+        seed=(args.seed or [123])[0],\n"
+        "@@ -1216,0 +1480,2 @@\n"
+        "+        config = SearchConfig.from_files(\n"
+        "+            seed=(args.seed or [123])[0],\n"
         "@@ -1223,0 +1489 @@\n"
         "+    seeds = args.seed or [123]\n"
         "@@ -1302,52 +1577,12 @@\n"
@@ -200,6 +268,28 @@ def test_moved_sampler_defaults_are_not_new_seeds(tmp_path: Path) -> None:
         "-        seeds = args.seed or [123]\n"
     )
     assert check_diff(diff, tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    "added",
+    [
+        "run_episode(seed=(args.seed or [123])[0])",
+        "run_episode(\n            seed=(args.seed or [123])[0],\n        )",
+    ],
+)
+def test_sampler_file_episode_call_is_flagged(tmp_path: Path, added: str) -> None:
+    path = "scripts/tools/compare_adversarial_samplers.py"
+    assert len(check_diff(_diff(path, added), tmp_path)) == 1
+
+
+def test_sampler_exception_requires_exact_default(tmp_path: Path) -> None:
+    path = "scripts/tools/compare_adversarial_samplers.py"
+    diff = _diff(
+        path,
+        "            seed=(args.seed or [124])[0],",
+        context="        config = SearchConfig.from_files(",
+    )
+    assert len(check_diff(diff, tmp_path)) == 1
 
 
 def test_moved_episode_seed_line_is_flagged(tmp_path: Path) -> None:
@@ -290,3 +380,6 @@ def test_seed_alias_rejection_payload_does_not_run_episodes(tmp_path: Path) -> N
     )
     diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -2,0 +3 @@\n+{assignment}\n"
     assert check_diff(diff, tmp_path) == []
+
+
+# seed-holdout: synthetic-fixture end

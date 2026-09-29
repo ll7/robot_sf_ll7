@@ -2,7 +2,7 @@
 # VV-5 ten-fault diagnostic matrix (#9735)
 
 **Scope:** Ten controlled synthetic fault classes were replayed on source commit
-`7c1b714b8bef4e0a80de334172e4bf03c3339a4b`. The applicable checks
+`03f96dbf4907622ea0ec7f865db4adf1630ede7a` (current `origin/main`). The applicable checks
 detected **8/10**. This is fixture-level sensitivity across different checks,
 not a pooled statistical estimate, nominal campaign evidence, or 0.0.8
 release admission. The machine-readable controls, mutants, checker outputs, and
@@ -60,22 +60,25 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/validation/run_
 scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/validation/run_issue_9735_geometry_radius_diagnostic.py --root "$PWD" --out "$vv5_artifact_root"/geometry --fault infeasible_gap --fault planner_only_radius_halved
 scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/validation/run_issue_9735_force_diagnostic.py --output-dir "$vv5_artifact_root"/force
 scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/validation/run_issue_9735_braking_goal_diagnostic.py --output-dir "$vv5_artifact_root"/remaining
-scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/validation/build_issue_9735_full_matrix.py --first "$vv5_artifact_root"/first/report.json --geometry-radius "$vv5_artifact_root"/geometry/report.json --force "$vv5_artifact_root"/force/report.json --remaining "$vv5_artifact_root"/remaining/remaining_report.json --source-commit 7c1b714b8bef4e0a80de334172e4bf03c3339a4b --output "$vv5_artifact_root"/full_matrix.json
+scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/validation/build_issue_9735_full_matrix.py --first "$vv5_artifact_root"/first/report.json --geometry-radius "$vv5_artifact_root"/geometry/report.json --force "$vv5_artifact_root"/force/report.json --remaining "$vv5_artifact_root"/remaining/remaining_report.json --source-commit 03f96dbf4907622ea0ec7f865db4adf1630ede7a --output "$vv5_artifact_root"/full_matrix.json
 ```
 
 The compactor verifies all ten unique classes, exact 8/10 disposition, and
 source/config and replay-script file hashes against the pinned source commit
 or tracked script bytes. It records packet execution HEADs as provenance;
 these may differ from the source commit when the evidence-only PR advances.
-The current packets ran at `08ebc56809645e3ecf0c948bc64885dce7c8b269`.
-Those file hashes are retained in the compact JSON so packet identity can be
-rechecked without local raw logs. Current-source packet
-SHA-256 values, in command order: `5b8e842b9d2372bd412ec8cc7a2a572d981e28a86314ccebd8601892b2ca85f8`,
-`ec43e503a116bd4275e8e48a952a79dfe32f9ff685fa3d8a46c3c71222a9f62c`,
-`6376b8e5d08e4ae7633aa10999d485ade8804f5665306ddd0364d9e50d002579`,
-`6169a6d0b2cef8fe1cf7282cc1db8a3f052a2d308587b6e27a40a5b01041c5fd`.
+The current packets were rerun at execution head
+`052b03e395d63dc377923feb588a9b85f1e94e24`, a local append-only merge of
+the PR head into current `origin/main`; their source/config bytes are bound
+to `03f96dbf4907622ea0ec7f865db4adf1630ede7a`. Those file hashes are retained
+in the compact JSON so packet identity can be rechecked without local raw logs.
+Current-source packet SHA-256 values, in command order:
+`cefb32e94e5b3bf01f1c3fbf001b06cb5607fcf90c441272930fd6ac6c39d8f6`,
+`61f8daa4f4a401ce682c3e83c3f89007bb40cb289b21e0e0f7ed76d261ccde43`,
+`1269776a2a86e6a54b30961a725eab49cd210261c78ad35b6e8431856b0cc21b`,
+`eed50a085bf460e91dbdeb9145fa4eda73206d3c8819fac5b6277c8681345b9a`.
 The tracked compact JSON SHA-256 is
-`365c903025a82fd1748cf12eec026c9d0da4bcdf34cbadc607ebfabd3ada1d8b`.
+`1b9b111a187e523ef98527a28713c11c5dd992b56f1a996ee945832119f7bffb`.
 These packet hashes identify local replay inputs; the raw logs and generated
 fixtures are ignored caches and are **not** independently durable. The tracked
 scripts and compact matrix are the reviewable, reproducible evidence. No

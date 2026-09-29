@@ -20,6 +20,11 @@ from robot_sf.planner.clearance_geometry import (
     validate_clearance_model,
     validate_surface_clearance_radii,
 )
+from robot_sf.planner.goal_target import (
+    LEGACY_NEXT_GOAL_V1,
+    select_goal_target,
+    validate_goal_target_version,
+)
 from robot_sf.planner.risk_dwa import _wrap_angle
 from robot_sf.planner.socnav import (
     OccupancyAwarePlannerMixin,
@@ -59,6 +64,7 @@ class PredictiveMPPIConfig:
     min_linear_std: float = 0.05
     min_angular_std: float = 0.08
     goal_tolerance: float = 0.25
+    goal_target_version: str = LEGACY_NEXT_GOAL_V1
     max_linear_speed: float = 1.4
     max_angular_speed: float = 1.3
     near_distance: float = 0.7
@@ -84,7 +90,8 @@ class PredictiveMPPIConfig:
     clearance_model: str = CENTER_CLEARANCE_V1
 
     def __post_init__(self) -> None:
-        """Reject unsupported geometry modes at config construction."""
+        """Validate route selection and physical geometry before execution."""
+        validate_goal_target_version(self.goal_target_version)
         validate_clearance_model(self.clearance_model)
         radii = {
             "robot_radius": self.socnav.predictive_robot_radius,
@@ -123,7 +130,9 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         goal_current = self._predictor._as_1d_float(goal_state.get("current", [0.0, 0.0]), pad=2)[
             :2
         ]
-        goal = goal_next if np.linalg.norm(goal_next - robot_pos) > 1e-6 else goal_current
+        goal = select_goal_target(
+            robot_pos, goal_current, goal_next, version=self.config.goal_target_version
+        )
         return robot_pos, heading, speed, goal
 
     def _predict_future(self, observation: dict[str, object]) -> tuple[np.ndarray, np.ndarray, int]:
@@ -744,6 +753,7 @@ def build_predictive_mppi_config(cfg: dict[str, object] | None) -> PredictiveMPP
         min_linear_std=float(cfg.get("min_linear_std", 0.05)),
         min_angular_std=float(cfg.get("min_angular_std", 0.08)),
         goal_tolerance=float(cfg.get("goal_tolerance", 0.25)),
+        goal_target_version=str(cfg.get("goal_target_version", LEGACY_NEXT_GOAL_V1)),
         max_linear_speed=float(cfg.get("max_linear_speed", 1.4)),
         max_angular_speed=float(cfg.get("max_angular_speed", 1.3)),
         near_distance=float(cfg.get("near_distance", 0.7)),

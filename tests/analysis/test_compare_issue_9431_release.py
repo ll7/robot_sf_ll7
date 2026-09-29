@@ -26,6 +26,7 @@ from scripts.analysis.compare_issue_9431_release import (
     _validate_matrix,
     _validate_successor_bundle_root,
 )
+from scripts.analysis.compare_release_0_0_7_to_0_0_8 import V4_SLOT_REPLACEMENTS
 
 
 def test_execution_audit_admits_mixed_mode_and_outcome_failures() -> None:
@@ -314,6 +315,12 @@ def test_frozen_matrix_matches_the_versioned_issue_9431_sources() -> None:
 
     assert predecessor_ids == EXPECTED_SCENARIO_IDS
     assert successor_ids == EXPECTED_SCENARIO_IDS
-    assert resolved_template["scenario_matrix"] == EXPECTED_SUCCESSOR_SCENARIO_MANIFEST
-    assert {row["key"] for row in resolved_template["planners"]} == EXPECTED_ARM_KEYS
+    # The 0.0.7 matrix is pinned above by path and SHA-256. The campaign template is
+    # mutable and now points at the 0.0.8 scenario manifest, so it is not used here.
+    # The accepted 0.0.7 bundle retains the frozen v3 roster; the current
+    # 0.0.8 template replaces exactly four slots under new v4 keys (#9751).
+    expected_current_arms = (EXPECTED_ARM_KEYS - V4_SLOT_REPLACEMENTS.keys()) | set(
+        V4_SLOT_REPLACEMENTS.values()
+    )
+    assert {row["key"] for row in resolved_template["planners"]} == expected_current_arms
     assert set(resolved_seed_sets[resolved_template["seed_policy"]["seed_set"]]) == EXPECTED_SEEDS

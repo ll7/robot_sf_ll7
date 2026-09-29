@@ -2,9 +2,10 @@
 
 For every scenario x seed, the preflight builds the environment exactly as the map
 runner does, resets it with the episode seed, and measures robot-pedestrian and
-robot-obstacle clearance. Any reset in contact fails the preflight. No planner runs
-and no step is taken unless ``--step-zero`` asks for one zero-action step, which
-also reports the simulator's own step-1 collision flags.
+robot-obstacle clearance. Any reset in contact fails the preflight. No planner runs.
+The release-manifest path also checks a bounded respawn window with zero action
+and a stationary robot; the direct matrix path optionally takes one zero-action
+step when ``--step-zero`` is requested.
 
 It also reports, per map, static geometry that places pedestrian route waypoints
 inside a robot spawn zone or on a robot route waypoint (padded by both radii).
@@ -389,6 +390,26 @@ def _continuous_margin_route(
     if x_min >= x_max or y_min >= y_max:
         return {"status": "invalid", "reason": "invalid_map_bounds"}
 
+    # A straight segment's distance to the full wall geometry is exact. This
+    # certifies boundary-width corridors (including the preregistered 2.2 m
+    # doorway) where a positive-area buffered component cannot represent the
+    # single safe centerline. The check keeps the full 0.10 m margin.
+    direct_segments = [LineString([start, goal]) for start, goal in pairwise(route_points)]
+    if direct_segments and all(
+        segment.distance(wall) + 1.0e-12 >= required_radius_m
+        and all(
+            x_min + required_radius_m <= point[0] <= x_max - required_radius_m
+            and y_min + required_radius_m <= point[1] <= y_max - required_radius_m
+            for point in segment.coords
+        )
+        for segment in direct_segments
+    ):
+        return {
+            "status": "pass",
+            "reason": "exact_straight_route_meets_continuous_margin",
+            "certified_center_clearance_lower_bound_m": round(required_radius_m, 6),
+        }
+
     # A chord of a quad_segs-buffered quarter circle lies at least this far
     # from the exact circular boundary. The extra micron handles roundoff.
     oracle_radius = (
@@ -439,23 +460,70 @@ def _continuous_margin_route(
     }
 
 
+def _verified_main_grid_probe(scenario: dict[str, Any], matrix_path: Path) -> bool:
+    """Admit only the pinned historical doorway as a main-grid probe.
+
+    Returns:
+        True only for the exact declaration and immutable 2.0 m map bytes.
+    """
+    declaration = scenario.get("infeasibility_probe")
+    if not isinstance(declaration, dict):
+        return False
+    expected = {
+        "schema_version": "benchmark-main-grid-infeasibility-probe.v1",
+        "expected_outcome": "timeout",
+        "classification": "infeasible_by_construction",
+        "map_sha256": "7538ed173d462a5107afc1a1e43b5b2e6d2bc5c9604035cdec9a551e20a8b15e",
+        "opening_width_m": 2.0,
+        "robot_diameter_m": 2.0,
+        "required_width_with_margin_m": 2.2,
+        "safe_failure_metric": {
+            "numerator": "timeout_without_robot_attributable_contact",
+            "denominator": "all_420_probe_episodes",
+            "unresolved_rows": "fail_admission",
+        },
+    }
+    if (
+        scenario.get("name") != "francis2023_narrow_doorway"
+        or scenario.get("expected_outcome") != "infeasible_safe_hold"
+        or declaration != expected
+        or scenario.get("map_id") is not None
+    ):
+        return False
+    map_file = scenario.get("map_file")
+    if not isinstance(map_file, str):
+        return False
+    resolved_map = (matrix_path.parent / map_file).resolve()
+    return (
+        resolved_map
+        == get_repository_root().resolve()
+        / "maps/svg_maps/francis2023/francis2023_narrow_doorway.svg"
+        and sha256_file(resolved_map) == expected["map_sha256"]
+    )
+
+
 def _apply_infeasibility_declaration(
     reachability: dict[str, Any],
     passage: dict[str, Any],
     *,
     probe_manifest: bool,
 ) -> None:
-    """Keep nominal declarations blocked and probe declarations diagnostic."""
+    """Require a pinned declaration and an observed infeasible continuous route."""
     if not probe_manifest:
         for check in (reachability, passage):
             check["observed_status"] = check["status"]
             check["observed_reason"] = check["reason"]
             check["status"] = "invalid"
             check["reason"] = "infeasibility_probe_requires_separate_manifest"
-    elif reachability["status"] == "pass" and passage["status"] == "pass":
+    elif reachability.get("continuous_oracle", {}).get("status") != "fail" or reachability.get(
+        "continuous_oracle", {}
+    ).get("reason") not in {
+        "ordered_route_segment_disconnected_in_continuous_free_space",
+        "required_route_point_below_continuous_margin",
+    }:
         for check in (reachability, passage):
             check["status"] = "invalid"
-            check["reason"] = "declared_infeasibility_not_observed"
+            check["reason"] = "declared_infeasibility_not_confirmed_by_continuous_oracle"
     else:
         for check in (reachability, passage):
             if check["status"] == "fail":
@@ -903,6 +971,8 @@ def _release_manifest_inputs(  # noqa: C901, PLR0912, PLR0915
     raw_seeds = getattr(manifest, "resolved_seeds", ())
     if not raw_seeds:
         raw_seeds = manifest.seed_policy.get("resolved_seeds", ())
+    if not raw_seeds and manifest.seed_policy.get("mode") == "fixed-list":
+        raw_seeds = manifest.seed_policy.get("seeds", ())
     if not raw_seeds or any(type(seed) is not int or seed < 0 for seed in raw_seeds):
         raise ValueError("release manifest has no valid resolved seed set")
     seeds = tuple(raw_seeds)
@@ -910,6 +980,11 @@ def _release_manifest_inputs(  # noqa: C901, PLR0912, PLR0915
         raise ValueError("release manifest resolved seed set contains duplicates")
 
     seed_policy = dict(manifest.seed_policy)
+    seed_mode = seed_policy.get("mode")
+    if seed_mode not in {"seed-set", "fixed-list"}:
+        raise ValueError(
+            f"unsupported seed_policy mode {seed_mode!r}; expected seed-set or fixed-list"
+        )
     seed_set_name = seed_policy.get("seed_set")
     seed_sets_path: Path | None = None
     declared_seed_sha256 = getattr(manifest, "seed_sets_sha256", None) or seed_policy.get(
@@ -917,7 +992,7 @@ def _release_manifest_inputs(  # noqa: C901, PLR0912, PLR0915
     )
     seed_sets_sha256: str | None = None
     seed_sets_path_raw = seed_policy.get("seed_sets_path")
-    if seed_sets_path_raw:
+    if seed_sets_path_raw and seed_policy.get("mode") == "seed-set":
         seed_sets_path = (
             (repository_root if candidate else manifest_path.parent) / str(seed_sets_path_raw)
         ).resolve()
@@ -946,7 +1021,9 @@ def _release_manifest_inputs(  # noqa: C901, PLR0912, PLR0915
         raise ValueError("seed-set mode requires a checksummed seed_sets_path")
     else:
         fixed_seeds = seed_policy.get("seeds")
-        if isinstance(fixed_seeds, list) and tuple(int(seed) for seed in fixed_seeds) != seeds:
+        if not isinstance(fixed_seeds, list):
+            raise ValueError("fixed-list mode requires seed_policy.seeds as a list")
+        if tuple(int(seed) for seed in fixed_seeds) != seeds:
             raise ValueError("resolved release seeds do not match seed_policy.seeds")
 
     scenarios = _load_matrix(matrix_path)
@@ -955,6 +1032,11 @@ def _release_manifest_inputs(  # noqa: C901, PLR0912, PLR0915
     names = [str(row.get("name") or row.get("scenario_id") or "") for row in scenarios]
     if any(not name for name in names) or len(set(names)) != len(names):
         raise ValueError("release scenario matrix has missing or duplicate scenario identities")
+    for scenario in scenarios:
+        if "infeasibility_probe" in scenario and not _verified_main_grid_probe(
+            scenario, matrix_path
+        ):
+            raise ValueError("main-grid infeasibility probe declaration or map pin is invalid")
 
     expected_cells = getattr(manifest, "expected_episode_cells", None)
     planner_count = len(getattr(manifest, "planner_keys", ()) or ())
@@ -1149,7 +1231,8 @@ def run_manifest_preflight(  # noqa: C901
             clearance_margin_m,
             respawn_window_steps,
             grid_resolution_m,
-            probe_manifest,
+            probe_manifest
+            or _verified_main_grid_probe(scenario, Path(manifest.scenario_matrix_path)),
         )
         for scenario in scenarios
     ]
@@ -1212,7 +1295,7 @@ def run_manifest_preflight(  # noqa: C901
         if sha256_file(Path(manifest.scenario_matrix_path)) != identity["scenario_matrix_sha256"]:
             input_error = "scenario matrix changed while preflight was running"
         seed_sets_path_raw = manifest.seed_policy.get("seed_sets_path")
-        if seed_sets_path_raw:
+        if seed_sets_path_raw and manifest.seed_policy.get("mode") == "seed-set":
             seed_sets_base = (
                 manifest.repository_root
                 if isinstance(manifest, PrepublicationCandidate)
@@ -1223,7 +1306,11 @@ def run_manifest_preflight(  # noqa: C901
                 input_error = "seed-set file changed while preflight was running"
     except OSError as exc:
         input_error = f"input disappeared while preflight was running: {exc}"
-    blocked = sum(row["overall_status"] != "valid" for row in rows)
+    blocked = sum(
+        row["overall_status"]
+        not in ({"valid"} if probe_manifest else {"valid", "infeasibility_probe"})
+        for row in rows
+    )
     report = {
         "schema_version": "spawn_matrix_preflight.v1",
         "status": (

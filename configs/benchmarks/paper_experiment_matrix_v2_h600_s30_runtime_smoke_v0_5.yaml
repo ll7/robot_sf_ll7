@@ -1,13 +1,13 @@
 # Candidate runtime smoke for the current 0.0.8 benchmark-data template.
-# The unfrozen v4 slots fail closed; no runtime or SNQI claim follows from this file.
+# The #9748 frozen v4 slots resolve; runtime and SNQI claims require separate runs.
 name: paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5
 derived_from:
   config: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
-  config_sha256: 3b5302c2546b5c9c03dbfb5c752b9b78ea062c4af7e957450de9b8595d44bec6
+  config_sha256: 7ec9112d999e84e73675d7df4501aea0850ba072ab2ffc74943d22ea7d270223
 paper_facing: true
 paper_profile_version: paper-matrix-v1
-scenario_matrix: configs/scenarios/single/francis2023_blind_corner_goal_zone_entry_kernel_wrapped_v2.yaml
-comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
+scenario_matrix: configs/scenarios/single/francis2023_blind_corner_release_0_0_8_v1.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v2.yaml
 route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
 
 amv_profile:
@@ -115,22 +115,22 @@ planners:
   - key: scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4
     algo: hybrid_rule_local_planner
     planner_group: experimental
-    algo_config: configs/policy_search/release_0_0_8_placeholders/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4.unfrozen.yaml
+    algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml
     benchmark_profile: experimental
   - key: scenario_adaptive_hybrid_orca_v2_collision_guard_v4
     algo: hybrid_rule_local_planner
     planner_group: experimental
-    algo_config: configs/policy_search/release_0_0_8_placeholders/scenario_adaptive_hybrid_orca_v2_collision_guard_v4.unfrozen.yaml
+    algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml
     benchmark_profile: experimental
   - key: hybrid_rule_v4_fast_progress_static_escape
     algo: hybrid_rule_local_planner
     planner_group: experimental
-    algo_config: configs/policy_search/release_0_0_8_placeholders/hybrid_rule_v4_fast_progress_static_escape.unfrozen.yaml
+    algo_config: configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml
     benchmark_profile: experimental
   - key: hybrid_rule_v4_fast_progress_static_escape_continuous
     algo: hybrid_rule_local_planner
     planner_group: experimental
-    algo_config: configs/policy_search/release_0_0_8_placeholders/hybrid_rule_v4_fast_progress_static_escape_continuous.unfrozen.yaml
+    algo_config: configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml
     benchmark_profile: experimental
   - key: guarded_ppo
     algo: guarded_ppo

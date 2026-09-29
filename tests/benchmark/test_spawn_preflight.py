@@ -244,7 +244,7 @@ def test_probe_declaration_requires_observed_infeasibility() -> None:
     )
     assert reachability["status"] == "invalid"
     assert passage["status"] == "invalid"
-    assert reachability["reason"] == "declared_infeasibility_not_observed"
+    assert reachability["reason"] == "declared_infeasibility_not_confirmed_by_continuous_oracle"
 
 
 def test_footprint_path_checks_required_intermediate_waypoints_in_order() -> None:
@@ -321,7 +321,7 @@ def test_continuous_margin_oracle_recovers_safe_grid_blocked_endpoint() -> None:
         probe_manifest=True,
     )
     assert reachability["status"] == passage["status"] == "invalid"
-    assert reachability["reason"] == "declared_infeasibility_not_observed"
+    assert reachability["reason"] == "declared_infeasibility_not_confirmed_by_continuous_oracle"
 
     del analysis["map_bounds"]
     reachability, _passage = spawn_preflight._check_footprint_path(
@@ -437,6 +437,74 @@ def test_historical_narrow_doorway_probe_stays_blocked_on_all_release_seeds() ->
         assert row["passage_width"]["observed_status"] == "fail", row
 
 
+def test_main_grid_doorway_probe_requires_pinned_map_and_oracle() -> None:
+    matrix = REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    scenario = next(
+        row
+        for row in spawn_preflight._load_matrix(matrix)
+        if row["name"] == "francis2023_narrow_doorway"
+    )
+    assert spawn_preflight._verified_main_grid_probe(scenario, matrix)
+    changed = dict(scenario)
+    changed["map_file"] = (
+        "../../maps/successor_svg_maps/issue_9728_francis2023_narrow_doorway_feasible_3p60_v1.svg"
+    )
+    assert not spawn_preflight._verified_main_grid_probe(changed, matrix)
+    result = spawn_preflight._check_release_scenario(
+        (scenario, str(matrix), (111, 119), 0.1, 20, 0.1, True)
+    )
+    assert [row["overall_status"] for row in result["rows"]] == [
+        "infeasibility_probe",
+        "infeasibility_probe",
+    ]
+    assert all(
+        row["footprint_reachability"]["continuous_oracle"]["status"] == "fail"
+        for row in result["rows"]
+    )
+
+
+def test_station_platform_117_respawn_defect_is_removed_by_successor_map() -> None:
+    matrix = REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    scenario = next(
+        row
+        for row in spawn_preflight._load_matrix(matrix)
+        if row["name"] == "classic_station_platform_medium"
+    )
+    corrected = spawn_preflight._check_release_scenario(
+        (scenario, str(matrix), (117,), 0.1, 20, 0.1, False)
+    )["rows"][0]
+    historical = dict(scenario)
+    historical["map_file"] = "../../maps/svg_maps/classic_station_platform.svg"
+    historical_result = spawn_preflight._check_release_scenario(
+        (historical, str(matrix), (117,), 0.1, 20, 0.1, False)
+    )["rows"][0]
+    assert corrected["overall_status"] == "valid"
+    assert corrected["respawn_safety"]["status"] == "pass"
+    assert historical_result["overall_status"] == "blocked"
+    assert historical_result["respawn_safety"]["reason"] == ("episode_ended_before_respawn_window")
+
+
+def test_boundary_width_straight_route_requires_full_margin() -> None:
+    _, analysis, _ = _doorway_fixture()
+    analysis["wall_geometry"] = unary_union(
+        [
+            LineString([(3.0, 0.0), (3.0, 1.9)]),
+            LineString([(3.0, 4.1), (3.0, 6.0)]),
+        ]
+    )
+    route = [(1.5, 3.0), (4.5, 3.0)]
+    assert (
+        spawn_preflight._continuous_margin_route(analysis, route, required_radius_m=1.1)["status"]
+        == "pass"
+    )
+    assert (
+        spawn_preflight._continuous_margin_route(analysis, route, required_radius_m=1.100001)[
+            "status"
+        ]
+        == "fail"
+    )
+
+
 def test_continuous_margin_oracle_replaces_narrow_raw_grid_witness() -> None:
     """A narrow sampled grid witness does not disprove a safe route around an obstacle."""
     occupancy = np.zeros((100, 100), dtype=bool)
@@ -476,6 +544,39 @@ def test_release_input_resolver_uses_manifest_matrix_and_seed_set() -> None:
     assert len(scenarios) == 48
     assert seeds == tuple(range(111, 141))
     assert identity["seed_set"] == "paper_eval_s30"
+
+
+def _manifest_with_seed_policy(seed_policy: dict[str, object]):
+    manifest = load_release_manifest(RELEASE_MANIFEST)
+    fields = {name: getattr(manifest, name) for name in dir(manifest) if not name.startswith("_")}
+    fields["seed_policy"] = seed_policy
+    return SimpleNamespace(**fields)
+
+
+def test_release_input_resolver_rejects_fixed_list_that_differs_from_resolved_seeds() -> None:
+    """A fixed list of [111] cannot stand in for the resolved 111-140 evaluation seeds."""
+    manifest = _manifest_with_seed_policy({"mode": "fixed-list", "seeds": [111]})
+
+    with pytest.raises(ValueError, match="do not match seed_policy.seeds"):
+        spawn_preflight._release_manifest_inputs(manifest)
+
+
+def test_release_input_resolver_rejects_fixed_list_without_a_seed_list() -> None:
+    manifest = _manifest_with_seed_policy({"mode": "fixed-list"})
+
+    with pytest.raises(ValueError, match="requires seed_policy.seeds"):
+        spawn_preflight._release_manifest_inputs(manifest)
+
+
+@pytest.mark.parametrize("mode", ["seedset", "", None, "range"])
+def test_release_input_resolver_rejects_unknown_seed_mode(mode: object) -> None:
+    """An unknown mode must not skip the named seed-set check."""
+    manifest = _manifest_with_seed_policy(
+        {"mode": mode, "seed_set": "paper_eval_s30", "seeds": list(range(111, 141))}
+    )
+
+    with pytest.raises(ValueError, match="unsupported seed_policy mode"):
+        spawn_preflight._release_manifest_inputs(manifest)
 
 
 def test_matrix_only_cli_input_cannot_be_mistaken_for_release_preflight(

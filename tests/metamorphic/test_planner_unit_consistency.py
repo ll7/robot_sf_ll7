@@ -15,8 +15,6 @@ one strict expected failure per tracking issue flips when that issue is fixed.
 
 from __future__ import annotations
 
-import copy
-import hashlib
 import math
 from dataclasses import fields
 from functools import cache
@@ -26,9 +24,8 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
+from robot_sf.benchmark.release_parameter_freeze import ARM_SLOTS_0_0_7_TO_0_0_8
 from robot_sf.benchmark.runner import (
-    _scenario_ped_radius_m,
-    _scenario_robot_radius_m,
     load_scenario_matrix,
 )
 from robot_sf.planner.dwa import DWAPlannerConfig
@@ -38,11 +35,12 @@ from robot_sf.planner.socnav_base import SocNavPlannerConfig
 from robot_sf.robot.actuation_envelope import stopping_distance
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.sim.sim_config import SimulationSettings
-from robot_sf.training.scenario_loader import load_scenarios
 from tests.metamorphic.planner_arms import (
+    RELEASE_MANIFEST,
+    RELEASE_TEMPLATE_CAMPAIGN,
     ROOT,
+    release_0_0_8_planners,
     release_campaign_planners,
-    release_candidate_0_0_8_planners,
     resolve_release_algo_config,
 )
 from tests.metamorphic.planner_arms import load_yaml as _load_yaml
@@ -434,9 +432,7 @@ def _unit_bearing(name: str) -> bool:
 def _release_values():
     """Yield each release algo_config resolved for the default and every override scenario."""
     entries = [(entry["algo"], entry.get("algo_config")) for entry in release_campaign_planners()]
-    entries.extend(
-        (entry["algo"], entry.get("algo_config")) for entry in release_candidate_0_0_8_planners()
-    )
+    entries.extend((entry["algo"], entry.get("algo_config")) for entry in release_0_0_8_planners())
     entries += [("hybrid_rule_local_planner", path) for path in HYBRID_V4_RELEASE_TWINS]
     for algo, path in entries:
         if not path:
@@ -572,13 +568,49 @@ def _violations_for(issue: str) -> list[str]:
 
 
 def test_release_campaign_planner_configs_are_audited() -> None:
-    """The audit reads the release roster, including its base configs and overrides."""
+    """Audit both contracted rosters, including frozen v4 bases and overrides."""
+    release_template = _load_yaml(
+        "configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml"
+    )
+    arm_count = release_template["matrix"]["planner_arms"]
+    matrix = release_template["matrix"]
+    assert matrix["expected_episode_cells"] == arm_count * matrix["scenarios"] * matrix["seeds"]
+    historical_manifest = _load_yaml(RELEASE_MANIFEST.relative_to(ROOT))
+    historical_campaign = (
+        RELEASE_MANIFEST.parent / historical_manifest["canonical_campaign_config"]
+    ).resolve()
+    rosters = [
+        _load_yaml(campaign.relative_to(ROOT))["planners"]
+        for campaign in (historical_campaign, RELEASE_TEMPLATE_CAMPAIGN)
+    ]
+    for roster in rosters:
+        assert len(roster) == len({entry["key"] for entry in roster}) == arm_count
+
     entries = release_campaign_planners()
-    assert len({entry["key"] for entry in entries}) == 14, "release roster lost or gained arms"
-    audited_sources = {source for source, _values in _all_values()}
+    assert {entry["key"] for entry in entries} == {
+        entry["key"] for roster in rosters for entry in roster
+    }
+    audited_values: dict[str, list[dict[str, Any]]] = {}
+    for source, values in _all_values():
+        audited_values.setdefault(source, []).append(values)
     for entry in entries:
         if entry.get("algo_config"):
-            assert entry["algo_config"] in audited_sources, entry
+            assert entry["algo_config"] in audited_values, entry
+    for slot in ARM_SLOTS_0_0_7_TO_0_0_8:
+        if slot.key_0_0_7 == slot.key_0_0_8:
+            continue
+        entry = next(entry for entry in rosters[1] if entry["key"] == slot.key_0_0_8)
+        path = entry["algo_config"]
+        manifest = _load_yaml(path)
+        base_fields = dict(_number_leaves(_load_yaml(manifest["base_config_path"])))
+        scenarios = {"__default__"}
+        for block in ("scenario_overrides", "scenario_algo_overrides"):
+            scenarios.update(manifest.get(block) or {})
+        for scenario in scenarios:
+            _algo, resolved = resolve_release_algo_config(entry["algo"], path, scenario)
+            if scenario == "__default__":
+                assert base_fields.keys() <= resolved.keys(), path
+            assert dict(_number_leaves(resolved)) in audited_values[path], (path, scenario)
     # base_config_path inheritance must reach the audited values: the hybrid base
     # file sets stop_distance_human, which no release candidate overrides.
     _algo, resolved = resolve_release_algo_config(
@@ -595,29 +627,12 @@ def test_release_campaign_planner_configs_are_audited() -> None:
     assert orca["max_linear_speed"] == 1.15
 
 
-def _assert_0_0_8_campaign_pair(candidate_campaign: dict, release_campaign: dict) -> None:
-    """The diagnostic candidate preserves the release scenario, seed, and roster contract."""
-    release_scenarios = load_scenarios(
-        "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml"
-    )
-    candidate_scenarios = load_scenarios(candidate_campaign["scenario_matrix"])
-    assert [row["name"] for row in candidate_scenarios] == [
-        row["name"] for row in release_scenarios
-    ]
-    assert len(candidate_scenarios) == 48
-    for key in ("seed_policy", "horizon", "dt", "kinematics_matrix"):
-        assert candidate_campaign[key] == release_campaign[key]
-    assert [row["key"] for row in candidate_campaign["planners"]] == [
-        row["key"] for row in release_campaign["planners"]
-    ]
-
-
-def _resolved_0_0_8_candidate_configs() -> tuple[list[dict], dict[str, tuple[str, dict[str, Any]]]]:
-    """Resolve every candidate arm through its algorithm and base-config chain."""
-    entries = release_candidate_0_0_8_planners()
+def _resolved_0_0_8_release_configs() -> tuple[list[dict], dict[str, tuple[str, dict[str, Any]]]]:
+    """Resolve every release arm through its algorithm and base-config chain."""
+    entries = release_0_0_8_planners()
     assert len({entry["key"] for entry in entries}) == 14
     assert {entry["key"] for entry in entries} == {
-        entry["key"] for entry in release_campaign_planners()
+        slot.key_0_0_8 for slot in ARM_SLOTS_0_0_7_TO_0_0_8
     }
     resolved = {
         entry["key"]: resolve_release_algo_config(
@@ -684,6 +699,7 @@ def _assert_guard_mppi_and_dwa_configs(resolved: dict[str, tuple[str, dict[str, 
     assert guarded["guard_robot_radius_m"] == pytest.approx(DRIVE.radius)
     assert guarded["guard_pedestrian_radius_m"] == pytest.approx(SIM.ped_radius)
     assert guarded["guard_rollout_dt"] == pytest.approx(SIM.time_per_step_in_secs)
+    assert guarded["fallback_risk_dwa"]["goal_target_version"] == "active_waypoint_v2"
 
     mppi = resolved["predictive_mppi"][1]
     assert mppi["clearance_model"] == "surface_v2"
@@ -692,6 +708,7 @@ def _assert_guard_mppi_and_dwa_configs(resolved: dict[str, tuple[str, dict[str, 
     assert mppi["predictive_pedestrian_radius"] == pytest.approx(SIM.ped_radius)
     assert mppi["max_angular_speed"] == pytest.approx(DRIVE.max_angular_speed)
     assert mppi["rollout_dt"] == pytest.approx(SIM.time_per_step_in_secs)
+    assert mppi["goal_target_version"] == "active_waypoint_v2"
 
     dwa = resolved["risk_dwa"][1]
     assert dwa["clearance_model"] == "surface_v2"
@@ -699,83 +716,28 @@ def _assert_guard_mppi_and_dwa_configs(resolved: dict[str, tuple[str, dict[str, 
     assert dwa["pedestrian_radius_m"] == pytest.approx(SIM.ped_radius)
     assert dwa["max_angular_speed"] == pytest.approx(DRIVE.max_angular_speed)
     assert dwa["rollout_dt"] == pytest.approx(SIM.time_per_step_in_secs)
+    assert dwa["goal_target_version"] == "active_waypoint_v2"
 
 
-def _assert_hybrid_configs_use_drive_limits(
-    resolved: dict[str, tuple[str, dict[str, Any]]],
-) -> None:
-    """Resolve all four historical hybrid arm configs and compare their drive envelope."""
-    keys = (
-        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield",
-        "scenario_adaptive_hybrid_orca_v2_collision_guard",
-        "hybrid_rule_v3_fast_progress_static_escape",
-        "hybrid_rule_v3_fast_progress_static_escape_continuous",
-    )
-    for key in keys:
-        hybrid = resolved[key][1]
-        assert hybrid["max_linear_speed"] == pytest.approx(DRIVE.max_linear_speed)
-        assert hybrid["max_angular_speed"] == pytest.approx(DRIVE.max_angular_speed)
-        assert hybrid["max_linear_accel"] == pytest.approx(DRIVE.max_linear_accel)
-        assert hybrid["max_linear_decel"] == pytest.approx(DRIVE.max_linear_decel)
-        assert hybrid["max_angular_accel"] == pytest.approx(DRIVE.max_angular_accel)
-        assert hybrid["control_period"] == pytest.approx(SIM.time_per_step_in_secs)
-        assert hybrid["rollout_dt"] == pytest.approx(SIM.time_per_step_in_secs)
-        assert hybrid["robot_radius_default"] == pytest.approx(DRIVE.radius)
-        assert hybrid["pedestrian_radius_default"] == pytest.approx(SIM.ped_radius)
-
-
-def test_0_0_8_candidate_resolves_versioned_physical_configs_for_all_arms() -> None:
-    """The diagnostic candidate keeps the release roster and binds physical limits."""
-    candidate_campaign = _load_yaml(
-        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml"
-    )
-    release_campaign = _load_yaml(
-        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml"
-    )
-    _assert_0_0_8_campaign_pair(candidate_campaign, release_campaign)
-    entries, resolved = _resolved_0_0_8_candidate_configs()
+def test_0_0_8_release_resolves_versioned_physical_configs_for_all_arms() -> None:
+    """The real release template binds corrected physical limits and selectors."""
+    entries, resolved = _resolved_0_0_8_release_configs()
     _assert_prediction_and_social_force_configs(entries, resolved)
     _assert_reference_and_learned_arm_configs(resolved)
     _assert_guard_mppi_and_dwa_configs(resolved)
-    _assert_hybrid_configs_use_drive_limits(resolved)
 
 
-def test_0_0_8_candidate_resolves_physical_geometry_for_all_scenarios() -> None:
-    """Candidate preserves accepted rows apart from declared 0.0.8 input corrections."""
-    candidate = _load_yaml(
-        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml"
+def test_0_0_8_release_resolves_physical_geometry_for_all_scenarios() -> None:
+    """The release matrix supplies physical radii to all 48 map-runner environments."""
+    campaign = _load_yaml(RELEASE_TEMPLATE_CAMPAIGN.relative_to(ROOT))
+    assert campaign["scenario_matrix"] == (
+        "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
     )
-    assert candidate["scenario_matrix"] == (
-        "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_0_0_8_physical_geometry.yaml"
-    )
-    assert candidate["dt"] == pytest.approx(SIM.time_per_step_in_secs)
-
-    accepted_scenario_path = ROOT / (
-        "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml"
-    )
-    assert hashlib.sha256(accepted_scenario_path.read_bytes()).hexdigest() == (
-        "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c"
-    )
-    accepted_scenarios = load_scenario_matrix(accepted_scenario_path)
-    scenarios = load_scenario_matrix(ROOT / candidate["scenario_matrix"])
-    assert len(accepted_scenarios) == len(scenarios) == 48
-
-    def strip_declared_0_0_8_deltas(scenario: dict[str, Any]) -> dict[str, Any]:
-        normalized = copy.deepcopy(scenario)
-        normalized["robot_config"].pop("radius", None)
-        normalized["simulation_config"].pop("ped_radius", None)
-        normalized["simulation_config"].pop("social_force_kernel_version", None)
-        return normalized
-
-    scenario_path = ROOT / candidate["scenario_matrix"]
-    for accepted, scenario in zip(accepted_scenarios, scenarios, strict=True):
-        assert strip_declared_0_0_8_deltas(scenario) == strip_declared_0_0_8_deltas(accepted)
-        assert scenario["robot_config"]["radius"] == pytest.approx(DRIVE.radius)
-        assert scenario["simulation_config"]["ped_radius"] == pytest.approx(SIM.ped_radius)
-        assert scenario["simulation_config"]["social_force_kernel_version"] == "wrapped_v2"
-        assert _scenario_robot_radius_m(scenario) == pytest.approx(DRIVE.radius)
-        assert _scenario_ped_radius_m(scenario) == pytest.approx(SIM.ped_radius)
-
+    assert campaign["dt"] == pytest.approx(SIM.time_per_step_in_secs)
+    scenario_path = ROOT / campaign["scenario_matrix"]
+    scenarios = load_scenario_matrix(scenario_path)
+    assert len(scenarios) == 48
+    for scenario in scenarios:
         # Check every actual map-runner environment config, without reset or step.
         env_config = build_env_config(scenario, scenario_path=scenario_path)
         assert env_config.robot_config.radius == pytest.approx(DRIVE.radius)

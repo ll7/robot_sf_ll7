@@ -39,10 +39,6 @@ RELEASE_MANIFEST = ROOT / "configs/benchmarks/releases/benchmark_data_release_s3
 RELEASE_TEMPLATE_CAMPAIGN = (
     ROOT / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
 )
-CANDIDATE_0_0_8_CAMPAIGN = (
-    ROOT
-    / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml"
-)
 HYBRID_V3_ARM = "hybrid_rule_v3_fast_progress_static_escape"
 # Explicitly bound diagnostic candidate.  It is intentionally absent from
 # ``RELEASE_ARMS`` so this check cannot silently change the official roster.
@@ -92,15 +88,14 @@ def release_campaign_planners() -> tuple[dict[str, Any], ...]:
     return tuple(entries)
 
 
-def release_candidate_0_0_8_planners() -> tuple[dict[str, Any], ...]:
-    """Return the explicitly diagnostic 0.0.8 candidate planner rows.
+def release_0_0_8_planners() -> tuple[dict[str, Any], ...]:
+    """Return the actual 0.0.8 release template planner rows.
 
     Returns:
-        Planner entries from the candidate matrix, without promoting it to an
-        admitted release campaign.
+        Planner entries from the campaign template.
     """
     return tuple(
-        dict(entry) for entry in load_yaml(CANDIDATE_0_0_8_CAMPAIGN.relative_to(ROOT))["planners"]
+        dict(entry) for entry in load_yaml(RELEASE_TEMPLATE_CAMPAIGN.relative_to(ROOT))["planners"]
     )
 
 

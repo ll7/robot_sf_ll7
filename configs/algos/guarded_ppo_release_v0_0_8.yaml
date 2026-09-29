@@ -2,9 +2,8 @@
 #
 # This preserves the camera-ready guarded PPO policy and guard thresholds while
 # preventing every forked map worker from loading a separate policy copy onto a
-# shared GPU. The fallback behavior is intentionally unchanged from the
-# canonical guarded PPO profile; release acceptance still rejects any episode
-# that actually reports fallback or degraded execution.
+# shared GPU. Release acceptance rejects episodes that report fallback or
+# degraded execution.
 
 model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
 device: cpu
@@ -25,6 +24,7 @@ guard_hard_obstacle_clearance: 0.30
 guard_min_ttc: 0.70
 
 fallback_risk_dwa:
+  goal_target_version: active_waypoint_v2
   max_linear_speed: 0.9
   max_angular_speed: 1.0
   rollout_dt: 0.1
@@ -43,7 +43,7 @@ fallback_risk_dwa:
   pedestrian_radius_m: 0.4
   hard_obstacle_clearance: 0.30
 
-# Candidate-only geometry: guard thresholds are free-surface clearances.
+# Release geometry: guard thresholds are free-surface clearances.
 guard_clearance_model: surface_v2
 guard_robot_radius_m: 1.0
 guard_pedestrian_radius_m: 0.4

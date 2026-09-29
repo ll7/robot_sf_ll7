@@ -1,4 +1,5 @@
 # Risk-aware dynamic-window baseline (non-learning).
+goal_target_version: active_waypoint_v2
 allow_testing_algorithms: true
 max_linear_speed: 1.2
 max_angular_speed: 1.0
@@ -29,7 +30,7 @@ progress_escape_distance: 1.0
 progress_escape_speed: 0.55
 progress_escape_heading_gain: 1.6
 
-# Candidate-only geometry: safety distances below are surface clearances.
+# Release geometry: safety distances below are surface clearances.
 clearance_model: surface_v2
 robot_radius_m: 1.0
 pedestrian_radius_m: 0.4

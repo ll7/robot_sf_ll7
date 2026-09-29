@@ -30,21 +30,14 @@ the global-planner fallback radius `0.4 m` are not the physics/metrics robot rad
 silently treated as the physical footprint in this audit. Observation fields `robot_radius` and
 `pedestrians_radius` are defined in metres in [`observation_contract.md`](../dev/observation_contract.md).
 
-## 0.0.8 candidate geometry binding
+## 0.0.8 release geometry binding
 
-The 0.0.8 candidate uses the versioned scenario matrix
-`configs/scenarios/classic_interactions_francis2023_goal_zone_entry_0_0_8_physical_geometry.yaml`.
-It derives from the accepted 0.0.7 execution matrix
-`configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml` (SHA-256
-`03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c`), rather than the older
-checked-in campaign template matrix. Across all 48 resolved rows, the only differences from that
-accepted matrix are the declared robot radius (`1.0 m`), pedestrian radius (`0.4 m`), and the
-separately versioned Social Force kernel selector (`wrapped_v2`, #9764). A contract test pins the
-accepted matrix hash, compares complete resolved rows after removing exactly those three fields,
-and builds all 48 map-runner environment configs without resetting or stepping them. The frozen
-0.0.7 config and scenario matrix remain untouched. The release comparison must still report the
-radius and kernel deltas; this config audit does not establish spawn/route feasibility at the larger
-robot radius, so final 0.0.8 setup gates must check those before planner episodes.
+The actual 0.0.8 campaign template selects
+`configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml`, as fixed by #9972.
+The versioned planner configs below bind the physical robot and pedestrian radii and the drive
+limits. A contract test resolves all 48 scenarios through the map-runner environment builder
+without resetting or stepping them. The #9972 preflight, rather than this config test, checks
+spawn and route feasibility. The frozen 0.0.7 config and scenario matrix remain untouched.
 
 ## Per-arm audit
 
@@ -80,12 +73,11 @@ circle-intersection time. Occupancy clearance treats a marked cell as its square
 subtracts the robot radius. This removes duplicate radius padding when the physical clearance is
 already selected.
 
-The 0.0.8 candidate binds these corrections through new config files for the predictor, Guarded
+The 0.0.8 release template binds these corrections through new config files for the predictor, Guarded
 PPO, MPPI, RiskDWA, SocialForce, SocNav/ORCA/SACADRL, and bounded SocNav sampling. The PPO learned
 feature cadence remains `0.2 s` to preserve the registered checkpoint input contract while the
-environment control step remains `0.1 s`. The four hybrid config twins currently in this worktree
-are provisional only; #9751 and its fresh author ruling own the final hybrid implementation/config
-bindings. They are not release-frozen evidence.
+environment control step remains `0.1 s`. The four hybrid v4 slots remain bound to the frozen
+#9748/#9751 configs from #9972. The obsolete v3 diagnostic twins are not used.
 
 Relevant correctness findings are tracked in [#9724](https://github.com/ll7/robot_sf_ll7/issues/9724),
 [#9742](https://github.com/ll7/robot_sf_ll7/issues/9742),

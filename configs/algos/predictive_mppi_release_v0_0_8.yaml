@@ -1,4 +1,5 @@
 # Predictive MPPI planner.
+goal_target_version: active_waypoint_v2
 # Uses the learned pedestrian predictor from the predictive planner, but scores
 # short action sequences via CEM/MPPI instead of a one-step control lattice.
 allow_testing_algorithms: true
@@ -52,7 +53,7 @@ predictive_near_field_speed_cap: 0.65
 predictive_candidate_speeds: [0.0, 0.25, 0.5, 0.75, 1.0]
 predictive_candidate_heading_deltas: [-0.785398, -0.523599, -0.261799, 0.0, 0.261799, 0.523599, 0.785398]
 
-# Candidate-only geometric contract. Clearance thresholds above are metres of
+# Release geometric contract. Clearance thresholds above are metres of
 # free space between physical surfaces. The historical v1 config stays frozen.
 clearance_model: surface_v2
 predictive_clearance_model: surface_v2

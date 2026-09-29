@@ -21,6 +21,11 @@ from robot_sf.planner.clearance_geometry import (
     validate_clearance_model,
     validate_surface_clearance_radii,
 )
+from robot_sf.planner.goal_target import (
+    LEGACY_NEXT_GOAL_V1,
+    select_goal_target,
+    validate_goal_target_version,
+)
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
 _DEFAULT_GOAL_PROGRESS_WEIGHT = 4.0
@@ -62,6 +67,7 @@ class RiskDWAPlannerConfig:
     rollout_dt: float = 0.2
     rollout_steps: int = 8
     goal_tolerance: float = 0.25
+    goal_target_version: str = LEGACY_NEXT_GOAL_V1
 
     linear_candidates: tuple[float, ...] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2)
     angular_candidates: tuple[float, ...] = (-1.2, -0.8, -0.4, 0.0, 0.4, 0.8, 1.2)
@@ -92,7 +98,8 @@ class RiskDWAPlannerConfig:
     hard_obstacle_clearance: float = 0.30
 
     def __post_init__(self) -> None:
-        """Validate the versioned geometry mode and physical radii."""
+        """Validate route selection and physical geometry before execution."""
+        validate_goal_target_version(self.goal_target_version)
         validate_clearance_model(self.clearance_model)
         validate_surface_clearance_radii(
             self.clearance_model,
@@ -128,7 +135,9 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
 
         goal_next = self._as_1d_float(goal_state.get("next", [0.0, 0.0]), pad=2)[:2]
         goal_current = self._as_1d_float(goal_state.get("current", [0.0, 0.0]), pad=2)[:2]
-        goal = goal_next if np.linalg.norm(goal_next - robot_pos) > 1e-6 else goal_current
+        goal = select_goal_target(
+            robot_pos, goal_current, goal_next, version=self.config.goal_target_version
+        )
 
         ped_positions_raw = ped_state.get("positions")
         ped_velocities_raw = ped_state.get("velocities")
@@ -532,6 +541,7 @@ def build_risk_dwa_config(cfg: dict[str, Any] | None) -> RiskDWAPlannerConfig:
         rollout_dt=float(cfg.get("rollout_dt", 0.2)),
         rollout_steps=int(cfg.get("rollout_steps", 8)),
         goal_tolerance=float(cfg.get("goal_tolerance", 0.25)),
+        goal_target_version=str(cfg.get("goal_target_version", LEGACY_NEXT_GOAL_V1)),
         linear_candidates=linear_candidates,
         angular_candidates=angular_candidates,
         goal_progress_weight=float(cfg.get("goal_progress_weight", _DEFAULT_GOAL_PROGRESS_WEIGHT)),

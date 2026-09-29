@@ -1,0 +1,22 @@
+# Predeclared, development-only, one-factor-at-a-time v4 search.
+# The baseline and each perturbation run on all four #9748 variants and
+# seeds 1001–1030. The release-keyed scenario overrides are not exercised.
+schema_version: issue_9748.v4_search.v1
+development_only: true
+objective: >-
+  Rank complete native trials within each arm by fewer collision events, then
+  more route completions, then lower mean time to goal among completed rows.
+  Failed, missing, fallback, or degraded cells make a trial ineligible.
+trials:
+  - id: baseline
+    params: {}
+  - id: slow_clearance_0p45
+    params: {v4_slow_clearance_human: 0.45}
+  - id: moderate_clearance_0p8
+    params: {v4_moderate_clearance_human: 0.8}
+  - id: braking_margin_0p15
+    params: {v4_braking_margin: 0.15}
+  - id: dynamic_clearance_weight_2p2
+    params: {dynamic_clearance_weight: 2.2}
+  - id: goal_progress_weight_4p5
+    params: {goal_progress_weight: 4.5}

@@ -457,6 +457,100 @@ def test_route_manifest_snapshot_treats_auth_as_failed_inconclusive_route(
     assert row["acceptance_state"] == "not_established"
 
 
+def test_route_manifest_snapshot_selects_indexed_no_run_auth_attempt(tmp_path: Path) -> None:
+    """A selected pre-start auth route must not inherit details from an earlier attempt."""
+    manifest_path = tmp_path / "routing_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "routed_worker_manifest.v2",
+                "route_evidence_only": True,
+                "chosen_route": {"provider": "luna"},
+                "chosen_run_dir": None,
+                "chosen_attempt_index": 1,
+                "chosen_terminal_state": "auth",
+                "attempted_routes": [
+                    {
+                        "attempt_index": 0,
+                        "route": {"provider": "opencode-go"},
+                        "returncode": 1,
+                        "failure_class": "backend-unavailable",
+                        "terminal_state": "route_not_started",
+                        "run_dir": None,
+                    },
+                    {
+                        "attempt_index": 1,
+                        "route": {"provider": "luna"},
+                        "returncode": 1,
+                        "failure_class": "startup_auth",
+                        "terminal_state": "auth",
+                        "run_dir": None,
+                    },
+                ],
+                "aggregation": "inconclusive",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    row = snapshot.route_manifest_snapshot(manifest_path)
+
+    assert row["status"] == "ok"
+    assert row["chosen_attempt_index"] == 1
+    assert row["chosen_terminal_state"] == "auth"
+    assert row["chosen_failure_class"] == "startup_auth"
+    assert row["chosen_returncode"] == 1
+    assert row["aggregation"] == "inconclusive"
+    assert row["aggregation_reason"] == "terminal_state:auth"
+
+
+def test_route_manifest_snapshot_fails_closed_on_ambiguous_legacy_no_run_attempts(
+    tmp_path: Path,
+) -> None:
+    """Legacy no-run rows are not guessed when route/state identity is duplicated."""
+    manifest_path = tmp_path / "routing_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "routed_worker_manifest.v2",
+                "route_evidence_only": True,
+                "chosen_route": {"provider": "luna"},
+                "chosen_run_dir": None,
+                "chosen_terminal_state": "auth",
+                "attempted_routes": [
+                    {
+                        "attempt_index": 0,
+                        "route": {"provider": "luna"},
+                        "returncode": 1,
+                        "failure_class": "startup_auth",
+                        "terminal_state": "auth",
+                        "run_dir": None,
+                    },
+                    {
+                        "attempt_index": 1,
+                        "route": {"provider": "luna"},
+                        "returncode": 2,
+                        "failure_class": "worker_task_auth",
+                        "terminal_state": "auth",
+                        "run_dir": None,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    row = snapshot.route_manifest_snapshot(manifest_path)
+
+    assert row["status"] == "unavailable"
+    assert row["chosen_terminal_state"] == "auth"
+    assert row["chosen_attempt_index"] is None
+    assert row["chosen_failure_class"] is None
+    assert row["aggregation"] == "inconclusive"
+    assert row["aggregation_reason"] == "chosen_attempt_ambiguous"
+    assert "chosen attempt is unresolved" in row["error"]
+
+
 def test_route_manifest_snapshot_overrides_false_confirmed_aggregation(tmp_path: Path) -> None:
     """A reported confirmed aggregate must be downgraded when output evidence is empty."""
     manifest_path = tmp_path / "routing_manifest.json"

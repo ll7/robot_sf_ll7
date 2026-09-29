@@ -625,6 +625,74 @@ def _route_attempt_snapshot(attempt: Any) -> dict[str, Any]:
     }
 
 
+def _matches_chosen_route_identity(
+    row: dict[str, Any], *, chosen_route: Any, chosen_terminal_state: Any
+) -> bool:
+    """Check the optional top-level route/state identity against one attempt row."""
+    return (chosen_route is None or row.get("route") == chosen_route) and (
+        chosen_terminal_state is None or row.get("terminal_state") == chosen_terminal_state
+    )
+
+
+def _resolve_chosen_attempt_position(
+    raw: dict[str, Any], attempt_rows: list[dict[str, Any]]
+) -> tuple[int | None, str | None]:
+    """Resolve the chosen attempt only when its identity is unambiguous."""
+    chosen_route = raw.get("chosen_route")
+    chosen_terminal_state = raw.get("chosen_terminal_state")
+    if "chosen_attempt_index" in raw:
+        chosen_index = raw.get("chosen_attempt_index")
+        if not isinstance(chosen_index, int) or isinstance(chosen_index, bool):
+            return None, "chosen_attempt_index_invalid"
+        positions = [
+            index
+            for index, row in enumerate(attempt_rows)
+            if isinstance(row.get("attempt_index"), int)
+            and not isinstance(row.get("attempt_index"), bool)
+            and row.get("attempt_index") == chosen_index
+            and _matches_chosen_route_identity(
+                row,
+                chosen_route=chosen_route,
+                chosen_terminal_state=chosen_terminal_state,
+            )
+        ]
+        if len(positions) == 1:
+            return positions[0], None
+        return None, "chosen_attempt_index_unmatched_or_ambiguous"
+
+    chosen_run_dir = raw.get("chosen_run_dir")
+    if chosen_run_dir is not None:
+        positions = [
+            index
+            for index, row in enumerate(attempt_rows)
+            if row.get("run_dir") == chosen_run_dir
+            and _matches_chosen_route_identity(
+                row,
+                chosen_route=chosen_route,
+                chosen_terminal_state=chosen_terminal_state,
+            )
+        ]
+        if len(positions) == 1:
+            return positions[0], None
+        return None, "chosen_run_dir_unmatched_or_ambiguous"
+
+    identity_declared = chosen_route is not None or chosen_terminal_state is not None
+    positions = [
+        index
+        for index, row in enumerate(attempt_rows)
+        if _matches_chosen_route_identity(
+            row,
+            chosen_route=chosen_route,
+            chosen_terminal_state=chosen_terminal_state,
+        )
+    ]
+    if len(positions) == 1:
+        return positions[0], None
+    if not identity_declared and len(attempt_rows) == 1:
+        return 0, None
+    return None, "chosen_attempt_ambiguous"
+
+
 def route_manifest_snapshot(  # noqa: C901, PLR0912 - explicit fail-closed parser states
     manifest_path: str | Path,
 ) -> dict[str, Any]:
@@ -681,18 +749,18 @@ def route_manifest_snapshot(  # noqa: C901, PLR0912 - explicit fail-closed parse
             "route_evidence_only": raw.get("route_evidence_only"),
             "chosen_route": raw.get("chosen_route"),
             "chosen_run_dir": raw.get("chosen_run_dir"),
+            "chosen_attempt_index": raw.get("chosen_attempt_index"),
             "error": "route manifest attempted_routes contains malformed attempt records",
             "next_action": "inspect_route_manifest_path_and_route_artifacts",
         }
     chosen_run_dir = raw.get("chosen_run_dir")
     chosen_terminal_state = raw.get("chosen_terminal_state")
     chosen: dict[str, Any] | None = None
-    for row in attempt_rows:
-        if row.get("run_dir") == chosen_run_dir:
-            chosen = row
-            break
-    if chosen is None and attempt_rows:
-        chosen = attempt_rows[0]
+    chosen_attempt_position, chosen_resolution_reason = _resolve_chosen_attempt_position(
+        raw, attempt_rows
+    )
+    if chosen_attempt_position is not None:
+        chosen = attempt_rows[chosen_attempt_position]
     if chosen_terminal_state is None and chosen is not None:
         chosen_terminal_state = chosen.get("terminal_state")
 
@@ -738,11 +806,8 @@ def route_manifest_snapshot(  # noqa: C901, PLR0912 - explicit fail-closed parse
         )
         for row in attempt_rows
     ]
-    if chosen is not None:
-        chosen = next(
-            (row for row in normalized_attempt_rows if row.get("run_dir") == chosen.get("run_dir")),
-            chosen,
-        )
+    if chosen_attempt_position is not None:
+        chosen = normalized_attempt_rows[chosen_attempt_position]
     if chosen_attempt_missing_terminal and chosen is not None:
         chosen_terminal_state = chosen.get("terminal_state")
     elif chosen_terminal_state is None and chosen is not None:
@@ -759,22 +824,29 @@ def route_manifest_snapshot(  # noqa: C901, PLR0912 - explicit fail-closed parse
     chosen_output_contract = chosen.get("output_contract") if chosen else None
     aggregation = chosen.get("aggregation", "inconclusive") if chosen else "inconclusive"
     aggregation_reason = (
-        chosen.get("aggregation_reason", "no_chosen_route") if chosen else "no_chosen_route"
+        chosen.get("aggregation_reason", "no_chosen_route")
+        if chosen
+        else chosen_resolution_reason or "no_chosen_route"
     )
     reported_aggregation = raw.get("aggregation")
     if missing_terminal_state:
         aggregation = "unavailable"
         aggregation_reason = "terminal_state_unknown"
-    elif reported_aggregation == "confirmed" and aggregation != "confirmed":
+    elif chosen is not None and reported_aggregation == "confirmed" and aggregation != "confirmed":
         aggregation = "inconclusive"
         aggregation_reason = "reported_confirmed_without_usable_worker_output"
     snapshot = {
         **base,
-        "status": "unavailable" if missing_terminal_state else "ok",
+        "status": "unavailable"
+        if missing_terminal_state or (attempt_rows and chosen is None)
+        else "ok",
         "schema": schema,
         "route_evidence_only": raw.get("route_evidence_only"),
         "chosen_route": raw.get("chosen_route"),
         "chosen_run_dir": chosen_run_dir,
+        "chosen_attempt_index": (
+            chosen.get("attempt_index") if chosen else raw.get("chosen_attempt_index")
+        ),
         "chosen_terminal_state": chosen_terminal_state,
         "chosen_failure_class": chosen.get("failure_class") if chosen else None,
         "chosen_returncode": chosen.get("returncode") if chosen else None,
@@ -800,6 +872,9 @@ def route_manifest_snapshot(  # noqa: C901, PLR0912 - explicit fail-closed parse
         snapshot["next_action"] = "inspect_route_manifest_path_and_route_artifacts"
     elif missing_terminal_state:
         snapshot["error"] = "route manifest attempt is missing terminal_state"
+        snapshot["next_action"] = "inspect_route_manifest_path_and_route_artifacts"
+    elif attempt_rows and chosen is None:
+        snapshot["error"] = f"route manifest chosen attempt is unresolved: {aggregation_reason}"
         snapshot["next_action"] = "inspect_route_manifest_path_and_route_artifacts"
     return snapshot
 

@@ -1202,6 +1202,7 @@ def build_routing_manifest(
         "route_evidence_only": True,
         "warning": ROUTE_EVIDENCE_WARNING,
         "attempted_routes": manifest_attempts,
+        "chosen_attempt_index": chosen_attempt["attempt_index"],
         "chosen_route": chosen_attempt["route"],
         "chosen_run_dir": chosen_attempt["run_dir"],
         "chosen_terminal_state": chosen_attempt["terminal_state"],

@@ -106,6 +106,7 @@ def test_build_manifest_includes_attempts_chosen_route_and_warning(tmp_path: Pat
     assert "not task acceptance" in data["warning"]
     assert len(data["attempted_routes"]) == 2
     assert data["attempted_routes"][0]["compact_artifacts"]["validation"]["reason"] == "not-run"
+    assert data["chosen_attempt_index"] == 1
     assert data["chosen_route"] == {"provider": "qwen"}
     assert data["compact_artifacts"]["validation"]["present"] is True
 
@@ -170,6 +171,7 @@ def test_write_manifest_persists_startup_auth_without_run_dir(tmp_path: Path) ->
     assert output_path.is_relative_to(artifact_root)
     data = json.loads(output_path.read_text(encoding="utf-8"))
     assert data["chosen_run_dir"] is None
+    assert data["chosen_attempt_index"] == 0
     assert data["chosen_terminal_state"] == "auth"
     assert data["attempted_routes"][0]["delegation"]["classification"] == "startup_auth"
     assert data["recovery"]["retry_recommended"] is False

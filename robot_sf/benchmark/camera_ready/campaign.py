@@ -2693,6 +2693,17 @@ def _build_campaign_metadata_section(
         f"{repository_url}/releases/download/{release_tag_value}/{expected_archive_name}"
     )
     doi_url = f"https://doi.org/{cfg.doi}"
+    publication_fields = (
+        {}
+        if cfg.publication_identity_mode == "scientific_candidate"
+        else {
+            "release_tag": release_tag_value,
+            "doi": cfg.doi,
+            "release_url": release_url,
+            "release_asset_url": release_asset_url,
+            "doi_url": doi_url,
+        }
+    )
     return {
         **_build_campaign_execution_metadata(
             cfg,
@@ -2718,11 +2729,7 @@ def _build_campaign_metadata_section(
         ),
         "comparability_mapping_hash": paths.manifest_payload.get("comparability_mapping_hash"),
         "repository_url": cfg.repository_url,
-        "release_tag": release_tag_value,
-        "doi": cfg.doi,
-        "release_url": release_url,
-        "release_asset_url": release_asset_url,
-        "doi_url": doi_url,
+        **publication_fields,
         **(cfg.snqi_v2_spec.provenance() if getattr(cfg, "snqi_v2_spec", None) else {}),
         "snqi_weights_version": (
             cfg.snqi_weights_path.stem if cfg.snqi_weights_path is not None else "default"
@@ -2782,7 +2789,12 @@ def _build_campaign_summary_dict(  # noqa: PLR0913
         "campaign_integrity": campaign_integrity,
         "warnings": warnings,
         "soft_contract_warning": snqi.soft_contract_warning,
-        "artifacts": _build_campaign_artifacts_section(paths, snqi, table_paths),
+        "artifacts": _build_campaign_artifacts_section(
+            paths,
+            snqi,
+            table_paths,
+            publication_identity_mode=cfg.publication_identity_mode,
+        ),
     }
 
 
@@ -2809,6 +2821,8 @@ def _build_campaign_artifacts_section(
     paths: _CampaignPreflightPaths,
     snqi: _SnqiSectionResult,
     table_paths: dict[str, Any],
+    *,
+    publication_identity_mode: str = "bound",
 ) -> dict[str, Any]:
     """Build the artifacts sub-dict for the campaign summary.
 
@@ -2872,10 +2886,16 @@ def _build_campaign_artifacts_section(
         "scenario_family_breakdown_md": _repo_relative(table_paths["family_md_path"]),
         "campaign_report_md": _repo_relative(table_paths["report_md_path"]),
         "campaign_integrity_json": _repo_relative(reports_dir / "campaign_integrity.json"),
-        "expected_release_archive": expected_archive_name,
-        "release_url": release_url,
-        "release_asset_url": release_asset_url,
-        "doi_url": doi_url,
+        **(
+            {}
+            if publication_identity_mode == "scientific_candidate"
+            else {
+                "expected_release_archive": expected_archive_name,
+                "release_url": release_url,
+                "release_asset_url": release_asset_url,
+                "doi_url": doi_url,
+            }
+        ),
         "snqi_diagnostics_json": _repo_relative(snqi.snqi_diagnostics_json_path),
         "snqi_diagnostics_md": _repo_relative(snqi.snqi_diagnostics_md_path),
         "snqi_sensitivity_csv": _repo_relative(snqi.snqi_sensitivity_csv_path),

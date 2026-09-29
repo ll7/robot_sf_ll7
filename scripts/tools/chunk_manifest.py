@@ -272,8 +272,8 @@ def _allocation_status(path: Path, st: os.stat_result, relative: str) -> str:
     return ALLOCATION_VERIFIED if mapped else ALLOCATION_UNVERIFIED
 
 
-def _seek_confirms_allocation(path: Path, size: int) -> bool | None:
-    """Walk SEEK_DATA/SEEK_HOLE when FIEMAP is unavailable; reject any observed hole."""
+def _seek_finds_hole(path: Path, size: int) -> bool | None:
+    """Detect an observed hole; a hole-free SEEK walk is not allocation proof."""
     if not hasattr(os, "SEEK_DATA") or not hasattr(os, "SEEK_HOLE"):
         return None
     try:
@@ -285,28 +285,34 @@ def _seek_confirms_allocation(path: Path, size: int) -> bool | None:
         while offset < size:
             data = os.lseek(fd, offset, os.SEEK_DATA)
             if data != offset:
-                return False
+                return True
             hole = os.lseek(fd, offset, os.SEEK_HOLE)
             if hole <= offset or hole > size:
-                return False
+                return True
             offset = hole
-        return True
+        return False
     except OSError as exc:
-        return False if exc.errno == errno.ENXIO else None
+        return True if exc.errno == errno.ENXIO else None
     finally:
         os.close(fd)
 
 
 def _destination_allocation_status(path: Path, size: int, relative: str) -> str:
-    """Inspect all nonempty destination extents, independent of st_blocks."""
+    """Require FIEMAP proof for nonempty destinations, independent of st_blocks."""
     if size == 0:
         return ALLOCATION_VERIFIED
     mapped = _fiemap_confirms_allocation(path, size, require_encoded=False)
     if mapped is None:
-        mapped = _seek_confirms_allocation(path, size)
+        if _seek_finds_hole(path, size) is True:
+            raise ChunkManifestError("sparse_file", f"sparse member: {relative}", file=relative)
+        raise ChunkManifestError(
+            "allocation_unverifiable_destination",
+            f"destination allocation cannot be verified: {relative}",
+            file=relative,
+        )
     if mapped is False:
         raise ChunkManifestError("sparse_file", f"sparse member: {relative}", file=relative)
-    return ALLOCATION_VERIFIED if mapped else ALLOCATION_UNVERIFIED
+    return ALLOCATION_VERIFIED
 
 
 def _stat_checked(path: Path, relative: str) -> tuple[int, int, int, int, int]:
@@ -1751,8 +1757,12 @@ def _run_custody(args: argparse.Namespace) -> int:
     input_paths = (args.manifest, args.source_verification, args.destination_verification)
     if args.output.resolve() in {path.resolve() for path in input_paths}:
         raise ChunkManifestError("custody_output_conflict", "output must differ from inputs")
-    source_root = args.source_root.expanduser().resolve()
-    destination_root = args.destination_root.expanduser().resolve()
+    source_root = args.source_root.expanduser()
+    destination_root = args.destination_root.expanduser()
+    if source_root.is_symlink() or destination_root.is_symlink():
+        raise ChunkManifestError("symlink_root", "custody roots must not be symlinks")
+    source_root = source_root.resolve()
+    destination_root = destination_root.resolve()
     if source_root == destination_root:
         raise ChunkManifestError(
             "custody_root_conflict", "source and destination roots must differ"

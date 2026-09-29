@@ -423,9 +423,9 @@ def test_gpfs_like_source_dense_destination_passes_custody(
     ):
         path.write_text(json.dumps(payload), encoding="utf-8")
     source_args = ["verify", "--root", str(source_root), "--manifest", str(manifest_path), "--json"]
-    assert cm.main(source_args) == cm.EXIT_OK
-    assert json.loads(capsys.readouterr().out)["files"][0]["allocation_status"] == (
-        cm.ALLOCATION_VERIFIED
+    assert cm.main(source_args) == cm.EXIT_FAILED
+    assert json.loads(capsys.readouterr().out)["error"]["code"] == (
+        "allocation_unverifiable_destination"
     )
     assert cm.main([*source_args, "--side", "source"]) == cm.EXIT_OK
     assert json.loads(capsys.readouterr().out)["allocation_policy"] == "source"
@@ -544,27 +544,42 @@ def test_destination_hole_fails_even_with_blocks_beyond_eof(
     assert error.value.code == "sparse_file"
 
 
-def test_destination_without_fiemap_uses_seek_and_fails_without_either(
+def test_destination_without_fiemap_rejects_coarse_seek_on_sparse_file(
     tmp_path: Path, monkeypatch
 ) -> None:
     source_root = tmp_path / "source"
     destination_root = tmp_path / "destination"
     source_root.mkdir()
     destination_root.mkdir()
-    data = b"dense data" * 100
+    data = b"\0" * (1024 * 1024) + b"x"
     (source_root / "output.bin").write_bytes(data)
-    (destination_root / "output.bin").write_bytes(data)
     manifest = _build(source_root)
+    destination_file = destination_root / "output.bin"
+    with destination_file.open("wb") as handle:
+        handle.seek(len(data) - 1)
+        handle.write(b"x")
+    if not cm._looks_sparse_by_blocks(destination_file.stat()):
+        pytest.skip("filesystem does not report sparse allocation")
     monkeypatch.setattr(cm, "_fiemap_extents", lambda _fd, _size: None)
-    assert cm.verify_manifest(destination_root, manifest=manifest)["status"] == "ok"
 
-    def unavailable_seek(_fd, _offset, _whence):
-        raise OSError(errno.EINVAL, "SEEK_DATA/SEEK_HOLE unsupported")
+    def coarse_seek(_fd, _offset, whence):
+        return 0 if whence == os.SEEK_DATA else len(data)
 
-    monkeypatch.setattr(cm.os, "lseek", unavailable_seek)
-    result = cm.verify_manifest(destination_root, manifest=manifest)
-    assert result["status"] == "failed"
-    assert {failure["code"] for failure in result["failures"]} == {cm.ALLOCATION_UNVERIFIED}
+    monkeypatch.setattr(cm.os, "lseek", coarse_seek)
+    with pytest.raises(cm.ChunkManifestError) as error:
+        cm.verify_manifest(destination_root, manifest=manifest)
+    assert error.value.code == "allocation_unverifiable_destination"
+
+
+def test_destination_without_fiemap_rejects_dense_file(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "destination"
+    root.mkdir()
+    (root / "output.bin").write_bytes(b"dense data" * 100)
+    manifest = _build(root)
+    monkeypatch.setattr(cm, "_fiemap_extents", lambda _fd, _size: None)
+    with pytest.raises(cm.ChunkManifestError) as error:
+        cm.verify_manifest(root, manifest=manifest)
+    assert error.value.code == "allocation_unverifiable_destination"
 
 
 def test_source_mapping_with_holes_still_fails(tmp_path: Path, monkeypatch) -> None:
@@ -678,6 +693,61 @@ def test_custody_rechecks_roots_after_verification(
     )
     assert result == cm.EXIT_FAILED
     assert not receipt_path.exists()
+
+
+@pytest.mark.parametrize("side", ("source", "destination"))
+def test_custody_cli_rejects_symlinked_root(tmp_path: Path, capsys, side: str) -> None:
+    source_root = tmp_path / "source"
+    destination_root = tmp_path / "destination"
+    source_root.mkdir()
+    destination_root.mkdir()
+    data = b"copy evidence" * 100
+    (source_root / "output.bin").write_bytes(data)
+    (destination_root / "output.bin").write_bytes(data)
+    manifest = _build(source_root)
+    source = cm.verify_manifest(source_root, manifest=manifest, require_allocation=False)
+    destination = cm.verify_manifest(destination_root, manifest=manifest, require_allocation=True)
+    paths = {
+        "manifest": tmp_path / "manifest.json",
+        "source": tmp_path / "source-verify.json",
+        "destination": tmp_path / "destination-verify.json",
+    }
+    for path, payload in (
+        (paths["manifest"], manifest),
+        (paths["source"], source),
+        (paths["destination"], destination),
+    ):
+        path.write_text(json.dumps(payload), encoding="utf-8")
+    linked_root = tmp_path / f"{side}-link"
+    linked_root.symlink_to(
+        source_root if side == "source" else destination_root, target_is_directory=True
+    )
+    roots = {"source": source_root, "destination": destination_root}
+    roots[side] = linked_root
+    output = tmp_path / "custody.json"
+    assert (
+        cm.main(
+            [
+                "custody",
+                "--manifest",
+                str(paths["manifest"]),
+                "--source-verification",
+                str(paths["source"]),
+                "--destination-verification",
+                str(paths["destination"]),
+                "--source-root",
+                str(roots["source"]),
+                "--destination-root",
+                str(roots["destination"]),
+                "--output",
+                str(output),
+                "--json",
+            ]
+        )
+        == cm.EXIT_FAILED
+    )
+    assert json.loads(capsys.readouterr().out)["error"]["code"] == "symlink_root"
+    assert not output.exists()
 
 
 def test_source_mutation_guard_fails_closed(tmp_path: Path, monkeypatch) -> None:

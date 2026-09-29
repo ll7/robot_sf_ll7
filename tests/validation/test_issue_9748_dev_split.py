@@ -701,6 +701,65 @@ def test_tuning_log_rejects_changed_transitive_inputs_after_source_commit(
 
 
 @pytest.mark.parametrize(
+    "dependency,match",
+    [
+        (
+            "configs/benchmarks/issue_9748_hybrid_v4_dev_split_v1.yaml",
+            "campaign_config_sha256 does not match the current HEAD",
+        ),
+        (
+            "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml",
+            "scenario_manifest_sha256 does not match the current HEAD",
+        ),
+        (
+            "configs/policy_search/candidates/"
+            "hybrid_rule_v4_fast_progress_static_escape_s30_h600_release.yaml",
+            "candidate config hash.*does not match the current HEAD",
+        ),
+        (
+            "robot_sf/benchmark/policy_search_manifest.py",
+            "transitive tuning input.*frozen source",
+        ),
+    ],
+)
+def test_tuning_log_rejects_head_change_hidden_by_old_working_tree_bytes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    dependency: str,
+    match: str,
+) -> None:
+    payload = _valid_log_payload()
+    log_path, _ = _write_committed_log(tmp_path, payload, monkeypatch)
+    dependency_path = CHECKER.ROOT / dependency
+    frozen_bytes = dependency_path.read_bytes()
+    dependency_path.write_bytes(frozen_bytes + b"\n# committed post-freeze mutation\n")
+    subprocess.run(
+        ["git", "add", "--", dependency],
+        cwd=CHECKER.ROOT,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "commit", "--quiet", "-m", "Change governed input after log"],
+        cwd=CHECKER.ROOT,
+        check=True,
+        capture_output=True,
+    )
+    dependency_path.write_bytes(frozen_bytes)
+
+    head_bytes = subprocess.run(
+        ["git", "show", f"HEAD:{dependency}"],
+        cwd=CHECKER.ROOT,
+        check=True,
+        capture_output=True,
+    ).stdout
+    assert head_bytes != frozen_bytes
+    assert dependency_path.read_bytes() == frozen_bytes
+    with pytest.raises(CHECKER.ValidationError, match=match):
+        _validate_committed_log(log_path)
+
+
+@pytest.mark.parametrize(
     "mutation,match",
     [
         ("entry_candidate", "must name an approved candidate"),

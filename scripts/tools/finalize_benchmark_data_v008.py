@@ -26,6 +26,13 @@ from robot_sf.benchmark.release_protocol import (
     verify_resolved_release_identity,
 )
 from robot_sf.common.artifact_paths import get_repository_root
+from scripts.analysis.compare_release_007_008 import (
+    HISTORICAL_EFFECTIVE_CONFIG_SHA256,
+    HISTORICAL_MATRIX_SHA256,
+)
+from scripts.analysis.compare_release_007_008 import (
+    REPORT_SCHEMA as STAGE3_REPORT_SCHEMA,
+)
 from scripts.tools.run_benchmark_release import (
     _assert_no_historical_release_identity,
     _build_publication_payload,
@@ -53,6 +60,10 @@ _SNQI_V2_REPORTS = (
     "reports/snqi_v2_family.md",
 )
 _SNQI_V2_ASSET_ROLES = ("weights", "anchors", "family")
+_STAGE3_DEFAULT_IDENTITY = "release/candidate_identity.json"
+_STAGE3_DEFAULT_LEDGER = "reports/attribution_ledger.json"
+_STAGE3_DEFAULT_REPORT = "reports/stage3_comparison.json"
+_STAGE3_DEFAULT_FINDINGS = "reports/stage3_findings.jsonl"
 
 
 def _sha256(path: Path) -> str:
@@ -68,6 +79,193 @@ def _read_mapping(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"expected a JSON object: {path.name}")
     return payload
+
+
+def _stage3_paths(
+    campaign_root: Path,
+    *,
+    output_root: Path | None = None,
+    candidate_identity: Path | None = None,
+    attribution_ledger: Path | None = None,
+    comparison_report: Path | None = None,
+    comparison_findings: Path | None = None,
+) -> dict[str, Path]:
+    """Resolve the Stage-3 inputs and outputs for one candidate root."""
+    root = campaign_root.resolve()
+    output = (output_root or root).resolve()
+    return {
+        "candidate_identity": (candidate_identity or root / _STAGE3_DEFAULT_IDENTITY).resolve(),
+        "attribution_ledger": (attribution_ledger or root / _STAGE3_DEFAULT_LEDGER).resolve(),
+        "comparison_report": (comparison_report or output / _STAGE3_DEFAULT_REPORT).resolve(),
+        "comparison_findings": (comparison_findings or output / _STAGE3_DEFAULT_FINDINGS).resolve(),
+    }
+
+
+def _require_external_stage3_outputs(producer_root: Path, paths: dict[str, Path]) -> None:
+    """Keep comparator outputs outside an immutable producer tree."""
+    producer = producer_root.resolve()
+    for key in ("comparison_report", "comparison_findings"):
+        path = paths[key]
+        if path == producer or producer in path.parents:
+            raise ValueError(f"Stage-3 {key} must be outside the producer root")
+
+
+def _materialize_stage3_artifacts(
+    candidate_root: Path, paths: dict[str, Path], receipt: dict[str, Any]
+) -> dict[str, Path]:
+    """Copy receipt-bound Stage-3 artifacts into the publication derivative."""
+    destinations = {
+        "candidate_identity": candidate_root / _STAGE3_DEFAULT_IDENTITY,
+        "attribution_ledger": candidate_root / _STAGE3_DEFAULT_LEDGER,
+        "comparison_report": candidate_root / _STAGE3_DEFAULT_REPORT,
+        "comparison_findings": candidate_root / _STAGE3_DEFAULT_FINDINGS,
+    }
+    hashes = {
+        "candidate_identity": receipt["candidate_identity_sha256"],
+        "attribution_ledger": receipt["attribution_ledger_sha256"],
+        "comparison_report": receipt["comparison_report_sha256"],
+        "comparison_findings": receipt["findings_sha256"],
+    }
+    for key, destination in destinations.items():
+        source = paths[key]
+        if source.resolve() != destination.resolve():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+        if _sha256(destination) != hashes[key]:
+            raise ValueError(f"Stage-3 {key} changed while materializing derivative")
+    return destinations
+
+
+def _run_stage3_comparator(
+    *,
+    campaign_root: Path,
+    baseline_archive: Path,
+    candidate_source_root: Path,
+    paths: dict[str, Path],
+    log_path: Path,
+) -> None:
+    """Run the canonical receipt-aware 0.0.7→0.0.8 comparator."""
+    _run_gate(
+        [
+            sys.executable,
+            str(get_repository_root() / "scripts/analysis/compare_release_007_008.py"),
+            "--historical-bundle",
+            str(baseline_archive),
+            "--candidate-root",
+            str(campaign_root),
+            "--candidate-source-root",
+            str(candidate_source_root),
+            "--candidate-identity",
+            str(paths["candidate_identity"]),
+            "--attribution-ledger",
+            str(paths["attribution_ledger"]),
+            "--report-json",
+            str(paths["comparison_report"]),
+            "--findings-jsonl",
+            str(paths["comparison_findings"]),
+            "--report-md",
+            str(paths["comparison_report"].with_suffix(".md")),
+        ],
+        log_path,
+    )
+
+
+def _require_stage3_comparison(  # noqa: C901
+    *,
+    campaign_root: Path,
+    baseline_archive: Path,
+    expected_source_sha: str,
+    paths: dict[str, Path],
+) -> dict[str, Any]:
+    """Require a complete, hash-bound comparator receipt before publication."""
+    report = _read_mapping(paths["comparison_report"])
+    identity = _read_mapping(paths["candidate_identity"])
+    ledger = _read_mapping(paths["attribution_ledger"])
+    if report.get("schema_version") != STAGE3_REPORT_SCHEMA:
+        raise ValueError("Stage-3 comparison report schema is invalid")
+    if report.get("comparison_passed") is not True:
+        raise ValueError("Stage-3 comparison receipt is not passed")
+    comparison = report.get("comparison")
+    inventory = comparison.get("inventory") if isinstance(comparison, dict) else None
+    if (
+        not isinstance(comparison, dict)
+        or comparison.get("comparison_passed") is not True
+        or not isinstance(inventory, dict)
+        or any(inventory.values())
+        or comparison.get("row_anomalies") != []
+        or comparison.get("unexplained_findings") != []
+        or comparison.get("orphaned_attributions") != []
+    ):
+        raise ValueError("Stage-3 comparison receipt has inventory, row, or attribution findings")
+    if report.get("read_anomalies") != [] or report.get("attribution_anomalies") != []:
+        raise ValueError("Stage-3 comparison receipt has read or attribution anomalies")
+    if identity.get("source_sha") != expected_source_sha:
+        raise ValueError("Stage-3 candidate identity source differs from finalizer source")
+    if ledger.get("candidate_source_sha") != expected_source_sha:
+        raise ValueError("Stage-3 attribution ledger source differs from finalizer source")
+    if _sha256(baseline_archive) != BASELINE_ARCHIVE_SHA256:
+        raise ValueError("frozen 0.0.7 archive checksum mismatch")
+    expected_hashes = {
+        "candidate_source_sha": expected_source_sha,
+        "historical_source_sha": BASELINE_SOURCE_SHA,
+        "historical_effective_config_sha256": HISTORICAL_EFFECTIVE_CONFIG_SHA256,
+        "historical_matrix_sha256": HISTORICAL_MATRIX_SHA256,
+        "historical_bundle_sha256": BASELINE_ARCHIVE_SHA256,
+        "candidate_identity_sha256": _sha256(paths["candidate_identity"]),
+        "attribution_ledger_sha256": _sha256(paths["attribution_ledger"]),
+        "findings_sha256": _sha256(paths["comparison_findings"]),
+    }
+    for field, expected in expected_hashes.items():
+        if report.get(field) != expected:
+            raise ValueError(f"Stage-3 comparison {field} is not hash-bound")
+    if not campaign_root.is_dir():
+        raise ValueError("Stage-3 candidate root is missing")
+    return {
+        "report": paths["comparison_report"],
+        "candidate_identity": paths["candidate_identity"],
+        "attribution_ledger": paths["attribution_ledger"],
+        "findings": paths["comparison_findings"],
+        **expected_hashes,
+        "comparison_report_sha256": _sha256(paths["comparison_report"]),
+    }
+
+
+def _promote_scientific_candidate_result(
+    candidate_root: Path, stage3_receipt: dict[str, Any]
+) -> dict[str, Any]:
+    """Promote a pending candidate only after the Stage-3 receipt passes."""
+    result_path = candidate_root / "release/scientific_candidate_result.json"
+    result = _read_mapping(result_path)
+    if result.get("status") not in {"stage3_pending", "accepted_pre_publication"}:
+        raise ValueError("scientific candidate is not waiting at the Stage-3 boundary")
+    source_sha = result.get("source_sha")
+    if source_sha is not None and source_sha != stage3_receipt["candidate_source_sha"]:
+        raise ValueError("scientific candidate source differs from Stage-3 receipt")
+    result.update(
+        {
+            "status": "accepted_pre_publication",
+            "stage3_status": "passed",
+            "stage3_comparison_sha256": stage3_receipt["comparison_report_sha256"],
+            "stage3_candidate_identity_sha256": stage3_receipt["candidate_identity_sha256"],
+            "stage3_attribution_ledger_sha256": stage3_receipt["attribution_ledger_sha256"],
+            "stage3_findings_sha256": stage3_receipt["findings_sha256"],
+        }
+    )
+    _write_json(result_path, result)
+    return result
+
+
+def _promote_scientific_candidate_if_present(
+    candidate_root: Path, stage3_receipt: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Require paired science identity/result files and promote them after Stage 3."""
+    identity_path = candidate_root / "release/scientific_candidate.json"
+    result_path = candidate_root / "release/scientific_candidate_result.json"
+    if not identity_path.exists() and not result_path.exists():
+        return None
+    if not identity_path.is_file() or not result_path.is_file():
+        raise ValueError("scientific candidate identity and result must be paired")
+    return _promote_scientific_candidate_result(candidate_root, stage3_receipt)
 
 
 def _require_producer(producer_root: Path, source_sha: str) -> dict[str, Any]:
@@ -160,7 +358,7 @@ def _require_scientific_report_identities(  # noqa: C901, PLR0912
 
     equivalence = reports[_SCIENTIFIC_REPORTS[1]]
     if (
-        equivalence.get("status") != "pass"
+        equivalence.get("status") not in {"pass", "mismatch"}
         or equivalence.get("baseline_archive_sha256") != BASELINE_ARCHIVE_SHA256
         or equivalence.get("baseline_source_sha") != BASELINE_SOURCE_SHA
         or equivalence.get("candidate_source_sha") != source_sha
@@ -168,8 +366,7 @@ def _require_scientific_report_identities(  # noqa: C901, PLR0912
         or equivalence.get("baseline_rows") != EXPECTED_EPISODES
         or equivalence.get("candidate_rows") != EXPECTED_EPISODES
         or equivalence.get("paired_rows") != EXPECTED_EPISODES
-        or equivalence.get("mismatch_episodes") != 0
-        or equivalence.get("scientific_manifest_differences") != []
+        or not isinstance(equivalence.get("scientific_manifest_differences"), list)
     ):
         raise ValueError("scientific candidate equivalence report identity is invalid")
     force_metrics = equivalence.get("robot_force_metrics")
@@ -274,7 +471,7 @@ def _require_scientific_candidate(  # noqa: C901, PLR0912
     if (
         identity.get("schema_version") != "benchmark-scientific-candidate.v1"
         or result.get("schema_version") != "benchmark-scientific-candidate-result.v1"
-        or result.get("status") != "accepted_pre_publication"
+        or result.get("status") not in {"stage3_pending", "accepted_pre_publication"}
         or identity.get("source_sha") != source_sha
         or result.get("source_sha") != source_sha
         or manifest.source_sha != source_sha
@@ -282,7 +479,9 @@ def _require_scientific_candidate(  # noqa: C901, PLR0912
         or identity.get("baseline_archive_sha256") != BASELINE_ARCHIVE_SHA256
         or result.get("baseline_archive_sha256") != BASELINE_ARCHIVE_SHA256
     ):
-        raise ValueError("producer is not an accepted exact-source scientific candidate")
+        raise ValueError(
+            "producer is not an accepted exact-source scientific candidate or Stage-3 pending candidate"
+        )
     unsigned = dict(identity)
     identity_digest = unsigned.pop("scientific_identity_sha256", None)
     canonical = (
@@ -361,7 +560,7 @@ def _require_scientific_candidate(  # noqa: C901, PLR0912
             report.get("classification") == "release_robot_force_validation"
             and report.get("episodes") == EXPECTED_EPISODES
             if key == "robot_force_validation_sha256"
-            else report.get("status") in {"valid", "pass"}
+            else report.get("status") in {"valid", "pass", "mismatch"}
         )
         if _sha256(report_path) != result.get(key) or not accepted:
             raise ValueError(f"scientific candidate gate is not accepted: {name}")
@@ -574,15 +773,20 @@ def _prepare_candidate(
     return producer_root, candidate_root, producer_result
 
 
-def finalize(
+def finalize(  # noqa: PLR0913
     *,
     producer_root: Path,
     candidate_root: Path,
     resolved_identity: Path,
     baseline_archive: Path,
     expected_source_sha: str,
+    candidate_source_root: Path | None = None,
+    candidate_identity: Path | None = None,
+    attribution_ledger: Path | None = None,
+    comparison_report: Path | None = None,
+    comparison_findings: Path | None = None,
 ) -> dict[str, Any]:
-    """Copy, validate, and publish one accepted exact-source campaign."""
+    """Copy, compare, validate, and publish one exact-source campaign."""
     manifest = verify_resolved_release_identity(resolved_identity)
     if manifest.source_sha != expected_source_sha or manifest.source_sha == BASELINE_SOURCE_SHA:
         raise ValueError("0.0.8 resolved identity has the wrong scientific source")
@@ -592,11 +796,37 @@ def finalize(
         producer_root, candidate_root, expected_source_sha, manifest
     )
     report_dir = candidate_root / "reports"
+    stage3_paths = _stage3_paths(
+        candidate_root,
+        candidate_identity=candidate_identity,
+        attribution_ledger=attribution_ledger,
+        comparison_report=comparison_report,
+        comparison_findings=comparison_findings,
+    )
+    stage3_source_root = (candidate_source_root or get_repository_root()).resolve()
+    stage3_log = candidate_root.parent / f"{candidate_root.name}.stage3_comparison.log"
     equivalence = report_dir / "metric_equivalence.json"
     equivalence_log = candidate_root.parent / f"{candidate_root.name}.equivalence.log"
     force_log = candidate_root.parent / f"{candidate_root.name}.robot_force.log"
-    stage = "metric_equivalence"
+    stage = "stage3_comparison"
     try:
+        _run_stage3_comparator(
+            campaign_root=candidate_root,
+            baseline_archive=baseline_archive,
+            candidate_source_root=stage3_source_root,
+            paths=stage3_paths,
+            log_path=stage3_log,
+        )
+        stage3_receipt = _require_stage3_comparison(
+            campaign_root=candidate_root,
+            baseline_archive=baseline_archive,
+            expected_source_sha=expected_source_sha,
+            paths=stage3_paths,
+        )
+        _materialize_stage3_artifacts(candidate_root, stage3_paths, stage3_receipt)
+        stage = "scientific_candidate_promotion"
+        _promote_scientific_candidate_if_present(candidate_root, stage3_receipt)
+        stage = "metric_equivalence"
         _run_gate(
             [
                 sys.executable,
@@ -615,6 +845,7 @@ def finalize(
                 expected_source_sha,
                 "--expected-rows",
                 str(EXPECTED_EPISODES),
+                "--diagnostic",
                 "--require-robot-force-metrics",
                 "--output",
                 str(equivalence),
@@ -665,6 +896,10 @@ def finalize(
             ),
             "equivalence_report_sha256": _sha256(equivalence),
             "equivalence_log_sha256": _sha256(equivalence_log),
+            "stage3_comparison_sha256": stage3_receipt["comparison_report_sha256"],
+            "stage3_candidate_identity_sha256": stage3_receipt["candidate_identity_sha256"],
+            "stage3_attribution_ledger_sha256": stage3_receipt["attribution_ledger_sha256"],
+            "stage3_findings_sha256": stage3_receipt["findings_sha256"],
             "robot_force_validation_sha256": _sha256(report_dir / "robot_force_validation.json"),
             "robot_force_log_sha256": _sha256(force_log),
             "publication_archive_sha256": _sha256(archive),
@@ -687,15 +922,20 @@ def finalize(
         raise
 
 
-def finalize_pre_doi_candidate(  # noqa: C901, PLR0912, PLR0915
+def finalize_pre_doi_candidate(  # noqa: C901, PLR0912, PLR0913, PLR0915
     *,
     producer_root: Path,
     candidate_root: Path,
     resolved_identity: Path,
     baseline_archive: Path,
     expected_source_sha: str,
+    candidate_source_root: Path | None = None,
+    candidate_identity: Path | None = None,
+    attribution_ledger: Path | None = None,
+    comparison_report: Path | None = None,
+    comparison_findings: Path | None = None,
 ) -> dict[str, Any]:
-    """After author approval, bind DOI metadata in a copy of accepted raw rows."""
+    """After Stage-3 approval, bind DOI metadata in a candidate derivative."""
     manifest = verify_resolved_release_identity(resolved_identity)
     if manifest.source_sha != expected_source_sha or manifest.source_sha == BASELINE_SOURCE_SHA:
         raise ValueError("resolved DOI identity has the wrong scientific source")
@@ -711,6 +951,33 @@ def finalize_pre_doi_candidate(  # noqa: C901, PLR0912, PLR0915
     if candidate_root == producer_root or producer_root in candidate_root.parents:
         raise ValueError("publication derivative must be separate from its producer")
     _require_copyable_producer(producer_root)
+    stage3_output_root = candidate_root.parent / f"{candidate_root.name}.stage3"
+    if stage3_output_root.exists() or stage3_output_root.is_symlink():
+        raise FileExistsError(f"Stage-3 output directory already exists: {stage3_output_root}")
+    stage3_paths = _stage3_paths(
+        producer_root,
+        output_root=stage3_output_root,
+        candidate_identity=candidate_identity,
+        attribution_ledger=attribution_ledger,
+        comparison_report=comparison_report,
+        comparison_findings=comparison_findings,
+    )
+    _require_external_stage3_outputs(producer_root, stage3_paths)
+    stage3_source_root = (candidate_source_root or get_repository_root()).resolve()
+    stage3_log = producer_root.parent / f"{producer_root.name}.stage3_comparison.log"
+    _run_stage3_comparator(
+        campaign_root=producer_root,
+        baseline_archive=baseline_archive,
+        candidate_source_root=stage3_source_root,
+        paths=stage3_paths,
+        log_path=stage3_log,
+    )
+    stage3_receipt = _require_stage3_comparison(
+        campaign_root=producer_root,
+        baseline_archive=baseline_archive,
+        expected_source_sha=expected_source_sha,
+        paths=stage3_paths,
+    )
     identity, _ = _require_scientific_candidate(producer_root, expected_source_sha, manifest)
     _read_scientific_candidate_manifest(producer_root, expected_source_sha, BASELINE_ARCHIVE_SHA256)
     original_raw = copy.deepcopy(identity["raw_episode_sha256"])
@@ -727,6 +994,16 @@ def finalize_pre_doi_candidate(  # noqa: C901, PLR0912, PLR0915
     stage_root.rename(candidate_root)
     stage = "publication_identity"
     try:
+        derivative_stage3_paths = _materialize_stage3_artifacts(
+            candidate_root, stage3_paths, stage3_receipt
+        )
+        stage3_receipt = _require_stage3_comparison(
+            campaign_root=candidate_root,
+            baseline_archive=baseline_archive,
+            expected_source_sha=expected_source_sha,
+            paths=derivative_stage3_paths,
+        )
+        _promote_scientific_candidate_result(candidate_root, stage3_receipt)
         resolved = manifest.resolved_manifest_payload
         _write_json(candidate_root / "release/release_manifest.resolved.json", resolved)
         provenance = build_release_provenance(
@@ -764,7 +1041,7 @@ def finalize_pre_doi_candidate(  # noqa: C901, PLR0912, PLR0915
             "publication_preflight_status": "not_requested",
             "publication_bundle": None,
             "scientific_candidate_result_sha256": _sha256(
-                producer_root / "release/scientific_candidate_result.json"
+                candidate_root / "release/scientific_candidate_result.json"
             ),
         }
         _write_json(candidate_root / "release/producer_release_result.json", release_result)
@@ -779,8 +1056,12 @@ def finalize_pre_doi_candidate(  # noqa: C901, PLR0912, PLR0915
             "source_sha": expected_source_sha,
             "scientific_identity_sha256": identity["scientific_identity_sha256"],
             "scientific_candidate_result_sha256": _sha256(
-                producer_root / "release/scientific_candidate_result.json"
+                candidate_root / "release/scientific_candidate_result.json"
             ),
+            "stage3_comparison_sha256": stage3_receipt["comparison_report_sha256"],
+            "stage3_candidate_identity_sha256": stage3_receipt["candidate_identity_sha256"],
+            "stage3_attribution_ledger_sha256": stage3_receipt["attribution_ledger_sha256"],
+            "stage3_findings_sha256": stage3_receipt["findings_sha256"],
             "publication_identity_sha256": _sha256(resolved_identity),
             "raw_episode_sha256": original_raw,
             "publication_archive_sha256": _sha256(archive),
@@ -809,6 +1090,39 @@ def main() -> int:
     parser.add_argument("--baseline-archive", type=Path, required=True)
     parser.add_argument("--expected-source-sha", required=True)
     parser.add_argument(
+        "--candidate-source-root",
+        type=Path,
+        help="Clean checkout whose source/config/matrix pins are bound by Stage 3.",
+    )
+    parser.add_argument(
+        "--candidate-identity",
+        "--stage3-candidate-identity",
+        dest="candidate_identity",
+        type=Path,
+        help="Stage-3 candidate identity JSON (defaults inside the producer/candidate root).",
+    )
+    parser.add_argument(
+        "--attribution-ledger",
+        "--stage3-attribution-ledger",
+        dest="attribution_ledger",
+        type=Path,
+        help="Stage-3 attribution ledger JSON (defaults inside the producer/candidate root).",
+    )
+    parser.add_argument(
+        "--comparison-report",
+        "--stage3-comparison-report",
+        dest="comparison_report",
+        type=Path,
+        help="Stage-3 comparison report JSON (defaults inside the producer/candidate root).",
+    )
+    parser.add_argument(
+        "--comparison-findings",
+        "--stage3-comparison-findings",
+        dest="comparison_findings",
+        type=Path,
+        help="Stage-3 findings JSONL (defaults inside the producer/candidate root).",
+    )
+    parser.add_argument(
         "--pre-doi-producer",
         action="store_true",
         help="Bind a real DOI identity only in a derivative of an accepted scientific candidate",
@@ -821,6 +1135,11 @@ def main() -> int:
         resolved_identity=args.resolved_identity,
         baseline_archive=args.baseline_archive,
         expected_source_sha=args.expected_source_sha,
+        candidate_source_root=args.candidate_source_root,
+        candidate_identity=args.candidate_identity,
+        attribution_ledger=args.attribution_ledger,
+        comparison_report=args.comparison_report,
+        comparison_findings=args.comparison_findings,
     )
     print(json.dumps(receipt, indent=2, sort_keys=True))
     return 0

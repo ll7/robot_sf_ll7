@@ -13,6 +13,13 @@ import pytest
 if TYPE_CHECKING:
     from pathlib import Path
 
+from scripts.analysis.compare_release_007_008 import (
+    ATTRIBUTION_SCHEMA,
+    RECEIPT_SCHEMA,
+    _finding,
+    compare_with_attribution,
+    load_attribution_ledger,
+)
 from scripts.validation.check_release_metric_equivalence import (
     _read_archive,
     _read_archive_manifest,
@@ -263,3 +270,104 @@ def test_force_gate_rejects_fractional_exposed_count(tmp_path: Path) -> None:
 
     assert report["status"] == "invalid_robot_force_metrics"
     assert report["examples"][0]["fields"] == ["robot_force_exposed_ped_count"]
+
+
+def test_changed_row_requires_intact_per_finding_causal_receipt(tmp_path: Path) -> None:
+    """Changed fields pass Stage 3 only with an intact accepted receipt."""
+    old = {
+        KEY: {
+            "outcome": {"route_complete": True, "collision_event": False, "timeout_event": False},
+            "metrics": {"snqi": 1.0},
+            "metric_values": {},
+            "status": "ok",
+            "steps": 10,
+            "algorithm_metadata": {
+                "algorithm": "goal",
+                "planner_kinematics": {"execution_mode": "native"},
+            },
+            "integrity": {"contradictions": []},
+        }
+    }
+    new = {
+        KEY: {
+            "outcome": {"route_complete": True, "collision_event": False, "timeout_event": False},
+            "metrics": {"snqi": 2.0},
+            "metric_values": {},
+            "status": "ok",
+            "steps": 10,
+            "algorithm_metadata": {
+                "algorithm": "goal",
+                "planner_kinematics": {"execution_mode": "native"},
+            },
+            "integrity": {"contradictions": []},
+        }
+    }
+    finding = _finding("goal", "doorway", 111, "metrics.snqi", 1.0, 2.0, False)
+    evidence = tmp_path / "evidence.json"
+    evidence.write_text('{"reviewed": true}\n', encoding="utf-8")
+    receipt = tmp_path / "receipt.json"
+    receipt.write_text(
+        json.dumps(
+            {
+                "schema_version": RECEIPT_SCHEMA,
+                "change_id": "planner-correction",
+                "finding_ids": [finding["finding_id"]],
+                "mechanism": "synthetic planner correction",
+                "evidence_path": evidence.name,
+                "evidence_sha256": hashlib.sha256(evidence.read_bytes()).hexdigest(),
+                "review": {
+                    "decision": "accepted",
+                    "reviewer": "synthetic-reviewer",
+                    "reviewed_at_utc": "2026-09-29T00:00:00Z",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    ledger_path = tmp_path / "ledger.json"
+    ledger_path.write_text(
+        json.dumps(
+            {
+                "schema_version": ATTRIBUTION_SCHEMA,
+                "candidate_source_sha": "a" * 40,
+                "entries": [
+                    {
+                        "finding_id": finding["finding_id"],
+                        "change_id": "planner-correction",
+                        "receipt_path": receipt.name,
+                        "receipt_sha256": hashlib.sha256(receipt.read_bytes()).hexdigest(),
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    identity = {"source_sha": "a" * 40, "versioned_changes": [{"id": "planner-correction"}]}
+    ledger, anomalies, _ = load_attribution_ledger(ledger_path, identity)
+    summary = compare_with_attribution(
+        old,
+        new,
+        [{"old_key": "goal", "new_key": "goal", "implementation_replaced": False}],
+        ledger,
+        scenarios=("doorway",),
+        seeds=(111,),
+        emit=lambda _: None,
+    )
+    assert anomalies == []
+    assert summary["comparison_passed"] is True
+
+    evidence.write_text('{"reviewed": false}\n', encoding="utf-8")
+    _, tampered, _ = load_attribution_ledger(ledger_path, identity)
+    assert [item["kind"] for item in tampered] == ["invalid_causal_receipt"]
+
+    empty_summary = compare_with_attribution(
+        old,
+        new,
+        [{"old_key": "goal", "new_key": "goal", "implementation_replaced": False}],
+        {},
+        scenarios=("doorway",),
+        seeds=(111,),
+        emit=lambda _: None,
+    )
+    assert empty_summary["unexplained_findings"]
+    assert empty_summary["comparison_passed"] is False

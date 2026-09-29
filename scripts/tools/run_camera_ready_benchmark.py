@@ -104,7 +104,12 @@ def _finish_scientific_candidate(
     args: Any,
     checkpoint_receipt: dict[str, Any],
 ) -> None:
-    """Record raw custody and run full acceptance and post-run scientific gates."""
+    """Record raw custody and leave the candidate at the Stage-3 boundary.
+
+    The legacy metric-equivalence and robot-force reports are useful diagnostics
+    after a raw campaign completes.  They do not decide release admission: the
+    receipt-backed 0.0.7→0.0.8 comparator is a separate post-run stage.
+    """
     root = Path(result["campaign_root"]).resolve(strict=True)
     identity = build_scientific_candidate_identity(
         cfg=cfg,
@@ -146,6 +151,7 @@ def _finish_scientific_candidate(
             "--expected-rows",
             "20160",
             "--scientific-candidate",
+            "--diagnostic",
             "--require-robot-force-metrics",
             "--output",
             str(equivalence),
@@ -172,7 +178,8 @@ def _finish_scientific_candidate(
     )
     receipt = {
         "schema_version": "benchmark-scientific-candidate-result.v1",
-        "status": "accepted_pre_publication",
+        "status": "stage3_pending",
+        "stage3_status": "pending",
         "source_sha": args.source_commit,
         "scientific_identity_sha256": identity["scientific_identity_sha256"],
         "baseline_archive_sha256": FROZEN_0_0_7_ARCHIVE_SHA256,
@@ -186,7 +193,8 @@ def _finish_scientific_candidate(
         "robot_force_log_sha256": _sha256(report_dir / "scientific_candidate_force.log"),
     }
     _write_json(root / "release/scientific_candidate_result.json", receipt)
-    result["scientific_candidate_status"] = "accepted_pre_publication"
+    result["scientific_candidate_status"] = "stage3_pending"
+    result["scientific_candidate_stage3_status"] = "pending"
     result["scientific_candidate_identity"] = str(identity_path)
 
 

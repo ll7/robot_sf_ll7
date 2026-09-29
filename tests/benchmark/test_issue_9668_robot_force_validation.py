@@ -97,32 +97,32 @@ def test_release_force_report_keeps_shared_algorithm_arms_separate(tmp_path: Pat
     }
 
 
-def test_release_force_report_rejects_failed_equivalence_gate(tmp_path: Path) -> None:
-    """Correlation reporting never upgrades a predecessor mismatch into release evidence."""
+def test_release_force_report_accepts_changed_predecessor_fields(tmp_path: Path) -> None:
+    """Force diagnostics remain usable when predecessor fields legitimately change."""
     campaign, gate = _campaign(tmp_path)
     _gate(gate, status="mismatch")
-    with pytest.raises(ValueError, match="complete passing equivalence gate"):
-        build_report(
-            campaign,
-            expected_source=SOURCE,
-            expected_rows=2,
-            equivalence_report=gate,
-        )
+    report = build_report(
+        campaign,
+        expected_source=SOURCE,
+        expected_rows=2,
+        equivalence_report=gate,
+    )
+    assert report["classification"] == "release_robot_force_validation"
 
 
-def test_release_force_report_requires_frozen_007_archive(tmp_path: Path) -> None:
-    """A passing comparison against some other archive is insufficient custody."""
+def test_release_force_report_does_not_depend_on_predecessor_archive(tmp_path: Path) -> None:
+    """Robot-force field validation is independent of predecessor equality custody."""
     campaign, gate = _campaign(tmp_path)
     payload = json.loads(gate.read_text(encoding="utf-8"))
     payload["baseline_archive_sha256"] = "b" * 64
     _write_json(gate, payload)
-    with pytest.raises(ValueError, match="complete passing equivalence gate"):
-        build_report(
-            campaign,
-            expected_source=SOURCE,
-            expected_rows=2,
-            equivalence_report=gate,
-        )
+    report = build_report(
+        campaign,
+        expected_source=SOURCE,
+        expected_rows=2,
+        equivalence_report=gate,
+    )
+    assert report["episodes"] == 2
 
 
 def test_release_force_report_rejects_source_mismatch(tmp_path: Path) -> None:

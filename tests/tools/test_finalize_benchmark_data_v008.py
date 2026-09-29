@@ -21,6 +21,69 @@ def _write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
 
 
+def _stage3_inputs(root: Path) -> None:
+    """Install a minimal candidate identity, ledger, and findings fixture."""
+    _write_json(
+        root / "release/candidate_identity.json",
+        {
+            "schema_version": "release_007_008_candidate_identity.v1",
+            "source_sha": SOURCE_SHA,
+        },
+    )
+    _write_json(
+        root / "reports/attribution_ledger.json",
+        {
+            "schema_version": "release_007_008_attribution_ledger.v1",
+            "candidate_source_sha": SOURCE_SHA,
+            "entries": [],
+        },
+    )
+    findings = root / "reports/stage3_findings.jsonl"
+    findings.parent.mkdir(parents=True, exist_ok=True)
+    findings.write_text("", encoding="utf-8")
+
+
+def _stage3_gate(command: list[str], *, baseline_sha: str) -> None:
+    """Write a synthetic passing comparator receipt for finalizer tests."""
+    identity = Path(command[command.index("--candidate-identity") + 1])
+    ledger = Path(command[command.index("--attribution-ledger") + 1])
+    findings = Path(command[command.index("--findings-jsonl") + 1])
+    findings.parent.mkdir(parents=True, exist_ok=True)
+    if not findings.exists():
+        findings.write_text("", encoding="utf-8")
+    report = {
+        "schema_version": "release_007_008_comparison.v1",
+        "historical_bundle_sha256": baseline_sha,
+        "historical_source_sha": finalizer.BASELINE_SOURCE_SHA,
+        "historical_effective_config_sha256": finalizer.HISTORICAL_EFFECTIVE_CONFIG_SHA256,
+        "historical_matrix_sha256": finalizer.HISTORICAL_MATRIX_SHA256,
+        "candidate_source_sha": SOURCE_SHA,
+        "candidate_identity_sha256": finalizer._sha256(identity),
+        "attribution_ledger_sha256": finalizer._sha256(ledger),
+        "findings_sha256": finalizer._sha256(findings),
+        "comparison_passed": True,
+        "comparison": {
+            "comparison_passed": True,
+            "inventory": {},
+            "row_anomalies": [],
+            "unexplained_findings": [],
+            "orphaned_attributions": [],
+        },
+        "read_anomalies": [],
+        "attribution_anomalies": [],
+    }
+    _write_json(Path(command[command.index("--report-json") + 1]), report)
+
+
+def _tree_snapshot(root: Path) -> dict[str, bytes]:
+    """Capture regular-file bytes for producer immutability assertions."""
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
 def _producer(root: Path) -> dict:
     result = {
         "release_benchmark_success": True,
@@ -45,6 +108,7 @@ def _producer(root: Path) -> dict:
         },
     )
     _write_json(root / "campaign_manifest.json", {"git_hash": SOURCE_SHA})
+    _stage3_inputs(root)
     return result
 
 
@@ -85,6 +149,7 @@ def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
         elif name == "campaign_manifest.json":
             payload = {"config_hash": "c" * 64}
         _write_json(producer / name, payload)
+    _stage3_inputs(producer)
     v2_metrics = {}
     for role in ("weights", "anchors", "family"):
         asset = producer / f"assets/snqi_v2_{role}.json"
@@ -153,7 +218,9 @@ def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
                 "candidate_rows": 20160,
                 "paired_rows": 20160,
                 "mismatch_episodes": 0,
-                "scientific_manifest_differences": [],
+                "scientific_manifest_differences": [
+                    {"field": "scientific_manifest.metrics.snqi", "old": 1, "new": 2}
+                ],
                 "robot_force_metrics": {
                     "status": "pass",
                     "checked_rows": 20160,
@@ -217,6 +284,7 @@ def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
     )
     for name in ("snqi_v2_diagnostics.md", "snqi_v2_family.md"):
         (producer / "reports" / name).write_text("synthetic SNQI-v2 report\n", encoding="utf-8")
+    producer_snapshot = _tree_snapshot(producer)
     manifest = SimpleNamespace(
         source_sha=SOURCE_SHA,
         resolved_manifest_payload={
@@ -260,6 +328,14 @@ def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
     resolved_identity = tmp_path / "resolved_identity.json"
     resolved_identity.write_text("{}\n", encoding="utf-8")
     monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        finalizer,
+        "_run_gate",
+        lambda command, log: (
+            _stage3_gate(command, baseline_sha=finalizer.BASELINE_ARCHIVE_SHA256),
+            log.write_text("stage3 passed\n", encoding="utf-8"),
+        ),
+    )
     monkeypatch.setattr(finalizer, "verify_resolved_release_identity", lambda _: manifest)
     monkeypatch.setattr(finalizer, "_read_scientific_candidate_manifest", lambda *_: science)
     monkeypatch.setattr(
@@ -293,6 +369,9 @@ def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
     )
     assert receipt["raw_episode_sha256"] == finalizer._raw_episode_hashes(producer)
     assert receipt["raw_episode_sha256"] == finalizer._raw_episode_hashes(tmp_path / "derivative")
+    assert _tree_snapshot(producer) == producer_snapshot
+    assert (tmp_path / "derivative/reports/stage3_comparison.json").is_file()
+    assert (tmp_path / "derivative/reports/stage3_findings.jsonl").is_file()
     raw_path = producer / "runs/arm0__differential_drive/episodes.jsonl"
     raw_path.write_bytes(raw_path.read_bytes() + b" ")
     with pytest.raises(ValueError, match="raw episode bytes changed"):
@@ -309,6 +388,18 @@ def test_finalize_copies_accepted_producer_before_postrun_gates(
 ) -> None:
     producer = tmp_path / "producer"
     original = _producer(producer)
+    _write_json(
+        producer / "release/scientific_candidate.json",
+        {"schema_version": "benchmark-scientific-candidate.v1", "source_sha": SOURCE_SHA},
+    )
+    _write_json(
+        producer / "release/scientific_candidate_result.json",
+        {
+            "schema_version": "benchmark-scientific-candidate-result.v1",
+            "source_sha": SOURCE_SHA,
+            "status": "stage3_pending",
+        },
+    )
     candidate = tmp_path / "candidate"
     baseline = tmp_path / "predecessor.tar.gz"
     baseline.write_bytes(b"frozen predecessor fixture")
@@ -330,13 +421,17 @@ def test_finalize_copies_accepted_producer_before_postrun_gates(
 
     def gate(command: list[str], log_path: Path) -> None:
         calls.append(Path(command[1]).name)
-        output = Path(command[command.index("--output") + 1])
-        _write_json(output, {"status": "pass"})
+        if Path(command[1]).name == "compare_release_007_008.py":
+            _stage3_gate(command, baseline_sha=finalizer.BASELINE_ARCHIVE_SHA256)
+        else:
+            output = Path(command[command.index("--output") + 1])
+            _write_json(output, {"status": "pass"})
         log_path.write_text("gate passed\n", encoding="utf-8")
 
     def acceptance(root: Path, **kwargs: object) -> dict:
         assert root == candidate
         assert calls == [
+            "compare_release_007_008.py",
             "check_release_metric_equivalence.py",
             "issue_9668_robot_force_validation.py",
         ]
@@ -371,7 +466,128 @@ def test_finalize_copies_accepted_producer_before_postrun_gates(
         ]
         == "fail"
     )  # Publication is mocked; the real helper replaces this provisional state.
+    promoted = finalizer._read_mapping(candidate / "release" / "scientific_candidate_result.json")
+    assert promoted["status"] == "accepted_pre_publication"
+    assert promoted["stage3_status"] == "passed"
     assert (tmp_path / "candidate.finalization_receipt.json").is_file()
+
+
+def test_stage3_receipt_rejects_tampered_missing_or_unexplained_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Finalizer admission stays closed when any comparator evidence changes."""
+    baseline = tmp_path / "baseline.tar.gz"
+    baseline.write_bytes(b"baseline")
+    monkeypatch.setattr(finalizer, "BASELINE_ARCHIVE_SHA256", finalizer._sha256(baseline))
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    _stage3_inputs(candidate)
+    paths = finalizer._stage3_paths(candidate)
+    command = [
+        "python",
+        "compare_release_007_008.py",
+        "--candidate-identity",
+        str(paths["candidate_identity"]),
+        "--attribution-ledger",
+        str(paths["attribution_ledger"]),
+        "--findings-jsonl",
+        str(paths["comparison_findings"]),
+        "--report-json",
+        str(paths["comparison_report"]),
+    ]
+    _stage3_gate(command, baseline_sha=finalizer.BASELINE_ARCHIVE_SHA256)
+    receipt = finalizer._require_stage3_comparison(
+        campaign_root=candidate,
+        baseline_archive=baseline,
+        expected_source_sha=SOURCE_SHA,
+        paths=paths,
+    )
+    assert receipt["comparison_report_sha256"] == finalizer._sha256(paths["comparison_report"])
+
+    paths["comparison_findings"].write_text("tampered\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="findings_sha256"):
+        finalizer._require_stage3_comparison(
+            campaign_root=candidate,
+            baseline_archive=baseline,
+            expected_source_sha=SOURCE_SHA,
+            paths=paths,
+        )
+    paths["comparison_findings"].write_text("", encoding="utf-8")
+    paths["attribution_ledger"].unlink()
+    with pytest.raises(FileNotFoundError):
+        finalizer._require_stage3_comparison(
+            campaign_root=candidate,
+            baseline_archive=baseline,
+            expected_source_sha=SOURCE_SHA,
+            paths=paths,
+        )
+    _stage3_inputs(candidate)
+    report = finalizer._read_mapping(paths["comparison_report"])
+    report["comparison"]["unexplained_findings"] = ["finding"]
+    _write_json(paths["comparison_report"], report)
+    with pytest.raises(ValueError, match="inventory, row, or attribution"):
+        finalizer._require_stage3_comparison(
+            campaign_root=candidate,
+            baseline_archive=baseline,
+            expected_source_sha=SOURCE_SHA,
+            paths=paths,
+        )
+
+
+def test_scientific_runner_records_stage3_pending_after_raw_completion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A complete raw candidate remains pending until Stage 3 runs."""
+    from scripts.tools import run_camera_ready_benchmark as runner
+
+    root = tmp_path / "campaign"
+    root.mkdir()
+    checkpoint = tmp_path / "checkpoint.json"
+    smoke = tmp_path / "smoke.json"
+    checkpoint.write_text("checkpoint\n", encoding="utf-8")
+    smoke.write_text("smoke\n", encoding="utf-8")
+    identity = {"scientific_identity_sha256": "c" * 64}
+    monkeypatch.setattr(
+        runner,
+        "build_scientific_candidate_identity",
+        lambda **kwargs: identity,
+    )
+    monkeypatch.setattr(runner, "scientific_candidate_acceptance_view", lambda *_: object())
+    monkeypatch.setattr(
+        runner,
+        "validate_full_benchmark_release_acceptance",
+        lambda *args, **kwargs: {"status": "valid"},
+    )
+
+    def gate(command: list[str], log_path: Path) -> None:
+        output = Path(command[command.index("--output") + 1])
+        _write_json(output, {"status": "mismatch" if "equivalence" in output.name else "pass"})
+        log_path.write_text("diagnostic gate\n", encoding="utf-8")
+
+    monkeypatch.setattr(runner, "_candidate_gate", gate)
+    args = SimpleNamespace(
+        source_commit=SOURCE_SHA,
+        checkpoint_receipt=checkpoint,
+        runtime_smoke_receipt=smoke,
+        baseline_archive=tmp_path / "baseline.tar.gz",
+    )
+    args.baseline_archive.write_bytes(b"baseline")
+    result = {"campaign_root": str(root), "benchmark_success": True}
+    runner._finish_scientific_candidate(
+        result,
+        object(),
+        {},
+        {},
+        args,
+        {},
+    )
+    receipt = json.loads(
+        (root / "release/scientific_candidate_result.json").read_text(encoding="utf-8")
+    )
+    assert receipt["status"] == "stage3_pending"
+    assert receipt["stage3_status"] == "pending"
+    assert result["scientific_candidate_status"] == "stage3_pending"
+    assert result["benchmark_success"] is True
 
 
 def test_producer_rejects_changed_source_or_publication_identity(tmp_path: Path) -> None:
@@ -463,7 +679,7 @@ def test_postrun_gate_failure_invalidates_only_candidate(
     assert json.loads((producer / "release" / "release_result.json").read_text()) == original
     rejected = json.loads((candidate / "release" / "release_result.json").read_text())
     assert rejected["release_benchmark_success"] is False
-    assert rejected["finalization_failed_stage"] == "metric_equivalence"
+    assert rejected["finalization_failed_stage"] == "stage3_comparison"
 
 
 def test_publication_export_failure_is_recorded_in_candidate(
@@ -651,7 +867,10 @@ def test_receipt_write_failure_invalidates_candidate(
     )
 
     def gate(command: list[str], log_path: Path) -> None:
-        _write_json(Path(command[command.index("--output") + 1]), {"status": "pass"})
+        if Path(command[1]).name == "compare_release_007_008.py":
+            _stage3_gate(command, baseline_sha=finalizer.BASELINE_ARCHIVE_SHA256)
+        else:
+            _write_json(Path(command[command.index("--output") + 1]), {"status": "pass"})
         log_path.write_text("pass\n", encoding="utf-8")
 
     def publish(root: Path, result: dict, manifest: object) -> Path:

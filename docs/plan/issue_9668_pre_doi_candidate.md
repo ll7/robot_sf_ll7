@@ -34,7 +34,8 @@ semantics; the preregistered three-width H400 slice has its own manifest.
   at the exact clean source. It binds scenario/config/model-registry pins,
   checkpoint staging, exact-source runtime smoke, complete SNQI-v2 calibration
   anchors, and release preflight before evaluation. DOI and tag fields are
-  absent from candidate artifacts.
+  absent from candidate artifacts. A complete raw run is still a pending
+  candidate until the post-run Stage-3 receipt exists.
 - Candidate custody records source and template SHA-256, ordered planner keys
   and config hashes, unchanged checkpoint pins, scenario and seed hashes,
   all 20,160 expected cell keys, producer sidecars, and every raw
@@ -48,16 +49,24 @@ semantics; the preregistered three-width H400 slice has its own manifest.
 
 ## Acceptance and publication stop rule
 
-1. The corrected manifest preflight and full 20,160-row acceptance pass, with
-   fallback/degraded/partial rows excluded and all failures accounted for.
-2. Join every 0.0.8 row to its 0.0.7 identity. Compare all common outcomes and
-   metrics at absolute tolerance `1e-12`, retaining every changed field.
-   A reviewed disposition attributes changed fields to named versioned
-   corrections with causal evidence and rates/rankings impact. Missing,
-   unexplained, or unsupported changes stop acceptance. Comparison findings
-   do not invalidate custody of already completed raw rows.
+1. **Stage 1, raw campaign completion:** the corrected manifest preflight and
+   full 20,160-row acceptance pass, with fallback/degraded/partial rows excluded
+   and all failures accounted for. The runner records predecessor metric and
+   robot-force results as diagnostics, including every old/new field. It writes
+   `stage3_pending`; it cannot write `accepted_pre_publication`.
+2. **Stage 2, post-run admission:** join every 0.0.8 row to its 0.0.7 identity
+   and compare all common outcomes and metrics at absolute tolerance `1e-12`,
+   retaining every changed field. Admission requires the receipt-backed
+   comparator to pass with exact source, config, matrix, archive, candidate,
+   ledger and findings hashes, an empty row/read/attribution anomaly set, and a
+   valid per-finding causal receipt for every changed field. Missing,
+   unexplained, tampered or unsupported evidence stops acceptance. Only this
+   receipt promotes the candidate to `accepted_pre_publication` and allows
+   either publication finalizer to run. Comparison findings do not invalidate
+   custody of already completed raw rows.
 3. Validate the robot-force reductions and SNQI-v2 terms against their stored
    inputs, then independently review the candidate, checksums and limitations.
+   Stage-3 admission remains evidence for review; it is not author approval.
 4. Only after the author approves publication, bind real DOI/tag values in a
    derivative copy. Verify unchanged raw-row digests and scientific hash, rerun
    release acceptance, and export the publication bundle. The 18-row H400

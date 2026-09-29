@@ -458,6 +458,14 @@ def main() -> int:
     parser.add_argument("--expected-rows", type=int, default=20160)
     parser.add_argument("--require-robot-force-metrics", action="store_true")
     parser.add_argument(
+        "--diagnostic",
+        action="store_true",
+        help=(
+            "Allow changed predecessor fields and manifest paths to remain a diagnostic report. "
+            "Structural row and force-shape failures still return nonzero."
+        ),
+    )
+    parser.add_argument(
         "--scientific-candidate",
         action="store_true",
         help="Read the publication-free, raw-hash-bound candidate identity",
@@ -501,7 +509,16 @@ def main() -> int:
     print(
         f"{report['status']}: {report['paired_rows']} paired; {report['mismatch_episodes']} mismatches"
     )
-    return 0 if report["status"] == "pass" else 1
+    # A corrected release may legitimately change predecessor fields.  Keep the
+    # complete mismatch inventory in the report, but let the receipt-backed
+    # Stage-3 comparator decide whether those changes are explained.  Structural
+    # identity and force-shape failures keep their fail-closed exit.  The
+    # corrected candidate's manifest differences remain diagnostics for Stage 3.
+    diagnostic_pass = args.diagnostic and report["status"] in {
+        "mismatch",
+        "scientific_manifest_mismatch",
+    }
+    return 0 if report["status"] == "pass" or diagnostic_pass else 1
 
 
 if __name__ == "__main__":

@@ -119,6 +119,31 @@ def _identity(st: os.stat_result) -> tuple[int, int, int, int, int]:
     return (st.st_size, st.st_mtime_ns, st.st_ctime_ns, st.st_ino, st.st_dev)
 
 
+def _looks_sparse_by_blocks(st: os.stat_result) -> bool:
+    """Flag low allocation for an extent check; compression can also cause it."""
+    blocks = getattr(st, "st_blocks", None)
+    return blocks is not None and st.st_size > 0 and blocks * 512 < st.st_size
+
+
+def _has_sparse_hole(path: Path, size: int) -> bool:
+    """Confirm a hole with filesystem extent queries, failing closed if unavailable."""
+    if not hasattr(os, "SEEK_DATA") or not hasattr(os, "SEEK_HOLE"):
+        return True
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        return True
+    try:
+        try:
+            first_data = os.lseek(fd, 0, os.SEEK_DATA)
+            first_hole = os.lseek(fd, 0, os.SEEK_HOLE)
+        except OSError:
+            return True
+        return first_data > 0 or first_hole < size
+    finally:
+        os.close(fd)
+
+
 def _stat_checked(path: Path, relative: str) -> tuple[int, int, int, int, int]:
     st = os.stat(path, follow_symlinks=False)
     if stat.S_ISLNK(st.st_mode):
@@ -131,8 +156,7 @@ def _stat_checked(path: Path, relative: str) -> tuple[int, int, int, int, int]:
         raise ChunkManifestError(
             "hardlink_rejected", f"hardlinked member: {relative}", file=relative
         )
-    blocks = getattr(st, "st_blocks", None)
-    if blocks is not None and st.st_size > 0 and blocks * 512 < st.st_size:
+    if _looks_sparse_by_blocks(st) and _has_sparse_hole(path, st.st_size):
         raise ChunkManifestError("sparse_file", f"sparse member: {relative}", file=relative)
     return _identity(st)
 

@@ -177,6 +177,16 @@ def test_unsafe_members_fail_closed(tmp_path: Path, setup, code: str) -> None:
     assert error.value.code == code
 
 
+def test_compressed_allocation_without_holes_is_accepted(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "dense.bin"
+    path.write_bytes(b"dense bytes" * 100)
+    monkeypatch.setattr(cm, "_looks_sparse_by_blocks", lambda _st: True)
+    if not hasattr(os, "SEEK_HOLE") or not hasattr(os, "SEEK_DATA"):
+        pytest.skip("filesystem extent queries are unavailable")
+    assert cm._has_sparse_hole(path, path.stat().st_size) is False
+    assert cm._stat_checked(path, path.name)[0] == path.stat().st_size
+
+
 def test_source_mutation_guard_fails_closed(tmp_path: Path, monkeypatch) -> None:
     root = tmp_path / "root"
     root.mkdir()

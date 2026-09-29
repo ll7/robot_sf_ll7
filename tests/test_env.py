@@ -22,6 +22,21 @@ def test_direct_construction_same_reset_seed_gives_identical_crowd():
     )
 
 
+def test_direct_construction_changed_reset_seed_repopulates_crowd():
+    """A later explicit seed replaces the crowd with that seed's population."""
+    env_reseeded = RobotEnv()
+    env_reseeded.reset(seed=123)
+    env_reseeded.reset(seed=456)
+
+    env_reference = RobotEnv()
+    env_reference.reset(seed=456)
+
+    np.testing.assert_array_equal(
+        np.asarray(env_reseeded.simulator.ped_pos),
+        np.asarray(env_reference.simulator.ped_pos),
+    )
+
+
 def test_can_create_env():
     """RobotEnv can be constructed with default settings."""
     env = RobotEnv()

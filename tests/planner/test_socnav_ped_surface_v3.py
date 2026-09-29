@@ -4,6 +4,7 @@ import inspect
 
 import numpy as np
 import pytest
+from pysocialforce.config import SOCIAL_FORCE_KERNEL_WRAPPED_V2
 
 from robot_sf.planner import socnav_social_force as sf
 from robot_sf.planner.socnav_base import (
@@ -217,9 +218,10 @@ def _rollout_v3(
     ped_velocity: tuple[float, float],
     dt: float,
     horizon_s: float,
+    kernel_version: str | None = None,
 ) -> tuple[float, float]:
     """Roll out the adapter and return swept minimum clearance and final speed."""
-    adapter = sf.SocialForcePlannerAdapter(_v3_config())
+    adapter = sf.SocialForcePlannerAdapter(_v3_config(social_force_kernel_version=kernel_version))
     robot_position = np.zeros(2, dtype=float)
     heading = 0.0
     robot_speed = 0.0
@@ -268,6 +270,35 @@ def test_v3_crossing_pedestrian_rollout_avoids_contact(dt: float) -> None:
     """A 1.3 m/s crossing pedestrian completes the encounter without contact."""
     minimum_clearance, _ = _rollout_v3(
         ped_start=(2.0, -1.3), ped_velocity=(0.0, 1.3), dt=dt, horizon_s=3.0
+    )
+    assert minimum_clearance > 0.05
+
+
+@pytest.mark.parametrize("dt", [0.1, 0.05])
+def test_v3_standing_pedestrian_rollout_stops_before_contact_with_wrapped_kernel(
+    dt: float,
+) -> None:
+    """The #9764 kernel correction preserves the separate #9758 standing-ped result."""
+    minimum_clearance, final_speed = _rollout_v3(
+        ped_start=(1.8, 0.0),
+        ped_velocity=(0.0, 0.0),
+        dt=dt,
+        horizon_s=4.0,
+        kernel_version=SOCIAL_FORCE_KERNEL_WRAPPED_V2,
+    )
+    assert minimum_clearance > 0.05
+    assert final_speed < 0.05
+
+
+@pytest.mark.parametrize("dt", [0.1, 0.05])
+def test_v3_crossing_pedestrian_rollout_avoids_contact_with_wrapped_kernel(dt: float) -> None:
+    """The 1.3 m/s #9758 crossing stays contact-free under wrapped_v2."""
+    minimum_clearance, _ = _rollout_v3(
+        ped_start=(2.0, -1.3),
+        ped_velocity=(0.0, 1.3),
+        dt=dt,
+        horizon_s=3.0,
+        kernel_version=SOCIAL_FORCE_KERNEL_WRAPPED_V2,
     )
     assert minimum_clearance > 0.05
 

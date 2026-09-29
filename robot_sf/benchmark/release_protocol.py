@@ -23,6 +23,7 @@ from robot_sf.benchmark.camera_ready._preflight import _resolved_seed_inventory
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, load_campaign_config
 from robot_sf.benchmark.effective_algorithm_branches import WITNESS_KINDS
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
+from robot_sf.benchmark.release_parameter_freeze import unfrozen_planner_config_blockers
 from robot_sf.benchmark.release_tag_identity import (
     HISTORICAL_RELEASE_TAG,
     check_canonical_source_tag,
@@ -2008,6 +2009,8 @@ def validate_release_planner_roster(
         blockers.append("planners.groups does not match campaign config")
     if any(not key or not algorithm for key, algorithm in observed_algorithms.items()):
         blockers.append("enabled planner roster contains an empty key or algorithm")
+    # Issue #9751: an arm bound to an unfrozen release placeholder cannot be admitted.
+    blockers.extend(unfrozen_planner_config_blockers(enabled_planners))
 
     expected_kinematics = tuple(str(value).strip() for value in manifest.expected_kinematics_matrix)
     observed_kinematics = tuple(

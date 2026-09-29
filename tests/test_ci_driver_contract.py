@@ -500,9 +500,15 @@ def test_ci_workflow_requires_the_proven_core_compatibility_matrix() -> None:
     assert "continue-on-error" not in compat_matrix
     assert compat_matrix["strategy"]["fail-fast"] is False
     assert compat_matrix["strategy"]["matrix"] == {
-        "os": ["ubuntu-latest", "macos-latest"],
+        "os": "${{ fromJSON(needs.dispatch-ownership.outputs.compat_os) }}",
         "python": ["3.11", "3.13"],
     }
+    path_step = next(
+        step
+        for step in workflow["jobs"]["dispatch-ownership"]["steps"]
+        if step.get("id") == "paths"
+    )
+    assert 'compat_os=["ubuntu-latest","macos-latest"]' in path_step["run"]
     assert setup_step["with"] == {
         "python-version": "${{ matrix.python }}",
         "sync-args": "--extra viz --extra maps --frozen",
@@ -564,7 +570,10 @@ def test_examples_smoke_uses_narrow_lock_backed_dependency_group() -> None:
     )
 
     assert setup_step is not None, "examples-smoke setup step not found"
-    assert setup_step["with"] == {"sync-args": "--group examples --frozen"}
+    assert setup_step["with"] == {
+        "sync-args": "--group examples --frozen",
+        "install-system-packages": "${{ runner.environment == 'github-hosted' && 'true' || 'false' }}",
+    }
 
     dependency_groups = _pyproject()["dependency-groups"]
     assert dependency_groups["examples"] == [
@@ -1147,7 +1156,6 @@ def test_lightweight_workflows_skip_system_packages_and_full_sync() -> None:
     """Issue #7648: policy and metadata workflows must use lightweight setup-ci-python."""
     lightweight_workflows = [
         "pr-contract-check.yml",
-        "pr-body-contracts.yml",
         "scripts-catalog.yml",
         "evidence-registry-ratchet.yml",
         "ty-advisory-ratchet.yml",

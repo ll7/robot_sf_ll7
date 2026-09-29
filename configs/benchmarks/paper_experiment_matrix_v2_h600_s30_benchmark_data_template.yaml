@@ -114,32 +114,40 @@ planners:
     benchmark_profile: experimental
     socnav_missing_prereq_policy: fail-fast
 
-  - key: scenario_adaptive_hybrid_orca_v2_bottleneck_yield
+  # Issue #9751: replaces 0.0.7 slot `scenario_adaptive_hybrid_orca_v2_bottleneck_yield` (reported as
+  # `implementation replaced`). Unfrozen placeholder until #9748; it fails closed.
+  - key: scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4
     algo: hybrid_rule_local_planner
     planner_group: experimental
     algo_config: >-
-      configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_s30_h600_release.yaml
+      configs/policy_search/release_0_0_8_placeholders/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4.unfrozen.yaml
     benchmark_profile: experimental
 
-  - key: scenario_adaptive_hybrid_orca_v2_collision_guard
+  # Issue #9751: replaces 0.0.7 slot `scenario_adaptive_hybrid_orca_v2_collision_guard` (reported as
+  # `implementation replaced`). Unfrozen placeholder until #9748; it fails closed.
+  - key: scenario_adaptive_hybrid_orca_v2_collision_guard_v4
     algo: hybrid_rule_local_planner
     planner_group: experimental
     algo_config: >-
-      configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml
+      configs/policy_search/release_0_0_8_placeholders/scenario_adaptive_hybrid_orca_v2_collision_guard_v4.unfrozen.yaml
     benchmark_profile: experimental
 
-  - key: hybrid_rule_v3_fast_progress_static_escape
+  # Issue #9751: replaces 0.0.7 slot `hybrid_rule_v3_fast_progress_static_escape` (reported as
+  # `implementation replaced`). Unfrozen placeholder until #9748; it fails closed.
+  - key: hybrid_rule_v4_fast_progress_static_escape
     algo: hybrid_rule_local_planner
     planner_group: experimental
     algo_config: >-
-      configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_s30_h600_release.yaml
+      configs/policy_search/release_0_0_8_placeholders/hybrid_rule_v4_fast_progress_static_escape.unfrozen.yaml
     benchmark_profile: experimental
 
-  - key: hybrid_rule_v3_fast_progress_static_escape_continuous
+  # Issue #9751: replaces 0.0.7 slot `hybrid_rule_v3_fast_progress_static_escape_continuous` (reported as
+  # `implementation replaced`). Unfrozen placeholder until #9748; it fails closed.
+  - key: hybrid_rule_v4_fast_progress_static_escape_continuous
     algo: hybrid_rule_local_planner
     planner_group: experimental
     algo_config: >-
-      configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release.yaml
+      configs/policy_search/release_0_0_8_placeholders/hybrid_rule_v4_fast_progress_static_escape_continuous.unfrozen.yaml
     benchmark_profile: experimental
 
   - key: guarded_ppo

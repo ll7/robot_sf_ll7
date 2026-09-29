@@ -126,6 +126,27 @@ def test_unset_rollout_switch_keeps_trusted_jobs_hosted() -> None:
         )
 
 
+def test_routed_jobs_do_not_persist_checkout_credentials() -> None:
+    """No routed checkout may leave its job token in the disk-backed work volume."""
+    jobs = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))["jobs"]
+    routed = {
+        name: job
+        for name, job in jobs.items()
+        if "robot-sf-ci-ephemeral" in str(job.get("runs-on", ""))
+    }
+    assert set(ROUTED_JOBS) <= routed.keys()
+    for name, job in routed.items():
+        checkouts = [
+            step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@")
+        ]
+        assert checkouts, name
+        for step in checkouts:
+            assert (step.get("with") or {}).get("persist-credentials") is False, (
+                name,
+                step.get("name"),
+            )
+
+
 def test_routed_jobs_skip_package_install_only_on_self_hosted() -> None:
     """The image owns system packages; hosted fallback keeps its existing setup."""
     jobs = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))["jobs"]
@@ -151,7 +172,7 @@ def test_container_setup_keeps_ephemeral_and_no_host_mounts() -> None:
         "--tmpfs /home/runner:",
         "--cpus 4 --memory 8g",
         "--jq .token |",
-        "--rm --interactive",
+        "--rm --detach --interactive",
         "flock -x",
         '--network "$network"',
         "probe_network",

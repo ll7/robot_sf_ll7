@@ -56,6 +56,21 @@ unlock_slot() {
   exec {slot_lock_fd}>&-
 }
 
+lock_disk_admission() {
+  install -d -m 700 "$state_dir" || return 1
+  chmod 700 "$state_dir" || return 1
+  exec {disk_lock_fd}>"$state_dir/disk-admission.lock" || return 1
+  if ! flock -x "$disk_lock_fd"; then
+    exec {disk_lock_fd}>&-
+    return 1
+  fi
+}
+
+unlock_disk_admission() {
+  flock -u "$disk_lock_fd"
+  exec {disk_lock_fd}>&-
+}
+
 build_image() {
   # The official image includes passwordless sudo and docker-group membership.
   # Remove both, preload the CI system packages, then run it with no privileges,
@@ -110,16 +125,20 @@ supervise() {
       sleep 60
       continue
     fi
-    # The API response goes directly through the pipe to the container's
-    # config step. Neither a token file nor a token-bearing Docker argument is
-    # created. --rm removes the container and its anonymous workspace volume.
+    # Keep the host lock through container startup: the next slot must count
+    # this container when it checks capacity. --rm removes its work volume.
+    if ! lock_disk_admission; then
+      echo "Runner $name Docker disk admission lock failed; retrying after 60 seconds" >&2
+      sleep 60
+      continue
+    fi
     if ! check_docker_disk; then
+      unlock_disk_admission
       echo "Runner $name Docker disk capacity check failed; retrying after 60 seconds" >&2
       sleep 60
       continue
     fi
-    if gh api -X POST "repos/$repo/actions/runners/registration-token" --jq .token |
-      docker run --rm --interactive --name "$name" \
+    if ! docker run --rm --detach --interactive --name "$name" \
         --user 1001:1001 --read-only --network "$network" \
         --dns 1.1.1.1 --dns 9.9.9.9 \
         --tmpfs /home/runner:rw,exec,nosuid,nodev,uid=1001,gid=1001,size=1g \
@@ -133,9 +152,20 @@ supervise() {
         --env TMPDIR=/home/runner/_work/_tmp \
         --env PYTEST_NUM_WORKERS=2 --env OPENBLAS_NUM_THREADS=1 \
         --env OMP_NUM_THREADS=1 \
-        "$image" "$name"; then
+        "$image" "$name" >/dev/null; then
+      unlock_disk_admission
+      echo "Runner $name container failed to start; retrying after 15 seconds" >&2
+      sleep 15
+      continue
+    fi
+    unlock_disk_admission
+    # The API response goes straight to the waiting container's stdin. No
+    # token file, token-bearing Docker argument, or shell trace is created.
+    if gh api -X POST "repos/$repo/actions/runners/registration-token" --jq .token |
+      docker attach --sig-proxy=false "$name"; then
       echo "Runner $name finished its job; replacing its container"
     else
+      docker stop --time 5 "$name" >/dev/null 2>&1 || true
       echo "Runner $name exited or failed to register; retrying after 15 seconds" >&2
     fi
     sleep 15
@@ -143,16 +173,20 @@ supervise() {
 }
 
 check_docker_disk() {
-  local docker_root available_kib
+  local docker_root available_kib running_slots required_gib required_kib
   docker_root="$(docker info -f '{{.DockerRootDir}}')" || return 1
   [[ -n "$docker_root" ]] || return 1
+  running_slots="$(docker ps --format '{{.Names}}' |
+    awk '/^robot-sf-ci-(imech036|imech039|imech156-u)-[1-3]$/ {count++} END {print count+0}')" || return 1
   available_kib="$(df -Pk -- "$docker_root" | awk 'NR == 2 {print $4}')" || return 1
   if [[ ! "$available_kib" =~ ^[0-9]+$ ]]; then
     echo "Could not determine free space on Docker root: $docker_root" >&2
     return 1
   fi
-  if (( available_kib < 20 * 1024 * 1024 )); then
-    echo "Docker root has $available_kib KiB free; 20 GiB required: $docker_root" >&2
+  required_gib=$((20 * (running_slots + 1)))
+  required_kib=$((required_gib * 1024 * 1024))
+  if (( available_kib < required_kib )); then
+    echo "Docker root has $available_kib KiB free; $required_gib GiB required for $running_slots running slots plus one: $docker_root" >&2
     return 1
   fi
 }

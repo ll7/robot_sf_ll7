@@ -314,6 +314,7 @@ class SocNavPlannerConfig:
     sacadrl_model_id: str = _SACADRL_MODEL_ID
     sacadrl_checkpoint_path: str | None = None
     sacadrl_pref_speed: float = 1.0
+    sacadrl_max_goal_distance: float | None = None
     sacadrl_max_other_agents: int = 3
     sacadrl_sorting_method: str = "closest_first"
     predictive_model_id: str = _PREDICTIVE_MODEL_ID

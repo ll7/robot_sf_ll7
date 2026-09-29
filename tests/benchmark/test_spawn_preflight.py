@@ -388,6 +388,55 @@ def test_continuous_margin_oracle_rejects_unsafe_goal_and_disconnected_leg() -> 
     assert reachability["continuous_oracle"]["first_blocked_segment_index"] == 0
 
 
+def test_known_unsafe_sampled_goals_stay_blocked_on_release_seeds() -> None:
+    """The exact-margin fallback cannot admit the observed unsafe nominal goals."""
+    matrix = (
+        REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v3.yaml"
+    )
+    scenario = next(
+        dict(row)
+        for row in spawn_preflight._load_matrix(matrix)
+        if row["name"] == "classic_t_intersection_low"
+    )
+    unsafe_seeds = (111, 115, 118, 121, 122, 125, 134, 138)
+    result = spawn_preflight._check_release_scenario(
+        (scenario, str(matrix), unsafe_seeds, 0.1, 20, 0.1, False)
+    )
+
+    assert [row["seed"] for row in result["rows"]] == list(unsafe_seeds)
+    for row in result["rows"]:
+        assert row["overall_status"] == "blocked", row
+        assert row["footprint_reachability"]["status"] == "fail", row
+        assert row["footprint_reachability"]["continuous_oracle"]["reason"] == (
+            "required_route_point_below_continuous_margin"
+        ), row
+
+
+def test_historical_narrow_doorway_probe_stays_blocked_on_all_release_seeds() -> None:
+    """A probe declaration cannot admit the 2 m doorway to the nominal matrix."""
+    matrix = (
+        REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v3.yaml"
+    )
+    scenario = next(
+        dict(row)
+        for row in spawn_preflight._load_matrix(matrix)
+        if row["name"] == "francis2023_narrow_doorway"
+    )
+    scenario["expected_outcome"] = "infeasible_safe_hold"
+    result = spawn_preflight._check_release_scenario(
+        (scenario, str(matrix), tuple(range(111, 141)), 0.1, 20, 0.1, False)
+    )
+
+    assert len(result["rows"]) == 30
+    for row in result["rows"]:
+        assert row["overall_status"] == "blocked", row
+        reachability = row["footprint_reachability"]
+        assert reachability["status"] == "invalid", row
+        assert reachability["reason"] == "infeasibility_probe_requires_separate_manifest", row
+        assert reachability["observed_status"] == "fail", row
+        assert row["passage_width"]["observed_status"] == "fail", row
+
+
 def test_continuous_margin_oracle_replaces_narrow_raw_grid_witness() -> None:
     """A narrow sampled grid witness does not disprove a safe route around an obstacle."""
     occupancy = np.zeros((100, 100), dtype=bool)

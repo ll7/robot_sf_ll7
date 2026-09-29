@@ -79,12 +79,22 @@ build_image() {
 FROM ghcr.io/actions/actions-runner@sha256:0cfdcc701ce933c6d243c6b0b2da767366dc9f2e99961d4c3754b0b78084cdda
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential cmake ffmpeg gh \
+    build-essential cmake ffmpeg gh git-lfs \
     libglib2.0-0t64 libgl1 fonts-dejavu-core jq poppler-utils iputils-ping curl \
     && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSLo /tmp/node.tar.gz \
+      https://nodejs.org/dist/v22.23.2/node-v22.23.2-linux-x64.tar.gz \
+    && echo 'b294a556e639d64338823920e5866c21c02741742d2e1529ee1a225c1ec9252a  /tmp/node.tar.gz' | sha256sum -c - \
+    && mkdir -p /opt/node \
+    && tar -xzf /tmp/node.tar.gz -C /opt/node --strip-components=1 \
+    && ln -s /opt/node/bin/node /usr/local/bin/node \
+    && ln -s /opt/node/bin/npm /usr/local/bin/npm \
+    && ln -s /opt/node/bin/npx /usr/local/bin/npx \
+    && rm /tmp/node.tar.gz \
     && usermod -G '' runner \
     && rm -f /etc/sudoers \
     && mkdir -p /opt/robot-sf-runner \
+    && ln -s /home/runner/_tool /opt/hostedtoolcache \
     && cp -a /home/runner/. /opt/robot-sf-runner/ \
     && chown -R runner:runner /opt/robot-sf-runner \
     && install -d -o runner -g runner /home/runner/_work
@@ -108,6 +118,7 @@ run_container() {
   cd /home/runner
   cp -a /opt/robot-sf-runner/. /home/runner/
   install -d -m 700 /home/runner/_work/_temp /home/runner/_work/_uv_cache \
+    /home/runner/_work/_tmp /home/runner/_work/_pip_cache \
     /home/runner/_tool
   ./config.sh --unattended --ephemeral --disableupdate --replace \
     --url "https://github.com/$repo" --token "$token" \
@@ -151,7 +162,8 @@ supervise() {
         --env RUNNER_TEMP=/home/runner/_work/_temp \
         --env RUNNER_TOOL_CACHE=/home/runner/_tool \
         --env UV_CACHE_DIR=/home/runner/_work/_uv_cache \
-        --env TMPDIR=/tmp \
+        --env TMPDIR=/home/runner/_work/_tmp \
+        --env PIP_CACHE_DIR=/home/runner/_work/_pip_cache \
         --env PYTEST_NUM_WORKERS=2 --env OPENBLAS_NUM_THREADS=1 \
         --env OMP_NUM_THREADS=1 \
         "$image" "$name" >/dev/null; then

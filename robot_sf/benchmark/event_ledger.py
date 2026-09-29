@@ -237,6 +237,38 @@ def _normalize_collision_events(
     return normalized
 
 
+def _contact_class(
+    speed: float | None,
+    step_index: int | None,
+    partner_type: str,
+    partners: set[str],
+    reset_match: bool,
+    respawn_match: Any,
+) -> str:
+    """Keep grouped setup matches unresolved without changing exact event counts.
+
+    Returns:
+        Diagnostic class for the grouped collision event.
+    """
+    if speed is None:
+        return "unresolved_missing_robot_speed"
+    if step_index is None:
+        return "unresolved_missing_step_index"
+    if partner_type != "pedestrian":
+        return "geometry_contact"
+    if len(partners) > 1 and (reset_match or respawn_match is not None):
+        # The exact event groups simultaneous partners. One setup match
+        # cannot assign its class to every pedestrian in that event.
+        return "unresolved_multi_pedestrian_attribution"
+    if reset_match:
+        return "reset_overlap_contact"
+    if respawn_match is not None:
+        return "respawn_contact"
+    if speed <= STATIONARY_ROBOT_SPEED_THRESHOLD_M_S:
+        return "pedestrian_on_stationary_robot"
+    return "moving_robot_pedestrian_contact"
+
+
 def _contact_provenance(
     record: Mapping[str, Any], collision_events: Sequence[Mapping[str, Any]] | None
 ) -> dict[str, Any]:
@@ -286,20 +318,9 @@ def _contact_provenance(
             and step_index == 0
             and bool(partners & reset_rows)
         )
-        if speed is None:
-            contact_class = "unresolved_missing_robot_speed"
-        elif step_index is None:
-            contact_class = "unresolved_missing_step_index"
-        elif partner_type != "pedestrian":
-            contact_class = "geometry_contact"
-        elif reset_match:
-            contact_class = "reset_overlap_contact"
-        elif matched is not None:
-            contact_class = "respawn_contact"
-        elif speed <= STATIONARY_ROBOT_SPEED_THRESHOLD_M_S:
-            contact_class = "pedestrian_on_stationary_robot"
-        else:
-            contact_class = "moving_robot_pedestrian_contact"
+        contact_class = _contact_class(
+            speed, step_index, partner_type, partners, reset_match, matched
+        )
         contacts.append(
             {
                 "collision_event_index": index,
@@ -678,16 +699,13 @@ def _contact_entry_violations(index: int, contact: Any, event: Any) -> list[str]
         if contact.get("contact_class") != "unresolved_missing_step_index":
             violations.append(f"{prefix} missing step index must be unresolved")
         return violations
-    expected_class = (
-        "geometry_contact"
-        if contact.get("collision_partner_type") != "pedestrian"
-        else "reset_overlap_contact"
-        if contact.get("reset_overlap_match") is True
-        else "respawn_contact"
-        if contact.get("respawn_match") is not None
-        else "pedestrian_on_stationary_robot"
-        if speed <= STATIONARY_ROBOT_SPEED_THRESHOLD_M_S
-        else "moving_robot_pedestrian_contact"
+    expected_class = _contact_class(
+        speed,
+        step_index,
+        str(contact.get("collision_partner_type") or ""),
+        _contact_partner_ids(event),
+        contact.get("reset_overlap_match") is True,
+        contact.get("respawn_match"),
     )
     if contact.get("contact_class") != expected_class:
         violations.append(f"{prefix} class inconsistent with speed")

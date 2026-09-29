@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from copy import deepcopy
+from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -12,10 +15,12 @@ from robot_sf.benchmark.event_ledger import (
     reconcile_event_ledger,
     validate_record_event_ledger,
 )
+from robot_sf.benchmark.map_runner import map_runner_episode
 from robot_sf.benchmark.map_runner.map_runner_episode import (
     _CollisionEventContext,
     _step_collision_events,
 )
+from robot_sf.benchmark.map_runner.map_runner_jsonl import write_validated_to_handle
 
 
 def _record() -> dict:
@@ -121,6 +126,151 @@ def test_first_step_contact_with_reset_overlapping_row_is_reset_class() -> None:
     assert contact["contact_class"] == "reset_overlap_contact"
     assert ledger["contact_provenance"]["classification_status"] == "invalid_start"
     assert reconcile_event_ledger(ledger) == []
+
+
+@pytest.mark.parametrize("match_kind", ["reset", "respawn"])
+def test_two_partner_event_with_one_setup_match_stays_unresolved(match_kind: str) -> None:
+    """One setup-matched pedestrian cannot label another simultaneous contact."""
+    context = _CollisionEventContext(
+        dt_seconds=0.1,
+        map_def=None,
+        robot_radius=0.5,
+        ped_radius=0.4,
+        capture_robot_speed=True,
+    )
+    step_idx = 0 if match_kind == "reset" else 2
+    event = _step_collision_events(
+        step_idx=step_idx,
+        robot_pos=np.array([1.0, 0.0]),
+        previous_robot_pos=np.array([1.0, 0.0]),
+        ped_positions=np.array([[1.1, 0.0], [1.2, 0.0]]),
+        previous_ped_positions=np.array([[1.1, 0.0], [1.2, 0.0]]),
+        meta={"is_pedestrian_collision": True},
+        context=context,
+    )[0]
+    assert event["contact_partner_ids"] == ["0", "1"]
+    record = _record()
+    if match_kind == "reset":
+        record["spawn_validity"].update(
+            reset_overlap=True,
+            reset_clearance={"overlap": True, "overlapping_pedestrian_rows": [1]},
+        )
+    else:
+        record["spawn_validity"]["respawn_overlap_collisions"] = [
+            {"group_id": "g1", "ped_row": 1, "collision_time_s": 0.3}
+        ]
+    ledger = build_event_ledger(record, collision_events=[event])
+    contact = ledger["contact_provenance"]["contacts"][0]
+    assert contact["contact_class"] == "unresolved_multi_pedestrian_attribution"
+    assert ledger["exact_events"]["collision"] is True
+    assert ledger["reconciliation"]["collision_metric_value"] == 1.0
+    assert reconcile_event_ledger(ledger) == []
+    if match_kind == "respawn":
+        assert ledger["contact_provenance"]["classification_status"] == (
+            "unresolved_contact_measurement"
+        )
+    forged = deepcopy(ledger)
+    forged["contact_provenance"]["contacts"][0]["contact_class"] = (
+        "reset_overlap_contact" if match_kind == "reset" else "respawn_contact"
+    )
+    assert any("class inconsistent" in issue for issue in reconcile_event_ledger(forged))
+
+
+def test_versioned_scenario_marker_saves_measured_contact_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The episode marker enables runtime speed capture in a saved contact row."""
+
+    class ContactEnv:
+        def __init__(self) -> None:
+            self.simulator = SimpleNamespace(
+                robot_pos=[np.array([0.0, 0.0])],
+                ped_pos=np.array([[2.0, 0.0]]),
+                goal_pos=[np.array([3.0, 0.0])],
+                map_def=SimpleNamespace(obstacles=[], bounds=(0.0, 0.0, 10.0, 10.0)),
+                robot_vel=[np.array([0.0, 0.0])],
+                get_pedestrian_forces=lambda: np.zeros((1, 2)),
+            )
+            self.action_space = None
+
+        def _observation(self) -> dict:
+            return {
+                "robot": {"position": self.simulator.robot_pos[0].tolist(), "heading": [0.0]},
+                "goal": {"current": [3.0, 0.0]},
+                "pedestrians": {"positions": self.simulator.ped_pos},
+            }
+
+        def reset(self, seed: int | None = None) -> tuple[dict, dict]:
+            assert seed == 1001
+            return self._observation(), {}
+
+        def step(self, _action: object) -> tuple[dict, float, bool, bool, dict]:
+            self.simulator.robot_pos[0] = np.array([0.2, 0.0])
+            self.simulator.ped_pos = np.array([[0.3, 0.0]])
+            return (
+                self._observation(),
+                0.0,
+                True,
+                False,
+                {"meta": {"is_pedestrian_collision": True}},
+            )
+
+        def close(self) -> None:
+            return None
+
+    config = SimpleNamespace(
+        sim_config=SimpleNamespace(time_per_step_in_secs=0.1, robot_radius=0.5, ped_radius=0.4),
+        robot_config=SimpleNamespace(radius=0.5),
+    )
+    monkeypatch.setattr(map_runner_episode, "_build_env_config", lambda *_args, **_kwargs: config)
+    monkeypatch.setattr(map_runner_episode, "make_robot_env", lambda **_kwargs: ContactEnv())
+    monkeypatch.setattr(map_runner_episode, "sample_obstacle_points", lambda *_args: None)
+    monkeypatch.setattr(map_runner_episode, "compute_shortest_path_length", lambda *_args: 3.0)
+    monkeypatch.setattr(
+        map_runner_episode,
+        "compute_all_metrics",
+        lambda *_args, **_kwargs: {"success": 0.0, "collisions": 1.0},
+    )
+    monkeypatch.setattr(
+        map_runner_episode,
+        "post_process_metrics",
+        lambda metrics, **_kwargs: metrics,
+    )
+
+    record = map_runner_episode.run_map_episode(
+        {
+            "name": "contact-marker-1001",
+            "collision_attribution_version": "v1",
+            "simulation_config": {"max_episode_steps": 1},
+        },
+        seed=1001,
+        horizon=1,
+        dt=0.1,
+        record_forces=False,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        scenario_path=Path(__file__),
+        policy_builder=lambda *_args, **_kwargs: (lambda _obs: (1.0, 0.0), {"algorithm": "goal"}),
+    )
+    out_path = tmp_path / "contact_episode.jsonl"
+    schema_path = (
+        Path(__file__).resolve().parents[2] / "robot_sf/benchmark/schemas/episode.schema.v1.json"
+    )
+    with out_path.open("w", encoding="utf-8") as handle:
+        write_validated_to_handle(handle, json.loads(schema_path.read_text()), record)
+    saved = json.loads(out_path.read_text(encoding="utf-8"))
+    assert saved["scenario_params"]["collision_attribution_version"] == "v1"
+    ledger = saved["event_ledger"]
+    assert ledger["contact_provenance"]["schema_version"] == "contact_provenance.v1"
+    source = ledger["collision_events"][0]
+    contact = ledger["contact_provenance"]["contacts"][0]
+    assert source["robot_speed_at_contact_m_s"] == pytest.approx(2.0)
+    assert source["contact_step_index"] == 0
+    assert contact["robot_speed_at_contact_m_s"] == pytest.approx(2.0)
+    assert contact["contact_step_index"] == 0
+    assert contact["contact_class"] == "moving_robot_pedestrian_contact"
+    assert validate_record_event_ledger(saved) == []
 
 
 def test_historical_default_event_and_ledger_do_not_gain_attribution() -> None:

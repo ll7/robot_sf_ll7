@@ -40,6 +40,9 @@ classes can be audited without changing the historical collision count or event 
   altered copies within a row cannot be detected by ledger reconciliation.
 - Respawn matching inherits the existing timed pedestrian-row match; a match
   remains diagnostic until simulator-level reinjection and release comparison pass.
+- A grouped event with multiple pedestrian partners stays
+  `unresolved_multi_pedestrian_attribution` if any partner matches reset overlap
+  or respawn evidence. A single matched partner cannot classify the whole event.
 - An observed collision is never relabeled as planner-caused by this block.
 
 # Validation route
@@ -54,13 +57,19 @@ classes can be audited without changing the historical collision count or event 
 Work is isolated on `issue-9729-contact-attribution-20260928`, stacked on
 `#9873` head `6332c5c0`. Preserve the draft PR and its exact head for review.
 
-# Observed diagnostic checks
+# Quarantined diagnostics and replacement proof
 
-- A native three-step `classic_cross_trap_low` seed 111 goal episode carried
-  `collision_attribution_version: v1` in its scenario identity and emitted
-  `contact_provenance.v1` in the saved ledger. It had no contact, so it proves
-  the saved-row path, not contact classification.
-- A native zero-action `francis2023_robot_crowding` seed 113 trace had no contact
-  during its first 100 steps. This is a negative diagnostic, not evidence that
-  the historical stationary-contact defect is absent. Stationary, moving,
-  reset, respawn, and missing-speed classes have focused runtime-step fixtures.
+- Before the #9668 seed rule was merged, a three-step
+  `classic_cross_trap_low` seed 111 goal episode and a 100-step zero-action
+  `francis2023_robot_crowding` seed 113 trace were run as diagnostics. Both
+  had no contact. Quarantine both episodes: they are excluded from all release
+  evidence and must not inform v4 tuning, the freeze, Social Navigation Quality
+  Index (SNQI) calibration, or the campaign. The seed 113 no-contact trace does
+  not establish absence of the historical stationary-contact defect.
+- The saved-row regression uses development seed 1001 with a deterministic
+  contact environment to prove the scenario marker enables measured speed,
+  step index, and class in the saved `contact_provenance.v1` row. It is a code
+  diagnostic, not native benchmark or release evidence. The quarantined native
+  runs are not needed for this PR's implementation check and are not reused.
+  Any further stepped diagnostic must use development seeds 1001-1030 or
+  diagnostic seeds 103-105; no planner step is allowed on seeds 111-140.

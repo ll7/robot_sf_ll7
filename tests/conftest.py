@@ -760,8 +760,14 @@ _FAST_FILES = {
     "test_issue_9348_three_width_doorway.py",
     "test_issue_9533_guarded_ppo_trace.py",
     "test_event_ledger.py",
+    # Contact-attribution fixtures cover the opt-in ledger and map-runner paths
+    # in pull-request fast shards (issue #9729).
+    "test_contact_attribution_issue_9729.py",
     "test_spawn_overlap_rate_paths_issue_9725.py",
     "test_spawn_clearance_issue_9725.py",
+    # Goal-clearance runtime contracts are deterministic and provide exact-head
+    # coverage for the opt-in sampler in pull-request fast shards (issue #9859).
+    "test_goal_clearance_issue_9859.py",
     "test_spawn_preflight_issue_9725.py",
     # Release-matrix preflight contracts use synthetic fixtures and monkeypatched
     # environments; keep changed preflight logic covered in PR fast shards.

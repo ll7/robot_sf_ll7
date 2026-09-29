@@ -256,7 +256,12 @@ The release entrypoint:
 The matrix setup gate uses the release manifest's checksummed matrix and seed set without
 development-matrix or seed overrides. It requires 0.10 m surface clearance and checks the robot
 footprint through every navigator waypoint in order on a 0.10 m occupancy grid, then holds the
-robot stationary for 20 steps to catch early route-end respawn overlap. JSON and Markdown reports
+robot stationary for 20 steps to catch early route-end respawn overlap. A conservative grid block
+can be cleared only by a continuous-geometry proof that every ordered route leg shares free space
+after obstacles are buffered and map bounds are inset by the robot radius plus the clearance
+margin. In that case the report retains the failed grid check and certifies only the required
+opening-width lower bound; it does not infer a route length or a measured opening width. JSON and
+Markdown reports
 are retained under
 `<campaign_root>/reports/spawn_matrix_preflight.v1.{json,md}`. A blocked row stops the release
 before planner execution. Their recorded SHA-256 digests are checked again after the campaign and

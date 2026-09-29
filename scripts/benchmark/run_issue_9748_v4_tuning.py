@@ -123,6 +123,30 @@ def _candidate_manifest(path: Path, params: dict[str, float]) -> dict[str, Any]:
     return result
 
 
+def _completion_time_s(record: dict[str, Any], *, dt: float) -> float:
+    """Recover simulated goal time from the canonical success-only metric."""
+    normalized = record.get("metrics", {}).get("time_to_goal_norm_success_only")
+    horizon = record.get("horizon")
+    if (
+        not isinstance(normalized, (int, float))
+        or not math.isfinite(normalized)
+        or not 0.0 <= normalized < 1.0
+        or not isinstance(horizon, int)
+        or horizon <= 0
+        or not math.isfinite(dt)
+        or dt <= 0
+    ):
+        raise ValueError("invalid success-only normalized goal time, horizon, or dt")
+    return float(normalized) * horizon * dt
+
+
+def _quiet_logs() -> None:
+    from loguru import logger
+
+    logger.remove()
+    logger.add(sys.stderr, level="WARNING")
+
+
 def _effective_config_hash(
     *, manifest: dict[str, Any], candidate_path: Path, scenario: dict[str, Any]
 ) -> str:
@@ -149,6 +173,7 @@ def _run_cell(
     scenario, seed, manifest, candidate_path, scenario_anchor, horizon, dt = job
     started = time.perf_counter()
     try:
+        _quiet_logs()
         from robot_sf.benchmark.map_runner.map_runner import build_map_policy
         from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
 
@@ -198,6 +223,7 @@ def _write_group(
     from robot_sf.benchmark.map_runner.map_runner_jsonl import write_validated_to_handle
 
     scenario_id = scenario["name"]
+    dt = jobs[0][-1]
     group_dir = output_root / candidate / trial["id"] / scenario_id
     group_dir.mkdir(parents=True)
     rows_path = group_dir / "episodes.jsonl"
@@ -230,15 +256,11 @@ def _write_group(
                 counts["collisions"] += int(outcome["collision_event"])
                 if outcome["route_complete"]:
                     counts["completions"] += 1
-                    value = record.get("metrics", {}).get("time_to_goal")
-                    if not isinstance(value, (int, float)) or not math.isfinite(value):
+                    try:
+                        completed_times.append(_completion_time_s(record, dt=dt))
+                    except ValueError as exc:
                         counts["errors"] += 1
-                        errors.write(
-                            json.dumps({"seed": result["seed"], "error": "invalid time_to_goal"})
-                            + "\n"
-                        )
-                    else:
-                        completed_times.append(float(value))
+                        errors.write(json.dumps({"seed": result["seed"], "error": str(exc)}) + "\n")
             except (KeyError, TypeError, ValueError) as exc:
                 counts["errors"] += 1
                 errors.write(
@@ -322,9 +344,10 @@ def _rank_trials(groups: list[dict[str, Any]], candidates: list[str]) -> dict[st
     return rankings
 
 
-def main(argv: list[str] | None = None) -> int:  # noqa: C901
+def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
     """Execute the selected dev cells and write raw rows plus a commit-ready log."""
     args = _parser().parse_args(argv)
+    _quiet_logs()
     if args.workers < 1:
         raise ValueError("workers must be positive")
     output_root = args.output_root.resolve()
@@ -350,6 +373,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
 
     validate(CAMPAIGN_PATH)
     cfg = load_campaign_config(CAMPAIGN_PATH)
+    if cfg.horizon != 600 or cfg.dt != 0.1:
+        raise ValueError("#9748 runner requires the frozen H600 / dt=0.1 contract")
     scenarios = _load_campaign_scenarios(cfg)
     if {row["name"] for row in scenarios} != EXPECTED_SCENARIO_IDS or len(scenarios) != 4:
         raise ValueError("resolved development scenario identities changed")

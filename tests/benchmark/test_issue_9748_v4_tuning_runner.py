@@ -64,3 +64,10 @@ def test_ranking_excludes_degraded_and_prioritizes_collisions() -> None:
         "fast",
         "fallback",
     ]
+
+
+def test_completion_time_uses_native_success_metric() -> None:
+    record = {"horizon": 600, "metrics": {"time_to_goal_norm_success_only": 134 / 600}}
+    assert runner._completion_time_s(record, dt=0.1) == pytest.approx(13.4)
+    with pytest.raises(ValueError, match="invalid success-only"):
+        runner._completion_time_s({"horizon": 600, "metrics": {}}, dt=0.1)

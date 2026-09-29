@@ -10,7 +10,6 @@ import argparse
 import re
 import subprocess
 import sys
-from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -28,13 +27,17 @@ SEED = re.compile(
 SEED_FIELD = re.compile(
     r"(?i)(?:^|[\s,({])['\"]?(?:seed|seeds|seed_list|seed_set|resolved_seeds|"
     r"eval_seeds|evaluation_seeds|pilot_seeds|diagnostic_seeds|base_seed|"
-    r"master_seed|episode_seed|scenario_seed)['\"]?\s*[:=]"
+    r"master_seed|episode_seed|scenario_seed|simulator_seed|simulation_seed|"
+    r"environment_seed|env_seed|world_seed|run_seed|rollout_seed|task_seed|"
+    r"map_seed|spawn_seed)['\"]?\s*[:=]"
 )
 SCENARIO_SEEDS = re.compile(r"(?i)\bscenario\s*\[\s*['\"]seeds?['\"]\s*\]\s*=")
 EPISODE_SEED_LOOP = re.compile(
     r"\bfor\s+seed\s+in\s+range\s*\([^)]*\)\s*:\s*.*\brun_episode\s*\(\s*seed\b"
 )
 SAMPLER_CLI_DEFAULT = re.compile(r"\bseeds?\s*=\s*\(?\s*args\.seed\s+or\b")
+SAMPLER_SINGLE_CLI_DEFAULT = re.compile(r"\bseed\s*=\s*\(\s*args\.seed\s+or\b")
+YAML_RANGE_BOUND = re.compile(r"^\s*(?:-\s*)?(?:min|max|low|high)\s*:", re.I)
 CLI_SEED = re.compile(r"(?<![\w-])--seeds?(?:\s+|=)")
 SEED_PARAM = re.compile(r"(?i)\bparametrize\s*\(\s*['\"][^'\"]*\bseed\b")
 SEED_CONSTANT = re.compile(r"(?i)\b(?:DEFAULT|TEST|PILOT|DIAGNOSTIC|EVAL)_SEEDS?\s*=")
@@ -91,8 +94,25 @@ def _non_episode_seed(path: str, text: str, before: list[str], after: list[str])
         if declarations and declarations[-1].lstrip().startswith("def candidate_repo("):
             return True
     return path == "scripts/tools/compare_adversarial_samplers.py" and bool(
-        SAMPLER_CLI_DEFAULT.search(text)
+        SAMPLER_CLI_DEFAULT.search(text) or SAMPLER_SINGLE_CLI_DEFAULT.search(text)
     )
+
+
+def _yaml_seed_range_bound(path: str, text: str, before: list[str]) -> bool:
+    """Match a range bound only under its nearest YAML seed key."""
+    if not path.startswith("configs/") or not path.endswith((".yaml", ".yml")):
+        return False
+    if not YAML_RANGE_BOUND.match(text):
+        return False
+    indentation = len(text) - len(text.lstrip())
+    for previous in reversed(before):
+        stripped = previous.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        previous_indent = len(previous) - len(previous.lstrip())
+        if previous_indent < indentation:
+            return bool(SEED_FIELD.search(stripped)) and stripped.endswith(":")
+    return False
 
 
 def _seed_context(path: str, text: str, before: list[str], after: list[str]) -> bool:
@@ -106,6 +126,7 @@ def _seed_context(path: str, text: str, before: list[str], after: list[str]) -> 
         or EPISODE_SEED_LOOP.search(text)
         or SEED_CONSTANT.search(text)
         or SEED_PARAM.search(text)
+        or _yaml_seed_range_bound(path, text, before)
     ):
         return True
     # YAML block lists and multiline pytest parametrizations put the value on
@@ -131,33 +152,9 @@ def _seed_context(path: str, text: str, before: list[str], after: list[str]) -> 
     return False
 
 
-def _removed_lines(diff: str) -> dict[str, Counter[str]]:
-    """Count deleted lines by file, ignoring indentation changed by a move."""
-    removed: dict[str, Counter[str]] = defaultdict(Counter)
-    path = ""
-    for row in diff.splitlines():
-        if row.startswith("diff --git "):
-            path = row.rsplit(" b/", 1)[-1]
-        elif row.startswith("+++ b/"):
-            path = row[6:]
-        elif row.startswith("-") and not row.startswith("--- "):
-            removed[path][row[1:].strip()] += 1
-    return removed
-
-
-def _consume_moved(removed: dict[str, Counter[str]], path: str, content: str) -> bool:
-    """Consume one matching deletion for an added line, if present."""
-    normalized = content.strip()
-    if removed[path][normalized] == 0:
-        return False
-    removed[path][normalized] -= 1
-    return True
-
-
 def check_diff(diff: str, root: Path) -> list[Finding]:
     """Return violations on added lines; root supplies complete file context."""
     findings: list[Finding] = []
-    removed = _removed_lines(diff)
     path = ""
     line_number = 0
     before: list[str] = []
@@ -181,8 +178,7 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
         elif row.startswith("+") and not row.startswith("+++ "):
             content = row[1:]
             if (
-                not _consume_moved(removed, path, content)
-                and _eligible(path)
+                _eligible(path)
                 and path not in RELEASE_CONFIGS
                 and not file_marked
                 and not MARKER.search(content)

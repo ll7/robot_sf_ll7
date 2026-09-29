@@ -38,6 +38,74 @@ def test_yaml_seed_list_continuation_fails(tmp_path: Path) -> None:
     assert len(check_diff(diff, tmp_path)) == 1
 
 
+def test_issue_9918_exact_pilot_space_diff_flags_seed_range(tmp_path: Path) -> None:
+    path = "configs/adversarial/issue_9645_pilot_space.v1.yaml"
+    diff = f"""diff --git a/{path} b/{path}
+new file mode 100644
+index 000000000..09ed512ad
+--- /dev/null
++++ b/{path}
+@@ -0,0 +1,29 @@
++schema_version: adversarial-search-space.v1
++description: >-
++  Issue #9645 paired Random/TPE pilot derived from the crossing/TTC source bounds.
++  Only candidate-effective dimensions vary; pedestrian timing controls are omitted
++  because the crossing template has no bound pedestrian ID. The lower start/goal
++  bounds are clipped to 2.5 m after the original 1.0/2.0 m search bounds produced
++  an obstacle-inflated start. The simulator scenario seed is fixed to 123 so sampler
++  proposal seeds do not change the environment.
++variables:
++  start_x:
++    min: 2.5
++    max: 3.0
++  start_y:
++    min: 2.5
++    max: 4.0
++  goal_x:
++    min: 7.0
++    max: 9.0
++  goal_y:
++    min: 2.5
++    max: 4.0
++  pedestrian_speed_mps:
++    min: 0.8
++    max: 1.4
++  scenario_seed:
++    min: 123
++    max: 123
++constraints:
++  min_start_goal_distance_m: 2.0
+"""
+    findings = check_diff(diff, tmp_path)
+    assert [(finding.path, finding.line) for finding in findings] == [(path, 26), (path, 27)]
+
+
+@pytest.mark.parametrize(
+    "added",
+    [
+        "scenario_seed: {min: 123, max: 123}",
+        "episode_seed: {low: 123, high: 123}",
+        "  low: 123",
+        "  high: 123",
+    ],
+)
+def test_yaml_seed_range_forms_fail(tmp_path: Path, added: str) -> None:
+    context = "scenario_seed:" if added.lstrip().startswith(("low:", "high:")) else ""
+    assert (
+        len(check_diff(_diff("configs/adversarial/pilot.yaml", added, context=context), tmp_path))
+        == 1
+    )
+
+
+def test_unrelated_yaml_range_below_seed_sibling_passes(tmp_path: Path) -> None:
+    path = "configs/adversarial/pilot.yaml"
+    file = tmp_path / path
+    file.parent.mkdir(parents=True)
+    file.write_text("scenario_seed:\n  min: 1001\nstart_x:\n  min: 123\n")
+    diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -3,0 +4 @@\n+  min: 123\n"
+    assert check_diff(diff, tmp_path) == []
+
+
 def test_named_seed_list_fails(tmp_path: Path) -> None:
     diff = _diff("configs/benchmarks/seed_list_v1.yaml", "  - 121", context="classic_interactions:")
     assert len(check_diff(diff, tmp_path)) == 1
@@ -134,14 +202,24 @@ def test_moved_sampler_defaults_are_not_new_seeds(tmp_path: Path) -> None:
     assert check_diff(diff, tmp_path) == []
 
 
-def test_moved_episode_seed_line_is_not_reintroduced(tmp_path: Path) -> None:
+def test_moved_episode_seed_line_is_flagged(tmp_path: Path) -> None:
     path = "scripts/benchmark/run_pilot.py"
     diff = (
         f"diff --git a/{path} b/{path}\n+++ b/{path}\n"
         "@@ -20 +20,0 @@\n-    scenario_seed = 111\n"
         "@@ -90,0 +90 @@\n+scenario_seed = 111\n"
     )
-    assert check_diff(diff, tmp_path) == []
+    assert len(check_diff(diff, tmp_path)) == 1
+
+
+def test_moved_seed_argument_into_episode_call_is_flagged(tmp_path: Path) -> None:
+    path = "scripts/benchmark/run_pilot.py"
+    diff = (
+        f"diff --git a/{path} b/{path}\n+++ b/{path}\n"
+        "@@ -10 +10,0 @@\n-    seed=123,\n"
+        "@@ -40,0 +40,2 @@\n+    run_episode(\n+        seed=123,\n"
+    )
+    assert len(check_diff(diff, tmp_path)) == 1
 
 
 def test_deletion_in_another_file_does_not_hide_new_episode_seed(tmp_path: Path) -> None:
@@ -161,6 +239,9 @@ def test_deletion_in_another_file_does_not_hide_new_episode_seed(tmp_path: Path)
     "added",
     [
         "scenario_seed = 111",
+        "simulator_seed: 123",
+        "environment_seed = 124",
+        "world_seed = 125",
         'scenario["seeds"] = [111]',
         "for seed in range(111, 141): run_episode(seed)",
     ],

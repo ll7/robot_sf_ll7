@@ -12,6 +12,7 @@ from robot_sf.benchmark.map_runner.map_runner_episode import (
     _finalize_trace_metadata,
     _read_sampler_capture,
     _read_simulator_ped_headings,
+    _read_step_goals,
     _step_build_simulation_trace,
     _StepLoopState,
     _surface_clearances_m,
@@ -260,6 +261,7 @@ def _step_harness() -> tuple[_StepLoopState, SimpleNamespace, SimpleNamespace]:
         info={},
         selected_action_payload={},
         applied_environment_action_payload={},
+        action_conversion_payload=None,
         actuation_step=None,
         step_visible=None,
         step_confidence=None,
@@ -524,3 +526,26 @@ def test_read_sampler_capture_returns_mapping_only_for_well_formed_records() -> 
         simulator=SimpleNamespace(sampler_capture=SimpleNamespace(to_mapping=_boom))
     )
     assert _read_sampler_capture(raising) is None
+
+
+def test_step_builder_records_pre_step_goals_and_collision_flags() -> None:
+    """The trace carries goal.current/next and per-step collision flags for #9979 checks."""
+    state, slc, sim = _step_harness()
+    sim.goal_current = [8.0, 5.0]
+    sim.goal_next = None
+    sim.info = {"meta": {"is_pedestrian_collision": True, "is_obstacle_collision": False}}
+
+    _step_build_simulation_trace(state, slc, step_idx=0, sim=sim)
+
+    entry = state.simulation_step_trace[0]
+    assert entry["goal"] == {"current": [8.0, 5.0], "next": None}
+    assert entry["collision"] == {"pedestrian": True, "obstacle": False, "robot": False}
+
+
+def test_read_step_goals_handles_missing_next_and_missing_simulator() -> None:
+    """A null next waypoint stays ``None``; a missing simulator yields no goals."""
+    simulator = SimpleNamespace(goal_pos=[np.array([3.0, 4.0])], next_goal_pos=[None])
+    assert _read_step_goals(SimpleNamespace(simulator=simulator)) == ([3.0, 4.0], None)
+    simulator.next_goal_pos = [np.array([1.0, 2.0])]
+    assert _read_step_goals(SimpleNamespace(simulator=simulator)) == ([3.0, 4.0], [1.0, 2.0])
+    assert _read_step_goals(SimpleNamespace()) == (None, None)

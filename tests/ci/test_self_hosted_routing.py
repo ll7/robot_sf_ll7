@@ -190,14 +190,45 @@ def test_container_setup_keeps_ephemeral_and_no_host_mounts() -> None:
     assert "source=" not in script
     assert "/var/run/docker.sock" not in script
     for environment in (
-        "RUNNER_TOOL_CACHE=/home/runner/_work/_tool",
+        "RUNNER_TEMP=/home/runner/_work/_temp",
+        "RUNNER_TOOL_CACHE=/home/runner/_tool",
         "UV_CACHE_DIR=/home/runner/_work/_uv_cache",
-        "TMPDIR=/home/runner/_work/_tmp",
+        "TMPDIR=/tmp",
         "PYTEST_NUM_WORKERS=2",
         "OPENBLAS_NUM_THREADS=1",
         "OMP_NUM_THREADS=1",
     ):
         assert environment in script
+
+
+def test_runner_temporary_paths_resolve_to_tmpfs() -> None:
+    """Checkout's RUNNER_TEMP and other scratch paths must stay off the volume."""
+    script = SETUP_SCRIPT.read_text(encoding="utf-8")
+    assert "--work _work" in script
+    docker_run = script.split("if ! docker run", 1)[1].split('"$image" "$name"', 1)[0]
+    mounts = [
+        (spec.split(":", 1)[0], "tmpfs") for spec in re.findall(r"--tmpfs\s+([^\s\\]+)", docker_run)
+    ]
+    mounts += [
+        (destination, "volume")
+        for destination in re.findall(r"--mount\s+type=volume,dst=([^\s\\]+)", docker_run)
+    ]
+    environment = dict(re.findall(r"--env\s+([A-Z_]+)=([^\s\\]+)", docker_run))
+
+    def filesystem(path: str) -> str:
+        candidates = [
+            (len(destination), kind)
+            for destination, kind in mounts
+            if path == destination or path.startswith(f"{destination}/")
+        ]
+        assert candidates, path
+        return max(candidates)[1]
+
+    assert environment["RUNNER_TEMP"] == "/home/runner/_work/_temp"
+    for key in ("RUNNER_TEMP", "TMPDIR", "RUNNER_TOOL_CACHE"):
+        assert filesystem(environment[key]) == "tmpfs", key
+    assert filesystem("/home/runner/_work") == "volume"
+    assert filesystem(environment["UV_CACHE_DIR"]) == "volume"
 
 
 def test_container_image_preloads_routed_job_tools() -> None:

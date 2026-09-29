@@ -107,8 +107,8 @@ run_container() {
   fi
   cd /home/runner
   cp -a /opt/robot-sf-runner/. /home/runner/
-  install -d -m 700 /home/runner/_work/_tmp /home/runner/_work/_uv_cache \
-    /home/runner/_work/_tool
+  install -d -m 700 /home/runner/_work/_temp /home/runner/_work/_uv_cache \
+    /home/runner/_tool
   ./config.sh --unattended --ephemeral --disableupdate --replace \
     --url "https://github.com/$repo" --token "$token" \
     --name "$runner_name" --labels "$label" --work _work
@@ -141,15 +141,17 @@ supervise() {
     if ! docker run --rm --detach --interactive --name "$name" \
         --user 1001:1001 --read-only --network "$network" \
         --dns 1.1.1.1 --dns 9.9.9.9 \
-        --tmpfs /home/runner:rw,exec,nosuid,nodev,uid=1001,gid=1001,size=1g \
+        --tmpfs /home/runner:rw,exec,nosuid,nodev,uid=1001,gid=1001,size=2g \
         --mount type=volume,dst=/home/runner/_work \
+        --tmpfs /home/runner/_work/_temp:rw,exec,nosuid,nodev,uid=1001,gid=1001,size=512m,mode=700 \
         --tmpfs /tmp:rw,exec,nosuid,nodev,uid=1001,gid=1001,size=512m \
         --cap-drop ALL --security-opt no-new-privileges \
         --pids-limit 512 --cpus 4 --memory 8g --memory-swap 8g \
         --env HOME=/home/runner \
-        --env RUNNER_TOOL_CACHE=/home/runner/_work/_tool \
+        --env RUNNER_TEMP=/home/runner/_work/_temp \
+        --env RUNNER_TOOL_CACHE=/home/runner/_tool \
         --env UV_CACHE_DIR=/home/runner/_work/_uv_cache \
-        --env TMPDIR=/home/runner/_work/_tmp \
+        --env TMPDIR=/tmp \
         --env PYTEST_NUM_WORKERS=2 --env OPENBLAS_NUM_THREADS=1 \
         --env OMP_NUM_THREADS=1 \
         "$image" "$name" >/dev/null; then

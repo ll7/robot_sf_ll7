@@ -455,7 +455,7 @@ def test_candidate_rejects_pinned_but_untracked_map(candidate_repo) -> None:
         load_prepublication_candidate(path, repository_root=root)
 
 
-def test_builder_creates_ignored_valid_candidate_without_doi(candidate_repo) -> None:
+def test_builder_creates_ignored_valid_candidate_without_doi(candidate_repo, monkeypatch) -> None:
     root, _path, _payload = candidate_repo
     output = root / "output" / "candidate.json"
     candidate = create_prepublication_candidate(
@@ -477,6 +477,22 @@ def test_builder_creates_ignored_valid_candidate_without_doi(candidate_repo) -> 
             output=output,
             repository_root=root,
         )
+
+    def reject_candidate(*_args: object, **_kwargs: object) -> None:
+        raise ValueError("invalid candidate")
+
+    monkeypatch.setattr(release_candidate, "load_prepublication_candidate", reject_candidate)
+    rejected_output = root / "output" / "rejected-candidate.json"
+    with pytest.raises(ValueError, match="invalid candidate"):
+        create_prepublication_candidate(
+            campaign_config=CONFIG.relative_to(SOURCE_ROOT),
+            suite_policy=Path(SUITE_POLICY),
+            route_certification=Path(ROUTE_CERTIFICATION),
+            candidate_id="0.0.8-diagnostic-fixture",
+            output=rejected_output,
+            repository_root=root,
+        )
+    assert not rejected_output.exists()
 
 
 def test_post_preflight_readback_rejects_candidate_digest_drift(candidate_repo) -> None:

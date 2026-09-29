@@ -560,11 +560,14 @@ def create_prepublication_candidate(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("x", encoding="utf-8") as stream:
         stream.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    validated = False
     try:
-        return load_prepublication_candidate(output_path, repository_root=root)
-    except Exception:
-        output_path.unlink()
-        raise
+        candidate = load_prepublication_candidate(output_path, repository_root=root)
+        validated = True
+        return candidate
+    finally:
+        if not validated:
+            output_path.unlink(missing_ok=True)
 
 
 def load_preflight_input(

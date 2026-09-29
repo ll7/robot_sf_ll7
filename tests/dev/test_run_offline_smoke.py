@@ -92,6 +92,25 @@ def test_negative_optional_capability_fixtures(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux loader contract")
+def test_child_environment_uses_only_active_python_library_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Tool-cache Python children can start without inheriting arbitrary loader paths."""
+    lib_dir = tmp_path / "python" / "lib"
+    lib_dir.mkdir(parents=True)
+    (lib_dir / f"libpython{sys.version_info.major}.{sys.version_info.minor}.so.1.0").touch()
+    monkeypatch.setattr(sys, "base_prefix", str(lib_dir.parent))
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/untrusted/ambient/path")
+    output_root, manager = smoke._prepare_root(REPO_ROOT, tmp_path / "smoke")
+    try:
+        environment, _ = smoke._controlled_environment(output_root, REPO_ROOT)
+        assert environment["LD_LIBRARY_PATH"] == str(lib_dir)
+    finally:
+        if manager is not None:
+            manager.cleanup()
+
+
 def test_negative_path_root_and_network_fixtures(tmp_path: Path) -> None:
     leaky = tmp_path / "leaky.txt"
     leaky.write_text("/home/example/private-ops/secret\n", encoding="utf-8")

@@ -212,6 +212,15 @@ def _controlled_environment(root: Path, repo_root: Path) -> tuple[dict[str, str]
             "OMP_NUM_THREADS": "1",
         }
     )
+    # actions/setup-python's Linux build loads libpython from its tool-cache
+    # prefix. Clearing the inherited environment must not prevent isolated
+    # child interpreters from starting; derive the one needed library directory
+    # from this interpreter rather than copying an ambient LD_LIBRARY_PATH.
+    if sys.platform.startswith("linux"):
+        python_lib = Path(sys.base_prefix) / "lib"
+        library = python_lib / f"libpython{sys.version_info.major}.{sys.version_info.minor}.so.1.0"
+        if library.is_file():
+            environment["LD_LIBRARY_PATH"] = str(python_lib)
     return environment, targets
 
 

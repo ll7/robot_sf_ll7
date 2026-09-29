@@ -54,8 +54,21 @@ semantics. V2 adds `metrics.snqi_v2` and `metrics.snqi_v2_terms`.
 
 ## Calibration before evaluation
 
-Use `configs/benchmarks/snqi_v2/calibration.dev101_102.yaml`: the frozen 14-arm
-release roster, all 48 scenarios, development seeds 101/102, horizon 600 and dt .1.
+The candidate `configs/benchmarks/snqi_v2/calibration.dev101_102.yaml` covers the
+14 arm slots, all 48 scenarios, development seeds 101/102, horizon 600 and dt .1.
+Its Social Force and socnav sampling selectors match the tracked 0.0.8
+template. Social Force explicitly selects
+`social_force_resolution_independent_v2_kernel_wrapped_v2.yaml`, and the
+scenario matrices select the same `wrapped_v2` kernel for pedestrians.
+The successor runtime smoke `v0_5` uses development seed 103. It is disjoint
+from calibration 101/102, evaluation 111-140, and #9748 development 1001-1030;
+`v0_4` remains byte-identical history and seed 111 remains closed to pre-anchor
+smoke. The four v4 slots now resolve to the frozen #9932 configs in calibration,
+smoke, and the release template. The three profiles use the versioned v2
+comparability map that declares those keys. Static parity and a passing
+one-seed preflight are not calibration, runtime-smoke, or release evidence.
+Rerun the parity and release gates on the selected execution freeze before
+calibration acquisition; #9850 remains open until its runtime gate is satisfied.
 The config preserves planner/checkpoint references, requires force recording,
 and disallows prerequisite fallback. V2 scoring is disabled for acquisition.
 The canonical preflight and checkpoint staging gates must pass before submission.

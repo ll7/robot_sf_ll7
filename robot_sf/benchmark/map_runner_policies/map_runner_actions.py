@@ -123,6 +123,7 @@ def policy_command_to_env_action(  # noqa: C901
     env: Any,
     config: RobotSimulationConfig,
     command: tuple[float, float] | dict[str, Any],
+    conversion_trace: dict[str, Any] | None = None,
 ) -> np.ndarray:
     """Convert a policy command into the robot's native environment action space.
 
@@ -210,4 +211,24 @@ def policy_command_to_env_action(  # noqa: C901
     step_dt = max(float(config.sim_config.time_per_step_in_secs), 1e-6)
     linear_accel = (float(command[0]) - float(current_linear)) / step_dt
     angular_accel = (float(command[1]) - float(current_angular)) / step_dt
+    if conversion_trace is not None:
+        conversion_trace.update(
+            {
+                "schema_version": "policy-action-conversion.v1",
+                "kind": "unicycle_velocity_to_acceleration",
+                "robot_config_type": (
+                    f"{type(robot_cfg).__module__}.{type(robot_cfg).__qualname__}"
+                ),
+                "dt_s": step_dt,
+                "pre_step_speed": {
+                    "linear_velocity": float(current_linear),
+                    "angular_velocity": float(current_angular),
+                },
+                "input_units": {"linear_velocity": "m/s", "angular_velocity": "rad/s"},
+                "output_units": {
+                    "linear_velocity": "m/s^2",
+                    "angular_velocity": "rad/s^2",
+                },
+            }
+        )
     return np.array([linear_accel, angular_accel], dtype=float)

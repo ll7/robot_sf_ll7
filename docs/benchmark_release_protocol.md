@@ -256,16 +256,33 @@ The release entrypoint:
 The matrix setup gate uses the release manifest's checksummed matrix and seed set without
 development-matrix or seed overrides. It requires 0.10 m surface clearance and checks the robot
 footprint through every navigator waypoint in order on a 0.10 m occupancy grid, then holds the
-robot stationary for 20 steps to catch early route-end respawn overlap. JSON and Markdown reports
+robot stationary for 20 steps to catch early route-end respawn overlap. A conservative grid block
+can be cleared only by a continuous-geometry proof. There are two proofs. The buffered proof
+buffers obstacles and insets map bounds by the robot radius plus the clearance margin, then
+requires every ordered route leg to share free space. The exact straight-segment certificate is
+tried first and is what clears the 2.2 m doorway, where the buffered free space has no area. It
+passes only if every
+straight leg between waypoints keeps at least the robot radius plus the 0.10 m margin from the
+full wall geometry and stays inside the inset map bounds. The distance to the walls is computed
+exactly, with a 1e-12 m rounding allowance only. In both cases the report retains the failed grid
+check and certifies only the required opening-width lower bound; it does not infer a route length
+or a measured opening width. JSON and
+Markdown reports
 are retained under
 `<campaign_root>/reports/spawn_matrix_preflight.v1.{json,md}`. A blocked row stops the release
 before planner execution. Their recorded SHA-256 digests are checked again after the campaign and
 in the publication bundle. These reports are setup diagnostics; they are not planner-performance,
 navigation-success, or release-success evidence. A declared
-`expected_outcome: infeasible_safe_hold` is labelled as an infeasibility probe only when the
-separate, checksummed manifest has `release_kind: benchmark-infeasibility-probe`. Its report
-remains blocked for release admission. The nominal benchmark-data manifest rejects that
-declaration even when geometry is infeasible; it needs a versioned feasible successor.
+`expected_outcome: infeasible_safe_hold` is admitted as an infeasibility probe in two ways. A
+separate, checksummed manifest with `release_kind: benchmark-infeasibility-probe` may declare it.
+The nominal 48-scenario main-grid manifest admits it for one scenario only,
+`francis2023_narrow_doorway` (the pinned 2.0 m doorway). The scenario must carry the exact
+`benchmark-main-grid-infeasibility-probe.v1` declaration, must have no `map_id`, and must load the
+map file whose SHA-256 is pinned in the code. Any other declaration, scenario, or map bytes is
+rejected. The preflight must also confirm by the continuous proof that the route is infeasible. Such
+a row is labelled `infeasibility_probe`, not `valid`, and the probe is not release-success
+evidence. Any other scenario with this declaration in a nominal manifest is rejected; it needs a
+versioned feasible successor.
 
 To inspect the same manifest gate directly, use the manifest-bound command and provide both report
 paths:

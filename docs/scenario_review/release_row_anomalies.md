@@ -251,6 +251,11 @@ report = analyze_release_rows(
 
 ## 0.0.7 retro-validation
 
+The command below remains a historical **diagnostic**. Its v1 config selects
+`collision_metric_contract=legacy_diagnostic` and preserves the old detector
+registry. A passing historical report does not satisfy 0.0.8 collision-count
+admission; missing historical component fields are not imputed.
+
 The pinned corrected 0.0.7 archive used for retro-validation has SHA-256
 `684da7c557c426756f22ddbf5cb3270141ee8ae385669a39d36f324852a6fb2f`. Run the
 gate with that digest and retain the JSON and Markdown reports with the bundle
@@ -274,3 +279,41 @@ failure of `francis2023_narrow_doorway` from #9728. The observed maximum
 contact speed in that run was 731.0746 m/s. These counts identify release-row
 patterns for review and do not attribute a root cause without separate
 evidence.
+
+## 0.0.8 candidate collision-count gate
+
+The checked-in
+`configs/benchmarks/release_row_anomalies_0_0_8.template.json` is an
+**unfrozen, non-admission template**. It always blocks with
+`collision_roster_unfrozen_template`; its pedestrian-aware roster is empty.
+The strict gate reads the 14-arm v4 identities from the committed #9751 campaign
+template. A stale historical hybrid roster cannot pass even if the bundle and
+gate config agree. After the v4 parameters freeze, create a versioned config with
+`collision_roster_status=frozen`, `collision_expected_arm_count=14`, and the
+exact baseline/aware IDs, then check the pinned bundle:
+
+```bash
+python -m robot_sf.analysis_workbench.release_row_anomalies \
+  --bundle /path/to/0.0.8-candidate-publication_bundle.tar.gz \
+  --config /path/to/frozen-release-row-anomalies-0.0.8.json \
+  --preflight /path/to/pinned-0.0.8-preflight.json \
+  --output-json output/0.0.8-release-row-anomalies.json \
+  --output-markdown output/0.0.8-release-row-anomalies.md \
+  --release-gate
+```
+
+The candidate manifest and receipt must pin the config hash and show
+`collision_metric_contract=release_0_0_8` and
+`collision_roster_status=frozen`. That mode checks the configured 14-arm roster
+against both the verified bundle source and the committed #9751 template, then
+checks every admitted row's
+five collision-count fields and blocks missing or inconsistent values. It also
+checks equivalent fields in a typed event ledger. Exact contact-event records
+and sampled collision counts use different collection semantics, so the gate
+does not equate their counts. Missing or unversioned ledgers are reported as
+`typed_collision_ledger_unavailable`; a separate provenance gate must establish
+ledger completeness. Count arithmetic uses exact integers, including JSON
+integers above `2**53`; integral floats above `2**53 - 1` block because
+adjacent counts cannot be distinguished. This command is a release gate only
+after the bundle and preflight inputs are pinned and verified; the example
+paths above are placeholders.

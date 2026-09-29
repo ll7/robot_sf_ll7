@@ -8,6 +8,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 from robot_sf.benchmark.camera_ready._config import load_campaign_config
@@ -17,6 +18,7 @@ from robot_sf.benchmark.policy_search_manifest import resolve_candidate_manifest
 from robot_sf.benchmark.release_parameter_freeze import (
     ARM_SLOTS_0_0_7_TO_0_0_8,
     COMPARISON_IMPLEMENTATION_REPLACED,
+    UnfrozenReleaseParametersError,
 )
 from robot_sf.benchmark.release_protocol import load_release_manifest, validate_release_manifest
 from robot_sf.benchmark.runtime_smoke_admission import RUNTIME_SMOKE_PLANNER_KEYS
@@ -54,11 +56,12 @@ RUNTIME_SMOKE_V05_CONFIG_PATH = REPO_ROOT / (
 RUNTIME_SMOKE_V05_MANIFEST_PATH = REPO_ROOT / (
     "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml"
 )
-PINNED_V04_CONFIG_SHA256 = "43683e998a5fbbb9fa5828aba7a5662a82dae091c629214a3b96ec0349d73ddc"
-PINNED_V04_MANIFEST_SHA256 = "163fe1484a6c5865ed4f166aec0e703d7e71857b7a154b0efea05423f1aa876b"
+PINNED_V04_CONFIG_SHA256 = "698b4bc44455a3fd4485b5b25b0bca16e47ca7d6ceaf62fd918aaba05df177d4"
+PINNED_V04_MANIFEST_SHA256 = "aded0ca71e40bdc8f7193282bb8d28420a9b627f93d47a43034703a45d613197"
 PINNED_V03_CONFIG_SHA256 = "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4"
 PINNED_V03_MANIFEST_SHA256 = "d6f3047adaacfb8cad2cc12430ee5ce7331f11b0777ac522209fd1e5af019241"
-CAMPAIGN_TEMPLATE_SHA256 = "f453b7c824fdd47298cbc66dae3afc1fffcd7eedf57ee4bb87cd1c67b4feb1d7"
+HISTORICAL_V04_TEMPLATE_SHA256 = "f453b7c824fdd47298cbc66dae3afc1fffcd7eedf57ee4bb87cd1c67b4feb1d7"
+CAMPAIGN_TEMPLATE_SHA256 = "3b5302c2546b5c9c03dbfb5c752b9b78ea062c4af7e957450de9b8595d44bec6"
 
 EXPECTED_PLANNER_KEYS = [
     "prediction_planner",
@@ -114,7 +117,7 @@ def _algo_config(root: Path, path: str) -> dict[str, Any]:
 def _resolved_arm_identity(
     planner: PlannerSpec, scenario: dict[str, Any], *, root: Path = REPO_ROOT
 ) -> dict[str, Any]:
-    """Resolve an arm's per-scenario candidate inheritance and inputs."""
+    """Resolve runnable inputs or record an unfrozen placeholder's refusal."""
     spec = asdict(planner)
     algo_path = planner.algo_config_path
     spec["algo_config_path"] = str(algo_path.relative_to(root)) if algo_path else None
@@ -122,6 +125,22 @@ def _resolved_arm_identity(
 
     def load_base(path: object) -> dict[str, Any]:
         return _algo_config(root, str(path)) if path else {}
+
+    if manifest.get("release_parameter_freeze", {}).get("status") == "unfrozen":
+        with pytest.raises(
+            UnfrozenReleaseParametersError, match="release parameters are not frozen"
+        ):
+            resolve_candidate_manifest_runtime(
+                default_algo=planner.algo,
+                manifest=manifest,
+                scenario=scenario,
+                load_config=load_base,
+            )
+        return {
+            "planner": spec,
+            "blocked_manifest": manifest,
+            "algo_config_sha256": _sha256(algo_path),
+        }
 
     algo, effective = resolve_candidate_manifest_runtime(
         default_algo=planner.algo,
@@ -372,20 +391,20 @@ def test_runtime_smoke_manifest_validates_against_config_and_assets() -> None:
     assert manifest.expected_kinematics_matrix == ("differential_drive",)
 
 
-def test_runtime_smoke_v0_4_matches_campaign_template_and_preserves_v0_3() -> None:
-    """The new smoke uses the template's full ordered arm rows and leaves v0_3 pinned."""
+def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
+    """The predecessor keeps its original source pin and v4 fail-closed roster."""
     template = _load_yaml(CAMPAIGN_TEMPLATE_PATH)
     smoke = _load_yaml(RUNTIME_SMOKE_V04_CONFIG_PATH)
     cfg = load_campaign_config(RUNTIME_SMOKE_V04_CONFIG_PATH)
     scenarios = _load_campaign_scenarios(cfg)
 
-    assert _sha256(CAMPAIGN_TEMPLATE_PATH) == CAMPAIGN_TEMPLATE_SHA256
+    assert _sha256(RUNTIME_SMOKE_V04_CONFIG_PATH) == PINNED_V04_CONFIG_SHA256
+    assert _sha256(RUNTIME_SMOKE_V04_MANIFEST_PATH) == PINNED_V04_MANIFEST_SHA256
     assert smoke["derived_from"] == {
         "config": "configs/benchmarks/"
         "paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
-        "config_sha256": CAMPAIGN_TEMPLATE_SHA256,
+        "config_sha256": HISTORICAL_V04_TEMPLATE_SHA256,
     }
-    assert smoke["planners"] == template["planners"]
     assert [row["key"] for row in smoke["planners"]] == EXPECTED_0_0_8_PLANNER_KEYS
     # The canonical runtime-smoke admission roster stays the 0.0.7 (v0_2) roster;
     # the 0.0.8 keys are its slot-for-slot successors.
@@ -441,7 +460,9 @@ def test_runtime_smoke_v0_4_matches_campaign_template_and_preserves_v0_3() -> No
         "snqi_contract.calibration_trials",
         "zenodo",
     }
-    assert _diff_paths(template, smoke) == expected_config_differences
+    # The current template advances the simulator kernel and Social Force selector;
+    # v0_4 retains its historical bytes and source pin.
+    assert _diff_paths(template, smoke) == expected_config_differences | {"planners"}
     assert smoke["record_forces"] is True
     assert smoke["checkpoint_provenance_enforcement"] == "error"
     assert smoke["resume"] is False
@@ -464,8 +485,37 @@ def test_runtime_smoke_v0_4_matches_campaign_template_and_preserves_v0_3() -> No
     assert _sha256(RUNTIME_SMOKE_V03_MANIFEST_PATH) == PINNED_V03_MANIFEST_SHA256
 
 
-def test_calibration_smoke_and_template_resolve_the_same_arm_inputs() -> None:
-    """All 14 arms share effective inputs across the three campaign profiles (#9850)."""
+def _assert_versioned_kernel_and_v4_freeze(
+    profiles: list[dict[str, Any]], scenario_sets: list[dict[str, dict[str, Any]]]
+) -> None:
+    """Every candidate profile selects wrapped_v2 and the same blocked v4 slots."""
+    for payload, profile_scenarios in zip(profiles, scenario_sets, strict=True):
+        assert [row["key"] for row in payload["planners"]] == EXPECTED_0_0_8_PLANNER_KEYS
+        social_force = next(row for row in payload["planners"] if row["key"] == "social_force")
+        assert social_force["algo_config"] == (
+            "configs/algos/social_force_resolution_independent_v2_kernel_wrapped_v2.yaml"
+        )
+        assert (
+            _algo_config(REPO_ROOT, social_force["algo_config"])["social_force_kernel_version"]
+            == "wrapped_v2"
+        )
+        assert all(
+            scenario["simulation_config"]["social_force_kernel_version"] == "wrapped_v2"
+            for scenario in profile_scenarios.values()
+        )
+        for row in payload["planners"]:
+            if row["key"] in REPLACED_V4_KEYS:
+                assert (
+                    _algo_config(REPO_ROOT, row["algo_config"])["release_parameter_freeze"][
+                        "status"
+                    ]
+                    == "unfrozen"
+                )
+
+
+def test_calibration_smoke_and_template_match_inputs_and_blocked_v4_slots() -> None:
+    """Runnable inputs match and all four v4 slots refuse resolution (#9850)."""
+    assert _sha256(CAMPAIGN_TEMPLATE_PATH) == CAMPAIGN_TEMPLATE_SHA256
     paths = (CALIBRATION_CONFIG_PATH, RUNTIME_SMOKE_V05_CONFIG_PATH, CAMPAIGN_TEMPLATE_PATH)
     raw = [_load_yaml(path) for path in paths]
     configs = [load_campaign_config(path) for path in paths]
@@ -473,6 +523,8 @@ def test_calibration_smoke_and_template_resolve_the_same_arm_inputs() -> None:
         {row["name"]: row for row in _load_campaign_scenarios(config)} for config in configs
     ]
     calibration, smoke, template = raw
+    assert calibration["planners"] == smoke["planners"] == template["planners"]
+    _assert_versioned_kernel_and_v4_freeze(raw, scenarios)
     allowed_calibration_differences = {
         "arm_isolation",  # execution resource policy
         "export_publication_bundle",  # publication identity
@@ -576,7 +628,7 @@ def test_runtime_smoke_v0_4_manifest_is_source_bound_and_refused_until_v4_freeze
     assert manifest_payload["campaign_config_sha256"] == _sha256(RUNTIME_SMOKE_V04_CONFIG_PATH)
     assert manifest_payload["derived_from"] == {
         "config": "../paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
-        "config_sha256": CAMPAIGN_TEMPLATE_SHA256,
+        "config_sha256": HISTORICAL_V04_TEMPLATE_SHA256,
     }
     assert manifest_payload["planners"]["keys"] == EXPECTED_0_0_8_PLANNER_KEYS
     assert manifest_payload["planners"]["groups"] == {
@@ -597,16 +649,19 @@ def test_runtime_smoke_v0_4_manifest_is_source_bound_and_refused_until_v4_freeze
     assert manifest.expected_kinematics_matrix == ("differential_drive",)
 
 
-def test_runtime_smoke_v0_5_changes_only_seed_and_publication_identity() -> None:
-    """The development-seed successor cannot alter the frozen v0_4 runtime contract."""
+def test_runtime_smoke_v0_5_advances_wrapped_kernel_and_preserves_v0_4() -> None:
+    """The successor selects the new kernel while v0_4 remains byte-pinned."""
     assert _sha256(RUNTIME_SMOKE_V04_CONFIG_PATH) == PINNED_V04_CONFIG_SHA256
     assert _sha256(RUNTIME_SMOKE_V04_MANIFEST_PATH) == PINNED_V04_MANIFEST_SHA256
 
     predecessor = _load_yaml(RUNTIME_SMOKE_V04_CONFIG_PATH)
     successor = _load_yaml(RUNTIME_SMOKE_V05_CONFIG_PATH)
     assert _diff_paths(predecessor, successor) == {
+        "derived_from.config_sha256",
         "name",
+        "planners",
         "release_tag",
+        "scenario_matrix",
         "seed_policy.seeds",
     }
     assert successor["name"] == "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5"
@@ -615,24 +670,40 @@ def test_runtime_smoke_v0_5_changes_only_seed_and_publication_identity() -> None
 
     old_manifest = _load_yaml(RUNTIME_SMOKE_V04_MANIFEST_PATH)
     new_manifest = _load_yaml(RUNTIME_SMOKE_V05_MANIFEST_PATH)
+    changed_group_keys = set(old_manifest["planners"]["groups"]) ^ set(
+        new_manifest["planners"]["groups"]
+    )
     assert _diff_paths(old_manifest, new_manifest) == {
         "release_id",
         "release_tag",
         "canonical_campaign_config",
         "campaign_config_sha256",
         "artifact_provenance.command",
+        "derived_from.config_sha256",
+        "scenario.matrix_path",
+        "scenario.matrix_sha256",
         "seed_policy.seeds",
-    }
+    } | {f"planners.groups.{key}" for key in changed_group_keys}
     assert new_manifest["release_id"] == successor["name"]
     assert new_manifest["release_tag"] == successor["release_tag"]
     assert new_manifest["seed_policy"]["seeds"] == [103]
     assert new_manifest["campaign_config_sha256"] == _sha256(RUNTIME_SMOKE_V05_CONFIG_PATH)
+    assert new_manifest["derived_from"]["config_sha256"] == CAMPAIGN_TEMPLATE_SHA256
+    assert new_manifest["scenario"]["matrix_sha256"] == _sha256(
+        REPO_ROOT / successor["scenario_matrix"]
+    )
+    assert new_manifest["planners"]["keys"] == EXPECTED_0_0_8_PLANNER_KEYS
 
     manifest = load_release_manifest(RUNTIME_SMOKE_V05_MANIFEST_PATH)
-    assert validate_release_manifest(manifest) == {
-        "manifest_path": "configs/benchmarks/releases/"
-        "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml",
-        "status": "valid",
-        "problem_count": 0,
-        "problems": [],
-    }
+    validation = validate_release_manifest(manifest)
+    assert validation["manifest_path"] == (
+        "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml"
+    )
+    assert validation["status"] == "invalid"
+    assert validation["problem_count"] == len(REPLACED_V4_KEYS) == 4
+    for key in REPLACED_V4_KEYS:
+        assert any(
+            problem.startswith(f"planner {key}: release parameters are not frozen")
+            and "ll7/robot_sf_ll7#9748" in problem
+            for problem in validation["problems"]
+        ), key

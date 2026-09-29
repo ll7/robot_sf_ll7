@@ -1,12 +1,12 @@
-# One-scenario/one-seed smoke for the current 0.0.8 campaign template.
-# It verifies construction and runtime compatibility of all 14 arms only.
+# One-scenario/one-seed candidate for the current 0.0.8 campaign template.
+# Unfrozen v4 placeholders intentionally fail release admission until #9748.
 schema_version: benchmark-release-manifest.v0.1
 benchmark_protocol_version: 0.1.0
 release_id: paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5
 release_tag: paper-matrix-v2-h600-s30-runtime-smoke-v0_5
 maturity: pre-1.0
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml
-campaign_config_sha256: "f40f38db2916ce0fea34e521ffe0dfb495b781a8359472320255b39207b95b13"
+campaign_config_sha256: "05d3dead6c5cf738c1dfd059c22de992d59f1177b85ca31bd05375ff0ce4bad5"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: runtime-smoke-advisory-no-ranking
 
@@ -14,7 +14,7 @@ release_kind: benchmark-data
 release_status: runtime-smoke-only
 derived_from:
   config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
-  config_sha256: "7dc9a2dd9df8585593c9bc8ecc001bed0d2ddff4ebb3803dfb92e8dad8762881"
+  config_sha256: "3b5302c2546b5c9c03dbfb5c752b9b78ea062c4af7e957450de9b8595d44bec6"
 claim_boundary:
   evidence_class: runtime-smoke
   snqi: advisory-no-ranking
@@ -36,8 +36,8 @@ artifact_provenance:
   campaign_root: output/benchmarks/camera_ready/<campaign_id>
 
 scenario:
-  matrix_path: ../../scenarios/single/francis2023_blind_corner_goal_zone_entry_v1.yaml
-  matrix_sha256: "ae61216593770397fc74a2cb28c7ba0d1005e13e1e59449309155ce9fab331ca"
+  matrix_path: ../../scenarios/single/francis2023_blind_corner_goal_zone_entry_kernel_wrapped_v2.yaml
+  matrix_sha256: "cb58d1aa6daa77395010be39747d5675e3b6a3c664c71ad1ab7d6465029b897b"
 
 seed_policy:
   mode: fixed-list
@@ -60,10 +60,10 @@ planners:
     - ppo
     - socnav_sampling
     - sacadrl
-    - scenario_adaptive_hybrid_orca_v2_bottleneck_yield
-    - scenario_adaptive_hybrid_orca_v2_collision_guard
-    - hybrid_rule_v3_fast_progress_static_escape
-    - hybrid_rule_v3_fast_progress_static_escape_continuous
+    - scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4
+    - scenario_adaptive_hybrid_orca_v2_collision_guard_v4
+    - hybrid_rule_v4_fast_progress_static_escape
+    - hybrid_rule_v4_fast_progress_static_escape_continuous
     - guarded_ppo
     - predictive_mppi
     - risk_dwa
@@ -75,10 +75,10 @@ planners:
     ppo: experimental
     socnav_sampling: experimental
     sacadrl: experimental
-    scenario_adaptive_hybrid_orca_v2_bottleneck_yield: experimental
-    scenario_adaptive_hybrid_orca_v2_collision_guard: experimental
-    hybrid_rule_v3_fast_progress_static_escape: experimental
-    hybrid_rule_v3_fast_progress_static_escape_continuous: experimental
+    scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4: experimental
+    scenario_adaptive_hybrid_orca_v2_collision_guard_v4: experimental
+    hybrid_rule_v4_fast_progress_static_escape: experimental
+    hybrid_rule_v4_fast_progress_static_escape_continuous: experimental
     guarded_ppo: experimental
     predictive_mppi: experimental
     risk_dwa: experimental

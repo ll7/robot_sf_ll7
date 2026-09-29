@@ -56,15 +56,19 @@ semantics. V2 adds `metrics.snqi_v2` and `metrics.snqi_v2_terms`.
 
 The candidate `configs/benchmarks/snqi_v2/calibration.dev101_102.yaml` covers the
 14 arm slots, all 48 scenarios, development seeds 101/102, horizon 600 and dt .1.
-Its current Social Force and socnav sampling selectors match the tracked 0.0.8
-template; Social Force uses `social_force_resolution_independent_v2.yaml`.
+Its Social Force and socnav sampling selectors match the tracked 0.0.8
+template. Social Force explicitly selects
+`social_force_resolution_independent_v2_kernel_wrapped_v2.yaml`, and the
+scenario matrices select the same `wrapped_v2` kernel for pedestrians.
 The successor runtime smoke `v0_5` uses development seed 103. It is disjoint
 from calibration 101/102, evaluation 111-140, and #9748 development 1001-1030;
 `v0_4` remains byte-identical history and seed 111 remains closed to pre-anchor
-smoke. This is an interim parity check, not a release freeze. The four v4 arm
-slots remain placeholders under the #9874 freeze guard until #9748 and #9764
-land. Before any calibration acquisition, the three-profile parity check must
-pass again at the selected source head.
+smoke. This is an interim static parity check, not a release freeze or a
+runtime-smoke result. The four v4 arm slots remain fail-closed placeholders
+under the #9874 freeze guard until #9748 selects and freezes their parameters.
+The parity check must pass again at the frozen v4 source head before #9668
+release admission or any calibration acquisition. #9850 remains open for that
+gate.
 The config preserves planner/checkpoint references, requires force recording,
 and disallows prerequisite fallback. V2 scoring is disabled for acquisition.
 The canonical preflight and checkpoint staging gates must pass before submission.

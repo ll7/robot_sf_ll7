@@ -124,6 +124,24 @@ The binding map must contain all four v4 keys in the campaign config. Pin the
 manifest digest after reviewing these identities, and retain that exact file
 with the comparison evidence.
 
+For each v4 key, the comparator also reads the #9874 slot row and its exact
+config path from the pinned 0.0.8 campaign template. The successor binding
+must name that path, declare a frozen config for the slot, preserve its
+predecessor and v4 implementation family, and resolve both its base config and
+effective hybrid planner variant
+to `hybrid_rule_v4_clearance_braking`. A v4 key bound to a v3 config is invalid
+even if the manifest and config file hashes were repinned.
+
+The pinned runtime reconstructs episode controls for every configured slot:
+campaign or arm horizon and time step, scenario `simulation_config` including
+`max_episode_steps`, seed, kinematics and holonomic command mode, resolved
+observation mode and level, observation noise identity, tracking precision,
+synthetic actuation and latency profiles, safety wrapper and CBF filter,
+benchmark track and schema, and `record_forces`, planner decision trace, and
+simulation step trace flags. Recorded controls must agree with the pinned
+campaign; a mismatch is invalid input (exit 2), even if a row's self-recorded
+scenario hash was recomputed.
+
 The tool compares every leaf under `outcome`
 and `metrics`, including fields present in only one release. Numeric changes
 at absolute tolerance greater than `1e-12` become findings; categorical

@@ -93,7 +93,11 @@ def _root(
         row["git_hash"] = source_commit
         algo = row["algo"]
         binding = manifest["versioned_planner_bindings"].get(run_planner)
-        config = {"speed": 1, "name": run_planner} if binding else {}
+        config = (
+            {"speed": 1, "planner_variant": "hybrid_rule_v4_clearance_braking", "name": run_planner}
+            if binding
+            else {}
+        )
         scenario = {
             "name": row["scenario_id"],
             "id": row["scenario_id"],
@@ -119,6 +123,32 @@ def _root(
                 "campaign_config_hash": manifest["campaign_config"]["runtime_hash"],
             },
         }
+    _, _, runtime_rows, _, _ = comparator._runtime_successor_identity(
+        source,
+        source_commit,
+        "configs/benchmarks/synthetic.yaml",
+        {
+            (
+                run_planner,
+                run.rsplit("__", 1)[1],
+                row["scenario_id"],
+                row["seed"],
+                row.get("benchmark_track") or "",
+            ): {"_provenance": {"scenario_params": row["scenario_params"]}}
+            for row in updated
+        },
+    )
+    for row in updated:
+        slot = (
+            run_planner,
+            run.rsplit("__", 1)[1],
+            row["scenario_id"],
+            row["seed"],
+            row.get("benchmark_track") or "",
+        )
+        if slot in runtime_rows:
+            row["scenario_params"].update(runtime_rows[slot]["controls"])
+        row["config_hash"] = _config_hash(row["scenario_params"])
     path.write_text("".join(json.dumps(row) + "\n" for row in updated), encoding="utf-8")
     (root / "campaign_manifest.json").write_text(
         json.dumps(
@@ -178,6 +208,7 @@ def _successor_contract(
             "configs/benchmarks",
             "configs/scenarios",
             "configs/algos",
+            "configs/policy_search",
             "maps/svg_maps",
         ],
         check=True,
@@ -210,16 +241,29 @@ def _successor_contract(
         "    algo: goal",
         f"    enabled: {str(selected_planner == 'goal').lower()}",
     ]
-    base_planner = source / "configs/algos/base_hybrid.yaml"
+    base_planner = source / "configs/algos/hybrid_rule_v4_clearance_braking.yaml"
     base_planner.parent.mkdir(parents=True, exist_ok=True)
-    base_planner.write_text("speed: 1\n")
+    base_planner.write_text("speed: 1\nplanner_variant: hybrid_rule_v4_clearance_braking\n")
+    template = (
+        source
+        / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+    )
+    template_text = template.read_text(encoding="utf-8")
     for key in V4_SLOT_REPLACEMENTS.values():
         name = f"configs/algos/{key}.yaml"
         path = source / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
-            f"base_config_path: configs/algos/base_hybrid.yaml\nparams:\n  name: {key}\n"
+            "release_parameter_freeze:\n"
+            "  status: frozen\n"
+            "  implementation_family: hybrid_rule_v4_clearance_braking\n"
+            f"  replaces_0_0_7_slot: {comparator.V4_PREDECESSORS[key]}\n"
+            "base_config_path: configs/algos/hybrid_rule_v4_clearance_braking.yaml\n"
+            f"params:\n  name: {key}\n"
         )
+        placeholder = f"configs/policy_search/release_0_0_8_placeholders/{key}.unfrozen.yaml"
+        assert placeholder in template_text
+        template_text = template_text.replace(placeholder, name)
         planner_lines.extend(
             [
                 f"  - key: {key}",
@@ -229,8 +273,9 @@ def _successor_contract(
             ]
         )
         planner_bindings[key] = {"path": name, "sha256": sha256(path.read_bytes()).hexdigest()}
+    template.write_text(template_text, encoding="utf-8")
     config.write_text(
-        "scenario_matrix: configs/scenarios/synthetic.yaml\nplanners:\n"
+        "scenario_matrix: configs/scenarios/synthetic.yaml\nhorizon: 600\ndt: 0.1\nplanners:\n"
         + "\n".join(planner_lines)
         + "\n"
     )
@@ -338,6 +383,49 @@ def _compare(bundle: Path, root: Path, digest: str, rules: Path | None = None) -
         expected_scenario_identity=SCENARIO,
         **_successor_kwargs(root.parent),
     )
+
+
+def _assert_cli_exit_two(
+    tmp_path: Path, bundle: Path, root: Path, digest: str, monkeypatch
+) -> None:
+    real_compare = comparator.compare
+    monkeypatch.setattr(
+        comparator,
+        "compare",
+        lambda bundle_arg, root_arg, **kwargs: real_compare(
+            bundle_arg,
+            root_arg,
+            baseline_sha256=digest,
+            baseline_source=OLD_SOURCE,
+            expected_scenario_identity=SCENARIO,
+            **kwargs,
+        ),
+    )
+    successor = _successor_kwargs(tmp_path)
+    output = tmp_path / "invalid-control-report"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "compare",
+            "--baseline-bundle",
+            str(bundle),
+            "--successor-root",
+            str(root),
+            "--successor-manifest",
+            str(successor["successor_manifest"]),
+            "--successor-manifest-sha256",
+            successor["successor_manifest_sha256"],
+            "--successor-source-root",
+            str(successor["successor_source_root"]),
+            "--output-dir",
+            str(output),
+        ],
+    )
+    with pytest.raises(SystemExit) as exc:
+        comparator.main()
+    assert exc.value.code == 2
+    assert not (output / "report.json").exists()
 
 
 def _rules(path: Path, entries: list[dict]) -> Path:
@@ -1111,6 +1199,88 @@ def test_row_identity_alias_must_match_pinned_scenario(tmp_path: Path) -> None:
         _compare(bundle, root, digest)
 
 
+@pytest.mark.parametrize(
+    ("field", "wrong"),
+    [
+        ("run_horizon", 300),
+        ("run_dt", 0.2),
+        ("record_forces", False),
+        ("observation_mode", "wrong_mode"),
+        ("record_simulation_step_trace", True),
+        ("seed", 112),
+    ],
+)
+def test_recorded_episode_controls_must_match_pinned_h600_campaign(
+    tmp_path: Path, field: str, wrong: object, monkeypatch
+) -> None:
+    row = _row("s1", 111)
+    bundle, digest = _archive(tmp_path, [row])
+    root = _root(tmp_path, [row])
+    path = root / "runs/goal__differential_drive/episodes.jsonl"
+    changed = json.loads(path.read_text())
+    changed["scenario_params"][field] = wrong
+    changed["config_hash"] = _config_hash(changed["scenario_params"])
+    path.write_text(json.dumps(changed) + "\n")
+    with pytest.raises(ValueError, match="pinned (episode controls|slot)"):
+        _compare(bundle, root, digest)
+    if field == "run_horizon":
+        _assert_cli_exit_two(tmp_path, bundle, root, digest, monkeypatch)
+
+
+def test_v4_key_bound_to_v3_config_fails_even_with_re_pinned_manifest(
+    tmp_path: Path, monkeypatch
+) -> None:
+    v4 = "hybrid_rule_v4_fast_progress_static_escape"
+    row = _row("s1", 111, planner=v4)
+    bundle, digest = _archive(tmp_path, [row], run=f"{v4}__differential_drive")
+    root = _root(tmp_path, [row], run=f"{v4}__differential_drive")
+    source = tmp_path / "successor-source"
+    config = source / f"configs/algos/{v4}.yaml"
+    config.write_text(
+        "base_config_path: configs/algos/hybrid_rule_v3_teb_like_rollout.yaml\n"
+        f"params:\n  name: {v4}\n"
+    )
+    (source / "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml").write_text(
+        "speed: 1\nplanner_variant: hybrid_rule_v3_teb_like_rollout\n"
+    )
+    subprocess.run(["git", "-C", str(source), "add", "--sparse", "configs/algos"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(source),
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-qm",
+            "swap reviewed v4 binding to v3",
+        ],
+        check=True,
+    )
+    commit = subprocess.check_output(
+        ["git", "-C", str(source), "rev-parse", "HEAD"], text=True
+    ).strip()
+    manifest_path = tmp_path / "successor-manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["source_commit"] = commit
+    manifest["versioned_planner_bindings"][v4]["sha256"] = sha256(config.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest))
+    row_path = root / "runs" / f"{v4}__differential_drive" / "episodes.jsonl"
+    recorded = json.loads(row_path.read_text())
+    recorded["git_hash"] = commit
+    recorded["provenance"]["commit_hash"] = commit
+    row_path.write_text(json.dumps(recorded) + "\n")
+    campaign_path = root / "campaign_manifest.json"
+    campaign = json.loads(campaign_path.read_text())
+    campaign["git"]["commit"] = commit
+    campaign_path.write_text(json.dumps(campaign))
+    with pytest.raises(ValueError, match="reviewed v4 lineage"):
+        _compare(bundle, root, digest)
+    _assert_cli_exit_two(tmp_path, bundle, root, digest, monkeypatch)
+
+
 def test_goal_row_under_v4_run_directory_exits_two(tmp_path: Path, monkeypatch) -> None:
     row = _row("s1", 111)
     bundle, digest = _archive(tmp_path, [row])
@@ -1170,7 +1340,11 @@ def test_effective_planner_config_and_referenced_path_must_match(tmp_path: Path)
     path.write_text(json.dumps(original) + "\n")
     with pytest.raises(ValueError, match="effective planner config differs"):
         _compare(bundle, root, digest)
-    original["algorithm_metadata"]["config"] = {"speed": 1, "name": v4}
+    original["algorithm_metadata"]["config"] = {
+        "speed": 1,
+        "planner_variant": "hybrid_rule_v4_clearance_braking",
+        "name": v4,
+    }
     original["provenance"]["config_identity"]["algo_config_path"] = "configs/algos/other.yaml"
     path.write_text(json.dumps(original) + "\n")
     with pytest.raises(ValueError, match="run provenance differs"):

@@ -136,6 +136,11 @@ def _insert_rows(
                 for name in (
                     "algo",
                     "planner_key",
+                    "kinematics",
+                    "observation_mode",
+                    "observation_level",
+                    "observation_noise",
+                    "observation_noise_hash",
                     "scenario_params",
                     "algorithm_metadata",
                     "provenance",
@@ -357,6 +362,7 @@ def _runtime_successor_identity(
             worker = Path(__file__).with_name("_pinned_successor_runtime.py")
             request = {
                 "config_path": config_path,
+                "versioned_keys": sorted(V4_SLOT_REPLACEMENTS.values()),
                 "rows": [
                     {"slot": slot, "scenario_params": row["_provenance"]["scenario_params"]}
                     for slot, row in rows.items()
@@ -510,7 +516,7 @@ def _matches_config_path(observed: Any, expected: str | None) -> bool:
     return observed_parts[-len(expected_parts) :] == expected_parts
 
 
-def _validate_successor_row(  # noqa: C901 - each provenance assertion fails independently
+def _validate_successor_row(  # noqa: C901, PLR0912 - provenance assertions fail independently
     slot: tuple[str, str, str, int, str],
     row: Mapping[str, Any],
     runtime_rows: Mapping[str, Any],
@@ -533,6 +539,42 @@ def _validate_successor_row(  # noqa: C901 - each provenance assertion fails ind
             field not in scenario or scenario[field] != expected
         ):
             raise ValueError(f"0.0.8 row {field} differs from pinned scenario at {slot}")
+    if scenario.get("seed") != slot[3]:
+        raise ValueError(f"0.0.8 row seed differs from pinned slot at {slot}")
+    controls = planner["controls"]
+    control_fields = {
+        "run_horizon",
+        "run_dt",
+        "record_forces",
+        "record_planner_decision_trace",
+        "record_simulation_step_trace",
+        "observation_mode",
+        "observation_level",
+        "observation_noise_profile",
+        "observation_noise_hash",
+        "tracking_precision",
+        "tracking_precision_hash",
+        "synthetic_actuation_profile",
+        "latency_stress_profile",
+        "safety_wrapper",
+        "cbf_safety_filter",
+        "benchmark_track",
+        "track_schema_version",
+    }
+    for field in control_fields:
+        if scenario.get(field, None) != controls.get(field, None) or (
+            field in scenario and field not in controls
+        ):
+            raise ValueError(f"0.0.8 row {field} differs from pinned episode controls at {slot}")
+    for field, expected in (
+        ("kinematics", slot[1]),
+        ("observation_mode", controls.get("observation_mode")),
+        ("observation_level", controls.get("observation_level")),
+        ("observation_noise", planner["observation_noise"]),
+        ("observation_noise_hash", planner["observation_noise_hash"]),
+    ):
+        if recorded.get(field) is not None and recorded[field] != expected:
+            raise ValueError(f"0.0.8 row {field} differs from pinned episode controls at {slot}")
     if recorded["algo"] != planner["algo"] or scenario.get("algo") != planner["algo"]:
         raise ValueError(f"0.0.8 row algorithm differs from configured planner at {slot}")
     if metadata.get("algorithm") != planner["algo"]:

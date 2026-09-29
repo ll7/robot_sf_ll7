@@ -42,6 +42,9 @@ evidenced `implementation replaced` classification.
 uv run python scripts/analysis/compare_release_0_0_7_to_0_0_8.py \
   --baseline-root /path/to/restored-0.0.7-artifact \
   --successor-root /path/to/0.0.8-campaign-root \
+  --successor-manifest /path/to/reviewed-successor-manifest.json \
+  --successor-manifest-sha256 <reviewed-manifest-sha256> \
+  --successor-source-root /path/to/successor-source-clone \
   --classification-file /path/to/classifications.json \
   --output-dir /path/to/comparison-output
 ```
@@ -49,9 +52,52 @@ uv run python scripts/analysis/compare_release_0_0_7_to_0_0_8.py \
 Use `--baseline-bundle /path/to/accepted-publication-bundle.tar.gz` instead of
 `--baseline-root` when that exact checksummed tarball is available.
 
-The successor root needs `campaign_manifest.json` with `campaign_id` and
-`git.commit`, plus `runs/*/episodes.jsonl`. Every 0.0.8 row's source commit
-must agree with that manifest. The tool compares every leaf under `outcome`
+The successor needs a separately reviewed `slot-paired-successor.v1` manifest
+and its pinned SHA-256. It names release `0.0.8`, campaign ID, full source
+commit, campaign config and scenario matrix paths with raw SHA-256 and campaign
+runtime hashes, and the path and raw SHA-256 of each configured v4 planner
+input. The tool reads those files from the named Git commit in
+`--successor-source-root` and checks their bytes and the config's scenario and
+planner bindings. It rejects a missing or extra v4 binding. The result root's
+`campaign_manifest.json` must match the reviewed campaign ID, source commit,
+config hash, scenario path, and scenario hash. All run planner keys must appear
+in the verified config, and every row's source commit must match. Invalid
+identity exits 2 before writing a comparison report. A manifest checksum proves
+which reviewed assertion was supplied; it does not independently establish
+that a campaign was accepted for release.
+
+Manifest shape (values below are placeholders, not approved identities):
+
+```json
+{
+  "schema_version": "slot-paired-successor.v1",
+  "release": "0.0.8",
+  "campaign_id": "<reviewed-campaign-id>",
+  "source_commit": "<40-character-source-sha>",
+  "campaign_config": {
+    "path": "configs/benchmarks/<versioned-campaign>.yaml",
+    "sha256": "<raw-file-sha256>",
+    "runtime_hash": "<campaign_manifest.config_hash>"
+  },
+  "scenario_matrix": {
+    "path": "configs/scenarios/<versioned-matrix>.yaml",
+    "sha256": "<raw-file-sha256>",
+    "runtime_hash": "<campaign_manifest.scenario_matrix_hash>"
+  },
+  "versioned_planner_bindings": {
+    "<v4-planner-key>": {
+      "path": "configs/policy_search/<versioned-planner>.yaml",
+      "sha256": "<raw-file-sha256>"
+    }
+  }
+}
+```
+
+The binding map must contain all four v4 keys in the campaign config. Pin the
+manifest digest after reviewing these identities, and retain that exact file
+with the comparison evidence.
+
+The tool compares every leaf under `outcome`
 and `metrics`, including fields present in only one release. Numeric changes
 at absolute tolerance greater than `1e-12` become findings; categorical
 changes use exact comparison. The outputs are `report.json`, `findings.csv`,
@@ -63,33 +109,31 @@ exit code 1; invalid inputs or ambiguous rules produce exit code 2.
 Legacy non-finite metric sentinels compare by value and are omitted from
 numeric means; they are represented as strings in JSON findings.
 
-Classification rules are explicit analyst assertions. Omitted selectors match
-all values, so scope a rule to the causal evidence it supports. An exact
-match wins over a broader match; equally specific matches are an error.
-Every rule needs `field`, `planner` or `scenario_id`, and a nonempty
-`classification`, `issue`, `explanation`, and `evidence`:
+Classification rules are explicit analyst assertions under
+`slot-paired-classifications.v2`. Every rule declares its exact planner,
+kinematics, scenario, track, and seed set (`"all"` is explicit), fields,
+positive `max_findings`, and either a sign plus maximum absolute numeric delta
+or exact finding IDs. Finding IDs are SHA-256 values of the slot, field,
+presence, and displayed old/new values in the first pass `report.json`.
+No finding is explained unless all conditions hold. A rule matching more than
+`max_findings` explains none of those findings. Overlapping successful rules
+are invalid. Each rule's matching and covered finding IDs appear in
+`report.json`; covered IDs also appear in `summary.md`:
 
 ```json
 {
-  "schema_version": "slot-paired-classifications.v1",
+  "schema_version": "slot-paired-classifications.v2",
   "rules": [
     {
-      "planner": "goal",
-      "scenario_id": "classic_doorway_low",
-      "field": "metrics.collisions",
+      "rule_id": "doorway-goal-111-collision",
+      "slots": [{"planner": "goal", "kinematics": "differential_drive", "scenario_id": "classic_doorway_low", "benchmark_track": "", "seeds": [111]}],
+      "fields": ["metrics.collisions"],
+      "predicate": {"sign": "positive", "max_abs_delta": 1},
+      "max_findings": 1,
       "classification": "route change",
       "issue": "#9870",
       "explanation": "The versioned doorway route moves this slot's obstacle encounter.",
       "evidence": "path/to/paired-trace-or-route-analysis.json"
-    },
-    {
-      "planner": "hybrid_rule_v3_fast_progress_static_escape",
-      "field": "__row__",
-      "presence": "only_0_0_7",
-      "classification": "implementation replaced",
-      "issue": "#9874",
-      "explanation": "This v3 arm slot was replaced by a separately named v4 arm.",
-      "evidence": "path/to/versioned-slot-manifest.json"
     }
   ]
 }
@@ -98,7 +142,9 @@ Every rule needs `field`, `planner` or `scenario_id`, and a nonempty
 Likely causes to investigate are route changes #9870/#9887/#9884,
 seed/reset fix #9889, Social Force angle wrap #9764/#9878, v4 slots #9874,
 collision typing #9867, and SNQI calibration #9667/#9850. A matching issue
-number alone is not causal evidence. The audit only records the asserted
+number alone is not causal evidence. For categorical or release-only findings,
+use `{"finding_ids": ["<ID from first-pass report>"]}` as the predicate.
+The audit only records the asserted
 classification and fails on missing explanations; release admission still
 requires the causal review and impact tables in #9668.
 

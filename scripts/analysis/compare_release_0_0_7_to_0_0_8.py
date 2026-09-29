@@ -14,9 +14,13 @@ import gzip
 import hashlib
 import json
 import math
+import re
+import subprocess
 import tarfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+import yaml
 
 from scripts.analysis.compare_issue_9431_release import (
     EXPECTED_SUCCESSOR_SCENARIO_MANIFEST,
@@ -46,6 +50,7 @@ V4_PREDECESSORS = {new: old for old, new in V4_SLOT_REPLACEMENTS.items()}
 TOLERANCE = 1e-12
 SLOT_COLUMNS = ("planner", "kinematics", "scenario_id", "seed", "benchmark_track")
 FINDING_COLUMNS = (
+    "finding_id",
     *SLOT_COLUMNS,
     "replacement_planner",
     "presence",
@@ -57,6 +62,7 @@ FINDING_COLUMNS = (
     "issue",
     "explanation",
     "evidence",
+    "rule_id",
 )
 SUMMARY_COLUMNS = (
     "planner",
@@ -260,7 +266,100 @@ def _root_rows(root: Path) -> dict[tuple[str, str, str, int, str], dict[str, Any
     return rows
 
 
-def _root_identity(root: Path) -> dict[str, str]:
+def _hex_digest(value: Any, label: str) -> str:
+    if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+        raise ValueError(f"{label} requires a 64-character lowercase SHA-256")
+    return value
+
+
+def _source_bytes(source_root: Path, commit: str, name: str) -> bytes:
+    if (
+        not isinstance(name, str)
+        or not name
+        or Path(name).is_absolute()
+        or ".." in Path(name).parts
+    ):
+        raise ValueError(f"invalid successor source path: {name!r}")
+    result = subprocess.run(
+        ["git", "-C", str(source_root), "show", f"{commit}:{name}"],
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        raise ValueError(f"successor source commit lacks {name}")
+    return result.stdout
+
+
+def _verified_successor_manifest(  # noqa: C901, PLR0912
+    path: Path, digest: str, source_root: Path
+) -> dict[str, Any]:
+    _verify_sha256(
+        path, _hex_digest(digest, "successor manifest digest"), label="successor manifest SHA-256"
+    )
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    if (
+        not isinstance(manifest, dict)
+        or manifest.get("schema_version") != "slot-paired-successor.v1"
+    ):
+        raise ValueError("successor manifest requires schema_version slot-paired-successor.v1")
+    if manifest.get("release") != "0.0.8":
+        raise ValueError("successor manifest release must be 0.0.8")
+    commit = manifest.get("source_commit")
+    if not isinstance(commit, str) or re.fullmatch(r"[0-9a-f]{40}", commit) is None:
+        raise ValueError("successor manifest requires a full source commit")
+    if not isinstance(manifest.get("campaign_id"), str) or not manifest["campaign_id"]:
+        raise ValueError("successor manifest requires campaign_id")
+    for key in ("campaign_config", "scenario_matrix"):
+        binding = manifest.get(key)
+        if not isinstance(binding, dict):
+            raise ValueError(f"successor manifest requires {key} binding")
+        expected = _hex_digest(binding.get("sha256"), f"{key} sha256")
+        actual = hashlib.sha256(_source_bytes(source_root, commit, binding.get("path"))).hexdigest()
+        if actual != expected:
+            raise ValueError(f"successor {key} SHA-256 mismatch")
+        runtime_hash = binding.get("runtime_hash")
+        if (
+            not isinstance(runtime_hash, str)
+            or re.fullmatch(r"[0-9a-f]{16}|[0-9a-f]{64}", runtime_hash) is None
+        ):
+            raise ValueError(f"successor {key} requires a 16- or 64-character runtime_hash")
+    config = yaml.safe_load(_source_bytes(source_root, commit, manifest["campaign_config"]["path"]))
+    if (
+        not isinstance(config, dict)
+        or config.get("scenario_matrix") != manifest["scenario_matrix"]["path"]
+    ):
+        raise ValueError("successor config scenario binding mismatch")
+    planners = config.get("planners")
+    if not isinstance(planners, list):
+        raise ValueError("successor config lacks planner bindings")
+    configured = {item.get("key"): item for item in planners if isinstance(item, dict)}
+    if len(configured) != len(planners) or any(
+        not isinstance(key, str) or not key for key in configured
+    ):
+        raise ValueError("successor config has duplicate or invalid planner keys")
+    bindings = manifest.get("versioned_planner_bindings")
+    if not isinstance(bindings, dict):
+        raise ValueError("successor manifest requires versioned_planner_bindings")
+    versioned = set(V4_SLOT_REPLACEMENTS.values())
+    if not versioned <= configured.keys():
+        raise ValueError("successor config lacks required v4 planner bindings")
+    if set(bindings) != versioned:
+        raise ValueError("successor versioned planner binding set mismatch")
+    for key, binding in bindings.items():
+        if not isinstance(binding, dict) or configured[key].get("algo_config") != binding.get(
+            "path"
+        ):
+            raise ValueError(f"successor planner binding mismatch: {key}")
+        expected = _hex_digest(binding.get("sha256"), f"{key} sha256")
+        actual = hashlib.sha256(_source_bytes(source_root, commit, binding["path"])).hexdigest()
+        if actual != expected:
+            raise ValueError(f"successor planner binding SHA-256 mismatch: {key}")
+    manifest["manifest_sha256"] = digest
+    manifest["planner_keys"] = sorted(configured)
+    return manifest
+
+
+def _root_identity(root: Path, expected: Mapping[str, Any]) -> dict[str, str]:
     path = root / "campaign_manifest.json"
     manifest = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(manifest, dict):
@@ -268,13 +367,16 @@ def _root_identity(root: Path) -> dict[str, str]:
     git = manifest.get("git")
     source = git.get("commit") if isinstance(git, dict) else None
     campaign_id = manifest.get("campaign_id")
-    if (
-        not isinstance(source, str)
-        or not source
-        or not isinstance(campaign_id, str)
-        or not campaign_id
-    ):
-        raise ValueError("0.0.8 campaign manifest requires campaign_id and git.commit")
+    if campaign_id != expected["campaign_id"] or source != expected["source_commit"]:
+        raise ValueError("0.0.8 campaign ID/source differs from verified successor manifest")
+    checks = {
+        "config_hash": expected["campaign_config"]["runtime_hash"],
+        "scenario_matrix": expected["scenario_matrix"]["path"],
+        "scenario_matrix_hash": expected["scenario_matrix"]["runtime_hash"],
+    }
+    for key, value in checks.items():
+        if manifest.get(key) != value:
+            raise ValueError(f"0.0.8 {key} differs from verified successor manifest")
     return {
         "campaign_id": campaign_id,
         "source_commit": source,
@@ -333,53 +435,113 @@ def _different(old: Any, new: Any) -> bool:
     return type(old) is not type(new) or _json_safe(old) != _json_safe(new)
 
 
-def _read_rules(path: Path | None) -> list[dict[str, Any]]:
+def _read_rules(path: Path | None) -> list[dict[str, Any]]:  # noqa: C901, PLR0912
     if path is None:
         return []
     data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict) or data.get("schema_version") != "slot-paired-classifications.v1":
+    if not isinstance(data, dict) or data.get("schema_version") != "slot-paired-classifications.v2":
         raise ValueError(
-            "classification file requires schema_version slot-paired-classifications.v1"
+            "classification file requires schema_version slot-paired-classifications.v2"
         )
     rules = data.get("rules")
     if not isinstance(rules, list):
         raise ValueError("classification file requires a rules list")
-    selectors = (*SLOT_COLUMNS, "presence", "field")
+    seen_ids: set[str] = set()
     for index, rule in enumerate(rules):
-        if (
-            not isinstance(rule, dict)
-            or "field" not in rule
-            or not any(key in rule for key in ("planner", "scenario_id"))
-        ):
-            raise ValueError(f"rule {index} requires field and planner or scenario_id selectors")
-        for key in ("classification", "issue", "explanation", "evidence"):
+        if not isinstance(rule, dict) or set(rule) != {
+            "rule_id",
+            "slots",
+            "fields",
+            "predicate",
+            "max_findings",
+            "classification",
+            "issue",
+            "explanation",
+            "evidence",
+        }:
+            raise ValueError(f"rule {index} has missing or unknown keys")
+        for key in ("rule_id", "classification", "issue", "explanation", "evidence"):
             if not isinstance(rule.get(key), str) or not rule[key].strip():
                 raise ValueError(f"rule {index} requires nonempty {key}")
+        if rule["rule_id"] in seen_ids:
+            raise ValueError(f"duplicate rule_id {rule['rule_id']}")
+        seen_ids.add(rule["rule_id"])
         if rule["classification"].lower() in {"unexplained", "unknown", "todo"}:
             raise ValueError(f"rule {index} cannot classify a finding as unexplained")
-        if any(
-            key not in {*selectors, "classification", "issue", "explanation", "evidence"}
-            for key in rule
+        if type(rule["max_findings"]) is not int or rule["max_findings"] < 1:
+            raise ValueError(f"rule {index} requires positive max_findings")
+        if (
+            not isinstance(rule["fields"], list)
+            or not rule["fields"]
+            or any(not isinstance(field, str) or not field for field in rule["fields"])
         ):
-            raise ValueError(f"rule {index} contains an unknown key")
+            raise ValueError(f"rule {index} requires fields")
+        if not isinstance(rule["slots"], list) or not rule["slots"]:
+            raise ValueError(f"rule {index} requires exact slots")
+        for slot in rule["slots"]:
+            if not isinstance(slot, dict) or set(slot) != {
+                *SLOT_COLUMNS[:-2],
+                "benchmark_track",
+                "seeds",
+            }:
+                raise ValueError(
+                    f"rule {index} requires planner, kinematics, scenario_id, benchmark_track, seeds"
+                )
+            if any(
+                not isinstance(slot[key], str) or not slot[key]
+                for key in ("planner", "kinematics", "scenario_id")
+            ) or not isinstance(slot["benchmark_track"], str):
+                raise ValueError(f"rule {index} has invalid slot")
+            seeds = slot["seeds"]
+            if seeds != "all" and (
+                not isinstance(seeds, list)
+                or not seeds
+                or any(type(seed) is not int for seed in seeds)
+            ):
+                raise ValueError(f"rule {index} requires explicit seeds or all")
+        predicate = rule["predicate"]
+        if not isinstance(predicate, dict):
+            raise ValueError(f"rule {index} requires predicate")
+        if set(predicate) == {"finding_ids"}:
+            if (
+                not isinstance(predicate["finding_ids"], list)
+                or not predicate["finding_ids"]
+                or any(not isinstance(item, str) or not item for item in predicate["finding_ids"])
+            ):
+                raise ValueError(f"rule {index} requires finding IDs")
+        elif set(predicate) == {"sign", "max_abs_delta"}:
+            if (
+                predicate["sign"] not in ("positive", "negative")
+                or type(predicate["max_abs_delta"]) not in (int, float)
+                or not math.isfinite(predicate["max_abs_delta"])
+                or predicate["max_abs_delta"] <= 0
+            ):
+                raise ValueError(f"rule {index} requires sign and positive finite bound")
+        else:
+            raise ValueError(f"rule {index} has invalid predicate")
     return rules
 
 
-def _classification(finding: dict[str, Any], rules: list[dict[str, Any]]) -> dict[str, str]:
-    selectors = (*SLOT_COLUMNS, "presence", "field")
-    matches: list[tuple[int, dict[str, Any]]] = []
-    for rule in rules:
-        if all(str(rule[key]) == str(finding[key]) for key in selectors if key in rule):
-            matches.append((sum(key in rule for key in selectors), rule))
-    if not matches:
-        return {"classification": "unexplained", "issue": "", "explanation": "", "evidence": ""}
-    best = max(score for score, _ in matches)
-    winners = [rule for score, rule in matches if score == best]
-    if len(winners) != 1:
-        raise ValueError(
-            f"ambiguous classification rules for {finding['field']} at {finding['scenario_id']}/{finding['seed']}"
+def _rule_matches(rule: Mapping[str, Any], finding: Mapping[str, Any]) -> bool:
+    slot_match = any(
+        all(
+            finding[key] == slot[key]
+            for key in ("planner", "kinematics", "scenario_id", "benchmark_track")
         )
-    return {key: winners[0][key] for key in ("classification", "issue", "explanation", "evidence")}
+        and (slot["seeds"] == "all" or finding["seed"] in slot["seeds"])
+        for slot in rule["slots"]
+    )
+    if not slot_match or finding["field"] not in rule["fields"]:
+        return False
+    predicate = rule["predicate"]
+    if "finding_ids" in predicate:
+        return finding["finding_id"] in predicate["finding_ids"]
+    delta = finding["delta_0_0_8_minus_0_0_7"]
+    return (
+        delta is not None
+        and (delta > 0 if predicate["sign"] == "positive" else delta < 0)
+        and abs(delta) <= predicate["max_abs_delta"]
+    )
 
 
 def _display(value: Any) -> str:
@@ -390,10 +552,13 @@ def _display(value: Any) -> str:
     )
 
 
-def compare(  # noqa: C901, PLR0912, PLR0915
+def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
     baseline_bundle: Path | None,
     successor_root: Path,
     *,
+    successor_manifest: Path,
+    successor_manifest_sha256: str,
+    successor_source_root: Path,
     baseline_root: Path | None = None,
     classification_file: Path | None = None,
     baseline_sha256: str = BASELINE_SHA256,
@@ -431,8 +596,13 @@ def compare(  # noqa: C901, PLR0912, PLR0915
     }
     if scenario_identity != expected:
         raise ValueError(f"0.0.7 scenario identity mismatch: {scenario_identity} != {expected}")
-    successor_identity = _root_identity(successor_root)
+    verified_successor = _verified_successor_manifest(
+        successor_manifest, successor_manifest_sha256, successor_source_root
+    )
+    successor_identity = _root_identity(successor_root, verified_successor)
     new = _root_rows(successor_root)
+    if any(key[0] not in verified_successor["planner_keys"] for key in new):
+        raise ValueError("0.0.8 row planner is absent from verified successor config")
     for key, row in old.items():
         if row["_source_commit"] != baseline_source:
             raise ValueError(f"0.0.7 row has wrong source at {key}")
@@ -503,7 +673,22 @@ def compare(  # noqa: C901, PLR0912, PLR0915
                 "delta_0_0_8_minus_0_0_7": delta,
             }
         )
-        finding.update(_classification(finding, rules))
+        identity = {
+            key: finding[key]
+            for key in (*SLOT_COLUMNS, "presence", "field", "old_value", "new_value")
+        }
+        finding["finding_id"] = hashlib.sha256(
+            json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        finding.update(
+            {
+                "classification": "unexplained",
+                "issue": "",
+                "explanation": "",
+                "evidence": "",
+                "rule_id": "",
+            }
+        )
         findings.append(finding)
 
     for slot in sorted(set(old) | set(new)):
@@ -546,11 +731,53 @@ def compare(  # noqa: C901, PLR0912, PLR0915
         ):
             values = item.pop(private)
             item[public] = sum(values) / len(values) if values else None
+    rule_coverage = []
+    rule_matches = [
+        [finding for finding in findings if _rule_matches(rule, finding)] for rule in rules
+    ]
+    over_limit_findings = {
+        finding["finding_id"]
+        for rule, matched in zip(rules, rule_matches, strict=True)
+        if len(matched) > rule["max_findings"]
+        for finding in matched
+    }
+    claimed: set[str] = set()
+    for rule, matched in zip(rules, rule_matches, strict=True):
+        over_limit = len(matched) > rule["max_findings"]
+        covered = []
+        if not over_limit:
+            for finding in matched:
+                if finding["finding_id"] in over_limit_findings:
+                    continue
+                if finding["finding_id"] in claimed:
+                    raise ValueError(f"ambiguous classification rules for {finding['finding_id']}")
+                claimed.add(finding["finding_id"])
+                finding.update(
+                    {
+                        key: rule[key]
+                        for key in ("classification", "issue", "explanation", "evidence", "rule_id")
+                    }
+                )
+                covered.append(finding["finding_id"])
+        rule_coverage.append(
+            {
+                "rule_id": rule["rule_id"],
+                "max_findings": rule["max_findings"],
+                "over_limit": over_limit,
+                "covered_findings": covered,
+                "matching_findings": [finding["finding_id"] for finding in matched],
+            }
+        )
     unexplained = sum(finding["classification"] == "unexplained" for finding in findings)
     return {
         "schema_version": "slot-paired-release-diff.v1",
         "baseline": {"release": "0.0.7", **baseline_identity},
-        "successor": {"release": "0.0.8", "root": str(successor_root), **successor_identity},
+        "successor": {
+            "release": "0.0.8",
+            "root": str(successor_root),
+            "verified_manifest_sha256": successor_manifest_sha256,
+            **successor_identity,
+        },
         "slot_columns": list(SLOT_COLUMNS),
         "v4_slot_replacements": V4_SLOT_REPLACEMENTS,
         "numeric_tolerance_absolute": TOLERANCE,
@@ -562,6 +789,7 @@ def compare(  # noqa: C901, PLR0912, PLR0915
         "unexplained_count": unexplained,
         "status": "classified" if unexplained == 0 else "unexplained",
         "findings": findings,
+        "rules": rule_coverage,
         "planner_scenario_metrics": [summaries[key] for key in sorted(summaries)],
     }
 
@@ -587,7 +815,15 @@ def write_report(report: Mapping[str, Any], output_dir: Path) -> None:
         f"- Rows: 0.0.7 `{report['rows_0_0_7']}`, 0.0.8 `{report['rows_0_0_8']}`, paired `{report['paired_rows']}`.",
         f"- Release-only rows: 0.0.7 `{report['only_0_0_7']}`, 0.0.8 `{report['only_0_0_8']}`.",
         f"- Findings: `{len(report['findings'])}`; unexplained: `{report['unexplained_count']}`.",
+        f"- Verified successor manifest SHA-256: `{report['successor']['verified_manifest_sha256']}`.",
         "- Classification rules are analyst claims; this audit does not prove causality or admit a release.",
+        "",
+        "## Rule coverage",
+        "",
+        *(
+            f"- `{rule['rule_id']}`: {len(rule['covered_findings'])} covered, over limit `{rule['over_limit']}`; finding IDs: {', '.join(rule['covered_findings']) or '(none)'}"
+            for rule in report["rules"]
+        ),
         "",
         "See `findings.csv` for every changed field and release-only row, and",
         "`planner_scenario_metrics.csv` for paired means and differences.",
@@ -603,6 +839,9 @@ def main() -> int:
     baseline.add_argument("--baseline-bundle", type=Path)
     baseline.add_argument("--baseline-root", type=Path)
     parser.add_argument("--successor-root", required=True, type=Path)
+    parser.add_argument("--successor-manifest", required=True, type=Path)
+    parser.add_argument("--successor-manifest-sha256", required=True)
+    parser.add_argument("--successor-source-root", required=True, type=Path)
     parser.add_argument("--classification-file", type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
     args = parser.parse_args()
@@ -610,6 +849,9 @@ def main() -> int:
         report = compare(
             args.baseline_bundle,
             args.successor_root,
+            successor_manifest=args.successor_manifest,
+            successor_manifest_sha256=args.successor_manifest_sha256,
+            successor_source_root=args.successor_source_root,
             baseline_root=args.baseline_root,
             classification_file=args.classification_file,
         )

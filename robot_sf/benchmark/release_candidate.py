@@ -62,19 +62,19 @@ _APPROVED_008_PLANNER_KEYS = (
 _APPROVED_008_HYBRID_CONFIGS = {
     "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": (
         "configs/policy_search/candidates/"
-        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release.yaml"
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4_s30_h600_release_0_0_8_frozen.yaml"
     ),
     "scenario_adaptive_hybrid_orca_v2_collision_guard_v4": (
         "configs/policy_search/candidates/"
-        "scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release.yaml"
+        "scenario_adaptive_hybrid_orca_v2_collision_guard_v4_s30_h600_release_0_0_8_frozen.yaml"
     ),
     "hybrid_rule_v4_fast_progress_static_escape": (
         "configs/policy_search/candidates/"
-        "hybrid_rule_v4_fast_progress_static_escape_s30_h600_release.yaml"
+        "hybrid_rule_v4_fast_progress_static_escape_s30_h600_release_0_0_8_frozen.yaml"
     ),
     "hybrid_rule_v4_fast_progress_static_escape_continuous": (
         "configs/policy_search/candidates/"
-        "hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release.yaml"
+        "hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml"
     ),
 }
 _APPROVED_008_ACTIVE_WAYPOINT_CONFIGS = {

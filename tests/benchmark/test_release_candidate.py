@@ -15,7 +15,6 @@ import yaml
 from robot_sf.benchmark import release_candidate, spawn_preflight
 from robot_sf.benchmark.release_candidate import (
     _APPROVED_008_HYBRID_CONFIGS,
-    _APPROVED_008_PLANNER_KEYS,
     CANDIDATE_SCHEMA,
     _expected_input_paths,
     create_prepublication_candidate,
@@ -31,7 +30,7 @@ CONFIG = (
     SOURCE_ROOT
     / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
 )
-MATRIX = SOURCE_ROOT / "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v3.yaml"
+MATRIX = SOURCE_ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
 SUITE_POLICY = (
     "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml"
 )
@@ -47,11 +46,6 @@ def _git(root: Path, *args: str) -> str:
 def candidate_repo(tmp_path: Path) -> tuple[Path, Path, dict]:
     """Build a small committed checkout with a real 48-scenario source closure."""
     config = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
-    config["scenario_matrix"] = MATRIX.relative_to(SOURCE_ROOT).as_posix()
-    for planner, approved_key in zip(config["planners"], _APPROVED_008_PLANNER_KEYS, strict=True):
-        planner["key"] = approved_key
-        if approved_key in _APPROVED_008_HYBRID_CONFIGS:
-            planner["algo_config"] = _APPROVED_008_HYBRID_CONFIGS[approved_key]
     scenarios = load_scenarios_for_validation(MATRIX, base_dir=SOURCE_ROOT)
     assert scenarios.load_error is None and not scenarios.load_issues and not scenarios.entry_issues
     rows = [dict(row) for row in scenarios.scenarios]
@@ -78,8 +72,6 @@ def candidate_repo(tmp_path: Path) -> tuple[Path, Path, dict]:
         target = tmp_path / source.relative_to(SOURCE_ROOT)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
-    config_path = tmp_path / CONFIG.relative_to(SOURCE_ROOT)
-    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     pins = {
         source.relative_to(SOURCE_ROOT).as_posix(): hashlib.sha256(
             (tmp_path / source.relative_to(SOURCE_ROOT)).read_bytes()
@@ -465,7 +457,12 @@ def test_candidate_rejects_jointly_pinned_v3_hybrid_variant_override(
     )
     payload["source_commit"] = _git(root, "rev-parse", "HEAD")
     path.write_text(json.dumps(payload), encoding="utf-8")
-    with pytest.raises(ValueError, match="resolves to a non-v4 planner variant"):
+    reason = (
+        "frozen v4 slot resolves planner_variant=.*hybrid_rule_v3_teb_like_rollout"
+        if section == "params"
+        else "resolves to a non-v4 planner variant"
+    )
+    with pytest.raises(ValueError, match=reason):
         load_prepublication_candidate(path, repository_root=root)
 
 
@@ -618,6 +615,7 @@ def test_preflight_cli_accepts_candidate_and_rejects_mid_run_drift(
     root, path, payload = candidate_repo
     original_digest = hashlib.sha256(path.read_bytes()).hexdigest()
     monkeypatch.setattr(release_candidate, "get_repository_root", lambda: root)
+    monkeypatch.setattr(spawn_preflight, "get_repository_root", lambda: root)
     observed: dict[str, object] = {"changed": False}
 
     def diagnostic_scenario(job):

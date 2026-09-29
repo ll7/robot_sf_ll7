@@ -15,6 +15,8 @@ one strict expected failure per tracking issue flips when that issue is fixed.
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import math
 from dataclasses import fields
 from functools import cache
@@ -730,7 +732,7 @@ def test_0_0_8_candidate_resolves_versioned_physical_configs_for_all_arms() -> N
 
 
 def test_0_0_8_candidate_resolves_physical_geometry_for_all_scenarios() -> None:
-    """The actual candidate campaign binds physical radii before simulation and metrics."""
+    """Candidate preserves accepted rows apart from declared 0.0.8 input corrections."""
     candidate = _load_yaml(
         "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml"
     )
@@ -739,20 +741,36 @@ def test_0_0_8_candidate_resolves_physical_geometry_for_all_scenarios() -> None:
     )
     assert candidate["dt"] == pytest.approx(SIM.time_per_step_in_secs)
 
+    accepted_scenario_path = ROOT / (
+        "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml"
+    )
+    assert hashlib.sha256(accepted_scenario_path.read_bytes()).hexdigest() == (
+        "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c"
+    )
+    accepted_scenarios = load_scenario_matrix(accepted_scenario_path)
     scenarios = load_scenario_matrix(ROOT / candidate["scenario_matrix"])
-    assert len(scenarios) == 48
-    for scenario in scenarios:
+    assert len(accepted_scenarios) == len(scenarios) == 48
+
+    def strip_declared_0_0_8_deltas(scenario: dict[str, Any]) -> dict[str, Any]:
+        normalized = copy.deepcopy(scenario)
+        normalized["robot_config"].pop("radius", None)
+        normalized["simulation_config"].pop("ped_radius", None)
+        normalized["simulation_config"].pop("social_force_kernel_version", None)
+        return normalized
+
+    scenario_path = ROOT / candidate["scenario_matrix"]
+    for accepted, scenario in zip(accepted_scenarios, scenarios, strict=True):
+        assert strip_declared_0_0_8_deltas(scenario) == strip_declared_0_0_8_deltas(accepted)
         assert scenario["robot_config"]["radius"] == pytest.approx(DRIVE.radius)
         assert scenario["simulation_config"]["ped_radius"] == pytest.approx(SIM.ped_radius)
+        assert scenario["simulation_config"]["social_force_kernel_version"] == "wrapped_v2"
         assert _scenario_robot_radius_m(scenario) == pytest.approx(DRIVE.radius)
         assert _scenario_ped_radius_m(scenario) == pytest.approx(SIM.ped_radius)
 
-    # Verify the candidate's resolved settings reach the environment builder used
-    # by the map runner, not only the campaign's metric helper.
-    scenario_path = ROOT / candidate["scenario_matrix"]
-    env_config = build_env_config(scenarios[0], scenario_path=scenario_path)
-    assert env_config.robot_config.radius == pytest.approx(DRIVE.radius)
-    assert env_config.sim_config.ped_radius == pytest.approx(SIM.ped_radius)
+        # Check every actual map-runner environment config, without reset or step.
+        env_config = build_env_config(scenario, scenario_path=scenario_path)
+        assert env_config.robot_config.radius == pytest.approx(DRIVE.radius)
+        assert env_config.sim_config.ped_radius == pytest.approx(SIM.ped_radius)
 
 
 def test_representative_planner_physical_field_inventory_and_ranges() -> None:

@@ -34,13 +34,17 @@ silently treated as the physical footprint in this audit. Observation fields `ro
 
 The 0.0.8 candidate uses the versioned scenario matrix
 `configs/scenarios/classic_interactions_francis2023_goal_zone_entry_0_0_8_physical_geometry.yaml`.
-Its manifest-wide overrides bind `robot_config.radius=1.0 m` and
-`simulation_config.ped_radius=0.4 m`; these values flow into the map runner's environment builder,
-planner observations, collision context, and outcome metrics. A contract test loads the candidate's
-actual scenario matrix and checks the resolved radii across all 48 scenarios, then builds one
-environment config without resetting or stepping it. The frozen 0.0.7 config and scenario matrix
-remain untouched. This config audit does not establish spawn/route feasibility at the larger robot
-radius; the final 0.0.8 setup gates must check those before any planner episodes.
+It derives from the accepted 0.0.7 execution matrix
+`configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml` (SHA-256
+`03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c`), rather than the older
+checked-in campaign template matrix. Across all 48 resolved rows, the only differences from that
+accepted matrix are the declared robot radius (`1.0 m`), pedestrian radius (`0.4 m`), and the
+separately versioned Social Force kernel selector (`wrapped_v2`, #9764). A contract test pins the
+accepted matrix hash, compares complete resolved rows after removing exactly those three fields,
+and builds all 48 map-runner environment configs without resetting or stepping them. The frozen
+0.0.7 config and scenario matrix remain untouched. The release comparison must still report the
+radius and kernel deltas; this config audit does not establish spawn/route feasibility at the larger
+robot radius, so final 0.0.8 setup gates must check those before planner episodes.
 
 ## Per-arm audit
 

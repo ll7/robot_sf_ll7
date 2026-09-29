@@ -174,10 +174,11 @@ def _run_cell(
     started = time.perf_counter()
     try:
         _quiet_logs()
-        from robot_sf.benchmark.map_runner.map_runner import build_map_policy
-        from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
+        from robot_sf.benchmark.map_runner.map_runner import _run_map_episode, build_map_policy
 
-        record = run_map_episode(
+        # Use the same episode wrapper as the release batch. It captures the
+        # parser-consumed map input and binds selected_map_identity in each row.
+        record = _run_map_episode(
             scenario=scenario,
             seed=seed,
             horizon=horizon,

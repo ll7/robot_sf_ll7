@@ -19,6 +19,7 @@ import enum
 import json
 import re
 import subprocess
+import tempfile
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -1224,7 +1225,16 @@ def write_routing_manifest(
     filename: str = "routing_manifest.json",
     max_recovery_attempts: int = DEFAULT_MAX_RECOVERY_ATTEMPTS,
 ) -> Path:
-    """Write the routing manifest into the chosen attempt run directory."""
+    """Write the manifest into the chosen run directory or private pre-start bundle."""
+    filename_path = Path(filename)
+    if (
+        not filename
+        or filename in {".", ".."}
+        or filename_path.is_absolute()
+        or filename_path.name != filename
+    ):
+        raise ValueError("manifest filename must be a single path component")
+
     manifest = build_routing_manifest(
         attempts,
         chosen_index=chosen_index,
@@ -1232,12 +1242,39 @@ def write_routing_manifest(
         task_class=task_class,
         max_recovery_attempts=max_recovery_attempts,
     )
+    target_repo_path = Path(target_repo).resolve()
+    target_worktree = validate_target_worktree(target_repo_path)
+    if not target_worktree.ok:
+        raise ValueError(target_worktree.failure or "target worktree validation failed")
+
     chosen_run_dir = manifest["chosen_run_dir"]
-    if not chosen_run_dir:
-        raise ValueError("chosen route has no run_dir; cannot write manifest")
-    run_root = _resolve_run_dir(chosen_run_dir, target_repo=Path(target_repo).resolve())
-    run_root.mkdir(parents=True, exist_ok=True)
+    if chosen_run_dir:
+        run_root = _resolve_run_dir(
+            chosen_run_dir,
+            target_repo=target_repo_path,
+            target_worktree=target_worktree,
+        )
+        run_root.mkdir(parents=True, exist_ok=True)
+    else:
+        # A pre-start failure has no attempt directory, but must still be
+        # persisted. Keep this private route evidence under the shared Git
+        # artifact root and give each invocation its own directory so concurrent
+        # or repeated failures cannot overwrite one another.
+        artifact_root = _artifact_root(target_worktree)
+        if artifact_root.is_symlink():
+            raise ValueError("shared Git codex-agent-runs root must not be a symlink")
+        artifact_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        run_root = Path(tempfile.mkdtemp(prefix="routed-worker-no-run-", dir=artifact_root))
+
     output_path = run_root / filename
+    if output_path.is_symlink():
+        raise ValueError("routing manifest output must not be a symlink")
+    resolved_output_path = output_path.resolve(strict=False)
+    if not any(
+        resolved_output_path.is_relative_to(root)
+        for root, _root_name in _authorized_run_roots(target_worktree)
+    ):
+        raise ValueError("routing manifest output must stay inside an authorized artifact root")
     output_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return output_path
 

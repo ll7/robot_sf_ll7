@@ -5,14 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 
 from scripts.dev import routed_worker_manifest as manifest
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _write_artifacts(run_dir: Path, filenames: list[str]) -> None:
@@ -144,6 +141,54 @@ def test_write_manifest_uses_target_repository_run_directory(tmp_path: Path) -> 
     data = json.loads(output_path.read_text(encoding="utf-8"))
     assert data["compact_artifacts"]["validation"]["present"] is False
     assert data["compact_artifacts"]["validation"]["reason"] == "missing"
+
+
+def test_write_manifest_persists_startup_auth_without_run_dir(tmp_path: Path) -> None:
+    """A pre-start auth failure is retained privately without storing raw stderr."""
+    target_repo = _init_repo(tmp_path / "target-repo")
+    secret = "sk-live-abcdef0123456789"
+    attempts = [
+        {
+            "route": {"provider": "luna"},
+            "worker_started": False,
+            "run_dir": None,
+            "returncode": 1,
+            "http_status": 401,
+            "stderr": f"HTTP 401 invalid service api credential: {secret}",
+        }
+    ]
+
+    output_path = manifest.write_routing_manifest(
+        attempts,
+        chosen_index=0,
+        target_repo=target_repo,
+    )
+
+    target_worktree = manifest.validate_target_worktree(target_repo)
+    assert target_worktree.ok and target_worktree.common_git_dir is not None
+    artifact_root = Path(target_worktree.common_git_dir) / "codex-agent-runs"
+    assert output_path.is_relative_to(artifact_root)
+    data = json.loads(output_path.read_text(encoding="utf-8"))
+    assert data["chosen_run_dir"] is None
+    assert data["chosen_terminal_state"] == "auth"
+    assert data["attempted_routes"][0]["delegation"]["classification"] == "startup_auth"
+    assert data["recovery"]["retry_recommended"] is False
+    assert data["recovery"]["fallback"]["independent_review_authorized"] is False
+    assert secret not in output_path.read_text(encoding="utf-8")
+
+
+def test_write_manifest_rejects_filename_path_escape(tmp_path: Path) -> None:
+    target_repo = _init_repo(tmp_path / "target-repo")
+
+    with pytest.raises(ValueError, match="single path component"):
+        manifest.write_routing_manifest(
+            [{"route": {"provider": "luna"}, "worker_started": False}],
+            chosen_index=0,
+            target_repo=target_repo,
+            filename="../escaped-routing-manifest.json",
+        )
+
+    assert not (tmp_path / "escaped-routing-manifest.json").exists()
 
 
 def test_write_manifest_rejects_run_dir_outside_target_repository(tmp_path: Path) -> None:

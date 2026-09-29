@@ -1711,7 +1711,14 @@ They also expose additive `delegation` records per attempt and a bounded `delega
 may recommend one next startup attempt, but the manifest does not sleep or spawn a worker. Once
 the hard retry budget is exhausted, `recovery.fallback` requires manual or local review and keeps
 `independent_review_authorized` false; a successful prior worker suppresses later retries to avoid
-duplicate work.
+duplicate work. HTTP 401 or 403, a recognized structured authentication class, or a backend
+response that explicitly reports a credential failure is recorded as terminal `auth` with
+`startup_auth` or `worker_task_auth`; it is not eligible for a bounded retry and never counts as
+independent review evidence. Because a pre-start failure has no attempt run directory, the writer
+stores that manifest in a unique private `codex-agent-runs/routed-worker-no-run-*` bundle under the
+shared Git directory. Raw stderr and credential material are not copied into the manifest. The
+writer rejects path-bearing filenames and symlink outputs so this fallback does not escape its
+authorized artifact roots.
 
 ### PR Review: Route Efficiency
 

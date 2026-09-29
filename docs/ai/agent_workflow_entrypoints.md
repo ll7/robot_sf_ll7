@@ -151,8 +151,14 @@ When `worker_started` is false and the attempt carries an HTTP 404 from the Code
 backend, the manifest emits `startup_backend_404` and a single next-attempt recommendation. The
 recommendation is data only: it does not sleep or spawn a worker. After the retry budget is
 exhausted, or for a non-retryable startup/task failure, `recovery.fallback` requires manual or
-local review and keeps `independent_review_authorized` false. A successful prior worker suppresses
-later retries to avoid duplicate work; every route manifest remains route evidence only.
+local review and keeps `independent_review_authorized` false. HTTP 401/403 or explicit credential
+failure is terminal `auth` (`startup_auth` before worker start, `worker_task_auth` afterward), is
+not retryable, and never authorizes independent review. A startup failure with no run directory is
+persisted in a unique private `codex-agent-runs/routed-worker-no-run-*` bundle; raw stderr and
+credential material are not copied. The manifest records `chosen_attempt_index`, and consumers
+use it to bind compact details to the selected route when several attempts have no run directory.
+A successful prior worker suppresses later retries to avoid duplicate work; every route manifest
+remains route evidence only.
 
 ### handoff.v2 request format
 

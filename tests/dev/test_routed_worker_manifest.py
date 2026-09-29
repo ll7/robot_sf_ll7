@@ -5,14 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 
 from scripts.dev import routed_worker_manifest as manifest
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _write_artifacts(run_dir: Path, filenames: list[str]) -> None:
@@ -109,6 +106,7 @@ def test_build_manifest_includes_attempts_chosen_route_and_warning(tmp_path: Pat
     assert "not task acceptance" in data["warning"]
     assert len(data["attempted_routes"]) == 2
     assert data["attempted_routes"][0]["compact_artifacts"]["validation"]["reason"] == "not-run"
+    assert data["chosen_attempt_index"] == 1
     assert data["chosen_route"] == {"provider": "qwen"}
     assert data["compact_artifacts"]["validation"]["present"] is True
 
@@ -144,6 +142,55 @@ def test_write_manifest_uses_target_repository_run_directory(tmp_path: Path) -> 
     data = json.loads(output_path.read_text(encoding="utf-8"))
     assert data["compact_artifacts"]["validation"]["present"] is False
     assert data["compact_artifacts"]["validation"]["reason"] == "missing"
+
+
+def test_write_manifest_persists_startup_auth_without_run_dir(tmp_path: Path) -> None:
+    """A pre-start auth failure is retained privately without storing raw stderr."""
+    target_repo = _init_repo(tmp_path / "target-repo")
+    secret = "sk-live-abcdef0123456789"
+    attempts = [
+        {
+            "route": {"provider": "luna"},
+            "worker_started": False,
+            "run_dir": None,
+            "returncode": 1,
+            "http_status": 401,
+            "stderr": f"HTTP 401 invalid service api credential: {secret}",
+        }
+    ]
+
+    output_path = manifest.write_routing_manifest(
+        attempts,
+        chosen_index=0,
+        target_repo=target_repo,
+    )
+
+    target_worktree = manifest.validate_target_worktree(target_repo)
+    assert target_worktree.ok and target_worktree.common_git_dir is not None
+    artifact_root = Path(target_worktree.common_git_dir) / "codex-agent-runs"
+    assert output_path.is_relative_to(artifact_root)
+    data = json.loads(output_path.read_text(encoding="utf-8"))
+    assert data["chosen_run_dir"] is None
+    assert data["chosen_attempt_index"] == 0
+    assert data["chosen_terminal_state"] == "auth"
+    assert data["attempted_routes"][0]["delegation"]["classification"] == "startup_auth"
+    assert data["recovery"]["retry_recommended"] is False
+    assert data["recovery"]["fallback"]["independent_review_authorized"] is False
+    assert secret not in output_path.read_text(encoding="utf-8")
+
+
+def test_write_manifest_rejects_filename_path_escape(tmp_path: Path) -> None:
+    target_repo = _init_repo(tmp_path / "target-repo")
+
+    with pytest.raises(ValueError, match="single path component"):
+        manifest.write_routing_manifest(
+            [{"route": {"provider": "luna"}, "worker_started": False}],
+            chosen_index=0,
+            target_repo=target_repo,
+            filename="../escaped-routing-manifest.json",
+        )
+
+    assert not (tmp_path / "escaped-routing-manifest.json").exists()
 
 
 def test_write_manifest_rejects_run_dir_outside_target_repository(tmp_path: Path) -> None:
@@ -222,6 +269,39 @@ def test_classify_terminal_state_route_not_started() -> None:
     """No run_dir means route was never started."""
     state = manifest.classify_terminal_state(has_run_dir=False)
     assert state == manifest.TerminalFailure.ROUTE_NOT_STARTED
+
+
+def test_classify_terminal_state_auth_precedes_missing_run_dir() -> None:
+    """An auth blocker remains distinct even when startup produced no run directory."""
+    state = manifest.classify_terminal_state(failure_class="auth", has_run_dir=False)
+    assert state == manifest.TerminalFailure.AUTH
+
+
+@pytest.mark.parametrize("http_status", [401, 403])
+def test_build_manifest_classifies_startup_auth_without_run_dir(
+    tmp_path: Path, http_status: int
+) -> None:
+    """Startup HTTP auth failures must not collapse into route_not_started."""
+    repo = _init_repo(tmp_path / f"repo-{http_status}")
+    data = manifest.build_routing_manifest(
+        [
+            {
+                "route": {"provider": "luna"},
+                "worker_started": False,
+                "run_dir": None,
+                "returncode": 1,
+                "http_status": http_status,
+            }
+        ],
+        chosen_index=0,
+        target_repo=repo,
+    )
+
+    attempt = data["attempted_routes"][0]
+    assert attempt["delegation"]["classification"] == "startup_auth"
+    assert attempt["terminal_state"] == "auth"
+    assert data["chosen_terminal_state"] == "auth"
+    assert data["aggregation"] == "inconclusive"
 
 
 def test_classify_terminal_state_unavailable_when_details_are_absent() -> None:
@@ -937,3 +1017,172 @@ def test_manifest_path_contract_findings_do_not_change_aggregation(tmp_path: Pat
     assert data["chosen_path_contract"]["findings"][0]["kind"] == "stale_reference"
     assert data["chosen_terminal_state"] == "none"
     assert data["aggregation"] == "confirmed"
+
+
+class TestAuthCredentialFailureClassification:
+    """An authentication failure is an actionable blocker, not a generic route failure (#9780)."""
+
+    def test_startup_401_is_distinct_actionable_and_not_retryable(self) -> None:
+        result = manifest.classify_delegation_attempt(
+            {
+                "worker_started": False,
+                "http_status": 401,
+                "stderr": "HTTP 401 from backend-api/codex/responses",
+            }
+        )
+
+        assert result["classification"] == "startup_auth"
+        assert result["signature"] == "worker_startup_auth_http_401"
+        assert result["retryable"] is False
+        assert result["review_evidence_status"] == "none"
+        assert "credential" in result["reason"]
+
+    def test_startup_403_is_classified_as_auth(self) -> None:
+        result = manifest.classify_delegation_attempt({"worker_started": False, "http_status": 403})
+
+        assert result["classification"] == "startup_auth"
+        assert result["signature"] == "worker_startup_auth_http_403"
+        assert result["retryable"] is False
+
+    def test_auth_never_earns_a_bounded_retry_recommendation(self) -> None:
+        recovery = manifest.build_delegation_recovery(
+            [
+                {
+                    "worker_started": False,
+                    "http_status": 401,
+                    "stderr": "unauthorized",
+                }
+            ]
+        )
+
+        assert recovery["retry_recommended"] is False
+        assert recovery["next_action"] == "manual_or_local_review_required"
+        assert recovery["fallback"]["required"] is True
+        assert recovery["fallback"]["mode"] == "manual_or_local_review"
+        assert recovery["fallback"]["independent_review_authorized"] is False
+
+    def test_transient_statuses_remain_retryable(self) -> None:
+        """The auth classification must not swallow transient startup failures."""
+        for status in sorted(manifest._TRANSIENT_STARTUP_STATUSES):
+            result = manifest.classify_delegation_attempt(
+                {"worker_started": False, "http_status": status}
+            )
+            assert result["classification"] == "startup_transient", status
+            assert result["retryable"] is True, status
+
+    @pytest.mark.parametrize("http_status", [404, *sorted(manifest._TRANSIENT_STARTUP_STATUSES)])
+    def test_explicit_auth_failure_precedes_bounded_retry_status(self, http_status: int) -> None:
+        """Structured auth evidence must not also earn a transient/backend retry."""
+        result = manifest.classify_delegation_attempt(
+            {"worker_started": False, "http_status": http_status, "failure_class": "auth"}
+        )
+
+        assert result["classification"] == "startup_auth"
+        assert result["retryable"] is False
+        assert result["review_evidence_status"] == "none"
+
+    def test_backend_404_still_earns_its_bounded_retry(self) -> None:
+        result = manifest.classify_delegation_attempt(
+            {
+                "worker_started": False,
+                "http_status": 404,
+                "stderr": "backend-api/codex/responses not found",
+            }
+        )
+
+        assert result["classification"] == "startup_backend_404"
+        assert result["retryable"] is True
+
+    def test_task_phase_401_is_classified_and_denies_review_evidence(self) -> None:
+        result = manifest.classify_delegation_attempt(
+            {
+                "worker_started": True,
+                "returncode": 1,
+                "http_status": 401,
+                "stderr": "invalid service api credential",
+            }
+        )
+
+        assert result["phase"] == "worker_task"
+        assert result["classification"] == "worker_task_auth"
+        assert result["signature"] == "worker_task_auth_http_401"
+        assert result["retryable"] is False
+        assert result["review_evidence_status"] == "none"
+
+    @pytest.mark.parametrize("http_status", sorted(manifest._AUTH_STATUSES))
+    @pytest.mark.parametrize("returncode", [None, 0], ids=["missing-returncode", "zero-returncode"])
+    def test_task_phase_auth_precedes_missing_or_zero_returncode(
+        self, http_status: int, returncode: int | None
+    ) -> None:
+        """Started-worker auth remains non-retryable before terminal-state fallbacks."""
+        attempt: dict[str, object] = {"worker_started": True, "http_status": http_status}
+        if returncode is not None:
+            attempt["returncode"] = returncode
+
+        result = manifest.classify_delegation_attempt(attempt)
+
+        assert result["phase"] == "worker_task"
+        assert result["classification"] == "worker_task_auth"
+        assert result["signature"] == f"worker_task_auth_http_{http_status}"
+        assert result["retryable"] is False
+        assert result["review_evidence_status"] == "none"
+
+    def test_unrelated_prose_mentioning_unauthorized_is_not_promoted(self) -> None:
+        """Free text alone must not fabricate a credential blocker."""
+        result = manifest.classify_delegation_attempt(
+            {
+                "worker_started": True,
+                "returncode": 1,
+                "stderr": "assertion failed: expected unauthorized request to be rejected",
+            }
+        )
+
+        assert result["classification"] == "worker_task_failure"
+
+    def test_terminal_state_records_auth_distinctly(self) -> None:
+        assert (
+            manifest.classify_terminal_state(returncode=1, failure_class="auth")
+            is manifest.TerminalFailure.AUTH
+        )
+        assert (
+            manifest.classify_terminal_state(returncode=1, failure_class="authentication_error")
+            is manifest.TerminalFailure.AUTH
+        )
+
+    def test_manifest_keeps_auth_terminal_state_and_retry_classification_consistent(
+        self, tmp_path: Path
+    ) -> None:
+        repo = _init_repo(tmp_path / "repo-auth-transient-status")
+        data = manifest.build_routing_manifest(
+            [
+                {
+                    "route": {"provider": "luna"},
+                    "worker_started": False,
+                    "run_dir": None,
+                    "returncode": 1,
+                    "http_status": 503,
+                    "failure_class": "auth",
+                }
+            ],
+            chosen_index=0,
+            target_repo=repo,
+        )
+
+        attempt = data["attempted_routes"][0]
+        assert attempt["delegation"]["classification"] == "startup_auth"
+        assert attempt["delegation"]["retryable"] is False
+        assert attempt["terminal_state"] == "auth"
+        assert data["aggregation"] == "inconclusive"
+
+    def test_auth_reason_never_echoes_credential_material(self) -> None:
+        secret = "sk-live-abcdef0123456789"
+        result = manifest.classify_delegation_attempt(
+            {
+                "worker_started": False,
+                "http_status": 401,
+                "stderr": f"invalid service api credential: {secret}",
+            }
+        )
+
+        assert secret not in result["reason"]
+        assert secret not in result["signature"]

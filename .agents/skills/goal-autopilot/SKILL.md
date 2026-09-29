@@ -106,9 +106,10 @@ In token-efficient mode:
 - For every delegated implementation/review/queue task, the worker **must** write compact artifacts in
   `<run_artifact_dir>` as: `result.json`, `RESULT.md`, `diffstat.txt`, and `validation.json`.
   The repository-side `scripts/dev/routed_worker_manifest.py` additionally records a versioned
-  `terminal_state` for `timeout`, `exception`, `non_zero_exit`, `missing_artifact`, and
-  `route_not_started` outcomes, plus `unavailable` when the wrapper did not provide enough
-  terminal detail. It also records per-attempt `scope_check` and `compact_artifacts` fields.
+  `terminal_state` for `timeout`, `exception`, `non_zero_exit`, `missing_artifact`,
+  `route_not_started`, and `auth` outcomes, plus `unavailable` when the wrapper did not provide
+  enough terminal detail. Authentication failures are non-retryable and never supply independent
+  review evidence. It also records per-attempt `scope_check` and `compact_artifacts` fields.
   It additionally records `attempted_routes[*].delegation` and a `delegation_recovery.v1`
   `recovery` object. A pre-start `startup_backend_404` is a bounded retry recommendation only;
   the manifest never sleeps or spawns a worker. Once the retry budget is exhausted, or when a

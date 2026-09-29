@@ -19,6 +19,7 @@ import enum
 import json
 import re
 import subprocess
+import tempfile
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -73,6 +74,34 @@ _BACKEND_RESPONSE_MARKERS = (
     "/codex/responses",
 )
 _TRANSIENT_STARTUP_STATUSES = frozenset({429, 500, 502, 503, 504})
+# Credential failures are not transient: no bounded retry can refresh an invalid
+# service API credential, so they are reported as an actionable auth blocker
+# instead of being pooled with an undifferentiated startup or task failure.
+_AUTH_STATUSES = frozenset({401, 403})
+_AUTH_FAILURE_CLASSES = frozenset(
+    {
+        "auth",
+        "authentication_error",
+        "invalid_api_key",
+        "invalid_service_api_credential",
+        "worker_auth",
+        "worker_startup_auth",
+        "startup_auth",
+        "worker_task_auth",
+    }
+)
+_AUTH_TEXT_MARKERS = (
+    "invalid service api credential",
+    "invalid_api_key",
+    "invalid api key",
+    "authentication_error",
+    "unauthorized",
+)
+_AUTH_REMEDY = (
+    "the dispatched route reported an authentication or credential failure; retrying the same "
+    "dispatch cannot fix it, so refresh or re-establish the agent-session credential before "
+    "retrying, and treat any review requirement bound to this attempt as still unmet"
+)
 
 
 class TerminalFailure(enum.StrEnum):
@@ -86,6 +115,7 @@ class TerminalFailure(enum.StrEnum):
     ROUTE_NOT_STARTED = "route_not_started"
     SCOPE_VIOLATION = "scope_violation"
     UNAVAILABLE = "unavailable"
+    AUTH = "auth"
 
 
 def classify_terminal_state(
@@ -102,11 +132,18 @@ def classify_terminal_state(
     ``MISSING_ARTIFACT``; non-zero returncode or known failure classes map to
     their respective terminal states.
     """
+    normalized_failure_class = (
+        failure_class.strip().lower() if isinstance(failure_class, str) else failure_class
+    )
+    if normalized_failure_class in _AUTH_FAILURE_CLASSES:
+        return TerminalFailure.AUTH
     if not has_run_dir:
         return TerminalFailure.ROUTE_NOT_STARTED
-    if failure_class == "timeout" or returncode == 124:
+    if normalized_failure_class == "timeout" or returncode == 124:
         return TerminalFailure.TIMEOUT
-    if failure_class in {"exception", "error"} or (returncode is not None and returncode < 0):
+    if normalized_failure_class in {"exception", "error"} or (
+        returncode is not None and returncode < 0
+    ):
         return TerminalFailure.EXCEPTION
     if returncode is not None and returncode != 0:
         return TerminalFailure.NON_ZERO_EXIT
@@ -118,9 +155,9 @@ def classify_terminal_state(
         ]
         if required_missing:
             return TerminalFailure.MISSING_ARTIFACT
-    if failure_class not in {None, "none", "success"}:
+    if normalized_failure_class not in {None, "none", "success"}:
         return TerminalFailure.UNAVAILABLE
-    if returncode is None and failure_class is None:
+    if returncode is None and normalized_failure_class is None:
         return TerminalFailure.UNAVAILABLE
     return TerminalFailure.NONE
 
@@ -200,6 +237,22 @@ def _failure_class(attempt: dict[str, Any]) -> str:
     return str(value).strip().lower() if value is not None else ""
 
 
+def _auth_failure(attempt: dict[str, Any], status: int | None, text: str) -> bool:
+    """Return whether one attempt carries an authentication or credential failure.
+
+    The HTTP status is authoritative. Free text is only consulted together with a
+    backend response marker, so prose that merely mentions "unauthorized" in an
+    unrelated task message is not promoted into a credential blocker.
+    """
+    if status in _AUTH_STATUSES:
+        return True
+    if _failure_class(attempt) in _AUTH_FAILURE_CLASSES:
+        return True
+    if not any(marker in text for marker in _AUTH_TEXT_MARKERS):
+        return False
+    return any(marker in text for marker in _BACKEND_RESPONSE_MARKERS)
+
+
 def classify_delegation_attempt(attempt: dict[str, Any]) -> dict[str, Any]:
     """Classify startup versus task failures for one delegated-worker attempt.
 
@@ -228,6 +281,17 @@ def classify_delegation_attempt(attempt: dict[str, Any]) -> dict[str, Any]:
         }
 
     if not started:
+        if _auth_failure(attempt, status, text):
+            return {
+                "phase": "worker_startup",
+                "classification": "startup_auth",
+                "signature": f"worker_startup_auth_http_{status}"
+                if status in _AUTH_STATUSES
+                else "worker_startup_auth",
+                "retryable": False,
+                "review_evidence_status": "none",
+                "reason": _AUTH_REMEDY,
+            }
         backend_404 = (
             status == 404
             or failure_class in _STARTUP_BACKEND_404_FAILURE_CLASSES
@@ -261,6 +325,22 @@ def classify_delegation_attempt(attempt: dict[str, Any]) -> dict[str, Any]:
             "retryable": False,
             "review_evidence_status": "none",
             "reason": "worker did not start; no independent review evidence exists",
+        }
+
+    # A worker-started HTTP credential failure is authoritative even when the
+    # wrapper did not capture a terminal return code or reported zero. Check it
+    # before the missing/zero-returncode success handling so auth cannot be
+    # misclassified as unavailable or successful route evidence.
+    if _auth_failure(attempt, status, text):
+        return {
+            "phase": "worker_task",
+            "classification": "worker_task_auth",
+            "signature": f"worker_task_auth_http_{status}"
+            if status in _AUTH_STATUSES
+            else "worker_task_auth",
+            "retryable": False,
+            "review_evidence_status": "none",
+            "reason": _AUTH_REMEDY,
         }
 
     returncode = attempt.get("returncode")
@@ -1021,6 +1101,12 @@ def build_routing_manifest(
     target_worktree = validate_target_worktree(repo_root)
     manifest_attempts: list[dict[str, Any]] = []
     for index, attempt in enumerate(attempts):
+        delegation = classify_delegation_attempt(attempt)
+        normalized_failure_class = attempt.get("failure_class")
+        if delegation["classification"] in {"startup_auth", "worker_task_auth"}:
+            # Keep terminal-state evidence aligned with the normalized delegation
+            # classification, including startup failures with no run directory.
+            normalized_failure_class = "auth"
         run_dir = attempt.get("run_dir")
         scope_check: ScopeCheck | None = None
         path_contract: dict[str, Any] | None = None
@@ -1052,7 +1138,7 @@ def build_routing_manifest(
                 }
                 terminal_state = classify_terminal_state(
                     returncode=attempt.get("returncode"),
-                    failure_class=attempt.get("failure_class"),
+                    failure_class=normalized_failure_class,
                     artifact_presence=artifact_presence,
                     has_run_dir=True,
                 )
@@ -1076,7 +1162,7 @@ def build_routing_manifest(
             )
             terminal_state = classify_terminal_state(
                 returncode=attempt.get("returncode"),
-                failure_class=attempt.get("failure_class"),
+                failure_class=normalized_failure_class,
                 has_run_dir=False,
             )
         scope_dict = asdict(scope_check) if scope_check is not None else None
@@ -1085,7 +1171,6 @@ def build_routing_manifest(
             terminal_state=terminal_state,
             compact_artifacts=compact_artifacts,
         )
-        delegation = classify_delegation_attempt(attempt)
         manifest_attempts.append(
             {
                 "attempt_index": index,
@@ -1117,6 +1202,7 @@ def build_routing_manifest(
         "route_evidence_only": True,
         "warning": ROUTE_EVIDENCE_WARNING,
         "attempted_routes": manifest_attempts,
+        "chosen_attempt_index": chosen_attempt["attempt_index"],
         "chosen_route": chosen_attempt["route"],
         "chosen_run_dir": chosen_attempt["run_dir"],
         "chosen_terminal_state": chosen_attempt["terminal_state"],
@@ -1140,7 +1226,16 @@ def write_routing_manifest(
     filename: str = "routing_manifest.json",
     max_recovery_attempts: int = DEFAULT_MAX_RECOVERY_ATTEMPTS,
 ) -> Path:
-    """Write the routing manifest into the chosen attempt run directory."""
+    """Write the manifest into the chosen run directory or private pre-start bundle."""
+    filename_path = Path(filename)
+    if (
+        not filename
+        or filename in {".", ".."}
+        or filename_path.is_absolute()
+        or filename_path.name != filename
+    ):
+        raise ValueError("manifest filename must be a single path component")
+
     manifest = build_routing_manifest(
         attempts,
         chosen_index=chosen_index,
@@ -1148,12 +1243,39 @@ def write_routing_manifest(
         task_class=task_class,
         max_recovery_attempts=max_recovery_attempts,
     )
+    target_repo_path = Path(target_repo).resolve()
+    target_worktree = validate_target_worktree(target_repo_path)
+    if not target_worktree.ok:
+        raise ValueError(target_worktree.failure or "target worktree validation failed")
+
     chosen_run_dir = manifest["chosen_run_dir"]
-    if not chosen_run_dir:
-        raise ValueError("chosen route has no run_dir; cannot write manifest")
-    run_root = _resolve_run_dir(chosen_run_dir, target_repo=Path(target_repo).resolve())
-    run_root.mkdir(parents=True, exist_ok=True)
+    if chosen_run_dir:
+        run_root = _resolve_run_dir(
+            chosen_run_dir,
+            target_repo=target_repo_path,
+            target_worktree=target_worktree,
+        )
+        run_root.mkdir(parents=True, exist_ok=True)
+    else:
+        # A pre-start failure has no attempt directory, but must still be
+        # persisted. Keep this private route evidence under the shared Git
+        # artifact root and give each invocation its own directory so concurrent
+        # or repeated failures cannot overwrite one another.
+        artifact_root = _artifact_root(target_worktree)
+        if artifact_root.is_symlink():
+            raise ValueError("shared Git codex-agent-runs root must not be a symlink")
+        artifact_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        run_root = Path(tempfile.mkdtemp(prefix="routed-worker-no-run-", dir=artifact_root))
+
     output_path = run_root / filename
+    if output_path.is_symlink():
+        raise ValueError("routing manifest output must not be a symlink")
+    resolved_output_path = output_path.resolve(strict=False)
+    if not any(
+        resolved_output_path.is_relative_to(root)
+        for root, _root_name in _authorized_run_roots(target_worktree)
+    ):
+        raise ValueError("routing manifest output must stay inside an authorized artifact root")
     output_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return output_path
 

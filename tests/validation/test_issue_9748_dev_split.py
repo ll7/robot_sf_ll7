@@ -205,12 +205,6 @@ def test_scenario_validator_rejects_duplicate_development_ids() -> None:
         CHECKER._validate_scenario_parameters(mutated)
 
 
-def _write_log(tmp_path: Path, payload: dict) -> Path:
-    path = tmp_path / "tuning-log.json"
-    path.write_text(json.dumps(payload), encoding="utf-8")
-    return path
-
-
 def _write_committed_log(
     tmp_path: Path,
     payload: dict,
@@ -279,21 +273,11 @@ def _validate_committed_log(path: Path) -> dict:
     )
 
 
-def _parent_commit() -> str:
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD^"],
-        cwd=CHECKER.ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()
-
-
 def _frozen_provenance() -> dict:
     scenario_manifest = ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml"
     return {
-        "source_commit": _parent_commit(),
+        # Synthetic repository fixtures replace this with their own frozen commit.
+        "source_commit": CHECKER._current_source_commit(),
         "campaign_config_sha256": CHECKER._sha256(
             CHECKER.DEFAULT_CONFIG, label="test campaign config"
         ),
@@ -327,60 +311,72 @@ def _valid_log_payload() -> dict:
     }
 
 
-def test_tuning_log_rejects_release_seed_in_typed_field(tmp_path: Path) -> None:
+def test_tuning_log_rejects_release_seed_in_typed_field(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     payload = _valid_log_payload()
     payload["entries"][0]["seeds"] = [1001, 111]
     payload["notes"] = "The held-out release range 111–140 is never tuning evidence."
-    path = _write_log(tmp_path, payload)
+    path, _ = _write_committed_log(tmp_path, payload, monkeypatch)
 
     with pytest.raises(CHECKER.ValidationError, match="held-out release seeds"):
-        CHECKER._validate_tuning_log(path)
+        _validate_committed_log(path)
 
 
-def test_tuning_log_rejects_release_scenario_id(tmp_path: Path) -> None:
+def test_tuning_log_rejects_release_scenario_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     payload = _valid_log_payload()
     payload["entries"][0]["scenario_ids"] = ["classic_doorway_medium"]
-    path = _write_log(tmp_path, payload)
+    path, _ = _write_committed_log(tmp_path, payload, monkeypatch)
 
     with pytest.raises(CHECKER.ValidationError, match="scenario IDs outside"):
-        CHECKER._validate_tuning_log(path)
+        _validate_committed_log(path)
 
 
-def test_tuning_log_rejects_seeds_only_entry(tmp_path: Path) -> None:
+def test_tuning_log_rejects_seeds_only_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     payload = _valid_log_payload()
     payload["entries"][0].pop("scenario_ids")
-    path = _write_log(tmp_path, payload)
+    path, _ = _write_committed_log(tmp_path, payload, monkeypatch)
 
     with pytest.raises(CHECKER.ValidationError, match="entry 0.*scenario_id"):
-        CHECKER._validate_tuning_log(path)
+        _validate_committed_log(path)
 
 
-def test_tuning_log_requires_seed_on_each_entry(tmp_path: Path) -> None:
+def test_tuning_log_requires_seed_on_each_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     payload = _valid_log_payload()
     payload["entries"][0].pop("seeds")
-    path = _write_log(tmp_path, payload)
+    path, _ = _write_committed_log(tmp_path, payload, monkeypatch)
 
     with pytest.raises(CHECKER.ValidationError, match="entry 0.*non-empty seeds list"):
-        CHECKER._validate_tuning_log(path)
+        _validate_committed_log(path)
 
 
-def test_tuning_log_rejects_mixed_seeded_and_unseeded_entries(tmp_path: Path) -> None:
+def test_tuning_log_rejects_mixed_seeded_and_unseeded_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     payload = _valid_log_payload()
     first = copy.deepcopy(payload["entries"][0])
     second = copy.deepcopy(first)
     second.pop("seeds")
     payload["entries"] = [first, second]
-    path = _write_log(tmp_path, payload)
+    path, _ = _write_committed_log(tmp_path, payload, monkeypatch)
 
     with pytest.raises(CHECKER.ValidationError, match="entry 1.*non-empty seeds list"):
-        CHECKER._validate_tuning_log(path)
+        _validate_committed_log(path)
 
 
 @pytest.mark.parametrize(
     "location",
     ["episode_seed", "run_seed", "nested_seed", "top_level_episode_seed"],
 )
-def test_tuning_log_rejects_seed_aliases_outside_entry_seeds(tmp_path: Path, location: str) -> None:
+def test_tuning_log_rejects_seed_aliases_outside_entry_seeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, location: str
+) -> None:
     payload = _valid_log_payload()
     if location == "nested_seed":
         payload["entries"][0]["metadata"] = {"trial": {"episode_seed": 111}}
@@ -388,53 +384,59 @@ def test_tuning_log_rejects_seed_aliases_outside_entry_seeds(tmp_path: Path, loc
         payload["episode_seed"] = 111
     else:
         payload["entries"][0][location] = 111
-    path = _write_log(tmp_path, payload)
+    path, _ = _write_committed_log(tmp_path, payload, monkeypatch)
 
     with pytest.raises(CHECKER.ValidationError, match="unsupported seed field"):
-        CHECKER._validate_tuning_log(path)
+        _validate_committed_log(path)
 
 
-def test_tuning_log_requires_scenario_identity_on_entry(tmp_path: Path) -> None:
+def test_tuning_log_requires_scenario_identity_on_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     payload = _valid_log_payload()
     scenario_id = payload["entries"][0].pop("scenario_ids")[0]
     payload["entries"][0]["metadata"] = {"scenario_id": scenario_id}
-    path = _write_log(tmp_path, payload)
+    path, _ = _write_committed_log(tmp_path, payload, monkeypatch)
 
     with pytest.raises(CHECKER.ValidationError, match="entry 0.*scenario_id"):
-        CHECKER._validate_tuning_log(path)
+        _validate_committed_log(path)
 
 
 def test_tuning_log_rejects_scenario_identity_alias_even_with_valid_binding(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     payload = _valid_log_payload()
     payload["entries"][0]["episode_scenario_id"] = "classic_doorway_medium"
-    path = _write_log(tmp_path, payload)
+    path, _ = _write_committed_log(tmp_path, payload, monkeypatch)
 
     with pytest.raises(
         CHECKER.ValidationError,
         match="unsupported scenario field.*episode_scenario_id",
     ):
-        CHECKER._validate_tuning_log(path)
+        _validate_committed_log(path)
 
 
 @pytest.mark.parametrize("malformed_seed", [True, "1001", [1001, "1002"]])
-def test_tuning_log_rejects_malformed_entry_seed(tmp_path: Path, malformed_seed: object) -> None:
+def test_tuning_log_rejects_malformed_entry_seed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, malformed_seed: object
+) -> None:
     payload = _valid_log_payload()
     payload["entries"][0]["seeds"] = malformed_seed
-    path = _write_log(tmp_path, payload)
+    path, _ = _write_committed_log(tmp_path, payload, monkeypatch)
 
     with pytest.raises(CHECKER.ValidationError, match="entry 0.*typed integer seeds"):
-        CHECKER._validate_tuning_log(path)
+        _validate_committed_log(path)
 
 
-def test_tuning_log_requires_string_scalar_or_list_scenario_ids(tmp_path: Path) -> None:
+def test_tuning_log_requires_string_scalar_or_list_scenario_ids(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     payload = _valid_log_payload()
     payload["entries"][0]["scenario_ids"] = "issue_9748_dev_classic_doorway_medium"
-    path = _write_log(tmp_path, payload)
+    path, _ = _write_committed_log(tmp_path, payload, monkeypatch)
 
     with pytest.raises(CHECKER.ValidationError, match="list of scenario IDs"):
-        CHECKER._validate_tuning_log(path)
+        _validate_committed_log(path)
 
 
 def test_campaign_config_rejects_release_seed_or_scenario_admission() -> None:
@@ -485,9 +487,10 @@ def test_campaign_config_rejects_wrong_or_missing_planner_algo(mutation: str) ->
     ],
 )
 def test_tuning_log_requires_frozen_provenance_and_known_candidates(
-    tmp_path: Path, mutation: str, match: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutation: str, match: str
 ) -> None:
     payload = _valid_log_payload()
+    path, _ = _write_committed_log(tmp_path, payload, monkeypatch)
     if mutation == "missing":
         del payload["provenance"]["scenario_manifest_sha256"]
     elif mutation == "wrong_source_commit":
@@ -509,10 +512,10 @@ def test_tuning_log_requires_frozen_provenance_and_known_candidates(
             "path": "configs/policy_search/candidates/unknown.yaml",
             "sha256": "0" * 64,
         }
-    path = _write_log(tmp_path, payload)
+    path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(CHECKER.ValidationError, match=match):
-        CHECKER._validate_tuning_log(path)
+        _validate_committed_log(path)
 
 
 def test_tuning_log_accepts_valid_frozen_provenance(
@@ -527,11 +530,15 @@ def test_tuning_log_accepts_valid_frozen_provenance(
     assert set(summary["provenance"]["candidate_configs"]) == set(CHECKER.EXPECTED_PLANNER_CONFIGS)
 
 
-def test_tuning_log_requires_a_tracked_log_file(tmp_path: Path) -> None:
-    path = _write_log(tmp_path, _valid_log_payload())
+def test_tuning_log_requires_a_tracked_log_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    committed_path, _ = _write_committed_log(tmp_path, _valid_log_payload(), monkeypatch)
+    path = tmp_path / "outside-repository-log.json"
+    path.write_bytes(committed_path.read_bytes())
 
     with pytest.raises(CHECKER.ValidationError, match="structured tuning log must be inside"):
-        CHECKER._validate_tuning_log(path)
+        _validate_committed_log(path)
 
 
 def test_tuning_log_validates_after_log_is_committed(
@@ -699,6 +706,8 @@ def test_tuning_log_rejects_source_commit_sibling_to_log_commit(
 @pytest.mark.parametrize(
     "dependency",
     [
+        CHECKER.RELEASE_CONFIG_RELATIVE_PATH,
+        "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_kernel_wrapped_v2.yaml",
         "configs/scenarios/archetypes/classic_doorway.yaml",
         "configs/algos/hybrid_rule_v4_clearance_braking.yaml",
         "maps/svg_maps/classic_doorway.svg",
@@ -840,17 +849,17 @@ def test_tuning_log_rejects_head_change_hidden_by_old_working_tree_bytes(
     ],
 )
 def test_tuning_log_rejects_unknown_entry_candidate_or_hash(
-    tmp_path: Path, mutation: str, match: str
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutation: str, match: str
 ) -> None:
     payload = _valid_log_payload()
     if mutation == "entry_candidate":
         payload["entries"][0]["candidate"] = "unknown_candidate"
     else:
         payload["entries"][0]["candidate_config_sha256"] = "0" * 64
-    path = _write_log(tmp_path, payload)
+    path, _ = _write_committed_log(tmp_path, payload, monkeypatch)
 
     with pytest.raises(CHECKER.ValidationError, match=match):
-        CHECKER._validate_tuning_log(path)
+        _validate_committed_log(path)
 
 
 def test_tuning_log_accepts_dev_fields_and_held_out_prose(

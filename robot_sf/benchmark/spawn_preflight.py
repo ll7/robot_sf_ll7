@@ -36,7 +36,11 @@ from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
 from robot_sf.benchmark.map_runner.map_runner_identity import (
     _scenario_with_episode_seed_defaults,
 )
-from robot_sf.benchmark.release_protocol import load_release_manifest
+from robot_sf.benchmark.release_candidate import (
+    PrepublicationCandidate,
+    load_preflight_input,
+    verify_prepublication_candidate_after_preflight,
+)
 from robot_sf.common.artifact_paths import get_repository_root
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.nav.occupancy_grid import (
@@ -887,6 +891,8 @@ def _release_manifest_inputs(  # noqa: C901, PLR0912, PLR0915
         Input identities, resolved scenarios, and the exact resolved seed tuple.
     """
     manifest_path = Path(manifest.path).resolve()
+    candidate = isinstance(manifest, PrepublicationCandidate)
+    repository_root = manifest.repository_root if candidate else get_repository_root().resolve()
     matrix_path = Path(manifest.scenario_matrix_path).resolve()
     manifest_sha256 = sha256_file(manifest_path)
     matrix_sha256 = sha256_file(matrix_path)
@@ -912,8 +918,13 @@ def _release_manifest_inputs(  # noqa: C901, PLR0912, PLR0915
     seed_sets_sha256: str | None = None
     seed_sets_path_raw = seed_policy.get("seed_sets_path")
     if seed_sets_path_raw:
-        seed_sets_path = (manifest_path.parent / str(seed_sets_path_raw)).resolve()
+        seed_sets_path = (
+            (repository_root if candidate else manifest_path.parent) / str(seed_sets_path_raw)
+        ).resolve()
         seed_sets_sha256 = sha256_file(seed_sets_path)
+        if candidate:
+            pinned = dict(manifest.pinned_files)
+            declared_seed_sha256 = pinned.get(seed_sets_path)
         if not declared_seed_sha256:
             raise ValueError("release seed-set path is missing its declared SHA-256")
         if seed_sets_sha256 != str(declared_seed_sha256).lower():
@@ -952,8 +963,6 @@ def _release_manifest_inputs(  # noqa: C901, PLR0912, PLR0915
             raise ValueError(
                 "release manifest cell count disagrees with matrix, seeds, and planners"
             )
-
-    repository_root = get_repository_root().resolve()
 
     def _portable_path(path: Path) -> str:
         """Keep repository inputs relative and avoid publishing machine-local paths.
@@ -1063,6 +1072,25 @@ def write_preflight_reports(
     json_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     markdown_path.write_text(_preflight_markdown(report), encoding="utf-8")
     return sha256_file(json_path), sha256_file(markdown_path)
+
+
+def _verify_candidate_report_inputs(
+    manifest: Any, identity: dict[str, Any], report: dict[str, Any]
+) -> None:
+    """Invalidate a candidate report when its pinned source or inputs drifted."""
+    if not isinstance(manifest, PrepublicationCandidate):
+        return
+    try:
+        verify_prepublication_candidate_after_preflight(
+            manifest,
+            manifest_sha256=identity["manifest_sha256"],
+            repository_root=manifest.repository_root,
+        )
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        report["status"] = "invalid"
+        drift_error = f"candidate_input_drift: {type(exc).__name__}: {exc}"
+        prior_error = report.get("input_error")
+        report["input_error"] = f"{prior_error}; {drift_error}" if prior_error else drift_error
 
 
 def run_manifest_preflight(  # noqa: C901
@@ -1185,9 +1213,12 @@ def run_manifest_preflight(  # noqa: C901
             input_error = "scenario matrix changed while preflight was running"
         seed_sets_path_raw = manifest.seed_policy.get("seed_sets_path")
         if seed_sets_path_raw:
-            seed_sets_path = (
-                Path(manifest.path).resolve().parent / str(seed_sets_path_raw)
-            ).resolve()
+            seed_sets_base = (
+                manifest.repository_root
+                if isinstance(manifest, PrepublicationCandidate)
+                else Path(manifest.path).resolve().parent
+            )
+            seed_sets_path = (seed_sets_base / str(seed_sets_path_raw)).resolve()
             if sha256_file(seed_sets_path) != identity["seed_sets_sha256"]:
                 input_error = "seed-set file changed while preflight was running"
     except OSError as exc:
@@ -1226,15 +1257,18 @@ def run_manifest_preflight(  # noqa: C901
         "input_error": input_error,
         "runtime_s": round(time.perf_counter() - started, 1),
     }
+    _verify_candidate_report_inputs(manifest, identity, report)
     return report
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Return the release-manifest-only command parser."""
+    """Return the exact release-manifest or diagnostic-candidate parser."""
     parser = argparse.ArgumentParser(
-        description="Run the fail-closed spawn and footprint preflight for a release manifest."
+        description="Run the fail-closed spawn and footprint preflight for pinned release inputs."
     )
-    parser.add_argument("--manifest", type=Path, required=True, help="Selected release manifest.")
+    parser.add_argument(
+        "--manifest", type=Path, required=True, help="Release manifest or DOI-free candidate."
+    )
     parser.add_argument("--workers", type=int, default=1, help="Parallel scenario workers (1-8).")
     parser.add_argument(
         "--clearance-margin-m",
@@ -1315,20 +1349,23 @@ def run_preflight(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the exact release-manifest matrix and write JSON and Markdown reports.
+    """Run the exact pinned matrix and write JSON and Markdown diagnostic reports.
 
     Returns:
         Zero for a valid matrix and nonzero when inputs or checks fail.
     """
     args = build_parser().parse_args(argv)
     try:
-        manifest = load_release_manifest(args.manifest)
+        manifest = load_preflight_input(args.manifest)
         report = run_manifest_preflight(
             manifest,
             workers=args.workers,
             clearance_margin_m=args.clearance_margin_m,
             respawn_window_steps=args.respawn_window_steps,
             grid_resolution_m=args.grid_resolution_m,
+            source_commit=manifest.source_sha
+            if isinstance(manifest, PrepublicationCandidate)
+            else None,
         )
     except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
         report = {

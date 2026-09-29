@@ -1097,6 +1097,7 @@ if [[ "$pr_ready_final" == "1" ]]; then
   changed_files_list="$(mktemp "${TMPDIR:-/tmp}/pr-ready-changed-files.XXXXXX")"
   printf '%s\n' "${changed_files[@]}" > "$changed_files_list"
   contract_args=(--changed-files-file "$changed_files_list" --base-ref "$BASE_REF")
+  contract_args+=(--budget-base-sha "$VALIDATED_BASE_SHA")
   if [[ -n "$PR_READY_PR_BODY_FILE" ]]; then
     contract_args+=(--pr-body-file "$PR_READY_PR_BODY_FILE")
   fi

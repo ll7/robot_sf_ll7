@@ -8,19 +8,23 @@ aggregates member records sorted by normalized relative path (``path``, ``size_b
 (``size_bytes <= full_digest_threshold_bytes``) use ``mode: full`` with the whole-file SHA-256 in
 one chunk; larger members use fixed boundaries ``offset_i = i * chunk_size_bytes`` and
 ``length_i = min(chunk_size_bytes, size - offset_i)``, independent of filesystem read size,
-traversal order, and worker count. Chunk digests are not whole-file digest substitutes.
+traversal order, and worker count. Every file also carries a whole-file SHA-256; chunk digests
+are not whole-file digest substitutes.
 
 Modes: ``manifest`` (hash an owned root), ``verify`` (re-hash and compare against a manifest),
 ``resume`` (build a manifest while reusing identity-guarded cached digests from a
-``chunk_manifest.state.v1`` file), and ``compare`` (diff two manifests without a root scan).
+``chunk_manifest.state.v1`` file), ``compare`` (diff two manifests without a root scan),
+and ``custody`` (bind source and destination verification receipts).
 ``verify --state`` records the same identity-guarded digests. A cached file record is reused only
 when the size, mtime, ctime, inode, and device identity are unchanged; any other state fails closed
 (``state_invalid``, ``state_schema_unsupported``, ``state_root_mismatch``, ``state_policy_mismatch``)
 instead of trusting stale digests.
 
-Symlinks, hardlinks, sparse files, special files, path escapes, duplicate or case-colliding paths,
-missing or unexpected members, source mutation/truncation/growth during hashing, and partial or
-tampered manifests fail closed with a coded error. Output holds normalized relative paths only;
+Symlinks, hardlinks, mapped sparse files, special files, path escapes, duplicate or case-colliding
+paths, missing or unexpected members, source mutation/truncation/growth during hashing, and partial
+or tampered manifests fail closed with a coded error. A source with no usable low-allocation mapping
+is recorded as allocation-unverified and requires a hash-equal, allocation-verified destination.
+Output holds normalized relative paths only;
 ``root_identity`` defaults to a SHA-256 of the resolved path. Producer manifests are never
 rewritten. Stdlib-only; no ``robot_sf`` imports needed.
 """
@@ -59,6 +63,9 @@ RETENTION_UNSPECIFIED = "unspecified"
 ROLES = ("keep-latest", "long-lived", "short-lived", "disposable", RETENTION_UNSPECIFIED)
 DIGEST_KIND_FULL = "full-sha256-v1"
 DIGEST_KIND_CHUNKED = "chunked-content-v1"
+ALLOCATION_VERIFIED = "allocation_verified"
+ALLOCATION_UNVERIFIED = "allocation_unverified"
+CUSTODY_SCHEMA_VERSION = "chunk-custody.v1"
 MAX_FAILURES = 1000
 CHECKPOINT_INTERVAL_SECONDS = 15.0
 EXIT_OK, EXIT_FAILED = 0, 1
@@ -208,8 +215,8 @@ def _fiemap_extents(fd: int, size: int) -> list[_FiemapExtent] | None:
     return None
 
 
-def _fiemap_confirms_low_allocation(path: Path, size: int) -> bool:
-    """Return True only when FIEMAP proves a gapless file explained by encoded extents.
+def _fiemap_confirms_low_allocation(path: Path, size: int) -> bool | None:
+    """Return True for encoded, gapless extents; None when no mapping is available.
 
     Requires every extent to make strictly forward progress (no zero-length or
     overlapping extents) and requires FIEMAP_EXTENT_LAST on the final extent of the
@@ -218,11 +225,13 @@ def _fiemap_confirms_low_allocation(path: Path, size: int) -> bool:
     try:
         fd = os.open(path, os.O_RDONLY)
     except OSError:
-        return False
+        return None
     try:
         extents = _fiemap_extents(fd, size)
     finally:
         os.close(fd)
+    if extents is None:
+        return None
     if not extents:
         return False
     covered = 0
@@ -252,6 +261,16 @@ def _has_sparse_hole(path: Path, size: int) -> bool:
     return not _fiemap_confirms_low_allocation(path, size)
 
 
+def _allocation_status(path: Path, st: os.stat_result, relative: str) -> str:
+    """Classify allocation; reject a mapping that actually shows unsafe extents."""
+    if not _looks_sparse_by_blocks(st):
+        return ALLOCATION_VERIFIED
+    mapped = _fiemap_confirms_low_allocation(path, st.st_size)
+    if mapped is False:
+        raise ChunkManifestError("sparse_file", f"sparse member: {relative}", file=relative)
+    return ALLOCATION_VERIFIED if mapped else ALLOCATION_UNVERIFIED
+
+
 def _stat_checked(path: Path, relative: str) -> tuple[int, int, int, int, int]:
     st = os.stat(path, follow_symlinks=False)
     if stat.S_ISLNK(st.st_mode):
@@ -264,8 +283,7 @@ def _stat_checked(path: Path, relative: str) -> tuple[int, int, int, int, int]:
         raise ChunkManifestError(
             "hardlink_rejected", f"hardlinked member: {relative}", file=relative
         )
-    if _looks_sparse_by_blocks(st) and _has_sparse_hole(path, st.st_size):
-        raise ChunkManifestError("sparse_file", f"sparse member: {relative}", file=relative)
+    _allocation_status(path, st, relative)
     return _identity(st)
 
 
@@ -451,6 +469,7 @@ class CachedFile:
     mode: str
     chunks: tuple[Mapping[str, Any], ...]
     content_sha256: str | None
+    file_sha256: str | None
     complete: bool
 
     def matches(self, identity: tuple[int, int, int, int, int], mode: str) -> bool:
@@ -459,9 +478,14 @@ class CachedFile:
 
     def reusable(self) -> bool:
         """Return whether the entry carries a complete, well-formed record."""
-        return self.complete and bool(self.content_sha256) and bool(self.chunks)
+        return (
+            self.complete
+            and bool(self.content_sha256)
+            and bool(self.file_sha256)
+            and bool(self.chunks)
+        )
 
-    def record(self, relative: str, size_bytes: int) -> dict[str, Any]:
+    def record(self, relative: str, size_bytes: int, allocation_status: str) -> dict[str, Any]:
         """Return the manifest record rebuilt from this cache entry."""
         chunks = [dict(chunk) for chunk in self.chunks]
         return {
@@ -470,6 +494,8 @@ class CachedFile:
             "mode": self.mode,
             "digest_kind": DIGEST_KIND_FULL if self.mode == "full" else DIGEST_KIND_CHUNKED,
             "content_sha256": self.content_sha256,
+            "file_sha256": self.file_sha256,
+            "allocation_status": allocation_status,
             "chunks": chunks,
         }
 
@@ -518,8 +544,12 @@ def _validate_state_entry(entry: Any) -> tuple[str, Mapping[str, Any]]:
         raise ChunkManifestError("state_invalid", f"{relative}: bad complete flag")
     if entry.get("complete") and not _hex64(entry.get("content_sha256")):
         raise ChunkManifestError("state_invalid", f"{relative}: bad content digest")
+    if entry.get("file_sha256") is not None and not _hex64(entry.get("file_sha256")):
+        raise ChunkManifestError("state_invalid", f"{relative}: bad whole-file digest")
     if not entry.get("complete") and entry.get("content_sha256") is not None:
         raise ChunkManifestError("state_invalid", f"{relative}: partial content digest")
+    if not entry.get("complete") and entry.get("file_sha256") is not None:
+        raise ChunkManifestError("state_invalid", f"{relative}: partial whole-file digest")
     _identity_tuple(entry.get("identity"))
     return relative, entry
 
@@ -636,6 +666,7 @@ class ResumeState:
             mode=str(entry.get("mode")),
             chunks=tuple(entry.get("chunks") or ()),
             content_sha256=entry.get("content_sha256"),
+            file_sha256=entry.get("file_sha256"),
             complete=bool(entry.get("complete")),
         )
 
@@ -650,7 +681,7 @@ class ResumeState:
         with self._lock:
             self.reused_chunks += max(chunks, 0)
 
-    def record_file(
+    def record_file(  # noqa: PLR0913 - checkpoint carries both content and whole-file digests
         self,
         relative: str,
         *,
@@ -659,6 +690,7 @@ class ResumeState:
         mode: str,
         chunks: Sequence[Mapping[str, Any]],
         content_sha256: str | None,
+        file_sha256: str | None = None,
         complete: bool,
         force_persist: bool = False,
     ) -> None:
@@ -671,6 +703,7 @@ class ResumeState:
                 "mode": mode,
                 "chunks": [dict(chunk) for chunk in chunks],
                 "content_sha256": content_sha256 if complete else None,
+                "file_sha256": file_sha256 if complete else None,
                 "complete": bool(complete),
             }
             if complete:
@@ -774,31 +807,40 @@ def _content_digest(
     return hasher.hexdigest(), DIGEST_KIND_CHUNKED
 
 
-def _hash_member(member, *, policy: ChunkingPolicy, cached: CachedFile | None = None, state=None):
+def _hash_member(  # noqa: C901 - hashes and checkpoints one file in a single pass
+    member, *, policy: ChunkingPolicy, cached: CachedFile | None = None, state=None
+):
     """Hash one member, reusing identity-guarded cached digests and chunk checkpoints."""
     relative, absolute, identity = member
     size_bytes = identity[0]
     mode = _mode_for_size(size_bytes, policy)
+    if _stat_checked(absolute, relative) != identity:
+        raise ChunkManifestError(
+            "source_mutated", f"changed before hashing: {relative}", file=relative
+        )
     if (
         cached is not None
         and state is not None
         and cached.matches(identity, mode)
         and cached.reusable()
     ):
-        record = cached.record(relative, size_bytes)
+        allocation_status = _allocation_status(absolute, absolute.stat(), relative)
+        record = cached.record(relative, size_bytes, allocation_status)
         state.note_reuse(len(cached.chunks))
         return record
-    if _stat_checked(absolute, relative) != identity:
-        raise ChunkManifestError(
-            "source_mutated", f"changed before hashing: {relative}", file=relative
-        )
     chunks, offset = _cached_prefix(cached, identity, mode, size_bytes, policy, state)
+    file_digest = hashlib.sha256()
     with absolute.open("rb") as handle:
-        handle.seek(offset)
+        prefix_remaining = offset
+        while prefix_remaining:
+            block = _read_exact(handle, min(READ_SIZE, prefix_remaining), relative)
+            file_digest.update(block)
+            prefix_remaining -= len(block)
         if mode == "full":
             stream = hashlib.sha256()
             for block in iter(lambda: handle.read(READ_SIZE), b""):
                 stream.update(block)
+                file_digest.update(block)
             chunks.append(
                 {"index": 0, "offset": 0, "length": size_bytes, "sha256": stream.hexdigest()}
             )
@@ -806,7 +848,9 @@ def _hash_member(member, *, policy: ChunkingPolicy, cached: CachedFile | None = 
             index = len(chunks)
             while offset < size_bytes:
                 length = min(policy.chunk_size_bytes, size_bytes - offset)
-                digest = hashlib.sha256(_read_exact(handle, length, relative)).hexdigest()
+                data = _read_exact(handle, length, relative)
+                file_digest.update(data)
+                digest = hashlib.sha256(data).hexdigest()
                 chunks.append(
                     {"index": index, "offset": offset, "length": length, "sha256": digest}
                 )
@@ -820,6 +864,7 @@ def _hash_member(member, *, policy: ChunkingPolicy, cached: CachedFile | None = 
                         mode=mode,
                         chunks=chunks,
                         content_sha256=None,
+                        file_sha256=None,
                         complete=False,
                     )
         if handle.read(1):
@@ -829,6 +874,8 @@ def _hash_member(member, *, policy: ChunkingPolicy, cached: CachedFile | None = 
             "source_mutated", f"changed during hashing: {relative}", file=relative
         )
     content, digest_kind = _content_digest(chunks, mode, size_bytes)
+    allocation_status = _allocation_status(absolute, absolute.stat(), relative)
+    whole_sha256 = file_digest.hexdigest()
     if state is not None:
         state.record_file(
             relative,
@@ -837,6 +884,7 @@ def _hash_member(member, *, policy: ChunkingPolicy, cached: CachedFile | None = 
             mode=mode,
             chunks=chunks,
             content_sha256=content,
+            file_sha256=whole_sha256,
             complete=True,
         )
     return {
@@ -845,6 +893,8 @@ def _hash_member(member, *, policy: ChunkingPolicy, cached: CachedFile | None = 
         "mode": mode,
         "digest_kind": digest_kind,
         "content_sha256": content,
+        "file_sha256": whole_sha256,
+        "allocation_status": allocation_status,
         "chunks": chunks,
     }
 
@@ -864,6 +914,11 @@ def _process_member(member, *, policy, expected=None, cached=None, state=None):
     if expected is not None:
         wanted = {int(chunk["index"]): chunk for chunk in expected.get("chunks", [])}
         failures = _compare_chunks(relative, mode, wanted, record["chunks"])
+        if (
+            expected.get("file_sha256") is not None
+            and expected["file_sha256"] != record["file_sha256"]
+        ):
+            failures.append({"code": "file_digest_mismatch", "file": relative})
     return {"path": relative, "record": record, "failures": failures}
 
 
@@ -1052,6 +1107,25 @@ def validate_manifest(payload: Any) -> list[dict[str, str]]:  # noqa: C901, PLR0
             issues.append(_issue("manifest_digest_kind", f"{relative}: digest_kind", relative))
         if not _hex64(record.get("content_sha256")):
             issues.append(_issue("manifest_digest_format", f"{relative}: content digest", relative))
+        allocation_status = record.get("allocation_status")
+        file_sha256 = record.get("file_sha256")
+        if (allocation_status is None) != (file_sha256 is None):
+            issues.append(
+                _issue(
+                    "manifest_allocation_proof",
+                    f"{relative}: incomplete allocation proof",
+                    relative,
+                )
+            )
+        if allocation_status is not None and allocation_status not in (
+            ALLOCATION_VERIFIED,
+            ALLOCATION_UNVERIFIED,
+        ):
+            issues.append(
+                _issue("manifest_allocation_proof", f"{relative}: allocation status", relative)
+            )
+        if file_sha256 is not None and not _hex64(file_sha256):
+            issues.append(_issue("manifest_digest_format", f"{relative}: file digest", relative))
         chunks = record.get("chunks")
         if not isinstance(chunks, list):
             issues.append(_issue("manifest_field_missing", f"{relative}: chunks", relative))
@@ -1060,6 +1134,10 @@ def validate_manifest(payload: Any) -> list[dict[str, str]]:  # noqa: C901, PLR0
         if mode == "full":
             if len(chunks) != 1 or int(chunks[0].get("length", -1)) != size_bytes:
                 issues.append(_issue("manifest_chunk_shape", f"{relative}: full chunk", relative))
+            elif file_sha256 is not None and chunks[0].get("sha256") != file_sha256:
+                issues.append(
+                    _issue("manifest_digest_mismatch", f"{relative}: file digest", relative)
+                )
             continue
         offset = 0
         for index, chunk in enumerate(chunks):
@@ -1174,7 +1252,7 @@ def load_manifest_file(path: Path) -> dict[str, Any]:
     return payload
 
 
-def verify_manifest(root, *, manifest, state=None, progress_every=0):
+def verify_manifest(root, *, manifest, state=None, progress_every=0, require_allocation=True):
     """Verify one root against a manifest, failing closed on any difference."""
     chunking = manifest["chunking"]
     policy = ChunkingPolicy(
@@ -1207,6 +1285,9 @@ def verify_manifest(root, *, manifest, state=None, progress_every=0):
     )
     for result in outcomes:
         failures.extend(result["failures"])
+        record = result["record"]
+        if require_allocation and record and record["allocation_status"] != ALLOCATION_VERIFIED:
+            failures.append({"code": ALLOCATION_UNVERIFIED, "file": result["path"]})
     failure_count = len(failures)
     truncated = failure_count > MAX_FAILURES
     if state is not None:
@@ -1217,8 +1298,115 @@ def verify_manifest(root, *, manifest, state=None, progress_every=0):
         "failure_count": failure_count,
         "failures_truncated": truncated,
         "members_checked": len(outcomes),
+        "allocation_policy": "destination" if require_allocation else "source",
+        "files": [
+            {
+                "path": result["path"],
+                "file_sha256": result["record"]["file_sha256"],
+                "allocation_status": result["record"]["allocation_status"],
+            }
+            for result in outcomes
+            if result["record"] is not None
+        ],
         "manifest_id": manifest["manifest_id"],
         "tree_sha256": manifest["tree_sha256"],
+    }
+
+
+def _custody_files(
+    receipt: Mapping[str, Any], manifest: Mapping[str, Any], *, side: str
+) -> dict[str, Mapping[str, Any]]:
+    """Validate a verification receipt and return its complete per-file evidence."""
+    expected = {record["path"]: record for record in manifest["files"]}
+    if (
+        receipt.get("status") != "ok"
+        or receipt.get("allocation_policy") != side
+        or not _is_int(receipt.get("failure_count"), minimum=0)
+        or receipt["failure_count"] != 0
+        or receipt.get("failures") != []
+        or receipt.get("failures_truncated") is not False
+        or not _is_int(receipt.get("members_checked"), minimum=0)
+        or receipt["members_checked"] != len(expected)
+        or receipt.get("manifest_id") != manifest["manifest_id"]
+        or receipt.get("tree_sha256") != manifest["tree_sha256"]
+        or "state_ref" in receipt
+    ):
+        raise ChunkManifestError(
+            "custody_verification_invalid", f"{side} verification is incomplete"
+        )
+    files = receipt.get("files")
+    if not isinstance(files, list) or len(files) != len(expected):
+        raise ChunkManifestError(
+            "custody_verification_invalid", f"{side} file evidence is incomplete"
+        )
+    found: dict[str, Mapping[str, Any]] = {}
+    for entry in files:
+        if not isinstance(entry, Mapping):
+            raise ChunkManifestError(
+                "custody_verification_invalid", f"{side} file evidence is malformed"
+            )
+        path = entry.get("path")
+        if not isinstance(path, str) or path not in expected or path in found:
+            raise ChunkManifestError(
+                "custody_verification_invalid", f"{side} has an unexpected file"
+            )
+        status = entry.get("allocation_status")
+        if status not in (ALLOCATION_VERIFIED, ALLOCATION_UNVERIFIED):
+            raise ChunkManifestError(
+                "custody_verification_invalid", f"{side} allocation status is invalid"
+            )
+        if side == "destination" and status != ALLOCATION_VERIFIED:
+            raise ChunkManifestError(
+                "custody_allocation_unverified", f"destination allocation unverified: {path}"
+            )
+        sha256 = entry.get("file_sha256")
+        if not _hex64(sha256) or sha256 != expected[path].get("file_sha256"):
+            raise ChunkManifestError("custody_hash_mismatch", f"{side} hash mismatch: {path}")
+        found[path] = entry
+    if set(found) != set(expected):
+        raise ChunkManifestError(
+            "custody_verification_invalid", f"{side} file evidence is incomplete"
+        )
+    return found
+
+
+def build_custody_receipt(
+    manifest: Mapping[str, Any],
+    source: Mapping[str, Any],
+    destination: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Bind complete, hash-equal copies to verified destination allocation."""
+    if validate_manifest(manifest):
+        raise ChunkManifestError("custody_manifest_invalid", "manifest is invalid")
+    if any(not _hex64(record.get("file_sha256")) for record in manifest["files"]):
+        raise ChunkManifestError("custody_manifest_invalid", "manifest lacks whole-file SHA-256")
+    source_files = _custody_files(source, manifest, side="source")
+    destination_files = _custody_files(destination, manifest, side="destination")
+    unverified = []
+    for record in manifest["files"]:
+        path = record["path"]
+        if source_files[path]["file_sha256"] != destination_files[path]["file_sha256"]:
+            raise ChunkManifestError("custody_hash_mismatch", f"copy hash mismatch: {path}")
+        if (
+            record.get("allocation_status") == ALLOCATION_UNVERIFIED
+            or source_files[path]["allocation_status"] == ALLOCATION_UNVERIFIED
+        ):
+            unverified.append(
+                {
+                    "path": path,
+                    "source_sha256": source_files[path]["file_sha256"],
+                    "destination_sha256": destination_files[path]["file_sha256"],
+                    "destination_allocation_status": destination_files[path]["allocation_status"],
+                }
+            )
+    return {
+        "schema_version": CUSTODY_SCHEMA_VERSION,
+        "manifest_id": manifest["manifest_id"],
+        "tree_sha256": manifest["tree_sha256"],
+        "member_count": len(manifest["files"]),
+        "allocation_unverified_source": unverified,
+        "source_status": "ok",
+        "destination_status": "ok",
     }
 
 
@@ -1314,8 +1502,16 @@ def _build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--root", type=Path, required=True)
     verify.add_argument("--manifest", type=Path, required=True)
     verify.add_argument("--state", type=Path, default=None)
+    verify.add_argument("--side", choices=("source", "destination"), default="destination")
     verify.add_argument("--progress-every", type=_non_negative_int, default=0)
     verify.add_argument("--json", action="store_true")
+
+    custody = commands.add_parser("custody", help="Bind source and destination verification")
+    custody.add_argument("--manifest", type=Path, required=True)
+    custody.add_argument("--source-verification", type=Path, required=True)
+    custody.add_argument("--destination-verification", type=Path, required=True)
+    custody.add_argument("--output", type=Path, required=True)
+    custody.add_argument("--json", action="store_true")
 
     compare = commands.add_parser("compare", help="Compare two manifests without a root scan")
     compare.add_argument("--left", type=Path, required=True)
@@ -1450,7 +1646,11 @@ def _run_verify(args: argparse.Namespace) -> int:
         )
         state = _load_or_init_state(state_path, root=root, policy=policy)
     result = verify_manifest(
-        root, manifest=manifest, state=state, progress_every=args.progress_every
+        root,
+        manifest=manifest,
+        state=state,
+        progress_every=args.progress_every,
+        require_allocation=args.side == "destination",
     )
     if state is not None:
         result["resume"] = state.stats()
@@ -1461,6 +1661,45 @@ def _run_verify(args: argparse.Namespace) -> int:
     result["receipt_ref"] = {"kind": SCHEMA_VERSION, "manifest_id": manifest["manifest_id"]}
     _dump(result, args.json)
     return EXIT_OK if result["status"] == "ok" else EXIT_FAILED
+
+
+def _read_json_mapping(path: Path) -> tuple[dict[str, Any], bytes]:
+    try:
+        raw = path.read_bytes()
+        payload = json.loads(raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ChunkManifestError("custody_input_invalid", f"cannot read {path.name}") from exc
+    if not isinstance(payload, dict):
+        raise ChunkManifestError("custody_input_invalid", f"{path.name} must be an object")
+    return payload, raw
+
+
+def _run_custody(args: argparse.Namespace) -> int:
+    input_paths = (args.manifest, args.source_verification, args.destination_verification)
+    if args.output.resolve() in {path.resolve() for path in input_paths}:
+        raise ChunkManifestError("custody_output_conflict", "output must differ from inputs")
+    manifest, manifest_raw = _read_json_mapping(args.manifest)
+    source, source_raw = _read_json_mapping(args.source_verification)
+    destination, destination_raw = _read_json_mapping(args.destination_verification)
+    receipt = build_custody_receipt(manifest, source, destination)
+    receipt["manifest_sha256"] = hashlib.sha256(manifest_raw).hexdigest()
+    receipt["source_verification_sha256"] = hashlib.sha256(source_raw).hexdigest()
+    receipt["destination_verification_sha256"] = hashlib.sha256(destination_raw).hexdigest()
+    receipt["receipt_sha256"] = hashlib.sha256(
+        json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    _write_json(args.output, receipt)
+    _dump(
+        {
+            "mode": "custody",
+            "status": "ok",
+            "receipt_sha256": receipt["receipt_sha256"],
+            "member_count": receipt["member_count"],
+            "allocation_unverified_count": len(receipt["allocation_unverified_source"]),
+        },
+        args.json,
+    )
+    return EXIT_OK
 
 
 def _run_compare(args: argparse.Namespace) -> int:
@@ -1483,6 +1722,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "manifest": _run_manifest,
         "resume": _run_resume,
         "verify": _run_verify,
+        "custody": _run_custody,
         "compare": _run_compare,
     }
     try:

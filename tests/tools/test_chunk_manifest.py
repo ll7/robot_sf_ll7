@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
@@ -333,6 +334,192 @@ def test_stat_checked_accepts_low_block_hint_confirmed_by_fiemap(
     )
     identity = cm._stat_checked(path, path.name)
     assert identity[0] == size
+
+
+def _gpfs_like_source(tmp_path: Path, monkeypatch, data: bytes) -> tuple[Path, Path, dict]:
+    """Make FIEMAP return EOPNOTSUPP for one low-allocation source inode."""
+    if cm.fcntl is None:
+        pytest.skip("FIEMAP needs fcntl")
+    source_root = tmp_path / "source"
+    destination_root = tmp_path / "destination"
+    source_root.mkdir()
+    destination_root.mkdir()
+    source_file = source_root / "output.bin"
+    source_file.write_bytes(data)
+    source_inode = source_file.stat().st_ino
+    real_hint = cm._looks_sparse_by_blocks
+    real_ioctl = cm.fcntl.ioctl
+    monkeypatch.setattr(
+        cm, "_looks_sparse_by_blocks", lambda st: st.st_ino == source_inode or real_hint(st)
+    )
+
+    def unsupported_source(fd, request, buffer, mutate):
+        if os.fstat(fd).st_ino == source_inode:
+            raise OSError(errno.EOPNOTSUPP, "FIEMAP unsupported")
+        return real_ioctl(fd, request, buffer, mutate)
+
+    monkeypatch.setattr(cm.fcntl, "ioctl", unsupported_source)
+    manifest = _build(source_root, chunk_size=128)
+    return source_root, destination_root, manifest
+
+
+def test_gpfs_like_source_dense_destination_passes_custody(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    data = b"compressed output" * 50
+    source_root, destination_root, manifest = _gpfs_like_source(tmp_path, monkeypatch, data)
+    (destination_root / "output.bin").write_bytes(data)
+    record = manifest["files"][0]
+    expected_sha = hashlib.sha256(data).hexdigest()
+    assert record["allocation_status"] == cm.ALLOCATION_UNVERIFIED
+    assert record["file_sha256"] == expected_sha
+    assert record["mode"] == "chunked"
+
+    source = cm.verify_manifest(source_root, manifest=manifest, require_allocation=False)
+    destination = cm.verify_manifest(destination_root, manifest=manifest, require_allocation=True)
+    assert source["status"] == destination["status"] == "ok"
+    assert source["files"][0]["allocation_status"] == cm.ALLOCATION_UNVERIFIED
+    assert destination["files"][0]["allocation_status"] == cm.ALLOCATION_VERIFIED
+    assert source["files"][0]["file_sha256"] == destination["files"][0]["file_sha256"]
+    receipt = cm.build_custody_receipt(manifest, source, destination)
+    assert receipt["allocation_unverified_source"] == [
+        {
+            "path": "output.bin",
+            "source_sha256": expected_sha,
+            "destination_sha256": expected_sha,
+            "destination_allocation_status": cm.ALLOCATION_VERIFIED,
+        }
+    ]
+
+    manifest_path = tmp_path / "manifest.json"
+    source_path = tmp_path / "source-verify.json"
+    destination_path = tmp_path / "destination-verify.json"
+    receipt_path = tmp_path / "custody.json"
+    for path, payload in (
+        (manifest_path, manifest),
+        (source_path, source),
+        (destination_path, destination),
+    ):
+        path.write_text(json.dumps(payload), encoding="utf-8")
+    source_args = ["verify", "--root", str(source_root), "--manifest", str(manifest_path), "--json"]
+    assert cm.main(source_args) == cm.EXIT_FAILED
+    assert json.loads(capsys.readouterr().out)["failures"][0]["code"] == cm.ALLOCATION_UNVERIFIED
+    assert cm.main([*source_args, "--side", "source"]) == cm.EXIT_OK
+    assert json.loads(capsys.readouterr().out)["allocation_policy"] == "source"
+    assert (
+        cm.main(
+            [
+                "verify",
+                "--side",
+                "destination",
+                "--root",
+                str(destination_root),
+                "--manifest",
+                str(manifest_path),
+                "--json",
+            ]
+        )
+        == cm.EXIT_OK
+    )
+    assert json.loads(capsys.readouterr().out)["allocation_policy"] == "destination"
+    assert (
+        cm.main(
+            [
+                "custody",
+                "--manifest",
+                str(manifest_path),
+                "--source-verification",
+                str(source_path),
+                "--destination-verification",
+                str(destination_path),
+                "--output",
+                str(receipt_path),
+            ]
+        )
+        == cm.EXIT_OK
+    )
+    written = json.loads(receipt_path.read_text(encoding="utf-8"))
+    digest = written.pop("receipt_sha256")
+    assert (
+        digest
+        == hashlib.sha256(
+            json.dumps(written, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+    )
+
+
+def test_gpfs_like_source_destination_hash_mismatch_fails(tmp_path: Path, monkeypatch) -> None:
+    data = b"compressed output" * 50
+    source_root, destination_root, manifest = _gpfs_like_source(tmp_path, monkeypatch, data)
+    changed = bytearray(data)
+    changed[200] ^= 1
+    (destination_root / "output.bin").write_bytes(changed)
+    source = cm.verify_manifest(source_root, manifest=manifest, require_allocation=False)
+    destination = cm.verify_manifest(destination_root, manifest=manifest, require_allocation=True)
+    assert destination["status"] == "failed"
+    assert "file_digest_mismatch" in {failure["code"] for failure in destination["failures"]}
+    with pytest.raises(cm.ChunkManifestError) as error:
+        cm.build_custody_receipt(manifest, source, destination)
+    assert error.value.code == "custody_verification_invalid"
+
+
+def test_gpfs_like_source_sparse_destination_fails(tmp_path: Path, monkeypatch) -> None:
+    data = b"\0" * (1024 * 1024) + b"x"
+    source_root, destination_root, manifest = _gpfs_like_source(tmp_path, monkeypatch, data)
+    destination_file = destination_root / "output.bin"
+    with destination_file.open("wb") as handle:
+        handle.seek(len(data) - 1)
+        handle.write(b"x")
+    if not cm._looks_sparse_by_blocks(destination_file.stat()):
+        pytest.skip("filesystem does not report sparse allocation")
+    assert (
+        cm.verify_manifest(source_root, manifest=manifest, require_allocation=False)["status"]
+        == "ok"
+    )
+    with pytest.raises(cm.ChunkManifestError) as error:
+        cm.verify_manifest(destination_root, manifest=manifest, require_allocation=True)
+    assert error.value.code == "sparse_file"
+
+
+def test_source_mapping_with_holes_still_fails(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "source"
+    root.mkdir()
+    path = root / "output.bin"
+    path.write_bytes(b"x" * 4096)
+    monkeypatch.setattr(cm, "_looks_sparse_by_blocks", lambda _st: True)
+    monkeypatch.setattr(
+        cm,
+        "_fiemap_extents",
+        lambda _fd, size: [
+            cm._FiemapExtent(64, size - 64, cm._FIEMAP_EXTENT_ENCODED | cm._FIEMAP_EXTENT_LAST)
+        ],
+    )
+    with pytest.raises(cm.ChunkManifestError) as error:
+        _build(root)
+    assert error.value.code == "sparse_file"
+
+
+@pytest.mark.parametrize(
+    "tamper", ("missing_destination", "unverified_destination", "wrong_hash", "cached_receipt")
+)
+def test_custody_rejects_incomplete_destination_proof(
+    tmp_path: Path, monkeypatch, tamper: str
+) -> None:
+    data = b"compressed output" * 50
+    source_root, destination_root, manifest = _gpfs_like_source(tmp_path, monkeypatch, data)
+    (destination_root / "output.bin").write_bytes(data)
+    source = cm.verify_manifest(source_root, manifest=manifest, require_allocation=False)
+    destination = cm.verify_manifest(destination_root, manifest=manifest, require_allocation=True)
+    if tamper == "missing_destination":
+        destination["files"] = []
+    elif tamper == "unverified_destination":
+        destination["files"][0]["allocation_status"] = cm.ALLOCATION_UNVERIFIED
+    elif tamper == "cached_receipt":
+        destination["state_ref"] = {"kind": cm.STATE_SCHEMA_VERSION}
+    else:
+        destination["files"][0]["file_sha256"] = "0" * 64
+    with pytest.raises(cm.ChunkManifestError):
+        cm.build_custody_receipt(manifest, source, destination)
 
 
 def test_source_mutation_guard_fails_closed(tmp_path: Path, monkeypatch) -> None:

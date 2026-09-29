@@ -124,6 +124,112 @@ def test_observation_mode_drift_blocks_development_parity() -> None:
         )
 
 
+def test_release_safety_wrapper_opt_in_requires_development_parity() -> None:
+    development_campaign, development_rows = CHECKER._load_canonical_campaign_rows(
+        CHECKER.DEFAULT_CONFIG
+    )
+    release_campaign, release_rows = CHECKER._load_release_candidate_rows(
+        CHECKER.DEFAULT_RELEASE_MATRIX
+    )
+    wrapper_on = {"enabled": True, "arm_key": "wrapper_on"}
+
+    with pytest.raises(CHECKER.ValidationError, match="safety_wrapper"):
+        CHECKER._validate_release_parity(
+            development_campaign=development_campaign,
+            development_rows=development_rows,
+            release_campaign=replace(release_campaign, safety_wrapper=wrapper_on),
+            release_rows=release_rows,
+        )
+
+    CHECKER._validate_release_parity(
+        development_campaign=replace(development_campaign, safety_wrapper=wrapper_on),
+        development_rows=development_rows,
+        release_campaign=replace(release_campaign, safety_wrapper=wrapper_on),
+        release_rows=release_rows,
+    )
+
+
+def test_development_arm_cannot_override_matching_campaign_wrapper() -> None:
+    development_campaign, development_rows = CHECKER._load_canonical_campaign_rows(
+        CHECKER.DEFAULT_CONFIG
+    )
+    release_campaign, release_rows = CHECKER._load_release_candidate_rows(
+        CHECKER.DEFAULT_RELEASE_MATRIX
+    )
+    wrapper_on = {"enabled": True, "arm_key": "wrapper_on"}
+    planners = (
+        replace(
+            development_campaign.planners[0],
+            safety_wrapper={"enabled": False, "arm_key": "wrapper_off"},
+        ),
+        *development_campaign.planners[1:],
+    )
+
+    with pytest.raises(CHECKER.ValidationError, match="effective safety_wrapper"):
+        CHECKER._validate_release_parity(
+            development_campaign=replace(
+                development_campaign, safety_wrapper=wrapper_on, planners=planners
+            ),
+            development_rows=development_rows,
+            release_campaign=replace(release_campaign, safety_wrapper=wrapper_on),
+            release_rows=release_rows,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "effective_field"),
+    [
+        ("observation_mode", "lidar", "observation_mode"),
+        ("horizon_override", 500, "horizon"),
+        ("dt_override", 0.2, "dt"),
+    ],
+)
+def test_development_arm_action_observation_override_requires_release_parity(
+    field: str, value: object, effective_field: str
+) -> None:
+    development_campaign, development_rows = CHECKER._load_canonical_campaign_rows(
+        CHECKER.DEFAULT_CONFIG
+    )
+    release_campaign, release_rows = CHECKER._load_release_candidate_rows(
+        CHECKER.DEFAULT_RELEASE_MATRIX
+    )
+    planners = (
+        replace(development_campaign.planners[0], **{field: value}),
+        *development_campaign.planners[1:],
+    )
+
+    with pytest.raises(CHECKER.ValidationError, match=effective_field):
+        CHECKER._validate_release_parity(
+            development_campaign=replace(development_campaign, planners=planners),
+            development_rows=development_rows,
+            release_campaign=release_campaign,
+            release_rows=release_rows,
+        )
+
+
+def test_scenario_candidate_selection_drift_blocks_development_parity() -> None:
+    development_campaign, development_rows = CHECKER._load_canonical_campaign_rows(
+        CHECKER.DEFAULT_CONFIG
+    )
+    release_campaign, release_rows = CHECKER._load_release_candidate_rows(
+        CHECKER.DEFAULT_RELEASE_MATRIX
+    )
+
+    with pytest.raises(CHECKER.ValidationError, match="scenario_candidates"):
+        CHECKER._validate_release_parity(
+            development_campaign=development_campaign,
+            development_rows=development_rows,
+            release_campaign=replace(
+                release_campaign,
+                scenario_candidates=replace(
+                    release_campaign.scenario_candidates,
+                    names=("classic_doorway_medium",),
+                ),
+            ),
+            release_rows=release_rows,
+        )
+
+
 def test_tuning_input_hash_closure_binds_release_candidate_matrix_chain() -> None:
     paths = set(
         CHECKER._tuning_input_paths(
@@ -138,6 +244,7 @@ def test_tuning_input_hash_closure_binds_release_candidate_matrix_chain() -> Non
     assert ROOT / CHECKER.RELEASE_CONFIG_RELATIVE_PATH in paths
     assert CHECKER.DEFAULT_RELEASE_MATRIX in paths
     assert ROOT / "configs/scenarios/classic_interactions_francis2023.yaml" in paths
+    assert ROOT / "robot_sf/benchmark/camera_ready/campaign.py" in paths
 
 
 @pytest.mark.parametrize("planner_key", sorted(CHECKER.EXPECTED_PLANNER_CONFIGS))

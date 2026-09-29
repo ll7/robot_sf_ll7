@@ -23,6 +23,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios, load_campaign_config
+from robot_sf.benchmark.camera_ready.campaign import _resolve_arm_safety_wrapper
 from robot_sf.training.scenario_loader import load_scenarios
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -51,6 +52,8 @@ SIMULATOR_CAMPAIGN_FIELDS = (
     "record_forces",
     "record_planner_decision_trace",
     "record_simulation_step_trace",
+    "safety_wrapper",
+    "scenario_candidates",
     "scenario_horizons_path",
     "radius_sweep",
 )
@@ -173,6 +176,7 @@ _TUNING_LOADER_RELATIVE_PATHS = (
     "robot_sf/benchmark/camera_ready/_config.py",
     "robot_sf/benchmark/camera_ready/_config_types.py",
     "robot_sf/benchmark/camera_ready/_util.py",
+    "robot_sf/benchmark/camera_ready/campaign.py",
     "robot_sf/training/scenario_loader.py",
     "robot_sf/benchmark/map_runner_policies/map_runner_policy_resolution.py",
     "robot_sf/benchmark/policy_search_manifest.py",
@@ -613,6 +617,17 @@ def _validate_release_disjointness(release_rows: Sequence[Mapping[str, Any]]) ->
         )
 
 
+def _effective_arm_action_observation(campaign: Any, planner: Any) -> dict[str, Any]:
+    """Resolve the per-arm overrides used by the release campaign runner."""
+    return {
+        "observation_mode": planner.observation_mode or campaign.observation_mode,
+        "horizon": (
+            planner.horizon_override if planner.horizon_override is not None else campaign.horizon
+        ),
+        "dt": planner.dt_override if planner.dt_override is not None else campaign.dt,
+    }
+
+
 def _validate_release_parity(
     *,
     development_campaign: Any,
@@ -630,6 +645,45 @@ def _validate_release_parity(
             "development simulator campaign settings differ from the 0.0.8 candidate: "
             f"{campaign_differences!r}"
         )
+
+    # The release runner lets an arm override campaign defaults. Compare each
+    # tuned arm's effective runtime settings as well as campaign values above.
+    release_planners = {planner.key: planner for planner in release_campaign.planners}
+    for planner in development_campaign.planners:
+        release_planner = release_planners.get(planner.key)
+        release_runtime = (
+            _effective_arm_action_observation(release_campaign, release_planner)
+            if release_planner is not None
+            else {
+                "observation_mode": release_campaign.observation_mode,
+                "horizon": release_campaign.horizon,
+                "dt": release_campaign.dt,
+            }
+        )
+        development_runtime = _effective_arm_action_observation(development_campaign, planner)
+        runtime_differences = sorted(
+            field
+            for field in release_runtime
+            if development_runtime[field] != release_runtime[field]
+        )
+        if runtime_differences:
+            raise ValidationError(
+                f"development planner {planner.key} effective action/observation settings "
+                f"differ from the 0.0.8 candidate: {runtime_differences!r}"
+            )
+        release_wrapper = (
+            _resolve_arm_safety_wrapper(cfg=release_campaign, planner=release_planner)
+            if release_planner is not None
+            else release_campaign.safety_wrapper
+        )
+        if (
+            _resolve_arm_safety_wrapper(cfg=development_campaign, planner=planner)
+            != release_wrapper
+        ):
+            raise ValidationError(
+                f"development planner {planner.key} effective safety_wrapper differs "
+                "from the 0.0.8 candidate"
+            )
 
     release_by_id = {
         _scenario_id(row, label="0.0.8 candidate scenario matrix"): row for row in release_rows

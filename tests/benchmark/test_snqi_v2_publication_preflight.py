@@ -25,10 +25,9 @@ def _write_json(path: Path, payload: object) -> None:
 
 def _v2_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Create a small, internally consistent v2 bundle with a frozen synthetic spec."""
+    from robot_sf.benchmark.snqi.compute import compute_snqi_v2, normalize_snqi_v2_terms
     from robot_sf.benchmark.snqi.v2_reports import family_vectors
     from robot_sf.benchmark.snqi.v2_spec import SIMULATED_FORCE, WEIGHTS, SnqiV2Spec
-
-    from robot_sf.benchmark.snqi.compute import compute_snqi_v2, normalize_snqi_v2_terms
 
     payload = tmp_path / "payload"
     paths = {

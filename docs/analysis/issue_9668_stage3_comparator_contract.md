@@ -9,6 +9,20 @@ The archive is checked by SHA-256 before its members are read in place. The
 executed 0.0.7 source/config/matrix pins; the older checked-in release manifest
 is not the comparison reference.
 
+The completed raw 0.0.8 runner writes `release/candidate_identity.json` and
+`reports/attribution_ledger.json` before Stage 3. The scaffold hashes the clean
+source commit, tracked campaign and scenario matrix, canonical scenario/seed
+axes, and each raw episode file. It is deliberately incomplete:
+`scaffold_status: requires_author_review`, empty `arm_slots`,
+`versioned_changes`, and ledger `entries`. The comparator rejects that
+status. The release owner completes and reviews the candidate-slot mapping and
+source-bound changes; a domain reviewer inspects each causal receipt and
+records `review.decision: accepted`, reviewer, and timestamp. Only then may
+the identity status be changed to `author_reviewed_ready`. The finalizer
+rechecks the same identity, ledger, findings, and row-file hashes before
+promotion. Neither scaffold generation nor comparison automatically accepts a
+candidate.
+
 The identity JSON has schema `release_007_008_candidate_identity.v1` and
 `release: "0.0.8"`. It declares `source_sha` (the clean checkout HEAD),
 `effective_config_path` and `effective_config_sha256`, `scenario_matrix` with
@@ -30,6 +44,15 @@ config and effective `planner_variant` in every non-ORCA scenario. Only the
 two adaptive arms may hand off to the approved ORCA config, and only on
 `francis2023_leave_group`. A v4 name plus a changed identity declaration
 cannot make all-ORCA or v3 execution admissible.
+
+For every candidate row, the comparator also reconstructs the complete
+scenario identity and run envelope from the exact campaign and scenario files.
+It requires H600, dt=0.1, the source-resolved planner algorithm and algorithm
+config hash, robot kinematics/command mode, scenario payload, force-recording
+and declared observation/trace/safety controls to match. It verifies the row
+and result-provenance config hashes against the reconstructed scenario
+parameters. A row-file checksum therefore proves byte custody but does not
+substitute for run-control validation.
 
 `versioned_changes` names each correction with a unique `id`, `kind`
 (`source`, `config`, `map`, `model`, or `planner`), `version`, `old_identity`, and

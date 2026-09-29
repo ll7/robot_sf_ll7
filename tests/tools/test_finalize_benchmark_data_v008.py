@@ -294,6 +294,33 @@ def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
         },
     )
     assert finalizer._require_scientific_candidate(producer, SOURCE_SHA, manifest)[0] == identity
+    assert finalizer._require_scientific_candidate_pair(producer, SOURCE_SHA, manifest) == (
+        identity,
+        result,
+    )
+    identity_bytes = identity_path.read_bytes()
+    identity["unbound_tamper"] = True
+    _write_json(identity_path, identity)
+    with pytest.raises(ValueError, match="accepted exact-source scientific candidate"):
+        finalizer._require_scientific_candidate_pair(producer, SOURCE_SHA, manifest)
+    identity_path.write_bytes(identity_bytes)
+    identity = json.loads(identity_bytes)
+    result_path = producer / "release/scientific_candidate_result.json"
+    result_bytes = result_path.read_bytes()
+    tampered_result = json.loads(result_bytes)
+    tampered_result["source_sha"] = "b" * 40
+    _write_json(result_path, tampered_result)
+    with pytest.raises(ValueError, match="accepted exact-source scientific candidate"):
+        finalizer._require_scientific_candidate_pair(producer, SOURCE_SHA, manifest)
+    result_path.write_bytes(result_bytes)
+    identity_path.unlink()
+    with pytest.raises(ValueError, match="identity and result must be paired"):
+        finalizer._require_scientific_candidate_pair(producer, SOURCE_SHA, manifest)
+    identity_path.write_bytes(identity_bytes)
+    result_path.unlink()
+    with pytest.raises(ValueError, match="identity and result must be paired"):
+        finalizer._require_scientific_candidate_pair(producer, SOURCE_SHA, manifest)
+    result_path.write_bytes(result_bytes)
     missing_metrics_identity = {
         **identity,
         "scientific_manifest": {**science, "metrics": {}},
@@ -417,6 +444,17 @@ def test_finalize_copies_accepted_producer_before_postrun_gates(
     )
     monkeypatch.setattr(finalizer, "verify_resolved_release_identity", lambda _: manifest)
     monkeypatch.setattr(finalizer, "load_release_campaign_config", lambda _: object())
+    verified_candidate_pairs: list[tuple[Path, str, object]] = []
+
+    def verify_scientific_candidate_pair(
+        candidate_root: Path, source_sha: str, checked_manifest: object
+    ) -> tuple[dict, dict]:
+        verified_candidate_pairs.append((candidate_root, source_sha, checked_manifest))
+        return ({"source_sha": source_sha}, {"status": "stage3_pending"})
+
+    monkeypatch.setattr(
+        finalizer, "_require_scientific_candidate", verify_scientific_candidate_pair
+    )
     calls: list[str] = []
 
     def gate(command: list[str], log_path: Path) -> None:
@@ -455,6 +493,7 @@ def test_finalize_copies_accepted_producer_before_postrun_gates(
         baseline_archive=baseline,
         expected_source_sha=SOURCE_SHA,
     )
+    assert verified_candidate_pairs == [(candidate, SOURCE_SHA, manifest)]
     assert result["publication_archive_sha256"] == finalizer._sha256(tmp_path / "candidate.tar.gz")
     assert json.loads((producer / "release" / "release_result.json").read_text()) == original
     assert (
@@ -552,6 +591,18 @@ def test_scientific_runner_records_stage3_pending_after_raw_completion(
         "build_scientific_candidate_identity",
         lambda **kwargs: identity,
     )
+    scaffold_paths = {
+        "candidate_identity_path": "release/candidate_identity.json",
+        "candidate_identity_sha256": "d" * 64,
+        "attribution_ledger_path": "reports/attribution_ledger.json",
+        "attribution_ledger_sha256": "e" * 64,
+        "episode_files": {},
+    }
+    monkeypatch.setattr(
+        runner,
+        "write_candidate_input_scaffolds",
+        lambda campaign_root, **kwargs: scaffold_paths,
+    )
     monkeypatch.setattr(runner, "scientific_candidate_acceptance_view", lambda *_: object())
     monkeypatch.setattr(
         runner,
@@ -586,7 +637,10 @@ def test_scientific_runner_records_stage3_pending_after_raw_completion(
     )
     assert receipt["status"] == "stage3_pending"
     assert receipt["stage3_status"] == "pending"
+    assert receipt["stage3_input_scaffold"] == scaffold_paths
     assert result["scientific_candidate_status"] == "stage3_pending"
+    assert result["stage3_candidate_identity_scaffold"] == scaffold_paths["candidate_identity_path"]
+    assert result["stage3_attribution_ledger_scaffold"] == scaffold_paths["attribution_ledger_path"]
     assert result["benchmark_success"] is True
 
 
@@ -846,6 +900,18 @@ def test_receipt_write_failure_invalidates_candidate(
 ) -> None:
     producer = tmp_path / "producer"
     _producer(producer)
+    _write_json(
+        producer / "release/scientific_candidate.json",
+        {"schema_version": "benchmark-scientific-candidate.v1", "source_sha": SOURCE_SHA},
+    )
+    _write_json(
+        producer / "release/scientific_candidate_result.json",
+        {
+            "schema_version": "benchmark-scientific-candidate-result.v1",
+            "source_sha": SOURCE_SHA,
+            "status": "stage3_pending",
+        },
+    )
     candidate = tmp_path / "candidate"
     baseline = tmp_path / "baseline.tar.gz"
     baseline.write_bytes(b"predecessor")
@@ -853,6 +919,14 @@ def test_receipt_write_failure_invalidates_candidate(
     monkeypatch.setattr(finalizer, "BASELINE_ARCHIVE_SHA256", finalizer._sha256(baseline))
     monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
     monkeypatch.setattr(finalizer, "load_release_campaign_config", lambda _: object())
+    monkeypatch.setattr(
+        finalizer,
+        "_require_scientific_candidate",
+        lambda _root, source, _manifest: (
+            {"source_sha": source},
+            {"source_sha": source, "status": "stage3_pending"},
+        ),
+    )
     monkeypatch.setattr(
         finalizer,
         "verify_resolved_release_identity",

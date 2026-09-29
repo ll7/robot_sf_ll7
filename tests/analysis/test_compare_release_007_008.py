@@ -330,6 +330,7 @@ def test_candidate_identity_requires_exact_roster_and_v4_names(
     monkeypatch.setattr(comparator, "_source_head", lambda _root: "a" * 40)
     monkeypatch.setattr(comparator, "_bound_file", lambda _root, _path, digest, **_kw: digest)
     monkeypatch.setattr(comparator, "_validate_effective_algorithms", lambda _identity, _root: {})
+    monkeypatch.setattr(comparator, "_candidate_run_controls", lambda _identity, _root: {})
     slots = [
         {
             "old_key": old,
@@ -499,9 +500,203 @@ def _versioned_v4_fixture(tmp_path: Path) -> tuple[Path, Path, dict, str]:
     return source, identity_path, identity, target_old
 
 
-def test_hashed_v4_config_derives_per_scenario_runtime_and_rejects_row_switch(
+def _run_control_fixture(tmp_path: Path) -> dict:
+    source = tmp_path / "run-control-source"
+    matrix = source / "configs/matrix.yaml"
+    campaign = source / "configs/campaign.yaml"
+    matrix.parent.mkdir(parents=True)
+    matrix.write_text(
+        yaml.safe_dump(
+            {
+                "scenarios": [
+                    {
+                        "name": "doorway",
+                        "id": "doorway",
+                        "seeds": list(comparator.EXPECTED_SEEDS),
+                        "robot_config": {"type": "holonomic", "command_mode": "goal"},
+                        "simulation_config": {
+                            "route_spawn_seed": None,
+                            "goal_completion_policy": "zone",
+                        },
+                    }
+                ]
+            },
+            sort_keys=True,
+        )
+    )
+    campaign.write_text(
+        yaml.safe_dump(
+            {
+                "name": "run-control-fixture",
+                "scenario_matrix": "matrix.yaml",
+                "horizon": 600,
+                "dt": 0.1,
+                "kinematics_matrix": ["differential_drive"],
+                "planners": [{"key": "fixture_arm", "algo": "goal"}],
+            },
+            sort_keys=True,
+        )
+    )
+    identity = {
+        "effective_config_path": "configs/campaign.yaml",
+        "scenario_matrix": {
+            "path": "configs/matrix.yaml",
+            "sha256": _sha(matrix),
+        },
+        "scenario_ids": ["doorway"],
+        "_effective_algorithms": {"fixture_arm": {"doorway": "goal"}},
+    }
+    return comparator._candidate_run_controls(identity, source)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "reason"),
+    [
+        (lambda row: row.update({"horizon": 300}), "row.horizon"),
+        (
+            lambda row: row["result_provenance"]["simulator_settings"].update({"dt": 0.2}),
+            "simulator_settings.dt",
+        ),
+        (
+            lambda row: row["scenario_params"].update({"run_dt": 0.2}),
+            "scenario_params differs from source-bound campaign, planner, and scenario",
+        ),
+        (
+            lambda row: row["scenario_params"]["robot_config"].update({"type": "holonomic"}),
+            "scenario_params differs from source-bound campaign, planner, and scenario",
+        ),
+        (
+            lambda row: row["scenario_params"]["robot_config"].update({"command_mode": "vx_vy"}),
+            "scenario_params differs from source-bound campaign, planner, and scenario",
+        ),
+        (
+            lambda row: row["scenario_params"].update({"algo": "social_force"}),
+            "source-bound campaign, planner, and scenario",
+        ),
+    ],
+)
+def test_candidate_run_controls_reject_rehashed_control_changes(
+    tmp_path: Path, mutate, reason: str
+) -> None:
+    controls = _run_control_fixture(tmp_path)
+    scenario = controls["scenarios"]["doorway"]
+    scenario_with_seed = comparator._scenario_with_episode_seed_defaults(
+        scenario["scenario"], seed=111
+    )
+    arm_control = controls["arms"]["fixture_arm"]
+    policy = arm_control["policy_configs"]["doorway"]
+    params = comparator._scenario_identity_payload(
+        scenario_with_seed,
+        algo=policy["algo"],
+        algo_config=policy["policy_config"],
+        horizon=arm_control["horizon"],
+        dt=arm_control["dt"],
+        record_forces=arm_control["record_forces"],
+        observation_mode=arm_control["observation_mode"],
+        observation_noise=arm_control["observation_noise"],
+        synthetic_actuation_profile=arm_control["synthetic_actuation_profile"],
+        latency_stress_profile=arm_control["latency_stress_profile"],
+        safety_wrapper=arm_control["safety_wrapper"],
+        record_planner_decision_trace=arm_control["record_planner_decision_trace"],
+        record_simulation_step_trace=arm_control["record_simulation_step_trace"],
+    )
+    row = {
+        "scenario_id": "doorway",
+        "seed": 111,
+        "algo": policy["algo"],
+        "horizon": arm_control["horizon"],
+        "config_hash": comparator._config_hash(params),
+        "result_provenance": {
+            "config_hash": comparator._config_hash(params),
+            "simulator_settings": {"horizon": 600, "dt": 0.1},
+        },
+        "scenario_params": params,
+    }
+    assert (
+        comparator._candidate_run_control_issues(
+            row,
+            arm="fixture_arm",
+            expected_algo=policy["algo"],
+            expected=controls,
+        )
+        == []
+    )
+    mutate(row)
+    issues = comparator._candidate_run_control_issues(
+        row,
+        arm="fixture_arm",
+        expected_algo=policy["algo"],
+        expected=controls,
+    )
+    assert any(reason in issue for issue in issues)
+
+
+def test_stage3_scaffold_binds_source_inputs_and_raw_rows_but_is_not_admissible(
     tmp_path: Path,
 ) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    subprocess.run(["git", "-C", str(source), "init", "-q"], check=True, capture_output=True)
+    config_sha = _write_yaml(source, "configs/campaign.yaml", {"scenario_matrix": "matrix.yaml"})
+    matrix_sha = _write_yaml(
+        source,
+        "configs/matrix.yaml",
+        {"scenarios": [{"name": item} for item in sorted(comparator.EXPECTED_SCENARIO_IDS)]},
+    )
+    source_sha = _git_commit(source)
+    campaign_root = tmp_path / "campaign"
+    episode_hashes = {}
+    for index in range(14):
+        path = campaign_root / f"runs/arm_{index}__differential_drive/episodes.jsonl"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({"arm": index}) + "\n", encoding="utf-8")
+        episode_hashes[path.relative_to(campaign_root).as_posix()] = _sha(path)
+    scientific_identity = {
+        "source_sha": source_sha,
+        "campaign_template_path": "configs/campaign.yaml",
+        "campaign_template_sha256": config_sha,
+        "scenario_ids": sorted(comparator.EXPECTED_SCENARIO_IDS),
+        "scientific_manifest": {
+            "scenario": {"matrix_path": "configs/matrix.yaml", "matrix_sha256": matrix_sha},
+            "seed_policy": {"resolved_seeds": list(comparator.EXPECTED_SEEDS)},
+        },
+    }
+
+    scaffold = comparator.write_candidate_input_scaffolds(
+        campaign_root,
+        source_root=source,
+        scientific_identity=scientific_identity,
+    )
+
+    identity_path = campaign_root / scaffold["candidate_identity_path"]
+    ledger_path = campaign_root / scaffold["attribution_ledger_path"]
+    identity = json.loads(identity_path.read_text(encoding="utf-8"))
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    assert identity["source_sha"] == source_sha
+    assert identity["effective_config_sha256"] == config_sha
+    assert identity["scenario_matrix"] == {
+        "path": "configs/matrix.yaml",
+        "sha256": matrix_sha,
+    }
+    assert identity["episode_files"] == episode_hashes
+    assert identity["scaffold_status"] == "requires_author_review"
+    assert identity["arm_slots"] == []
+    assert identity["versioned_changes"] == []
+    assert ledger == {
+        "schema_version": comparator.ATTRIBUTION_SCHEMA,
+        "candidate_source_sha": source_sha,
+        "entries": [],
+    }
+    assert scaffold["candidate_identity_sha256"] == _sha(identity_path)
+    assert scaffold["attribution_ledger_sha256"] == _sha(ledger_path)
+    with pytest.raises(ValueError, match="requires author/domain review"):
+        comparator.load_candidate_identity(identity_path, source)
+
+
+def test_hashed_v4_config_derives_per_scenario_runtime_and_rejects_row_switch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(comparator, "_candidate_run_controls", lambda _identity, _root: {})
     source, identity_path, identity, target_old = _versioned_v4_fixture(tmp_path)
     checked = comparator.load_candidate_identity(identity_path, source)
     target = next(slot for slot in identity["arm_slots"] if slot["old_key"] == target_old)

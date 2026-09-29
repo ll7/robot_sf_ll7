@@ -24,8 +24,24 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.camera_ready._config import (
+    _load_campaign_scenarios,
+    _scenario_with_kinematics,
+    load_campaign_config,
+)
+from robot_sf.benchmark.camera_ready.campaign import _resolve_arm_safety_wrapper
+from robot_sf.benchmark.map_runner.map_runner_identity import (
+    _scenario_identity_payload,
+    _scenario_with_episode_seed_defaults,
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
+    _apply_planner_selector_v2_context,
+    _apply_scenario_uncertainty_envelope_config,
+    _parse_algo_config,
+)
 from robot_sf.benchmark.policy_search_manifest import resolve_candidate_manifest_runtime
 from robot_sf.benchmark.release_acceptance import _status_markers
+from robot_sf.benchmark.utils import _config_hash
 from scripts.analysis.compare_issue_9431_release import (
     EXPECTED_ARM_KEYS,
     EXPECTED_SCENARIO_IDS,
@@ -105,6 +121,14 @@ def _json_object(path: Path) -> dict[str, Any]:
     return value
 
 
+def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, allow_nan=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
 def _bound_file(source_root: Path, relative: Any, expected_sha: Any, *, label: str) -> str:
     if not isinstance(relative, str) or not relative or Path(relative).is_absolute():
         raise ValueError(f"{label} needs a relative path")
@@ -153,6 +177,8 @@ def load_candidate_identity(  # noqa: C901, PLR0912 - keep identity gates in one
     identity = _json_object(path)
     if identity.get("schema_version") != CANDIDATE_SCHEMA or identity.get("release") != "0.0.8":
         raise ValueError("candidate comparison identity schema/release mismatch")
+    if identity.get("scaffold_status") not in {None, "author_reviewed_ready"}:
+        raise ValueError("candidate identity scaffold still requires author/domain review")
     source_sha = identity.get("source_sha")
     if not _is_sha(source_sha, 40) or _source_head(source_root) != source_sha:
         raise ValueError("candidate source commit does not match clean checkout")
@@ -224,7 +250,100 @@ def load_candidate_identity(  # noqa: C901, PLR0912 - keep identity gates in one
         raise ValueError("candidate episode_files checksums are missing")
     _validate_changes(identity, source_root)
     identity["_effective_algorithms"] = _validate_effective_algorithms(identity, source_root)
+    identity["_expected_run_controls"] = _candidate_run_controls(identity, source_root)
     return identity
+
+
+def write_candidate_input_scaffolds(
+    campaign_root: Path,
+    *,
+    source_root: Path,
+    scientific_identity: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Write a source/config/matrix/row-hash-bound Stage-3 review scaffold.
+
+    The scaffold is deliberately incomplete: the 0.0.8 arm mapping and causal
+    corrections require author/domain review. Its status and empty mapping/change
+    sets make it unusable for comparison acceptance until that review is recorded.
+    """
+    source_root = source_root.resolve(strict=True)
+    if _source_head(source_root) != scientific_identity.get("source_sha"):
+        raise ValueError("Stage-3 scaffold source differs from the clean candidate checkout")
+    science = scientific_identity.get("scientific_manifest")
+    if not isinstance(science, Mapping):
+        raise ValueError("scientific candidate manifest is missing for Stage-3 scaffold")
+    scenario = science.get("scenario")
+    seed_policy = science.get("seed_policy")
+    if not isinstance(scenario, Mapping) or not isinstance(seed_policy, Mapping):
+        raise ValueError("candidate scenario or seed identity is missing for Stage-3 scaffold")
+    effective_config_path = scientific_identity.get("campaign_template_path")
+    effective_config_sha256 = scientific_identity.get("campaign_template_sha256")
+    matrix_path = scenario.get("matrix_path")
+    matrix_sha256 = scenario.get("matrix_sha256")
+    scenario_ids = scientific_identity.get("scenario_ids")
+    seeds = seed_policy.get("resolved_seeds")
+    _bound_file(
+        source_root,
+        effective_config_path,
+        effective_config_sha256,
+        label="candidate effective config",
+    )
+    _bound_file(source_root, matrix_path, matrix_sha256, label="candidate scenario matrix")
+    if (
+        not isinstance(scenario_ids, list)
+        or scenario_ids != sorted(EXPECTED_SCENARIO_IDS)
+        or seeds != list(EXPECTED_SEEDS)
+    ):
+        raise ValueError("candidate scenario/seed inventory is not the canonical H600 matrix")
+    campaign_root = campaign_root.resolve(strict=True)
+    episode_files: dict[str, str] = {}
+    for path in sorted((campaign_root / "runs").glob("*/episodes.jsonl")):
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("candidate episode files must be regular, non-symlink files")
+        relative = path.relative_to(campaign_root).as_posix()
+        episode_files[relative] = _sha256(path)
+    if len(episode_files) != 14:
+        raise ValueError("Stage-3 scaffold requires the complete 14-arm raw row inventory")
+
+    identity_path = campaign_root / "release/candidate_identity.json"
+    ledger_path = campaign_root / "reports/attribution_ledger.json"
+    if any(path.exists() or path.is_symlink() for path in (identity_path, ledger_path)):
+        raise FileExistsError("Stage-3 input scaffold already exists; refusing to overwrite it")
+    candidate_identity = {
+        "schema_version": CANDIDATE_SCHEMA,
+        "release": "0.0.8",
+        "scaffold_status": "requires_author_review",
+        "source_sha": scientific_identity["source_sha"],
+        "effective_config_path": effective_config_path,
+        "effective_config_sha256": effective_config_sha256,
+        "scenario_matrix": {"path": matrix_path, "sha256": matrix_sha256},
+        "scenario_ids": scenario_ids,
+        "seeds": seeds,
+        "episode_files": episode_files,
+        "arm_slots": [],
+        "versioned_changes": [],
+        "versioned_inputs": [],
+        "review_requirements": [
+            "complete and review the historical-to-candidate arm mapping",
+            "declare source/config/matrix changes with bound identities",
+            "record one accepted causal receipt for every changed outcome or metric field",
+            "set scaffold_status to author_reviewed_ready only after that review",
+        ],
+    }
+    ledger = {
+        "schema_version": ATTRIBUTION_SCHEMA,
+        "candidate_source_sha": scientific_identity["source_sha"],
+        "entries": [],
+    }
+    _write_json(identity_path, candidate_identity)
+    _write_json(ledger_path, ledger)
+    return {
+        "candidate_identity_path": identity_path.relative_to(campaign_root).as_posix(),
+        "candidate_identity_sha256": _sha256(identity_path),
+        "attribution_ledger_path": ledger_path.relative_to(campaign_root).as_posix(),
+        "attribution_ledger_sha256": _sha256(ledger_path),
+        "episode_files": episode_files,
+    }
 
 
 def _validate_changes(  # noqa: C901 - independent change-custody checks
@@ -393,6 +512,219 @@ def _validate_effective_algorithms(  # noqa: C901, PLR0912, PLR0915 - source-bou
     return expected
 
 
+def _candidate_run_controls(  # noqa: C901, PLR0912, PLR0915 - one audited source-bound gate
+    identity: Mapping[str, Any], source_root: Path
+) -> dict[str, Any]:
+    """Resolve run controls and scenario payloads from the source-bound campaign.
+
+    The row file digest proves only which bytes were read. It cannot prove that
+    those bytes describe the declared H600/dt/kinematics campaign. Reconstruct
+    that contract from the exact tracked campaign and matrix before comparing
+    rows.
+    """
+    campaign_path = (source_root / str(identity["effective_config_path"])).resolve()
+    campaign_payload = _yaml_mapping(campaign_path, label="candidate campaign config")
+    campaign = load_campaign_config(campaign_path, repository_root=source_root)
+    matrix_path = Path(campaign.scenario_matrix_path).resolve()
+    raw_matrix_path = campaign_payload.get("scenario_matrix")
+    if not isinstance(raw_matrix_path, str) or not raw_matrix_path:
+        raise ValueError("candidate campaign config has no scenario matrix path")
+    configured_matrix_path = (campaign_path.parent / raw_matrix_path).resolve()
+    try:
+        matrix_relative = matrix_path.relative_to(source_root.resolve()).as_posix()
+    except ValueError as exc:
+        raise ValueError("candidate scenario matrix escapes the source checkout") from exc
+    declared_matrix = identity.get("scenario_matrix")
+    if (
+        not isinstance(declared_matrix, Mapping)
+        or declared_matrix.get("path") != matrix_relative
+        or configured_matrix_path != matrix_path
+    ):
+        raise ValueError("candidate campaign config and identity scenario matrix differ")
+    if campaign.horizon != 600 or campaign.dt != 0.1:
+        raise ValueError("candidate campaign run controls must declare H600 and dt=0.1")
+    if tuple(campaign.kinematics_matrix) != ("differential_drive",):
+        raise ValueError("candidate campaign kinematics must be differential_drive only")
+
+    resolved_scenarios = _load_campaign_scenarios(campaign, repository_root=source_root)
+    scenario_controls: dict[str, dict[str, Any]] = {}
+    for scenario in resolved_scenarios:
+        scenario_id = str(
+            scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or ""
+        ).strip()
+        if not scenario_id or scenario_id in scenario_controls:
+            raise ValueError("candidate campaign matrix has missing or duplicate scenario IDs")
+        expected_scenario = _scenario_with_kinematics(
+            scenario,
+            kinematics="differential_drive",
+            holonomic_command_mode=campaign.holonomic_command_mode,
+        )
+        expected_seeds = expected_scenario.get("seeds")
+        if expected_seeds != list(EXPECTED_SEEDS):
+            raise ValueError(f"{scenario_id}: candidate scenario seeds differ from 111–140")
+        if campaign.telemetry is not None:
+            expected_scenario["telemetry"] = dict(campaign.telemetry)
+        scenario_controls[scenario_id] = {"scenario": expected_scenario}
+    if set(scenario_controls) != set(identity["scenario_ids"]):
+        raise ValueError("candidate campaign matrix scenario IDs differ from candidate identity")
+    effective_algorithms = identity.get("_effective_algorithms")
+    if not isinstance(effective_algorithms, Mapping):
+        raise ValueError("candidate runtime algorithms were not source-resolved")
+    arm_controls: dict[str, dict[str, Any]] = {}
+    for planner in campaign.planners:
+        horizon = (
+            planner.horizon_override if planner.horizon_override is not None else campaign.horizon
+        )
+        dt = planner.dt_override if planner.dt_override is not None else campaign.dt
+        active_observation_mode = planner.observation_mode or campaign.observation_mode
+        if horizon != 600 or dt != 0.1:
+            raise ValueError(f"{planner.key}: planner run controls differ from H600 and dt=0.1")
+        config_path = planner.algo_config_path
+        if config_path is None:
+            manifest: dict[str, Any] = {}
+        else:
+            config_path = Path(config_path).resolve()
+            if not config_path.is_relative_to(source_root.resolve()):
+                raise ValueError(f"{planner.key}: planner config escapes candidate source")
+            manifest = _parse_algo_config(str(config_path))
+
+        def load_config(raw_path: object) -> dict[str, Any]:
+            if not isinstance(raw_path, str) or not raw_path:
+                raise ValueError(f"{planner.key}: candidate base config path is missing")
+            candidate_path = Path(raw_path)
+            if not candidate_path.is_absolute():
+                rooted = source_root / candidate_path
+                anchored = (
+                    (config_path.parent / candidate_path) if config_path is not None else rooted
+                )
+                candidate_path = rooted if rooted.is_file() else anchored
+            candidate_path = candidate_path.resolve()
+            if (
+                not candidate_path.is_relative_to(source_root.resolve())
+                or not candidate_path.is_file()
+            ):
+                raise ValueError(f"{planner.key}: candidate base config is outside source checkout")
+            return _parse_algo_config(str(candidate_path))
+
+        by_scenario = effective_algorithms.get(planner.key)
+        if not isinstance(by_scenario, Mapping):
+            raise ValueError(f"{planner.key}: source-resolved algorithm map is missing")
+        policy_configs: dict[str, dict[str, Any]] = {}
+        for scenario_id, control in scenario_controls.items():
+            scenario = control["scenario"]
+            algo, policy_config = resolve_candidate_manifest_runtime(
+                default_algo=planner.algo,
+                manifest=manifest,
+                scenario=scenario,
+                load_config=load_config,
+            )
+            if algo != by_scenario.get(scenario_id):
+                raise ValueError(f"{planner.key}/{scenario_id}: resolved algorithm map changed")
+            policy_configs[scenario_id] = {
+                "algo": algo,
+                "policy_config": policy_config,
+            }
+        actuation_profile = (
+            campaign.synthetic_actuation_profile.to_metadata()
+            if campaign.synthetic_actuation_profile is not None
+            else None
+        )
+        safety_wrapper = _resolve_arm_safety_wrapper(cfg=campaign, planner=planner)
+        arm_controls[planner.key] = {
+            "horizon": horizon,
+            "dt": dt,
+            "record_forces": campaign.record_forces,
+            "record_planner_decision_trace": campaign.record_planner_decision_trace,
+            "record_simulation_step_trace": campaign.record_simulation_step_trace,
+            "observation_mode": active_observation_mode,
+            "observation_noise": campaign.observation_noise,
+            "synthetic_actuation_profile": actuation_profile,
+            "latency_stress_profile": (
+                campaign.latency_stress_profile.to_metadata(dt=dt)
+                if campaign.latency_stress_profile is not None
+                else None
+            ),
+            "safety_wrapper": safety_wrapper,
+            "policy_configs": policy_configs,
+        }
+    return {"scenarios": scenario_controls, "arms": arm_controls}
+
+
+def _candidate_run_control_issues(  # noqa: C901 - compare every execution field together
+    row: Mapping[str, Any],
+    *,
+    arm: str,
+    expected_algo: str,
+    expected: Mapping[str, Any],
+) -> list[str]:
+    """Compare a candidate row's run identity with reconstructed source controls."""
+    scenario_id = row.get("scenario_id")
+    scenario = expected.get("scenarios", {}).get(scenario_id)
+    arm_control = expected.get("arms", {}).get(arm)
+    if not isinstance(scenario, Mapping) or not isinstance(arm_control, Mapping):
+        return ["scenario has no source-bound run-control declaration"]
+    issues: list[str] = []
+    seed = row.get("seed")
+    if type(seed) is not int or seed not in EXPECTED_SEEDS:
+        issues.append("row.seed differs from source-bound release seeds")
+    if row.get("horizon") != arm_control["horizon"]:
+        issues.append("row.horizon differs from source-bound H600")
+    provenance = row.get("result_provenance")
+    settings = provenance.get("simulator_settings") if isinstance(provenance, Mapping) else None
+    if not isinstance(settings, Mapping) or settings.get("horizon") != arm_control["horizon"]:
+        issues.append("result_provenance.simulator_settings.horizon differs from source-bound H600")
+    if not isinstance(settings, Mapping) or settings.get("dt") != arm_control["dt"]:
+        issues.append("result_provenance.simulator_settings.dt differs from source-bound dt")
+    if type(seed) is int:
+        scenario_with_seed = _scenario_with_episode_seed_defaults(scenario["scenario"], seed=seed)
+        config_pair = arm_control["policy_configs"].get(scenario_id)
+        if not isinstance(config_pair, Mapping) or config_pair.get("algo") != expected_algo:
+            issues.append("source-resolved algorithm differs from row runtime")
+            return issues
+        policy_config = _apply_planner_selector_v2_context(
+            expected_algo,
+            dict(config_pair["policy_config"]),
+            scenario=scenario_with_seed,
+            seed=seed,
+        )
+        policy_config = _apply_scenario_uncertainty_envelope_config(
+            expected_algo, policy_config, scenario_with_seed
+        )
+        expected_params = _scenario_identity_payload(
+            scenario_with_seed,
+            algo=expected_algo,
+            algo_config=policy_config,
+            horizon=arm_control["horizon"],
+            dt=arm_control["dt"],
+            record_forces=arm_control["record_forces"],
+            observation_mode=arm_control["observation_mode"],
+            observation_noise=arm_control["observation_noise"],
+            synthetic_actuation_profile=arm_control["synthetic_actuation_profile"],
+            latency_stress_profile=arm_control["latency_stress_profile"],
+            safety_wrapper=arm_control["safety_wrapper"],
+            record_planner_decision_trace=arm_control["record_planner_decision_trace"],
+            record_simulation_step_trace=arm_control["record_simulation_step_trace"],
+        )
+        params = row.get("scenario_params")
+        if not isinstance(params, Mapping):
+            issues.append("scenario_params is missing or malformed")
+        elif dict(params) != expected_params:
+            issues.append(
+                "scenario_params differs from source-bound campaign, planner, and scenario"
+            )
+        expected_config_hash = _config_hash(expected_params)
+        if row.get("config_hash") != expected_config_hash:
+            issues.append("row.config_hash differs from reconstructed scenario params")
+        result_config_hash = (
+            provenance.get("config_hash") if isinstance(provenance, Mapping) else None
+        )
+        if result_config_hash != expected_config_hash:
+            issues.append(
+                "result_provenance.config_hash differs from reconstructed scenario params"
+            )
+    return issues
+
+
 def _compact_row(row: Mapping[str, Any]) -> dict[str, Any]:
     return {
         key: row.get(key)
@@ -426,7 +758,13 @@ def _compact_row(row: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _candidate_execution_issues(row: Mapping[str, Any], *, expected_algo: str) -> list[str]:
+def _candidate_execution_issues(
+    row: Mapping[str, Any],
+    *,
+    arm: str,
+    expected_algo: str,
+    run_controls: Mapping[str, Any] | None = None,
+) -> list[str]:
     """Audit candidate execution eligibility on the raw row before compaction."""
     issues = [
         f"{path.removeprefix('candidate_row.')}={marker}"
@@ -444,15 +782,25 @@ def _candidate_execution_issues(row: Mapping[str, Any], *, expected_algo: str) -
     validity = row.get("spawn_validity")
     if isinstance(validity, Mapping) and validity.get("invalid_run") is True:
         issues.append("spawn_validity.invalid_run=true")
+    if run_controls is not None:
+        issues.extend(
+            _candidate_run_control_issues(
+                row,
+                arm=arm,
+                expected_algo=expected_algo,
+                expected=run_controls,
+            )
+        )
     return list(dict.fromkeys(issues))
 
 
-def _read_jsonl_stream(  # noqa: C901 - all raw-row gates share one read
+def _read_jsonl_stream(  # noqa: C901, PLR0913 - all raw-row gates share one read
     lines: Any,
     *,
     arm: str,
     expected_algos: set[str],
     effective_algorithms: Mapping[str, str] | None = None,
+    run_controls: Mapping[str, Any] | None = None,
     source: str,
     expected_commit: str,
     rows: dict[tuple[str, str, int], dict[str, Any]],
@@ -536,7 +884,9 @@ def _read_jsonl_stream(  # noqa: C901 - all raw-row gates share one read
             expected_algo = expected_scenario_algo or (
                 row_algo if isinstance(row_algo, str) else arm
             )
-            issues = _candidate_execution_issues(row, expected_algo=expected_algo)
+            issues = _candidate_execution_issues(
+                row, arm=arm, expected_algo=expected_algo, run_controls=run_controls
+            )
             if issues:
                 anomalies.append(
                     {
@@ -653,6 +1003,7 @@ def read_candidate_rows(
                 arm=arm,
                 expected_algos=row_algos.get(arm, {arm}),
                 effective_algorithms=effective.get(arm, {}),
+                run_controls=identity.get("_expected_run_controls"),
                 source=relative,
                 expected_commit=identity["source_sha"],
                 rows=rows,
@@ -884,7 +1235,9 @@ def compare_episode_maps(  # noqa: C901, PLR0912 - all per-pair checks share one
                 )
             if side == "new":
                 problems = _candidate_execution_issues(
-                    row, expected_algo=str(row.get("algo") or slot["new_key"])
+                    row,
+                    arm=slot["new_key"],
+                    expected_algo=str(row.get("algo") or slot["new_key"]),
                 )
                 if problems:
                     anomalies.append(

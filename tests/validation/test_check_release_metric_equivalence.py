@@ -21,6 +21,7 @@ from scripts.analysis.compare_release_007_008 import (
     load_attribution_ledger,
 )
 from scripts.validation.check_release_metric_equivalence import (
+    _classify_status,
     _read_archive,
     _read_archive_manifest,
     _read_candidate,
@@ -118,6 +119,85 @@ def test_missing_or_extra_episode_identity_is_reported() -> None:
         ("missing_identity",),
         ("unexpected_identity",),
     }
+
+
+@pytest.mark.parametrize(
+    "candidate_key",
+    [
+        ("goal", "other_scenario", 111),
+        ("goal", "doorway", 112),
+    ],
+)
+def test_diagnostic_status_rejects_equal_count_identity_substitution(candidate_key) -> None:
+    report = compare({KEY: {"metrics": {}}}, {candidate_key: {"metrics": {}}})
+    assert report["baseline_rows"] == report["candidate_rows"] == 1
+    assert (
+        _classify_status(
+            report,
+            expected_rows=1,
+            manifest_differences=[],
+        )
+        == "identity_count_mismatch"
+    )
+
+
+def test_diagnostic_status_keeps_force_failure_ahead_of_manifest_mismatch() -> None:
+    report = {
+        "status": "mismatch",
+        "baseline_rows": 1,
+        "candidate_rows": 1,
+        "mismatches": [],
+    }
+    status = _classify_status(
+        report,
+        expected_rows=1,
+        manifest_differences=["planners.config_identities[0].sha256"],
+        force_report={"status": "invalid_robot_force_metrics"},
+    )
+    assert status == "invalid_robot_force_metrics"
+
+
+@pytest.mark.parametrize(
+    "manifest_path",
+    [
+        "matrix.expected_episode_cells",
+        "matrix.horizon_steps",
+        "seed_policy.resolved_seeds[0]",
+        "kinematics.matrix[0]",
+        "metrics.snqi_weights_sha256",
+    ],
+)
+def test_diagnostic_status_rejects_structural_manifest_changes(manifest_path: str) -> None:
+    report = {"status": "mismatch", "baseline_rows": 1, "candidate_rows": 1, "mismatches": []}
+    assert (
+        _classify_status(
+            report,
+            expected_rows=1,
+            manifest_differences=[manifest_path],
+        )
+        == "scientific_manifest_mismatch"
+    )
+
+
+@pytest.mark.parametrize(
+    "manifest_path",
+    [
+        "planners.config_identities[0].sha256",
+        "scenario.matrix_sha256",
+    ],
+)
+def test_diagnostic_status_allows_source_bound_scenario_or_planner_change_for_stage3(
+    manifest_path: str,
+) -> None:
+    report = {"status": "mismatch", "baseline_rows": 1, "candidate_rows": 1, "mismatches": []}
+    assert (
+        _classify_status(
+            report,
+            expected_rows=1,
+            manifest_differences=[manifest_path],
+        )
+        == "mismatch"
+    )
 
 
 def test_legacy_nan_sentinel_must_remain_nan() -> None:

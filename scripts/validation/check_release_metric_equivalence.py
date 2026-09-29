@@ -447,6 +447,61 @@ def scan_robot_force_metrics(root: Path, expected_source: str) -> dict[str, Any]
     }
 
 
+def _has_identity_mismatch(report: dict[str, Any]) -> bool:
+    """Return whether pairing changed, even when the row counts still match."""
+    for mismatch in report.get("mismatches", []):
+        paths = mismatch.get("paths") if isinstance(mismatch, dict) else None
+        if isinstance(paths, list) and {
+            "missing_identity",
+            "unexpected_identity",
+        } & set(paths):
+            return True
+    return False
+
+
+def _structural_manifest_differences(differences: list[str]) -> list[str]:
+    """Keep campaign axes, metric assets, and kinematics outside diagnostics.
+
+    Source-bound scenario-map and planner corrections remain in the complete
+    report for Stage 3 attribution. The v1 metric assets must stay pinned; v2
+    additions are handled by the manifest's explicit allowlist. Row-set
+    comparison and the source-bound Stage-3 identity independently require the
+    canonical scenario/seed axes and bind every changed input.
+    """
+    structural_roots = {"matrix", "seed_policy", "kinematics", "metrics"}
+    return [
+        path
+        for path in differences
+        if path.split(".", 1)[0] in structural_roots or path.split(".", 1)[0] in {"files", "file"}
+    ]
+
+
+def _classify_status(
+    report: dict[str, Any],
+    *,
+    expected_rows: int,
+    manifest_differences: list[str],
+    force_report: dict[str, Any] | None = None,
+) -> str:
+    """Keep structural failures outside diagnostic outcome/metric suppression.
+
+    The diagnostic flag is interpreted by ``main`` only after this classifier has
+    separated row identity, force validity, and structural manifest failures from
+    ordinary predecessor outcome or metric changes.
+    """
+    if (
+        report.get("baseline_rows") != expected_rows
+        or report.get("candidate_rows") != expected_rows
+        or _has_identity_mismatch(report)
+    ):
+        return "identity_count_mismatch"
+    if force_report is not None and force_report.get("status") != "pass":
+        return "invalid_robot_force_metrics"
+    if _structural_manifest_differences(manifest_differences):
+        return "scientific_manifest_mismatch"
+    return str(report.get("status", "mismatch"))
+
+
 def main() -> int:
     """Verify a pinned archive against one exact-source successor campaign."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -495,29 +550,25 @@ def main() -> int:
             "scientific_manifest_differences": manifest_differences,
         }
     )
+    force_report: dict[str, Any] | None = None
     if args.require_robot_force_metrics:
         force_report = scan_robot_force_metrics(args.candidate_root, args.candidate_source_sha)
         report["robot_force_metrics"] = force_report
-        if force_report["status"] != "pass":
-            report["status"] = "invalid_robot_force_metrics"
-    if len(baseline) != args.expected_rows or len(candidate) != args.expected_rows:
-        report["status"] = "identity_count_mismatch"
-    if manifest_differences:
-        report["status"] = "scientific_manifest_mismatch"
+    report["status"] = _classify_status(
+        report,
+        expected_rows=args.expected_rows,
+        manifest_differences=manifest_differences,
+        force_report=force_report,
+    )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(
         f"{report['status']}: {report['paired_rows']} paired; {report['mismatch_episodes']} mismatches"
     )
-    # A corrected release may legitimately change predecessor fields.  Keep the
-    # complete mismatch inventory in the report, but let the receipt-backed
-    # Stage-3 comparator decide whether those changes are explained.  Structural
-    # identity and force-shape failures keep their fail-closed exit.  The
-    # corrected candidate's manifest differences remain diagnostics for Stage 3.
-    diagnostic_pass = args.diagnostic and report["status"] in {
-        "mismatch",
-        "scientific_manifest_mismatch",
-    }
+    # A corrected release may legitimately change predecessor outcomes or metric
+    # fields.  Keep every mismatch in the report, but never suppress row identity,
+    # manifest/file, or robot-force validity failures in diagnostic mode.
+    diagnostic_pass = args.diagnostic and report["status"] == "mismatch"
     return 0 if report["status"] == "pass" or diagnostic_pass else 1
 
 

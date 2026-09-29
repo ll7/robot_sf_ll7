@@ -54,6 +54,9 @@ from robot_sf.benchmark.runtime_smoke_admission import (  # noqa: E402
     validate_runtime_smoke_result,
 )
 from robot_sf.common.artifact_paths import get_repository_root  # noqa: E402
+from scripts.analysis.compare_release_007_008 import (  # noqa: E402
+    write_candidate_input_scaffolds,
+)
 from scripts.tools.record_post_campaign_stage_status import build_stage_status  # noqa: E402
 from scripts.tools.run_benchmark_release import (  # noqa: E402
     _compare_rehearsal_checkpoint_identities,
@@ -192,10 +195,18 @@ def _finish_scientific_candidate(
         "robot_force_validation_sha256": _sha256(force_report),
         "robot_force_log_sha256": _sha256(report_dir / "scientific_candidate_force.log"),
     }
+    stage3_scaffold = write_candidate_input_scaffolds(
+        root,
+        source_root=get_repository_root(),
+        scientific_identity=identity,
+    )
+    receipt["stage3_input_scaffold"] = stage3_scaffold
     _write_json(root / "release/scientific_candidate_result.json", receipt)
     result["scientific_candidate_status"] = "stage3_pending"
     result["scientific_candidate_stage3_status"] = "pending"
     result["scientific_candidate_identity"] = str(identity_path)
+    result["stage3_candidate_identity_scaffold"] = stage3_scaffold["candidate_identity_path"]
+    result["stage3_attribution_ledger_scaffold"] = stage3_scaffold["attribution_ledger_path"]
 
 
 def _build_parser() -> argparse.ArgumentParser:

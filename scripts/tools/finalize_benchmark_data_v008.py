@@ -255,16 +255,25 @@ def _promote_scientific_candidate_result(
     return result
 
 
-def _promote_scientific_candidate_if_present(
-    candidate_root: Path, stage3_receipt: dict[str, Any]
-) -> dict[str, Any] | None:
-    """Require paired science identity/result files and promote them after Stage 3."""
+def _require_scientific_candidate_pair(
+    candidate_root: Path, source_sha: str, manifest: Any
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Require and reverify the paired science identity before any promotion."""
     identity_path = candidate_root / "release/scientific_candidate.json"
     result_path = candidate_root / "release/scientific_candidate_result.json"
-    if not identity_path.exists() and not result_path.exists():
-        return None
     if not identity_path.is_file() or not result_path.is_file():
         raise ValueError("scientific candidate identity and result must be paired")
+    return _require_scientific_candidate(candidate_root, source_sha, manifest)
+
+
+def _promote_scientific_candidate(
+    candidate_root: Path,
+    stage3_receipt: dict[str, Any],
+    source_sha: str,
+    manifest: Any,
+) -> dict[str, Any]:
+    """Reverify the bound pair, then promote it after the Stage-3 receipt."""
+    _require_scientific_candidate_pair(candidate_root, source_sha, manifest)
     return _promote_scientific_candidate_result(candidate_root, stage3_receipt)
 
 
@@ -825,7 +834,12 @@ def finalize(  # noqa: PLR0913
         )
         _materialize_stage3_artifacts(candidate_root, stage3_paths, stage3_receipt)
         stage = "scientific_candidate_promotion"
-        _promote_scientific_candidate_if_present(candidate_root, stage3_receipt)
+        _promote_scientific_candidate(
+            candidate_root,
+            stage3_receipt,
+            expected_source_sha,
+            manifest,
+        )
         stage = "metric_equivalence"
         _run_gate(
             [
@@ -978,7 +992,7 @@ def finalize_pre_doi_candidate(  # noqa: C901, PLR0912, PLR0913, PLR0915
         expected_source_sha=expected_source_sha,
         paths=stage3_paths,
     )
-    identity, _ = _require_scientific_candidate(producer_root, expected_source_sha, manifest)
+    identity, _ = _require_scientific_candidate_pair(producer_root, expected_source_sha, manifest)
     _read_scientific_candidate_manifest(producer_root, expected_source_sha, BASELINE_ARCHIVE_SHA256)
     original_raw = copy.deepcopy(identity["raw_episode_sha256"])
     if candidate_root.exists() or candidate_root.is_symlink():
@@ -1003,7 +1017,12 @@ def finalize_pre_doi_candidate(  # noqa: C901, PLR0912, PLR0913, PLR0915
             expected_source_sha=expected_source_sha,
             paths=derivative_stage3_paths,
         )
-        _promote_scientific_candidate_result(candidate_root, stage3_receipt)
+        _promote_scientific_candidate(
+            candidate_root,
+            stage3_receipt,
+            expected_source_sha,
+            manifest,
+        )
         resolved = manifest.resolved_manifest_payload
         _write_json(candidate_root / "release/release_manifest.resolved.json", resolved)
         provenance = build_release_provenance(

@@ -136,6 +136,36 @@ bundle digests and their hash sources afterward. Do not launch until the
 admissions pass. The default runner and existing DOI-bound release semantics
 are unchanged.
 
+After the raw campaign and its producer gates pass, the runner writes
+`release/candidate_identity.json` and `reports/attribution_ledger.json` as
+Stage-3 input scaffolds. The identity binds the exact source commit, tracked
+campaign and scenario-matrix paths and hashes, canonical scenario/seed axes,
+and every raw episode-file hash. Its `scaffold_status` is
+`requires_author_review`; its arm map, versioned changes, and attribution
+entries are empty. The comparator rejects this state. It is a custody scaffold,
+not an acceptance receipt.
+
+Before Stage 3, the release owner must complete the historical-to-candidate
+arm mapping, declare each versioned source/config/map/planner change using a
+source-bound identity, and prepare checksummed causal receipts for every
+changed outcome or metric. A domain reviewer records an accepted decision in
+each receipt after inspecting the mechanism and evidence. Set
+`scaffold_status` to `author_reviewed_ready` only after the identity and its
+change declarations have been reviewed; retain the candidate source/config/
+matrix and raw-row hashes exactly. The ledger begins empty and cannot admit
+changed results until it contains one valid, reviewed receipt per finding.
+Detailed fields and comparator invocation are in
+[`issue_9668_stage3_comparator_contract.md`](./analysis/issue_9668_stage3_comparator_contract.md).
+
+Stage 3 reconstructs each row's H600 horizon, 0.1-second step, runtime
+algorithm, robot configuration, scenario payload, planner configuration hash,
+force-recording setting, and other declared run controls from that clean,
+source-bound campaign. Row-file hashes alone cannot admit substituted
+controls. The post-run finalizer reruns this comparator and revalidates the
+scientific-candidate identity before promoting it to
+`accepted_pre_publication`. No runner or finalizer step authorizes a tag,
+Zenodo upload, or DOI.
+
 After the author approves the publication steps and real concept/version DOI
 coordinates are bound in a clean-source resolved identity, create a derivative
 bundle from the accepted candidate:

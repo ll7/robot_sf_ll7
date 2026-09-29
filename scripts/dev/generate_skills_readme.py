@@ -72,6 +72,7 @@ def render_readme(registry: dict[str, Any]) -> str:
         "| Promote a reviewed PR after green CI or merge a ready PR | `gh-pr-merger` | `goal-pr-review` |",
         "| Open a ready PR | `gh-pr-opener` | `artifact-provenance` |",
         "| Verify branch claims | `implementation-verification` | `pr-ready-check` |",
+        "| Write, change, or review tests | `test-value-gate` | `implementation-verification` |",
         "| Run the standard readiness gate | `pr-ready-check` | none |",
         "| Set up or clean up worktrees | `skill-picker` | `goal-issue-implementation`, `clean-up`; see `AGENTS.md` |",
         "| Review benchmark output | `analyze-camera-ready-benchmark` | `benchmark-row-status`, `artifact-provenance` |",

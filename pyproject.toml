@@ -626,6 +626,23 @@ parallel = true
 branch = true
 data_file = "output/coverage/.coverage"
 
+[tool.coverage.paths]
+# Remap workspace roots recorded in shard data files so `coverage combine` works when
+# shards ran on self-hosted runners (/home/runner/_work/...) and are combined on
+# GitHub-hosted runners (/home/runner/work/...). The first entry is the canonical path.
+robot_sf = [
+    "robot_sf/",
+    "*/robot_sf_ll7/robot_sf/",
+    "/home/runner/_work/robot_sf_ll7/robot_sf_ll7/robot_sf/",
+    "/home/runner/work/robot_sf_ll7/robot_sf_ll7/robot_sf/",
+]
+pysocialforce = [
+    "fast-pysf/pysocialforce/",
+    "*/robot_sf_ll7/fast-pysf/pysocialforce/",
+    "/home/runner/_work/robot_sf_ll7/robot_sf_ll7/fast-pysf/pysocialforce/",
+    "/home/runner/work/robot_sf_ll7/robot_sf_ll7/fast-pysf/pysocialforce/",
+]
+
 [tool.coverage.report]
 precision = 2
 show_missing = true

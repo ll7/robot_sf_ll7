@@ -152,10 +152,10 @@ def _doorway_fixture(*, expected_outcome: str | None = None):
             LineString([(0.0, 6.0), (0.0, 0.0)]),
         ]
     )
-    robot = SimpleNamespace(pose=((1.0, 3.0), 0.0), config=SimpleNamespace(radius=1.0))
+    robot = SimpleNamespace(pose=((1.5, 3.0), 0.0), config=SimpleNamespace(radius=1.0))
     simulator = SimpleNamespace(
         robots=[robot],
-        robot_navs=[SimpleNamespace(waypoints=[(5.0, 3.0)])],
+        robot_navs=[SimpleNamespace(waypoints=[(4.5, 3.0)])],
     )
     env = SimpleNamespace(simulator=simulator)
     analysis = {
@@ -163,6 +163,7 @@ def _doorway_fixture(*, expected_outcome: str | None = None):
         "inflated": inflated,
         "origin": (0.0, 0.0),
         "resolution": 0.1,
+        "map_bounds": (0.0, 6.0, 0.0, 6.0),
         "wall_geometry": wall_geometry,
     }
     scenario = {"name": "francis2023_narrow_doorway"}
@@ -183,6 +184,9 @@ def test_issue_9728_undeclared_doorway_fails_reachability_and_width() -> None:
 
     assert reachability["status"] == "fail"
     assert reachability["reason"] == "no_collision_free_footprint_path"
+    assert reachability["continuous_oracle"]["reason"] == (
+        "ordered_route_segment_disconnected_in_continuous_free_space"
+    )
     assert passage["status"] == "fail"
     assert 1.8 <= passage["minimum_opening_width_estimate_m"] < 2.2
     assert passage["required_opening_width_m"] == pytest.approx(2.2)
@@ -275,6 +279,188 @@ def test_footprint_path_checks_required_intermediate_waypoints_in_order() -> Non
     assert reachability["status"] == "pass"
     assert reachability["path_length_m"] == pytest.approx(2.0)
     assert passage["status"] == "pass"
+
+
+def test_continuous_margin_oracle_recovers_safe_grid_blocked_endpoint() -> None:
+    """A conservative endpoint cell cannot block a continuously safe route."""
+    occupancy = np.zeros((100, 100), dtype=bool)
+    inflated = occupancy.copy()
+    inflated[50, 88] = True
+    robot = SimpleNamespace(pose=((2.0, 5.0), 0.0), config=SimpleNamespace(radius=1.0))
+    env = SimpleNamespace(
+        simulator=SimpleNamespace(
+            robots=[robot], robot_navs=[SimpleNamespace(waypoints=[(8.85, 5.0)])]
+        )
+    )
+    analysis = {
+        "occupancy": occupancy,
+        "inflated": inflated,
+        "origin": (0.0, 0.0),
+        "resolution": 0.1,
+        "map_bounds": (0.0, 10.0, 0.0, 10.0),
+        "wall_geometry": LineString([(0.0, 0.0), (0.0, 10.0)]),
+    }
+
+    reachability, passage = spawn_preflight._check_footprint_path(
+        env, analysis, scenario={"name": "safe_endpoint"}, margin_m=0.1
+    )
+
+    assert reachability["status"] == passage["status"] == "pass"
+    assert reachability["grid_status"] == "fail"
+    assert reachability["continuous_oracle"]["status"] == "pass"
+    assert reachability["path_length_m"] is None
+    assert passage["measurement_path"] == "continuous_clearance_component"
+    assert passage["minimum_opening_width_estimate_m"] is None
+    assert passage["minimum_opening_width_certified_lower_bound_m"] == pytest.approx(2.2)
+
+    reachability, passage = spawn_preflight._check_footprint_path(
+        env,
+        analysis,
+        scenario={"name": "safe_endpoint", "expected_outcome": "infeasible_safe_hold"},
+        margin_m=0.1,
+        probe_manifest=True,
+    )
+    assert reachability["status"] == passage["status"] == "invalid"
+    assert reachability["reason"] == "declared_infeasibility_not_observed"
+
+    del analysis["map_bounds"]
+    reachability, _passage = spawn_preflight._check_footprint_path(
+        env, analysis, scenario={"name": "missing_geometry"}, margin_m=0.1
+    )
+    assert reachability["status"] == "fail"
+    assert reachability["continuous_oracle"]["reason"] == "continuous_geometry_unavailable"
+
+
+def test_continuous_margin_oracle_keeps_the_exact_boundary_conservative() -> None:
+    """The buffer approximation guard cannot admit a point below the required margin."""
+    analysis = {
+        "map_bounds": (0.0, 10.0, 0.0, 10.0),
+        "wall_geometry": LineString([(0.0, 0.0), (0.0, 10.0)]),
+    }
+    safe = spawn_preflight._continuous_margin_route(
+        analysis, [(2.0, 5.0), (8.899, 5.0)], required_radius_m=1.1
+    )
+    unsafe = spawn_preflight._continuous_margin_route(
+        analysis, [(2.0, 5.0), (8.901, 5.0)], required_radius_m=1.1
+    )
+    assert safe["status"] == "pass"
+    assert unsafe["status"] == "fail"
+    assert unsafe["first_unsafe_route_point_index"] == 1
+
+
+def test_continuous_margin_oracle_rejects_unsafe_goal_and_disconnected_leg() -> None:
+    """The fallback must keep exact margin failures and ordered route cuts blocked."""
+    occupancy = np.zeros((100, 100), dtype=bool)
+    inflated = occupancy.copy()
+    inflated[50, 90] = True
+    robot = SimpleNamespace(pose=((2.0, 5.0), 0.0), config=SimpleNamespace(radius=1.0))
+    navigator = SimpleNamespace(waypoints=[(9.05, 5.0)])
+    env = SimpleNamespace(simulator=SimpleNamespace(robots=[robot], robot_navs=[navigator]))
+    analysis = {
+        "occupancy": occupancy,
+        "inflated": inflated,
+        "origin": (0.0, 0.0),
+        "resolution": 0.1,
+        "map_bounds": (0.0, 10.0, 0.0, 10.0),
+        "wall_geometry": LineString([(0.0, 0.0), (0.0, 10.0)]),
+    }
+    reachability, passage = spawn_preflight._check_footprint_path(
+        env, analysis, scenario={"name": "unsafe_goal"}, margin_m=0.1
+    )
+    assert reachability["status"] == "fail"
+    assert reachability["continuous_oracle"]["reason"] == (
+        "required_route_point_below_continuous_margin"
+    )
+    assert reachability["continuous_oracle"]["first_unsafe_route_point_index"] == 1
+    assert passage["status"] == "pass"
+
+    occupancy[:, 50] = True
+    inflated[:, 50] = True
+    navigator.waypoints = [(8.0, 5.0), (2.0, 5.0)]
+    analysis["wall_geometry"] = LineString([(5.0, 0.0), (5.0, 10.0)])
+    reachability, passage = spawn_preflight._check_footprint_path(
+        env, analysis, scenario={"name": "disconnected_waypoint"}, margin_m=0.1
+    )
+    assert reachability["status"] == passage["status"] == "fail"
+    assert reachability["continuous_oracle"]["reason"] == (
+        "ordered_route_segment_disconnected_in_continuous_free_space"
+    )
+    assert reachability["continuous_oracle"]["first_blocked_segment_index"] == 0
+
+
+def test_known_unsafe_sampled_goals_stay_blocked_on_release_seeds() -> None:
+    """The exact-margin fallback cannot admit the observed unsafe nominal goals."""
+    matrix = (
+        REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v3.yaml"
+    )
+    scenario = next(
+        dict(row)
+        for row in spawn_preflight._load_matrix(matrix)
+        if row["name"] == "classic_t_intersection_low"
+    )
+    unsafe_seeds = (111, 115, 118, 121, 122, 125, 134, 138)
+    result = spawn_preflight._check_release_scenario(
+        (scenario, str(matrix), unsafe_seeds, 0.1, 20, 0.1, False)
+    )
+
+    assert [row["seed"] for row in result["rows"]] == list(unsafe_seeds)
+    for row in result["rows"]:
+        assert row["overall_status"] == "blocked", row
+        assert row["footprint_reachability"]["status"] == "fail", row
+        assert row["footprint_reachability"]["continuous_oracle"]["reason"] == (
+            "required_route_point_below_continuous_margin"
+        ), row
+
+
+def test_historical_narrow_doorway_probe_stays_blocked_on_all_release_seeds() -> None:
+    """A probe declaration cannot admit the 2 m doorway to the nominal matrix."""
+    matrix = (
+        REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v3.yaml"
+    )
+    scenario = next(
+        dict(row)
+        for row in spawn_preflight._load_matrix(matrix)
+        if row["name"] == "francis2023_narrow_doorway"
+    )
+    scenario["expected_outcome"] = "infeasible_safe_hold"
+    result = spawn_preflight._check_release_scenario(
+        (scenario, str(matrix), tuple(range(111, 141)), 0.1, 20, 0.1, False)
+    )
+
+    assert len(result["rows"]) == 30
+    for row in result["rows"]:
+        assert row["overall_status"] == "blocked", row
+        reachability = row["footprint_reachability"]
+        assert reachability["status"] == "invalid", row
+        assert reachability["reason"] == "infeasibility_probe_requires_separate_manifest", row
+        assert reachability["observed_status"] == "fail", row
+        assert row["passage_width"]["observed_status"] == "fail", row
+
+
+def test_continuous_margin_oracle_replaces_narrow_raw_grid_witness() -> None:
+    """A narrow sampled grid witness does not disprove a safe route around an obstacle."""
+    occupancy = np.zeros((100, 100), dtype=bool)
+    robot = SimpleNamespace(pose=((2.0, 5.0), 0.0), config=SimpleNamespace(radius=1.0))
+    env = SimpleNamespace(
+        simulator=SimpleNamespace(
+            robots=[robot], robot_navs=[SimpleNamespace(waypoints=[(8.0, 5.0)])]
+        )
+    )
+    analysis = {
+        "occupancy": occupancy,
+        "inflated": occupancy.copy(),
+        "origin": (0.0, 0.0),
+        "resolution": 0.1,
+        "map_bounds": (0.0, 10.0, 0.0, 10.0),
+        "wall_geometry": LineString([(5.0, 4.0), (5.0, 6.0)]),
+    }
+    reachability, passage = spawn_preflight._check_footprint_path(
+        env, analysis, scenario={"name": "detour"}, margin_m=0.1
+    )
+    assert reachability["status"] == passage["status"] == "pass"
+    assert passage["grid_status"] == "fail"
+    assert passage["grid_minimum_opening_width_estimate_m"] < 2.2
+    assert passage["minimum_opening_width_certified_lower_bound_m"] == pytest.approx(2.2)
 
 
 def test_release_input_resolver_uses_manifest_matrix_and_seed_set() -> None:

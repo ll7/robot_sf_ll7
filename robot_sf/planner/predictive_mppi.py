@@ -681,7 +681,9 @@ def build_predictive_mppi_config(cfg: dict[str, object] | None) -> PredictiveMPP
         PredictiveMPPIConfig: Parsed planner configuration.
     """
     cfg = cfg if isinstance(cfg, dict) else {}
-    socnav_allowed = {field.name for field in fields(SocNavPlannerConfig)}
+    socnav_allowed = {field.name for field in fields(SocNavPlannerConfig)} | {
+        "social_force_kernel_version"
+    }
     socnav_kwargs = {key: value for key, value in cfg.items() if key in socnav_allowed}
     socnav = SocNavPlannerConfig(**socnav_kwargs)
     return PredictiveMPPIConfig(

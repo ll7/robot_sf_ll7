@@ -40,6 +40,7 @@ from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.reset_metadata import build_reset_metadata
 from robot_sf.gym_env.reward import route_completion_v2_reward
 from robot_sf.gym_env.snqi_proxy import StepSNQIProxy
+from robot_sf.nav.map_config import ROBOT_GOAL_SAMPLING_LEGACY_V1
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.nav.occupancy_grid import OccupancyGrid
 from robot_sf.prediction.goal_intention import (
@@ -115,8 +116,14 @@ def _hash_payload_without_default_goal_policy(value: Any) -> Any:
             key: _hash_payload_without_default_goal_policy(item)
             for key, item in value.items()
             if not (
-                key == "goal_completion_policy"
-                and (item is None or item == _LEGACY_GOAL_COMPLETION_POLICY)
+                (
+                    key == "goal_completion_policy"
+                    and (item is None or item == _LEGACY_GOAL_COMPLETION_POLICY)
+                )
+                or (
+                    key == "robot_goal_sampling_policy"
+                    and (item is None or item == ROBOT_GOAL_SAMPLING_LEGACY_V1)
+                )
             )
         }
     if isinstance(value, list):
@@ -135,6 +142,10 @@ def _stable_config_hash(cfg: EnvSettings) -> str:
     """
     try:
         config_payload = asdict(cfg) if is_dataclass(cfg) else cfg.__dict__
+        sim_config = getattr(cfg, "sim_config", None)
+        selector_overrides = getattr(sim_config, "_config_hash_overrides", None)
+        if callable(selector_overrides):
+            config_payload["sim_config"].update(selector_overrides())
         payload = json.dumps(
             _hash_payload_without_default_goal_policy(config_payload),
             sort_keys=True,

@@ -2,6 +2,7 @@ name: PR Promoted Planner Smoke
 
 on:
   pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
   workflow_dispatch:
 
 permissions:
@@ -13,6 +14,7 @@ concurrency:
 
 jobs:
   promoted-planner-smoke:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:

@@ -1,9 +1,13 @@
 """Focused coverage for the extracted SocialForce planner-family module."""
 
+from dataclasses import asdict
+
 import numpy as np
+from pysocialforce.config import SOCIAL_FORCE_KERNEL_WRAPPED_V2
 
 from robot_sf.planner import socnav
 from robot_sf.planner import socnav_social_force as sf
+from robot_sf.prediction._contract_utils import stable_config_hash
 
 
 def test_facade_wildcard_import_includes_lazy_public_exports() -> None:
@@ -54,3 +58,43 @@ def test_adapter_constructs_finite_action_via_facade() -> None:
     v, w = adapter.plan(obs)
     assert np.isfinite(v)
     assert np.isfinite(w)
+
+
+def test_kernel_provenance_is_absent_for_legacy_default_and_present_when_selected() -> None:
+    """Missing selectors keep legacy diagnostics unchanged; opt-in runs identify the kernel."""
+    legacy = sf.SocialForcePlannerAdapter(sf.SocNavPlannerConfig()).diagnostics()
+    assert "kernel_version" not in legacy
+    assert "social_force_kernel" not in legacy
+
+    wrapped = sf.SocialForcePlannerAdapter(
+        sf.SocNavPlannerConfig(social_force_kernel_version=SOCIAL_FORCE_KERNEL_WRAPPED_V2)
+    ).diagnostics()
+    assert wrapped["kernel_version"] == SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    assert wrapped["kernel_resolution_mode"] == "explicit"
+    assert wrapped["social_force_kernel"]["angle_wrap"] is True
+
+
+def test_socnav_kernel_selector_preserves_default_serialization_and_explicit_identity() -> None:
+    """Missing and explicitly selected legacy kernels keep distinct identities."""
+    from pysocialforce.config import SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1
+
+    from robot_sf.planner.socnav_base import SocNavPlannerConfig
+
+    legacy_default = SocNavPlannerConfig()
+    explicit_legacy = SocNavPlannerConfig(
+        social_force_kernel_version=SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1
+    )
+    wrapped = SocNavPlannerConfig(social_force_kernel_version=SOCIAL_FORCE_KERNEL_WRAPPED_V2)
+
+    assert legacy_default.social_force_kernel_resolution_mode == "defaulted_missing"
+    legacy_default.__post_init__()
+    assert legacy_default.social_force_kernel_version == (SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1)
+    assert "social_force_kernel_version" not in asdict(legacy_default)
+    assert "social_force_kernel_version" not in legacy_default.to_dict()
+    assert legacy_default != explicit_legacy
+    assert explicit_legacy.to_dict()["social_force_kernel_version"] == (
+        SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1
+    )
+    assert wrapped.to_dict()["social_force_kernel_version"] == SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    assert SocNavPlannerConfig(**wrapped.to_dict()) == wrapped
+    assert stable_config_hash(legacy_default.to_dict()) != stable_config_hash(wrapped.to_dict())

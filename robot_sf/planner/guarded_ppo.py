@@ -1155,7 +1155,9 @@ def _build_socnav_orca_config(cfg: dict[str, Any] | None) -> SocNavPlannerConfig
     """
     if not isinstance(cfg, dict):
         return SocNavPlannerConfig()
-    allowed = {field.name for field in fields(SocNavPlannerConfig)}
+    allowed = {field.name for field in fields(SocNavPlannerConfig)} | {
+        "social_force_kernel_version"
+    }
     return SocNavPlannerConfig(**{key: value for key, value in cfg.items() if key in allowed})
 
 

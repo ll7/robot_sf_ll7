@@ -380,7 +380,9 @@ def build_lidar_tracked_social_force_config(
     if not isinstance(social_force_payload, dict):
         social_force_payload = payload
     max_track_range = lidar_payload.get("max_track_range")
-    allowed_social_force = {field.name for field in fields(SocNavPlannerConfig)}
+    allowed_social_force = {field.name for field in fields(SocNavPlannerConfig)} | {
+        "social_force_kernel_version"
+    }
     filtered_social_force = {
         key: value for key, value in social_force_payload.items() if key in allowed_social_force
     }

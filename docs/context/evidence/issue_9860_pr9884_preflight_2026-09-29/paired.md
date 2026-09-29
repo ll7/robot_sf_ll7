@@ -5,6 +5,7 @@ Diagnostic only: static setup feasibility; no planner action or outcome metric.
 - Before checker: `4665cd13fc205761a4edb256a04d23d37ffbc235` (PR ancestor).
 - After checker: `b626384207ca88422d3f0014d53785976d10fc0b` (PR fix commit).
 - Reviewed head: `67b5a8a336c4bfc29c957c552e27d84675e72767`.
+- Reproduction source commit: `03957faa332577008169d957b4fbe83ce66de0a9`.
 - Committed goal-clearance diagnostic overlay SHA-256: `b578efe33e5f30f56241362afc5bb45b0aed05c398af83421ca51fbedffb04cc`.
 - Manifest SHA-256: `9b4020d6fed428c8c1045a45e20e97eef1e8f51a497f5e8323ea25590dca9516`.
 - Matrix SHA-256: `89e38c84af12a467599f0b76a60e5f80f7f5946b5438116378cfc4b2dee414ad`.

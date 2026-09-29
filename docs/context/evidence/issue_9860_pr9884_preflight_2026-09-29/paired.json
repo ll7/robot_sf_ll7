@@ -89,6 +89,7 @@
   "claim_boundary": "Static setup feasibility only; no planner action, episode outcome, or release admission.",
   "diagnostic_overlay_sha256": "b578efe33e5f30f56241362afc5bb45b0aed05c398af83421ca51fbedffb04cc",
   "evidence_class": "preflight_diagnostic_only",
+  "evidence_source_commit": "03957faa332577008169d957b4fbe83ce66de0a9",
   "historical_doorway_probe_cells_blocked": 30,
   "input_closure_sha256": "e8e55c35c186e0a514e8061f8f645bc8dfbc8c80806a1fd710cbdd23b3be6cd6",
   "inputs": {

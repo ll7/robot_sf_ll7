@@ -116,6 +116,10 @@ entries:
   status: current
   freshness: policy
   area: planner
+- path: docs/context/issue_9764_social_force_kernel_versioning.md
+  status: current
+  freshness: maintained
+  area: planner
 - path: docs/context/pedestrian_goal_force_prediction_research.md
   status: current
   freshness: maintained

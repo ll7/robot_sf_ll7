@@ -15,6 +15,7 @@ from pathlib import Path
 
 from pair_reports import (
     BASE_CHECKER_COMMIT,
+    EVIDENCE_SOURCE_COMMIT,
     FIXED_CHECKER_COMMIT,
     pair_reports,
     read_report,
@@ -107,6 +108,26 @@ def compare_report(name: str, fresh: Path, markdown: Path) -> dict[str, object]:
     }
 
 
+def verify_source_commits() -> None:
+    """Require reachable, unchanged checker sources for the historical pair."""
+    if git("rev-parse", "--show-toplevel") != str(ROOT):
+        raise RuntimeError("run from the PR checkout containing this evidence")
+    if git("rev-parse", f"{BASE_CHECKER_COMMIT}^{{commit}}") != BASE_CHECKER_COMMIT:
+        raise RuntimeError("baseline checker commit is missing")
+    if git("rev-parse", f"{FIXED_CHECKER_COMMIT}^{{commit}}") != FIXED_CHECKER_COMMIT:
+        raise RuntimeError("fixed checker commit is missing")
+    if git("rev-parse", f"{EVIDENCE_SOURCE_COMMIT}^{{commit}}") != EVIDENCE_SOURCE_COMMIT:
+        raise RuntimeError("evidence source commit is missing")
+    fixed_bytes = subprocess.check_output(
+        ["git", "show", f"{FIXED_CHECKER_COMMIT}:{CHECKER}"], cwd=ROOT
+    )
+    evidence_checker = subprocess.check_output(
+        ["git", "show", f"{EVIDENCE_SOURCE_COMMIT}:{CHECKER}"], cwd=ROOT
+    )
+    if evidence_checker != fixed_bytes:
+        raise RuntimeError("evidence source checker differs from the fixed checker commit")
+
+
 def main() -> None:
     """Reconstruct baseline inputs, run three preflights, and compare receipts."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -114,17 +135,7 @@ def main() -> None:
     args = parser.parse_args()
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    if git("rev-parse", "--show-toplevel") != str(ROOT):
-        raise RuntimeError("run from the PR checkout containing this evidence")
-    if git("rev-parse", f"{BASE_CHECKER_COMMIT}^{{commit}}") != BASE_CHECKER_COMMIT:
-        raise RuntimeError("baseline checker commit is missing")
-    if git("rev-parse", f"{FIXED_CHECKER_COMMIT}^{{commit}}") != FIXED_CHECKER_COMMIT:
-        raise RuntimeError("fixed checker commit is missing")
-    fixed_bytes = subprocess.check_output(
-        ["git", "show", f"{FIXED_CHECKER_COMMIT}:{CHECKER}"], cwd=ROOT
-    )
-    if (ROOT / CHECKER).read_bytes() != fixed_bytes:
-        raise RuntimeError("current checker differs from the fixed checker commit")
+    verify_source_commits()
 
     closure = json.loads((HERE / "input_closure.json").read_text(encoding="utf-8"))
     hashes = closure["sha256_files"]
@@ -152,7 +163,7 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory(prefix="pr9884-fixed-") as tmp:
         fixed = Path(tmp) / "fixed"
-        git("worktree", "add", "--detach", "--quiet", str(fixed), "HEAD")
+        git("worktree", "add", "--detach", "--quiet", str(fixed), EVIDENCE_SOURCE_COMMIT)
         try:
             verify_input_closure(fixed, hashes)
             apply_diagnostic_overlay(fixed)
@@ -178,6 +189,7 @@ def main() -> None:
     receipt = {
         "schema_version": "issue_9860_pr9884_fresh_clone_reproduction.v1",
         "source_head": git("rev-parse", "HEAD"),
+        "evidence_source_commit": EVIDENCE_SOURCE_COMMIT,
         "input_closure_sha256": digest(HERE / "input_closure.json"),
         "diagnostic_overlay_sha256": digest(GOAL_SAMPLING_OVERLAY),
         "reports": comparisons,

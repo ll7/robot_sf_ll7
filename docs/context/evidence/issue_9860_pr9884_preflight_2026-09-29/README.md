@@ -27,8 +27,11 @@ and requires exact Markdown report bytes. Its output includes
 `reproduction_receipt.json` and the three fresh reports.
 
 The fixed checker is commit `b626384207ca88422d3f0014d53785976d10fc0b`.
-Both checker commits are reachable in the PR history. The script verifies that
-the current checker bytes equal the fixed commit. Its baseline worktree receives
+The fixed diagnostic source is pinned to PR commit
+`03957faa332577008169d957b4fbe83ce66de0a9`; later merges into this PR do
+not alter this historical comparison. All three source commits are reachable
+in the PR history. The script verifies that the pinned checker bytes equal the
+fixed checker commit. Its baseline worktree receives
 the same checksummed input files from the PR branch. Both temporary worktrees
 are removed after the run. The goal-clearance patch captures the opt-in runtime
 dependency used for this diagnostic and is applied only in those temporary

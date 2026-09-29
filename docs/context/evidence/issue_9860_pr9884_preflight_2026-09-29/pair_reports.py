@@ -14,6 +14,7 @@ HERE = Path(__file__).resolve().parent
 BASE_CHECKER_COMMIT = "4665cd13fc205761a4edb256a04d23d37ffbc235"
 FIXED_CHECKER_COMMIT = "b626384207ca88422d3f0014d53785976d10fc0b"
 REVIEWED_HEAD = "67b5a8a336c4bfc29c957c552e27d84675e72767"
+EVIDENCE_SOURCE_COMMIT = "03957faa332577008169d957b4fbe83ce66de0a9"
 INVARIANT_FIELDS = (
     "reset_clearance",
     "respawn_safety",
@@ -118,6 +119,7 @@ def pair_reports(
         "evidence_class": "preflight_diagnostic_only",
         "claim_boundary": "Static setup feasibility only; no planner action, episode outcome, or release admission.",
         "reviewed_head": REVIEWED_HEAD,
+        "evidence_source_commit": EVIDENCE_SOURCE_COMMIT,
         "before_source_commit": BASE_CHECKER_COMMIT,
         "after_source_commit": FIXED_CHECKER_COMMIT,
         "diagnostic_overlay_sha256": sha256(
@@ -167,6 +169,7 @@ def write_pair(report: dict[str, Any], output_dir: Path) -> None:
         f"- Before checker: `{report['before_source_commit']}` (PR ancestor).",
         f"- After checker: `{report['after_source_commit']}` (PR fix commit).",
         f"- Reviewed head: `{report['reviewed_head']}`.",
+        f"- Reproduction source commit: `{report['evidence_source_commit']}`.",
         f"- Committed goal-clearance diagnostic overlay SHA-256: `{report['diagnostic_overlay_sha256']}`.",
         f"- Manifest SHA-256: `{report['inputs']['manifest_sha256']}`.",
         f"- Matrix SHA-256: `{report['inputs']['scenario_matrix_sha256']}`.",

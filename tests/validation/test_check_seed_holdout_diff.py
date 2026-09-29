@@ -163,6 +163,29 @@ def test_one_and_three_argument_seed_ranges_fail(tmp_path: Path, path: str, adde
 @pytest.mark.parametrize(
     "added",
     [
+        "for seed in range(0, 141, +1): run_episode(seed)",
+        "for seed in range(142,): run_episode(seed)",
+        "for seed in range(0, 141,): run_episode(seed)",
+        "for seed in range(1_00, 1_42): run_episode(seed)",
+        "for seed in range(0, 0x8e): run_episode(seed)",
+        "for seed in list(range(111, 141)): run_episode(seed)",
+        "for seed in tuple(range(111, 141)): run_episode(seed)",
+        "list(map(run_episode, range(111, 141)))",
+    ],
+)
+def test_literal_range_spellings_and_wrappers_fail(tmp_path: Path, added: str) -> None:
+    assert len(check_diff(_diff("scripts/benchmark/run_pilot.py", added), tmp_path)) == 1
+
+
+def test_multiline_episode_range_fails(tmp_path: Path) -> None:
+    added = "for seed in range(111, 141):\n    run_episode(seed)"
+    findings = check_diff(_diff("scripts/benchmark/run_pilot.py", added), tmp_path)
+    assert [(finding.line, finding.text) for finding in findings] == [(2, "run_episode(seed)")]
+
+
+@pytest.mark.parametrize(
+    "added",
+    [
         "for seed in range(111): run_episode(seed)",
         "for seed in range(100, 111): run_episode(seed)",
         "for seed in range(141, 110, -50): run_episode(seed)",
@@ -407,6 +430,21 @@ def test_parametrized_rejection_seeds_do_not_run_episodes(tmp_path: Path) -> Non
         + '        runner._choose([seed], list(range(1001, 1031)), label="seed")\n'
     )
     assert check_diff(_diff(path, decorator), tmp_path) == []
+
+
+def test_parametrized_rejection_seed_that_steps_episode_fails(tmp_path: Path) -> None:
+    path = "tests/benchmark/test_rejection.py"
+    file = tmp_path / path
+    file.parent.mkdir(parents=True)
+    decorator = '@pytest.mark.parametrize("seed", [111])'
+    file.write_text(
+        decorator
+        + "\ndef test_rejects_bad_seed(seed: int) -> None:\n"
+        + "    run_episode(seed)\n"
+        + "    with pytest.raises(ValueError):\n"
+        + "        reject(seed)\n"
+    )
+    assert len(check_diff(_diff(path, decorator), tmp_path)) == 1
 
 
 def test_seed_alias_rejection_payload_does_not_run_episodes(tmp_path: Path) -> None:

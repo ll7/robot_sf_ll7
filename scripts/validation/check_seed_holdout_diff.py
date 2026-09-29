@@ -6,6 +6,8 @@ See issue #9668 for the evaluation split and anchor barrier.
 Accepted syntactic limits: quoted seed values on continuation lines of multiline
 JSON lists, non-literal or aliased seed generation (including dynamic ``range``
 bounds), and seeds passed through environment variables need exact-head review.
+Literal Python ``range`` calls and nearby episode loops are checked across common
+wrappers and line breaks; unknown syntax remains an exact-head review obligation.
 """
 
 from __future__ import annotations
@@ -41,7 +43,27 @@ SCENARIO_SEEDS = re.compile(r"(?i)\bscenario\s*\[\s*['\"]seeds?['\"]\s*\]\s*=")
 EPISODE_SEED_LOOP = re.compile(
     r"\bfor\s+seed\s+in\s+range\s*\([^)]*\)\s*:\s*.*\brun_episode\s*\(\s*seed\b"
 )
-RANGE = re.compile(r"\brange\s*\(\s*(-?\d+)\s*(?:,\s*(-?\d+)\s*(?:,\s*(-?\d+)\s*)?)?\)")
+PYTHON_INT_LITERAL = (
+    r"[+-]?\s*(?:"
+    r"0[xX][0-9a-fA-F](?:_?[0-9a-fA-F])*|"
+    r"0[bB][01](?:_?[01])*|"
+    r"0[oO][0-7](?:_?[0-7])*|"
+    r"(?:0|[1-9](?:_?\d)*)"
+    r")"
+)
+RANGE = re.compile(
+    rf"\brange\s*\(\s*(?P<first>{PYTHON_INT_LITERAL})\s*"
+    rf"(?:,\s*(?P<second>{PYTHON_INT_LITERAL})\s*"
+    rf"(?:,\s*(?P<third>{PYTHON_INT_LITERAL})\s*)?)?,?\s*\)"
+)
+EPISODE_RANGE_LOOP = re.compile(
+    r"\bfor\s+[A-Za-z_]\w*\s+in\b(?P<body>.{0,1200}?)\brun_episode\s*\(",
+    re.DOTALL,
+)
+EPISODE_RANGE_MAP = re.compile(r"\bmap\s*\(\s*run_episode\b", re.DOTALL)
+EPISODE_CALL = re.compile(
+    r"\b(?:run_episode|run_map_episode|execute_episode)\s*\(|\.\s*(?:step|reset)\s*\(",
+)
 YAML_RANGE_BOUND = re.compile(r"^\s*(?:-\s*)?(?:min|max|low|high)\s*:", re.I)
 CLI_SEED = re.compile(r"(?<![\w-])--seeds?(?:\s+|=)")
 SEED_PARAM = re.compile(r"(?i)\bparametrize\s*\(\s*['\"][^'\"]*\bseed\b")
@@ -71,17 +93,20 @@ def _rejection_test_seed(path: str, text: str, before: list[str], after: list[st
     if not path.startswith("tests/"):
         return False
     if SEED_PARAM.search(text):
-        next_lines = "\n".join(after[:10])
+        next_lines = "\n".join(after[:40])
         return (
             bool(re.search(r"def test_\w*reject\w*\(", next_lines))
             and "pytest.raises" in next_lines
+            and not EPISODE_CALL.search(next_lines)
         )
     if text.lstrip().startswith("payload["):
         declarations = [line for line in before if line.startswith("def test_")]
+        next_lines = "\n".join(after[:40])
         return bool(
             declarations
             and re.search(r"def test_\w*reject\w*\(", declarations[-1])
-            and "pytest.raises" in "\n".join(after[:20])
+            and "pytest.raises" in next_lines
+            and not EPISODE_CALL.search(next_lines)
         )
     return False
 
@@ -142,13 +167,21 @@ def _non_episode_seed(path: str, text: str, before: list[str], after: list[str])
 def _range_overlaps_holdout(text: str) -> bool:
     """Recognize literal Python ranges whose values include a held-out seed."""
     for match in RANGE.finditer(text):
-        first = int(match.group(1))
-        second = match.group(2)
+        first = _parse_python_int_literal(match.group("first"))
+        second = match.group("second")
+        if first is None:
+            continue
         if second is None:
             start, stop, step = 0, first, 1
         else:
-            start, stop = first, int(second)
-            step = int(match.group(3)) if match.group(3) is not None else 1
+            stop = _parse_python_int_literal(second)
+            if stop is None:
+                continue
+            third = match.group("third")
+            step = _parse_python_int_literal(third) if third is not None else 1
+            if step is None:
+                continue
+            start = first
         if step == 0:
             continue
         if step > 0:
@@ -161,6 +194,32 @@ def _range_overlaps_holdout(text: str) -> bool:
             if 111 <= candidate <= 140 and candidate > stop:
                 return True
     return False
+
+
+def _parse_python_int_literal(value: str) -> int | None:
+    """Parse the integer literal spellings accepted by Python's ``range`` call."""
+    normalized = value.replace("_", "").replace(" ", "")
+    sign = ""
+    if normalized[:1] in {"+", "-"}:
+        sign, normalized = normalized[0], normalized[1:]
+    try:
+        base = 0 if normalized.lower().startswith(("0x", "0o", "0b")) else 10
+        return int(f"{sign}{normalized}", base)
+    except ValueError:
+        return None
+
+
+def _episode_range_context(text: str, before: list[str], after: list[str]) -> bool:
+    """Recognize an overlapping literal range used by a nearby episode call."""
+    window = "\n".join(before[-20:] + [text] + after[:20])
+    if not _range_overlaps_holdout(window):
+        return False
+    if EPISODE_RANGE_MAP.search(window):
+        return True
+    return any(
+        _range_overlaps_holdout(match.group("body"))
+        for match in EPISODE_RANGE_LOOP.finditer(window)
+    )
 
 
 def _marked_block_lines(lines: list[str]) -> set[int]:
@@ -224,6 +283,7 @@ def _seed_context(path: str, text: str, before: list[str], after: list[str]) -> 
         or SEED_PARAM.search(text)
         or _yaml_seed_range_bound(path, text, before)
         or _seed_range_context(text, before)
+        or _episode_range_context(text, before, after)
     ):
         return True
     # YAML block lists and multiline pytest parametrizations put the value on
@@ -279,7 +339,11 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
                 and path not in RELEASE_CONFIGS
                 and line_number not in marked_block_lines
                 and not MARKER.search(content)
-                and (SEED.search(RANGE.sub("", content)) or _range_overlaps_holdout(content))
+                and (
+                    SEED.search(RANGE.sub("", content))
+                    or _range_overlaps_holdout(content)
+                    or _episode_range_context(content, before, file_lines[line_number:])
+                )
                 and _seed_context(path, content, before, file_lines[line_number:])
             ):
                 findings.append(Finding(path, line_number, content.strip()))

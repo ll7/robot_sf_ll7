@@ -265,9 +265,9 @@ def _successor_contract(
             "base_config_path: configs/algos/hybrid_rule_v4_clearance_braking.yaml\n"
             f"params:\n  name: {key}\n"
         )
-        placeholder = f"configs/policy_search/release_0_0_8_placeholders/{key}.unfrozen.yaml"
-        assert placeholder in template_text
-        template_text = template_text.replace(placeholder, name)
+        frozen = f"configs/policy_search/candidates/{key}_s30_h600_release_0_0_8_frozen.yaml"
+        assert frozen in template_text
+        template_text = template_text.replace(frozen, name)
         planner_lines.extend(
             [
                 f"  - key: {key}",

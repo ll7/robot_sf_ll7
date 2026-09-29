@@ -12,10 +12,20 @@ Robot-attributable contact reuses the existing attribution and adds none:
 
 * ``outcome.collision_event`` (canonical flag, see ``termination_reason``);
 * ``metrics.collisions`` above zero (the same collision metric the outcome
-  contradiction check ties to that flag);
-* the 0.0.8 robot-force metrics (``robot_force_impulse_total``,
-  ``robot_force_peak``, ``robot_force_exposed_ped_count``) above zero, when
-  the row carries them.
+  contradiction check ties to that flag).
+
+Obstacle and wall collisions count as contact, because ``collision_event``
+includes ``is_obstacle_collision``. The ``robot_force_*`` values are
+social-force repulsion, nonzero whenever a pedestrian is within a few metres,
+so they are not contact. They are reported only as a descriptive side column
+(``robot_force_descriptive``) and never classify a row.
+
+A planner exception writes no episode row; the batch runner records it in the
+``failures`` list of the run ``summary.json``. ``classify_probe_slots`` therefore
+classifies an expected slot with no row but a matching failure record as
+``error`` (crash). A slot with neither a row nor a failure record is
+unresolved and fails admission. No row carries ``termination_reason == "error"``
+in practice, so that value gets no crash branch here.
 """
 
 from __future__ import annotations
@@ -30,7 +40,7 @@ if TYPE_CHECKING:
 PROBE_SCENARIO_IDS = frozenset({"francis2023_narrow_doorway"})
 DECLARED_PROBE_EPISODES = 420
 TIMEOUT_TERMINATIONS = frozenset({"max_steps", "truncated"})
-ROBOT_FORCE_CONTACT_KEYS = (
+ROBOT_FORCE_DESCRIPTIVE_KEYS = (
     "robot_force_impulse_total",
     "robot_force_peak",
     "robot_force_exposed_ped_count",
@@ -64,15 +74,7 @@ def _contact(outcome: Mapping[str, Any], metrics: Mapping[str, Any]) -> bool | N
     collisions = _number(metrics.get("collisions", 0))
     if collisions is None:
         return None
-    contact = collision or collisions > 0
-    for key in ROBOT_FORCE_CONTACT_KEYS:
-        if key not in metrics:
-            continue
-        value = _number(metrics[key])
-        if value is None:
-            return None
-        contact = contact or value > 0
-    return contact
+    return collision or collisions > 0
 
 
 def classify_probe_row(row: Mapping[str, Any]) -> str:
@@ -98,8 +100,6 @@ def classify_probe_row(row: Mapping[str, Any]) -> str:
         return UNRESOLVED
     if route_complete or termination == "success":
         return DEFECT_SUCCESS
-    if termination == "error":
-        return CRASH
     if contact or termination == "collision":
         return CONTACT
     if termination in TIMEOUT_TERMINATIONS:
@@ -107,19 +107,33 @@ def classify_probe_row(row: Mapping[str, Any]) -> str:
     return OTHER_TERMINATION
 
 
-def safe_failure_summary(
-    rows: Iterable[Mapping[str, Any]], *, expected_rows: int = DECLARED_PROBE_EPISODES
-) -> dict[str, Any]:
-    """Compute the declared safe-failure rate over probe episode rows.
-
-    Status is ``computed`` only when every row is resolved and the row count
-    equals ``expected_rows``; ``defect`` when computed but a probe episode
-    succeeded; otherwise ``fail_admission``.
+def robot_force_descriptive(rows: Iterable[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Describe the robot-force values per key without classifying anything.
 
     Returns:
-        Counts per class, the rate (numerator over all rows) and the status.
+        Per key: rows carrying a finite value, rows with a value above zero, and the maximum.
     """
-    classes = Counter(classify_probe_row(row) for row in rows)
+    stats = {
+        key: {"rows_with_value": 0, "rows_above_zero": 0, "max": None}
+        for key in ROBOT_FORCE_DESCRIPTIVE_KEYS
+    }
+    for row in rows:
+        metrics = row.get("metrics")
+        if not isinstance(metrics, dict):
+            continue
+        for key, entry in stats.items():
+            value = _number(metrics.get(key))
+            if value is None:
+                continue
+            entry["rows_with_value"] += 1
+            entry["rows_above_zero"] += value > 0
+            entry["max"] = value if entry["max"] is None else max(entry["max"], value)
+    return stats
+
+
+def _summarize(
+    classes: Counter[str], expected_rows: int, force: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
     total = sum(classes.values())
     if classes[UNRESOLVED] or total != expected_rows or total == 0:
         status = "fail_admission"
@@ -135,5 +149,57 @@ def safe_failure_summary(
         "safe_failure_episodes": classes[SAFE_FAILURE],
         "safe_failure_rate": classes[SAFE_FAILURE] / total if total else None,
         "class_counts": dict(sorted(classes.items())),
+        "robot_force_descriptive": force,
         "status": status,
     }
+
+
+def safe_failure_summary(
+    rows: Iterable[Mapping[str, Any]], *, expected_rows: int = DECLARED_PROBE_EPISODES
+) -> dict[str, Any]:
+    """Compute the declared safe-failure rate over probe episode rows.
+
+    Status is ``computed`` only when every row is resolved and the row count
+    equals ``expected_rows``; ``defect`` when computed but a probe episode
+    succeeded; otherwise ``fail_admission``.
+
+    Returns:
+        Counts per class, the rate (numerator over all rows) and the status.
+    """
+    rows = list(rows)
+    return _summarize(
+        Counter(classify_probe_row(row) for row in rows),
+        expected_rows,
+        robot_force_descriptive(rows),
+    )
+
+
+def classify_probe_slots(
+    expected_slots: Iterable[tuple[Any, ...]],
+    rows_by_slot: Mapping[tuple[Any, ...], Mapping[str, Any]],
+    failure_slots: Iterable[tuple[Any, ...]] = (),
+) -> dict[str, Any]:
+    """Summarize the exact expected probe slots.
+
+    A slot with a row is classified from the row. A slot without a row but with
+    a matching batch failure record (a prefix of the slot, see below) is a
+    crash. A slot with neither is unresolved. ``failure_slots`` holds the
+    failure identity as a tuple that is a prefix of the slot tuple, for example
+    ``(planner, kinematics, scenario_id, seed)``.
+
+    Returns:
+        The summary of ``safe_failure_summary`` over the expected slots.
+    """
+    expected = set(expected_slots)
+    failed = {tuple(item) for item in failure_slots}
+    classes: Counter[str] = Counter()
+    for slot in expected:
+        row = rows_by_slot.get(slot)
+        if row is not None:
+            classes[classify_probe_row(row)] += 1
+        elif any(slot[: len(item)] == item for item in failed):
+            classes[CRASH] += 1
+        else:
+            classes[UNRESOLVED] += 1
+    force = robot_force_descriptive(rows_by_slot[slot] for slot in expected if slot in rows_by_slot)
+    return _summarize(classes, len(expected), force)

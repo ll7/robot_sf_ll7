@@ -27,7 +27,7 @@ import yaml
 from robot_sf.benchmark.infeasible_probe_safe_failure import (
     DECLARED_PROBE_EPISODES,
     PROBE_SCENARIO_IDS,
-    safe_failure_summary,
+    classify_probe_slots,
 )
 from scripts.analysis.compare_issue_9431_release import (
     EXPECTED_SUCCESSOR_SCENARIO_MANIFEST,
@@ -810,29 +810,72 @@ def _display(value: Any) -> str:
     )
 
 
+def _root_failure_slots(root: Path) -> set[tuple[str, str, str, int]]:
+    """Read batch failure records (planner exceptions) from runs/*/summary.json.
+
+    A planner exception writes no episode row; the batch runner records
+    ``{scenario_id, seed, error}`` in the run summary ``failures`` list.
+
+    Returns:
+        Failure identities as (planner, kinematics, scenario_id, seed).
+
+    Raises:
+        ValueError: If a run summary exists but its failures cannot be read.
+    """
+    found: set[tuple[str, str, str, int]] = set()
+    for path in sorted(root.glob("runs/*/summary.json")):
+        try:
+            failures = json.loads(path.read_text(encoding="utf-8")).get("failures") or []
+        except (OSError, ValueError, AttributeError) as exc:
+            raise ValueError(f"unreadable run summary {path}: {exc}") from exc
+        if not isinstance(failures, list):
+            raise ValueError(f"run summary failures is not a list: {path}")
+        planner, kinematics = _run_identity(path.parent.name)
+        for item in failures:
+            if isinstance(item, dict) and isinstance(item.get("scenario_id"), str):
+                if type(item.get("seed")) is int:
+                    found.add((planner, kinematics, item["scenario_id"], item["seed"]))
+    return found
+
+
 def _probe_gate(
-    probe_rows: list[dict[str, Any]], expected_probe_slots: int
+    new: dict[tuple[str, str, str, int, str], dict[str, Any]],
+    expected_slots: set[tuple[str, str, str, int, str]],
+    duplicates: Any = (),
+    failure_slots: Any = (),
 ) -> dict[str, Any] | None:
     """Compute the doorway safe-failure metric or refuse to report probe rows.
 
-    Blocking gate for issue #9974: no row of an infeasible-by-design probe
-    scenario is reported unless the declared metric is computed over all
-    declared probe episodes.
+    Blocking gate for issue #9974: the observed probe slots must equal the
+    expected probe slots exactly (arm and seed, exact probe scenario id), with
+    no duplicate and no extra probe slot. Only the ``new`` rows of those slots
+    are classified. A missing slot with a batch failure record is a crash.
 
     Returns:
         The metric summary, or None when the successor has no probe slots or rows.
 
     Raises:
-        ValueError: If probe rows exist but the metric cannot be computed.
+        ValueError: If probe slots are inexact or the metric cannot be computed.
     """
-    if not probe_rows and not expected_probe_slots:
+    probe_slots = {slot for slot in expected_slots if slot[2] in PROBE_SCENARIO_IDS}
+    observed = {slot for slot in new if slot[2] in PROBE_SCENARIO_IDS}
+    if not probe_slots and not observed:
         return None
-    summary = safe_failure_summary(probe_rows, expected_rows=DECLARED_PROBE_EPISODES)
-    if expected_probe_slots != DECLARED_PROBE_EPISODES or summary["status"] == "fail_admission":
+    extra = observed - probe_slots
+    duplicated = {slot for slot in duplicates if slot[2] in PROBE_SCENARIO_IDS}
+    if len(probe_slots) != DECLARED_PROBE_EPISODES or extra or duplicated:
         raise ValueError(
             "infeasible probe safe_failure_metric not computed: "
-            f"{len(probe_rows)} rows, {expected_probe_slots} expected slots, "
-            f"declared {DECLARED_PROBE_EPISODES}, classes {summary['class_counts']}"
+            f"{len(probe_slots)} expected probe slots (declared {DECLARED_PROBE_EPISODES}), "
+            f"{len(extra)} extra, {len(duplicated)} duplicated"
+        )
+    summary = classify_probe_slots(
+        probe_slots, {slot: new[slot] for slot in observed & probe_slots}, failure_slots
+    )
+    if summary["status"] == "fail_admission":
+        raise ValueError(
+            "infeasible probe safe_failure_metric not computed: "
+            f"{len(observed)} rows of {len(probe_slots)} slots, classes {summary['class_counts']}"
         )
     return summary
 
@@ -915,8 +958,7 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
             successor_identity["source_commit"],
         )
     probe_summary = _probe_gate(
-        [row for key, row in [*new.items(), *duplicate_rows] if key[2] in PROBE_SCENARIO_IDS],
-        sum(1 for slot in expected_slots if slot[2] in PROBE_SCENARIO_IDS),
+        new, expected_slots, duplicates, _root_failure_slots(successor_root)
     )
     rules = _read_rules(classification_file)
     broad_rules = []

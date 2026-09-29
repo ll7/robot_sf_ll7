@@ -10,7 +10,10 @@ from pysocialforce.config import (
 )
 from pysocialforce.scene import normalize_integration_scheme
 
-from robot_sf.nav.map_config import normalize_goal_completion_policy
+from robot_sf.nav.map_config import (
+    normalize_goal_completion_policy,
+    normalize_robot_goal_sampling_policy,
+)
 from robot_sf.ped_npc.adversial_ped_force import AdversarialPedForceConfig
 from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
 from robot_sf.ped_npc.residual_adversary import (
@@ -331,6 +334,14 @@ class SimulationSettings:
     explicitly for rectangle-entry completion.
     """
 
+    robot_goal_sampling_policy: str | None = None
+    """Optional versioned robot target sampling policy.
+
+    ``None`` preserves historical centre-only goal sampling. The explicit
+    ``footprint_clearance_v1`` opt-in rejects targets within the robot radius
+    plus spawn-clearance margin of a wall or map bound.
+    """
+
     stack_steps: int = 3
     """Deprecated alias for observation history depth.
 
@@ -562,6 +573,13 @@ class SimulationSettings:
         if self.action_latency_steps != 0:
             raise ValueError("action_latency_steps and action_latency_ms cannot both be configured")
 
+    def _normalize_robot_goal_sampling_policy(self) -> None:
+        """Validate an explicit goal-sampling policy without changing the legacy default."""
+        if self.robot_goal_sampling_policy is not None:
+            self.robot_goal_sampling_policy = normalize_robot_goal_sampling_policy(
+                self.robot_goal_sampling_policy
+            )
+
     def __post_init__(self, *init_vars: Any) -> None:  # noqa: C901
         """
         Validate the simulation settings.
@@ -585,6 +603,7 @@ class SimulationSettings:
         self.pedestrian_integration_scheme = normalize_integration_scheme(
             self.pedestrian_integration_scheme
         )
+        self._normalize_robot_goal_sampling_policy()
         # Check that the pedestrian speed multiplier is positive
         if self.peds_speed_mult <= 0:
             raise ValueError("Pedestrian speed mustn't be negative or zero!")

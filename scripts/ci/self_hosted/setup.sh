@@ -12,6 +12,8 @@ network_gateway="172.30.244.1"
 network_bridge="br-robot-sf-ci"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 host="$(hostname -s)"
+# imech036 and imech039 report the short hostname with an "auxme-" prefix.
+host="${host#auxme-}"
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/robot-sf-ci-runners"
 
 usage() {
@@ -70,9 +72,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && cp -a /home/runner/. /opt/robot-sf-runner/ \
     && chown -R runner:runner /opt/robot-sf-runner
 COPY --chown=runner:runner setup.sh /usr/local/bin/robot-sf-runner
-COPY --chown=runner:runner job_started_hook.sh /usr/local/libexec/robot-sf-job-started
+COPY --chown=runner:runner job_started_hook.sh /usr/local/libexec/robot-sf-job-started.sh
 COPY --chown=runner:runner network_probe.sh /usr/local/libexec/robot-sf-network-probe
-ENV ACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/libexec/robot-sf-job-started
+ENV ACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/libexec/robot-sf-job-started.sh
 USER 1001:1001
 ENTRYPOINT ["/usr/local/bin/robot-sf-runner", "container"]
 DOCKERFILE
@@ -88,7 +90,7 @@ run_container() {
   fi
   cd /home/runner
   cp -a /opt/robot-sf-runner/. /home/runner/
-  ./config.sh --unattended --ephemeral --disableupdate \
+  ./config.sh --unattended --ephemeral --disableupdate --replace \
     --url "https://github.com/$repo" --token "$token" \
     --name "$runner_name" --labels "$label" --work _work
   unset token
@@ -99,6 +101,11 @@ supervise() {
   local name
   name="$(slot_name "$1")"
   while true; do
+    if ! ensure_network || ! probe_network; then
+      echo "Runner $name network isolation check failed; retrying after 60 seconds" >&2
+      sleep 60
+      continue
+    fi
     # The API response goes directly through the pipe to the container's
     # config step. Neither a token file nor a token-bearing Docker argument is
     # created. The container and its tmpfs disappear after one job.
@@ -196,6 +203,7 @@ stop_slot() {
 case "${1:-}" in
   build) [[ $# -eq 1 ]] || { usage; exit 2; }; build_image ;;
   network) [[ $# -eq 1 ]] || { usage; exit 2; }; ensure_network ;;
+  supervise) [[ $# -eq 2 ]] || { usage; exit 2; }; require_slot "$2"; supervise "$2" ;;
   start|stop|status)
     [[ $# -eq 2 ]] || { usage; exit 2; }
     require_slot "$2"

@@ -20,7 +20,12 @@ import yaml
 
 from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
 from robot_sf.benchmark.camera_ready._preflight import _resolved_seed_inventory
+from robot_sf.benchmark.camera_ready._util import _config_hash_payload
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, load_campaign_config
+from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
+    iter_campaign_arm_checkpoint_references,
+)
+from robot_sf.benchmark.checkpoint_staging_receipt import _registry_checkpoint_sha256
 from robot_sf.benchmark.effective_algorithm_branches import WITNESS_KINDS
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.benchmark.release_parameter_freeze import unfrozen_planner_config_blockers
@@ -28,8 +33,10 @@ from robot_sf.benchmark.release_tag_identity import (
     HISTORICAL_RELEASE_TAG,
     check_canonical_source_tag,
 )
+from robot_sf.benchmark.utils import _config_hash
 from robot_sf.benchmark.zenodo_publisher import ZenodoPublisherError, load_dataset_metadata
 from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.models.registry import DEFAULT_REGISTRY_PATH, get_registry_entry
 
 RELEASE_MANIFEST_SCHEMA_VERSION = "benchmark-release-manifest.v0.1"
 RELEASE_MANIFEST_SCHEMA_VERSION_V0_2 = "benchmark-release-manifest.v0.2"
@@ -447,6 +454,12 @@ class BenchmarkReleaseManifest:
     doi: str
     citation_path: Path
     release_checklist_path: Path
+    snqi_v2_weights_path: Path | None = None
+    snqi_v2_weights_sha256: str | None = None
+    snqi_v2_anchors_path: Path | None = None
+    snqi_v2_anchors_sha256: str | None = None
+    snqi_v2_family_path: Path | None = None
+    snqi_v2_family_sha256: str | None = None
     latest_main_base_commit: str | None = None
     expected_episode_cells: int | None = None
     expected_horizon_steps: int | None = None
@@ -662,12 +675,27 @@ def _load_manifest_metrics_section(
         raise ValueError("metrics.snqi_weights_sha256 must be set when snqi_weights_path is set")
     if snqi_baseline_path is not None and not snqi_baseline_sha256:
         raise ValueError("metrics.snqi_baseline_sha256 must be set when snqi_baseline_path is set")
-    return {
+    result: dict[str, Path | str | None] = {
         "snqi_weights_path": snqi_weights_path,
         "snqi_weights_sha256": snqi_weights_sha256,
         "snqi_baseline_path": snqi_baseline_path,
         "snqi_baseline_sha256": snqi_baseline_sha256,
     }
+    if any(str(key).startswith("snqi_v2_") for key in metrics):
+        for role in ("weights", "anchors", "family"):
+            path_key = f"snqi_v2_{role}_path"
+            hash_key = f"snqi_v2_{role}_sha256"
+            result[path_key] = _resolve_required_file(
+                manifest_path,
+                metrics.get(path_key),
+                f"metrics.{path_key}",
+                repository_root=repository_root,
+            )
+            digest = metrics.get(hash_key)
+            if not isinstance(digest, str) or not _SHA256_RE.fullmatch(digest):
+                raise ValueError(f"metrics.{hash_key} must be a lowercase SHA-256 digest")
+            result[hash_key] = digest
+    return result
 
 
 def _load_manifest_planner_section(
@@ -1495,6 +1523,12 @@ def load_release_manifest(
         snqi_weights_sha256=metrics["snqi_weights_sha256"],
         snqi_baseline_path=metrics["snqi_baseline_path"],
         snqi_baseline_sha256=metrics["snqi_baseline_sha256"],
+        snqi_v2_weights_path=metrics.get("snqi_v2_weights_path"),
+        snqi_v2_weights_sha256=metrics.get("snqi_v2_weights_sha256"),
+        snqi_v2_anchors_path=metrics.get("snqi_v2_anchors_path"),
+        snqi_v2_anchors_sha256=metrics.get("snqi_v2_anchors_sha256"),
+        snqi_v2_family_path=metrics.get("snqi_v2_family_path"),
+        snqi_v2_family_sha256=metrics.get("snqi_v2_family_sha256"),
         planner_keys=planner_keys,
         planner_groups=planner_groups,
         required_artifact_paths=required_artifact_paths,
@@ -1860,6 +1894,24 @@ def _validate_release_hashes_and_assets(
         digest_problem="metrics.snqi_baseline_sha256 does not match snqi_baseline_path",
         problems=problems,
     )
+    v2_spec = getattr(cfg, "snqi_v2_spec", None)
+    for role in ("weights", "anchors", "family"):
+        path = getattr(manifest, f"snqi_v2_{role}_path")
+        digest = getattr(manifest, f"snqi_v2_{role}_sha256")
+        config_path = v2_spec.paths[role] if v2_spec is not None else None
+        config_digest = v2_spec.hashes[role] if v2_spec is not None else None
+        if path is None:
+            if config_path is not None:
+                problems.append(
+                    f"metrics.snqi_v2_{role}_path presence does not match campaign config"
+                )
+            continue
+        if config_path is None or path.resolve() != Path(config_path).resolve():
+            problems.append(f"metrics.snqi_v2_{role}_path does not match campaign config")
+        if digest != config_digest:
+            problems.append(f"metrics.snqi_v2_{role}_sha256 does not match campaign config")
+        if _sha256_file(path) != digest:
+            problems.append(f"metrics.snqi_v2_{role}_sha256 does not match asset bytes")
 
 
 def _validate_optional_metric_asset(
@@ -2509,6 +2561,13 @@ def build_resolved_release_manifest(
         },
         "release_kind": manifest.release_kind,
     }
+    if manifest.snqi_v2_weights_path is not None:
+        for role in ("weights", "anchors", "family"):
+            path = getattr(manifest, f"snqi_v2_{role}_path")
+            payload["metrics"][f"snqi_v2_{role}_path"] = _repo_relative(path)
+            payload["metrics"][f"snqi_v2_{role}_sha256"] = getattr(
+                manifest, f"snqi_v2_{role}_sha256"
+            )
     source_sha = _resolve_release_source_sha(manifest, source_commit)
     if source_sha is not None:
         # Keep the final source identity at the resolved-manifest root as well
@@ -2743,7 +2802,13 @@ def _materialize_release_template_payload(  # noqa: PLR0913
     path_fields = {
         "scenario": ("matrix_path", "suite_policy_path", "route_certification_path"),
         "seed_policy": ("seed_sets_path",),
-        "metrics": ("snqi_weights_path", "snqi_baseline_path"),
+        "metrics": (
+            "snqi_weights_path",
+            "snqi_baseline_path",
+            "snqi_v2_weights_path",
+            "snqi_v2_anchors_path",
+            "snqi_v2_family_path",
+        ),
     }
     for section_name, fields in path_fields.items():
         raw_section = template_payload.get(section_name)
@@ -2889,6 +2954,9 @@ def _build_resolved_release_identity(
         (cfg.seed_policy.seed_sets_path, "seed sets"),
         (manifest.snqi_weights_path, "SNQI weights"),
         (manifest.snqi_baseline_path, "SNQI baseline"),
+        (manifest.snqi_v2_weights_path, "SNQI v2 weights"),
+        (manifest.snqi_v2_anchors_path, "SNQI v2 anchors"),
+        (manifest.snqi_v2_family_path, "SNQI v2 family"),
         (manifest.citation_path, "citation"),
         (manifest.release_checklist_path, "release checklist"),
     )
@@ -3155,6 +3223,496 @@ def verify_resolved_release_identity(
     return manifest
 
 
+SCIENTIFIC_CANDIDATE_SCHEMA_VERSION = "benchmark-scientific-candidate.v1"
+SCIENTIFIC_CANDIDATE_TEMPLATE_SHA256 = (
+    "4033a931b46edddb29d6064be1cc38c0f798ec07df4a514b689a5cb21a5c710e"
+)
+SCIENTIFIC_CANDIDATE_FROZEN_ARCHIVE_SHA256 = (
+    "684da7c557c426756f22ddbf5cb3270141ee8ae385669a39d36f324852a6fb2f"
+)
+
+
+def _candidate_frozen_checkpoint_arms(  # noqa: C901, PLR0912, PLR0915
+    cfg: CampaignConfig,
+    frozen_campaign: Mapping[str, Any],
+    staging_receipt: Mapping[str, Any],
+    *,
+    registry_path: Path,
+    observed_campaign: Mapping[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Require every arm and checkpoint to match the frozen campaign, including runtime digests.
+
+    Returns:
+        Host-path-independent frozen identities for the candidate receipt.
+    """
+    frozen_arms = frozen_campaign.get("planners")
+    roster = [(planner.key, planner.algo) for planner in cfg.planners]
+    if (
+        not isinstance(frozen_arms, list)
+        or len(frozen_arms) != 14
+        or not all(isinstance(arm, Mapping) for arm in frozen_arms)
+    ):
+        raise ValueError("frozen 0.0.7 checkpoint roster is incomplete")
+    if [(arm.get("key"), arm.get("algo")) for arm in frozen_arms] != roster:
+        raise ValueError("frozen 0.0.7 checkpoint roster differs from candidate")
+    observed_arms = None
+    if observed_campaign is not None:
+        observed_arms = observed_campaign.get("planners")
+        if (
+            not isinstance(observed_arms, list)
+            or len(observed_arms) != 14
+            or not all(isinstance(arm, Mapping) for arm in observed_arms)
+        ):
+            raise ValueError("candidate campaign checkpoint roster is incomplete")
+        if [(arm.get("key"), arm.get("algo")) for arm in observed_arms] != roster:
+            raise ValueError("candidate campaign checkpoint roster differs from frozen 0.0.7")
+
+    def reference(record: Mapping[str, Any], label: str) -> tuple[Any, ...]:
+        keys = ("planner_key", "algo", "kind", "value", "implicit")
+        values = tuple(record.get(key) for key in keys)
+        digest = record.get("checkpoint_sha256")
+        if (
+            not all(isinstance(value, str) and value for value in values[:4])
+            or type(values[4]) is not bool
+            or not isinstance(digest, str)
+            or _SHA256_RE.fullmatch(digest.lower()) is None
+        ):
+            raise ValueError(f"{label} checkpoint reference is incomplete")
+        return (*values, digest.lower())
+
+    frozen_refs: list[tuple[Any, ...]] = []
+    projection: list[dict[str, Any]] = []
+    for index, (arm, (key, algo)) in enumerate(zip(frozen_arms, roster, strict=True)):
+        provenance = arm.get("checkpoint_provenance")
+        if not isinstance(provenance, Mapping):
+            raise ValueError(f"frozen 0.0.7 {key} checkpoint provenance is missing")
+        refs = provenance.get("references")
+        runtime = provenance.get("runtime")
+        if not isinstance(refs, list) or not isinstance(runtime, list):
+            raise ValueError(f"frozen 0.0.7 {key} checkpoint references/runtime are missing")
+        arm_refs = []
+        for item in refs:
+            if not isinstance(item, Mapping):
+                raise ValueError(f"frozen 0.0.7 {key} checkpoint reference is malformed")
+            normalized = reference(item, f"frozen 0.0.7 {key}")
+            if normalized[:2] != (key, algo):
+                raise ValueError(f"frozen 0.0.7 {key} checkpoint reference names another arm")
+            arm_refs.append(normalized)
+            frozen_refs.append(normalized)
+            if normalized[2] == "model_id":
+                entry = get_registry_entry(normalized[3], path=registry_path)
+                digest_path = item.get("resolved_path") or entry.get("local_path")
+                if not isinstance(digest_path, str) or not digest_path:
+                    raise ValueError(f"{key} model registry has no checkpoint path")
+                registry_digest = _registry_checkpoint_sha256(entry, Path(digest_path))
+                if registry_digest != normalized[5]:
+                    raise ValueError(f"{key} registry checkpoint differs from frozen 0.0.7")
+        top_digest = provenance.get("checkpoint_sha256")
+        if top_digest is not None and (
+            not isinstance(top_digest, str) or _SHA256_RE.fullmatch(top_digest.lower()) is None
+        ):
+            raise ValueError(f"frozen 0.0.7 {key} top checkpoint digest is invalid")
+        runtime_digests = []
+        for item in runtime:
+            if not isinstance(item, Mapping):
+                raise ValueError(f"frozen 0.0.7 {key} runtime checkpoint is malformed")
+            digest = item.get("checkpoint_sha256")
+            hash_source = item.get("hash_source")
+            if digest is not None and (
+                not isinstance(digest, str) or _SHA256_RE.fullmatch(digest.lower()) is None
+            ):
+                raise ValueError(f"frozen 0.0.7 {key} runtime checkpoint digest is invalid")
+            if hash_source is not None and (
+                not isinstance(hash_source, str) or not hash_source.strip()
+            ):
+                raise ValueError(f"frozen 0.0.7 {key} runtime hash source is invalid")
+            if digest is not None and hash_source is None:
+                raise ValueError(f"frozen 0.0.7 {key} runtime digest has no hash source")
+            if key == "sacadrl" and hash_source != "computed_tensorflow_checkpoint_bundle":
+                raise ValueError("frozen 0.0.7 SACADRL runtime must use the computed bundle")
+            runtime_digests.append(
+                (
+                    item.get("model_id"),
+                    item.get("kinematics"),
+                    digest.lower() if digest else None,
+                    hash_source,
+                )
+            )
+        projection.append(
+            {
+                "planner_key": key,
+                "algo": algo,
+                "model_id": provenance.get("model_id"),
+                "references": [list(item) for item in arm_refs],
+                "checkpoint_sha256": top_digest.lower() if top_digest else None,
+                "runtime": [list(item) for item in runtime_digests],
+            }
+        )
+        if observed_arms is None:
+            continue
+        observed = observed_arms[index].get("checkpoint_provenance")
+        if not isinstance(observed, Mapping) or observed.get("model_id") != provenance.get(
+            "model_id"
+        ):
+            raise ValueError(f"candidate {key} checkpoint model differs from frozen 0.0.7")
+        observed_refs = observed.get("references")
+        if not isinstance(observed_refs, list) or any(
+            not isinstance(item, Mapping) for item in observed_refs
+        ):
+            raise ValueError(f"candidate {key} checkpoint references are missing")
+        if sorted(reference(item, f"candidate {key}") for item in observed_refs) != sorted(
+            arm_refs
+        ):
+            raise ValueError(f"candidate {key} checkpoint references differ from frozen 0.0.7")
+        if observed.get("checkpoint_sha256") != top_digest:
+            raise ValueError(f"candidate {key} runtime bundle differs from frozen 0.0.7")
+        observed_runtime = observed.get("runtime")
+        if not isinstance(observed_runtime, list) or len(observed_runtime) != len(runtime_digests):
+            raise ValueError(f"candidate {key} runtime checkpoint coverage differs")
+        for current, frozen in zip(observed_runtime, runtime_digests, strict=True):
+            if (
+                not isinstance(current, Mapping)
+                or (
+                    current.get("model_id"),
+                    current.get("kinematics"),
+                )
+                != frozen[:2]
+            ):
+                raise ValueError(f"candidate {key} runtime checkpoint identity differs")
+            current_digest = current.get("checkpoint_sha256")
+            if frozen[3] is not None and current.get("hash_source") != frozen[3]:
+                raise ValueError(f"candidate {key} runtime checkpoint hash source differs")
+            if frozen[2] is not None and current_digest != frozen[2]:
+                raise ValueError(f"candidate {key} runtime checkpoint digest differs")
+            if frozen[2] is None and current_digest is not None and current_digest != top_digest:
+                raise ValueError(
+                    f"candidate {key} runtime checkpoint differs from frozen reference"
+                )
+            if current_digest is not None and (
+                not isinstance(current_digest, str)
+                or _SHA256_RE.fullmatch(current_digest.lower()) is None
+            ):
+                raise ValueError(f"candidate {key} runtime checkpoint digest is invalid")
+    declared_refs = [
+        (
+            item.planner_key,
+            item.algo,
+            item.kind,
+            item.value,
+            item.implicit,
+        )
+        for item in iter_campaign_arm_checkpoint_references(cfg)
+    ]
+    if sorted(item[:5] for item in frozen_refs) != sorted(declared_refs):
+        raise ValueError("candidate checkpoint references differ from frozen 0.0.7")
+    staged = staging_receipt.get("arms")
+    if not isinstance(staged, list) or any(not isinstance(item, Mapping) for item in staged):
+        raise ValueError("candidate checkpoint staging arms are missing")
+    if sorted(reference(item, "staged") for item in staged) != sorted(frozen_refs):
+        raise ValueError("candidate staged checkpoints differ from frozen 0.0.7")
+    return projection
+
+
+def _candidate_scientific_sections(
+    cfg: CampaignConfig,
+    baseline: Mapping[str, Any],
+    *,
+    repository_root: Path,
+    source_sha: str,
+) -> dict[str, Any]:
+    """Resolve actual configuration inputs against the frozen predecessor sections.
+
+    Returns:
+        Six source-bound scientific sections, including the three SNQI v2 assets.
+    """
+
+    root = repository_root.resolve()
+    scenarios = _load_campaign_scenarios(cfg)
+    scenario_ids = [
+        str(scenario.get("id") or scenario.get("scenario_id") or scenario.get("name") or "")
+        for scenario in scenarios
+    ]
+    seeds = _resolved_seed_inventory(scenarios)
+    if (
+        len(cfg.planners) != 14
+        or len(scenario_ids) != 48
+        or len(set(scenario_ids)) != 48
+        or seeds != list(range(111, 141))
+        or cfg.horizon != 600
+        or cfg.dt != 0.1
+        or cfg.kinematics_matrix != ("differential_drive",)
+    ):
+        raise ValueError("0.0.8 scientific candidate matrix differs from the frozen release")
+
+    def pinned(path: Path | None, label: str) -> tuple[str, str]:
+        if path is None:
+            raise ValueError(f"scientific candidate has no {label}")
+        resolved = _safe_repository_file(Path(path), root, field_name=label)
+        _require_tracked_input_at_source(
+            resolved, repository_root=root, source_commit=source_sha, label=label
+        )
+        return _repository_relative_value(resolved, root), _sha256_file(resolved)
+
+    scenario_path, scenario_sha = pinned(cfg.scenario_matrix_path, "scenario matrix")
+    seeds_path, seeds_sha = pinned(cfg.seed_policy.seed_sets_path, "seed sets")
+    weights_path, weights_sha = pinned(cfg.snqi_weights_path, "SNQI v1 weights")
+    baseline_path, baseline_sha = pinned(cfg.snqi_baseline_path, "SNQI v1 baseline")
+    sections = {
+        "matrix": {"expected_episode_cells": 20160, "horizon_steps": 600},
+        "scenario": {"matrix_path": scenario_path, "matrix_sha256": scenario_sha},
+        "seed_policy": {
+            "mode": cfg.seed_policy.mode,
+            "seed_set": cfg.seed_policy.seed_set,
+            "seeds": list(cfg.seed_policy.seeds),
+            "seed_sets_path": seeds_path,
+            "seed_sets_sha256": seeds_sha,
+            "resolved_seeds": seeds,
+        },
+        "planners": {
+            "keys": [planner.key for planner in cfg.planners],
+            "groups": {planner.key: planner.planner_group for planner in cfg.planners},
+            "config_identities": _build_planner_config_identities(cfg, repository_root=root),
+        },
+        "kinematics": {
+            "matrix": list(cfg.kinematics_matrix),
+            "holonomic_command_mode": None,
+        },
+        "metrics": {
+            "snqi_weights_path": weights_path,
+            "snqi_weights_sha256": weights_sha,
+            "snqi_baseline_path": baseline_path,
+            "snqi_baseline_sha256": baseline_sha,
+        },
+    }
+    for section in sections:
+        if sections[section] != baseline.get(section):
+            raise ValueError(f"scientific candidate {section} differs from frozen 0.0.7")
+    v2 = getattr(cfg, "snqi_v2_spec", None)
+    if v2 is None:
+        raise ValueError("0.0.8 campaign parser has not bound SNQI v2 assets")
+    for role in ("weights", "anchors", "family"):
+        path = v2.paths.get(role)
+        asset_path, asset_sha = pinned(path, f"SNQI v2 {role}")
+        if v2.hashes.get(role) != asset_sha:
+            raise ValueError(f"SNQI v2 {role} checksum differs from campaign config")
+        sections["metrics"][f"snqi_v2_{role}_path"] = asset_path
+        sections["metrics"][f"snqi_v2_{role}_sha256"] = asset_sha
+    return sections
+
+
+def build_scientific_candidate_identity(  # noqa: C901, PLR0913
+    *,
+    cfg: CampaignConfig,
+    baseline_manifest: Mapping[str, Any],
+    baseline_campaign_manifest: Mapping[str, Any],
+    baseline_archive_sha256: str,
+    source_sha: str,
+    checkpoint_receipt: Mapping[str, Any],
+    checkpoint_receipt_sha256: str,
+    runtime_smoke_receipt_sha256: str | None = None,
+    campaign_root: Path | None = None,
+    repository_root: Path | None = None,
+) -> dict[str, Any]:
+    """Build publication-free science custody; raw hashes appear only after execution.
+
+    Returns:
+        Versioned source, config, seed, checkpoint, and optional raw-artifact custody.
+    """
+
+    root = (repository_root or get_repository_root()).resolve()
+    config_path = _safe_repository_file(
+        Path(cfg.source_config_path or ""), root, field_name="0.0.8 campaign template"
+    )
+    if (
+        config_path.name
+        != ("paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_template.yaml")
+        or _sha256_file(config_path) != SCIENTIFIC_CANDIDATE_TEMPLATE_SHA256
+    ):
+        raise ValueError("0.0.8 candidate requires the exact dedicated campaign template")
+    _require_clean_exact_checkout(root, source_commit=source_sha, template_path=config_path)
+    if cfg.publication_identity_mode != "scientific_candidate":
+        raise ValueError("scientific candidate mode was not selected")
+    if cfg.release_tag or cfg.doi or cfg.export_publication_bundle:
+        raise ValueError("scientific candidate config contains publication coordinates")
+    if cfg.source_config_sha256 != SCIENTIFIC_CANDIDATE_TEMPLATE_SHA256:
+        raise ValueError("loaded campaign template bytes changed")
+    if baseline_archive_sha256 != SCIENTIFIC_CANDIDATE_FROZEN_ARCHIVE_SHA256:
+        raise ValueError("scientific candidate predecessor archive checksum differs")
+    frozen_git = baseline_campaign_manifest.get("git")
+    if not isinstance(frozen_git, Mapping) or frozen_git.get("commit") != baseline_manifest.get(
+        "source_sha"
+    ):
+        raise ValueError("frozen campaign and release manifest sources differ")
+    if checkpoint_receipt.get("submit_safe") is not True:
+        raise ValueError("scientific candidate has no submit-safe checkpoint receipt")
+    if _SHA256_RE.fullmatch(checkpoint_receipt_sha256) is None:
+        raise ValueError("checkpoint receipt checksum is invalid")
+    if (
+        runtime_smoke_receipt_sha256 is None
+        or _SHA256_RE.fullmatch(runtime_smoke_receipt_sha256) is None
+    ):
+        raise ValueError("exact-source runtime smoke receipt checksum is required")
+    sections = _candidate_scientific_sections(
+        cfg, baseline_manifest, repository_root=root, source_sha=source_sha
+    )
+    for planner in cfg.planners:
+        if planner.algo_config_path is not None:
+            _require_tracked_input_at_source(
+                planner.algo_config_path,
+                repository_root=root,
+                source_commit=source_sha,
+                label=f"planner config for {planner.key}",
+            )
+    scenarios = _load_campaign_scenarios(cfg)
+    scenario_ids = sorted(
+        str(scenario.get("id") or scenario.get("scenario_id") or scenario.get("name") or "")
+        for scenario in scenarios
+    )
+    episode_keys = [
+        [planner.key, scenario_id, seed]
+        for planner in cfg.planners
+        for scenario_id in scenario_ids
+        for seed in sections["seed_policy"]["resolved_seeds"]
+    ]
+    registry_path = _safe_repository_file(
+        root / DEFAULT_REGISTRY_PATH, root, field_name="model registry"
+    )
+    _require_tracked_input_at_source(
+        registry_path, repository_root=root, source_commit=source_sha, label="model registry"
+    )
+    observed_campaign = None
+    if campaign_root is not None:
+        observed_campaign = json.loads(
+            (campaign_root.resolve() / "campaign_manifest.json").read_text(encoding="utf-8")
+        )
+        if not isinstance(observed_campaign, dict):
+            raise ValueError("candidate campaign manifest is malformed")
+    frozen_checkpoint_arms = _candidate_frozen_checkpoint_arms(
+        cfg,
+        baseline_campaign_manifest,
+        checkpoint_receipt,
+        registry_path=registry_path,
+        observed_campaign=observed_campaign,
+    )
+    science = {**sections, "provenance": {"source_sha": source_sha}}
+    identity = {
+        "schema_version": SCIENTIFIC_CANDIDATE_SCHEMA_VERSION,
+        "source_sha": source_sha,
+        "campaign_template_path": _repository_relative_value(config_path, root),
+        "campaign_template_sha256": SCIENTIFIC_CANDIDATE_TEMPLATE_SHA256,
+        "baseline_archive_sha256": baseline_archive_sha256,
+        "scientific_config_hash_schema": "camera-ready-publication-free.v1",
+        "scientific_config_hash": _config_hash(_config_hash_payload(cfg)),
+        "scenario_ids": scenario_ids,
+        "expected_episode_key_count": len(episode_keys),
+        "expected_episode_keys_sha256": hashlib.sha256(
+            _canonical_json_bytes({"keys": episode_keys})
+        ).hexdigest(),
+        "model_registry_sha256": _sha256_file(registry_path),
+        "checkpoint_receipt_sha256": checkpoint_receipt_sha256,
+        "runtime_smoke_receipt_sha256": runtime_smoke_receipt_sha256,
+        "checkpoint_arms": [
+            {
+                key: arm[key]
+                for key in ("planner_key", "algo", "kind", "value", "implicit", "checkpoint_sha256")
+            }
+            for arm in checkpoint_receipt.get("arms", [])
+        ],
+        "frozen_checkpoint_arms": frozen_checkpoint_arms,
+        "scientific_manifest": science,
+    }
+    if campaign_root is not None:
+        output_root = campaign_root.resolve()
+        raw_paths = sorted((output_root / "runs").glob("*/episodes.jsonl"))
+        if len(raw_paths) != 14:
+            raise ValueError("scientific candidate requires exactly 14 raw episode files")
+        identity["raw_episode_sha256"] = {
+            path.relative_to(output_root).as_posix(): _sha256_file(path) for path in raw_paths
+        }
+        sidecars = (
+            "campaign_manifest.json",
+            "manifest.json",
+            "run_meta.json",
+            "reports/campaign_summary.json",
+            "reports/campaign_integrity.json",
+        )
+        arm_sidecars = tuple(
+            relative
+            for path in raw_paths
+            for relative in (
+                f"runs/{path.parent.name}/episodes.jsonl.provenance.json",
+                f"runs/{path.parent.name}/summary.json",
+            )
+        )
+        identity["producer_sidecar_sha256"] = {
+            name: _sha256_file(output_root / name) for name in (*sidecars, *arm_sidecars)
+        }
+    identity["scientific_identity_sha256"] = hashlib.sha256(
+        _canonical_json_bytes(identity)
+    ).hexdigest()
+    return identity
+
+
+@dataclass(frozen=True)
+class ScientificCandidateAcceptanceView:
+    """Publication-free inputs for the existing strict full-matrix validator."""
+
+    schema_version: str
+    expected_episode_cells: int
+    expected_horizon_steps: int
+    planner_keys: tuple[str, ...]
+    expected_kinematics_matrix: tuple[str, ...]
+    resolved_seeds: tuple[int, ...]
+    canonical_campaign_config_path: Path
+    scenario_matrix_path: Path
+
+
+def scientific_candidate_acceptance_view(
+    identity: Mapping[str, Any], cfg: CampaignConfig, *, repository_root: Path | None = None
+) -> ScientificCandidateAcceptanceView:
+    """Reject an unbound candidate before passing its science to full acceptance.
+
+    Returns:
+        A publication-free view compatible with the strict full-matrix validator.
+    """
+    root = (repository_root or get_repository_root()).resolve()
+    if identity.get("schema_version") != SCIENTIFIC_CANDIDATE_SCHEMA_VERSION:
+        raise ValueError("scientific candidate identity schema is invalid")
+    science = identity.get("scientific_manifest")
+    if not isinstance(science, Mapping):
+        raise ValueError("scientific candidate manifest is missing")
+    if identity.get("source_sha") != science.get("provenance", {}).get("source_sha"):
+        raise ValueError("scientific candidate source aliases differ")
+    if identity.get("scientific_config_hash_schema") != "camera-ready-publication-free.v1":
+        raise ValueError("scientific candidate config hash schema is invalid")
+    matrix = science.get("matrix")
+    scenario = science.get("scenario")
+    planners = science.get("planners")
+    seed_policy = science.get("seed_policy")
+    kinematics = science.get("kinematics")
+    if not all(
+        isinstance(block, Mapping)
+        for block in (matrix, scenario, planners, seed_policy, kinematics)
+    ):
+        raise ValueError("scientific candidate contract sections are missing")
+    if identity.get("expected_episode_key_count") != 20160:
+        raise ValueError("scientific candidate episode-key count is invalid")
+    return ScientificCandidateAcceptanceView(
+        schema_version=RELEASE_MANIFEST_SCHEMA_VERSION_V0_2,
+        expected_episode_cells=int(matrix["expected_episode_cells"]),
+        expected_horizon_steps=int(matrix["horizon_steps"]),
+        planner_keys=tuple(planners["keys"]),
+        expected_kinematics_matrix=tuple(kinematics["matrix"]),
+        resolved_seeds=tuple(seed_policy["resolved_seeds"]),
+        canonical_campaign_config_path=_safe_repository_file(
+            root / identity["campaign_template_path"], root, field_name="candidate campaign"
+        ),
+        scenario_matrix_path=_safe_repository_file(
+            root / scenario["matrix_path"], root, field_name="candidate scenario"
+        ),
+    )
+
+
 def parse_release_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Shared parser for release-entrypoint tests and CLI wrapper.
 
@@ -3259,6 +3817,9 @@ __all__ = [
     "RELEASE_MANIFEST_SCHEMA_VERSION_V0_2",
     "RESOLVED_RELEASE_IDENTITY_SCHEMA_VERSION",
     "RESOLVED_RELEASE_METADATA_FILENAME",
+    "SCIENTIFIC_CANDIDATE_FROZEN_ARCHIVE_SHA256",
+    "SCIENTIFIC_CANDIDATE_SCHEMA_VERSION",
+    "SCIENTIFIC_CANDIDATE_TEMPLATE_SHA256",
     "STRESS_SMOKE_EXPECTED_DT",
     "STRESS_SMOKE_EXPECTED_EPISODE_CELLS",
     "STRESS_SMOKE_EXPECTED_HORIZON_STEPS",
@@ -3269,14 +3830,17 @@ __all__ = [
     "STRESS_SMOKE_EXPECTED_SEED",
     "SUPPORTED_RELEASE_MANIFEST_SCHEMA_VERSIONS",
     "BenchmarkReleaseManifest",
+    "ScientificCandidateAcceptanceView",
     "StressSmokeAssetPin",
     "StressSmokeBranchWitness",
     "build_release_provenance",
     "build_resolved_release_manifest",
+    "build_scientific_candidate_identity",
     "is_diagnostic_stress_smoke",
     "load_release_campaign_config",
     "load_release_manifest",
     "parse_release_args",
+    "scientific_candidate_acceptance_view",
     "validate_release_manifest",
     "validate_release_planner_roster",
     "validate_stress_smoke_runtime_identity",

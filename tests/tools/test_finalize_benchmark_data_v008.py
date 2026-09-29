@@ -1,0 +1,1189 @@
+"""Fail-closed checks for the deferred 0.0.8 publication step."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from robot_sf.benchmark.artifact_publication import PublicationPreflightError
+from robot_sf.benchmark.camera_ready._config_types import CampaignConfig
+from scripts.tools import finalize_benchmark_data_v008 as finalizer
+
+SOURCE_SHA = "a" * 40
+
+
+def _write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+
+def _stage3_inputs(root: Path) -> None:
+    """Install a minimal candidate identity, ledger, and findings fixture."""
+    _write_json(
+        root / "release/candidate_identity.json",
+        {
+            "schema_version": "release_007_008_candidate_identity.v1",
+            "source_sha": SOURCE_SHA,
+        },
+    )
+    _write_json(
+        root / "reports/attribution_ledger.json",
+        {
+            "schema_version": "release_007_008_attribution_ledger.v1",
+            "candidate_source_sha": SOURCE_SHA,
+            "entries": [],
+        },
+    )
+    findings = root / "reports/stage3_findings.jsonl"
+    findings.parent.mkdir(parents=True, exist_ok=True)
+    findings.write_text("", encoding="utf-8")
+
+
+def _stage3_gate(command: list[str], *, baseline_sha: str) -> None:
+    """Write a synthetic passing comparator receipt for finalizer tests."""
+    identity = Path(command[command.index("--candidate-identity") + 1])
+    ledger = Path(command[command.index("--attribution-ledger") + 1])
+    findings = Path(command[command.index("--findings-jsonl") + 1])
+    findings.parent.mkdir(parents=True, exist_ok=True)
+    if not findings.exists():
+        findings.write_text("", encoding="utf-8")
+    report = {
+        "schema_version": "release_007_008_comparison.v1",
+        "historical_bundle_sha256": baseline_sha,
+        "historical_source_sha": finalizer.BASELINE_SOURCE_SHA,
+        "historical_effective_config_sha256": finalizer.HISTORICAL_EFFECTIVE_CONFIG_SHA256,
+        "historical_matrix_sha256": finalizer.HISTORICAL_MATRIX_SHA256,
+        "candidate_source_sha": SOURCE_SHA,
+        "candidate_identity_sha256": finalizer._sha256(identity),
+        "attribution_ledger_sha256": finalizer._sha256(ledger),
+        "findings_sha256": finalizer._sha256(findings),
+        "comparison_passed": True,
+        "comparison": {
+            "comparison_passed": True,
+            "inventory": {},
+            "row_anomalies": [],
+            "unexplained_findings": [],
+            "orphaned_attributions": [],
+        },
+        "read_anomalies": [],
+        "attribution_anomalies": [],
+    }
+    _write_json(Path(command[command.index("--report-json") + 1]), report)
+
+
+def _write_postrun_promotion_gate_report(output: Path, candidate_root: Path) -> None:
+    if output.name == "postrun_metric_equivalence.json":
+        _write_json(
+            output,
+            {
+                "status": "mismatch",
+                "baseline_archive_sha256": finalizer.BASELINE_ARCHIVE_SHA256,
+                "baseline_source_sha": finalizer.BASELINE_SOURCE_SHA,
+                "candidate_source_sha": SOURCE_SHA,
+                "expected_rows": finalizer.EXPECTED_EPISODES,
+                "baseline_rows": finalizer.EXPECTED_EPISODES,
+                "candidate_rows": finalizer.EXPECTED_EPISODES,
+                "paired_rows": finalizer.EXPECTED_EPISODES,
+                "robot_force_metrics": {
+                    "status": "pass",
+                    "checked_rows": finalizer.EXPECTED_EPISODES,
+                    "failed_rows": 0,
+                },
+            },
+        )
+    elif output.name == "postrun_robot_force_validation.json":
+        equivalence = candidate_root / "reports/postrun_metric_equivalence.json"
+        _write_json(
+            output,
+            {
+                "classification": "release_robot_force_validation",
+                "episodes": finalizer.EXPECTED_EPISODES,
+                "source_commit": SOURCE_SHA,
+                "equivalence_report_sha256": finalizer._sha256(equivalence),
+            },
+        )
+    else:
+        _write_json(output, {"status": "pass"})
+
+
+def _tree_snapshot(root: Path) -> dict[str, bytes]:
+    """Capture regular-file bytes for producer immutability assertions."""
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+def _producer(root: Path) -> dict:
+    result = {
+        "release_benchmark_success": True,
+        "release_status": "ok",
+        "release_exit_code": 0,
+        "release_acceptance": {"status": "valid"},
+        "publication_requested": False,
+        "publication_preflight_status": "not_requested",
+        "benchmark_release": {
+            "source_commit": SOURCE_SHA,
+            "release_tag": "benchmark-data-0.0.8",
+            "version_doi": "10.5281/zenodo.123456",
+        },
+    }
+    _write_json(root / "release" / "release_result.json", result)
+    _write_json(
+        root / "release" / "release_manifest.resolved.json",
+        {
+            "source_sha": SOURCE_SHA,
+            "release_tag": "benchmark-data-0.0.8",
+            "provenance": {"source_sha": SOURCE_SHA, "version_doi": "10.5281/zenodo.123456"},
+        },
+    )
+    _write_json(root / "campaign_manifest.json", {"git_hash": SOURCE_SHA})
+    _stage3_inputs(root)
+    return result
+
+
+def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    producer = tmp_path / "producer"
+    baseline = tmp_path / "predecessor.tar.gz"
+    baseline.write_bytes(b"synthetic archive only")
+    monkeypatch.setattr(finalizer, "BASELINE_ARCHIVE_SHA256", finalizer._sha256(baseline))
+    registry = tmp_path / "model/registry.yaml"
+    registry.parent.mkdir(parents=True)
+    registry.write_text("fixture: true\n", encoding="utf-8")
+    monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
+    for index in range(14):
+        path = producer / f"runs/arm{index}__differential_drive/episodes.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(f'{{"arm":{index}}}\n'.encode())
+    sidecar_names = [
+        "campaign_manifest.json",
+        "manifest.json",
+        "run_meta.json",
+        "reports/campaign_summary.json",
+        "reports/campaign_integrity.json",
+    ]
+    sidecar_names.extend(
+        name
+        for index in range(14)
+        for name in (
+            f"runs/arm{index}__differential_drive/episodes.jsonl.provenance.json",
+            f"runs/arm{index}__differential_drive/summary.json",
+        )
+    )
+    for name in sidecar_names:
+        payload = {"source": SOURCE_SHA}
+        if name == "reports/campaign_summary.json":
+            payload = {"campaign": {"status": "benchmark_success", "benchmark_success": True}}
+        elif name == "campaign_manifest.json":
+            payload = {"config_hash": "c" * 64}
+        _write_json(producer / name, payload)
+    _stage3_inputs(producer)
+    v2_metrics = {}
+    for role in ("weights", "anchors", "family"):
+        asset = producer / f"assets/snqi_v2_{role}.json"
+        _write_json(asset, {"role": role})
+        relative = asset.relative_to(tmp_path).as_posix()
+        v2_metrics[f"snqi_v2_{role}_path"] = relative
+        v2_metrics[f"snqi_v2_{role}_sha256"] = finalizer._sha256(asset)
+    science = {
+        "provenance": {"source_sha": SOURCE_SHA},
+        **{key: {} for key in ("matrix", "scenario", "seed_policy", "planners", "kinematics")},
+        "metrics": v2_metrics,
+    }
+    identity = {
+        "schema_version": "benchmark-scientific-candidate.v1",
+        "baseline_archive_sha256": finalizer.BASELINE_ARCHIVE_SHA256,
+        "source_sha": SOURCE_SHA,
+        "campaign_template_path": "configs/benchmarks/fixture.yaml",
+        "campaign_template_sha256": "b" * 64,
+        "scientific_config_hash_schema": "camera-ready-publication-free.v1",
+        "scientific_config_hash": "c" * 64,
+        "model_registry_sha256": finalizer._sha256(registry),
+        "scientific_manifest": science,
+        "raw_episode_sha256": finalizer._raw_episode_hashes(producer),
+        "producer_sidecar_sha256": {
+            name: finalizer._sha256(producer / name) for name in sidecar_names
+        },
+    }
+    canonical = (
+        json.dumps(
+            identity,
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=2,
+            sort_keys=True,
+            separators=(",", ": "),
+        )
+        + "\n"
+    )
+    identity["scientific_identity_sha256"] = hashlib.sha256(canonical.encode()).hexdigest()
+    identity_path = producer / "release/scientific_candidate.json"
+    _write_json(identity_path, identity)
+    reports = {
+        "full_acceptance_sha256": (
+            "reports/scientific_candidate_acceptance.json",
+            {
+                "status": "valid",
+                "benchmark_success": True,
+                "expected_planner_arms": 14,
+                "expected_episode_cells": 20160,
+                "observed_episode_rows": 20160,
+                "unique_episode_identities": 20160,
+                "source_commits": [SOURCE_SHA],
+                "blockers": [],
+                "forbidden_status_counts": {},
+            },
+        ),
+        "metric_equivalence_sha256": (
+            "reports/metric_equivalence.json",
+            {
+                "status": "pass",
+                "baseline_archive_sha256": finalizer.BASELINE_ARCHIVE_SHA256,
+                "baseline_source_sha": finalizer.BASELINE_SOURCE_SHA,
+                "candidate_source_sha": SOURCE_SHA,
+                "expected_rows": 20160,
+                "baseline_rows": 20160,
+                "candidate_rows": 20160,
+                "paired_rows": 20160,
+                "mismatch_episodes": 0,
+                "scientific_manifest_differences": [
+                    {"field": "scientific_manifest.metrics.snqi", "old": 1, "new": 2}
+                ],
+                "robot_force_metrics": {
+                    "status": "pass",
+                    "checked_rows": 20160,
+                    "failed_rows": 0,
+                },
+            },
+        ),
+        "robot_force_validation_sha256": (
+            "reports/robot_force_validation.json",
+            {
+                "classification": "release_robot_force_validation",
+                "episodes": 20160,
+                "source_commit": SOURCE_SHA,
+                "equivalence_report_sha256": "",
+                "sources": [],
+            },
+        ),
+    }
+    equivalence_path = producer / "reports/metric_equivalence.json"
+    force_report = reports["robot_force_validation_sha256"][1]
+    force_report["sources"] = [
+        {
+            "artifact_path": raw_name,
+            "sha256": digest,
+            "rows": 1,
+        }
+        for raw_name, digest in identity["raw_episode_sha256"].items()
+    ]
+    result = {
+        "schema_version": "benchmark-scientific-candidate-result.v1",
+        "baseline_archive_sha256": finalizer.BASELINE_ARCHIVE_SHA256,
+        "status": "accepted_pre_publication",
+        "source_sha": SOURCE_SHA,
+        "identity_file_sha256": finalizer._sha256(identity_path),
+        "scientific_identity_sha256": identity["scientific_identity_sha256"],
+    }
+    for key, (name, report) in reports.items():
+        _write_json(producer / name, report)
+        result[key] = finalizer._sha256(producer / name)
+    force_report["equivalence_report_sha256"] = finalizer._sha256(equivalence_path)
+    _write_json(producer / "reports/robot_force_validation.json", force_report)
+    result["robot_force_validation_sha256"] = finalizer._sha256(
+        producer / "reports/robot_force_validation.json"
+    )
+    for key, name in (
+        ("metric_equivalence_log_sha256", "reports/scientific_candidate_equivalence.log"),
+        ("robot_force_log_sha256", "reports/scientific_candidate_force.log"),
+    ):
+        log = producer / name
+        log.write_text("synthetic gate passed\n", encoding="utf-8")
+        result[key] = finalizer._sha256(log)
+    _write_json(producer / "release/scientific_candidate_result.json", result)
+    snqi_report = {"provenance": v2_metrics, "episode_count": 20160}
+    _write_json(
+        producer / "reports/snqi_v2_diagnostics.json",
+        {**snqi_report, "family_report": "snqi_v2_family.json"},
+    )
+    _write_json(
+        producer / "reports/snqi_v2_family.json",
+        {**snqi_report, "family": "V2-F", "vectors": [{}] * 2013, "stratified_count": 2011},
+    )
+    for name in ("snqi_v2_diagnostics.md", "snqi_v2_family.md"):
+        (producer / "reports" / name).write_text("synthetic SNQI-v2 report\n", encoding="utf-8")
+    producer_snapshot = _tree_snapshot(producer)
+    manifest = SimpleNamespace(
+        source_sha=SOURCE_SHA,
+        resolved_manifest_payload={
+            **science,
+            "canonical_campaign_config": "configs/benchmarks/fixture.yaml",
+            "canonical_campaign_config_sha256": "b" * 64,
+        },
+    )
+    assert finalizer._require_scientific_candidate(producer, SOURCE_SHA, manifest)[0] == identity
+    assert finalizer._require_scientific_candidate_pair(producer, SOURCE_SHA, manifest) == (
+        identity,
+        result,
+    )
+    run_meta_path = producer / "run_meta.json"
+    original_run_meta = run_meta_path.read_bytes()
+    run_meta = json.loads(original_run_meta)
+    run_meta["benchmark_release"] = {"source_sha": SOURCE_SHA}
+    _write_json(run_meta_path, run_meta)
+    mutable_sidecar_hashes = {
+        name: finalizer._sha256(producer / name)
+        for name in finalizer._DOI_DERIVATIVE_MUTABLE_PRODUCER_SIDECARS
+    }
+    assert (
+        finalizer._require_scientific_candidate(
+            producer,
+            SOURCE_SHA,
+            manifest,
+            mutable_producer_sidecar_sha256=mutable_sidecar_hashes,
+        )[0]
+        == identity
+    )
+    arm_summary_path = producer / "runs/arm0__differential_drive/summary.json"
+    original_arm_summary = arm_summary_path.read_bytes()
+    arm_summary_path.write_bytes(original_arm_summary + b" ")
+    with pytest.raises(ValueError, match="sidecar bytes changed"):
+        finalizer._require_scientific_candidate(
+            producer,
+            SOURCE_SHA,
+            manifest,
+            mutable_producer_sidecar_sha256=mutable_sidecar_hashes,
+        )
+    arm_summary_path.write_bytes(original_arm_summary)
+    run_meta_path.write_bytes(run_meta_path.read_bytes() + b" ")
+    with pytest.raises(ValueError, match="sidecar bytes changed"):
+        finalizer._require_scientific_candidate(
+            producer,
+            SOURCE_SHA,
+            manifest,
+            mutable_producer_sidecar_sha256=mutable_sidecar_hashes,
+        )
+    run_meta_path.write_bytes(original_run_meta)
+    with pytest.raises(ValueError, match="allowlist"):
+        finalizer._require_scientific_candidate(
+            producer,
+            SOURCE_SHA,
+            manifest,
+            mutable_producer_sidecar_sha256={
+                "runs/arm0__differential_drive/summary.json": finalizer._sha256(arm_summary_path)
+            },
+        )
+    identity_bytes = identity_path.read_bytes()
+    identity["unbound_tamper"] = True
+    _write_json(identity_path, identity)
+    with pytest.raises(ValueError, match="accepted exact-source scientific candidate"):
+        finalizer._require_scientific_candidate_pair(producer, SOURCE_SHA, manifest)
+    identity_path.write_bytes(identity_bytes)
+    identity = json.loads(identity_bytes)
+    result_path = producer / "release/scientific_candidate_result.json"
+    result_bytes = result_path.read_bytes()
+    tampered_result = json.loads(result_bytes)
+    tampered_result["source_sha"] = "b" * 40
+    _write_json(result_path, tampered_result)
+    with pytest.raises(ValueError, match="accepted exact-source scientific candidate"):
+        finalizer._require_scientific_candidate_pair(producer, SOURCE_SHA, manifest)
+    result_path.write_bytes(result_bytes)
+    identity_path.unlink()
+    with pytest.raises(ValueError, match="identity and result must be paired"):
+        finalizer._require_scientific_candidate_pair(producer, SOURCE_SHA, manifest)
+    identity_path.write_bytes(identity_bytes)
+    result_path.unlink()
+    with pytest.raises(ValueError, match="identity and result must be paired"):
+        finalizer._require_scientific_candidate_pair(producer, SOURCE_SHA, manifest)
+    result_path.write_bytes(result_bytes)
+    missing_metrics_identity = {
+        **identity,
+        "scientific_manifest": {**science, "metrics": {}},
+    }
+    with pytest.raises(ValueError, match="SNQI-v2 metrics are incomplete"):
+        finalizer._require_scientific_report_identities(
+            producer, SOURCE_SHA, missing_metrics_identity
+        )
+    missing_asset = tmp_path / v2_metrics["snqi_v2_weights_path"]
+    asset_bytes = missing_asset.read_bytes()
+    missing_asset.unlink()
+    with pytest.raises(ValueError, match="SNQI-v2 asset is missing"):
+        finalizer._require_scientific_report_identities(producer, SOURCE_SHA, identity)
+    missing_asset.write_bytes(asset_bytes)
+    original_equivalence = equivalence_path.read_bytes()
+    equivalence = json.loads(original_equivalence)
+    equivalence["candidate_source_sha"] = "b" * 40
+    _write_json(equivalence_path, equivalence)
+    result["metric_equivalence_sha256"] = finalizer._sha256(equivalence_path)
+    _write_json(producer / "release/scientific_candidate_result.json", result)
+    with pytest.raises(ValueError, match="equivalence report identity"):
+        finalizer._require_scientific_candidate(producer, SOURCE_SHA, manifest)
+    equivalence_path.write_bytes(original_equivalence)
+    result["metric_equivalence_sha256"] = finalizer._sha256(equivalence_path)
+    _write_json(producer / "release/scientific_candidate_result.json", result)
+    result["baseline_archive_sha256"] = "b" * 64
+    _write_json(producer / "release/scientific_candidate_result.json", result)
+    with pytest.raises(ValueError, match="accepted exact-source scientific candidate"):
+        finalizer._require_scientific_candidate(producer, SOURCE_SHA, manifest)
+    result["baseline_archive_sha256"] = finalizer.BASELINE_ARCHIVE_SHA256
+    _write_json(producer / "release/scientific_candidate_result.json", result)
+    resolved_identity = tmp_path / "resolved_identity.json"
+    resolved_identity.write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        finalizer,
+        "_run_gate",
+        lambda command, log: (
+            _stage3_gate(command, baseline_sha=finalizer.BASELINE_ARCHIVE_SHA256),
+            log.write_text("stage3 passed\n", encoding="utf-8"),
+        ),
+    )
+    monkeypatch.setattr(finalizer, "verify_resolved_release_identity", lambda _: manifest)
+    monkeypatch.setattr(finalizer, "_read_scientific_candidate_manifest", lambda *_: science)
+    monkeypatch.setattr(
+        finalizer, "build_release_provenance", lambda *_, **__: {"source_sha": SOURCE_SHA}
+    )
+    monkeypatch.setattr(finalizer, "_merge_release_provenance", lambda *_, **__: None)
+    monkeypatch.setattr(
+        finalizer,
+        "load_release_campaign_config",
+        lambda _: CampaignConfig(name="synthetic", scenario_matrix_path=Path("s"), planners=()),
+    )
+
+    monkeypatch.setattr(
+        finalizer,
+        "validate_full_benchmark_release_acceptance",
+        lambda *_, **__: {"status": "valid"},
+    )
+
+    def publication_stub(candidate: Path, _result: dict, _manifest: object) -> Path:
+        assert finalizer._raw_episode_hashes(candidate) == identity["raw_episode_sha256"]
+        archive = tmp_path / "derivative.tar.gz"
+        archive.write_bytes(b"synthetic derivative")
+        return archive
+
+    monkeypatch.setattr(finalizer, "_publish_copy", publication_stub)
+    receipt = finalizer.finalize_pre_doi_candidate(
+        producer_root=producer,
+        candidate_root=tmp_path / "derivative",
+        resolved_identity=resolved_identity,
+        baseline_archive=baseline,
+        expected_source_sha=SOURCE_SHA,
+    )
+    assert receipt["raw_episode_sha256"] == finalizer._raw_episode_hashes(producer)
+    assert receipt["raw_episode_sha256"] == finalizer._raw_episode_hashes(tmp_path / "derivative")
+    assert receipt["release_acceptance_sha256"] == finalizer._sha256(
+        tmp_path / "derivative/reports/release_acceptance.json"
+    )
+    assert (
+        finalizer._read_mapping(tmp_path / "derivative/release/scientific_candidate_result.json")[
+            "status"
+        ]
+        == "accepted_pre_publication"
+    )
+    assert _tree_snapshot(producer) == producer_snapshot
+    assert (tmp_path / "derivative/reports/stage3_comparison.json").is_file()
+    assert (tmp_path / "derivative/reports/stage3_findings.jsonl").is_file()
+    raw_path = producer / "runs/arm0__differential_drive/episodes.jsonl"
+    raw_path.write_bytes(raw_path.read_bytes() + b" ")
+    with pytest.raises(ValueError, match="raw episode bytes changed"):
+        finalizer._require_scientific_candidate(producer, SOURCE_SHA, manifest)
+    raw_path.write_bytes(b'{"arm":0}\n')
+    sidecar = producer / "run_meta.json"
+    sidecar.write_bytes(sidecar.read_bytes() + b" ")
+    with pytest.raises(ValueError, match="sidecar bytes changed"):
+        finalizer._require_scientific_candidate(producer, SOURCE_SHA, manifest)
+
+
+def test_finalize_copies_accepted_producer_before_postrun_gates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    producer = tmp_path / "producer"
+    original = _producer(producer)
+    _write_json(
+        producer / "release/scientific_candidate.json",
+        {"schema_version": "benchmark-scientific-candidate.v1", "source_sha": SOURCE_SHA},
+    )
+    _write_json(
+        producer / "release/scientific_candidate_result.json",
+        {
+            "schema_version": "benchmark-scientific-candidate-result.v1",
+            "source_sha": SOURCE_SHA,
+            "status": "stage3_pending",
+        },
+    )
+    candidate = tmp_path / "candidate"
+    baseline = tmp_path / "predecessor.tar.gz"
+    baseline.write_bytes(b"frozen predecessor fixture")
+    identity = tmp_path / "identity.json"
+    identity.write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(finalizer, "BASELINE_ARCHIVE_SHA256", finalizer._sha256(baseline))
+    monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
+    manifest = SimpleNamespace(
+        source_sha=SOURCE_SHA,
+        release_tag="benchmark-data-0.0.8",
+        version_doi="10.5281/zenodo.123456",
+        resolved_manifest_payload=finalizer._read_mapping(
+            producer / "release" / "release_manifest.resolved.json"
+        ),
+    )
+    monkeypatch.setattr(finalizer, "verify_resolved_release_identity", lambda _: manifest)
+    monkeypatch.setattr(finalizer, "load_release_campaign_config", lambda _: object())
+    verified_candidate_pairs: list[tuple[Path, str, object]] = []
+
+    def verify_scientific_candidate_pair(
+        candidate_root: Path, source_sha: str, checked_manifest: object
+    ) -> tuple[dict, dict]:
+        verified_candidate_pairs.append((candidate_root, source_sha, checked_manifest))
+        return ({"source_sha": source_sha}, {"status": "stage3_pending"})
+
+    monkeypatch.setattr(
+        finalizer, "_require_scientific_candidate", verify_scientific_candidate_pair
+    )
+    calls: list[str] = []
+
+    def gate(command: list[str], log_path: Path) -> None:
+        calls.append(Path(command[1]).name)
+        if Path(command[1]).name == "compare_release_007_008.py":
+            _stage3_gate(command, baseline_sha=finalizer.BASELINE_ARCHIVE_SHA256)
+        else:
+            output = Path(command[command.index("--output") + 1])
+            _write_postrun_promotion_gate_report(output, candidate)
+        log_path.write_text("gate passed\n", encoding="utf-8")
+
+    def acceptance(root: Path, **kwargs: object) -> dict:
+        assert root == candidate
+        assert (
+            finalizer._read_mapping(candidate / "release/scientific_candidate_result.json")[
+                "status"
+            ]
+            == "stage3_pending"
+        )
+        assert calls == [
+            "compare_release_007_008.py",
+            "check_release_metric_equivalence.py",
+            "issue_9668_robot_force_validation.py",
+        ]
+        return {"status": "valid"}
+
+    def publish(root: Path, result: dict, checked_manifest: object) -> Path:
+        assert root == candidate
+        assert (
+            finalizer._read_mapping(candidate / "release/scientific_candidate_result.json")[
+                "status"
+            ]
+            == "accepted_pre_publication"
+        )
+        assert result == original
+        assert checked_manifest is manifest
+        archive = tmp_path / "candidate.tar.gz"
+        archive.write_bytes(b"candidate bundle fixture")
+        return archive
+
+    monkeypatch.setattr(finalizer, "_run_gate", gate)
+    monkeypatch.setattr(finalizer, "validate_full_benchmark_release_acceptance", acceptance)
+    monkeypatch.setattr(finalizer, "_publish_copy", publish)
+    result = finalizer.finalize(
+        producer_root=producer,
+        candidate_root=candidate,
+        resolved_identity=identity,
+        baseline_archive=baseline,
+        expected_source_sha=SOURCE_SHA,
+    )
+    assert verified_candidate_pairs == [
+        (candidate, SOURCE_SHA, manifest),
+        (candidate, SOURCE_SHA, manifest),
+    ]
+    assert result["publication_archive_sha256"] == finalizer._sha256(tmp_path / "candidate.tar.gz")
+    assert json.loads((producer / "release" / "release_result.json").read_text()) == original
+    assert (
+        json.loads((candidate / "release" / "producer_release_result.json").read_text()) == original
+    )
+    assert (
+        json.loads((candidate / "release" / "release_result.json").read_text())[
+            "finalization_status"
+        ]
+        == "fail"
+    )  # Publication is mocked; the real helper replaces this provisional state.
+    promoted = finalizer._read_mapping(candidate / "release" / "scientific_candidate_result.json")
+    assert promoted["status"] == "accepted_pre_publication"
+    assert promoted["stage3_status"] == "passed"
+    assert promoted["full_release_acceptance_sha256"] == finalizer._sha256(
+        candidate / "reports/postrun_release_acceptance.json"
+    )
+    assert result["scientific_candidate_result_sha256"] == finalizer._sha256(
+        candidate / "release/scientific_candidate_result.json"
+    )
+    assert (tmp_path / "candidate.finalization_receipt.json").is_file()
+
+
+def test_stage3_receipt_rejects_tampered_missing_or_unexplained_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Finalizer admission stays closed when any comparator evidence changes."""
+    baseline = tmp_path / "baseline.tar.gz"
+    baseline.write_bytes(b"baseline")
+    monkeypatch.setattr(finalizer, "BASELINE_ARCHIVE_SHA256", finalizer._sha256(baseline))
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    _stage3_inputs(candidate)
+    paths = finalizer._stage3_paths(candidate)
+    command = [
+        "python",
+        "compare_release_007_008.py",
+        "--candidate-identity",
+        str(paths["candidate_identity"]),
+        "--attribution-ledger",
+        str(paths["attribution_ledger"]),
+        "--findings-jsonl",
+        str(paths["comparison_findings"]),
+        "--report-json",
+        str(paths["comparison_report"]),
+    ]
+    _stage3_gate(command, baseline_sha=finalizer.BASELINE_ARCHIVE_SHA256)
+    receipt = finalizer._require_stage3_comparison(
+        campaign_root=candidate,
+        baseline_archive=baseline,
+        expected_source_sha=SOURCE_SHA,
+        paths=paths,
+    )
+    assert receipt["comparison_report_sha256"] == finalizer._sha256(paths["comparison_report"])
+
+    paths["comparison_findings"].write_text("tampered\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="findings_sha256"):
+        finalizer._require_stage3_comparison(
+            campaign_root=candidate,
+            baseline_archive=baseline,
+            expected_source_sha=SOURCE_SHA,
+            paths=paths,
+        )
+    paths["comparison_findings"].write_text("", encoding="utf-8")
+    paths["attribution_ledger"].unlink()
+    with pytest.raises(FileNotFoundError):
+        finalizer._require_stage3_comparison(
+            campaign_root=candidate,
+            baseline_archive=baseline,
+            expected_source_sha=SOURCE_SHA,
+            paths=paths,
+        )
+    _stage3_inputs(candidate)
+    report = finalizer._read_mapping(paths["comparison_report"])
+    report["comparison"]["unexplained_findings"] = ["finding"]
+    _write_json(paths["comparison_report"], report)
+    with pytest.raises(ValueError, match="inventory, row, or attribution"):
+        finalizer._require_stage3_comparison(
+            campaign_root=candidate,
+            baseline_archive=baseline,
+            expected_source_sha=SOURCE_SHA,
+            paths=paths,
+        )
+
+
+def test_scientific_runner_records_stage3_pending_after_raw_completion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A complete raw candidate remains pending until Stage 3 runs."""
+    from scripts.tools import run_camera_ready_benchmark as runner
+
+    root = tmp_path / "campaign"
+    root.mkdir()
+    checkpoint = tmp_path / "checkpoint.json"
+    smoke = tmp_path / "smoke.json"
+    checkpoint.write_text("checkpoint\n", encoding="utf-8")
+    smoke.write_text("smoke\n", encoding="utf-8")
+    identity = {"scientific_identity_sha256": "c" * 64}
+    monkeypatch.setattr(
+        runner,
+        "build_scientific_candidate_identity",
+        lambda **kwargs: identity,
+    )
+    scaffold_paths = {
+        "candidate_identity_path": "release/candidate_identity.json",
+        "candidate_identity_sha256": "d" * 64,
+        "attribution_ledger_path": "reports/attribution_ledger.json",
+        "attribution_ledger_sha256": "e" * 64,
+        "episode_files": {},
+    }
+    monkeypatch.setattr(
+        runner,
+        "write_candidate_input_scaffolds",
+        lambda campaign_root, **kwargs: scaffold_paths,
+    )
+    monkeypatch.setattr(runner, "scientific_candidate_acceptance_view", lambda *_: object())
+    monkeypatch.setattr(
+        runner,
+        "validate_full_benchmark_release_acceptance",
+        lambda *args, **kwargs: {"status": "valid"},
+    )
+
+    def gate(command: list[str], log_path: Path) -> None:
+        output = Path(command[command.index("--output") + 1])
+        _write_json(output, {"status": "mismatch" if "equivalence" in output.name else "pass"})
+        log_path.write_text("diagnostic gate\n", encoding="utf-8")
+
+    monkeypatch.setattr(runner, "_candidate_gate", gate)
+    args = SimpleNamespace(
+        source_commit=SOURCE_SHA,
+        checkpoint_receipt=checkpoint,
+        runtime_smoke_receipt=smoke,
+        baseline_archive=tmp_path / "baseline.tar.gz",
+    )
+    args.baseline_archive.write_bytes(b"baseline")
+    result = {"campaign_root": str(root), "benchmark_success": True}
+    runner._finish_scientific_candidate(
+        result,
+        object(),
+        {},
+        {},
+        args,
+        {},
+    )
+    receipt = json.loads(
+        (root / "release/scientific_candidate_result.json").read_text(encoding="utf-8")
+    )
+    assert receipt["status"] == "stage3_pending"
+    assert receipt["stage3_status"] == "pending"
+    assert receipt["stage3_input_scaffold"] == scaffold_paths
+    assert result["scientific_candidate_status"] == "stage3_pending"
+    assert result["stage3_candidate_identity_scaffold"] == scaffold_paths["candidate_identity_path"]
+    assert result["stage3_attribution_ledger_scaffold"] == scaffold_paths["attribution_ledger_path"]
+    assert result["benchmark_success"] is True
+
+
+def test_producer_rejects_changed_source_or_publication_identity(tmp_path: Path) -> None:
+    root = tmp_path / "producer"
+    _producer(root)
+    with pytest.raises(ValueError, match="exact-source"):
+        finalizer._require_producer(root, "b" * 40)
+    campaign = root / "campaign_manifest.json"
+    _write_json(campaign, {"git_hash": "b" * 40})
+    with pytest.raises(ValueError, match="exact-source"):
+        finalizer._require_producer(root, SOURCE_SHA)
+    _write_json(campaign, {"git_hash": SOURCE_SHA})
+    resolved_path = root / "release" / "release_manifest.resolved.json"
+    resolved = finalizer._read_mapping(resolved_path)
+    resolved["source_sha"] = "b" * 40
+    _write_json(resolved_path, resolved)
+    with pytest.raises(ValueError, match="exact-source"):
+        finalizer._require_producer(root, SOURCE_SHA)
+
+
+def test_finalizer_rejects_scientific_manifest_drift_before_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    producer = tmp_path / "producer"
+    _producer(producer)
+    baseline = tmp_path / "predecessor.tar.gz"
+    baseline.write_bytes(b"frozen predecessor fixture")
+    monkeypatch.setattr(finalizer, "BASELINE_ARCHIVE_SHA256", finalizer._sha256(baseline))
+    monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
+    expected = finalizer._read_mapping(producer / "release" / "release_manifest.resolved.json")
+    expected["canonical_campaign_config_sha256"] = "b" * 64
+    monkeypatch.setattr(
+        finalizer,
+        "verify_resolved_release_identity",
+        lambda _: SimpleNamespace(
+            source_sha=SOURCE_SHA,
+            release_tag="benchmark-data-0.0.8",
+            version_doi="10.5281/zenodo.123456",
+            resolved_manifest_payload=expected,
+        ),
+    )
+    candidate = tmp_path / "candidate"
+    with pytest.raises(ValueError, match="resolved manifest differs"):
+        finalizer.finalize(
+            producer_root=producer,
+            candidate_root=candidate,
+            resolved_identity=tmp_path / "identity.json",
+            baseline_archive=baseline,
+            expected_source_sha=SOURCE_SHA,
+        )
+    assert not candidate.exists()
+
+
+def test_postrun_gate_failure_invalidates_only_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    producer = tmp_path / "producer"
+    original = _producer(producer)
+    _write_json(
+        producer / "release/scientific_candidate.json",
+        {"schema_version": "benchmark-scientific-candidate.v1", "source_sha": SOURCE_SHA},
+    )
+    _write_json(
+        producer / "release/scientific_candidate_result.json",
+        {
+            "schema_version": "benchmark-scientific-candidate-result.v1",
+            "source_sha": SOURCE_SHA,
+            "status": "stage3_pending",
+        },
+    )
+    baseline = tmp_path / "predecessor.tar.gz"
+    baseline.write_bytes(b"frozen predecessor fixture")
+    monkeypatch.setattr(finalizer, "BASELINE_ARCHIVE_SHA256", finalizer._sha256(baseline))
+    monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        finalizer,
+        "verify_resolved_release_identity",
+        lambda _: SimpleNamespace(
+            source_sha=SOURCE_SHA,
+            release_tag="benchmark-data-0.0.8",
+            version_doi="10.5281/zenodo.123456",
+            resolved_manifest_payload=finalizer._read_mapping(
+                producer / "release" / "release_manifest.resolved.json"
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        finalizer,
+        "_require_scientific_candidate",
+        lambda _root, source, _manifest: (
+            {"source_sha": source},
+            {"source_sha": source, "status": "stage3_pending"},
+        ),
+    )
+
+    def fail_equivalence(command: list[str], log_path: Path) -> None:
+        if Path(command[1]).name == "compare_release_007_008.py":
+            _stage3_gate(command, baseline_sha=finalizer.BASELINE_ARCHIVE_SHA256)
+            log_path.write_text("Stage 3 passed\n", encoding="utf-8")
+            return
+        raise ValueError("equivalence mismatch")
+
+    monkeypatch.setattr(finalizer, "_run_gate", fail_equivalence)
+    candidate = tmp_path / "candidate"
+    with pytest.raises(ValueError, match="equivalence mismatch"):
+        finalizer.finalize(
+            producer_root=producer,
+            candidate_root=candidate,
+            resolved_identity=tmp_path / "identity.json",
+            baseline_archive=baseline,
+            expected_source_sha=SOURCE_SHA,
+        )
+    assert json.loads((producer / "release" / "release_result.json").read_text()) == original
+    rejected = json.loads((candidate / "release" / "release_result.json").read_text())
+    assert rejected["release_benchmark_success"] is False
+    assert rejected["finalization_failed_stage"] == "metric_equivalence"
+    scientific = json.loads(
+        (candidate / "release/scientific_candidate_result.json").read_text(encoding="utf-8")
+    )
+    assert scientific["status"] == "stage3_pending"
+
+
+def test_publication_export_failure_is_recorded_in_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    candidate = tmp_path / "candidate"
+    original = _producer(candidate)
+    _write_json(candidate / "release" / "producer_release_result.json", original)
+
+    def fail_export(**kwargs: object) -> dict:
+        pending = json.loads((candidate / "release" / "release_result.json").read_text())
+        assert pending["finalization_status"] == "pass"
+        raise PublicationPreflightError("required report missing")
+
+    monkeypatch.setattr(
+        finalizer,
+        "_build_publication_payload",
+        fail_export,
+    )
+    with pytest.raises(PublicationPreflightError, match="required report missing"):
+        finalizer._publish_copy(
+            candidate,
+            original,
+            SimpleNamespace(
+                release_tag="benchmark-data-0.0.8",
+                doi="10.5281/zenodo.123456",
+                repository_url="https://example.org/repository",
+            ),
+        )
+    result = json.loads((candidate / "release" / "release_result.json").read_text())
+    assert result["release_benchmark_success"] is False
+    assert result["publication_preflight_status"] == "fail"
+    assert result["publication_preflight_violations"] == ["required report missing"]
+    assert (
+        json.loads((candidate / "release" / "producer_release_result.json").read_text()) == original
+    )
+
+
+def test_publication_path_rejects_external_descriptor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
+    with pytest.raises(ValueError, match="not a repository path"):
+        finalizer._publication_path({"bundle_dir": "<external>/bundle"}, "bundle_dir")
+    with pytest.raises(ValueError, match="leaves the source checkout"):
+        finalizer._publication_path({"bundle_dir": "../bundle"}, "bundle_dir")
+
+
+def test_publication_does_not_accept_missing_export_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    candidate = tmp_path / "candidate"
+    original = _producer(candidate)
+    _write_json(candidate / "release" / "producer_release_result.json", original)
+    monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        finalizer,
+        "_build_publication_payload",
+        lambda **kwargs: {
+            "bundle_dir": "publication/missing_bundle",
+            "archive_path": "publication/missing_bundle.tar.gz",
+        },
+    )
+    monkeypatch.setattr(finalizer, "_record_publication_payload", lambda *args: None)
+    with pytest.raises(ValueError, match="did not leave a bundle"):
+        finalizer._publish_copy(
+            candidate,
+            original,
+            SimpleNamespace(
+                release_tag="benchmark-data-0.0.8",
+                doi="10.5281/zenodo.123456",
+                repository_url="https://example.org/repository",
+            ),
+        )
+    rejected = json.loads((candidate / "release" / "release_result.json").read_text())
+    assert rejected["publication_preflight_status"] == "fail"
+
+
+def test_interrupted_copy_never_exposes_accepted_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    producer = tmp_path / "producer"
+    _producer(producer)
+    candidate = tmp_path / "candidate"
+    original_copy2 = finalizer.shutil.copy2
+
+    def interrupt_snapshot(source: Path, target: Path) -> None:
+        if source == producer / "release" / "release_result.json":
+            raise KeyboardInterrupt
+        original_copy2(source, target)
+
+    monkeypatch.setattr(finalizer.shutil, "copy2", interrupt_snapshot)
+    with pytest.raises(KeyboardInterrupt):
+        finalizer._copy_producer(producer, candidate)
+    partial = tmp_path / "candidate.copying"
+    assert partial.is_dir()
+    assert not (partial / "release" / "release_result.json").exists()
+    assert not candidate.exists()
+
+
+def test_failed_preflight_removes_owned_publication_export(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    candidate = tmp_path / "candidate"
+    original = _producer(candidate)
+    _write_json(candidate / "release" / "producer_release_result.json", original)
+    monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
+    output = finalizer._publication_output(candidate)
+
+    def export(**kwargs: object) -> dict:
+        assert kwargs["output_dir"] == output
+        bundle = output / "candidate_publication_bundle"
+        bundle.mkdir(parents=True, exist_ok=True)
+        archive = output / "candidate_publication_bundle.tar.gz"
+        archive.write_bytes(b"unverified bundle")
+        return {
+            "bundle_dir": str(bundle.relative_to(tmp_path)),
+            "archive_path": str(archive.relative_to(tmp_path)),
+        }
+
+    monkeypatch.setattr(finalizer, "_build_publication_payload", export)
+    monkeypatch.setattr(finalizer, "_record_publication_payload", lambda *args: None)
+    monkeypatch.setattr(finalizer, "_assert_no_historical_release_identity", lambda *args: None)
+    monkeypatch.setattr(
+        finalizer,
+        "_run_publication_preflight",
+        lambda *args: (_ for _ in ()).throw(PublicationPreflightError("force drift")),
+    )
+    manifest = SimpleNamespace(
+        release_tag="benchmark-data-0.0.8",
+        doi="10.5281/zenodo.123456",
+        repository_url="https://example.org/repository",
+    )
+    with pytest.raises(PublicationPreflightError, match="force drift"):
+        finalizer._publish_copy(candidate, original, manifest)
+    assert not output.exists()
+    assert (
+        finalizer._read_mapping(candidate / "release" / "release_result.json")[
+            "release_benchmark_success"
+        ]
+        is False
+    )
+
+    output.mkdir()
+    sentinel = output / "prior.txt"
+    sentinel.write_text("preserve", encoding="utf-8")
+    with pytest.raises(FileExistsError, match="already exists"):
+        finalizer._publish_copy(candidate, original, manifest)
+    assert sentinel.read_text(encoding="utf-8") == "preserve"
+
+    sentinel.unlink()
+    output.rmdir()
+    external = tmp_path / "external_missing"
+    output.symlink_to(external, target_is_directory=True)
+    with pytest.raises(FileExistsError, match="already exists"):
+        finalizer._publish_copy(candidate, original, manifest)
+    assert output.is_symlink()
+    assert not external.exists()
+
+
+@pytest.mark.parametrize("mark_failure", [False, True])
+def test_receipt_write_failure_invalidates_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mark_failure: bool
+) -> None:
+    producer = tmp_path / "producer"
+    _producer(producer)
+    _write_json(
+        producer / "release/scientific_candidate.json",
+        {"schema_version": "benchmark-scientific-candidate.v1", "source_sha": SOURCE_SHA},
+    )
+    _write_json(
+        producer / "release/scientific_candidate_result.json",
+        {
+            "schema_version": "benchmark-scientific-candidate-result.v1",
+            "source_sha": SOURCE_SHA,
+            "status": "stage3_pending",
+        },
+    )
+    candidate = tmp_path / "candidate"
+    baseline = tmp_path / "baseline.tar.gz"
+    baseline.write_bytes(b"predecessor")
+    (tmp_path / "identity.json").write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(finalizer, "BASELINE_ARCHIVE_SHA256", finalizer._sha256(baseline))
+    monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
+    monkeypatch.setattr(finalizer, "load_release_campaign_config", lambda _: object())
+    monkeypatch.setattr(
+        finalizer,
+        "_require_scientific_candidate",
+        lambda _root, source, _manifest: (
+            {"source_sha": source},
+            {"source_sha": source, "status": "stage3_pending"},
+        ),
+    )
+    monkeypatch.setattr(
+        finalizer,
+        "verify_resolved_release_identity",
+        lambda _: SimpleNamespace(
+            source_sha=SOURCE_SHA,
+            release_tag="benchmark-data-0.0.8",
+            version_doi="10.5281/zenodo.123456",
+            resolved_manifest_payload=finalizer._read_mapping(
+                producer / "release" / "release_manifest.resolved.json"
+            ),
+        ),
+    )
+
+    def gate(command: list[str], log_path: Path) -> None:
+        if Path(command[1]).name == "compare_release_007_008.py":
+            _stage3_gate(command, baseline_sha=finalizer.BASELINE_ARCHIVE_SHA256)
+        else:
+            _write_postrun_promotion_gate_report(
+                Path(command[command.index("--output") + 1]), candidate
+            )
+        log_path.write_text("pass\n", encoding="utf-8")
+
+    def publish(root: Path, result: dict, manifest: object) -> Path:
+        output = finalizer._publication_output(root)
+        output.mkdir()
+        archive = output / "bundle.tar.gz"
+        archive.write_bytes(b"candidate archive")
+        return archive
+
+    real_write = finalizer._write_json
+
+    def fail_receipt(path: Path, payload: dict) -> None:
+        if path.name.endswith(".finalization_receipt.pending.json"):
+            raise OSError("receipt storage failed")
+        real_write(path, payload)
+
+    monkeypatch.setattr(finalizer, "_run_gate", gate)
+    monkeypatch.setattr(
+        finalizer,
+        "validate_full_benchmark_release_acceptance",
+        lambda *args, **kwargs: {"status": "valid"},
+    )
+    monkeypatch.setattr(finalizer, "_publish_copy", publish)
+    monkeypatch.setattr(finalizer, "_write_json", fail_receipt)
+    if mark_failure:
+        monkeypatch.setattr(
+            finalizer,
+            "_mark_candidate_failure",
+            lambda *args: (_ for _ in ()).throw(OSError("mark storage failed")),
+        )
+    expected_error = "mark storage failed" if mark_failure else "receipt storage failed"
+    with pytest.raises(OSError, match=expected_error):
+        finalizer.finalize(
+            producer_root=producer,
+            candidate_root=candidate,
+            resolved_identity=tmp_path / "identity.json",
+            baseline_archive=baseline,
+            expected_source_sha=SOURCE_SHA,
+        )
+    if not mark_failure:
+        result = finalizer._read_mapping(candidate / "release" / "release_result.json")
+        assert result["release_benchmark_success"] is False
+        assert result["finalization_failed_stage"] == "finalization_receipt"
+    assert not finalizer._publication_output(candidate).exists()
+    assert not any(path.exists() for path in finalizer._receipt_paths(candidate))
+
+
+def test_interrupted_export_invalidates_candidate_and_removes_partial_archive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    candidate = tmp_path / "candidate"
+    original = _producer(candidate)
+    _write_json(candidate / "release" / "producer_release_result.json", original)
+    output = finalizer._publication_output(candidate)
+
+    def interrupt_export(**kwargs: object) -> dict:
+        output.mkdir()
+        (output / "partial.tar.gz").write_bytes(b"partial")
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(finalizer, "_build_publication_payload", interrupt_export)
+    with pytest.raises(KeyboardInterrupt):
+        finalizer._publish_copy(
+            candidate,
+            original,
+            SimpleNamespace(
+                release_tag="benchmark-data-0.0.8",
+                doi="10.5281/zenodo.123456",
+                repository_url="https://example.org/repository",
+            ),
+        )
+    assert not output.exists()
+    result = finalizer._read_mapping(candidate / "release" / "release_result.json")
+    assert result["release_benchmark_success"] is False
+    assert result["publication_preflight_violations"] == ["KeyboardInterrupt"]
+
+
+def test_prepare_candidate_preserves_preexisting_dangling_output_link(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    producer = tmp_path / "producer"
+    _producer(producer)
+    candidate = tmp_path / "candidate"
+    outside = tmp_path / "missing_elsewhere"
+    output = finalizer._publication_output(candidate)
+    output.symlink_to(outside, target_is_directory=True)
+    monkeypatch.setattr(finalizer, "get_repository_root", lambda: tmp_path)
+    manifest = SimpleNamespace(
+        release_tag="benchmark-data-0.0.8",
+        version_doi="10.5281/zenodo.123456",
+        resolved_manifest_payload=finalizer._read_mapping(
+            producer / "release" / "release_manifest.resolved.json"
+        ),
+    )
+    with pytest.raises(FileExistsError, match="publication output already exists"):
+        finalizer._prepare_candidate(producer, candidate, SOURCE_SHA, manifest)
+    assert output.is_symlink()
+    assert not outside.exists()
+    assert not candidate.exists()

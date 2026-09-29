@@ -17,8 +17,8 @@ identity_resolution:
 latest_main_base_commit: "{{latest_main_base_commit}}"
 planning_base_sha: "{{latest_main_base_commit}}"
 
-canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
-campaign_config_sha256: "3b5302c2546b5c9c03dbfb5c752b9b78ea062c4af7e957450de9b8595d44bec6"
+canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_template.yaml
+campaign_config_sha256: "4033a931b46edddb29d6064be1cc38c0f798ec07df4a514b689a5cb21a5c710e"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: baseline-ready-core
 
@@ -98,6 +98,12 @@ metrics:
   snqi_baseline_path: ../snqi_baseline_camera_ready_v3.json
   snqi_baseline_sha256: "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a"
   snqi_claim_policy: advisory_no_ranking
+  snqi_v2_weights_path: ../snqi_v2/weights.v2.0.json
+  snqi_v2_weights_sha256: "684db941093dbd05dc87f3e59e9492494e6f2876f2d05997341a4291de033a25"
+  snqi_v2_anchors_path: ../snqi_v2/anchors.v2.0.json
+  snqi_v2_anchors_sha256: "09d3c1038d8205a25828f2f56ea7ff712df0f0f9477b90a0a6f201baa7c18f2f"
+  snqi_v2_family_path: ../snqi_v2/family.v2.0.yaml
+  snqi_v2_family_sha256: "6ba0e5f4c1e1d5530e4ae773e22f811e2af9ee39f975c4e42554ca167ea09942"
 
 planners:
   keys:

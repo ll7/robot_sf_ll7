@@ -49,10 +49,16 @@ separate review under #9859.
 - `goal_clearance_runtime.patch.gz` contains the exact six-module diagnostic source
   overlay needed to reconstruct the original runs from this PR branch alone.
   Inspect it with `gzip -dc goal_clearance_runtime.patch.gz` from this directory.
+- `metadata.json` declares the `surface_clearance` distance convention for the
+  goal-clearance source overlay. It is source metadata, not an additional
+  measured distance series.
 - `input_closure.json` lists every input file and SHA-256.
 - `seed_sets_v1.yaml` is an adjacent byte-for-byte copy of the existing tracked
   `configs/benchmarks/seed_sets_v1.yaml` used by both manifests.
-- `checksums.sha256` covers all packet files except itself.
+- `checksums.sha256` covers the original packet files and `metadata.json`, except
+  itself. Each original packet file has an adjacent `.review.json` sidecar that
+  binds its exact bytes and carries the required review markers; the sidecars
+  are not included in the checksum manifest to avoid a checksum cycle.
 
 The executable corrected manifest and matrix are
 `configs/benchmarks/releases/issue_9860_corrected_diagnostic_v1.yaml` and

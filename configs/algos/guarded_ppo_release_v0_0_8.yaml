@@ -16,7 +16,7 @@ omega_max: 1.0
 fallback_to_goal: true
 
 guard_rollout_dt: 0.1
-guard_rollout_steps: 6
+guard_rollout_steps: 12
 guard_near_field_distance: 2.0
 guard_hard_ped_clearance: 0.58
 guard_first_step_ped_clearance: 0.72
@@ -28,7 +28,7 @@ fallback_risk_dwa:
   max_linear_speed: 0.9
   max_angular_speed: 1.0
   rollout_dt: 0.1
-  rollout_steps: 8
+  rollout_steps: 16
   near_field_distance: 2.5
   near_field_speed_cap: 0.55
   goal_progress_weight: 4.5
@@ -42,6 +42,11 @@ fallback_risk_dwa:
   robot_radius_m: 1.0
   pedestrian_radius_m: 0.4
   hard_obstacle_clearance: 0.30
+  dynamic_window_version: drive_limited_v2
+  dynamic_window_dt: 0.1
+  max_linear_accel: 1.0
+  max_linear_decel: 1.0
+  max_angular_accel: 1.0
 
 # Release geometry: guard thresholds are free-surface clearances.
 guard_clearance_model: surface_v2

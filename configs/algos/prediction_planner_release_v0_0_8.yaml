@@ -14,7 +14,7 @@
 predictive_model_id: predictive_proxy_selected_v2_full
 predictive_device: cpu
 predictive_max_agents: 16
-predictive_horizon_steps: 8
+predictive_horizon_steps: 16
 predictive_rollout_dt: 0.1
 
 # Motion limits.
@@ -47,7 +47,7 @@ predictive_speed_clearance_gain: 0.6
 
 # Adaptive horizon and lattice controls.
 predictive_adaptive_horizon_enabled: true
-predictive_horizon_boost_steps: 6
+predictive_horizon_boost_steps: 12
 predictive_near_field_distance: 2.6
 predictive_near_field_speed_cap: 0.65
 predictive_near_field_speed_samples: [0.1, 0.2, 0.35, 0.5]

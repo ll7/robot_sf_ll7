@@ -7,14 +7,14 @@ allow_testing_algorithms: true
 predictive_model_id: predictive_proxy_selected_v1
 predictive_device: cpu
 predictive_max_agents: 16
-predictive_horizon_steps: 10
+predictive_horizon_steps: 20
 predictive_rollout_dt: 0.1
 
 max_linear_speed: 1.5
 max_angular_speed: 1.0
 goal_tolerance: 0.25
 
-horizon_steps: 12
+horizon_steps: 24
 rollout_dt: 0.1
 sample_count: 128
 iterations: 4
@@ -47,7 +47,7 @@ progress_escape_heading_gain: 1.5
 
 # Reuse predictive near-field controls from the anchor planner.
 predictive_adaptive_horizon_enabled: true
-predictive_horizon_boost_steps: 6
+predictive_horizon_boost_steps: 12
 predictive_near_field_distance: 2.6
 predictive_near_field_speed_cap: 0.65
 predictive_candidate_speeds: [0.0, 0.25, 0.5, 0.75, 1.0]

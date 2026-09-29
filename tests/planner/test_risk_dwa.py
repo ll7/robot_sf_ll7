@@ -7,6 +7,7 @@ within an explicitly documented tolerance on a fixed seed/observation set.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -70,6 +71,61 @@ def _flat_observation(
         "pedestrians_velocities": np.asarray(pedestrian_velocities, dtype=float),
         "pedestrians_count": np.asarray([count], dtype=float),
     }
+
+
+def test_release_dynamic_window_scores_only_next_step_reachable_commands() -> None:
+    """At rest the 1 m/s² drive can change either velocity by 0.1 in 0.1 s."""
+    release_path = Path(__file__).parents[2] / "configs/algos/risk_dwa_release_v0_0_8.yaml"
+    release = build_risk_dwa_config(yaml.safe_load(release_path.read_text(encoding="utf-8")))
+    assert release.dynamic_window_version == "drive_limited_v2"
+    observation = _observation(goal=(5.0, 0.0))
+    command = RiskDWAPlannerAdapter(release).plan(observation)
+    assert 0.0 <= command[0] <= 0.1 + 1e-12
+    assert abs(command[1]) <= 0.1 + 1e-12
+    assert command[0] == pytest.approx(0.1)
+
+    historical_path = Path(__file__).parents[2] / "configs/algos/risk_dwa_camera_ready.yaml"
+    historical = build_risk_dwa_config(yaml.safe_load(historical_path.read_text(encoding="utf-8")))
+    assert historical.dynamic_window_version == "fixed_v1"
+    legacy = RiskDWAPlannerAdapter(replace(release, dynamic_window_version="fixed_v1"))
+    assert legacy.plan(observation)[0] > 0.1
+
+    moving = _observation(speed=0.7, goal=(0.0, 0.0))
+    moving["robot"]["angular_velocity"] = np.asarray([0.4])
+    braking = RiskDWAPlannerAdapter(release).plan(moving)
+    assert braking == pytest.approx((0.6, 0.3))
+
+
+def test_release_risk_dwa_sees_pedestrian_crossing_safety_boundary_at_one_second() -> None:
+    """The original 1.6 s horizon sees a crossing missed by a truncated 0.8 s one."""
+    release_path = Path(__file__).parents[2] / "configs/algos/risk_dwa_release_v0_0_8.yaml"
+    release = build_risk_dwa_config(yaml.safe_load(release_path.read_text(encoding="utf-8")))
+    assert release.rollout_dt * release.rollout_steps == pytest.approx(1.6)
+    observation = _observation(
+        goal=(5.0, 0.0),
+        pedestrians=[(0.5, 2.7)],
+        pedestrian_velocities=[(0.0, -1.0)],
+    )
+    robot_pos, heading, goal, ped_pos, ped_vel = RiskDWAPlannerAdapter(
+        release
+    )._extract_robot_goal_ped(observation)
+    assert np.hypot(0.1, 1.9) - 1.4 > release.safe_distance  # t=0.8 s
+    assert 1.7 - 1.4 < release.safe_distance  # t=1.0 s
+
+    def score(config: RiskDWAPlannerConfig) -> float:
+        return RiskDWAPlannerAdapter(config)._rollout_score(
+            robot_pos=robot_pos,
+            heading=heading,
+            goal=goal,
+            command=(0.5, 0.0),
+            ped_pos=ped_pos,
+            ped_vel=ped_vel,
+            observation=observation,
+            current_speed=0.0,
+        )
+
+    assert np.isfinite(score(replace(release, rollout_steps=8)))
+    assert score(release) == float("-inf")
 
 
 def test_risk_dwa_goal_target_versions_follow_route_contract() -> None:

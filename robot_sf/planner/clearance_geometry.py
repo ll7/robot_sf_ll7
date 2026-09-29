@@ -60,6 +60,7 @@ def occupied_cell_clearance(
     resolution: float,
     model: str,
     robot_radius: float,
+    point_offset_xy_m: tuple[float, float] = (0.0, 0.0),
 ) -> float:
     """Return distance to occupied cell centers or signed body-to-cell clearance.
 
@@ -86,10 +87,20 @@ def occupied_cell_clearance(
         # Retain the historical expression byte-for-byte for v1 callers.
         distance = np.sqrt(rows**2 + columns**2) * resolution_m
     else:
-        row_gap = np.maximum(np.abs(rows) * resolution_m - resolution_m / 2.0, 0.0)
-        column_gap = np.maximum(np.abs(columns) * resolution_m - resolution_m / 2.0, 0.0)
+        offset_x, offset_y = point_offset_xy_m
+        row_gap = np.maximum(np.abs(rows * resolution_m - offset_y) - resolution_m / 2.0, 0.0)
+        column_gap = np.maximum(np.abs(columns * resolution_m - offset_x) - resolution_m / 2.0, 0.0)
         distance = np.hypot(row_gap, column_gap) - robot_radius_m
     return float(np.min(distance))
+
+
+def surface_search_radius_cells(robot_radius: float, margin: float, resolution: float) -> int:
+    """Cover every square that can intersect the body plus a safety margin.
+
+    Returns:
+        int: Inclusive grid-cell search radius.
+    """
+    return max(1, int(np.ceil((robot_radius + margin) / resolution)) + 1)
 
 
 def time_to_circle_contact(
@@ -133,6 +144,7 @@ __all__ = [
     "ClearanceModel",
     "occupied_cell_clearance",
     "pedestrian_clearance",
+    "surface_search_radius_cells",
     "time_to_circle_contact",
     "validate_clearance_model",
     "validate_surface_clearance_radii",

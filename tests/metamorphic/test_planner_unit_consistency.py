@@ -68,7 +68,7 @@ AUDITED_UNIT_FIELDS = frozenset(
     corridor_subgoal_route_stall_progress_3s corridor_subgoal_route_regression_1s
     corridor_subgoal_speed
     corridor_subgoal_static_clearance_buffer deadlock_progress_threshold
-    desired_dynamic_clearance desired_static_clearance dt emergency_clearance
+    desired_dynamic_clearance desired_static_clearance dt dynamic_window_dt emergency_clearance
     first_step_obstacle_clearance first_step_ped_clearance
     forecast_variant_dt_s forecast_variant_horizons_s forecast_variant_risk_distance_m
     freezing_speed_threshold global_route_probe_waypoint_distance goal_far_distance
@@ -190,7 +190,7 @@ UNIT_TOKENS = (
 )
 TIME_STEP_FIELDS = frozenset(
     """
-    control_dt control_period dt forecast_variant_dt_s guard_rollout_dt prediction_dt
+    control_dt control_period dt dynamic_window_dt forecast_variant_dt_s guard_rollout_dt prediction_dt
     predictive_foresight_rollout_dt predictive_rollout_dt rollout_dt
     """.split()
 )
@@ -923,9 +923,9 @@ def test_observed_and_planner_read_radii_match_drive_and_simulator() -> None:
     from tests.metamorphic.planner_arms import interaction_scene, robot_env_config
 
     config = robot_env_config(interaction_scene(), max_steps=3)
-    env = make_robot_env(config=config, seed=8244)
+    env = make_robot_env(config=config, seed=1001)
     try:
-        observation, _info = env.reset(seed=8244)
+        observation, _info = env.reset(seed=1001)
     finally:
         env.close()
     robot_radius = float(observation["robot_radius"][0])

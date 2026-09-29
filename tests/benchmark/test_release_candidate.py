@@ -244,6 +244,34 @@ def test_candidate_rejects_jointly_rewritten_planner_key(candidate_repo) -> None
         load_prepublication_candidate(path, repository_root=root)
 
 
+def test_candidate_rejects_duplicate_disabled_planner_key(candidate_repo) -> None:
+    root, path, payload = candidate_repo
+    config_path = root / payload["canonical_campaign_config"]
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    duplicate = dict(config["planners"][-1])
+    duplicate["enabled"] = False
+    config["planners"].append(duplicate)
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    payload["sha256_files"][payload["canonical_campaign_config"]] = hashlib.sha256(
+        config_path.read_bytes()
+    ).hexdigest()
+    _git(root, "add", payload["canonical_campaign_config"])
+    _git(
+        root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "duplicate disabled planner",
+    )
+    payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="planner keys must be unique"):
+        load_prepublication_candidate(path, repository_root=root)
+
+
 def test_candidate_rejects_v4_key_bound_to_historical_v3_config(candidate_repo) -> None:
     root, path, payload = candidate_repo
     config_path = root / payload["canonical_campaign_config"]

@@ -614,11 +614,13 @@ def test_guarded_ppo_tracks_current_goal_before_next_waypoint() -> None:
     assert decision == "ppo_clear"
 
 
-def test_guarded_ppo_outer_guard_looks_ahead_for_one_waypoint_boundary_step() -> None:
+@pytest.mark.parametrize(
+    "profile",
+    ["guarded_ppo_camera_ready_cpu_goal_v2.yaml", "guarded_ppo_release_v0_0_8.yaml"],
+)
+def test_guarded_ppo_outer_guard_looks_ahead_for_one_waypoint_boundary_step(profile: str) -> None:
     """The outer guard keeps its own lookahead while the v2 fallback uses current."""
-    release_path = (
-        Path(__file__).parents[2] / "configs/algos/guarded_ppo_camera_ready_cpu_goal_v2.yaml"
-    )
+    release_path = Path(__file__).parents[2] / "configs/algos" / profile
     release_config = yaml.safe_load(release_path.read_text(encoding="utf-8"))
     guard = GuardedPPOAdapter(config=build_guarded_ppo_config(release_config))
     observation = _obs(robot=(8.0, 5.0), goal=(8.0, 5.0), next_goal=(8.0, 8.0))

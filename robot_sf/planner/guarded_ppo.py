@@ -16,6 +16,7 @@ from robot_sf.planner.clearance_geometry import (
     CENTER_CLEARANCE_V1,
     occupied_cell_clearance,
     pedestrian_clearance,
+    surface_search_radius_cells,
     time_to_circle_contact,
     validate_clearance_model,
     validate_surface_clearance_radii,
@@ -423,7 +424,16 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         if channel_grid[row, col] >= threshold and self.config.clearance_model != "surface_v2":
             return 0.0
 
-        radius = max(int(self.config.obstacle_search_cells), 1)
+        resolution = max(float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0]), 1e-6)
+        radius = (
+            surface_search_radius_cells(
+                self.config.robot_radius_m,
+                self.config.hard_obstacle_clearance,
+                resolution,
+            )
+            if self.config.clearance_model == "surface_v2"
+            else max(int(self.config.obstacle_search_cells), 1)
+        )
         r0 = max(0, row - radius)
         r1 = min(channel_grid.shape[0], row + radius + 1)
         c0 = max(0, col - radius)
@@ -435,13 +445,13 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
 
         dr = obs_idx[:, 0] + r0 - row
         dc = obs_idx[:, 1] + c0 - col
-        resolution = float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0])
         return occupied_cell_clearance(
             dr,
             dc,
-            resolution=max(resolution, 1e-6),
+            resolution=resolution,
             model=self.config.clearance_model,
             robot_radius=self.config.robot_radius_m,
+            point_offset_xy_m=self._point_offset_in_grid_cell(point, meta, row, col),
         )
 
     def _evaluate_command(

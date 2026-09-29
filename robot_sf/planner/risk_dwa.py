@@ -17,6 +17,7 @@ from robot_sf.planner.clearance_geometry import (
     CENTER_CLEARANCE_V1,
     occupied_cell_clearance,
     pedestrian_clearance,
+    surface_search_radius_cells,
     time_to_circle_contact,
     validate_clearance_model,
     validate_surface_clearance_radii,
@@ -96,6 +97,11 @@ class RiskDWAPlannerConfig:
     robot_radius_m: float = 1.0
     pedestrian_radius_m: float = 0.4
     hard_obstacle_clearance: float = 0.30
+    dynamic_window_version: str = "fixed_v1"
+    dynamic_window_dt: float = 0.1
+    max_linear_accel: float = 1.0
+    max_linear_decel: float = 1.0
+    max_angular_accel: float = 1.0
 
     def __post_init__(self) -> None:
         """Validate route selection and physical geometry before execution."""
@@ -110,6 +116,17 @@ class RiskDWAPlannerConfig:
             value = float(getattr(self, field_name))
             if not np.isfinite(value) or value < 0.0:
                 raise ValueError(f"{field_name} must be finite and non-negative")
+        if self.dynamic_window_version not in {"fixed_v1", "drive_limited_v2"}:
+            raise ValueError("dynamic_window_version must be fixed_v1 or drive_limited_v2")
+        for field_name in (
+            "dynamic_window_dt",
+            "max_linear_accel",
+            "max_linear_decel",
+            "max_angular_accel",
+        ):
+            value = float(getattr(self, field_name))
+            if not np.isfinite(value) or value <= 0.0:
+                raise ValueError(f"{field_name} must be finite and positive")
 
 
 class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -118,6 +135,30 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
     def __init__(self, config: RiskDWAPlannerConfig | None = None) -> None:
         """Initialize adapter with an optional config override."""
         self.config = config or RiskDWAPlannerConfig()
+
+    def _dynamic_window(
+        self, observation: dict[str, Any], current_speed: float, speed_cap: float
+    ) -> tuple[float, float, float, float]:
+        """Return reachable velocity bounds over one drive control step."""
+        if self.config.dynamic_window_version == "fixed_v1":
+            return 0.0, speed_cap, -self.config.max_angular_speed, self.config.max_angular_speed
+        robot_state = self._socnav_fields(observation)[0]
+        angular_speed = float(
+            self._as_1d_float(robot_state.get("angular_velocity", [0.0]), pad=1)[0]
+        )
+        dt = float(self.config.dynamic_window_dt)
+        linear_min = max(0.0, current_speed - self.config.max_linear_decel * dt)
+        linear_max = min(
+            self.config.max_linear_speed, current_speed + self.config.max_linear_accel * dt
+        )
+        linear_max = max(linear_min, min(linear_max, speed_cap))
+        angular_min = max(
+            -self.config.max_angular_speed, angular_speed - self.config.max_angular_accel * dt
+        )
+        angular_max = min(
+            self.config.max_angular_speed, angular_speed + self.config.max_angular_accel * dt
+        )
+        return linear_min, linear_max, angular_min, angular_max
 
     def _extract_robot_goal_ped(
         self, observation: dict[str, Any]
@@ -230,7 +271,20 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         if channel_grid[row, col] >= threshold and self.config.clearance_model != "surface_v2":
             return 0.0
 
-        radius = max(int(self.config.obstacle_search_cells), 1)
+        resolution = max(float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0]), 1e-6)
+        radius = (
+            surface_search_radius_cells(
+                self.config.robot_radius_m,
+                max(
+                    self.config.hard_obstacle_clearance,
+                    self.config.safe_distance,
+                    self.config.near_distance,
+                ),
+                resolution,
+            )
+            if self.config.clearance_model == "surface_v2"
+            else max(int(self.config.obstacle_search_cells), 1)
+        )
         r0 = max(0, row - radius)
         r1 = min(channel_grid.shape[0], row + radius + 1)
         c0 = max(0, col - radius)
@@ -242,13 +296,13 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
 
         dr = obs_idx[:, 0] + r0 - row
         dc = obs_idx[:, 1] + c0 - col
-        resolution = float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0])
         return occupied_cell_clearance(
             dr,
             dc,
-            resolution=max(resolution, 1e-6),
+            resolution=resolution,
             model=self.config.clearance_model,
             robot_radius=self.config.robot_radius_m,
+            point_offset_xy_m=self._point_offset_in_grid_cell(point, meta, row, col),
         )
 
     def _ttc_proxy(
@@ -441,9 +495,6 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         robot_pos, heading, goal, ped_pos, ped_vel = self._extract_robot_goal_ped(observation)
         grid_payload = self._cache_grid_payload(observation)
         to_goal = float(np.linalg.norm(goal - robot_pos))
-        if to_goal <= float(self.config.goal_tolerance):
-            return 0.0, 0.0
-
         current_speed = float(
             self._as_1d_float(self._socnav_fields(observation)[0].get("speed", [0.0]), pad=1)[0]
         )
@@ -453,15 +504,27 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             float(self.config.max_linear_speed),
             float(self.config.max_linear_speed) * density_scale,
         )
+        linear_min, linear_max, angular_min, angular_max = self._dynamic_window(
+            observation, current_speed, speed_cap
+        )
+        braking_cmd = (
+            float(np.clip(0.0, linear_min, linear_max)),
+            float(np.clip(0.0, angular_min, angular_max)),
+        )
+        if to_goal <= float(self.config.goal_tolerance):
+            return braking_cmd
         best_score = float("-inf")
-        best_cmd = (0.0, 0.0)
+        best_cmd = braking_cmd
 
-        for v_raw in self.config.linear_candidates:
-            v = float(np.clip(v_raw, 0.0, speed_cap))
-            for w_raw in self.config.angular_candidates:
-                w = float(
-                    np.clip(w_raw, -self.config.max_angular_speed, self.config.max_angular_speed)
-                )
+        linear_candidates = self.config.linear_candidates
+        angular_candidates = self.config.angular_candidates
+        if self.config.dynamic_window_version == "drive_limited_v2":
+            linear_candidates = (*linear_candidates, linear_min, linear_max)
+            angular_candidates = (*angular_candidates, angular_min, angular_max)
+        for v_raw in linear_candidates:
+            v = float(np.clip(v_raw, linear_min, linear_max))
+            for w_raw in angular_candidates:
+                w = float(np.clip(w_raw, angular_min, angular_max))
                 score = self._rollout_score(
                     robot_pos=robot_pos,
                     heading=heading,
@@ -484,12 +547,12 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             ):
                 goal_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
                 heading_err = _wrap_angle(goal_heading - heading)
-                escape_v = float(np.clip(self.config.progress_escape_speed, 0.0, speed_cap))
+                escape_v = float(np.clip(self.config.progress_escape_speed, linear_min, linear_max))
                 escape_w = float(
                     np.clip(
                         heading_err * float(self.config.progress_escape_heading_gain),
-                        -float(self.config.max_angular_speed),
-                        float(self.config.max_angular_speed),
+                        angular_min,
+                        angular_max,
                     )
                 )
                 escape_score = self._rollout_score(
@@ -567,6 +630,11 @@ def build_risk_dwa_config(cfg: dict[str, Any] | None) -> RiskDWAPlannerConfig:
         robot_radius_m=float(cfg.get("robot_radius_m", 1.0)),
         pedestrian_radius_m=float(cfg.get("pedestrian_radius_m", 0.4)),
         hard_obstacle_clearance=float(cfg.get("hard_obstacle_clearance", 0.30)),
+        dynamic_window_version=str(cfg.get("dynamic_window_version", "fixed_v1")),
+        dynamic_window_dt=float(cfg.get("dynamic_window_dt", 0.1)),
+        max_linear_accel=float(cfg.get("max_linear_accel", 1.0)),
+        max_linear_decel=float(cfg.get("max_linear_decel", 1.0)),
+        max_angular_accel=float(cfg.get("max_angular_accel", 1.0)),
     )
 
 

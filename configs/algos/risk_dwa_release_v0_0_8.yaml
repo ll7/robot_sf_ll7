@@ -4,7 +4,7 @@ allow_testing_algorithms: true
 max_linear_speed: 1.2
 max_angular_speed: 1.0
 rollout_dt: 0.1
-rollout_steps: 8
+rollout_steps: 16
 goal_tolerance: 0.25
 
 linear_candidates: [0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2]
@@ -35,3 +35,9 @@ clearance_model: surface_v2
 robot_radius_m: 1.0
 pedestrian_radius_m: 0.4
 hard_obstacle_clearance: 0.30
+# Reachable commands over the map runner's 0.1 s drive step.
+dynamic_window_version: drive_limited_v2
+dynamic_window_dt: 0.1
+max_linear_accel: 1.0
+max_linear_decel: 1.0
+max_angular_accel: 1.0

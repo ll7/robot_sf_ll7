@@ -20,6 +20,7 @@ RELEASE_CONFIGS = frozenset(
     }
 )
 MARKER = re.compile(r"#\s*seed-holdout:\s*(?:setup-only|synthetic-fixture)\b")
+FILE_MARKER = re.compile(r"\s*#\s*seed-holdout:\s*(?:setup-only|synthetic-fixture)\s*")
 SEED = re.compile(
     r"(?<![\w.])(?:11[1-9]|12\d|13\d|140)(?![\w.])"  # seed-holdout: synthetic-fixture
 )
@@ -91,7 +92,7 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
             path = row[6:]
             file_path = root / path
             file_marked = file_path.is_file() and any(
-                MARKER.search(line)
+                FILE_MARKER.fullmatch(line)
                 for line in file_path.read_text(errors="replace").splitlines()[:30]
             )
             before = []
@@ -151,7 +152,7 @@ def main() -> int:
         )
     if findings:
         print(
-            "Use dev seeds 1001-1030 (or calibration/diagnostic splits), or add an explicit seed-holdout marker for setup-only or synthetic fixtures.",
+            "Use dev seeds 1001-1030 for tests/tuning; calibration 101-102 and diagnostics 103-105 are reserved for their registered roles. Mark setup-only or synthetic fixtures explicitly.",
             file=sys.stderr,
         )
         return 1

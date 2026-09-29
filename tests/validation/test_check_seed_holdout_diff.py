@@ -87,6 +87,14 @@ def test_file_marker_passes(tmp_path: Path) -> None:
     assert check_diff(_diff(path, "seed = 111"), tmp_path) == []
 
 
+def test_inline_marker_does_not_exempt_whole_file(tmp_path: Path) -> None:
+    path = "tests/benchmark/test_mixed.py"
+    file = tmp_path / path
+    file.parent.mkdir(parents=True)
+    file.write_text("seed = 111  # seed-holdout: setup-only\nenv = make_robot_env(seed=112)\n")
+    assert len(check_diff(_diff(path, "env = make_robot_env(seed=112)"), tmp_path)) == 1
+
+
 def test_release_allowlist_is_exact(tmp_path: Path) -> None:
     neighbor = "configs/benchmarks/releases/benchmark_data_release_s30_h600_pilot.yaml"
     assert len(check_diff(_diff(neighbor, "seeds: [111]"), tmp_path)) == 1

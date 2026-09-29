@@ -36,6 +36,12 @@ release-only rows, never as paired corrections. Their `replacement_planner`
 column points to the other versioned key while still requiring a separately
 evidenced `implementation replaced` classification.
 
+The expected 0.0.8 slots come from the pinned campaign's enabled planners,
+kinematics matrix, resolved scenarios, seeds, and track values. A configured
+planner/kinematics arm with no rows invalidates the input (exit 2). Missing,
+extra, and duplicated slots appear as `__slot__` findings in `findings.csv`;
+classification rules cannot explain them, so each leaves the audit at exit 1.
+
 ## Run and classify
 
 ```bash
@@ -69,10 +75,17 @@ binding. The result root's
 config hash, scenario path, and scenario hash. Each row's run-directory planner
 key must occur in the pinned config. Its recorded algorithm, scenario config
 hash, algorithm metadata, effective planner config, and run provenance must
-match that key. Policy-search candidate base configs and scenario overrides are
-resolved from files in the pinned checkout with that commit's production
-resolver; a referenced config outside that checkout is rejected. Every row's source commit
-must also match. Matrix-owned scenario fields, including the scenario identity
+match that key. Each row's recorded
+`provenance.config_identity.scenario_matrix_hash` must match the pinned runner's
+hash of the full scenario list scoped to that planner and kinematics, including
+campaign track and observation settings. A row's campaign config hash, when
+recorded in its config identity, must match the pinned campaign runtime hash;
+the campaign manifest hash is always required and checked. Mixed scoped hashes
+invalidate the input (exit 2) before a report is written. Policy-search
+candidate base configs and scenario overrides are resolved from files in the
+pinned checkout with that commit's production resolver; a referenced config
+outside that checkout is rejected. Every row's source commit must also match.
+Matrix-owned scenario fields, including the scenario identity
 and `map_file`, must match the resolved scenario in the pinned commit. A row's
 self-recorded config hash cannot authenticate a changed map. Invalid identity
 exits 2 before writing a comparison report. A manifest checksum proves

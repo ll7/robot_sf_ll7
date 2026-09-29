@@ -17,6 +17,8 @@ def _assert_pinned_modules(checkout: Path) -> None:
         "robot_sf.benchmark.camera_ready._util",
         "robot_sf.benchmark.camera_ready._config",
         "robot_sf.benchmark.camera_ready._preflight",
+        "robot_sf.benchmark.runner",
+        "robot_sf.benchmark.map_runner.map_runner_identity",
         "robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution",
         "robot_sf.benchmark.utils",
         "pysocialforce",
@@ -39,9 +41,15 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
     from robot_sf.benchmark.camera_ready import _util
     from robot_sf.benchmark.camera_ready._config import (
         _load_campaign_scenarios,
+        _scenario_with_kinematics,
         load_campaign_config,
     )
     from robot_sf.benchmark.camera_ready._preflight import _scenario_matrix_hash
+    from robot_sf.benchmark.map_runner.map_runner_identity import (
+        _resolve_seed_list,
+        _select_seeds,
+        _suite_key,
+    )
     from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
         _apply_planner_selector_v2_context,
         _apply_scenario_uncertainty_envelope_config,
@@ -49,6 +57,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
         _resolve_config_path,
         _resolve_policy_search_candidate_runtime,
     )
+    from robot_sf.benchmark.runner import _apply_track_metadata_to_scenarios
     from robot_sf.benchmark.utils import _config_hash
 
     _assert_pinned_modules(checkout)
@@ -72,6 +81,8 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
 
     planners = {}
     for planner in cfg.planners:
+        if not planner.enabled:
+            continue
         path = planner.algo_config_path
         if path is not None and not path.resolve().is_relative_to(checkout):
             raise ValueError(f"successor planner config escapes pinned checkout: {planner.key}")
@@ -104,11 +115,52 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
             "config": raw,
             "path": path.relative_to(checkout).as_posix() if path else None,
             "absolute_path": str(path) if path else None,
+            "observation_mode": planner.observation_mode or cfg.observation_mode,
         }
+
+    expected_slots = set()
+    scoped_hashes = []
+    suite_seeds = _resolve_seed_list(checkout / "configs/benchmarks/seed_list_v1.yaml")
+    suite_key = _suite_key(cfg.scenario_matrix_path)
+    for kinematics in _util._kinematics_matrix_or_default(cfg.kinematics_matrix):
+        scoped = [
+            _scenario_with_kinematics(
+                scenario,
+                kinematics=kinematics,
+                holonomic_command_mode=cfg.holonomic_command_mode,
+            )
+            for scenario in scenarios
+        ]
+        if cfg.telemetry is not None:
+            for scenario in scoped:
+                scenario["telemetry"] = dict(cfg.telemetry)
+        for key, planner in planners.items():
+            runner_scenarios = _apply_track_metadata_to_scenarios(
+                scoped,
+                observation_mode=planner["observation_mode"],
+                observation_level=None,
+                benchmark_track=None,
+                track_schema_version=None,
+                telemetry=cfg.telemetry,
+            )
+            scoped_hashes.append(
+                {"planner": key, "kinematics": kinematics, "hash": _config_hash(runner_scenarios)}
+            )
+            for scenario in runner_scenarios:
+                identity = scenario.get("name") or scenario.get("scenario_id") or scenario.get("id")
+                seeds = _select_seeds(scenario, suite_seeds=suite_seeds, suite_key=suite_key)
+                track = scenario.get("benchmark_track") or ""
+                for seed in seeds:
+                    slot = (key, kinematics, identity, seed, track)
+                    if slot in expected_slots:
+                        raise ValueError(f"duplicate pinned successor slot: {slot}")
+                    expected_slots.add(slot)
 
     runtime_rows = []
     for item in request["rows"]:
         slot = item["slot"]
+        if tuple(slot) not in expected_slots:
+            continue
         planner = planners.get(slot[0])
         if planner is None:
             raise ValueError(f"0.0.8 row planner is absent from verified successor config: {slot}")
@@ -143,7 +195,13 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
             }
         )
     json.dump(
-        {"config_hash": config_hash, "scenario_hash": scenario_hash, "rows": runtime_rows},
+        {
+            "config_hash": config_hash,
+            "scenario_hash": scenario_hash,
+            "rows": runtime_rows,
+            "expected_slots": sorted(expected_slots),
+            "scoped_hashes": scoped_hashes,
+        },
         sys.stdout,
     )
 

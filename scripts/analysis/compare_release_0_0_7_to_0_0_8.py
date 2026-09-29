@@ -111,6 +111,8 @@ def _insert_rows(
     source: str,
     *,
     retain_provenance: bool = False,
+    duplicate_counts: dict[tuple[str, str, str, int, str], int] | None = None,
+    duplicate_rows: list[tuple[tuple[str, str, str, int, str], dict[str, Any]]] | None = None,
 ) -> None:
     for line_number, raw in enumerate(raw_lines, 1):
         if not raw.strip():
@@ -119,19 +121,17 @@ def _insert_rows(
         if not isinstance(row, dict):
             raise ValueError(f"{source}:{line_number}: episode row must be an object")
         key = _slot(row, run_name)
-        if key in rows:
-            raise ValueError(f"duplicate slot {key} at {source}:{line_number}")
         if not isinstance(row.get("outcome"), dict) or not isinstance(row.get("metrics"), dict):
             raise ValueError(f"{source}:{line_number}: outcome and metrics must be objects")
         # The published bundle is hundreds of MB uncompressed. Keep only the
         # compared values and a checked source identity for each slot.
-        rows[key] = {
+        compact = {
             "outcome": row["outcome"],
             "metrics": row["metrics"],
             "_source_commit": _row_source_commit(row),
         }
         if retain_provenance:
-            rows[key]["_provenance"] = {
+            compact["_provenance"] = {
                 name: row.get(name)
                 for name in (
                     "algo",
@@ -142,6 +142,14 @@ def _insert_rows(
                     "config_hash",
                 )
             }
+        if key in rows:
+            if duplicate_counts is None:
+                raise ValueError(f"duplicate slot {key} at {source}:{line_number}")
+            duplicate_counts[key] = duplicate_counts.get(key, 1) + 1
+            if duplicate_rows is not None:
+                duplicate_rows.append((key, compact))
+            continue
+        rows[key] = compact
 
 
 def _bundle_rows(bundle: Path) -> dict[tuple[str, str, str, int, str], dict[str, Any]]:
@@ -271,15 +279,31 @@ def _baseline_from_root(root: Path, expected_digest: str) -> tuple[dict, dict]:
     }
 
 
-def _root_rows(root: Path) -> dict[tuple[str, str, str, int, str], dict[str, Any]]:
+def _root_rows(
+    root: Path,
+) -> tuple[
+    dict[tuple[str, str, str, int, str], dict[str, Any]],
+    dict[tuple[str, str, str, int, str], int],
+    list[tuple[tuple[str, str, str, int, str], dict[str, Any]]],
+]:
     rows: dict[tuple[str, str, str, int, str], dict[str, Any]] = {}
+    duplicates: dict[tuple[str, str, str, int, str], int] = {}
+    duplicate_rows: list[tuple[tuple[str, str, str, int, str], dict[str, Any]]] = []
     paths = sorted(root.glob("runs/*/episodes.jsonl"))
     if not paths:
         raise ValueError(f"0.0.8 root has no runs/*/episodes.jsonl: {root}")
     for path in paths:
         with path.open("rb") as stream:
-            _insert_rows(rows, stream, path.parent.name, str(path), retain_provenance=True)
-    return rows
+            _insert_rows(
+                rows,
+                stream,
+                path.parent.name,
+                str(path),
+                retain_provenance=True,
+                duplicate_counts=duplicates,
+                duplicate_rows=duplicate_rows,
+            )
+    return rows, duplicates, duplicate_rows
 
 
 def _hex_digest(value: Any, label: str) -> str:
@@ -311,7 +335,13 @@ def _runtime_successor_identity(
     commit: str,
     config_path: str,
     rows: Mapping[tuple[str, str, str, int, str], dict[str, Any]],
-) -> tuple[str, str, dict[tuple[str, str, str, int, str], dict[str, Any]]]:
+) -> tuple[
+    str,
+    str,
+    dict[tuple[str, str, str, int, str], dict[str, Any]],
+    dict[tuple[str, str], str],
+    set[tuple[str, str, str, int, str]],
+]:
     """Recreate the campaign runner's hashes from a detached source checkout."""
     with tempfile.TemporaryDirectory(prefix="slot-paired-source-") as directory:
         checkout = Path(directory) / "source"
@@ -346,7 +376,18 @@ def _runtime_successor_identity(
                 )
             payload = json.loads(resolved.stdout)
             runtime_rows = {tuple(item.pop("slot")): item for item in payload["rows"]}
-            return payload["config_hash"], payload["scenario_hash"], runtime_rows
+            scoped_hashes = {
+                (item["planner"], item["kinematics"]): item["hash"]
+                for item in payload["scoped_hashes"]
+            }
+            expected_slots = {tuple(item) for item in payload["expected_slots"]}
+            return (
+                payload["config_hash"],
+                payload["scenario_hash"],
+                runtime_rows,
+                scoped_hashes,
+                expected_slots,
+            )
         finally:
             subprocess.run(
                 ["git", "-C", str(source_root), "worktree", "remove", "--force", str(checkout)],
@@ -418,8 +459,8 @@ def _verified_successor_manifest(  # noqa: C901, PLR0912
         actual = hashlib.sha256(_source_bytes(source_root, commit, binding["path"])).hexdigest()
         if actual != expected:
             raise ValueError(f"successor planner binding SHA-256 mismatch: {key}")
-    config_hash, scenario_hash, runtime_rows = _runtime_successor_identity(
-        source_root, commit, manifest["campaign_config"]["path"], rows
+    config_hash, scenario_hash, runtime_rows, scoped_hashes, expected_slots = (
+        _runtime_successor_identity(source_root, commit, manifest["campaign_config"]["path"], rows)
     )
     for key, actual in (("campaign_config", config_hash), ("scenario_matrix", scenario_hash)):
         if manifest[key]["runtime_hash"] != actual:
@@ -427,6 +468,8 @@ def _verified_successor_manifest(  # noqa: C901, PLR0912
     manifest["manifest_sha256"] = digest
     manifest["planner_keys"] = sorted(configured)
     manifest["runtime_rows"] = runtime_rows
+    manifest["expected_slots"] = expected_slots
+    manifest["scoped_hashes"] = scoped_hashes
     return manifest
 
 
@@ -518,6 +561,24 @@ def _validate_successor_row(  # noqa: C901 - each provenance assertion fails ind
         or not _matches_config_path(identity.get("algo_config_path"), planner["path"])
     ):
         raise ValueError(f"0.0.8 row run provenance differs from configured planner at {slot}")
+
+
+def _validate_row_runner_hashes(
+    slot: tuple[str, str, str, int, str],
+    row: Mapping[str, Any],
+    scoped_hash: str,
+    campaign_config_hash: str,
+) -> None:
+    """Bind every row in a configured arm to its pinned runner scope."""
+    provenance = row["_provenance"]["provenance"]
+    identity = provenance.get("config_identity") if isinstance(provenance, dict) else None
+    if not isinstance(identity, dict) or identity.get("scenario_matrix_hash") != scoped_hash:
+        raise ValueError(
+            f"0.0.8 row scenario_matrix_hash differs from pinned scoped runner at {slot}"
+        )
+    for field in ("campaign_config_hash", "config_hash"):
+        if field in identity and identity[field] != campaign_config_hash:
+            raise ValueError(f"0.0.8 row {field} differs from pinned campaign config at {slot}")
 
 
 def _fields(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -657,6 +718,10 @@ def _read_rules(path: Path | None) -> list[dict[str, Any]]:  # noqa: C901, PLR09
 
 
 def _rule_matches(rule: Mapping[str, Any], finding: Mapping[str, Any]) -> bool:
+    # A classification rule explains a measured change, never an incomplete
+    # or internally inconsistent successor campaign.
+    if finding["field"] == "__slot__":
+        return False
     slot_match = any(
         all(
             finding[key] == slot[key]
@@ -733,21 +798,35 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
     }
     if scenario_identity != expected:
         raise ValueError(f"0.0.7 scenario identity mismatch: {scenario_identity} != {expected}")
-    new = _root_rows(successor_root)
+    new, duplicates, duplicate_rows = _root_rows(successor_root)
     verified_successor = _verified_successor_manifest(
         successor_manifest, successor_manifest_sha256, successor_source_root, new
     )
     successor_identity = _root_identity(successor_root, verified_successor)
-    if any(key[0] not in verified_successor["planner_keys"] for key in new):
-        raise ValueError("0.0.8 row planner is absent from verified successor config")
+    expected_slots = verified_successor["expected_slots"]
+    expected_arms = set(verified_successor["scoped_hashes"])
+    observed_arms = {(key[0], key[1]) for key in new}
+    missing_arms = sorted(expected_arms - observed_arms)
+    if missing_arms:
+        raise ValueError(f"0.0.8 planner arm {missing_arms[0]} has no rows")
+    missing_slots = expected_slots - set(new)
+    extra_slots = set(new) - expected_slots
     for key, row in old.items():
         if row["_source_commit"] != baseline_source:
             raise ValueError(f"0.0.7 row has wrong source at {key}")
-    for key, row in new.items():
+    for key, row in [*new.items(), *duplicate_rows]:
+        scoped_hash = verified_successor["scoped_hashes"].get(key[:2])
+        if scoped_hash is not None:
+            _validate_row_runner_hashes(key, row, scoped_hash, successor_identity["config_hash"])
+        if key in extra_slots:
+            continue
         if row["_source_commit"] != successor_identity["source_commit"]:
             raise ValueError(f"0.0.8 row source differs from campaign manifest at {key}")
         _validate_successor_row(
-            key, row, verified_successor["runtime_rows"], successor_identity["source_commit"]
+            key,
+            row,
+            verified_successor["runtime_rows"],
+            successor_identity["source_commit"],
         )
     rules = _read_rules(classification_file)
     broad_rules = []
@@ -841,7 +920,16 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
         )
         findings.append(finding)
 
+    for slot in sorted(missing_slots):
+        add_finding(slot, "missing_0_0_8", "__slot__", "expected slot", MISSING)
+    for slot in sorted(extra_slots):
+        add_finding(slot, "extra_0_0_8", "__slot__", MISSING, "observed slot")
+    for slot, count in sorted(duplicates.items()):
+        add_finding(slot, "duplicate_0_0_8", "__slot__", 1, count)
+
     for slot in sorted(set(old) | set(new)):
+        if slot in missing_slots or slot in extra_slots:
+            continue
         old_row, new_row = old.get(slot), new.get(slot)
         if old_row is None or new_row is None:
             presence = "only_0_0_7" if new_row is None else "only_0_0_8"
@@ -932,7 +1020,11 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
         "v4_slot_replacements": V4_SLOT_REPLACEMENTS,
         "numeric_tolerance_absolute": TOLERANCE,
         "rows_0_0_7": len(old),
-        "rows_0_0_8": len(new),
+        "rows_0_0_8": len(new) + sum(count - 1 for count in duplicates.values()),
+        "expected_rows_0_0_8": len(expected_slots),
+        "missing_slots_0_0_8": len(missing_slots),
+        "extra_slots_0_0_8": len(extra_slots),
+        "duplicated_slots_0_0_8": len(duplicates),
         "paired_rows": len(set(old) & set(new)),
         "only_0_0_7": len(set(old) - set(new)),
         "only_0_0_8": len(set(new) - set(old)),
@@ -965,6 +1057,7 @@ def write_report(report: Mapping[str, Any], output_dir: Path) -> None:
         "",
         f"- Baseline identity: `{report['baseline'].get('bundle_sha256') or report['baseline']['preservation_manifest_digest']}`",
         f"- Rows: 0.0.7 `{report['rows_0_0_7']}`, 0.0.8 `{report['rows_0_0_8']}`, paired `{report['paired_rows']}`.",
+        f"- Expected 0.0.8 slots: `{report['expected_rows_0_0_8']}`; missing `{report['missing_slots_0_0_8']}`, extra `{report['extra_slots_0_0_8']}`, duplicated `{report['duplicated_slots_0_0_8']}`.",
         f"- Release-only rows: 0.0.7 `{report['only_0_0_7']}`, 0.0.8 `{report['only_0_0_8']}`.",
         f"- Findings: `{len(report['findings'])}`; unexplained: `{report['unexplained_count']}`.",
         f"- Verified successor manifest SHA-256: `{report['successor']['verified_manifest_sha256']}`.",

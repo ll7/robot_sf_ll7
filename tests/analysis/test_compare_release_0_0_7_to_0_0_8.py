@@ -70,9 +70,20 @@ def _archive(
     return bundle, sha256(bundle.read_bytes()).hexdigest()
 
 
-def _root(tmp_path: Path, rows: list[dict], *, run: str = "goal__differential_drive") -> Path:
-    manifest_path, _, _, source_commit = _successor_contract(tmp_path)
+def _root(
+    tmp_path: Path,
+    rows: list[dict],
+    *,
+    run: str = "goal__differential_drive",
+    enable_all_v4: bool = False,
+) -> Path:
+    manifest_path, _, source, source_commit = _successor_contract(
+        tmp_path, rows=rows, run=run, enable_all_v4=enable_all_v4
+    )
     manifest = json.loads(manifest_path.read_text())
+    _, _, _, scoped_hashes, _ = comparator._runtime_successor_identity(
+        source, source_commit, "configs/benchmarks/synthetic.yaml", {}
+    )
     root = tmp_path / "successor"
     path = root / "runs" / run / "episodes.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -90,6 +101,8 @@ def _root(tmp_path: Path, rows: list[dict], *, run: str = "goal__differential_dr
             "algo": algo,
             "seed": row["seed"],
         }
+        if row.get("benchmark_track"):
+            scenario["benchmark_track"] = row["benchmark_track"]
         row["scenario_params"] = scenario
         row["config_hash"] = _config_hash(scenario)
         row["algorithm_metadata"] = {
@@ -102,6 +115,8 @@ def _root(tmp_path: Path, rows: list[dict], *, run: str = "goal__differential_dr
             "config_identity": {
                 "algo": algo,
                 "algo_config_path": binding["path"] if binding else None,
+                "scenario_matrix_hash": scoped_hashes[(run_planner, run.rsplit("__", 1)[1])],
+                "campaign_config_hash": manifest["campaign_config"]["runtime_hash"],
             },
         }
     path.write_text("".join(json.dumps(row) + "\n" for row in updated), encoding="utf-8")
@@ -120,7 +135,13 @@ def _root(tmp_path: Path, rows: list[dict], *, run: str = "goal__differential_dr
     return root
 
 
-def _successor_contract(tmp_path: Path) -> tuple[Path, str, Path, str]:
+def _successor_contract(
+    tmp_path: Path,
+    *,
+    rows: list[dict] | None = None,
+    run: str = "goal__differential_drive",
+    enable_all_v4: bool = False,
+) -> tuple[Path, str, Path, str]:
     source = tmp_path / "successor-source"
     manifest_path = tmp_path / "successor-manifest.json"
     if manifest_path.exists():
@@ -168,15 +189,27 @@ def _successor_contract(tmp_path: Path) -> tuple[Path, str, Path, str]:
     map_path = source / "maps/svg_maps/classic_crossing.svg"
     map_path.parent.mkdir(parents=True, exist_ok=True)
     map_path.write_text("<svg xmlns='http://www.w3.org/2000/svg'/>\n")
+    selected = rows or [_row("s1", 111)]
+    by_scenario: dict[str, dict] = {}
+    for row in selected:
+        item = by_scenario.setdefault(row["scenario_id"], {"seeds": set(), "track": None})
+        item["seeds"].add(row["seed"])
+        item["track"] = row.get("benchmark_track") or item["track"]
     scenario.write_text(
         "".join(
             f"- name: {name}\n  map_file: ../../maps/svg_maps/classic_crossing.svg\n"
-            "  seeds: [111, 112]\n"
-            for name in ("s1", "s2", "s3", "classic_bottleneck_low")
+            f"  seeds: {sorted(item['seeds'])}\n"
+            + (f"  benchmark_track: {item['track']}\n" if item["track"] else "")
+            for name, item in by_scenario.items()
         )
     )
+    selected_planner = run.rsplit("__", 1)[0]
     planner_bindings = {}
-    planner_lines = ["  - key: goal", "    algo: goal"]
+    planner_lines = [
+        "  - key: goal",
+        "    algo: goal",
+        f"    enabled: {str(selected_planner == 'goal').lower()}",
+    ]
     base_planner = source / "configs/algos/base_hybrid.yaml"
     base_planner.parent.mkdir(parents=True, exist_ok=True)
     base_planner.write_text("speed: 1\n")
@@ -188,7 +221,12 @@ def _successor_contract(tmp_path: Path) -> tuple[Path, str, Path, str]:
             f"base_config_path: configs/algos/base_hybrid.yaml\nparams:\n  name: {key}\n"
         )
         planner_lines.extend(
-            [f"  - key: {key}", "    algo: hybrid_rule_local_planner", f"    algo_config: {name}"]
+            [
+                f"  - key: {key}",
+                "    algo: hybrid_rule_local_planner",
+                f"    algo_config: {name}",
+                f"    enabled: {str(enable_all_v4 or selected_planner == key).lower()}",
+            ]
         )
         planner_bindings[key] = {"path": name, "sha256": sha256(path.read_bytes()).hexdigest()}
     config.write_text(
@@ -215,7 +253,7 @@ def _successor_contract(tmp_path: Path) -> tuple[Path, str, Path, str]:
     commit = subprocess.check_output(
         ["git", "-C", str(source), "rev-parse", "HEAD"], text=True
     ).strip()
-    config_hash, scenario_hash, _ = comparator._runtime_successor_identity(
+    config_hash, scenario_hash, _, _, _ = comparator._runtime_successor_identity(
         source, commit, "configs/benchmarks/synthetic.yaml", {}
     )
     manifest = {
@@ -467,6 +505,164 @@ def test_duplicate_slot_and_ambiguous_classification_fail_closed(tmp_path: Path)
     rules = _rules(tmp_path / "rules.json", [first, second])
     with pytest.raises(ValueError, match="ambiguous classification"):
         _compare(bundle, root, digest, rules)
+
+
+def test_configured_v4_arms_absent_from_goal_only_campaign_exit_two(tmp_path: Path) -> None:
+    """A goal-only result cannot claim a complete four-arm v4 successor campaign."""
+    row = _row("s1", 111)
+    bundle, digest = _archive(tmp_path, [row])
+    root = _root(tmp_path, [row], enable_all_v4=True)
+
+    with pytest.raises(ValueError, match="planner arm .* has no rows"):
+        _compare(bundle, root, digest)
+
+
+def test_missing_extra_and_duplicate_successor_slots_are_unclassifiable_findings(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Completeness errors stay visible and cannot be hidden with analyst rules."""
+    rows = [_row("s1", 111), _row("s1", 112)]
+    bundle, digest = _archive(tmp_path, rows)
+    root = _root(tmp_path, rows)
+    path = root / "runs/goal__differential_drive/episodes.jsonl"
+    recorded = [json.loads(line) for line in path.read_text().splitlines()]
+    extra = copy.deepcopy(recorded[0])
+    extra["seed"] = 113
+    path.write_text("".join(json.dumps(row) + "\n" for row in [recorded[0], recorded[0], extra]))
+
+    report = _compare(bundle, root, digest)
+    structural = [item for item in report["findings"] if item["field"] == "__slot__"]
+    assert {(item["seed"], item["presence"]) for item in structural} == {
+        (111, "duplicate_0_0_8"),
+        (112, "missing_0_0_8"),
+        (113, "extra_0_0_8"),
+    }
+    assert report["unexplained_count"] >= 3
+    rules = _rules(
+        tmp_path / "rules.json",
+        [
+            _rule(
+                "__slot__",
+                predicate={"finding_ids": [item["finding_id"] for item in structural]},
+            )
+        ],
+    )
+    assert all(
+        item["classification"] == "unexplained"
+        for item in _compare(bundle, root, digest, rules)["findings"]
+        if item["field"] == "__slot__"
+    )
+
+    real_compare = comparator.compare
+    monkeypatch.setattr(
+        comparator,
+        "compare",
+        lambda bundle_arg, root_arg, **kwargs: real_compare(
+            bundle_arg,
+            root_arg,
+            baseline_sha256=digest,
+            baseline_source=OLD_SOURCE,
+            expected_scenario_identity=SCENARIO,
+            **kwargs,
+        ),
+    )
+    successor = _successor_kwargs(tmp_path)
+    output = tmp_path / "incomplete-report"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "compare",
+            "--baseline-bundle",
+            str(bundle),
+            "--successor-root",
+            str(root),
+            "--successor-manifest",
+            str(successor["successor_manifest"]),
+            "--successor-manifest-sha256",
+            successor["successor_manifest_sha256"],
+            "--successor-source-root",
+            str(successor["successor_source_root"]),
+            "--classification-file",
+            str(rules),
+            "--output-dir",
+            str(output),
+        ],
+    )
+    assert comparator.main() == 1
+    assert (output / "findings.csv").exists()
+
+    extra["provenance"]["config_identity"]["scenario_matrix_hash"] = "f" * 16
+    path.write_text("".join(json.dumps(row) + "\n" for row in [recorded[0], extra]))
+    with pytest.raises(ValueError, match="scenario_matrix_hash differs from pinned scoped runner"):
+        _compare(bundle, root, digest)
+
+    duplicate = copy.deepcopy(recorded[0])
+    duplicate["provenance"]["config_identity"]["scenario_matrix_hash"] = "f" * 16
+    path.write_text("".join(json.dumps(row) + "\n" for row in [recorded[0], duplicate]))
+    with pytest.raises(ValueError, match="scenario_matrix_hash differs from pinned scoped runner"):
+        _compare(bundle, root, digest)
+
+
+def test_mixed_scoped_matrix_hashes_exit_two_before_report(tmp_path: Path, monkeypatch) -> None:
+    """Rows from differently scoped runner inputs cannot share one campaign."""
+    rows = [_row("s1", 111), _row("s2", 111)]
+    bundle, digest = _archive(tmp_path, rows)
+    root = _root(tmp_path, rows)
+    path = root / "runs/goal__differential_drive/episodes.jsonl"
+    recorded = [json.loads(line) for line in path.read_text().splitlines()]
+    recorded[1]["provenance"]["config_identity"]["scenario_matrix_hash"] = "f" * 16
+    path.write_text("".join(json.dumps(row) + "\n" for row in recorded))
+
+    with pytest.raises(ValueError, match="scenario_matrix_hash differs from pinned scoped runner"):
+        _compare(bundle, root, digest)
+
+    real_compare = comparator.compare
+    monkeypatch.setattr(
+        comparator,
+        "compare",
+        lambda bundle_arg, root_arg, **kwargs: real_compare(
+            bundle_arg,
+            root_arg,
+            baseline_sha256=digest,
+            baseline_source=OLD_SOURCE,
+            expected_scenario_identity=SCENARIO,
+            **kwargs,
+        ),
+    )
+    successor = _successor_kwargs(tmp_path)
+    output = tmp_path / "mixed-report"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "compare",
+            "--baseline-bundle",
+            str(bundle),
+            "--successor-root",
+            str(root),
+            "--successor-manifest",
+            str(successor["successor_manifest"]),
+            "--successor-manifest-sha256",
+            successor["successor_manifest_sha256"],
+            "--successor-source-root",
+            str(successor["successor_source_root"]),
+            "--output-dir",
+            str(output),
+        ],
+    )
+    with pytest.raises(SystemExit) as exc:
+        comparator.main()
+    assert exc.value.code == 2
+    assert not (output / "report.json").exists()
+
+    recorded[1]["provenance"]["config_identity"]["scenario_matrix_hash"] = recorded[0][
+        "provenance"
+    ]["config_identity"]["scenario_matrix_hash"]
+    recorded[1]["provenance"]["config_identity"]["campaign_config_hash"] = "f" * 16
+    path.write_text("".join(json.dumps(row) + "\n" for row in recorded))
+    with pytest.raises(ValueError, match="campaign_config_hash differs from pinned campaign"):
+        _compare(bundle, root, digest)
 
 
 def test_baseline_checksum_and_source_are_pinned(tmp_path: Path) -> None:
@@ -842,7 +1038,7 @@ def test_runtime_hash_and_planner_resolution_use_pinned_code(tmp_path: Path) -> 
             }
         }
     }
-    observed, _, runtime_rows = comparator._runtime_successor_identity(
+    observed, _, runtime_rows, _, _ = comparator._runtime_successor_identity(
         source, changed_commit, "configs/benchmarks/synthetic.yaml", rows
     )
     assert observed == "a" * 16

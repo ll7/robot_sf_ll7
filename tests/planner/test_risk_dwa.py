@@ -77,12 +77,12 @@ def test_release_dynamic_window_scores_only_next_step_reachable_commands() -> No
     """At rest the 1 m/s² drive can change either velocity by 0.1 in 0.1 s."""
     release_path = Path(__file__).parents[2] / "configs/algos/risk_dwa_release_v0_0_8.yaml"
     release = build_risk_dwa_config(yaml.safe_load(release_path.read_text(encoding="utf-8")))
-    assert release.dynamic_window_version == "drive_limited_v2"
     observation = _observation(goal=(5.0, 0.0))
     command = RiskDWAPlannerAdapter(release).plan(observation)
     assert 0.0 <= command[0] <= 0.1 + 1e-12
     assert abs(command[1]) <= 0.1 + 1e-12
     assert command[0] == pytest.approx(0.1)
+    assert release.dynamic_window_version == "drive_limited_v2"
 
     historical_path = Path(__file__).parents[2] / "configs/algos/risk_dwa_camera_ready.yaml"
     historical = build_risk_dwa_config(yaml.safe_load(historical_path.read_text(encoding="utf-8")))
@@ -96,8 +96,8 @@ def test_release_dynamic_window_scores_only_next_step_reachable_commands() -> No
     assert braking == pytest.approx((0.6, 0.3))
 
 
-def test_release_risk_dwa_sees_pedestrian_crossing_safety_boundary_at_one_second() -> None:
-    """The original 1.6 s horizon sees a crossing missed by a truncated 0.8 s one."""
+def test_release_risk_dwa_horizon_scoring_sees_pedestrian_crossing_at_one_second() -> None:
+    """Horizon scoring only: a prescribed 0.5 m/s command bypasses the rest window."""
     release_path = Path(__file__).parents[2] / "configs/algos/risk_dwa_release_v0_0_8.yaml"
     release = build_risk_dwa_config(yaml.safe_load(release_path.read_text(encoding="utf-8")))
     assert release.rollout_dt * release.rollout_steps == pytest.approx(1.6)
@@ -644,3 +644,33 @@ def test_surface_v2_config_requires_positive_body_radii() -> None:
             robot_radius_m=1.0,
             pedestrian_radius_m=0.0,
         )
+
+
+def test_release_all_rejected_commands_report_emergency_brake_and_reset_flag() -> None:
+    """An overlapping obstacle rejects every candidate; the bounded brake is a fallback."""
+    release_path = Path(__file__).parents[2] / "configs/algos/risk_dwa_release_v0_0_8.yaml"
+    planner = RiskDWAPlannerAdapter(build_risk_dwa_config(yaml.safe_load(release_path.read_text())))
+    observation = _observation(robot=(1.1, 1.1), speed=0.7, goal=(5.0, 1.1))
+    observation["robot"]["angular_velocity"] = np.asarray([0.4])
+    grid = np.zeros((1, 20, 20))
+    grid[0, 5, 5] = 1.0
+    observation["occupancy_grid"] = grid
+    observation["occupancy_grid_meta"] = {
+        "origin": [0.0, 0.0],
+        "size": [4.0, 4.0],
+        "resolution": [0.2],
+        "channel_indices": [0, -1, -1, 0],
+        "use_ego_frame": [0.0],
+    }
+    assert planner.plan(observation) == pytest.approx((0.6, 0.3))
+    diagnostics = planner.diagnostics()
+    assert diagnostics.get("no_admissible_command") is True
+    assert diagnostics.get("no_admissible_command_count") == 1
+    assert diagnostics["last_decision"]["no_admissible_command"] is True
+    planner.plan(observation)
+    assert planner.diagnostics()["no_admissible_command_count"] == 2
+    planner.plan(_observation(goal=(5.0, 0.0)))
+    assert planner.diagnostics()["no_admissible_command"] is False
+    assert planner.diagnostics()["no_admissible_command_count"] == 2
+    planner.plan(_observation(goal=(0.0, 0.0)))
+    assert planner.diagnostics()["no_admissible_command"] is False

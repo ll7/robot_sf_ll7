@@ -135,6 +135,8 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
     def __init__(self, config: RiskDWAPlannerConfig | None = None) -> None:
         """Initialize adapter with an optional config override."""
         self.config = config or RiskDWAPlannerConfig()
+        self._no_admissible_command = False
+        self._no_admissible_command_count = 0
 
     def _dynamic_window(
         self, observation: dict[str, Any], current_speed: float, speed_cap: float
@@ -492,6 +494,7 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return best unicycle command `(v, omega)` for the current observation."""
+        self._no_admissible_command = False
         robot_pos, heading, goal, ped_pos, ped_vel = self._extract_robot_goal_ped(observation)
         grid_payload = self._cache_grid_payload(observation)
         to_goal = float(np.linalg.norm(goal - robot_pos))
@@ -569,11 +572,20 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
                 if escape_score > best_score:
                     best_score = escape_score
                     best_cmd = (escape_v, escape_w)
+        # With no admissible trajectory, return the reachable maximum brake.
+        # This emergency actuator fallback is distinct from DWA selection.
+        if best_score == float("-inf"):
+            self._no_admissible_command = True
+            self._no_admissible_command_count += 1
         return best_cmd
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""
-        return {"planner_type": "RiskDWAPlannerAdapter"}
+        decision = {
+            "no_admissible_command": getattr(self, "_no_admissible_command", False),
+            "no_admissible_command_count": getattr(self, "_no_admissible_command_count", 0),
+        }
+        return {"planner_type": "RiskDWAPlannerAdapter", **decision, "last_decision": decision}
 
 
 def build_risk_dwa_config(cfg: dict[str, Any] | None) -> RiskDWAPlannerConfig:

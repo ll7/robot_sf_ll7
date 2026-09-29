@@ -654,7 +654,8 @@ def _assert_prediction_and_social_force_configs(
     assert predictor["predictive_robot_radius"] == pytest.approx(DRIVE.radius)
     assert predictor["predictive_pedestrian_radius"] == pytest.approx(SIM.ped_radius)
     assert predictor["predictive_clearance_model"] == "surface_v2"
-    assert predictor["predictive_rollout_dt"] == pytest.approx(SIM.time_per_step_in_secs)
+    # Restore the historical checkpoint inference grid, separate from command dt.
+    assert predictor["predictive_rollout_dt"] == pytest.approx(0.2)
     assert predictor["max_linear_speed"] <= DRIVE.max_linear_speed
     assert predictor["max_angular_speed"] <= DRIVE.max_angular_speed
 
@@ -693,7 +694,7 @@ def _assert_reference_and_learned_arm_configs(
 
 
 def _assert_guard_mppi_and_dwa_configs(resolved: dict[str, tuple[str, dict[str, Any]]]) -> None:
-    """Check explicit surface geometry and environment cadence on safety rollouts."""
+    """Check physical geometry, command-based guard cadence, and checkpoint grid."""
     guarded = resolved["guarded_ppo"][1]
     assert guarded["guard_clearance_model"] == "surface_v2"
     assert guarded["guard_robot_radius_m"] == pytest.approx(DRIVE.radius)
@@ -707,7 +708,8 @@ def _assert_guard_mppi_and_dwa_configs(resolved: dict[str, tuple[str, dict[str, 
     assert mppi["predictive_robot_radius"] == pytest.approx(DRIVE.radius)
     assert mppi["predictive_pedestrian_radius"] == pytest.approx(SIM.ped_radius)
     assert mppi["max_angular_speed"] == pytest.approx(DRIVE.max_angular_speed)
-    assert mppi["rollout_dt"] == pytest.approx(SIM.time_per_step_in_secs)
+    assert mppi["rollout_dt"] == pytest.approx(0.2)
+    assert mppi["predictive_rollout_dt"] == pytest.approx(0.2)
     assert mppi["goal_target_version"] == "active_waypoint_v2"
 
     dwa = resolved["risk_dwa"][1]

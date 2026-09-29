@@ -1,3 +1,4 @@
+# Historical checkpoint forecast/rollout grid; command execution remains at 0.1 s.
 # Versioned 0.0.8 predictive planner config.
 # Uses registry model_id so the checkpoint path is resolved via model/registry.yaml.
 # This candidate binds planner limits and body radii to the differential-drive robot.
@@ -14,8 +15,8 @@
 predictive_model_id: predictive_proxy_selected_v2_full
 predictive_device: cpu
 predictive_max_agents: 16
-predictive_horizon_steps: 16
-predictive_rollout_dt: 0.1
+predictive_horizon_steps: 8
+predictive_rollout_dt: 0.2
 
 # Motion limits.
 max_linear_speed: 1.6
@@ -47,7 +48,7 @@ predictive_speed_clearance_gain: 0.6
 
 # Adaptive horizon and lattice controls.
 predictive_adaptive_horizon_enabled: true
-predictive_horizon_boost_steps: 12
+predictive_horizon_boost_steps: 6
 predictive_near_field_distance: 2.6
 predictive_near_field_speed_cap: 0.65
 predictive_near_field_speed_samples: [0.1, 0.2, 0.35, 0.5]

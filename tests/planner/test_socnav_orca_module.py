@@ -161,7 +161,7 @@ def test_orca_heuristic_fallback_slows_for_head_on_pedestrian(monkeypatch) -> No
 
 
 @pytest.mark.skipif(socnav.rvo2 is None, reason="the reference RVO2 dependency is not installed")
-def test_orca_reference_slows_for_head_on_pedestrian_at_release_radii() -> None:
+def test_orca_reference_slows_for_head_on_pedestrian_with_physical_body_radii() -> None:
     """The real RVO2 implementation reacts before 1.0 m + 0.4 m body contact."""
     adapter = orca.ORCAPlannerAdapter(allow_fallback=False)
     free = _observation(goal=(5.0, 0.0))

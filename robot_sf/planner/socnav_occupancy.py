@@ -153,6 +153,12 @@ class OccupancyAwarePlannerMixin:
     ) -> tuple[int, int] | None:
         """Convert world coordinates to grid row/col using metadata.
 
+        The closed upper edge (origin + size) clamps to the last cell. Points
+        strictly outside return None: occupancy callers treat them as occupied,
+        while surface-clearance callers return minus the robot radius. An empty
+        grid at the exact edge still has infinite clearance; no virtual boundary
+        obstacle is added for a body extending beyond the grid.
+
         Returns:
             tuple[int, int] | None: Grid indices or None when point is out of bounds/invalid.
         """

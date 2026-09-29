@@ -62,7 +62,7 @@ not a release episode.
 | `hybrid_rule_v4_fast_progress_static_escape_continuous` | [`hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml`](../../configs/policy_search/candidates/hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release_0_0_8_frozen.yaml), SHA-256 `044931a38f31a7b7c01ba8a750a1d34a79a58200309806e538761a94eff94888`; same v4 base plus hard-safety margin `0.2 m`, continuous static check and corridor subgoals. | Frozen v4 continuous replacement has explicit corridor behavior and exact obstacle geometry checks; these remain variant-specific behavior. | [`test_v4_braking_check_rejects_unstoppable_candidate`](../../tests/planner/test_hybrid_rule_v4_clearance_braking.py) |
 | `guarded_ppo` | `configs/algos/guarded_ppo_camera_ready_cpu.yaml`, SHA-256 `69f273f311590009a344f3a88592cb19f54524d252f469ab5fc66f7cf2c9e772`; PPO caps `2.0/1.0`, guard and fallback rollout `0.2 s`; fallback DWA caps `0.9/1.2`. No explicit clearance model/radii. | Repository-defined safety wrapper around the trained PPO policy and DWA fallback. Fallback angular cap exceeds the drive bound, the guard uses center-distance clearance, and rollout cadence is `0.2 s` (**correctness**). Successor explicitly selects surface clearance with `1.0/0.4 m` radii and `0.1 s` rollouts. | [`test_guarded_ppo_uses_fallback_when_ppo_is_unsafe`](../../tests/planner/test_guarded_ppo.py), [`test_surface_v2_guard_uses_body_to_body_clearance`](../../tests/planner/test_guarded_ppo.py) |
 | `predictive_mppi` | `configs/algos/predictive_mppi_camera_ready.yaml`, SHA-256 `5213a9e44c74cb79f78466d414645f6ca233d761e8fa5b77e5cfc3161ed94adb`; speed `1.5`, angular `1.3`, rollout `0.2 s`; nested predictor radii default to `0.3/0.3 m`, center-distance model. | Model predictive path integral control ([paper](https://doi.org/10.2514/1.G001921)). Body clearance and TTC are center-based or use undersized predictor radii, and angular limit exceeds the drive limit (**correctness**). Successor uses surface clearance and explicit `1.0/0.4 m` radii. | [`test_surface_v2_mppi_rejects_center_distance_that_overlaps_bodies`](../../tests/planner/test_predictive_mppi_planner.py) |
-| `risk_dwa` | `configs/algos/risk_dwa_camera_ready.yaml`, SHA-256 `1351439539ed02334891f6a1ef6ac652745791b1b830a5f8616850fbd5ccb37c`; speed `1.2`, angular `1.2`, rollout `0.2 s`; center-distance model and default radii `0/0 m`. | Dynamic Window Approach ([paper](https://doi.org/10.1109/100.580977)). Angular limit exceeds the drive limit; center-distance pedestrian/occupied-cell margins and closest-approach TTC do not express physical contact (**correctness**, tracked by #9750). Successor uses circle-contact TTC, continuous-point occupied-square clearance, explicit `1.0/0.4 m` radii and a one-step drive-limited dynamic window. | [`test_release_dynamic_window_scores_only_next_step_reachable_commands`](../../tests/planner/test_risk_dwa.py), [`test_release_risk_dwa_sees_pedestrian_crossing_safety_boundary_at_one_second`](../../tests/planner/test_risk_dwa.py) |
+| `risk_dwa` | `configs/algos/risk_dwa_camera_ready.yaml`, SHA-256 `1351439539ed02334891f6a1ef6ac652745791b1b830a5f8616850fbd5ccb37c`; speed `1.2`, angular `1.2`, rollout `0.2 s`; center-distance model and default radii `0/0 m`. | Dynamic Window Approach ([paper](https://doi.org/10.1109/100.580977)). Angular limit exceeds the drive limit; center-distance pedestrian/occupied-cell margins and closest-approach TTC do not express physical contact (**correctness**, tracked by #9750). Successor uses circle-contact TTC, continuous-point occupied-square clearance, explicit `1.0/0.4 m` radii and a one-step drive-limited dynamic window. | [`test_release_dynamic_window_scores_only_next_step_reachable_commands`](../../tests/planner/test_risk_dwa.py), [`test_release_risk_dwa_horizon_scoring_sees_pedestrian_crossing_at_one_second`](../../tests/planner/test_risk_dwa.py) |
 
 ## Versioned successor disposition
 
@@ -79,12 +79,67 @@ the robot body plus the largest local safety margin. The 0.0.8 Risk-DWA profile
 selects `drive_limited_v2`: sampled commands lie within one `0.1 s` drive step
 at `1.0 m/s²` linear acceleration/braking and `1.0 rad/s²` angular acceleration.
 The historical fixed lattice remains `fixed_v1` by default. The guarded PPO
-fallback selects the same versioned window. The release rollouts keep their
-historical durations in seconds by doubling step counts as cadence changes
-from `0.2 s` to `0.1 s`, including nested and boosted predictor horizons.
+fallback selects the same versioned window. Risk-DWA and Guarded PPO keep their
+historical durations by doubling step counts at `0.1 s`. Checkpoint-backed
+prediction and MPPI instead restore the historical `0.2 s` forecast/rollout grid
+and step counts (prediction 8, boost 6; MPPI 12, nested prediction 10, boost 6).
+Both actual decoder artifacts emit eight positions, capping the effective window
+at `8 × 0.2 s = 1.6 s`. The environment executes the selected command for `0.1 s`.
+[`test_release_checkpoint_effective_window_is_one_point_six_seconds`](../../tests/planner/test_release_horizons.py)
+loads each real release checkpoint; the adjacent hand-built crossing test scores
+a crossing at `t=1.0 s` on that effective grid. It does not claim the model
+predicts that particular trajectory.
 The Risk-DWA crossing oracle enters the physical safety margin near `t=1.0 s`:
 an `0.8 s` truncated rollout misses it; the restored `1.6 s` rollout rejects it.
-These are deterministic contract checks, not episode or release evidence.
+The Risk-DWA test exercises horizon scoring for a prescribed `0.5 m/s` command,
+not the from-rest dynamic-window selector. These are deterministic contract checks,
+not episode or release evidence.
+
+### Declared emergency fallback and grid-edge convention
+
+When every Risk-DWA candidate scores `-inf`, no admissible DWA command exists.
+The adapter retains the one-step reachable maximum brake, including residual
+forward/turn velocity when the drive cannot stop immediately. This is a declared
+emergency actuator fallback, a deviation from admissible DWA command selection;
+it does not certify a collision-free trajectory. Diagnostics expose the per-plan
+`no_admissible_command` flag and cumulative `no_admissible_command_count`, also
+copied into the simulation step trace's `planner` block. Reaching the goal or a
+later admissible plan clears the flag. The direct Risk-DWA adapter owns these
+fields; Guarded PPO's outer diagnostic block does not currently forward its
+fallback adapter's diagnostics.
+[`test_release_all_rejected_commands_report_emergency_brake_and_reset_flag`](../../tests/planner/test_risk_dwa.py)
+pins a `0.7/0.4` moving state and overlapping occupied cell: the reachable brake
+is `0.6/0.3`, with the fallback flag set.
+
+Grid edges preserve the existing convention, which is **occupied outside**, not
+free: `OccupancyAwarePlannerMixin._world_to_grid` returns no index strictly outside,
+`_grid_value` returns `1.0`, and the three surface-clearance adapters return
+`-robot_radius`. Exactly at `origin + size`, indexing clamps to the last cell.
+An empty grid therefore returns infinite clearance at the exact edge, despite
+body overlap beyond it; no virtual boundary obstacle is added. This discontinuity
+is a declared representation limitation, unchanged by this repair.
+[`test_grid_upper_edge_is_clamped_and_outside_is_occupied_characterization`](../../tests/planner/test_surface_geometry_adversarial.py)
+pins the edge, an epsilon beyond it, and an occupied last cell for all three arms.
+It passes on the pre-fix head and is characterization evidence.
+
+### Checkpoint temporal provenance limitation
+
+The `0.2 s` grid above restores the historical **inference interpretation**. It
+cannot presently be described as a proven trained cadence. The registry binds
+v1 to commit `dfc4aea84e25cc83f9888c620286457bab3e1596` and v2-full to
+`cef93136b92ddca9b0c4436bc44049412461a2fd`
+([registry](../../model/registry.yaml)); the published metadata and checkpoint
+payloads specify eight decoder steps but no step duration. The v2-full registry
+training config ([config](../../configs/training/predictive/predictive_br07_all_maps_randomized_full.yaml))
+sets eight target steps; `proxy_dt`/evaluation `dt=0.1` are evaluation settings.
+At its source commit, `scripts/training/collect_predictive_planner_data.py:185-186` uses
+consecutive frames, `:311` steps the environment once per frame, and
+`robot_sf/sim/sim_config.py:18` defaults to `0.1 s`. These source bytes imply
+an `8 × 0.1 s` training target window unless the actual collection run supplied
+an unrecorded override. The authoritative dataset collection metadata is missing
+from the published artifacts. Recover that metadata or explicitly resolve this
+conflict before claiming training-aligned timing or release admission. No model
+retraining, forecast interpolation, or checkpoint bytes changed here.
 
 The 0.0.8 release template binds these corrections through new config files for the predictor, Guarded
 PPO, MPPI, RiskDWA, SocialForce, SocNav/ORCA/SACADRL, and bounded SocNav sampling. The PPO learned

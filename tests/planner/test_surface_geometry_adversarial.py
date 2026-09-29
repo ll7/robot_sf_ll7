@@ -124,3 +124,49 @@ def test_release_grid_clearance_uses_true_robot_position_inside_cell(arm):
     hand_distance = np.hypot(2.8 - 2.59, 3.8 - 2.59) - 1.0
     assert hand_distance < 0.30
     assert actual == pytest.approx(hand_distance)
+
+
+@pytest.mark.parametrize("arm", ["risk_dwa", "predictive_mppi", "guarded_ppo"])
+def test_grid_upper_edge_is_clamped_and_outside_is_occupied_characterization(arm):
+    """Pin the existing discontinuity; this characterization claims no boundary repair."""
+    if arm == "risk_dwa":
+        planner = RiskDWAPlannerAdapter(build_risk_dwa_config({"clearance_model": "surface_v2"}))
+    elif arm == "predictive_mppi":
+        planner = PredictiveMPPIAdapter(
+            build_predictive_mppi_config(
+                {
+                    "clearance_model": "surface_v2",
+                    "predictive_robot_radius": 1.0,
+                    "predictive_pedestrian_radius": 0.4,
+                }
+            )
+        )
+    else:
+        planner = GuardedPPOAdapter(
+            build_guarded_ppo_config(
+                {
+                    "guard_clearance_model": "surface_v2",
+                    "guard_robot_radius_m": 1.0,
+                    "guard_pedestrian_radius_m": 0.4,
+                }
+            )
+        )
+    grid = np.zeros((1, 2, 2))
+    meta = {
+        "resolution": [0.2],
+        "origin": [0.0, 0.0],
+        "size": [0.4, 0.4],
+        "channel_indices": [0, -1, -1, 0],
+        "use_ego_frame": [0.0],
+    }
+    edge = np.asarray([0.4, 0.2])
+    outside = np.asarray([0.4 + 1e-9, 0.2])
+    assert planner._world_to_grid(edge, meta, (2, 2)) == (1, 1)
+    assert planner._world_to_grid(outside, meta, (2, 2)) is None
+    assert planner._grid_value(edge, grid, meta, 0) == 0.0
+    assert planner._grid_value(outside, grid, meta, 0) == 1.0
+    assert planner._min_obstacle_clearance(edge, grid_payload=(grid, meta)) == float("inf")
+    assert planner._min_obstacle_clearance(outside, grid_payload=(grid, meta)) == -1.0
+    grid[0, 1, 1] = 1.0
+    assert planner._grid_value(edge, grid, meta, 0) == 1.0
+    assert planner._min_obstacle_clearance(edge, grid_payload=(grid, meta)) == -1.0

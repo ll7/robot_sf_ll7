@@ -2529,9 +2529,11 @@ def _step_hybrid_and_planner_stats(
     planner_step_decision = None
     # Hybrid handoff telemetry is part of the episode predicate contract, so
     # sample it even when the larger planner-decision trace is not requested.
-    if (slc.record_planner_decision_trace or state.hybrid_command_sources is not None) and callable(
-        planner_stats
-    ):
+    if (
+        slc.record_planner_decision_trace
+        or slc.record_simulation_step_trace
+        or state.hybrid_command_sources is not None
+    ) and callable(planner_stats):
         try:
             planner_stats_payload = planner_stats()
         except (RuntimeError, ValueError, TypeError):
@@ -2852,6 +2854,11 @@ def _step_build_simulation_trace(
         "selected_action": sim.selected_action_payload,
         "applied_environment_action": sim.applied_environment_action_payload,
     }
+    decision = getattr(sim, "planner_step_decision", None)
+    if isinstance(decision, dict):
+        for key in ("no_admissible_command", "no_admissible_command_count"):
+            if key in decision:
+                planner_payload[key] = decision[key]
     if sim.action_conversion_payload:
         planner_payload["action_conversion"] = sim.action_conversion_payload
     if sim.actuation_step is not None:
@@ -3149,6 +3156,8 @@ def _step_planner_decision_dwa_keys(
     planners' traces are unchanged.
     """
     for dwa_key in (
+        "no_admissible_command",
+        "no_admissible_command_count",
         "constraint_reason",
         "candidate_total",
         "candidate_feasible",

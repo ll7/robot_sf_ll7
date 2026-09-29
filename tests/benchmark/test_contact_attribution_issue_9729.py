@@ -21,7 +21,7 @@ from robot_sf.benchmark.map_runner.map_runner_episode import (
 def _record() -> dict:
     return {
         "scenario_id": "contact-fixture",
-        "seed": 113,
+        "seed": 1001,
         "algo": "stand_still",
         "metrics": {"collisions": 1.0},
         "outcome": {"collision_event": True, "route_complete": False},

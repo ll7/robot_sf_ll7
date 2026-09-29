@@ -319,6 +319,7 @@ from robot_sf.planner.socnav import (  # noqa: F401 - registry re-export.
     SocNavBenchSamplingAdapter,
     SocNavPlannerConfig,
 )
+from robot_sf.planner.socnav_base import _SOCNAV_CONFIG_INIT_KEYS
 from robot_sf.planner.stream_gap import StreamGapPlannerAdapter  # noqa: F401
 from robot_sf.training.scenario_loader import load_scenarios
 
@@ -955,7 +956,7 @@ def _build_socnav_config(cfg: dict[str, Any]) -> SocNavPlannerConfig:
     """
     if not isinstance(cfg, dict):
         return SocNavPlannerConfig()
-    allowed = {f.name for f in fields(SocNavPlannerConfig)} | {"social_force_kernel_version"}
+    allowed = {f.name for f in fields(SocNavPlannerConfig)} | _SOCNAV_CONFIG_INIT_KEYS
     filtered = {key: value for key, value in cfg.items() if key in allowed}
     return SocNavPlannerConfig(**filtered)
 

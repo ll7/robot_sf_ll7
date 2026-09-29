@@ -13,12 +13,20 @@ from typing import Any
 import numpy as np
 
 from robot_sf.common.math_utils import wrap_angle_pi_array
+from robot_sf.planner.clearance_geometry import (
+    CENTER_CLEARANCE_V1,
+    occupied_cell_clearance,
+    pedestrian_clearance,
+    validate_clearance_model,
+    validate_surface_clearance_radii,
+)
 from robot_sf.planner.risk_dwa import _wrap_angle
 from robot_sf.planner.socnav import (
     OccupancyAwarePlannerMixin,
     PredictionPlannerAdapter,
     SocNavPlannerConfig,
 )
+from robot_sf.planner.socnav_base import _SOCNAV_CONFIG_INIT_KEYS
 
 _DEFAULT_ITERATIONS = 4
 _DEFAULT_GOAL_PROGRESS_WEIGHT = 6.0
@@ -73,6 +81,17 @@ class PredictiveMPPIConfig:
     progress_escape_distance: float = _DEFAULT_PROGRESS_ESCAPE_DISTANCE_M
     progress_escape_speed: float = 0.55
     progress_escape_heading_gain: float = 1.5
+    clearance_model: str = CENTER_CLEARANCE_V1
+
+    def __post_init__(self) -> None:
+        """Reject unsupported geometry modes at config construction."""
+        validate_clearance_model(self.clearance_model)
+        radii = {
+            "robot_radius": self.socnav.predictive_robot_radius,
+            "pedestrian_radius": self.socnav.predictive_pedestrian_radius,
+        }
+        validate_surface_clearance_radii(self.clearance_model, **radii)
+        validate_surface_clearance_radii(self.socnav.predictive_clearance_model, **radii)
 
 
 class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
@@ -163,11 +182,15 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
 
         rc = self._world_to_grid(point, meta, grid_shape=(grid.shape[1], grid.shape[2]))
         if rc is None:
-            return 0.0
+            return (
+                -float(self.config.socnav.predictive_robot_radius)
+                if self.config.clearance_model == "surface_v2"
+                else 0.0
+            )
         row, col = rc
         channel_grid = np.asarray(grid[channel], dtype=float)
         threshold = float(self.config.obstacle_threshold)
-        if channel_grid[row, col] >= threshold:
+        if channel_grid[row, col] >= threshold and self.config.clearance_model != "surface_v2":
             return 0.0
 
         radius = max(int(self.config.obstacle_search_cells), 1)
@@ -182,9 +205,14 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
 
         dr = obs_idx[:, 0] + r0 - row
         dc = obs_idx[:, 1] + c0 - col
-        cell_dist_sq = dr.astype(float) ** 2 + dc.astype(float) ** 2
         resolution = float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0])
-        return float(np.sqrt(np.min(cell_dist_sq)) * max(resolution, 1e-6))
+        return occupied_cell_clearance(
+            dr,
+            dc,
+            resolution=max(resolution, 1e-6),
+            model=self.config.clearance_model,
+            robot_radius=self.config.socnav.predictive_robot_radius,
+        )
 
     def _sequence_rollout(  # noqa: PLR0913
         self,
@@ -369,12 +397,21 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                 dists = np.linalg.norm(ped_t - local_pos[:, None, :], axis=2)  # (samples, peds)
                 valid_dist = dists[:, valid_idx]  # (samples, valid_peds)
                 if valid_dist.size > 0:
-                    sample_min = np.min(valid_dist, axis=1)  # (samples,)
+                    clearance = valid_dist
+                    if self.config.clearance_model == "surface_v2":
+                        clearance = pedestrian_clearance(
+                            valid_dist,
+                            model=self.config.clearance_model,
+                            robot_radius=self.config.socnav.predictive_robot_radius,
+                            pedestrian_radius=self.config.socnav.predictive_pedestrian_radius,
+                        )
+                        assert isinstance(clearance, np.ndarray)
+                    sample_min = np.min(clearance, axis=1)  # (samples,)
                     min_clear = np.minimum(min_clear, sample_min)
                     if step == 0:
                         first_clear = np.minimum(first_clear, sample_min)
                     threshold = float(self.config.near_distance)
-                    shortfall = np.maximum(0.0, threshold - valid_dist)
+                    shortfall = np.maximum(0.0, threshold - clearance)
                     time_weight = 1.0 / ((step + 1) * dt + 1e-6)
                     ttc_pen += np.sum(shortfall * time_weight, axis=1)
 
@@ -681,9 +718,9 @@ def build_predictive_mppi_config(cfg: dict[str, object] | None) -> PredictiveMPP
         PredictiveMPPIConfig: Parsed planner configuration.
     """
     cfg = cfg if isinstance(cfg, dict) else {}
-    socnav_allowed = {field.name for field in fields(SocNavPlannerConfig)} | {
-        "social_force_kernel_version"
-    }
+    socnav_allowed = {
+        field.name for field in fields(SocNavPlannerConfig)
+    } | _SOCNAV_CONFIG_INIT_KEYS
     socnav_kwargs = {key: value for key, value in cfg.items() if key in socnav_allowed}
     socnav = SocNavPlannerConfig(**socnav_kwargs)
     return PredictiveMPPIConfig(
@@ -723,6 +760,7 @@ def build_predictive_mppi_config(cfg: dict[str, object] | None) -> PredictiveMPP
         ),
         progress_escape_speed=float(cfg.get("progress_escape_speed", 0.55)),
         progress_escape_heading_gain=float(cfg.get("progress_escape_heading_gain", 1.5)),
+        clearance_model=str(cfg.get("clearance_model", CENTER_CLEARANCE_V1)),
     )
 
 

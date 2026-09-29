@@ -160,6 +160,23 @@ def test_orca_heuristic_fallback_slows_for_head_on_pedestrian(monkeypatch) -> No
     assert np.isfinite(angular_blocked)
 
 
+@pytest.mark.skipif(socnav.rvo2 is None, reason="the reference RVO2 dependency is not installed")
+def test_orca_reference_slows_for_head_on_pedestrian_at_release_radii() -> None:
+    """The real RVO2 implementation reacts before 1.0 m + 0.4 m body contact."""
+    adapter = orca.ORCAPlannerAdapter(allow_fallback=False)
+    free = _observation(goal=(5.0, 0.0))
+    blocked = _observation(goal=(5.0, 0.0), pedestrians=[(2.0, 0.0)])
+    for observation in (free, blocked):
+        observation["robot"]["radius"] = np.array([1.0], dtype=np.float32)
+
+    linear_free, _ = adapter.plan(free)
+    linear_blocked, angular_blocked = adapter.plan(blocked)
+
+    assert 2.0 - 1.0 - 0.4 == pytest.approx(0.6)  # Initial body-to-body gap, in metres.
+    assert linear_blocked < linear_free
+    assert np.isfinite(angular_blocked)
+
+
 def test_orca_missing_rvo2_fails_closed_without_explicit_fallback(monkeypatch) -> None:
     """The extracted adapter preserves the benchmark-ready optional-dependency contract."""
     monkeypatch.setattr(socnav, "rvo2", None)

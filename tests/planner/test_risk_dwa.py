@@ -454,3 +454,73 @@ def test_risk_dwa_normalized_none_count_preserves_padded_rows() -> None:
     assert ped_pos.shape == ped_vel.shape == (4, 2)
     np.testing.assert_allclose(ped_pos, np.asarray([[1.0, 0.5]] * 4))
     np.testing.assert_allclose(ped_vel, np.asarray([[-1.0, 2.0]] * 4))
+
+
+def test_surface_v2_rejects_commands_inside_physical_clearance_margin() -> None:
+    """The 0.0.8 hard gate rejects circle-surface gaps below safe_distance."""
+    config = RiskDWAPlannerConfig(
+        rollout_steps=1,
+        rollout_dt=0.1,
+        clearance_model="surface_v2",
+        robot_radius_m=1.0,
+        pedestrian_radius_m=0.4,
+        safe_distance=0.35,
+    )
+    planner = RiskDWAPlannerAdapter(config)
+    observation = _observation(pedestrians=[(1.7, 0.0)], pedestrian_velocities=[(0.0, 0.0)])
+    robot_pos, heading, goal, ped_pos, ped_vel = planner._extract_robot_goal_ped(observation)
+
+    unsafe = planner._rollout_score(
+        robot_pos=robot_pos,
+        heading=heading,
+        goal=goal,
+        command=(0.0, 0.0),
+        ped_pos=ped_pos,
+        ped_vel=ped_vel,
+        observation=observation,
+        current_speed=0.0,
+    )
+    assert unsafe == float("-inf")
+
+    observation = _observation(pedestrians=[(1.8, 0.0)], pedestrian_velocities=[(0.0, 0.0)])
+    robot_pos, heading, goal, ped_pos, ped_vel = planner._extract_robot_goal_ped(observation)
+    safe = planner._rollout_score(
+        robot_pos=robot_pos,
+        heading=heading,
+        goal=goal,
+        command=(0.0, 0.0),
+        ped_pos=ped_pos,
+        ped_vel=ped_vel,
+        observation=observation,
+        current_speed=0.0,
+    )
+    assert np.isfinite(safe)
+
+
+def test_surface_v2_ttc_reports_contact_time_for_circle_radii() -> None:
+    """Risk-DWA TTC reaches the physical contact boundary before centre overlap."""
+    planner = RiskDWAPlannerAdapter(
+        RiskDWAPlannerConfig(
+            clearance_model="surface_v2",
+            robot_radius_m=1.0,
+            pedestrian_radius_m=0.4,
+        )
+    )
+    ttc = planner._ttc_proxy(
+        np.asarray([0.0, 0.0]),
+        (0.0, 0.0),
+        np.asarray([[3.0, 0.0]]),
+        np.asarray([[-1.0, 0.0]]),
+        0.0,
+    )
+    assert ttc == pytest.approx(1.6)
+
+
+def test_surface_v2_config_requires_positive_body_radii() -> None:
+    """Surface-clearance configs must declare actual body extents."""
+    with pytest.raises(ValueError, match="pedestrian_radius must be finite and positive"):
+        RiskDWAPlannerConfig(
+            clearance_model="surface_v2",
+            robot_radius_m=1.0,
+            pedestrian_radius_m=0.0,
+        )

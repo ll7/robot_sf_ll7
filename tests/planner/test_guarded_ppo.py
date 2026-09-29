@@ -1076,3 +1076,61 @@ def test_guarded_ppo_config_accepts_boundary_values() -> None:
     assert config.prior_blend_weight == 1.0
     assert config.obstacle_threshold == 1.0
     assert config.goal_tolerance == 0.0
+
+
+def test_surface_v2_guard_uses_body_to_body_clearance() -> None:
+    """The candidate guard measures the free gap between the two physical discs."""
+    guard = GuardedPPOAdapter(
+        GuardedPPOConfig(
+            rollout_dt=0.1,
+            rollout_steps=1,
+            clearance_model="surface_v2",
+            robot_radius_m=1.0,
+            pedestrian_radius_m=0.4,
+            hard_ped_clearance=0.58,
+            first_step_ped_clearance=0.72,
+        )
+    )
+    unsafe = guard._evaluate_command(
+        _obs(ped_positions=[(1.7, 0.0)], ped_velocities=[(0.0, 0.0)]),
+        (0.0, 0.0),
+    )
+    safe = guard._evaluate_command(
+        _obs(ped_positions=[(2.2, 0.0)], ped_velocities=[(0.0, 0.0)]),
+        (0.0, 0.0),
+    )
+
+    assert unsafe["min_ped_clear"] == pytest.approx(0.3)
+    assert unsafe["safe"] is False
+    assert safe["min_ped_clear"] == pytest.approx(0.8)
+    assert safe["safe"] is True
+
+
+def test_surface_v2_guard_reports_ttc_from_rollout_start() -> None:
+    """TTC from each rollout sample includes the elapsed time to that sample."""
+    guard = GuardedPPOAdapter(
+        GuardedPPOConfig(
+            rollout_dt=0.1,
+            rollout_steps=1,
+            clearance_model="surface_v2",
+            robot_radius_m=1.0,
+            pedestrian_radius_m=0.4,
+            hard_ped_clearance=0.0,
+            first_step_ped_clearance=0.0,
+        )
+    )
+    result = guard._evaluate_command(
+        _obs(ped_positions=[(3.0, 0.0)], ped_velocities=[(-1.0, 0.0)]),
+        (0.0, 0.0),
+    )
+    assert result["min_ttc"] == pytest.approx(1.6)
+
+
+def test_surface_v2_guard_requires_positive_body_radii() -> None:
+    """Surface geometry cannot silently degrade to center-distance checks."""
+    with pytest.raises(ValueError, match="robot_radius must be finite and positive"):
+        GuardedPPOConfig(
+            clearance_model="surface_v2",
+            robot_radius_m=0.0,
+            pedestrian_radius_m=0.4,
+        )

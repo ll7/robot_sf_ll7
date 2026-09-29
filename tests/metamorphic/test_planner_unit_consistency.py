@@ -15,6 +15,8 @@ one strict expected failure per tracking issue flips when that issue is fixed.
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import math
 from dataclasses import fields
 from functools import cache
@@ -23,6 +25,12 @@ from typing import Any
 import pytest
 import yaml
 
+from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
+from robot_sf.benchmark.runner import (
+    _scenario_ped_radius_m,
+    _scenario_robot_radius_m,
+    load_scenario_matrix,
+)
 from robot_sf.planner.dwa import DWAPlannerConfig
 from robot_sf.planner.hybrid_rule_local_planner import HybridRuleLocalPlannerConfig
 from robot_sf.planner.risk_dwa import RiskDWAPlannerConfig
@@ -30,9 +38,11 @@ from robot_sf.planner.socnav_base import SocNavPlannerConfig
 from robot_sf.robot.actuation_envelope import stopping_distance
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.sim.sim_config import SimulationSettings
+from robot_sf.training.scenario_loader import load_scenarios
 from tests.metamorphic.planner_arms import (
     ROOT,
     release_campaign_planners,
+    release_candidate_0_0_8_planners,
     resolve_release_algo_config,
 )
 from tests.metamorphic.planner_arms import load_yaml as _load_yaml
@@ -98,8 +108,8 @@ AUDITED_UNIT_FIELDS = frozenset(
     social_force_obstacle_v2_length
     v4_braking_margin v4_moderate_clearance_human v4_reaction_time
     v4_slow_clearance_human v4_stop_clearance_human
-    recovery_reorient_angular_speed resolution robot_radius robot_radius_default
-    rollout_dt rollout_horizon route_guide_commitment_progress_threshold
+    recovery_reorient_angular_speed resolution robot_radius robot_radius_default robot_radius_m
+    rollout_dt rollout_horizon route_guide_commitment_progress_threshold pedestrian_radius_m
     route_rescue_progress_threshold route_trace_recovery_goal_stall_progress_3s
     route_trace_recovery_min_nearest_ped_distance
     route_trace_recovery_min_route_remaining_distance
@@ -211,11 +221,14 @@ DRIVE_LINEAR_DECEL_FIELDS = frozenset(("actuation_max_linear_decel", "max_linear
 DRIVE_ANGULAR_ACCEL_FIELDS = frozenset(
     ("actuation_max_angular_accel", "max_angular_accel", "max_angular_acceleration")
 )
-ROBOT_RADIUS_FIELDS = frozenset(("predictive_robot_radius", "robot_radius", "robot_radius_default"))
+ROBOT_RADIUS_FIELDS = frozenset(
+    ("predictive_robot_radius", "robot_radius", "robot_radius_default", "robot_radius_m")
+)
 PEDESTRIAN_RADIUS_FIELDS = frozenset(
     (
         "pedestrian_radius",
         "pedestrian_radius_default",
+        "pedestrian_radius_m",
         "predictive_pedestrian_radius",
         "social_force_ped_v3_default_ped_radius",
     )
@@ -412,6 +425,9 @@ def _unit_bearing(name: str) -> bool:
 def _release_values():
     """Yield each release algo_config resolved for the default and every override scenario."""
     entries = [(entry["algo"], entry.get("algo_config")) for entry in release_campaign_planners()]
+    entries.extend(
+        (entry["algo"], entry.get("algo_config")) for entry in release_candidate_0_0_8_planners()
+    )
     entries += [("hybrid_rule_local_planner", path) for path in HYBRID_V4_RELEASE_TWINS]
     for algo, path in entries:
         if not path:
@@ -568,6 +584,193 @@ def test_release_campaign_planner_configs_are_audited() -> None:
     )
     assert algo == "orca"
     assert orca["max_linear_speed"] == 1.15
+
+
+def _assert_0_0_8_campaign_pair(candidate_campaign: dict, release_campaign: dict) -> None:
+    """The diagnostic candidate preserves the release scenario, seed, and roster contract."""
+    release_scenarios = load_scenarios(
+        "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml"
+    )
+    candidate_scenarios = load_scenarios(candidate_campaign["scenario_matrix"])
+    assert [row["name"] for row in candidate_scenarios] == [
+        row["name"] for row in release_scenarios
+    ]
+    assert len(candidate_scenarios) == 48
+    for key in ("seed_policy", "horizon", "dt", "kinematics_matrix"):
+        assert candidate_campaign[key] == release_campaign[key]
+    assert [row["key"] for row in candidate_campaign["planners"]] == [
+        row["key"] for row in release_campaign["planners"]
+    ]
+
+
+def _resolved_0_0_8_candidate_configs() -> tuple[list[dict], dict[str, tuple[str, dict[str, Any]]]]:
+    """Resolve every candidate arm through its algorithm and base-config chain."""
+    entries = release_candidate_0_0_8_planners()
+    assert len({entry["key"] for entry in entries}) == 14
+    assert {entry["key"] for entry in entries} == {
+        entry["key"] for entry in release_campaign_planners()
+    }
+    resolved = {
+        entry["key"]: resolve_release_algo_config(
+            entry["algo"], entry.get("algo_config"), "physical_geometry_audit"
+        )
+        for entry in entries
+    }
+    return entries, resolved
+
+
+def _assert_prediction_and_social_force_configs(
+    entries: list[dict], resolved: dict[str, tuple[str, dict[str, Any]]]
+) -> None:
+    """Pin the predictor and SocialForce versioned geometry selectors and physical limits."""
+    prediction = next(entry for entry in entries if entry["key"] == "prediction_planner")
+    assert prediction["algo_config"] == "configs/algos/prediction_planner_release_v0_0_8.yaml"
+    algo, predictor = resolved["prediction_planner"]
+    assert algo == "prediction_planner"
+    assert predictor["predictive_robot_radius"] == pytest.approx(DRIVE.radius)
+    assert predictor["predictive_pedestrian_radius"] == pytest.approx(SIM.ped_radius)
+    assert predictor["predictive_clearance_model"] == "surface_v2"
+    assert predictor["predictive_rollout_dt"] == pytest.approx(SIM.time_per_step_in_secs)
+    assert predictor["max_linear_speed"] <= DRIVE.max_linear_speed
+    assert predictor["max_angular_speed"] <= DRIVE.max_angular_speed
+
+    social_force = resolved["social_force"][1]
+    assert social_force["social_force_planner_version"] == "resolution_independent_v2"
+    assert social_force["social_force_kernel_version"] == "wrapped_v2"
+    assert social_force["social_force_ped_version"] == "surface_v3"
+    assert social_force["social_force_ped_v3_strength"] == pytest.approx(6.0)
+    assert social_force["social_force_ped_v3_length"] == pytest.approx(0.5)
+    assert social_force["social_force_ped_v3_default_ped_radius"] == pytest.approx(SIM.ped_radius)
+    assert social_force["max_linear_speed"] == pytest.approx(DRIVE.max_linear_speed)
+    assert social_force["max_angular_speed"] == pytest.approx(DRIVE.max_angular_speed)
+
+
+def _assert_reference_and_learned_arm_configs(
+    resolved: dict[str, tuple[str, dict[str, Any]]],
+) -> None:
+    """Check sampling, ORCA, SACADRL, and checkpoint action bounds."""
+    sampling = resolved["socnav_sampling"][1]
+    assert sampling["socnav_sampling_version"] == "bounded_v2"
+    assert sampling["sampling_repulsion_weight"] == 0.0
+    assert sampling["sampling_footprint_margin"] == 0.0
+    assert sampling["sampling_braking_envelope"] is False
+
+    for arm in ("orca", "sacadrl"):
+        socnav = resolved[arm][1]
+        assert socnav["max_linear_speed"] == pytest.approx(DRIVE.max_linear_speed)
+        assert socnav["max_angular_speed"] == pytest.approx(DRIVE.max_angular_speed)
+
+    ppo = resolved["ppo"][1]
+    assert ppo["v_max"] == pytest.approx(DRIVE.max_linear_speed)
+    assert ppo["omega_max"] == pytest.approx(DRIVE.max_angular_speed)
+    # This feature cadence is part of the checkpoint input contract; it is
+    # separate from the 0.1 s environment action step.
+    assert ppo["predictive_foresight_rollout_dt"] == pytest.approx(0.2)
+
+
+def _assert_guard_mppi_and_dwa_configs(resolved: dict[str, tuple[str, dict[str, Any]]]) -> None:
+    """Check explicit surface geometry and environment cadence on safety rollouts."""
+    guarded = resolved["guarded_ppo"][1]
+    assert guarded["guard_clearance_model"] == "surface_v2"
+    assert guarded["guard_robot_radius_m"] == pytest.approx(DRIVE.radius)
+    assert guarded["guard_pedestrian_radius_m"] == pytest.approx(SIM.ped_radius)
+    assert guarded["guard_rollout_dt"] == pytest.approx(SIM.time_per_step_in_secs)
+
+    mppi = resolved["predictive_mppi"][1]
+    assert mppi["clearance_model"] == "surface_v2"
+    assert mppi["predictive_clearance_model"] == "surface_v2"
+    assert mppi["predictive_robot_radius"] == pytest.approx(DRIVE.radius)
+    assert mppi["predictive_pedestrian_radius"] == pytest.approx(SIM.ped_radius)
+    assert mppi["max_angular_speed"] == pytest.approx(DRIVE.max_angular_speed)
+    assert mppi["rollout_dt"] == pytest.approx(SIM.time_per_step_in_secs)
+
+    dwa = resolved["risk_dwa"][1]
+    assert dwa["clearance_model"] == "surface_v2"
+    assert dwa["robot_radius_m"] == pytest.approx(DRIVE.radius)
+    assert dwa["pedestrian_radius_m"] == pytest.approx(SIM.ped_radius)
+    assert dwa["max_angular_speed"] == pytest.approx(DRIVE.max_angular_speed)
+    assert dwa["rollout_dt"] == pytest.approx(SIM.time_per_step_in_secs)
+
+
+def _assert_hybrid_configs_use_drive_limits(
+    resolved: dict[str, tuple[str, dict[str, Any]]],
+) -> None:
+    """Resolve all four historical hybrid arm configs and compare their drive envelope."""
+    keys = (
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+    )
+    for key in keys:
+        hybrid = resolved[key][1]
+        assert hybrid["max_linear_speed"] == pytest.approx(DRIVE.max_linear_speed)
+        assert hybrid["max_angular_speed"] == pytest.approx(DRIVE.max_angular_speed)
+        assert hybrid["max_linear_accel"] == pytest.approx(DRIVE.max_linear_accel)
+        assert hybrid["max_linear_decel"] == pytest.approx(DRIVE.max_linear_decel)
+        assert hybrid["max_angular_accel"] == pytest.approx(DRIVE.max_angular_accel)
+        assert hybrid["control_period"] == pytest.approx(SIM.time_per_step_in_secs)
+        assert hybrid["rollout_dt"] == pytest.approx(SIM.time_per_step_in_secs)
+        assert hybrid["robot_radius_default"] == pytest.approx(DRIVE.radius)
+        assert hybrid["pedestrian_radius_default"] == pytest.approx(SIM.ped_radius)
+
+
+def test_0_0_8_candidate_resolves_versioned_physical_configs_for_all_arms() -> None:
+    """The diagnostic candidate keeps the release roster and binds physical limits."""
+    candidate_campaign = _load_yaml(
+        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml"
+    )
+    release_campaign = _load_yaml(
+        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml"
+    )
+    _assert_0_0_8_campaign_pair(candidate_campaign, release_campaign)
+    entries, resolved = _resolved_0_0_8_candidate_configs()
+    _assert_prediction_and_social_force_configs(entries, resolved)
+    _assert_reference_and_learned_arm_configs(resolved)
+    _assert_guard_mppi_and_dwa_configs(resolved)
+    _assert_hybrid_configs_use_drive_limits(resolved)
+
+
+def test_0_0_8_candidate_resolves_physical_geometry_for_all_scenarios() -> None:
+    """Candidate preserves accepted rows apart from declared 0.0.8 input corrections."""
+    candidate = _load_yaml(
+        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml"
+    )
+    assert candidate["scenario_matrix"] == (
+        "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_0_0_8_physical_geometry.yaml"
+    )
+    assert candidate["dt"] == pytest.approx(SIM.time_per_step_in_secs)
+
+    accepted_scenario_path = ROOT / (
+        "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml"
+    )
+    assert hashlib.sha256(accepted_scenario_path.read_bytes()).hexdigest() == (
+        "03fc83302f707dd1b27c0fa81c4e45e36e8354a4413171d09365926f62bb5c2c"
+    )
+    accepted_scenarios = load_scenario_matrix(accepted_scenario_path)
+    scenarios = load_scenario_matrix(ROOT / candidate["scenario_matrix"])
+    assert len(accepted_scenarios) == len(scenarios) == 48
+
+    def strip_declared_0_0_8_deltas(scenario: dict[str, Any]) -> dict[str, Any]:
+        normalized = copy.deepcopy(scenario)
+        normalized["robot_config"].pop("radius", None)
+        normalized["simulation_config"].pop("ped_radius", None)
+        normalized["simulation_config"].pop("social_force_kernel_version", None)
+        return normalized
+
+    scenario_path = ROOT / candidate["scenario_matrix"]
+    for accepted, scenario in zip(accepted_scenarios, scenarios, strict=True):
+        assert strip_declared_0_0_8_deltas(scenario) == strip_declared_0_0_8_deltas(accepted)
+        assert scenario["robot_config"]["radius"] == pytest.approx(DRIVE.radius)
+        assert scenario["simulation_config"]["ped_radius"] == pytest.approx(SIM.ped_radius)
+        assert scenario["simulation_config"]["social_force_kernel_version"] == "wrapped_v2"
+        assert _scenario_robot_radius_m(scenario) == pytest.approx(DRIVE.radius)
+        assert _scenario_ped_radius_m(scenario) == pytest.approx(SIM.ped_radius)
+
+        # Check every actual map-runner environment config, without reset or step.
+        env_config = build_env_config(scenario, scenario_path=scenario_path)
+        assert env_config.robot_config.radius == pytest.approx(DRIVE.radius)
+        assert env_config.sim_config.ped_radius == pytest.approx(SIM.ped_radius)
 
 
 def test_representative_planner_physical_field_inventory_and_ranges() -> None:

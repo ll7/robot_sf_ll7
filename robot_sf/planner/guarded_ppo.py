@@ -12,6 +12,14 @@ from typing import Any, Protocol
 import numpy as np
 
 from robot_sf.benchmark.uncertainty_safety import compute_intrusion_metrics
+from robot_sf.planner.clearance_geometry import (
+    CENTER_CLEARANCE_V1,
+    occupied_cell_clearance,
+    pedestrian_clearance,
+    time_to_circle_contact,
+    validate_clearance_model,
+    validate_surface_clearance_radii,
+)
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, _wrap_angle, build_risk_dwa_config
 from robot_sf.planner.safety_shield import ShieldDecision
 from robot_sf.planner.socnav import (
@@ -19,6 +27,7 @@ from robot_sf.planner.socnav import (
     ORCAPlannerAdapter,
     SocNavPlannerConfig,
 )
+from robot_sf.planner.socnav_base import _SOCNAV_CONFIG_INIT_KEYS
 
 _DEFAULT_GUARD_ROLLOUT_STEPS = 6
 
@@ -74,11 +83,20 @@ class GuardedPPOConfig:
     uncertainty_min_ttc_threshold_s: float | None = None
     uncertainty_fallback_mode: str = "stop"
     uncertainty_slow_down_speed_m_s: float = 0.2
+    clearance_model: str = CENTER_CLEARANCE_V1
+    robot_radius_m: float = 0.0
+    pedestrian_radius_m: float = 0.0
 
     def __post_init__(self) -> None:
         """Validate guard parameters fail-closed at construction time."""
         if self.uncertainty_fallback_mode not in {"stop", "slow_down", "fallback"}:
             raise ValueError("uncertainty_fallback_mode must be stop, slow_down, or fallback")
+        validate_clearance_model(self.clearance_model)
+        validate_surface_clearance_radii(
+            self.clearance_model,
+            robot_radius=self.robot_radius_m,
+            pedestrian_radius=self.pedestrian_radius_m,
+        )
         self._validate_finiteness()
         self._validate_positive()
         self._validate_non_negative()
@@ -106,6 +124,8 @@ class GuardedPPOConfig:
             "uncertainty_buffer_intrusion_threshold",
             "uncertainty_collision_probability_threshold",
             "uncertainty_slow_down_speed_m_s",
+            "robot_radius_m",
+            "pedestrian_radius_m",
         ):
             if not np.isfinite(float(getattr(self, name))):
                 raise ValueError(f"{name} must be finite")
@@ -139,6 +159,8 @@ class GuardedPPOConfig:
             "prior_residual_max_angular_delta",
             "uncertainty_conformal_radius_m",
             "uncertainty_slow_down_speed_m_s",
+            "robot_radius_m",
+            "pedestrian_radius_m",
         ):
             if float(getattr(self, name)) < 0.0:
                 raise ValueError(f"{name} must be non-negative")
@@ -390,11 +412,15 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
 
         rc = self._world_to_grid(point, meta, grid_shape=(grid.shape[1], grid.shape[2]))
         if rc is None:
-            return 0.0
+            return (
+                -float(self.config.robot_radius_m)
+                if self.config.clearance_model == "surface_v2"
+                else 0.0
+            )
         row, col = rc
         channel_grid = np.asarray(grid[channel], dtype=float)
         threshold = float(self.config.obstacle_threshold)
-        if channel_grid[row, col] >= threshold:
+        if channel_grid[row, col] >= threshold and self.config.clearance_model != "surface_v2":
             return 0.0
 
         radius = max(int(self.config.obstacle_search_cells), 1)
@@ -409,9 +435,14 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
 
         dr = obs_idx[:, 0] + r0 - row
         dc = obs_idx[:, 1] + c0 - col
-        cell_dist = np.sqrt(dr.astype(float) ** 2 + dc.astype(float) ** 2)
         resolution = float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0])
-        return float(np.min(cell_dist) * max(resolution, 1e-6))
+        return occupied_cell_clearance(
+            dr,
+            dc,
+            resolution=max(resolution, 1e-6),
+            model=self.config.clearance_model,
+            robot_radius=self.config.robot_radius_m,
+        )
 
     def _evaluate_command(
         self,
@@ -454,6 +485,15 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             if ped_pos.size > 0:
                 ped_t = ped_pos + ped_vel * t
                 ped_dist = np.linalg.norm(ped_t - x[None, :], axis=1)
+                ped_dist = np.asarray(
+                    pedestrian_clearance(
+                        ped_dist,
+                        model=self.config.clearance_model,
+                        robot_radius=self.config.robot_radius_m,
+                        pedestrian_radius=self.config.pedestrian_radius_m,
+                    ),
+                    dtype=float,
+                )
                 if ped_dist.size > 0:
                     min_ped_clear = min(min_ped_clear, float(np.min(ped_dist)))
                     if step == 0:
@@ -471,10 +511,34 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                     rel_speed_sq = np.sum(rel_vel * rel_vel, axis=1)
                     valid = rel_speed_sq > 1e-6
                     if np.any(valid):
-                        ttc = -np.sum(rel_pos[valid] * rel_vel[valid], axis=1) / rel_speed_sq[valid]
-                        ttc = ttc[ttc > 0.0]
-                        if ttc.size > 0:
-                            min_ttc = min(min_ttc, float(np.min(ttc)))
+                        if self.config.clearance_model == "surface_v2":
+                            contact_times = [
+                                time_to_circle_contact(
+                                    position,
+                                    velocity,
+                                    combined_radius=(
+                                        float(self.config.robot_radius_m)
+                                        + float(self.config.pedestrian_radius_m)
+                                    ),
+                                )
+                                for position, velocity in zip(
+                                    rel_pos[valid], rel_vel[valid], strict=True
+                                )
+                            ]
+                            # Contact time is relative to this rollout sample;
+                            # report it on the episode's absolute rollout clock.
+                            min_ttc = min(
+                                min_ttc,
+                                t + min(contact_times, default=float("inf")),
+                            )
+                        else:
+                            ttc = (
+                                -np.sum(rel_pos[valid] * rel_vel[valid], axis=1)
+                                / rel_speed_sq[valid]
+                            )
+                            ttc = ttc[ttc > 0.0]
+                            if ttc.size > 0:
+                                min_ttc = min(min_ttc, float(np.min(ttc)))
             min_obs_clear = min(
                 min_obs_clear,
                 self._min_obstacle_clearance(x, observation=observation, grid_payload=grid_payload),
@@ -1144,6 +1208,9 @@ def build_guarded_ppo_config(cfg: dict[str, Any] | None) -> GuardedPPOConfig:
         else float(cfg.get("uncertainty_min_ttc_threshold_s")),
         uncertainty_fallback_mode=str(cfg.get("uncertainty_fallback_mode", "stop")),
         uncertainty_slow_down_speed_m_s=float(cfg.get("uncertainty_slow_down_speed_m_s", 0.2)),
+        clearance_model=str(cfg.get("guard_clearance_model", CENTER_CLEARANCE_V1)),
+        robot_radius_m=float(cfg.get("guard_robot_radius_m", 0.0)),
+        pedestrian_radius_m=float(cfg.get("guard_pedestrian_radius_m", 0.0)),
     )
 
 
@@ -1155,9 +1222,7 @@ def _build_socnav_orca_config(cfg: dict[str, Any] | None) -> SocNavPlannerConfig
     """
     if not isinstance(cfg, dict):
         return SocNavPlannerConfig()
-    allowed = {field.name for field in fields(SocNavPlannerConfig)} | {
-        "social_force_kernel_version"
-    }
+    allowed = {field.name for field in fields(SocNavPlannerConfig)} | _SOCNAV_CONFIG_INIT_KEYS
     return SocNavPlannerConfig(**{key: value for key, value in cfg.items() if key in allowed})
 
 

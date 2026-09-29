@@ -35,6 +35,7 @@ from robot_sf.planner.planner_selector_v2_diagnostic import (
     build_planner_selector_v2_diagnostic_config,
 )
 from robot_sf.planner.socnav import ORCAPlannerAdapter, SocNavPlannerConfig
+from robot_sf.planner.socnav_base import _SOCNAV_CONFIG_INIT_KEYS
 
 
 def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
@@ -236,7 +237,7 @@ def _build_socnav_config(cfg: dict[str, Any]) -> SocNavPlannerConfig:
     """
     if not isinstance(cfg, dict):
         return SocNavPlannerConfig()
-    allowed = {f.name for f in fields(SocNavPlannerConfig)} | {"social_force_kernel_version"}
+    allowed = {f.name for f in fields(SocNavPlannerConfig)} | _SOCNAV_CONFIG_INIT_KEYS
     filtered = {key: value for key, value in cfg.items() if key in allowed}
     return SocNavPlannerConfig(**filtered)
 

@@ -48,7 +48,7 @@ environment, uv cache, Python tool cache, and job temporary files. `UV_CACHE_DIR
 source or host bind mount, so jobs never share a workspace. The container uses
 UID/GID 1001, no Linux capabilities, no privilege escalation, no Docker socket,
 and limits of 4 CPUs, 8 GiB RAM, and 512 processes. The runner executes at
-`nice 10`. Pytest uses at most four workers; OpenBLAS and OpenMP use one
+`nice 10`. Pytest uses at most two workers; OpenBLAS and OpenMP use one
 thread per worker so they fit under the process limit. Its ephemeral
 registration handles one job; `docker run --rm`
 destroys the container and its anonymous volume, and the supervisor creates

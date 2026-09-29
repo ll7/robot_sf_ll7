@@ -189,11 +189,15 @@ def test_container_setup_keeps_ephemeral_and_no_host_mounts() -> None:
     assert "src=" not in script
     assert "source=" not in script
     assert "/var/run/docker.sock" not in script
+    # actions/setup-python's Linux executable embeds /opt/hostedtoolcache in
+    # RUNPATH; keep it resolvable when a test launches Python with a clean env.
+    assert "ln -s /home/runner/_tool /opt/hostedtoolcache" in script
     for environment in (
         "RUNNER_TEMP=/home/runner/_work/_temp",
         "RUNNER_TOOL_CACHE=/home/runner/_tool",
         "UV_CACHE_DIR=/home/runner/_work/_uv_cache",
-        "TMPDIR=/tmp",
+        "TMPDIR=/home/runner/_work/_tmp",
+        "PIP_CACHE_DIR=/home/runner/_work/_pip_cache",
         "PYTEST_NUM_WORKERS=2",
         "OPENBLAS_NUM_THREADS=1",
         "OMP_NUM_THREADS=1",
@@ -201,8 +205,8 @@ def test_container_setup_keeps_ephemeral_and_no_host_mounts() -> None:
         assert environment in script
 
 
-def test_runner_temporary_paths_resolve_to_tmpfs() -> None:
-    """Checkout's RUNNER_TEMP and other scratch paths must stay off the volume."""
+def test_runner_temporary_paths_resolve_to_intended_mounts() -> None:
+    """Credential scratch stays in memory; build scratch has volume capacity."""
     script = SETUP_SCRIPT.read_text(encoding="utf-8")
     assert "--work _work" in script
     docker_run = script.split("if ! docker run", 1)[1].split('"$image" "$name"', 1)[0]
@@ -225,10 +229,11 @@ def test_runner_temporary_paths_resolve_to_tmpfs() -> None:
         return max(candidates)[1]
 
     assert environment["RUNNER_TEMP"] == "/home/runner/_work/_temp"
-    for key in ("RUNNER_TEMP", "TMPDIR", "RUNNER_TOOL_CACHE"):
+    for key in ("RUNNER_TEMP", "RUNNER_TOOL_CACHE"):
         assert filesystem(environment[key]) == "tmpfs", key
     assert filesystem("/home/runner/_work") == "volume"
-    assert filesystem(environment["UV_CACHE_DIR"]) == "volume"
+    for key in ("TMPDIR", "PIP_CACHE_DIR", "UV_CACHE_DIR"):
+        assert filesystem(environment[key]) == "volume", key
 
 
 def test_container_image_preloads_routed_job_tools() -> None:
@@ -237,7 +242,12 @@ def test_container_image_preloads_routed_job_tools() -> None:
     apt_packages = script.split("apt-get install -y --no-install-recommends", 1)[1].split(
         "&& rm -rf /var/lib/apt/lists/*", 1
     )[0]
-    assert {"build-essential", "cmake", "ffmpeg", "gh"} <= set(apt_packages.split())
+    assert {"build-essential", "cmake", "ffmpeg", "gh", "git-lfs"} <= set(apt_packages.split())
+    assert "https://nodejs.org/dist/v22.23.2/node-v22.23.2-linux-x64.tar.gz" in script
+    assert "b294a556e639d64338823920e5866c21c02741742d2e1529ee1a225c1ec9252a" in script
+    assert "sha256sum -c -" in script
+    for tool in ("node", "npm", "npx"):
+        assert f"ln -s /opt/node/bin/{tool} /usr/local/bin/{tool}" in script
 
 
 def test_job_started_hook_path_has_runner_accepted_extension() -> None:

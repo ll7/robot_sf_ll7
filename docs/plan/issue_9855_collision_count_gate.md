@@ -40,20 +40,27 @@ admission even if a legacy diagnostic report has `gate.blocked=false`.
 `configs/benchmarks/release_row_anomalies_0_0_8.template.json` is deliberately
 **not an admission config**. It has no pedestrian-aware roster and declares
 `collision_roster_status=unfrozen_template`, which always blocks the gate.
-After #9751 freezes the 14-arm v4 roster, create a new versioned config with
+The strict gate reads the 14 arm identities from the committed #9751 campaign
+template at
+`configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml`.
+The four v4 slots still have unfrozen parameter placeholders, so this roster
+identity does not admit a candidate run. After #9748 and #9751 freeze those
+parameters, create a new versioned config with
 `collision_roster_status=frozen`, `collision_expected_arm_count=14`, and the
 exact baseline plus pedestrian-aware planner IDs. Strict mode compares that
-configured set and arm count with the verified bundle's `source.planner_ids`;
-any mismatch blocks. A stale v2/v3 hybrid roster therefore cannot silently
-omit the v4 arms from the cohort check.
+configured set and arm count with both the verified bundle's
+`source.planner_ids` and the committed #9751 template; any mismatch blocks. A
+stale v2/v3 hybrid roster therefore cannot silently omit the v4 arms from the
+cohort check even if the bundle and gate config agree with each other.
 
 ## Proof and custody boundary
 
 The focused regression reproduces the VV-5 two-row control and doubled-total
 mutation and checks missing components, typed-ledger reconciliation, and the
 event-count distinction. This code repair is not an admitted 0.0.8 campaign.
-Before release acceptance, run the frozen-config gate on every row of the pinned 0.0.8
-candidate matrix, account for blocked or missing rows, and preserve its exact
-source/config hashes and receipt. Any 0.0.7 retro-check is diagnostic only;
-historical rows and release assets remain unchanged. #9855 stays open until that
-candidate-wide check and independent exact-head review are complete.
+The candidate-matrix run is a later release gate on #9668 after the v4 freeze:
+run the frozen-config gate on every row of the pinned 0.0.8 candidate matrix,
+account for blocked or missing rows, and preserve its exact source/config hashes
+and receipt. Any 0.0.7 retro-check is diagnostic only; historical rows and
+release assets remain unchanged. This PR does not complete #9855; keep it open
+until that candidate-wide check and independent exact-head review are complete.

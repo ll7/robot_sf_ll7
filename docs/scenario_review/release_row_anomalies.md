@@ -285,9 +285,10 @@ evidence.
 The checked-in
 `configs/benchmarks/release_row_anomalies_0_0_8.template.json` is an
 **unfrozen, non-admission template**. It always blocks with
-`collision_roster_unfrozen_template`; its pedestrian-aware roster is empty until
-#9751 freezes the 14-arm v4 names. A stale historical hybrid roster must never
-be copied into the candidate. After that freeze, create a versioned config with
+`collision_roster_unfrozen_template`; its pedestrian-aware roster is empty.
+The strict gate reads the 14-arm v4 identities from the committed #9751 campaign
+template. A stale historical hybrid roster cannot pass even if the bundle and
+gate config agree. After the v4 parameters freeze, create a versioned config with
 `collision_roster_status=frozen`, `collision_expected_arm_count=14`, and the
 exact baseline/aware IDs, then check the pinned bundle:
 
@@ -304,7 +305,8 @@ python -m robot_sf.analysis_workbench.release_row_anomalies \
 The candidate manifest and receipt must pin the config hash and show
 `collision_metric_contract=release_0_0_8` and
 `collision_roster_status=frozen`. That mode checks the configured 14-arm roster
-against the verified bundle source and checks every admitted row's
+against both the verified bundle source and the committed #9751 template, then
+checks every admitted row's
 five collision-count fields and blocks missing or inconsistent values. It also
 checks equivalent fields in a typed event ledger. Exact contact-event records
 and sampled collision counts use different collection semantics, so the gate

@@ -8,6 +8,9 @@ from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import pytest
+
+from robot_sf.analysis_workbench import release_row_anomalies
 from robot_sf.analysis_workbench.audit_contracts import (
     Signal,
     canonical_json,
@@ -51,6 +54,15 @@ CANDIDATE_CONFIG = {
     "collision_roster_status": "frozen",
     "collision_expected_arm_count": 2,
 }
+
+
+@pytest.fixture
+def synthetic_collision_roster(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep arithmetic fixtures independent of the 14-arm campaign roster."""
+
+    monkeypatch.setattr(
+        release_row_anomalies, "_release_0_0_8_roster", lambda: {"goal", "social_force"}
+    )
 
 
 def _row(  # noqa: PLR0913
@@ -136,7 +148,9 @@ def test_legacy_default_report_serialization_is_byte_identical() -> None:
     }
 
 
-def test_collision_metric_gate_blocks_vv5_double_total_and_missing_components() -> None:
+def test_collision_metric_gate_blocks_vv5_double_total_and_missing_components(
+    synthetic_collision_roster: None,
+) -> None:
     """The exact two-row VV-5 mutant fails while its clean control passes."""
 
     template = json.loads(
@@ -207,7 +221,43 @@ def test_collision_metric_gate_blocks_vv5_double_total_and_missing_components() 
     assert "collision_roster_manifest_mismatch" in wrong_roster["gate"]["reasons"]
 
 
-def test_collision_metric_gate_preserves_large_integer_count_arithmetic() -> None:
+def test_strict_gate_rejects_self_declared_historical_hybrid_roster() -> None:
+    """A matching bundle and config cannot override the committed #9751 roster."""
+
+    frozen = release_row_anomalies._release_0_0_8_roster()
+    assert frozen is not None
+    assert len(frozen) == 14
+    assert "hybrid_rule_v4_fast_progress_static_escape" in frozen
+    historical = {
+        "goal",
+        *release_row_anomalies.DEFAULT_CONFIG["pedestrian_aware_planners"],
+    }
+    assert len(historical) == 14
+    assert "hybrid_rule_v3_fast_progress_static_escape" in historical - frozen
+    assert "scenario_adaptive_hybrid_orca_v2_collision_guard" in historical - frozen
+
+    def report_for(roster: set[str]) -> dict[str, Any]:
+        config = {
+            **CANDIDATE_CONFIG,
+            "pedestrian_aware_planners": sorted(roster - {"goal"}),
+            "collision_expected_arm_count": len(roster),
+        }
+        rows = [
+            _row("roster-fixture", 111, planner, success=True, timeout=False)
+            for planner in sorted(roster)
+        ]
+        return analyze_release_rows(rows, config=config, source=_source(*sorted(roster)))
+
+    assert report_for(frozen)["gate"]["blocked"] is False
+    stale = report_for(historical)
+    assert stale["gate"]["blocked"] is True
+    assert "collision_roster_source_mismatch" in stale["gate"]["reasons"]
+    assert "collision_roster_manifest_mismatch" not in stale["gate"]["reasons"]
+
+
+def test_collision_metric_gate_preserves_large_integer_count_arithmetic(
+    synthetic_collision_roster: None,
+) -> None:
     """Adjacent counts beyond float precision must never compare equal."""
 
     count = 2**53
@@ -285,8 +335,12 @@ def test_collision_metric_gate_preserves_large_integer_count_arithmetic() -> Non
         assert expected_problem in findings[0]["measured"]["problems"]
 
 
-def test_collision_metric_gate_reconciles_typed_ledger_without_counting_events() -> None:
+def test_collision_metric_gate_reconciles_typed_ledger_without_counting_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Exact events and sampled counts retain distinct meanings."""
+
+    monkeypatch.setattr(release_row_anomalies, "_release_0_0_8_roster", lambda: {"goal"})
 
     row = _row("typed-ledger", 111, "goal", steps=100, collision=True, timeout=False)
     row["event_ledger"] = {

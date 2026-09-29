@@ -19,6 +19,8 @@ from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from robot_sf.analysis_workbench.audit_contracts import (
     AuditContractError,
     Signal,
@@ -95,10 +97,40 @@ MAX_EXACT_FLOAT_COLLISION_COUNT = 2**53 - 1
 COLLISION_CONFIG_KEYS = frozenset(
     {"collision_metric_contract", "collision_roster_status", "collision_expected_arm_count"}
 )
+RELEASE_0_0_8_ROSTER_SOURCE = (
+    Path(__file__).resolve().parents[2]
+    / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+)
 
 
 class ReleaseRowError(ValueError):
     """Malformed release rows, configuration, or accounting inputs."""
+
+
+def _release_0_0_8_roster() -> set[str] | None:
+    """Read the #9751 arm identities from the committed campaign template.
+
+    Returns:
+        The 14-arm roster, or None when the source is unavailable or invalid.
+    """
+
+    try:
+        campaign = yaml.safe_load(RELEASE_0_0_8_ROSTER_SOURCE.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return None
+    if not isinstance(campaign, dict) or not isinstance(campaign.get("planners"), list):
+        return None
+    planners = campaign["planners"]
+    if len(planners) != 14 or any(
+        not isinstance(planner, dict)
+        or planner.get("enabled", True) is not True
+        or not isinstance(planner.get("key"), str)
+        or not planner["key"].strip()
+        for planner in planners
+    ):
+        return None
+    roster = {planner["key"] for planner in planners}
+    return roster if len(roster) == 14 else None
 
 
 def _finite(value: object) -> float | None:
@@ -784,6 +816,16 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
             expected_planners
         ) != {settings["baseline_planner"], *settings["pedestrian_aware_planners"]}:
             collision_roster_reasons.append("collision_roster_manifest_mismatch")
+        frozen_roster = _release_0_0_8_roster()
+        if frozen_roster is None:
+            collision_roster_reasons.append("collision_roster_source_unavailable")
+        elif (
+            settings.get("collision_expected_arm_count") != len(frozen_roster)
+            or set(expected_planners) != frozen_roster
+            or {settings["baseline_planner"], *settings["pedestrian_aware_planners"]}
+            != frozen_roster
+        ):
+            collision_roster_reasons.append("collision_roster_source_mismatch")
     source_info.setdefault("row_count", len(records))
     annotation_entries = _annotation_entries(annotations)
     preflight_map = _preflight_cells(preflight)

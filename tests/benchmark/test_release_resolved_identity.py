@@ -139,14 +139,23 @@ def test_checked_in_future_benchmark_templates_pin_contract_without_historical_i
     assert scenario_matrix.name == "classic_interactions_francis2023_release_0_0_8_v1.yaml"
     scenarios = load_scenarios(scenario_matrix)
     assert len(scenarios) == 48
-    assert all("expected_outcome" not in row for row in scenarios)
+    assert sum("expected_outcome" in row for row in scenarios) == 1
     assert all(
         row["simulation_config"]["robot_goal_sampling_policy"] == "footprint_clearance_v1"
         and row["simulation_config"]["social_force_kernel_version"] == "wrapped_v2"
         for row in scenarios
     )
     by_name = {row["name"]: row for row in scenarios}
-    assert "feasible_3p60_v1.svg" in by_name["francis2023_narrow_doorway"]["map_file"]
+    doorway = by_name["francis2023_narrow_doorway"]
+    assert doorway["map_file"].endswith("francis2023_narrow_doorway.svg")
+    assert doorway["expected_outcome"] == "infeasible_safe_hold"
+    assert doorway["infeasibility_probe"]["classification"] == "infeasible_by_construction"
+    assert doorway["infeasibility_probe"]["expected_outcome"] == "timeout"
+    assert doorway["infeasibility_probe"]["safe_failure_metric"] == {
+        "numerator": "timeout_without_robot_attributable_contact",
+        "denominator": "all_420_probe_episodes",
+        "unresolved_rows": "fail_admission",
+    }
     assert "issue_9856_" in by_name["francis2023_entering_room"]["map_file"]
     assert "issue_9762_" in by_name["classic_station_platform_medium"]["map_file"]
     assert manifest["seed_policy"]["resolved_seeds"] == list(range(111, 141))
@@ -157,6 +166,25 @@ def test_checked_in_future_benchmark_templates_pin_contract_without_historical_i
     assert loaded_template == manifest
     assert metadata_path == ZENODO_METADATA_TEMPLATE
     assert metadata_bytes == ZENODO_METADATA_TEMPLATE.read_bytes()
+
+
+def test_three_width_doorway_slice_binds_full_roster_and_1260_rows() -> None:
+    manifest_path = (
+        REPO_ROOT / "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.yaml"
+    )
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    campaign_path = (manifest_path.parent / manifest["canonical_campaign_config"]).resolve()
+    campaign = yaml.safe_load(campaign_path.read_text(encoding="utf-8"))
+    matrix_path = (manifest_path.parent / manifest["scenario"]["matrix_path"]).resolve()
+    scenarios = load_scenarios(matrix_path)
+    assert manifest["campaign_config_sha256"] == _sha256(campaign_path)
+    assert manifest["scenario"]["matrix_sha256"] == _sha256(matrix_path)
+    assert campaign["scenario_matrix"] == matrix_path.relative_to(REPO_ROOT).as_posix()
+    assert [row["metadata"]["width_slice_m"] for row in scenarios] == [2.2, 2.8, 3.6]
+    assert len(campaign["planners"]) == len(manifest["planners"]["keys"]) == 14
+    assert manifest["seed_policy"]["resolved_seeds"] == list(range(111, 141))
+    assert manifest["width_slice_contract"]["expected_episode_rows"] == 1260
+    assert all(row["simulation_config"]["max_episode_steps"] == 400 for row in scenarios)
 
 
 def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:

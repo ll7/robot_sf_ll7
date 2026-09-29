@@ -24,6 +24,7 @@ from robot_sf.benchmark.release_protocol import (
 )
 from robot_sf.benchmark.release_tag_identity import derive_sha_tag
 from robot_sf.benchmark.zenodo_publisher import build_release_binding
+from robot_sf.training.scenario_loader import load_scenarios
 from scripts.tools import resolve_benchmark_release_identity as identity_cli
 from scripts.tools import run_benchmark_release
 
@@ -134,6 +135,20 @@ def test_checked_in_future_benchmark_templates_pin_contract_without_historical_i
     ).resolve()
     assert scenario_matrix.is_file()
     assert manifest["scenario"]["matrix_sha256"] == _sha256(scenario_matrix)
+    assert campaign["scenario_matrix"] == scenario_matrix.relative_to(REPO_ROOT).as_posix()
+    assert scenario_matrix.name == "classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    scenarios = load_scenarios(scenario_matrix)
+    assert len(scenarios) == 48
+    assert all("expected_outcome" not in row for row in scenarios)
+    assert all(
+        row["simulation_config"]["robot_goal_sampling_policy"] == "footprint_clearance_v1"
+        and row["simulation_config"]["social_force_kernel_version"] == "wrapped_v2"
+        for row in scenarios
+    )
+    by_name = {row["name"]: row for row in scenarios}
+    assert "feasible_3p60_v1.svg" in by_name["francis2023_narrow_doorway"]["map_file"]
+    assert "issue_9856_" in by_name["francis2023_entering_room"]["map_file"]
+    assert "issue_9762_" in by_name["classic_station_platform_medium"]["map_file"]
     assert manifest["seed_policy"]["resolved_seeds"] == list(range(111, 141))
     loaded_template, metadata_path, metadata_bytes = release_protocol._identity_template_payload(
         PUBLIC_RELEASE_TEMPLATE,

@@ -1,0 +1,7 @@
+# Development runtime-smoke subset of the 0.0.8 wrapped-kernel matrix.
+includes:
+  - francis2023_blind_corner.yaml
+scenario_overrides:
+  simulation_config:
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2

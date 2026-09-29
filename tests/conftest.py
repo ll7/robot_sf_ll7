@@ -762,6 +762,9 @@ _FAST_FILES = {
     "test_event_ledger.py",
     "test_spawn_overlap_rate_paths_issue_9725.py",
     "test_spawn_clearance_issue_9725.py",
+    # Goal-clearance runtime contracts are deterministic and provide exact-head
+    # coverage for the opt-in sampler in pull-request fast shards (issue #9859).
+    "test_goal_clearance_issue_9859.py",
     "test_spawn_preflight_issue_9725.py",
     # Release-matrix preflight contracts use synthetic fixtures and monkeypatched
     # environments; keep changed preflight logic covered in PR fast shards.

@@ -50,11 +50,11 @@ def test_policy_names_are_versioned_and_unknown_values_fail_closed() -> None:
 
 def test_opt_in_replaces_only_unsafe_final_goal(t_intersection_map) -> None:
     """The recorded defect draw is rejected while spawn and route prefix stay identical."""
-    np.random.seed(2)
+    np.random.seed(1009)
     legacy = sample_route(t_intersection_map, 0, robot_radius=RADIUS)
     assert robot_obstacle_clearance(t_intersection_map, legacy[-1], RADIUS) < 0.1
 
-    np.random.seed(2)
+    np.random.seed(1009)
     corrected = sample_route(
         t_intersection_map,
         0,
@@ -71,9 +71,9 @@ def test_opt_in_replaces_only_unsafe_final_goal(t_intersection_map) -> None:
 
 def test_opt_in_preserves_already_safe_goal_draw(t_intersection_map) -> None:
     """A candidate valid under both policies stays bit-identical."""
-    np.random.seed(0)
+    np.random.seed(1001)
     legacy = sample_route(t_intersection_map, 0, robot_radius=RADIUS)
-    np.random.seed(0)
+    np.random.seed(1001)
     corrected = sample_route(
         t_intersection_map,
         0,
@@ -93,7 +93,7 @@ def test_opt_in_guards_planner_route_goal(t_intersection_map) -> None:
     map_with_planner = deepcopy(t_intersection_map)
     map_with_planner._use_planner = True
     map_with_planner._global_planner = StraightPlanner()
-    np.random.seed(2)
+    np.random.seed(1009)
     route = sample_route(
         map_with_planner,
         0,
@@ -107,7 +107,7 @@ def test_opt_in_guards_planner_route_goal(t_intersection_map) -> None:
 
 def test_dummy_backend_propagates_opt_in_goal_policy(t_intersection_map) -> None:
     """The smoke backend uses the selected policy when a footprint radius is supplied."""
-    np.random.seed(2)
+    np.random.seed(1009)
     simulator = DummySimulator(
         map_def=t_intersection_map,
         robot_goal_sampling_policy=ROBOT_GOAL_SAMPLING_FOOTPRINT_CLEARANCE_V1,
@@ -136,7 +136,7 @@ def test_opt_in_requires_radius_and_rejects_goal_zone_without_safe_point(
         (1.4, 10.0),
         (1.4, 10.3),
     )
-    np.random.seed(2)
+    np.random.seed(1009)
     with pytest.raises(RuntimeError, match="No robot goal with wall clearance"):
         sample_route(
             map_without_safe_goal,
@@ -180,7 +180,7 @@ def test_map_runner_reset_uses_explicit_goal_sampling_policy() -> None:
     simulation_config = dict(scenario.get("simulation_config", {}))
     simulation_config["robot_goal_sampling_policy"] = ROBOT_GOAL_SAMPLING_FOOTPRINT_CLEARANCE_V1
     scenario["simulation_config"] = simulation_config
-    seed = 111
+    seed = 1001
     scenario = _scenario_with_episode_seed_defaults(scenario, seed=seed)
     env = make_robot_env(config=build_env_config(scenario, scenario_path=matrix), seed=seed)
     try:

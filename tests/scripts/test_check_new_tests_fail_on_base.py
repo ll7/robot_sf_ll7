@@ -86,6 +86,7 @@ def test_param_change_counts_as_changed() -> None:
     assert a["test_a"][0] != b["test_a"][0]
 
 
+# seed-holdout: synthetic-fixture begin
 def test_seed_guard_needs_benchmark_context() -> None:
     assert mod.has_seed_literals("def test_x():\n    run_episode(seed=120)\n")
     assert not mod.has_seed_literals("def test_x():\n    assert 120 == 120\n")
@@ -93,6 +94,7 @@ def test_seed_guard_needs_benchmark_context() -> None:
     assert mod.has_seed_literals("SEEDS = [1, 120]\ndef test_x():\n    benchmark(SEEDS)\n")
     assert mod.has_seed_literals("def test_x():\n    benchmark(range(111, 141))\n# seed\n")
     # a 111-140 literal unrelated to seeds does not trigger the guard
+    # seed-holdout: synthetic-fixture end
     assert not mod.has_seed_literals(
         "# episode seed docs\ndef test_x():\n    assert width == 120\n"
     )
@@ -135,10 +137,12 @@ def test_end_to_end_classification(repo: Path, tmp_path: Path) -> None:
         "    def test_param(self, n):\n        assert calc.value() == 2\n",
     )
     _write(
+        # seed-holdout: synthetic-fixture begin
         repo,
         "tests/test_seeds.py",
         "def test_bench():\n    run_episode(seed=120)  # benchmark episode\n",
     )
+    # seed-holdout: synthetic-fixture end
     _commit(repo, "feature")
 
     report = mod.check(repo, "base", "HEAD", timeout=300)

@@ -450,6 +450,68 @@ def parse_junit(
     return _merge_outcomes(results)
 
 
+def _submodule_changed(repo: Path, base: str, head: str, path: str = "fast-pysf") -> bool:
+    """Return whether the gitlink of ``path`` differs between base and head."""
+
+    def gitlink(ref: str) -> str:
+        out = _git(repo, "ls-tree", ref, "--", path, check=False).split()
+        return out[2] if out and out[0] == "160000" else ""
+
+    return gitlink(base) != gitlink(head)
+
+
+def _prepare_fast_pysf(repo: Path, wt: Path, base: str, head: str) -> str | None:
+    """Give the base worktree the base's fast-pysf; return an error reason on failure."""
+    fast_wt = wt / "fast-pysf"
+    if _submodule_changed(repo, base, head):
+        proc = subprocess.run(
+            ["git", "-C", str(wt), "submodule", "update", "--init", "fast-pysf"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0 or not fast_wt.is_dir() or not any(fast_wt.iterdir()):
+            return (
+                "fast-pysf submodule pointer changed and the base commit could not be "
+                f"checked out: {proc.stderr.strip()[:200]}"
+            )
+        return None
+    # unchanged pointer: the current checkout is the base's commit, reuse it
+    fast = repo / "fast-pysf"
+    if fast.is_dir() and any(fast.iterdir()) and fast_wt.is_dir() and not any(fast_wt.iterdir()):
+        shutil.rmtree(fast_wt)
+        fast_wt.symlink_to(fast, target_is_directory=True)
+    return None
+
+
+def _import_guard(
+    wt: Path, guard_packages: list[str] | None, info: list[str] | None = None
+) -> str | None:
+    """Verify guarded packages import from the base worktree, not an installed head copy."""
+    names = guard_packages if guard_packages is not None else ["robot_sf"]
+    root = wt.resolve()
+    for name in names:
+        if not (wt / name).exists():
+            continue
+        proc = subprocess.run(
+            [sys.executable, "-c", f"import {name}; print({name}.__file__)"],
+            cwd=wt,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        where = proc.stdout.strip().splitlines()[-1] if proc.stdout.strip() else ""
+        if proc.returncode != 0 or not where:
+            return (
+                f"import guard: cannot import {name} in base worktree: {proc.stderr.strip()[-200:]}"
+            )
+        if not Path(where).resolve().is_relative_to(root):
+            return f"import guard: {name} resolves to {where}, outside base worktree {root}"
+        if info is not None:
+            info.append(f"import guard ok: {name} -> {where}")
+    return None
+
+
 def run_on_base(
     repo: Path,
     base: str,
@@ -459,6 +521,7 @@ def run_on_base(
     *,
     pytest_args: list[str],
     timeout: int,
+    guard_packages: list[str] | None = None,
 ) -> list[str]:
     """Run selected records on a base worktree and set classifications. Return notes."""
     notes: list[str] = []
@@ -469,11 +532,7 @@ def run_on_base(
     wt = tmp / "base"
     try:
         _git(repo, "worktree", "add", "--detach", str(wt), base)
-        # submodule content is not checked out in the new worktree; reuse the current one
-        fast = repo / "fast-pysf"
-        if fast.is_dir() and any(fast.iterdir()) and not any((wt / "fast-pysf").iterdir()):
-            shutil.rmtree(wt / "fast-pysf")
-            (wt / "fast-pysf").symlink_to(fast, target_is_directory=True)
+        problem = _prepare_fast_pysf(repo, wt, base, head)
         for rel in overlay:
             content = subprocess.run(
                 ["git", "-C", str(repo), "show", f"{head}:{rel}"], capture_output=True, check=True
@@ -481,6 +540,12 @@ def run_on_base(
             dest = wt / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(content)
+        problem = problem or _import_guard(wt, guard_packages, notes)
+        if problem:
+            notes.append(problem)
+            for rec in runnable:
+                rec.classification, rec.detail = UNRELATED, problem
+            return notes
         packages = _repo_packages(wt)
         for path in sorted({r.path for r in runnable}):
             file_recs = [r for r in runnable if r.path == path]
@@ -530,6 +595,7 @@ def check(
     pytest_args: list[str] | None = None,
     timeout: int = 1800,
     allow_test_only: bool = False,
+    guard_packages: list[str] | None = None,
 ) -> Report:
     """Run the full check and return the report."""
     base_sha = resolve_base(repo, base, head)
@@ -560,6 +626,7 @@ def check(
             overlay,
             pytest_args=pytest_args or [],
             timeout=timeout,
+            guard_packages=guard_packages,
         )
     )
     return report
@@ -607,6 +674,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="also run when the diff touches no production files (default: skip)",
     )
+    ap.add_argument(
+        "--guard-package",
+        action="append",
+        default=None,
+        help="package that must import from the base worktree (default: robot_sf)",
+    )
     ap.add_argument("--strict", action="store_true", help="exit 1 when any test PASSES on base")
     ap.add_argument("--pytest-arg", action="append", default=[], help="extra pytest argument")
     args = ap.parse_args(argv)
@@ -619,6 +692,7 @@ def main(argv: list[str] | None = None) -> int:
         pytest_args=args.pytest_arg,
         timeout=args.timeout,
         allow_test_only=args.allow_test_only,
+        guard_packages=args.guard_package,
     )
     payload = {
         "base": report.base,

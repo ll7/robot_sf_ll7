@@ -197,3 +197,69 @@ def test_test_only_change_is_skipped_unless_allowed(repo: Path) -> None:
     assert [r.classification for r in report.tests] == [mod.SKIPPED_TEST_ONLY]
     forced = mod.check(repo, "base", "HEAD", timeout=300, allow_test_only=True)
     assert [r.classification for r in forced.tests] == [mod.PASSES]
+
+
+def _mini_pkg(repo: Path) -> None:
+    _write(repo, "calcpkg/__init__.py", "VALUE = 1\n")
+
+
+def test_import_guard_passes_for_worktree_package(repo: Path) -> None:
+    _mini_pkg(repo)
+    _commit(repo, "pkg")
+    _git(repo, "branch", "-f", "base")
+    _write(repo, "calcpkg/__init__.py", "VALUE = 2\n")
+    _write(
+        repo,
+        "tests/test_pkg.py",
+        "import calcpkg\n\n\ndef test_v():\n    assert calcpkg.VALUE == 2\n",
+    )
+    _commit(repo, "feature")
+    report = mod.check(repo, "base", "HEAD", timeout=300, guard_packages=["calcpkg"])
+    assert [r.classification for r in report.tests] == [mod.FAILS]
+
+
+def test_import_guard_aborts_when_stale_package_shadows_worktree(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mini_pkg(repo)
+    _commit(repo, "pkg")
+    _git(repo, "branch", "-f", "base")
+    _write(repo, "calcpkg/__init__.py", "VALUE = 2\n")
+    _write(
+        repo,
+        "tests/test_pkg.py",
+        "import calcpkg\n\n\ndef test_v():\n    assert calcpkg.VALUE == 2\n",
+    )
+    _commit(repo, "feature")
+    # a stale head copy earlier on sys.path (safe-path drops the cwd entry)
+    stale = tmp_path / "stale"
+    _write(stale, "calcpkg/__init__.py", "VALUE = 2\n")
+    monkeypatch.setenv("PYTHONPATH", str(stale))
+    monkeypatch.setenv("PYTHONSAFEPATH", "1")
+    report = mod.check(repo, "base", "HEAD", timeout=300, guard_packages=["calcpkg"])
+    (rec,) = report.tests
+    assert rec.classification == mod.UNRELATED
+    assert "import guard" in rec.detail and "outside base worktree" in rec.detail
+
+
+def _commit_index(repo: Path, msg: str) -> None:
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@example.org", "commit", "-q", "-m", msg)
+
+
+def test_submodule_pointer_change_is_reported_not_symlinked(repo: Path) -> None:
+    sha_a, sha_b = "a" * 40, "b" * 40
+    _git(repo, "update-index", "--add", "--cacheinfo", f"160000,{sha_a},fast-pysf")
+    _commit_index(repo, "gitlink a")
+    _git(repo, "branch", "-f", "base")
+    _git(repo, "update-index", "--cacheinfo", f"160000,{sha_b},fast-pysf")
+    _write(repo, "calc.py", "def value():\n    return 9\n")
+    _write(
+        repo, "tests/test_sub.py", "import calc\n\n\ndef test_v():\n    assert calc.value() == 9\n"
+    )
+    _git(repo, "add", "calc.py", "tests")
+    _commit_index(repo, "feature")
+    assert mod._submodule_changed(repo, _git(repo, "rev-parse", "base"), "HEAD")
+    report = mod.check(repo, "base", "HEAD", timeout=300, guard_packages=[])
+    (rec,) = report.tests
+    assert rec.classification == mod.UNRELATED
+    assert "fast-pysf submodule pointer changed" in rec.detail

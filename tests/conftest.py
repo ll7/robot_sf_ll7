@@ -760,6 +760,9 @@ _FAST_FILES = {
     "test_issue_9348_three_width_doorway.py",
     "test_issue_9533_guarded_ppo_trace.py",
     "test_event_ledger.py",
+    # DOI-free release candidate tests use deterministic fixture repositories;
+    # keep changed candidate contracts in pull-request fast shards (issue #9863).
+    "test_release_candidate.py",
     "test_spawn_overlap_rate_paths_issue_9725.py",
     "test_spawn_clearance_issue_9725.py",
     "test_spawn_preflight_issue_9725.py",

@@ -101,13 +101,15 @@ Each new file record also has a whole-file `file_sha256` and `allocation_status`
 allocation with no usable FIEMAP mapping is recorded as `allocation_unverified` on the source;
 a FIEMAP mapping that shows holes, unwritten extents, or incomplete coverage still fails. Source
 verification must explicitly use `--side source`; the default remains strict destination
-verification. Every nonempty destination file is checked for holes with FIEMAP, regardless of its
-reported block count. When FIEMAP is unavailable, destination verification walks
-`SEEK_DATA`/`SEEK_HOLE`; any detected hole or unavailable fallback fails. Its whole-file SHA-256
-must match the manifest. The `custody` command consumes the manifest plus source and destination
-verification JSON, then re-hashes and rechecks allocation on both live roots before writing a
-self-digested `chunk-custody.v1` receipt. It rejects state-backed verification receipts because
-cached digests are not a fresh byte readback. The receipt proves this copy check only; scheduler,
+verification. Every nonempty destination file requires a gapless FIEMAP allocation map, regardless
+of its reported block count. Without FIEMAP, destination verification fails with
+`allocation_unverifiable_destination`. `SEEK_DATA`/`SEEK_HOLE` may additionally detect a hole, but
+a walk that reports only data never proves allocation. Its whole-file SHA-256 must match the
+manifest. The `custody` command rejects symlinked root arguments before resolving them, consumes
+the manifest plus source and destination verification JSON, then re-hashes and rechecks allocation
+on both live roots before writing a self-digested `chunk-custody.v1` receipt. It rejects state-backed
+verification receipts because cached digests are not a fresh byte readback. The receipt proves this
+copy check only; scheduler,
 source revision, and preservation claims need their own bound evidence.
 
 ```bash

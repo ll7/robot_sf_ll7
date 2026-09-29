@@ -1,13 +1,17 @@
 """Tests for EnvSettings and SimulationSettings defaults, validation, and robot factories."""
 
-from dataclasses import replace
+import hashlib
+import json
+from dataclasses import asdict, replace
 
 import pytest
 from pysocialforce.config import (
     LEGACY_SHIFTED_GRADIENT_V1,
+    SOCIAL_FORCE_KERNEL_WRAPPED_V2,
     SURFACE_DISTANCE_UNIT_NORMAL_V2,
 )
 
+from robot_sf.gym_env.config_validation import get_resolved_config_dict
 from robot_sf.gym_env.env_config import (
     BicycleDriveRobot,
     BicycleDriveSettings,
@@ -18,6 +22,11 @@ from robot_sf.gym_env.env_config import (
     MapDefinitionPool,
     SimulationSettings,
 )
+from robot_sf.gym_env.robot_env import (
+    _hash_payload_without_default_goal_policy,
+    _stable_config_hash,
+)
+from robot_sf.sim.sim_config import TtcPredictiveForceConfig
 
 
 def test_env_settings_initialization():
@@ -33,6 +42,78 @@ def test_env_settings_post_init():
     """Passing sim_config=None to EnvSettings raises ValueError during initialization."""
     with pytest.raises(ValueError):
         _env_settings = EnvSettings(sim_config=None)  # type: ignore
+
+
+def test_kernel_selector_preserves_legacy_simulation_and_environment_hashes():
+    """The absent selector stays out of legacy hashes while explicit v2 remains identity-bearing."""
+    legacy = SimulationSettings()
+    assert legacy.social_force_kernel_resolution_mode == "defaulted_missing"
+    assert "social_force_kernel_version" not in asdict(legacy)
+    legacy_settings_payload = asdict(legacy)
+    # This newer field is omitted by the environment hash serializer for legacy configs.
+    legacy_settings_payload.pop("robot_goal_sampling_policy")
+    serialized_settings = json.dumps(
+        legacy_settings_payload, sort_keys=True, separators=(",", ":"), default=str
+    )
+    assert hashlib.sha256(serialized_settings.encode()).hexdigest() == (
+        "3862ea280966a4e790715babbb7567cbf121031eb38374b08264e4f4d3626be0"
+    )
+
+    legacy_env = EnvSettings()
+    legacy_env_payload = _hash_payload_without_default_goal_policy(asdict(legacy_env))
+    legacy_env_json = json.dumps(legacy_env_payload, sort_keys=True, default=str)
+    expected_legacy_env_hash = hashlib.blake2b(legacy_env_json.encode(), digest_size=8).hexdigest()
+    assert _stable_config_hash(legacy_env) == expected_legacy_env_hash
+
+    wrapped = SimulationSettings(social_force_kernel_version=SOCIAL_FORCE_KERNEL_WRAPPED_V2)
+    assert wrapped.social_force_kernel_resolution_mode == "explicit"
+    assert wrapped.social_force_kernel_version == SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    wrapped_env = EnvSettings(sim_config=wrapped)
+    wrapped_env_payload = _hash_payload_without_default_goal_policy(asdict(wrapped_env))
+    wrapped_env_payload["sim_config"]["social_force_kernel_version"] = (
+        SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    )
+    wrapped_env_json = json.dumps(wrapped_env_payload, sort_keys=True, default=str)
+    expected_wrapped_env_hash = hashlib.blake2b(
+        wrapped_env_json.encode(), digest_size=8
+    ).hexdigest()
+    assert _stable_config_hash(wrapped_env) == expected_wrapped_env_hash
+    assert expected_wrapped_env_hash != expected_legacy_env_hash
+
+    assert replace(legacy).social_force_kernel_resolution_mode == "defaulted_missing"
+    assert legacy != wrapped
+    assert wrapped.to_dict()["social_force_kernel_version"] == SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    assert SimulationSettings(**wrapped.to_dict()) == wrapped
+    assert replace(wrapped) == wrapped
+
+    wrapped.__post_init__()
+    assert wrapped.social_force_kernel_version == SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    assert wrapped.social_force_kernel_resolution_mode == "explicit"
+    wrapped.sim_time_in_secs = 0
+    with pytest.raises(ValueError, match="Simulation length"):
+        wrapped.__post_init__()
+    assert wrapped.social_force_kernel_version == SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    assert wrapped.social_force_kernel_resolution_mode == "explicit"
+
+    positional_ttc = TtcPredictiveForceConfig()
+    positional = SimulationSettings(
+        200.0,
+        0.1,
+        0,
+        None,
+        "semi_implicit_euler",
+        False,
+        False,
+        1.3,
+        "social_force_default",
+        positional_ttc,
+    )
+    assert positional.ttc_predictive_force == positional_ttc
+
+    resolved_payload = get_resolved_config_dict(EnvSettings(sim_config=wrapped))
+    assert resolved_payload["sim_config"]["social_force_kernel_version"] == (
+        SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    )
 
 
 def test_robot_factory():

@@ -40,6 +40,7 @@ from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.reset_metadata import build_reset_metadata
 from robot_sf.gym_env.reward import route_completion_v2_reward
 from robot_sf.gym_env.snqi_proxy import StepSNQIProxy
+from robot_sf.nav.map_config import ROBOT_GOAL_SAMPLING_LEGACY_V1
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.nav.occupancy_grid import OccupancyGrid
 from robot_sf.prediction.goal_intention import (
@@ -115,8 +116,14 @@ def _hash_payload_without_default_goal_policy(value: Any) -> Any:
             key: _hash_payload_without_default_goal_policy(item)
             for key, item in value.items()
             if not (
-                key == "goal_completion_policy"
-                and (item is None or item == _LEGACY_GOAL_COMPLETION_POLICY)
+                (
+                    key == "goal_completion_policy"
+                    and (item is None or item == _LEGACY_GOAL_COMPLETION_POLICY)
+                )
+                or (
+                    key == "robot_goal_sampling_policy"
+                    and (item is None or item == ROBOT_GOAL_SAMPLING_LEGACY_V1)
+                )
             )
         }
     if isinstance(value, list):
@@ -135,6 +142,10 @@ def _stable_config_hash(cfg: EnvSettings) -> str:
     """
     try:
         config_payload = asdict(cfg) if is_dataclass(cfg) else cfg.__dict__
+        sim_config = getattr(cfg, "sim_config", None)
+        selector_overrides = getattr(sim_config, "_config_hash_overrides", None)
+        if callable(selector_overrides):
+            config_payload["sim_config"].update(selector_overrides())
         payload = json.dumps(
             _hash_payload_without_default_goal_policy(config_payload),
             sort_keys=True,
@@ -634,6 +645,7 @@ class RobotEnv(BaseEnv):
         self._action_latency_queue: deque[tuple[Any, ...]] = deque()
         self._reset_action_latency_queue()
         self.applied_seed: int | None = None
+        self._crowd_established_by_seeded_reset = False
         self._latest_observation: Any = None
         # Enable occupancy grid overlay visualization if requested
         if self.sim_ui and getattr(env_config, "show_occupancy_grid", False):
@@ -650,20 +662,23 @@ class RobotEnv(BaseEnv):
         self._prime_snqi_proxy_state()
 
     def _apply_reset_seed(self, seed: int | None) -> None:
-        """Record the reset seed, establishing a deterministic crowd when needed (issue #9760).
+        """Record the reset seed and replay directly-constructed crowd sampling (issue #9760).
 
         A directly-constructed env samples its crowd from an unseeded RNG at
         construction. Its first seeded reset re-runs construction-time
-        population under the seeded context. Factory-seeded envs (applied_seed
-        already set) keep their construction crowd, preserving legacy replay
-        bytes. Must run inside the seeded RNG context.
+        population under the seeded context, and subsequent seeded resets repeat
+        that sampling so later reset work consumes the same RNG sequence.
+        Factory-seeded envs (applied_seed already set before reset) keep their
+        construction crowd, preserving legacy replay bytes. Must run inside the
+        seeded RNG context.
         """
         if seed is None:
             return
-        establish_crowd = self.applied_seed is None
+        repopulate_crowd = self.applied_seed is None or self._crowd_established_by_seeded_reset
         self.applied_seed = int(seed)
-        if establish_crowd:
+        if repopulate_crowd:
             self.simulator.repopulate_crowd()
+            self._crowd_established_by_seeded_reset = True
 
     def _reset_action_latency_queue(self) -> None:
         """Clear queued controls and prime the configured delay with zero commands."""

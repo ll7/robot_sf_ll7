@@ -4,10 +4,9 @@ Every episode record carries ``spawn_validity``: the reset clearance between the
 robot and pedestrians and between the robot and the static map, plus any
 route-end respawn that could not avoid the robot footprint. A row whose reset is
 already in contact, or whose robot collides with a respawned pedestrian within one
-second of that respawn, is marked ``invalid_run`` with reason ``spawn_overlap``
-(unless the route was completed). The event ledger mirrors the
-flag and aggregation excludes these rows from rates, because the outcome is a
-simulator spawn defect rather than planner behaviour.
+second of that respawn, is marked ``invalid_run`` with reason ``spawn_overlap``.
+An unmeasured reset clearance is invalid with reason ``reset_clearance_unavailable``.
+The event ledger mirrors the flag and aggregation excludes these rows from rates.
 """
 
 from __future__ import annotations
@@ -17,7 +16,8 @@ from typing import Any
 
 from robot_sf.nav.spawn_clearance import SPAWN_OVERLAP_INVALID_REASON
 
-SPAWN_VALIDITY_SCHEMA_VERSION = "spawn_validity.v1"
+SPAWN_VALIDITY_SCHEMA_VERSION = "spawn_validity.v2"
+RESET_CLEARANCE_UNAVAILABLE_REASON = "reset_clearance_unavailable"
 
 
 #: A pedestrian collision counts as caused by a respawn only this soon after it (seconds).
@@ -88,9 +88,9 @@ def build_spawn_validity(
         collision_events: Typed collision events of the episode.
         dt_seconds: Simulation step length used to time respawn events.
         reset_clearance_error: Why the reset clearance could not be measured, if so.
-        route_complete: Whether the robot completed its route. A completed route is
-            never marked invalid: no collision was counted, so no rate is distorted,
-            and the ledger keeps ``goal_reached`` and ``invalid_run`` exclusive.
+        route_complete: Whether the robot completed its route. This only exempts
+            route-end respawn contacts; it cannot validate an overlapping or
+            unmeasured reset.
 
     Returns:
         JSON-serializable spawn-validity block.
@@ -98,17 +98,23 @@ def build_spawn_validity(
     events = [dict(event) for event in respawn_overlap_events or []]
     reset_overlap = bool(reset_clearance.get("overlap")) if reset_clearance else False
     respawn_collisions = _respawn_collisions(events, collision_events or [], float(dt_seconds))
-    invalid = (reset_overlap or bool(respawn_collisions)) and not route_complete
+    reset_available = bool(reset_clearance)
+    if reset_overlap or (respawn_collisions and not route_complete):
+        invalid_reason = SPAWN_OVERLAP_INVALID_REASON
+    elif not reset_available:
+        invalid_reason = RESET_CLEARANCE_UNAVAILABLE_REASON
+    else:
+        invalid_reason = None
     return {
         "schema_version": SPAWN_VALIDITY_SCHEMA_VERSION,
         "reset_clearance": dict(reset_clearance) if reset_clearance else None,
-        "reset_clearance_status": "available" if reset_clearance else "unavailable",
-        "reset_clearance_error": None if reset_clearance else reset_clearance_error,
+        "reset_clearance_status": "available" if reset_available else "unavailable",
+        "reset_clearance_error": None if reset_available else reset_clearance_error,
         "reset_overlap": reset_overlap,
         "respawn_overlap_events": events,
         "respawn_overlap_collisions": respawn_collisions,
-        "invalid_run": invalid,
-        "invalid_reason": SPAWN_OVERLAP_INVALID_REASON if invalid else None,
+        "invalid_run": invalid_reason is not None,
+        "invalid_reason": invalid_reason,
     }
 
 
@@ -135,17 +141,58 @@ def spawn_validity_counts(records: Sequence[Mapping[str, Any]]) -> dict[str, int
 def record_has_spawn_overlap(record: Mapping[str, Any]) -> bool:
     """Return whether an episode record is invalid because of a spawn overlap."""
     block = record.get("spawn_validity")
+    if not isinstance(block, Mapping):
+        return False
+    if block.get("schema_version") == SPAWN_VALIDITY_SCHEMA_VERSION:
+        clearance = block.get("reset_clearance")
+        return (
+            block.get("reset_overlap") is True
+            or (isinstance(clearance, Mapping) and clearance.get("overlap") is True)
+            or (
+                block.get("invalid_run") is True
+                and block.get("invalid_reason") == SPAWN_OVERLAP_INVALID_REASON
+            )
+        )
     return (
-        isinstance(block, Mapping)
-        and block.get("invalid_run") is True
+        block.get("invalid_run") is True
         and block.get("invalid_reason") == SPAWN_OVERLAP_INVALID_REASON
     )
 
 
+def record_has_invalid_spawn(record: Mapping[str, Any]) -> bool:
+    """Exclude invalid v2 reset telemetry even when its verdict flag was forged.
+
+    Historical v1 and absent blocks retain their original rate behavior for
+    diagnostic comparisons. A corrected v2 producer must prove a clear reset.
+
+    Returns:
+        True when the row must be excluded from nominal rates.
+    """
+    block = record.get("spawn_validity")
+    if not isinstance(block, Mapping):
+        return False
+    if block.get("schema_version") != SPAWN_VALIDITY_SCHEMA_VERSION:
+        return record_has_spawn_overlap(record)
+    if block.get("invalid_run") is True:
+        return True
+    clearance = block.get("reset_clearance")
+    return (
+        block.get("invalid_run") is not False
+        or block.get("invalid_reason") is not None
+        or block.get("reset_clearance_status") != "available"
+        or block.get("reset_clearance_error") is not None
+        or not isinstance(clearance, Mapping)
+        or clearance.get("overlap") is not False
+        or block.get("reset_overlap") is not False
+    )
+
+
 __all__ = [
+    "RESET_CLEARANCE_UNAVAILABLE_REASON",
     "RESPAWN_COLLISION_WINDOW_S",
     "SPAWN_VALIDITY_SCHEMA_VERSION",
     "build_spawn_validity",
+    "record_has_invalid_spawn",
     "record_has_spawn_overlap",
     "spawn_validity_counts",
 ]

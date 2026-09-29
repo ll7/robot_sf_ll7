@@ -28,7 +28,7 @@ from typing import Any
 import numpy as np
 import yaml
 from scipy.ndimage import distance_transform_edt
-from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry import LineString, Point, Polygon, box
 from shapely.ops import unary_union
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file
@@ -36,7 +36,11 @@ from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
 from robot_sf.benchmark.map_runner.map_runner_identity import (
     _scenario_with_episode_seed_defaults,
 )
-from robot_sf.benchmark.release_protocol import load_release_manifest
+from robot_sf.benchmark.release_candidate import (
+    PrepublicationCandidate,
+    load_preflight_input,
+    verify_prepublication_candidate_after_preflight,
+)
 from robot_sf.common.artifact_paths import get_repository_root
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.nav.occupancy_grid import (
@@ -52,6 +56,7 @@ DEFAULT_MATRIX = Path("configs/scenarios/classic_interactions_francis2023_goal_z
 DEFAULT_CLEARANCE_MARGIN_M = 0.1
 DEFAULT_RESPAWN_WINDOW_STEPS = 20
 DEFAULT_GRID_RESOLUTION_M = 0.1
+CONTINUOUS_ORACLE_QUAD_SEGS = 32
 _EXPECTED_OUTCOMES = frozenset({"infeasible_safe_hold"})
 INFEASIBILITY_PROBE_RELEASE_KIND = "benchmark-infeasibility-probe"
 
@@ -236,6 +241,7 @@ def _build_occupancy_analysis(
     return {
         "occupancy": occupancy,
         "inflated": inflated,
+        "map_bounds": (float(x_min), float(x_max), float(y_min), float(y_max)),
         "origin": (center_x - width / 2.0, center_y - height / 2.0),
         "resolution": resolution_m,
         "wall_geometry": wall_geometry,
@@ -349,6 +355,88 @@ def _ordered_route_grid_path(
             return None, segment_index
         route_path.extend(segment[1:] if route_path else segment)
     return route_path, None
+
+
+def _continuous_margin_route(
+    analysis: dict[str, Any],
+    route_points: list[tuple[float, float]],
+    *,
+    required_radius_m: float,
+) -> dict[str, Any]:
+    """Certify each ordered leg within continuous footprint-safe free space.
+
+    The polygonal GEOS buffer approximates circular arcs with chords. Increase its
+    radius by the maximum chord deficit so the approximation cannot admit a
+    point closer than the required robot radius plus margin to a wall.
+
+    Returns:
+        A pass only when every ordered route leg shares a margin-safe component.
+    """
+    bounds = analysis.get("map_bounds")
+    wall = analysis.get("wall_geometry")
+    if (
+        not isinstance(bounds, (tuple, list))
+        or len(bounds) != 4
+        or any(not isinstance(value, (int, float)) or not math.isfinite(value) for value in bounds)
+        or wall is None
+        or wall.is_empty
+        or not wall.is_valid
+        or not math.isfinite(required_radius_m)
+        or required_radius_m <= 0
+    ):
+        return {"status": "invalid", "reason": "continuous_geometry_unavailable"}
+    x_min, x_max, y_min, y_max = (float(value) for value in bounds)
+    if x_min >= x_max or y_min >= y_max:
+        return {"status": "invalid", "reason": "invalid_map_bounds"}
+
+    # A chord of a quad_segs-buffered quarter circle lies at least this far
+    # from the exact circular boundary. The extra micron handles roundoff.
+    oracle_radius = (
+        required_radius_m / math.cos(math.pi / (4 * CONTINUOUS_ORACLE_QUAD_SEGS)) + 1.0e-6
+    )
+    point_geometries = [Point(point) for point in route_points]
+    for index, point in enumerate(point_geometries):
+        boundary_clearance = min(point.x - x_min, x_max - point.x, point.y - y_min, y_max - point.y)
+        if min(boundary_clearance, wall.distance(point)) < oracle_radius:
+            return {
+                "status": "fail",
+                "reason": "required_route_point_below_continuous_margin",
+                "first_unsafe_route_point_index": index,
+            }
+
+    safe_bounds = box(
+        x_min + oracle_radius,
+        y_min + oracle_radius,
+        x_max - oracle_radius,
+        y_max - oracle_radius,
+    )
+    if safe_bounds.is_empty or safe_bounds.area <= 0:
+        return {"status": "fail", "reason": "map_has_no_footprint_safe_area"}
+    free_space = safe_bounds.difference(
+        wall.buffer(oracle_radius, quad_segs=CONTINUOUS_ORACLE_QUAD_SEGS)
+    )
+    components = [
+        geometry
+        for geometry in (list(free_space.geoms) if hasattr(free_space, "geoms") else [free_space])
+        if isinstance(geometry, Polygon) and geometry.area > 0
+    ]
+    point_components = [
+        {index for index, component in enumerate(components) if component.covers(point)}
+        for point in point_geometries
+    ]
+    for index, (start_components, goal_components) in enumerate(pairwise(point_components)):
+        if not start_components.intersection(goal_components):
+            return {
+                "status": "fail",
+                "reason": "ordered_route_segment_disconnected_in_continuous_free_space",
+                "first_blocked_segment_index": index,
+            }
+    return {
+        "status": "pass",
+        "reason": "ordered_route_connected_in_continuous_margin_safe_free_space",
+        "certified_center_clearance_lower_bound_m": round(required_radius_m, 6),
+        "buffer_approximation_guard_m": round(oracle_radius - required_radius_m, 6),
+    }
 
 
 def _apply_infeasibility_declaration(
@@ -479,6 +567,41 @@ def _check_footprint_path(
                 ),
                 "measurement_path": "inflated" if inflated_path is not None else "raw",
             }
+
+        if reachability["status"] == "fail" or passage["status"] == "fail":
+            required_radius = float(robot.config.radius) + margin_m
+            oracle = _continuous_margin_route(
+                analysis, route_points, required_radius_m=required_radius
+            )
+            reachability["continuous_oracle"] = oracle
+            passage["continuous_oracle"] = oracle
+            if oracle["status"] == "pass":
+                reachability.update(
+                    grid_status=reachability["status"],
+                    grid_reason=reachability["reason"],
+                    grid_path_length_m=reachability.get("path_length_m"),
+                    status="pass",
+                    reason="continuous_margin_safe_route_found",
+                    first_blocked_segment_index=None,
+                    path_length_m=None,
+                )
+                passage.update(
+                    grid_status=passage["status"],
+                    grid_reason=passage["reason"],
+                    grid_minimum_opening_width_estimate_m=passage.get(
+                        "minimum_opening_width_estimate_m"
+                    ),
+                    grid_measurement_path=passage.get("measurement_path"),
+                    status="pass",
+                    reason="continuous_route_opening_meets_required_width",
+                    first_blocked_segment_index=None,
+                    minimum_opening_width_estimate_m=None,
+                    minimum_opening_width_certified_lower_bound_m=2.0 * required_radius,
+                    narrow_path_cell_count=0,
+                    first_narrow_path_cell_xy=None,
+                    measurement_path="continuous_clearance_component",
+                    required_opening_width_m=2.0 * required_radius,
+                )
 
         if expected_outcome == "infeasible_safe_hold":
             _apply_infeasibility_declaration(reachability, passage, probe_manifest=probe_manifest)
@@ -768,6 +891,8 @@ def _release_manifest_inputs(  # noqa: C901, PLR0912, PLR0915
         Input identities, resolved scenarios, and the exact resolved seed tuple.
     """
     manifest_path = Path(manifest.path).resolve()
+    candidate = isinstance(manifest, PrepublicationCandidate)
+    repository_root = manifest.repository_root if candidate else get_repository_root().resolve()
     matrix_path = Path(manifest.scenario_matrix_path).resolve()
     manifest_sha256 = sha256_file(manifest_path)
     matrix_sha256 = sha256_file(matrix_path)
@@ -793,8 +918,13 @@ def _release_manifest_inputs(  # noqa: C901, PLR0912, PLR0915
     seed_sets_sha256: str | None = None
     seed_sets_path_raw = seed_policy.get("seed_sets_path")
     if seed_sets_path_raw:
-        seed_sets_path = (manifest_path.parent / str(seed_sets_path_raw)).resolve()
+        seed_sets_path = (
+            (repository_root if candidate else manifest_path.parent) / str(seed_sets_path_raw)
+        ).resolve()
         seed_sets_sha256 = sha256_file(seed_sets_path)
+        if candidate:
+            pinned = dict(manifest.pinned_files)
+            declared_seed_sha256 = pinned.get(seed_sets_path)
         if not declared_seed_sha256:
             raise ValueError("release seed-set path is missing its declared SHA-256")
         if seed_sets_sha256 != str(declared_seed_sha256).lower():
@@ -833,8 +963,6 @@ def _release_manifest_inputs(  # noqa: C901, PLR0912, PLR0915
             raise ValueError(
                 "release manifest cell count disagrees with matrix, seeds, and planners"
             )
-
-    repository_root = get_repository_root().resolve()
 
     def _portable_path(path: Path) -> str:
         """Keep repository inputs relative and avoid publishing machine-local paths.
@@ -944,6 +1072,25 @@ def write_preflight_reports(
     json_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     markdown_path.write_text(_preflight_markdown(report), encoding="utf-8")
     return sha256_file(json_path), sha256_file(markdown_path)
+
+
+def _verify_candidate_report_inputs(
+    manifest: Any, identity: dict[str, Any], report: dict[str, Any]
+) -> None:
+    """Invalidate a candidate report when its pinned source or inputs drifted."""
+    if not isinstance(manifest, PrepublicationCandidate):
+        return
+    try:
+        verify_prepublication_candidate_after_preflight(
+            manifest,
+            manifest_sha256=identity["manifest_sha256"],
+            repository_root=manifest.repository_root,
+        )
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        report["status"] = "invalid"
+        drift_error = f"candidate_input_drift: {type(exc).__name__}: {exc}"
+        prior_error = report.get("input_error")
+        report["input_error"] = f"{prior_error}; {drift_error}" if prior_error else drift_error
 
 
 def run_manifest_preflight(  # noqa: C901
@@ -1066,9 +1213,12 @@ def run_manifest_preflight(  # noqa: C901
             input_error = "scenario matrix changed while preflight was running"
         seed_sets_path_raw = manifest.seed_policy.get("seed_sets_path")
         if seed_sets_path_raw:
-            seed_sets_path = (
-                Path(manifest.path).resolve().parent / str(seed_sets_path_raw)
-            ).resolve()
+            seed_sets_base = (
+                manifest.repository_root
+                if isinstance(manifest, PrepublicationCandidate)
+                else Path(manifest.path).resolve().parent
+            )
+            seed_sets_path = (seed_sets_base / str(seed_sets_path_raw)).resolve()
             if sha256_file(seed_sets_path) != identity["seed_sets_sha256"]:
                 input_error = "seed-set file changed while preflight was running"
     except OSError as exc:
@@ -1107,15 +1257,18 @@ def run_manifest_preflight(  # noqa: C901
         "input_error": input_error,
         "runtime_s": round(time.perf_counter() - started, 1),
     }
+    _verify_candidate_report_inputs(manifest, identity, report)
     return report
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Return the release-manifest-only command parser."""
+    """Return the exact release-manifest or diagnostic-candidate parser."""
     parser = argparse.ArgumentParser(
-        description="Run the fail-closed spawn and footprint preflight for a release manifest."
+        description="Run the fail-closed spawn and footprint preflight for pinned release inputs."
     )
-    parser.add_argument("--manifest", type=Path, required=True, help="Selected release manifest.")
+    parser.add_argument(
+        "--manifest", type=Path, required=True, help="Release manifest or DOI-free candidate."
+    )
     parser.add_argument("--workers", type=int, default=1, help="Parallel scenario workers (1-8).")
     parser.add_argument(
         "--clearance-margin-m",
@@ -1196,20 +1349,23 @@ def run_preflight(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the exact release-manifest matrix and write JSON and Markdown reports.
+    """Run the exact pinned matrix and write JSON and Markdown diagnostic reports.
 
     Returns:
         Zero for a valid matrix and nonzero when inputs or checks fail.
     """
     args = build_parser().parse_args(argv)
     try:
-        manifest = load_release_manifest(args.manifest)
+        manifest = load_preflight_input(args.manifest)
         report = run_manifest_preflight(
             manifest,
             workers=args.workers,
             clearance_margin_m=args.clearance_margin_m,
             respawn_window_steps=args.respawn_window_steps,
             grid_resolution_m=args.grid_resolution_m,
+            source_commit=manifest.source_sha
+            if isinstance(manifest, PrepublicationCandidate)
+            else None,
         )
     except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
         report = {

@@ -3,10 +3,131 @@
 import hashlib
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field, fields
 from typing import Any
 
 from pysocialforce.ped_population import PedSpawnConfig
+
+SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1 = "legacy_unwrapped_v1"
+SOCIAL_FORCE_KERNEL_WRAPPED_V2 = "wrapped_v2"
+DEFAULT_SOCIAL_FORCE_KERNEL_VERSION = SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1
+SOCIAL_FORCE_KERNEL_VERSIONS = frozenset(
+    {SOCIAL_FORCE_KERNEL_LEGACY_UNWRAPPED_V1, SOCIAL_FORCE_KERNEL_WRAPPED_V2}
+)
+SOCIAL_FORCE_KERNEL_SELECTOR_KEYS = (
+    "kernel_version",
+    "social_force_kernel_version",
+    "version",
+)
+
+
+class _ResolvedSocialForceKernelVersion(str):
+    """String-compatible kernel version retaining selector provenance."""
+
+    resolution_mode: str
+
+    def __new__(cls, value: str, resolution_mode: str) -> "_ResolvedSocialForceKernelVersion":
+        instance = super().__new__(cls, value)
+        instance.resolution_mode = resolution_mode
+        return instance
+
+    def __reduce_ex__(
+        self, protocol: int
+    ) -> tuple[type["_ResolvedSocialForceKernelVersion"], tuple[str, str]]:
+        """Keep resolution provenance when this value is copied or pickled.
+
+        Returns:
+            Constructor and arguments needed to recreate this resolved value.
+        """
+        del protocol
+        return type(self), (str(self), self.resolution_mode)
+
+
+def _resolve_social_force_kernel_version_value(value: Any) -> tuple[str, str]:
+    """Resolve one scalar kernel selector and retain how it was supplied.
+
+    Returns:
+        Tuple of canonical version and selector-resolution mode.
+    """
+    if isinstance(value, _ResolvedSocialForceKernelVersion):
+        return str(value), value.resolution_mode
+    if value is None:
+        return DEFAULT_SOCIAL_FORCE_KERNEL_VERSION, "defaulted_missing"
+    if not isinstance(value, str):
+        raise TypeError("social-force kernel version must be a string or None")
+    resolved = value.strip()
+    if not resolved:
+        return DEFAULT_SOCIAL_FORCE_KERNEL_VERSION, "historical_unversioned"
+    if resolved not in SOCIAL_FORCE_KERNEL_VERSIONS:
+        supported = ", ".join(sorted(SOCIAL_FORCE_KERNEL_VERSIONS))
+        raise ValueError(
+            f"unsupported social-force kernel version {resolved!r}; expected one of {supported}"
+        )
+    return resolved, "explicit"
+
+
+def resolve_social_force_kernel_version_with_mode(value: Any = None) -> tuple[str, str]:
+    """Resolve a social-force kernel selector and preserve its provenance.
+
+    Mapping inputs may contain compatibility aliases.  Conflicting aliases are
+    rejected so a run cannot silently use a kernel different from its recorded
+    configuration.
+
+    Returns:
+        Tuple of canonical version and selector-resolution mode.
+    """
+    if not isinstance(value, Mapping):
+        resolved, mode = _resolve_social_force_kernel_version_value(value)
+        return _ResolvedSocialForceKernelVersion(resolved, mode), mode
+
+    selectors = [(key, value[key]) for key in SOCIAL_FORCE_KERNEL_SELECTOR_KEYS if key in value]
+    if not selectors:
+        return (
+            _ResolvedSocialForceKernelVersion(
+                DEFAULT_SOCIAL_FORCE_KERNEL_VERSION, "defaulted_missing"
+            ),
+            "defaulted_missing",
+        )
+
+    resolved_selectors: list[tuple[str, Any, str, str]] = []
+    for key, candidate in selectors:
+        resolved, mode = _resolve_social_force_kernel_version_value(candidate)
+        resolved_selectors.append((key, candidate, resolved, mode))
+    resolved_versions = {resolved for _key, _candidate, resolved, _mode in resolved_selectors}
+    if len(resolved_versions) > 1:
+        details = ", ".join(f"{key}={candidate!r}" for key, candidate, *_ in resolved_selectors)
+        raise ValueError(
+            "conflicting social-force kernel version selectors; provide one consistent "
+            f"selector: {details}"
+        )
+
+    resolved = resolved_selectors[0][2]
+    mode = "historical_unversioned"
+    if any(selector[3] == "explicit" for selector in resolved_selectors):
+        mode = "explicit"
+    return _ResolvedSocialForceKernelVersion(resolved, mode), mode
+
+
+def resolve_social_force_kernel_version(value: Any = None) -> str:
+    """Return the canonical social-force kernel version, failing closed on unknown values."""
+    return resolve_social_force_kernel_version_with_mode(value)[0]
+
+
+def social_force_kernel_metadata(value: Any = None, *, site: str) -> dict[str, Any]:
+    """Build JSON-safe runtime metadata for the selected angle kernel.
+
+    Returns:
+        Metadata containing the selected version, resolution mode, and wrap flag.
+    """
+    resolved, mode = resolve_social_force_kernel_version_with_mode(value)
+    return {
+        "schema_version": "social_force_kernel_metadata.v1",
+        "site": site,
+        "kernel_version": str(resolved),
+        "resolution_mode": mode,
+        "angle_wrap": str(resolved) == SOCIAL_FORCE_KERNEL_WRAPPED_V2,
+    }
+
 
 LEGACY_SHIFTED_GRADIENT_V1 = "legacy_shifted_gradient_v1"
 SURFACE_DISTANCE_UNIT_NORMAL_V2 = "surface_distance_unit_normal_v2"
@@ -329,7 +450,7 @@ class DesiredForceConfig:
     goal_threshold: float = 0.2
 
 
-@dataclass
+@dataclass(eq=False)
 class SocialForceConfig:
     """Parameters for pedestrian-pedestrian interaction (social repulsion).
 
@@ -340,6 +461,9 @@ class SocialForceConfig:
         n: Exponent shaping angular dependency.
         n_prime: Exponent shaping directional weighting.
         activation_threshold: Max interaction distance for social force (meters).
+        kernel_version: Versioned pair-kernel angle handling. Missing configuration
+            resolves to the historical unwrapped behavior; ``wrapped_v2`` is the
+            explicit corrected behavior for next-release runs.
     """
 
     factor: float = 5.1
@@ -348,6 +472,83 @@ class SocialForceConfig:
     n: int = 2
     n_prime: int = 3
     activation_threshold: float = 20.0
+    kernel_version: InitVar[Any] = None
+
+    def __post_init__(self, *init_vars: Any) -> None:
+        """Resolve the selector without adding a default key to legacy dataclass payloads."""
+        if init_vars:
+            self.kernel_version = init_vars[0]
+
+    def __getattribute__(self, name: str) -> Any:
+        """Expose the runtime selector stored outside serialized dataclass fields.
+
+        Returns:
+            The resolved selector for ``kernel_version`` or the requested attribute.
+        """
+        if name == "kernel_version":
+            try:
+                return object.__getattribute__(self, "_social_force_kernel_version")
+            except AttributeError:
+                return resolve_social_force_kernel_version_with_mode(None)[0]
+        return object.__getattribute__(self, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Resolve the selector while keeping its legacy serialization shape unchanged."""
+        if name == "kernel_version":
+            resolved, mode = resolve_social_force_kernel_version_with_mode(value)
+            object.__setattr__(self, "_social_force_kernel_version", resolved)
+            object.__setattr__(self, "_social_force_kernel_resolution_mode", mode)
+            return
+        object.__setattr__(self, name, value)
+
+    @property
+    def social_force_kernel_version(self) -> str:
+        """Return the canonical kernel version through the descriptive alias."""
+        return self.kernel_version
+
+    @social_force_kernel_version.setter
+    def social_force_kernel_version(self, value: Any) -> None:
+        """Set the kernel through the descriptive compatibility alias."""
+        self.kernel_version = value
+
+    @property
+    def social_force_kernel_resolution_mode(self) -> str:
+        """Return how the kernel selector was resolved."""
+        return getattr(self, "_social_force_kernel_resolution_mode", "historical_unversioned")
+
+    def _config_hash_overrides(self) -> dict[str, str]:
+        """Include explicit selectors in config hashes while omitting the legacy default.
+
+        Returns:
+            Only the non-default selector field, or an empty mapping for the legacy default.
+        """
+        if self.social_force_kernel_resolution_mode == "defaulted_missing":
+            return {}
+        return {"kernel_version": str(self.kernel_version)}
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize force settings with explicit version selectors and legacy shape.
+
+        Returns:
+            The standard dataclass mapping plus the selector only when it was supplied.
+        """
+        payload = {item.name: getattr(self, item.name) for item in fields(self)}
+        payload.update(self._config_hash_overrides())
+        return payload
+
+    __hash__ = None
+
+    def __eq__(self, other: object) -> bool:
+        """Compare force parameters and selector provenance.
+
+        Returns:
+            Whether all parameters and explicit selector identity match.
+        """
+        if not isinstance(other, SocialForceConfig) or type(other) is not type(self):
+            return False
+        return all(
+            getattr(self, item.name) == getattr(other, item.name) for item in fields(self)
+        ) and (self._config_hash_overrides() == other._config_hash_overrides())
 
 
 @dataclass

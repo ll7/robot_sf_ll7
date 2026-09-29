@@ -10,14 +10,17 @@ import os
 import sys
 import threading
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import InitVar, asdict, dataclass, field, fields
 from math import atan2, pi
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from loguru import logger
-from pysocialforce.config import resolve_obstacle_force_law_with_mode
+from pysocialforce.config import (
+    resolve_obstacle_force_law_with_mode,
+    resolve_social_force_kernel_version_with_mode,
+)
 
 from robot_sf.common.math_utils import wrap_angle_pi_closed
 from robot_sf.planner.socnav_occupancy import OccupancyAwarePlannerMixin
@@ -245,7 +248,7 @@ def resolve_social_force_goal_approach_version_with_mode(
     return _ResolvedSocialForceGoalApproachVersion(resolved, mode), mode
 
 
-@dataclass
+@dataclass(eq=False)
 class SocNavPlannerConfig:
     """Simple config for SocNav-like planner adapters."""
 
@@ -421,6 +424,9 @@ class SocNavPlannerConfig:
     # are read only when ``social_force_ped_version == "surface_v3"``; see
     # ``socnav_social_force`` for the derivation of the defaults.
     social_force_ped_version: Any = field(default=None, kw_only=True)
+    # Issue #9764: preserve the historical unwrapped pair kernel by default;
+    # the shortest-angle correction is explicitly selected for next-release runs.
+    social_force_kernel_version: InitVar[Any] = field(default=None, kw_only=True)
     social_force_ped_v3_strength: float = field(default=6.0, kw_only=True)
     social_force_ped_v3_length: float = field(default=0.5, kw_only=True)
     social_force_ped_v3_default_ped_radius: float = field(default=0.4, kw_only=True)
@@ -470,6 +476,11 @@ class SocNavPlannerConfig:
         if name == "social_force_ped_version":
             object.__setattr__(self, name, resolve_social_force_ped_version(value))
             return
+        if name == "social_force_kernel_version":
+            resolved, mode = resolve_social_force_kernel_version_with_mode(value)
+            object.__setattr__(self, "_social_force_kernel_version", resolved)
+            object.__setattr__(self, "_social_force_kernel_resolution_mode", mode)
+            return
         if name == "social_force_obstacle_law":
             resolved, mode = resolve_obstacle_force_law_with_mode(value)
             object.__setattr__(self, name, resolved)
@@ -481,6 +492,59 @@ class SocNavPlannerConfig:
             object.__setattr__(self, "_social_force_goal_approach_resolution_mode", mode)
             return
         object.__setattr__(self, name, value)
+
+    def __post_init__(self, *init_vars: Any) -> None:
+        """Resolve the InitVar selector while keeping it out of legacy dataclass fields."""
+        if init_vars:
+            self.social_force_kernel_version = init_vars[0]
+
+    def __getattribute__(self, name: str) -> Any:
+        """Expose the resolved kernel selector without serializing its default.
+
+        Returns:
+            The selected version, defaulting to the historical kernel when omitted.
+        """
+        if name == "social_force_kernel_version":
+            try:
+                return object.__getattribute__(self, "_social_force_kernel_version")
+            except AttributeError:
+                return resolve_social_force_kernel_version_with_mode(None)[0]
+        return object.__getattribute__(self, name)
+
+    def _config_hash_overrides(self) -> dict[str, str]:
+        """Include explicitly supplied kernel selectors in serialized identity.
+
+        Returns:
+            The selector override, or an empty mapping for the historical default.
+        """
+        if self.social_force_kernel_resolution_mode == "defaulted_missing":
+            return {}
+        return {"social_force_kernel_version": str(self.social_force_kernel_version)}
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize planner settings while keeping the historical default shape.
+
+        Returns:
+            Standard dataclass fields plus an explicitly supplied kernel selector.
+        """
+        payload = asdict(self)
+        payload.update(self._config_hash_overrides())
+        return payload
+
+    __hash__ = None
+
+    def __eq__(self, other: object) -> bool:
+        """Compare planner parameters and selector provenance.
+
+        Returns:
+            Whether parameters and explicit version choices are identical.
+        """
+        if not isinstance(other, SocNavPlannerConfig) or type(other) is not type(self):
+            return False
+        return (
+            all(getattr(self, item.name) == getattr(other, item.name) for item in fields(self))
+            and self._config_hash_overrides() == other._config_hash_overrides()
+        )
 
     @property
     def obstacle_force_law_resolution_mode(self) -> str:
@@ -496,6 +560,11 @@ class SocNavPlannerConfig:
     def social_force_obstacle_law_version(self, value: Any) -> None:
         """Set the obstacle law through the explicit versioned alias."""
         self.social_force_obstacle_law = value
+
+    @property
+    def social_force_kernel_resolution_mode(self) -> str:
+        """Return how the pair-kernel selector was resolved."""
+        return getattr(self, "_social_force_kernel_resolution_mode", "historical_unversioned")
 
     @property
     def social_force_goal_approach_resolution_mode(self) -> str:

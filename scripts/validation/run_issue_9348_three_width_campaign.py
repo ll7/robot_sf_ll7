@@ -23,8 +23,16 @@ from typing import Any
 import numpy as np
 
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
-from robot_sf.benchmark.map_runner.map_runner import _build_policy, _run_map_episode
+from robot_sf.benchmark.map_runner.map_runner import (
+    SocialForcePlannerAdapter as _SocialForcePlannerAdapter,
+)
+from robot_sf.benchmark.map_runner.map_runner import (
+    _build_common_adapter_policy,
+    _build_policy,
+    _run_map_episode,
+)
 from robot_sf.benchmark.map_runner.map_runner_jsonl import write_validated_to_handle
+from robot_sf.benchmark.map_runner_policies import goal as _goal_policy_builder
 from robot_sf.benchmark.schema_validator import load_schema
 from robot_sf.benchmark.three_width_doorway_application import (
     DEFAULT_MANIFEST_PATH,
@@ -51,18 +59,38 @@ _DT = 0.1
 _BOOTSTRAP_DRAWS = 10000
 _BOOTSTRAP_SEED = 9348
 _PLANNER_INVOCATION_TRACE_SCHEMA = "issue_9348_planner_invocation.v1"
+_ACTION_CONVERSION_TRACE_SCHEMA = "policy-action-conversion.v1"
 _GOAL_POLICY_CALLABLE_IDENTITY = {
     "module": "robot_sf.benchmark.map_runner_policies.goal",
     "qualname": "build.<locals>._policy",
+    "implementation_id": "goal_policy_builder.policy.v1",
 }
 _SOCIAL_FORCE_POLICY_CALLABLE_IDENTITY = {
     "module": "robot_sf.benchmark.map_runner.map_runner",
     "qualname": "_build_common_adapter_policy.<locals>._policy",
+    "implementation_id": "common_adapter_policy.policy.v1",
 }
 _SOCIAL_FORCE_ADAPTER_IDENTITY = {
     "module": "robot_sf.planner.socnav_social_force",
     "class": "SocialForcePlannerAdapter",
 }
+
+
+def _nested_policy_code(builder: Any) -> Any:
+    """Return the builder's nested policy code object for runtime identity checks."""
+    code = getattr(builder, "__code__", None)
+    candidates = [
+        item
+        for item in getattr(code, "co_consts", ())
+        if getattr(item, "co_name", None) == "_policy"
+    ]
+    if len(candidates) != 1:
+        raise RuntimeError("baseline policy builder has no unique nested _policy code object")
+    return candidates[0]
+
+
+_GOAL_POLICY_CODE = _nested_policy_code(_goal_policy_builder.build)
+_SOCIAL_FORCE_POLICY_CODE = _nested_policy_code(_build_common_adapter_policy)
 _ENDPOINTS = {
     "success": ("success", "binary"),
     "total_collisions": ("total_collision_count", "runner_count"),
@@ -284,10 +312,22 @@ def _runtime_command_payload(command: Any) -> dict[str, float] | None:
 
 
 def _runtime_callable_identity(policy: Any) -> dict[str, str | None]:
-    """Return the stable module/qualname identity of one constructed callable."""
+    """Return readable markers plus builder-code identity for one constructed callable."""
+    code = getattr(policy, "__code__", None)
+    globals_dict = getattr(policy, "__globals__", None)
+    if code is _GOAL_POLICY_CODE and globals_dict is _goal_policy_builder.build.__globals__:
+        implementation_id = "goal_policy_builder.policy.v1"
+    elif (
+        code is _SOCIAL_FORCE_POLICY_CODE
+        and globals_dict is _build_common_adapter_policy.__globals__
+    ):
+        implementation_id = "common_adapter_policy.policy.v1"
+    else:
+        implementation_id = "unrecognized"
     return {
         "module": getattr(policy, "__module__", None),
         "qualname": getattr(policy, "__qualname__", None),
+        "implementation_id": implementation_id,
     }
 
 
@@ -296,14 +336,24 @@ def _runtime_policy_route(policy: Any) -> dict[str, Any]:
     policy_identity = _runtime_callable_identity(policy)
     adapter = getattr(policy, "_planner_adapter", None)
     adapter_type = type(adapter) if adapter is not None else None
+    expected_social_force_adapter = adapter_type is _SocialForcePlannerAdapter
     adapter_identity = {
         "module": getattr(adapter_type, "__module__", None),
         "class": getattr(adapter_type, "__qualname__", None),
+        "verified_type": expected_social_force_adapter,
     }
-    goal_callable = policy_identity == _GOAL_POLICY_CALLABLE_IDENTITY
+    goal_callable = (
+        policy_identity["implementation_id"] == "goal_policy_builder.policy.v1"
+        and policy_identity["module"] == _GOAL_POLICY_CALLABLE_IDENTITY["module"]
+        and policy_identity["qualname"] == _GOAL_POLICY_CALLABLE_IDENTITY["qualname"]
+    )
     social_force_route = (
-        policy_identity == _SOCIAL_FORCE_POLICY_CALLABLE_IDENTITY
-        and adapter_identity == _SOCIAL_FORCE_ADAPTER_IDENTITY
+        policy_identity["implementation_id"] == "common_adapter_policy.policy.v1"
+        and policy_identity["module"] == _SOCIAL_FORCE_POLICY_CALLABLE_IDENTITY["module"]
+        and policy_identity["qualname"] == _SOCIAL_FORCE_POLICY_CALLABLE_IDENTITY["qualname"]
+        and expected_social_force_adapter
+        and adapter_identity["module"] == _SOCIAL_FORCE_ADAPTER_IDENTITY["module"]
+        and adapter_identity["class"] == _SOCIAL_FORCE_ADAPTER_IDENTITY["class"]
     )
     if goal_callable and adapter is None:
         execution_mode = "native"
@@ -462,6 +512,7 @@ def _planner_invocation_reasons(
                 "present": False,
                 "module": None,
                 "class": None,
+                "verified_type": False,
             },
         },
         "social_force": {
@@ -472,6 +523,7 @@ def _planner_invocation_reasons(
             "planner_adapter": {
                 "present": True,
                 **_SOCIAL_FORCE_ADAPTER_IDENTITY,
+                "verified_type": True,
             },
         },
     }.get(expected_algorithm)
@@ -510,6 +562,8 @@ def _planner_invocation_reasons(
             break
         simulation_step = simulation_steps[index]
         selected = simulation_step.get("planner", {}).get("selected_action")
+        applied = simulation_step.get("planner", {}).get("applied_environment_action")
+        conversion = simulation_step.get("planner", {}).get("action_conversion")
         command = item.get("command")
         if (
             not isinstance(selected, dict)
@@ -535,7 +589,53 @@ def _planner_invocation_reasons(
         ):
             reasons.append("planner_invocation_action_binding_mismatch")
             break
+        if not _action_conversion_matches(selected, applied, conversion):
+            reasons.append("planner_invocation_action_conversion_mismatch")
+            break
     return sorted(set(reasons))
+
+
+def _action_conversion_matches(selected: Any, applied: Any, conversion: Any) -> bool:
+    """Verify the recorded differential-drive command-to-acceleration transform."""
+    if (
+        not isinstance(selected, dict)
+        or not isinstance(applied, dict)
+        or not isinstance(conversion, dict)
+        or conversion.get("schema_version") != _ACTION_CONVERSION_TRACE_SCHEMA
+        or conversion.get("kind") != "unicycle_velocity_to_acceleration"
+        or conversion.get("input_units") != {"linear_velocity": "m/s", "angular_velocity": "rad/s"}
+        or conversion.get("output_units")
+        != {"linear_velocity": "m/s^2", "angular_velocity": "rad/s^2"}
+        or not isinstance(conversion.get("dt_s"), (int, float))
+        or isinstance(conversion.get("dt_s"), bool)
+        or not math.isclose(conversion["dt_s"], _DT, rel_tol=0.0, abs_tol=1.0e-12)
+        or not isinstance(conversion.get("pre_step_speed"), dict)
+    ):
+        return False
+    previous = conversion["pre_step_speed"]
+    fields = ("linear_velocity", "angular_velocity")
+    if any(
+        not isinstance(previous.get(field), (int, float))
+        or isinstance(previous.get(field), bool)
+        or not math.isfinite(float(previous[field]))
+        or not isinstance(selected.get(field), (int, float))
+        or isinstance(selected.get(field), bool)
+        or not math.isfinite(float(selected[field]))
+        or not isinstance(applied.get(field), (int, float))
+        or isinstance(applied.get(field), bool)
+        or not math.isfinite(float(applied[field]))
+        for field in fields
+    ):
+        return False
+    return all(
+        math.isclose(
+            float(applied[field]),
+            (float(selected[field]) - float(previous[field])) / _DT,
+            rel_tol=0.0,
+            abs_tol=1.0e-8,
+        )
+        for field in fields
+    )
 
 
 def _observed_execution_mode(

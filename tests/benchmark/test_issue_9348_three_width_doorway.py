@@ -19,6 +19,9 @@ import robot_sf.benchmark.three_width_doorway_application as doorway_application
 from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
 from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
 from robot_sf.benchmark.map_runner.map_runner_jsonl import write_validated_to_handle
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    policy_command_to_env_action,
+)
 from robot_sf.benchmark.schema_validator import load_schema
 from robot_sf.benchmark.three_width_doorway_application import (
     DoorwayPairingSession,
@@ -77,8 +80,14 @@ def _baseline_kinematics(planner: str) -> dict[str, Any]:
             "policy_callable": {
                 "module": "robot_sf.benchmark.map_runner_policies.goal",
                 "qualname": "build.<locals>._policy",
+                "implementation_id": "goal_policy_builder.policy.v1",
             },
-            "planner_adapter": {"present": False, "module": None, "class": None},
+            "planner_adapter": {
+                "present": False,
+                "module": None,
+                "class": None,
+                "verified_type": False,
+            },
         }
     return {
         "execution_mode": "adapter",
@@ -87,11 +96,13 @@ def _baseline_kinematics(planner: str) -> dict[str, Any]:
         "policy_callable": {
             "module": "robot_sf.benchmark.map_runner.map_runner",
             "qualname": "_build_common_adapter_policy.<locals>._policy",
+            "implementation_id": "common_adapter_policy.policy.v1",
         },
         "planner_adapter": {
             "present": True,
             "module": "robot_sf.planner.socnav_social_force",
             "class": "SocialForcePlannerAdapter",
+            "verified_type": True,
         },
         "projection_documented": True,
     }
@@ -111,6 +122,23 @@ def _action_trace(count: int) -> dict[str, Any]:
                     "applied_environment_action": {
                         "linear_velocity": 0.5,
                         "angular_velocity": 0.0,
+                    },
+                    "action_conversion": {
+                        "schema_version": "policy-action-conversion.v1",
+                        "kind": "unicycle_velocity_to_acceleration",
+                        "dt_s": 0.1,
+                        "pre_step_speed": {
+                            "linear_velocity": 0.45,
+                            "angular_velocity": 0.0,
+                        },
+                        "input_units": {
+                            "linear_velocity": "m/s",
+                            "angular_velocity": "rad/s",
+                        },
+                        "output_units": {
+                            "linear_velocity": "m/s^2",
+                            "angular_velocity": "rad/s^2",
+                        },
                     },
                 },
             }
@@ -597,6 +625,8 @@ def test_execution_axes_are_copied_from_runtime_and_readiness_fails_closed() -> 
     def spoofed_policy(_observation: Any) -> tuple[float, float]:
         return 0.5, 0.0
 
+    spoofed_policy.__module__ = "robot_sf.benchmark.map_runner_policies.goal"
+    spoofed_policy.__qualname__ = "build.<locals>._policy"
     spoofed_callable_route = doorway_campaign._runtime_policy_route(spoofed_policy)
     assert spoofed_callable_route["execution_mode"] == "unknown"
     spoofed_callable = deepcopy(goal)
@@ -612,6 +642,16 @@ def test_execution_axes_are_copied_from_runtime_and_readiness_fails_closed() -> 
         "planner_invocation_route_mismatch"
         in spoofed_callable["algorithm_metadata"]["baseline_readiness"]["blockers"]
     )
+
+    class SpoofedSocialForceAdapter:
+        pass
+
+    SpoofedSocialForceAdapter.__module__ = "robot_sf.planner.socnav_social_force"
+    SpoofedSocialForceAdapter.__qualname__ = "SocialForcePlannerAdapter"
+    spoofed_social_policy = spoofed_policy
+    spoofed_social_policy._planner_adapter = SpoofedSocialForceAdapter()
+    spoofed_social_route = doorway_campaign._runtime_policy_route(spoofed_social_policy)
+    assert spoofed_social_route["execution_mode"] == "unknown"
 
 
 @pytest.mark.parametrize("digest_field", ["map_sha256", "scenario_sha256"])
@@ -715,6 +755,19 @@ def test_confirmation_separates_baseline_auxiliary_telemetry_from_execution() ->
     assert rejected_binding["admit_h400"] is False
     assert "planner_invocation_action_binding_mismatch" in rejected_binding["rows"][0]["blockers"]
 
+    mismatched_conversion = deepcopy(rows)
+    mismatched_conversion[0]["algorithm_metadata"]["simulation_step_trace"]["steps"][0]["planner"][
+        "applied_environment_action"
+    ]["linear_velocity"] = 5.0
+    rejected_conversion = doorway_campaign.assess_confirmation_rows(
+        mismatched_conversion, cells, pairs, source_sha="d" * 40, manifest_sha256="manifest"
+    )
+    assert rejected_conversion["admit_h400"] is False
+    assert (
+        "planner_invocation_action_conversion_mismatch"
+        in rejected_conversion["rows"][0]["blockers"]
+    )
+
     wrong_clock = deepcopy(rows)
     wrong_clock[0]["algorithm_metadata"]["simulation_step_trace"]["steps"][0]["time_s"] = 0.2
     rejected_clock = doorway_campaign.assess_confirmation_rows(
@@ -735,16 +788,6 @@ def test_confirmation_separates_baseline_auxiliary_telemetry_from_execution() ->
         reason.startswith("fallback_or_degraded_runtime:")
         for reason in blocked["rows"][0]["blockers"]
     )
-
-
-def _assert_paired_report_fields(report: dict[str, Any]) -> None:
-    """Check raw pair differences, cell denominators and binary degeneracy."""
-    _assert_paired_report_fields(report)
-
-
-def _assert_report_verifier_checks_raw_differences(tmp_path: Path, report: dict[str, Any]) -> None:
-    """Verify that sealed report raw differences cannot be edited independently."""
-    _assert_report_verifier_checks_raw_differences(tmp_path, report)
 
 
 def test_manifest_pins_three_width_tiers() -> None:
@@ -794,6 +837,40 @@ def test_doorway_execution_requires_recorded_author_decision() -> None:
         _validate_application_execution({**execution, "authorization_source": "ll7/diss#2669"})
     with pytest.raises(ValueError, match="author's execution decision"):
         _validate_application_execution({**execution, "slurm_submission_authorized": False})
+
+
+def test_velocity_command_conversion_records_formula_inputs() -> None:
+    """The witness records the current-speed delta used by the action converter."""
+
+    class DifferentialRobotConfig:
+        pass
+
+    class Robot:
+        current_speed = (0.4, -0.1)
+
+    env = SimpleNamespace(simulator=SimpleNamespace(robots=[Robot()]))
+    config = SimpleNamespace(
+        robot_config=DifferentialRobotConfig(),
+        sim_config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+    witness: dict[str, Any] = {}
+    action = policy_command_to_env_action(
+        env=env,
+        config=config,
+        command=(0.6, 0.3),
+        conversion_trace=witness,
+    )
+
+    assert action.tolist() == pytest.approx([2.0, 4.0])
+    assert witness == {
+        "schema_version": "policy-action-conversion.v1",
+        "kind": "unicycle_velocity_to_acceleration",
+        "robot_config_type": f"{DifferentialRobotConfig.__module__}.{DifferentialRobotConfig.__qualname__}",
+        "dt_s": 0.1,
+        "pre_step_speed": {"linear_velocity": 0.4, "angular_velocity": -0.1},
+        "input_units": {"linear_velocity": "m/s", "angular_velocity": "rad/s"},
+        "output_units": {"linear_velocity": "m/s^2", "angular_velocity": "rad/s^2"},
+    }
 
 
 def test_matrix_has_three_positive_clearance_widths(tmp_path: Path) -> None:

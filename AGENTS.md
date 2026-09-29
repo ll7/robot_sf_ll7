@@ -96,7 +96,8 @@ Match proof to risk: docs and instruction changes use the cheap path (inspect th
 links); runtime changes need focused tests plus lint and format; benchmark and planner changes need
 benchmark, policy-analysis, or equivalent executable evidence; metric and schema changes need
 targeted assertions with a reproducible sample; paper-facing claims need reproducible evidence at
-the claim boundary. Claim strength overrides the nominal class. Fallback or degraded benchmark
+the claim boundary. Claim strength overrides the nominal class. Any task that writes, changes, or reviews
+tests uses `.agents/skills/test-value-gate/SKILL.md`. Fallback or degraded benchmark
 execution is never success evidence. If proof fails or cannot be gathered, close as `blocked`,
 `diagnostic`, or `not benchmark evidence` and record the next smallest step. The full validation
 matrix is owned by `docs/code_review.md`; benchmark governance by `docs/benchmark_governance.md`.

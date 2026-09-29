@@ -687,9 +687,10 @@ def test_ci_workflow_examples_smoke_has_bounded_checkout_retry_and_fail_closed_g
     for attempt in (attempt_1, attempt_2, attempt_3):
         assert attempt["uses"] == pinned_checkout
         assert attempt.get("continue-on-error") is True
-        # Preserve the existing checkout semantics: no extra options, and in
-        # particular no TLS-bypassing configuration, are injected.
-        assert "with" not in attempt
+        # Preserve the existing checkout semantics: the only option is the
+        # credential-hardening flag, and in particular no TLS-bypassing
+        # configuration is injected.
+        assert attempt.get("with") == {"persist-credentials": False}
 
     assert attempt_2["if"] == "steps.checkout_attempt_1.outcome == 'failure'"
     assert attempt_3["if"] == (

@@ -260,6 +260,7 @@ def _step_harness() -> tuple[_StepLoopState, SimpleNamespace, SimpleNamespace]:
         info={},
         selected_action_payload={},
         applied_environment_action_payload={},
+        action_conversion_payload=None,
         actuation_step=None,
         step_visible=None,
         step_confidence=None,

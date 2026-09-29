@@ -155,8 +155,10 @@ local review and keeps `independent_review_authorized` false. HTTP 401/403 or ex
 failure is terminal `auth` (`startup_auth` before worker start, `worker_task_auth` afterward), is
 not retryable, and never authorizes independent review. A startup failure with no run directory is
 persisted in a unique private `codex-agent-runs/routed-worker-no-run-*` bundle; raw stderr and
-credential material are not copied. The manifest records `chosen_attempt_index`, and consumers
-use it to bind compact details to the selected route when several attempts have no run directory.
+credential material are not copied. Failure-class fields are restricted to the bounded route
+vocabulary (unknown producer values become `unclassified`) before manifest or report output. The
+manifest records `chosen_attempt_index`, and consumers use it to bind compact details to the
+selected route when several attempts have no run directory.
 A successful prior worker suppresses later retries to avoid duplicate work; every route manifest
 remains route evidence only.
 

@@ -19,6 +19,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from scripts.dev.routed_worker_manifest import safe_failure_class
+
 SCHEMA_VERSION = "route_efficiency_report.v1"
 DASHBOARD_SCHEMA_VERSION = "route_efficiency_dashboard.v1"
 ROUTE_EVIDENCE_WARNING = (
@@ -112,7 +114,12 @@ class _Accumulator:
         else:
             compact = attempt.get("compact_artifacts") or {}
             provider = _provider_name(attempt.get("route"))
-            fc = attempt.get("failure_class") or "unknown"
+            raw_failure_class = attempt.get("failure_class")
+            fc = (
+                "unknown"
+                if not raw_failure_class
+                else safe_failure_class(raw_failure_class) or "unknown"
+            )
 
         self.provider_total[provider] += 1
 

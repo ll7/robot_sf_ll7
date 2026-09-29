@@ -1070,6 +1070,32 @@ class TestAuthCredentialFailureClassification:
             assert result["classification"] == "startup_transient", status
             assert result["retryable"] is True, status
 
+    @pytest.mark.parametrize("worker_started", [False, True], ids=["startup", "worker-task"])
+    @pytest.mark.parametrize("http_status", [429, 503])
+    def test_unrelated_failure_class_does_not_become_auth(
+        self, worker_started: bool, http_status: int
+    ) -> None:
+        """An arbitrary class mentioning auth must not suppress status handling."""
+        attempt: dict[str, object] = {
+            "worker_started": worker_started,
+            "http_status": http_status,
+            "failure_class": "task_mentions_unauthorized",
+        }
+        if worker_started:
+            attempt["returncode"] = 1
+
+        result = manifest.classify_delegation_attempt(attempt)
+
+        assert result["classification"] != (
+            "worker_task_auth" if worker_started else "startup_auth"
+        )
+        if worker_started:
+            assert result["classification"] == "worker_task_failure"
+            assert result["retryable"] is False
+        else:
+            assert result["classification"] == "startup_transient"
+            assert result["retryable"] is True
+
     @pytest.mark.parametrize("http_status", [404, *sorted(manifest._TRANSIENT_STARTUP_STATUSES)])
     def test_explicit_auth_failure_precedes_bounded_retry_status(self, http_status: int) -> None:
         """Structured auth evidence must not also earn a transient/backend retry."""
@@ -1186,3 +1212,27 @@ class TestAuthCredentialFailureClassification:
 
         assert secret not in result["reason"]
         assert secret not in result["signature"]
+
+    def test_manifest_sanitizes_credential_bearing_failure_class(self, tmp_path: Path) -> None:
+        """Structured failure classes cannot smuggle credentials into manifests."""
+        repo = _init_repo(tmp_path / "repo-auth-failure-class")
+        secret = "sk-live-abcdef0123456789"
+        data = manifest.build_routing_manifest(
+            [
+                {
+                    "route": {"provider": "luna"},
+                    "worker_started": False,
+                    "run_dir": None,
+                    "returncode": 1,
+                    "failure_class": f"invalid service api credential: {secret}",
+                }
+            ],
+            chosen_index=0,
+            target_repo=repo,
+        )
+
+        attempt = data["attempted_routes"][0]
+        serialized = json.dumps(data)
+        assert secret not in serialized
+        assert attempt["failure_class"] == "auth"
+        assert attempt["terminal_state"] == "auth"

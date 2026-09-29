@@ -19,6 +19,7 @@ from scripts.dev.pr_loop_policy import (
     ReviewClaim,
     ShaCarrier,
     _accepted_gate_verdict_shas,
+    _extract_manifest_compact_artifacts,
     _has_decision_packet_heading,
     _parse_review_claim_marker,
     _review_claim_released_shas,
@@ -2426,6 +2427,52 @@ def test_load_manifest_artifacts_rejects_symlink(tmp_path: Path) -> None:
     assert artifact_presence == {}
     assert compact == {}
     assert warnings
+
+
+def test_extract_manifest_compact_artifacts_honors_chosen_attempt_index() -> None:
+    """The policy consumer must not inherit artifacts from an unselected attempt."""
+    selected_compact = _compact_artifacts(validation_result="selected")
+    unselected_compact = _compact_artifacts(validation_result="unselected")
+    manifest = {
+        "chosen_attempt_index": 1,
+        "chosen_run_dir": None,
+        "attempted_routes": [
+            {"attempt_index": 0, "run_dir": None, "compact_artifacts": unselected_compact},
+            {"attempt_index": 1, "run_dir": None, "compact_artifacts": selected_compact},
+        ],
+    }
+
+    assert _extract_manifest_compact_artifacts(manifest) == selected_compact
+
+
+def test_extract_manifest_compact_artifacts_rejects_stale_top_level_projection() -> None:
+    """A stale compatibility projection must not bypass indexed attempt selection."""
+    selected_compact = _compact_artifacts(validation_result="selected")
+    stale_compact = _compact_artifacts(validation_result="stale-top-level")
+    manifest = {
+        "chosen_attempt_index": 1,
+        "chosen_run_dir": None,
+        "compact_artifacts": stale_compact,
+        "attempted_routes": [
+            {"attempt_index": 0, "run_dir": None, "compact_artifacts": _compact_artifacts()},
+            {"attempt_index": 1, "run_dir": None, "compact_artifacts": selected_compact},
+        ],
+    }
+
+    assert _extract_manifest_compact_artifacts(manifest) == {}
+
+
+def test_extract_manifest_compact_artifacts_rejects_ambiguous_legacy_no_run() -> None:
+    """Legacy duplicate pre-start attempts must not be selected by list order."""
+    manifest = {
+        "chosen_run_dir": None,
+        "attempted_routes": [
+            {"attempt_index": 0, "run_dir": None, "compact_artifacts": _compact_artifacts()},
+            {"attempt_index": 1, "run_dir": None, "compact_artifacts": _compact_artifacts()},
+        ],
+    }
+
+    assert _extract_manifest_compact_artifacts(manifest) == {}
 
 
 def test_main_cli_dry_run_no_gh(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:

@@ -90,6 +90,16 @@ _AUTH_FAILURE_CLASSES = frozenset(
         "worker_task_auth",
     }
 )
+# Legacy producers sometimes append diagnostic detail (which may include a
+# credential) to one of these class labels.  Only these complete, credential-
+# specific prefixes retain auth semantics; arbitrary substrings such as
+# ``task_mentions_unauthorized`` must not override transient HTTP handling.
+_AUTH_FAILURE_CLASS_PREFIXES = (
+    "invalid service api credential:",
+    "invalid_service_api_credential:",
+    "invalid api key:",
+    "invalid_api_key:",
+)
 _AUTH_TEXT_MARKERS = (
     "invalid service api credential",
     "invalid_api_key",
@@ -102,6 +112,7 @@ _AUTH_REMEDY = (
     "dispatch cannot fix it, so refresh or re-establish the agent-session credential before "
     "retrying, and treat any review requirement bound to this attempt as still unmet"
 )
+_UNCLASSIFIED_FAILURE_CLASS = "unclassified"
 
 
 class TerminalFailure(enum.StrEnum):
@@ -237,6 +248,61 @@ def _failure_class(attempt: dict[str, Any]) -> str:
     return str(value).strip().lower() if value is not None else ""
 
 
+_SAFE_FAILURE_CLASSES = frozenset(
+    {
+        "none",
+        "success",
+        "timeout",
+        "exception",
+        "error",
+        "non_zero_exit",
+        "missing_artifact",
+        "route_not_started",
+        "scope_violation",
+        "unavailable",
+        "backend-unavailable",
+        "route-collapse",
+        "partial-artifacts",
+        "missing-artifact-paths",
+        "validation",
+        "malformed",
+        "missing_terminal_state",
+        "other",
+        "unknown",
+        "startup_failure",
+        "startup_transient",
+        "worker_task_failure",
+        "worker_started",
+        *_AUTH_FAILURE_CLASSES,
+        *_STARTUP_BACKEND_404_FAILURE_CLASSES,
+    }
+)
+
+
+def safe_failure_class(value: Any) -> str | None:
+    """Return a bounded class token suitable for manifest consumers.
+
+    Producer diagnostics are not a safe serialization boundary: callers can
+    accidentally pass a credential-bearing string in ``failure_class``. Keep
+    the established route vocabulary, but collapse all unknown/non-string
+    values to a bounded sentinel. Terminal state and delegation classification
+    retain the meaningful outcome separately.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return _UNCLASSIFIED_FAILURE_CLASS
+    normalized = value.strip().lower()
+    if normalized in _SAFE_FAILURE_CLASSES:
+        return normalized
+    return _UNCLASSIFIED_FAILURE_CLASS
+
+
+def _safe_failure_class(value: Any) -> str | None:
+    """Preserve the private producer helper while sharing the public boundary."""
+    return safe_failure_class(value)
+
+
 def _auth_failure(attempt: dict[str, Any], status: int | None, text: str) -> bool:
     """Return whether one attempt carries an authentication or credential failure.
 
@@ -246,7 +312,10 @@ def _auth_failure(attempt: dict[str, Any], status: int | None, text: str) -> boo
     """
     if status in _AUTH_STATUSES:
         return True
-    if _failure_class(attempt) in _AUTH_FAILURE_CLASSES:
+    failure_class = _failure_class(attempt)
+    if failure_class in _AUTH_FAILURE_CLASSES or any(
+        failure_class.startswith(prefix) for prefix in _AUTH_FAILURE_CLASS_PREFIXES
+    ):
         return True
     if not any(marker in text for marker in _AUTH_TEXT_MARKERS):
         return False
@@ -1102,7 +1171,9 @@ def build_routing_manifest(
     manifest_attempts: list[dict[str, Any]] = []
     for index, attempt in enumerate(attempts):
         delegation = classify_delegation_attempt(attempt)
-        normalized_failure_class = attempt.get("failure_class")
+        normalized_failure_class = (
+            _failure_class(attempt) if attempt.get("failure_class") is not None else None
+        )
         if delegation["classification"] in {"startup_auth", "worker_task_auth"}:
             # Keep terminal-state evidence aligned with the normalized delegation
             # classification, including startup failures with no run directory.
@@ -1166,6 +1237,7 @@ def build_routing_manifest(
                 has_run_dir=False,
             )
         scope_dict = asdict(scope_check) if scope_check is not None else None
+        bounded_failure_class = safe_failure_class(normalized_failure_class)
         output_contract = classify_worker_output(
             attempt,
             terminal_state=terminal_state,
@@ -1176,7 +1248,7 @@ def build_routing_manifest(
                 "attempt_index": index,
                 "route": attempt.get("route"),
                 "returncode": attempt.get("returncode"),
-                "failure_class": attempt.get("failure_class"),
+                "failure_class": bounded_failure_class,
                 "terminal_state": terminal_state.value,
                 "run_dir": run_dir,
                 "artifact_paths": attempt.get("artifact_paths"),

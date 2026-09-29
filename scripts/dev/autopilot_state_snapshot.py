@@ -24,7 +24,7 @@ from scripts.dev._gh_pagination import is_likely_truncated
 from scripts.dev.blocker_receipt import summarize_decisions
 from scripts.dev.check_pr_ci_status import _latest_check_runs
 from scripts.dev.routed_worker_manifest import SCHEMA_VERSION as ROUTE_MANIFEST_SCHEMA
-from scripts.dev.routed_worker_manifest import classify_worker_output
+from scripts.dev.routed_worker_manifest import classify_worker_output, safe_failure_class
 
 FAILURE_CONCLUSIONS = {
     "action_required",
@@ -611,7 +611,9 @@ def _route_attempt_snapshot(attempt: Any) -> dict[str, Any]:
         "attempt_index": attempt.get("attempt_index"),
         "route": attempt.get("route"),
         "returncode": attempt.get("returncode"),
-        "failure_class": attempt.get("failure_class"),
+        # Manifests can outlive the producer version or be supplied by an
+        # external wrapper. Never re-emit an unbounded diagnostic string.
+        "failure_class": safe_failure_class(attempt.get("failure_class")),
         "terminal_state": terminal_state,
         "terminal_state_known": terminal_state is not None,
         "run_dir": attempt.get("run_dir"),
@@ -657,6 +659,10 @@ def _resolve_chosen_attempt_position(
             )
         ]
         if len(positions) == 1:
+            if "chosen_run_dir" in raw and attempt_rows[positions[0]].get("run_dir") != raw.get(
+                "chosen_run_dir"
+            ):
+                return None, "chosen_attempt_index_identity_mismatch"
             return positions[0], None
         return None, "chosen_attempt_index_unmatched_or_ambiguous"
 
@@ -843,7 +849,9 @@ def route_manifest_snapshot(  # noqa: C901, PLR0912 - explicit fail-closed parse
         "schema": schema,
         "route_evidence_only": raw.get("route_evidence_only"),
         "chosen_route": raw.get("chosen_route"),
-        "chosen_run_dir": chosen_run_dir,
+        # The selected row is authoritative; this also derives the path for
+        # additive-index manifests that omitted the top-level projection.
+        "chosen_run_dir": chosen.get("run_dir") if chosen else chosen_run_dir,
         "chosen_attempt_index": (
             chosen.get("attempt_index") if chosen else raw.get("chosen_attempt_index")
         ),

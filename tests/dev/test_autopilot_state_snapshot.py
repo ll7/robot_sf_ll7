@@ -504,6 +504,111 @@ def test_route_manifest_snapshot_selects_indexed_no_run_auth_attempt(tmp_path: P
     assert row["aggregation_reason"] == "terminal_state:auth"
 
 
+def test_route_manifest_snapshot_redacts_legacy_failure_class_values(tmp_path: Path) -> None:
+    """Consumer snapshots must not re-emit credential-bearing legacy diagnostics."""
+    manifest_path = tmp_path / "routing_manifest.json"
+    secret = "sk-live-synthetic-redaction-marker"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "routed_worker_manifest.v2",
+                "route_evidence_only": True,
+                "chosen_route": {"provider": "luna"},
+                "chosen_run_dir": None,
+                "chosen_attempt_index": 0,
+                "chosen_terminal_state": "auth",
+                "attempted_routes": [
+                    {
+                        "attempt_index": 0,
+                        "route": {"provider": "luna"},
+                        "returncode": 1,
+                        "failure_class": f"invalid service api credential: {secret}",
+                        "terminal_state": "auth",
+                        "run_dir": None,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    row = snapshot.route_manifest_snapshot(manifest_path)
+
+    assert row["chosen_failure_class"] == "unclassified"
+    assert row["failed_attempts"][0]["failure_class"] == "unclassified"
+    assert secret not in json.dumps(row)
+
+
+def test_route_manifest_snapshot_rejects_indexed_stale_chosen_run_dir(
+    tmp_path: Path,
+) -> None:
+    """An indexed attempt with a stale top-level path must fail closed."""
+    manifest_path = tmp_path / "routing_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "routed_worker_manifest.v2",
+                "route_evidence_only": True,
+                "chosen_route": {"provider": "luna"},
+                "chosen_run_dir": ".git/codex-agent-runs/stale",
+                "chosen_attempt_index": 1,
+                "chosen_terminal_state": "auth",
+                "attempted_routes": [
+                    {
+                        "attempt_index": 0,
+                        "route": {"provider": "opencode-go"},
+                        "terminal_state": "route_not_started",
+                        "run_dir": None,
+                    },
+                    {
+                        "attempt_index": 1,
+                        "route": {"provider": "luna"},
+                        "terminal_state": "auth",
+                        "run_dir": None,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    row = snapshot.route_manifest_snapshot(manifest_path)
+
+    assert row["status"] == "unavailable"
+    assert row["chosen_attempt_index"] == 1
+    assert row["chosen_failure_class"] is None
+    assert row["aggregation"] == "inconclusive"
+    assert row["aggregation_reason"] == "chosen_attempt_index_identity_mismatch"
+
+
+def test_route_manifest_snapshot_derives_indexed_chosen_run_dir(tmp_path: Path) -> None:
+    """An omitted top-level path is derived from the selected indexed row."""
+    manifest_path = tmp_path / "routing_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "routed_worker_manifest.v2",
+                "route_evidence_only": True,
+                "chosen_attempt_index": 0,
+                "attempted_routes": [
+                    {
+                        "attempt_index": 0,
+                        "route": {"provider": "luna"},
+                        "terminal_state": "auth",
+                        "run_dir": ".git/codex-agent-runs/selected",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    row = snapshot.route_manifest_snapshot(manifest_path)
+
+    assert row["status"] == "ok"
+    assert row["chosen_run_dir"] == ".git/codex-agent-runs/selected"
+
+
 def test_route_manifest_snapshot_fails_closed_on_ambiguous_legacy_no_run_attempts(
     tmp_path: Path,
 ) -> None:

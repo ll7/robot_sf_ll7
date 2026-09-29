@@ -112,6 +112,31 @@ def test_analyze_missing_artifacts_counted_as_incomplete() -> None:
     assert report["incomplete_by_failure_class"]["route-collapse"] == 1
 
 
+def test_failure_class_is_bounded_in_json_and_markdown() -> None:
+    """Legacy credential-bearing classes never reach report serialization."""
+    secret = "sk-live-synthetic-consumer-marker"
+    manifest = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "luna"},
+                "failure_class": f"invalid service api credential: {secret}",
+                "compact_artifacts": _compact_artifacts(present=False),
+            }
+        ]
+    )
+
+    report = rer.analyze_manifests([manifest])
+    serialized = json.dumps(report, sort_keys=True)
+    markdown = rer._format_markdown(report)
+
+    assert report["incomplete_by_failure_class"] == {"unclassified": 1}
+    assert secret not in serialized
+    assert secret not in markdown
+    assert "unclassified" in serialized
+    assert "unclassified" in markdown
+
+
 def test_route_success_vs_task_acceptance_distinction() -> None:
     """A successful route should not imply task acceptance without snapshot."""
     manifest = _manifest(

@@ -424,21 +424,82 @@ def metadata_conflict_handoff(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _select_manifest_attempt(
+    manifest: dict[str, Any], attempts: list[Any]
+) -> dict[str, Any] | None:
+    """Resolve one manifest attempt without guessing legacy pre-start rows."""
+    chosen_route = manifest.get("chosen_route")
+    chosen_terminal_state = manifest.get("chosen_terminal_state")
+
+    def matches_identity(attempt: dict[str, Any]) -> bool:
+        return (chosen_route is None or attempt.get("route") == chosen_route) and (
+            chosen_terminal_state is None or attempt.get("terminal_state") == chosen_terminal_state
+        )
+
+    if "chosen_attempt_index" in manifest:
+        chosen_index = manifest.get("chosen_attempt_index")
+        if not isinstance(chosen_index, int) or isinstance(chosen_index, bool):
+            return None
+        selected = [
+            attempt
+            for attempt in attempts
+            if isinstance(attempt, dict)
+            and isinstance(attempt.get("attempt_index"), int)
+            and not isinstance(attempt.get("attempt_index"), bool)
+            and attempt.get("attempt_index") == chosen_index
+            and matches_identity(attempt)
+        ]
+        if len(selected) != 1:
+            return None
+        selected_attempt = selected[0]
+        if "chosen_run_dir" in manifest and selected_attempt.get("run_dir") != manifest.get(
+            "chosen_run_dir"
+        ):
+            return None
+        return selected_attempt
+
+    if "chosen_run_dir" in manifest and manifest.get("chosen_run_dir") is not None:
+        selected = [
+            attempt
+            for attempt in attempts
+            if isinstance(attempt, dict)
+            and attempt.get("run_dir") == manifest.get("chosen_run_dir")
+            and matches_identity(attempt)
+        ]
+    else:
+        # Legacy manifests may omit the additive index. Do not match a null
+        # run_dir by position: duplicate pre-start attempts are ambiguous.
+        selected = [
+            attempt
+            for attempt in attempts
+            if isinstance(attempt, dict) and matches_identity(attempt)
+        ]
+    return selected[0] if len(selected) == 1 else None
+
+
 def _extract_manifest_compact_artifacts(manifest: dict[str, Any]) -> dict[str, Any]:
     """Return compact artifact records from a routed-worker manifest."""
     compact = manifest.get("compact_artifacts")
-    if isinstance(compact, dict):
-        return compact
+    if "attempted_routes" not in manifest:
+        # Pre-index manifests without attempt rows have no competing source of
+        # truth. Preserve their explicit top-level projection only.
+        return compact if isinstance(compact, dict) else {}
+
     attempts = manifest.get("attempted_routes")
     if not isinstance(attempts, list):
         return {}
-    for attempt in attempts:
-        if not isinstance(attempt, dict):
-            continue
-        if attempt.get("run_dir") == manifest.get("chosen_run_dir"):
-            compact = attempt.get("compact_artifacts")
-            return compact if isinstance(compact, dict) else {}
-    return {}
+    selected = _select_manifest_attempt(manifest, attempts)
+    if selected is None:
+        return {}
+    selected_compact = selected.get("compact_artifacts")
+    if not isinstance(selected_compact, dict):
+        return {}
+    # New manifests retain a top-level projection for compatibility. A stale
+    # projection must not override, or silently disagree with, the selected
+    # attempt that the policy is supposed to validate.
+    if isinstance(compact, dict) and compact != selected_compact:
+        return {}
+    return selected_compact
 
 
 def _compact_artifacts_present(compact_artifacts: dict[str, Any] | None) -> bool | None:

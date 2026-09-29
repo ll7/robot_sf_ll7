@@ -760,6 +760,9 @@ _FAST_FILES = {
     "test_issue_9348_three_width_doorway.py",
     "test_issue_9533_guarded_ppo_trace.py",
     "test_event_ledger.py",
+    # DOI-free release candidate tests use deterministic fixture repositories;
+    # keep changed candidate contracts in pull-request fast shards (issue #9863).
+    "test_release_candidate.py",
     # Contact-attribution fixtures cover the opt-in ledger and map-runner paths
     # in pull-request fast shards (issue #9729).
     "test_contact_attribution_issue_9729.py",

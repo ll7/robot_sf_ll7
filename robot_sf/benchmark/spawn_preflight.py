@@ -980,6 +980,11 @@ def _release_manifest_inputs(  # noqa: C901, PLR0912, PLR0915
         raise ValueError("release manifest resolved seed set contains duplicates")
 
     seed_policy = dict(manifest.seed_policy)
+    seed_mode = seed_policy.get("mode")
+    if seed_mode not in {"seed-set", "fixed-list"}:
+        raise ValueError(
+            f"unsupported seed_policy mode {seed_mode!r}; expected seed-set or fixed-list"
+        )
     seed_set_name = seed_policy.get("seed_set")
     seed_sets_path: Path | None = None
     declared_seed_sha256 = getattr(manifest, "seed_sets_sha256", None) or seed_policy.get(
@@ -1016,7 +1021,9 @@ def _release_manifest_inputs(  # noqa: C901, PLR0912, PLR0915
         raise ValueError("seed-set mode requires a checksummed seed_sets_path")
     else:
         fixed_seeds = seed_policy.get("seeds")
-        if isinstance(fixed_seeds, list) and tuple(int(seed) for seed in fixed_seeds) != seeds:
+        if not isinstance(fixed_seeds, list):
+            raise ValueError("fixed-list mode requires seed_policy.seeds as a list")
+        if tuple(int(seed) for seed in fixed_seeds) != seeds:
             raise ValueError("resolved release seeds do not match seed_policy.seeds")
 
     scenarios = _load_matrix(matrix_path)

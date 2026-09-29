@@ -546,6 +546,39 @@ def test_release_input_resolver_uses_manifest_matrix_and_seed_set() -> None:
     assert identity["seed_set"] == "paper_eval_s30"
 
 
+def _manifest_with_seed_policy(seed_policy: dict[str, object]):
+    manifest = load_release_manifest(RELEASE_MANIFEST)
+    fields = {name: getattr(manifest, name) for name in dir(manifest) if not name.startswith("_")}
+    fields["seed_policy"] = seed_policy
+    return SimpleNamespace(**fields)
+
+
+def test_release_input_resolver_rejects_fixed_list_that_differs_from_resolved_seeds() -> None:
+    """A fixed list of [111] cannot stand in for the resolved 111-140 evaluation seeds."""
+    manifest = _manifest_with_seed_policy({"mode": "fixed-list", "seeds": [111]})
+
+    with pytest.raises(ValueError, match="do not match seed_policy.seeds"):
+        spawn_preflight._release_manifest_inputs(manifest)
+
+
+def test_release_input_resolver_rejects_fixed_list_without_a_seed_list() -> None:
+    manifest = _manifest_with_seed_policy({"mode": "fixed-list"})
+
+    with pytest.raises(ValueError, match="requires seed_policy.seeds"):
+        spawn_preflight._release_manifest_inputs(manifest)
+
+
+@pytest.mark.parametrize("mode", ["seedset", "", None, "range"])
+def test_release_input_resolver_rejects_unknown_seed_mode(mode: object) -> None:
+    """An unknown mode must not skip the named seed-set check."""
+    manifest = _manifest_with_seed_policy(
+        {"mode": mode, "seed_set": "paper_eval_s30", "seeds": list(range(111, 141))}
+    )
+
+    with pytest.raises(ValueError, match="unsupported seed_policy mode"):
+        spawn_preflight._release_manifest_inputs(manifest)
+
+
 def test_matrix_only_cli_input_cannot_be_mistaken_for_release_preflight(
     tmp_path: Path,
 ) -> None:

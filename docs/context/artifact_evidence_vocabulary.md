@@ -101,10 +101,11 @@ Each new file record also has a whole-file `file_sha256` and `allocation_status`
 allocation with no usable FIEMAP mapping is recorded as `allocation_unverified` on the source;
 a FIEMAP mapping that shows holes, unwritten extents, or incomplete coverage still fails. Source
 verification must explicitly use `--side source`; the default remains strict destination
-verification. Every destination file must have dense
-reported allocation or a complete encoded FIEMAP mapping, and its whole-file SHA-256 must match
-the manifest. The `custody` command consumes the manifest plus fresh source and destination
-verification JSON, requires complete per-file evidence and matching hashes, and writes a
+verification. Every nonempty destination file is checked for holes with FIEMAP, regardless of its
+reported block count. When FIEMAP is unavailable, destination verification walks
+`SEEK_DATA`/`SEEK_HOLE`; any detected hole or unavailable fallback fails. Its whole-file SHA-256
+must match the manifest. The `custody` command consumes the manifest plus source and destination
+verification JSON, then re-hashes and rechecks allocation on both live roots before writing a
 self-digested `chunk-custody.v1` receipt. It rejects state-backed verification receipts because
 cached digests are not a fresh byte readback. The receipt proves this copy check only; scheduler,
 source revision, and preservation claims need their own bound evidence.
@@ -112,7 +113,7 @@ source revision, and preservation claims need their own bound evidence.
 ```bash
 uv run python scripts/tools/chunk_manifest.py verify --side source --root <SOURCE> --manifest <MANIFEST.json> --json > <SOURCE-VERIFY.json>
 uv run python scripts/tools/chunk_manifest.py verify --side destination --root <DESTINATION> --manifest <MANIFEST.json> --json > <DESTINATION-VERIFY.json>
-uv run python scripts/tools/chunk_manifest.py custody --manifest <MANIFEST.json> --source-verification <SOURCE-VERIFY.json> --destination-verification <DESTINATION-VERIFY.json> --output <CUSTODY.json> --json
+uv run python scripts/tools/chunk_manifest.py custody --manifest <MANIFEST.json> --source-verification <SOURCE-VERIFY.json> --destination-verification <DESTINATION-VERIFY.json> --source-root <SOURCE> --destination-root <DESTINATION> --output <CUSTODY.json> --json
 ```
 
 New manifests also carry per-file `digest_kind`, a `summary` block, and

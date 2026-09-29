@@ -32,6 +32,7 @@ rewritten. Stdlib-only; no ``robot_sf`` imports needed.
 from __future__ import annotations
 
 import argparse
+import errno
 import fnmatch
 import hashlib
 import json
@@ -215,8 +216,8 @@ def _fiemap_extents(fd: int, size: int) -> list[_FiemapExtent] | None:
     return None
 
 
-def _fiemap_confirms_low_allocation(path: Path, size: int) -> bool | None:
-    """Return True for encoded, gapless extents; None when no mapping is available.
+def _fiemap_confirms_allocation(path: Path, size: int, *, require_encoded: bool) -> bool | None:
+    """Return True for gapless extents; require encoding for low block counts.
 
     Requires every extent to make strictly forward progress (no zero-length or
     overlapping extents) and requires FIEMAP_EXTENT_LAST on the final extent of the
@@ -249,7 +250,7 @@ def _fiemap_confirms_low_allocation(path: Path, size: int) -> bool | None:
         if extent.last != (index == last_index):
             return False
         covered += extent.length
-    return saw_encoded and covered >= size
+    return covered >= size and (saw_encoded or not require_encoded)
 
 
 def _has_sparse_hole(path: Path, size: int) -> bool:
@@ -258,14 +259,51 @@ def _has_sparse_hole(path: Path, size: int) -> bool:
     SEEK_DATA/SEEK_HOLE are not used here: they may legally report a whole file as
     data despite real sparse holes, so only an exhaustive FIEMAP mapping can accept.
     """
-    return not _fiemap_confirms_low_allocation(path, size)
+    return not _fiemap_confirms_allocation(path, size, require_encoded=True)
 
 
 def _allocation_status(path: Path, st: os.stat_result, relative: str) -> str:
     """Classify allocation; reject a mapping that actually shows unsafe extents."""
     if not _looks_sparse_by_blocks(st):
         return ALLOCATION_VERIFIED
-    mapped = _fiemap_confirms_low_allocation(path, st.st_size)
+    mapped = _fiemap_confirms_allocation(path, st.st_size, require_encoded=True)
+    if mapped is False:
+        raise ChunkManifestError("sparse_file", f"sparse member: {relative}", file=relative)
+    return ALLOCATION_VERIFIED if mapped else ALLOCATION_UNVERIFIED
+
+
+def _seek_confirms_allocation(path: Path, size: int) -> bool | None:
+    """Walk SEEK_DATA/SEEK_HOLE when FIEMAP is unavailable; reject any observed hole."""
+    if not hasattr(os, "SEEK_DATA") or not hasattr(os, "SEEK_HOLE"):
+        return None
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        return None
+    try:
+        offset = 0
+        while offset < size:
+            data = os.lseek(fd, offset, os.SEEK_DATA)
+            if data != offset:
+                return False
+            hole = os.lseek(fd, offset, os.SEEK_HOLE)
+            if hole <= offset or hole > size:
+                return False
+            offset = hole
+        return True
+    except OSError as exc:
+        return False if exc.errno == errno.ENXIO else None
+    finally:
+        os.close(fd)
+
+
+def _destination_allocation_status(path: Path, size: int, relative: str) -> str:
+    """Inspect all nonempty destination extents, independent of st_blocks."""
+    if size == 0:
+        return ALLOCATION_VERIFIED
+    mapped = _fiemap_confirms_allocation(path, size, require_encoded=False)
+    if mapped is None:
+        mapped = _seek_confirms_allocation(path, size)
     if mapped is False:
         raise ChunkManifestError("sparse_file", f"sparse member: {relative}", file=relative)
     return ALLOCATION_VERIFIED if mapped else ALLOCATION_UNVERIFIED
@@ -1283,6 +1321,20 @@ def verify_manifest(root, *, manifest, state=None, progress_every=0, require_all
         state=state,
         progress_every=progress_every,
     )
+    if require_allocation:
+        by_path = {relative: (absolute, identity) for relative, absolute, identity in targets}
+        for result in outcomes:
+            if result["record"] is None:
+                continue
+            relative = result["path"]
+            absolute, identity = by_path[relative]
+            result["record"]["allocation_status"] = _destination_allocation_status(
+                absolute, identity[0], relative
+            )
+            if _stat_checked(absolute, relative) != identity:
+                raise ChunkManifestError(
+                    "source_mutated", f"changed during allocation check: {relative}", file=relative
+                )
     for result in outcomes:
         failures.extend(result["failures"])
         record = result["record"]
@@ -1374,14 +1426,33 @@ def build_custody_receipt(
     manifest: Mapping[str, Any],
     source: Mapping[str, Any],
     destination: Mapping[str, Any],
+    *,
+    source_root: Path,
+    destination_root: Path,
 ) -> dict[str, Any]:
-    """Bind complete, hash-equal copies to verified destination allocation."""
+    """Recheck both live roots before binding hash-equal, allocated copies."""
     if validate_manifest(manifest):
         raise ChunkManifestError("custody_manifest_invalid", "manifest is invalid")
     if any(not _hex64(record.get("file_sha256")) for record in manifest["files"]):
         raise ChunkManifestError("custody_manifest_invalid", "manifest lacks whole-file SHA-256")
-    source_files = _custody_files(source, manifest, side="source")
-    destination_files = _custody_files(destination, manifest, side="destination")
+    prior_source = _custody_files(source, manifest, side="source")
+    prior_destination = _custody_files(destination, manifest, side="destination")
+    fresh_source = verify_manifest(source_root, manifest=manifest, require_allocation=False)
+    fresh_destination = verify_manifest(
+        destination_root, manifest=manifest, require_allocation=True
+    )
+    source_files = _custody_files(fresh_source, manifest, side="source")
+    destination_files = _custody_files(fresh_destination, manifest, side="destination")
+    for side, prior, fresh in (
+        ("source", prior_source, source_files),
+        ("destination", prior_destination, destination_files),
+    ):
+        if any(
+            prior[path]["file_sha256"] != fresh[path]["file_sha256"]
+            or prior[path]["allocation_status"] != fresh[path]["allocation_status"]
+            for path in prior
+        ):
+            raise ChunkManifestError("custody_verification_stale", f"{side} verification is stale")
     unverified = []
     for record in manifest["files"]:
         path = record["path"]
@@ -1506,10 +1577,12 @@ def _build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--progress-every", type=_non_negative_int, default=0)
     verify.add_argument("--json", action="store_true")
 
-    custody = commands.add_parser("custody", help="Bind source and destination verification")
+    custody = commands.add_parser("custody", help="Recheck roots and bind copy custody")
     custody.add_argument("--manifest", type=Path, required=True)
     custody.add_argument("--source-verification", type=Path, required=True)
     custody.add_argument("--destination-verification", type=Path, required=True)
+    custody.add_argument("--source-root", type=Path, required=True)
+    custody.add_argument("--destination-root", type=Path, required=True)
     custody.add_argument("--output", type=Path, required=True)
     custody.add_argument("--json", action="store_true")
 
@@ -1678,10 +1751,24 @@ def _run_custody(args: argparse.Namespace) -> int:
     input_paths = (args.manifest, args.source_verification, args.destination_verification)
     if args.output.resolve() in {path.resolve() for path in input_paths}:
         raise ChunkManifestError("custody_output_conflict", "output must differ from inputs")
+    source_root = args.source_root.expanduser().resolve()
+    destination_root = args.destination_root.expanduser().resolve()
+    if source_root == destination_root:
+        raise ChunkManifestError(
+            "custody_root_conflict", "source and destination roots must differ"
+        )
+    for root in (source_root, destination_root):
+        _reject_inside_root(args.output, root, "--output")
     manifest, manifest_raw = _read_json_mapping(args.manifest)
     source, source_raw = _read_json_mapping(args.source_verification)
     destination, destination_raw = _read_json_mapping(args.destination_verification)
-    receipt = build_custody_receipt(manifest, source, destination)
+    receipt = build_custody_receipt(
+        manifest,
+        source,
+        destination,
+        source_root=source_root,
+        destination_root=destination_root,
+    )
     receipt["manifest_sha256"] = hashlib.sha256(manifest_raw).hexdigest()
     receipt["source_verification_sha256"] = hashlib.sha256(source_raw).hexdigest()
     receipt["destination_verification_sha256"] = hashlib.sha256(destination_raw).hexdigest()

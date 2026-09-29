@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,6 +19,7 @@ ERRATUM_CONTRACT_PATH = Path(
     "configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json"
 )
 RELEASE_MANIFEST_PATH = Path("configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml")
+_EXPECTED_OPERATIONAL_METADATA = {"version": "0.0.7", "publication_date": "2026-09-24"}
 
 
 def _args(mode: str, tmp_path: Path) -> argparse.Namespace:
@@ -95,7 +97,14 @@ def test_release_cli_dispatches_each_zenodo_mode(
     args = _args(mode, tmp_path)
     if mode in {"upload", "publish", "verify"}:
         args.manifest = tmp_path / "manifest.yaml"
-        expected_binding = {"release_tag": "v1", "metadata_sha256": "a" * 64}
+        expected_binding = {
+            "release_tag": "v1",
+            "metadata_sha256": "a" * 64,
+            "manifest_schema_version": "benchmark-release-manifest.v0.2",
+        }
+        if mode in {"publish", "verify"}:
+            args.expected_version = "0.0.7"
+            args.expected_publication_date = "2026-09-24"
         monkeypatch.setattr(
             release_cli,
             "_load_release_binding",
@@ -117,6 +126,7 @@ def test_release_cli_dispatches_each_zenodo_mode(
         assert metadata_calls == [
             {"expected_source_tag": "v1", "expected_metadata_sha256": "a" * 64}
         ]
+        assert operation_kwargs["expected_operational_metadata"] == _EXPECTED_OPERATIONAL_METADATA
     elif mode == "reserve":
         assert metadata_calls == [{}]
     else:
@@ -226,6 +236,205 @@ def test_release_cli_parser_exposes_new_version_identity_arguments() -> None:
     assert args.manifest is None
 
 
+def test_release_cli_dispatches_repair_draft_metadata_with_repository_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The repair mode loads a bound metadata file and forwards the explicit preview guard."""
+    expected_binding = {"release_tag": "v1", "metadata_sha256": "a" * 64}
+    release_definition = SimpleNamespace(release_tag="v1", metadata_sha256="a" * 64)
+    calls: list[tuple[str, object]] = []
+    bootstrap_path = tmp_path / "bootstrap.json"
+    bootstrap_path.write_bytes(b"bootstrap metadata input\n")
+    bootstrap_digest = hashlib.sha256(bootstrap_path.read_bytes()).hexdigest()
+    args = argparse.Namespace(
+        release_cmd="zenodo",
+        zenodo_mode="repair-draft-metadata",
+        token_file=tmp_path / "token",
+        manifest=tmp_path / "manifest.yaml",
+        repository_root=tmp_path / "source-checkout",
+        metadata=tmp_path / "metadata.json",
+        bootstrap_metadata=bootstrap_path,
+        expected_bootstrap_metadata_sha256=bootstrap_digest,
+        deposition_id=22077448,
+        version="0.0.7",
+        publication_date="2026-09-24",
+        expected_remote_metadata_sha256="b" * 64,
+        expected_operational_metadata_sha256="e" * 64,
+        expected_remote_source_tag=(
+            "https://github.com/ll7/robot_sf_ll7/releases/tag/previous-candidate"
+        ),
+        expected_remote_source_sha="c" * 40,
+        expected_remote_base_sha="d" * 40,
+        apply=True,
+        api_base="https://example.test/api",
+    )
+    monkeypatch.setattr(
+        release_cli,
+        "_load_release_binding",
+        lambda value: (
+            calls.append(("load-binding", value.repository_root))
+            or (release_definition, expected_binding)
+        ),
+    )
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "build_session",
+        lambda path: calls.append(("build-session", path)) or "mock-session",
+    )
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "load_dataset_metadata",
+        lambda path, **kwargs: (
+            calls.append(("load-metadata", {"path": path, **kwargs})) or {"upload_type": "dataset"}
+        ),
+    )
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "repair_draft_metadata",
+        lambda session, deposition_id, metadata, **kwargs: (
+            calls.append(
+                (
+                    "repair",
+                    {"session": session, "deposition_id": deposition_id, **kwargs},
+                )
+            )
+            or {"status": "repaired", "deposition_id": deposition_id}
+        ),
+    )
+
+    assert release_cli.handle(args) == 0
+    assert calls[0] == ("load-binding", args.repository_root)
+    assert calls[1] == ("build-session", args.token_file)
+    assert calls[2] == (
+        "load-metadata",
+        {
+            "path": args.metadata,
+            "expected_source_tag": "v1",
+            "expected_metadata_sha256": "a" * 64,
+        },
+    )
+    assert calls[3] == (
+        "load-metadata",
+        {
+            "path": bootstrap_path,
+            "expected_source_tag": "v1",
+            "expected_metadata_sha256": bootstrap_digest,
+        },
+    )
+    assert calls[4] == (
+        "repair",
+        {
+            "session": "mock-session",
+            "deposition_id": 22077448,
+            "version": "0.0.7",
+            "publication_date": "2026-09-24",
+            "release_binding": expected_binding,
+            "bootstrap_metadata": {"upload_type": "dataset"},
+            "bootstrap_metadata_sha256": bootstrap_digest,
+            "expected_bootstrap_metadata_sha256": bootstrap_digest,
+            "expected_remote_metadata_sha256": "b" * 64,
+            "expected_operational_metadata_sha256": "e" * 64,
+            "expected_remote_source_tag": (
+                "https://github.com/ll7/robot_sf_ll7/releases/tag/previous-candidate"
+            ),
+            "expected_remote_source_sha": "c" * 40,
+            "expected_remote_base_sha": "d" * 40,
+            "apply": True,
+            "api_base": "https://example.test/api",
+        },
+    )
+    assert json.loads(capsys.readouterr().out)["status"] == "repaired"
+
+
+def test_release_cli_parser_exposes_repair_draft_metadata_arguments() -> None:
+    """The repair command exposes its repository, identity, preview, and apply arguments."""
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command")
+    release_cli.build_subparser(subparsers)
+
+    args = parser.parse_args(
+        [
+            "release",
+            "zenodo",
+            "repair-draft-metadata",
+            "--token-file",
+            "token",
+            "--manifest",
+            "manifest.yaml",
+            "--metadata",
+            "metadata.json",
+            "--repository-root",
+            "repo",
+            "--deposition-id",
+            "22077448",
+            "--version",
+            "0.0.7",
+            "--publication-date",
+            "2026-09-24",
+            "--bootstrap-metadata",
+            "bootstrap.json",
+            "--expected-bootstrap-metadata-sha256",
+            "d" * 64,
+            "--expected-remote-metadata-sha256",
+            "c" * 64,
+            "--expected-operational-metadata-sha256",
+            "e" * 64,
+            "--expected-remote-source-tag",
+            "https://github.com/ll7/robot_sf_ll7/releases/tag/previous-candidate",
+            "--expected-remote-source-sha",
+            "c" * 40,
+            "--expected-remote-base-sha",
+            "d" * 40,
+            "--apply",
+        ]
+    )
+
+    assert args.zenodo_mode == "repair-draft-metadata"
+    assert args.repository_root == Path("repo")
+    assert args.deposition_id == 22077448
+    assert args.version == "0.0.7"
+    assert args.publication_date == "2026-09-24"
+    assert args.bootstrap_metadata == Path("bootstrap.json")
+    assert args.expected_bootstrap_metadata_sha256 == "d" * 64
+    assert args.expected_remote_metadata_sha256 == "c" * 64
+    assert args.expected_operational_metadata_sha256 == "e" * 64
+    assert (
+        args.expected_remote_source_tag
+        == "https://github.com/ll7/robot_sf_ll7/releases/tag/previous-candidate"
+    )
+    assert args.expected_remote_source_sha == "c" * 40
+    assert args.expected_remote_base_sha == "d" * 40
+    assert args.apply is True
+
+
+def test_release_cli_parser_accepts_optional_repository_root_for_verify() -> None:
+    """Manifest-bound modes can resolve identity against an explicit repository checkout."""
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command")
+    release_cli.build_subparser(subparsers)
+
+    common = [
+        "release",
+        "zenodo",
+        "verify",
+        "--token-file",
+        "token",
+        "--state",
+        "state.json",
+        "--manifest",
+        "manifest.yaml",
+        "--metadata",
+        "metadata.json",
+    ]
+    default_args = parser.parse_args(common)
+    explicit_args = parser.parse_args([*common, "--repository-root", "source-checkout"])
+
+    assert default_args.repository_root is None
+    assert explicit_args.repository_root == Path("source-checkout")
+
+
 @pytest.mark.parametrize("mode", ["upload", "verify", "publish"])
 def test_release_cli_parser_requires_manifest_after_reservation(mode: str) -> None:
     """Post-reservation modes cannot be invoked without a release manifest."""
@@ -294,6 +503,7 @@ def test_release_cli_keeps_legacy_v02_manifest_binding() -> None:
     assert binding["metadata_sha256"] == manifest.metadata_sha256
     assert binding["concept_doi"] == manifest.concept_doi
     assert binding["version_doi"] == manifest.version_doi
+    assert binding["manifest_schema_version"] == "benchmark-release-manifest.v0.2"
 
 
 @pytest.mark.parametrize(
@@ -394,6 +604,34 @@ def test_release_cli_rejects_unbound_post_reservation_before_session(
     assert release_cli.handle(args) == 2
     output = capsys.readouterr().out
     assert "validated release manifest" in output
+
+
+def test_release_cli_requires_v02_operational_pair_before_session(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A v0.2 verification needs both operational pins before client construction."""
+    args = _args("verify", tmp_path)
+    args.manifest = tmp_path / "manifest.yaml"
+    monkeypatch.setattr(
+        release_cli,
+        "_load_release_binding",
+        lambda value: (
+            SimpleNamespace(),
+            {"manifest_schema_version": "benchmark-release-manifest.v0.2"},
+        ),
+    )
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "build_session",
+        lambda path: (_ for _ in ()).throw(
+            AssertionError("missing v0.2 operational pins must fail before session construction")
+        ),
+    )
+
+    assert release_cli.handle(args) == 2
+    assert "--expected-version" in capsys.readouterr().out
 
 
 def test_release_cli_recovers_without_loading_state_or_reserving(

@@ -39,19 +39,25 @@ policy and supplemental groups, and stores the runner program under
 the image sets `ACTIONS_RUNNER_HOOK_JOB_STARTED` to its path. Refresh and review
 the digest and package set when the runner version changes; `--disableupdate`
 makes image updates explicit.
+The image pins Node.js 22.23.2 from the official archive and checks its SHA-256;
+Ubuntu's Node 18 package cannot parse the browser-runtime test modules.
 
 Each job gets a new container with a read-only root, a 2 GiB tmpfs at
 `/home/runner` for runner binaries and the Python tool cache, a 512 MiB tmpfs
 at `/tmp`, and a 512 MiB tmpfs at `/home/runner/_work/_temp` for `RUNNER_TEMP`.
 The nested tmpfs covers the runner's temporary directory even though its
-parent, `/home/runner/_work`, is a fresh anonymous Docker volume. Only the
-checkout, its virtual environment, and the uv cache use that volume.
-`RUNNER_TOOL_CACHE` points into `/home/runner`, `TMPDIR` points to `/tmp`, and
-`UV_CACHE_DIR` points into the volume. Tmpfs usage counts against the container's
+parent, `/home/runner/_work`, is a fresh anonymous Docker volume. The checkout,
+virtual environment, uv and pip caches, and build scratch use that volume.
+`RUNNER_TOOL_CACHE` points into `/home/runner`; `TMPDIR`, `PIP_CACHE_DIR`, and
+`UV_CACHE_DIR` point into the per-job volume so wheel builds and pip installs do
+not fill the 512 MiB `/tmp` tmpfs. Tmpfs usage counts against the container's
 8 GiB memory limit. The [pinned checkout action](https://github.com/actions/checkout/blob/3d3c42e5aac5ba805825da76410c181273ba90b1/src/git-auth-helper.ts)
 briefly writes its token under `RUNNER_TEMP` even when credential persistence is
 disabled; a host crash cannot leave that file in the anonymous volume. There
-is no volume source or host bind mount, so jobs never share a workspace. The
+is a read-only image symlink from `/opt/hostedtoolcache` to `RUNNER_TOOL_CACHE`:
+the setup-python binary embeds the former path in its ELF RUNPATH, and tests
+that clear their environment still need to load its adjacent `libpython`.
+There is no volume source or host bind mount, so jobs never share a workspace. The
 container uses UID/GID 1001, no Linux capabilities, no privilege escalation,
 no Docker socket, and limits of 4 CPUs, 8 GiB RAM, and 512 processes. The
 runner executes at `nice 10`. Pytest uses at most two workers; OpenBLAS and OpenMP use one

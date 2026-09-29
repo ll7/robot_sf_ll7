@@ -241,6 +241,7 @@ class _CollisionEventContext:
     map_def: Any
     robot_radius: float
     ped_radius: float
+    capture_robot_speed: bool = False
 
 
 def _point_to_segment_distance(point: np.ndarray, segment: Any) -> float:
@@ -306,6 +307,20 @@ def _point_inside_map_bounds(point: np.ndarray, map_def: Any) -> bool:
     return 0.0 <= float(point[0]) <= float(width) and 0.0 <= float(point[1]) <= float(height)
 
 
+def _measured_robot_speed(
+    robot_pos: np.ndarray, previous_robot_pos: np.ndarray | None, dt_seconds: float
+) -> float | None:
+    """Return measured step speed, or None when displacement cannot prove it.
+
+    Returns:
+        Finite nonnegative robot speed in metres per second, when measurable.
+    """
+    if previous_robot_pos is None or not math.isfinite(dt_seconds) or dt_seconds <= 0.0:
+        return None
+    speed = float(np.linalg.norm((robot_pos - previous_robot_pos) / dt_seconds))
+    return speed if math.isfinite(speed) else None
+
+
 def _step_collision_events(
     *,
     step_idx: int,
@@ -323,6 +338,7 @@ def _step_collision_events(
         robot_velocity = (robot_pos - previous_robot_pos) / context.dt_seconds
     else:
         robot_velocity = np.zeros(2, dtype=float)
+    measured_robot_speed = _measured_robot_speed(robot_pos, previous_robot_pos, context.dt_seconds)
 
     if bool(meta.get("is_pedestrian_collision", False)):
         ped_array = np.asarray(ped_positions, dtype=float).reshape(-1, 2)
@@ -365,17 +381,19 @@ def _step_collision_events(
                     ped_array[ped_index] - previous_ped_positions[ped_index]
                 ) / context.dt_seconds
             relative_speed = float(np.linalg.norm(robot_velocity - ped_velocity))
-        events.append(
-            {
-                "collision_partner_type": "pedestrian",
-                "collision_partner_id": partner_id,
-                "contact_partner_ids": contact_partner_ids,
-                "collision_time": collision_time,
-                "relative_speed_at_contact": relative_speed,
-                "clearance_series_source": "runtime.step.pedestrian_positions",
-                "exact_event_source": "runtime.step.meta.is_pedestrian_collision",
-            }
-        )
+        event = {
+            "collision_partner_type": "pedestrian",
+            "collision_partner_id": partner_id,
+            "contact_partner_ids": contact_partner_ids,
+            "collision_time": collision_time,
+            "relative_speed_at_contact": relative_speed,
+            "clearance_series_source": "runtime.step.pedestrian_positions",
+            "exact_event_source": "runtime.step.meta.is_pedestrian_collision",
+        }
+        if context.capture_robot_speed:
+            event["robot_speed_at_contact_m_s"] = measured_robot_speed
+            event["contact_step_index"] = step_idx
+        events.append(event)
 
     if bool(meta.get("is_obstacle_collision", False)):
         bounds = list(getattr(context.map_def, "bounds", [])) if context.map_def is not None else []
@@ -398,20 +416,22 @@ def _step_collision_events(
                 prefix="obstacle" if partner_type == "static_geometry" else "boundary",
             )
         )
-        events.append(
-            {
-                "collision_partner_type": partner_type,
-                "collision_partner_id": partner_id,
-                "collision_time": collision_time,
-                "relative_speed_at_contact": float(np.linalg.norm(robot_velocity)),
-                "clearance_series_source": (
-                    "runtime.step.map.obstacles"
-                    if partner_type in {"static_geometry", "goal_artifact"}
-                    else "runtime.step.map.bounds"
-                ),
-                "exact_event_source": "runtime.step.meta.is_obstacle_collision",
-            }
-        )
+        event = {
+            "collision_partner_type": partner_type,
+            "collision_partner_id": partner_id,
+            "collision_time": collision_time,
+            "relative_speed_at_contact": float(np.linalg.norm(robot_velocity)),
+            "clearance_series_source": (
+                "runtime.step.map.obstacles"
+                if partner_type in {"static_geometry", "goal_artifact"}
+                else "runtime.step.map.bounds"
+            ),
+            "exact_event_source": "runtime.step.meta.is_obstacle_collision",
+        }
+        if context.capture_robot_speed:
+            event["robot_speed_at_contact_m_s"] = measured_robot_speed
+            event["contact_step_index"] = step_idx
+        events.append(event)
 
     return events
 
@@ -2422,6 +2442,7 @@ def _finite_positive_float(value: Any) -> float | None:
 def _make_collision_event_context(
     config: RobotSimulationConfig,
     map_def: Any,
+    scenario: Mapping[str, Any] | None = None,
 ) -> _CollisionEventContext:
     """Build the per-episode collision-event typing context.
 
@@ -2435,11 +2456,15 @@ def _make_collision_event_context(
     robot_radius = float(robot_radius_val if robot_radius_val is not None else 1.0)
     ped_radius_val = getattr(config.sim_config, "ped_radius", 0.4)
     ped_radius = float(ped_radius_val if ped_radius_val is not None else 0.4)
+    attribution_version = (scenario or {}).get("collision_attribution_version")
+    if attribution_version not in (None, "v1"):
+        raise ValueError(f"unsupported collision_attribution_version: {attribution_version!r}")
     return _CollisionEventContext(
         dt_seconds=float(config.sim_config.time_per_step_in_secs),
         map_def=map_def,
         robot_radius=robot_radius,
         ped_radius=ped_radius,
+        capture_robot_speed=attribution_version == "v1",
     )
 
 
@@ -3558,7 +3583,9 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
             single_pedestrian_vru_metadata=args.single_pedestrian_vru_metadata,
             hybrid_source_field=args.hybrid_source_field,
             active_harness=active_harness,
-            collision_event_context=_make_collision_event_context(args.config, state.map_def),
+            collision_event_context=_make_collision_event_context(
+                args.config, state.map_def, args.scenario
+            ),
         )
         _execute_step_loop(
             state,

@@ -760,6 +760,9 @@ _FAST_FILES = {
     "test_issue_9348_three_width_doorway.py",
     "test_issue_9533_guarded_ppo_trace.py",
     "test_event_ledger.py",
+    # Contact-attribution fixtures cover the opt-in ledger and map-runner paths
+    # in pull-request fast shards (issue #9729).
+    "test_contact_attribution_issue_9729.py",
     "test_spawn_overlap_rate_paths_issue_9725.py",
     "test_spawn_clearance_issue_9725.py",
     "test_spawn_preflight_issue_9725.py",

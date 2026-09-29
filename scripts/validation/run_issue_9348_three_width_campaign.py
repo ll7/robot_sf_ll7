@@ -279,10 +279,8 @@ def _execution_runtime_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     return runtime_metadata
 
 
-def _baseline_execution_reasons(
-    metadata: dict[str, Any], row: dict[str, Any] | None, expected_algorithm: str | None
-) -> list[str]:
-    """Bind each baseline to its declared command route, without requiring absent row axes."""
+def _baseline_route_reasons(metadata: dict[str, Any], expected_algorithm: str | None) -> list[str]:
+    """Check the observed planner identity and command route against the baseline contract."""
     expected = {
         "goal": ("native", False, "none"),
         "social_force": ("adapter", True, "SocialForcePlannerAdapter"),
@@ -308,17 +306,25 @@ def _baseline_execution_reasons(
         reasons.append("social_force_adapter_projection_unverified")
     if metadata.get("canonical_algorithm") != expected_algorithm:
         reasons.append("canonical_planner_identity_mismatch")
-    if (
-        row is not None
-        and row.get("execution_mode") is not None
-        and (expected is None or row["execution_mode"] != expected[0])
-    ):
+    return reasons
+
+
+def _baseline_execution_reasons(
+    metadata: dict[str, Any], row: dict[str, Any] | None, expected_algorithm: str | None
+) -> list[str]:
+    """Require explicit row-level execution and readiness axes for every baseline."""
+    expected = {
+        "goal": ("native", False, "none"),
+        "social_force": ("adapter", True, "SocialForcePlannerAdapter"),
+    }.get(expected_algorithm)
+    reasons = _baseline_route_reasons(metadata, expected_algorithm)
+    if row is None or not isinstance(row.get("execution_mode"), str):
+        reasons.append("missing_execution_mode")
+    elif expected is None or row["execution_mode"] != expected[0]:
         reasons.append(f"unexpected_execution_mode:{row.get('execution_mode')!r}")
-    if (
-        row is not None
-        and row.get("readiness_status") is not None
-        and (row["readiness_status"] != "native")
-    ):
+    if row is None or not isinstance(row.get("readiness_status"), str):
+        reasons.append("missing_readiness_status")
+    elif row["readiness_status"] != "native":
         reasons.append(f"non_native_readiness_status:{row.get('readiness_status')!r}")
     return reasons
 
@@ -373,6 +379,83 @@ def _trace_exclusion_reasons(
         marker_path, marker_value = runtime_marker
         reasons.append(f"fallback_or_degraded_runtime:{marker_path}={marker_value}")
     return reasons
+
+
+def _record_baseline_execution_axes(row: dict[str, Any], expected_algorithm: str) -> None:
+    """Copy observed command mode and derive readiness from the episode's recorded evidence."""
+    metadata = row.get("algorithm_metadata")
+    if not isinstance(metadata, dict):
+        row["readiness_status"] = "unknown"
+        return
+
+    execution_mode = _command_execution_mode(metadata)
+    if execution_mode is not None:
+        row["execution_mode"] = execution_mode
+    else:
+        row.pop("execution_mode", None)
+
+    route_reasons = _baseline_route_reasons(metadata, expected_algorithm)
+    trace = metadata.get("simulation_step_trace")
+    planner_trace = metadata.get("planner_decision_trace")
+    action_trace_valid = _valid_action_trace(trace, row)
+    decision_trace_present = isinstance(planner_trace, dict) and isinstance(
+        planner_trace.get("steps"), list
+    )
+    spawn_valid = _valid_spawn_evidence(row)
+    runtime_payload = {
+        "row": {"execution_mode": execution_mode},
+        "algorithm_metadata": _execution_runtime_metadata(metadata),
+    }
+    if "planner_runtime" in row:
+        runtime_payload["planner_runtime"] = row["planner_runtime"]
+    runtime_marker = runtime_fallback_or_degraded_marker(
+        runtime_payload,
+        expected_algorithm=expected_algorithm,
+        algorithm_metadata=metadata,
+    )
+
+    readiness_blockers = list(route_reasons)
+    if metadata.get("status") != "ok":
+        readiness_blockers.append("planner_status_not_ok")
+    if not action_trace_valid:
+        readiness_blockers.append("missing_or_invalid_simulation_action_trace")
+    if not decision_trace_present:
+        readiness_blockers.append("missing_planner_decision_trace")
+    if not spawn_valid:
+        readiness_blockers.append("invalid_or_unknown_spawn_validity")
+    if runtime_marker is not None:
+        readiness_blockers.append("fallback_or_degraded_runtime_marker")
+
+    # `native` here means the declared baseline route completed without a fallback
+    # and has complete action and spawn evidence. Social Force remains explicitly
+    # adapter-routed in `execution_mode`; its adapter is its intended baseline path.
+    readiness_status = "native" if not readiness_blockers else "unknown"
+    row["readiness_status"] = readiness_status
+    metadata["baseline_readiness"] = {
+        "schema_version": "issue_9348_baseline_readiness.v1",
+        "status": readiness_status,
+        "expected_algorithm": expected_algorithm,
+        "observed_execution_mode": execution_mode,
+        "planner_status": metadata.get("status"),
+        "action_trace_status": "complete" if action_trace_valid else "invalid_or_missing",
+        # Empty is valid for these baselines: their selected/applied actions are
+        # recorded per step in simulation_step_trace, not as internal decisions.
+        "decision_trace_status": (
+            "missing"
+            if not decision_trace_present
+            else "empty_expected_for_baseline"
+            if not planner_trace["steps"]
+            else "present"
+        ),
+        "spawn_validity_schema": (
+            row.get("spawn_validity", {}).get("schema_version")
+            if isinstance(row.get("spawn_validity"), dict)
+            else None
+        ),
+        "spawn_validity_status": "available" if spawn_valid else "invalid_or_missing",
+        "runtime_marker": list(runtime_marker) if runtime_marker is not None else None,
+        "blockers": readiness_blockers,
+    }
 
 
 def _row_inventory_item(
@@ -691,6 +774,7 @@ def _run_actor_present_confirmation(
                         record_simulation_step_trace=True,
                         pair_reset_hook=receipt_hook,
                     )
+                    _record_baseline_execution_axes(row, planner)
                     serialized = io.StringIO()
                     write_validated_to_handle(serialized, schema, row)
                     line = serialized.getvalue()
@@ -1112,6 +1196,7 @@ def run_campaign(manifest_path: Path, output_root: Path) -> Path:
                             record_simulation_step_trace=True,
                             pair_reset_hook=receipt_hook,
                         )
+                        _record_baseline_execution_axes(row, planner)
                         serialized = io.StringIO()
                         write_validated_to_handle(serialized, schema, row)
                         line = serialized.getvalue()

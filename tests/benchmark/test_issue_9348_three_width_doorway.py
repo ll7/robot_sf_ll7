@@ -369,6 +369,8 @@ def _complete_synthetic_campaign() -> tuple[
                         "scenario_id": scenario_id,
                         "horizon": 400,
                         "status": "success",
+                        "execution_mode": _baseline_kinematics(planner)["execution_mode"],
+                        "readiness_status": "native",
                         "spawn_validity": _valid_spawn_block(),
                         "episode_id": f"{planner}-{seed}-{asset['gap_width_m']}",
                         "steps": 100,
@@ -435,6 +437,16 @@ def test_actor_present_confirmation_rejects_fallback_and_custody_faults() -> Non
         )
 
     assert assess(rows)["admit_h400"] is True
+    missing_execution_mode = deepcopy(rows)
+    missing_execution_mode[0].pop("execution_mode")
+    missing_mode_result = assess(missing_execution_mode)
+    assert missing_mode_result["admit_h400"] is False
+    assert "missing_execution_mode" in missing_mode_result["rows"][0]["blockers"]
+    missing_readiness = deepcopy(rows)
+    missing_readiness[0].pop("readiness_status")
+    missing_readiness_result = assess(missing_readiness)
+    assert missing_readiness_result["admit_h400"] is False
+    assert "missing_readiness_status" in missing_readiness_result["rows"][0]["blockers"]
     current_spawn_schema = deepcopy(rows)
     current_spawn_schema[0]["spawn_validity"]["schema_version"] = "spawn_validity.v2"
     assert assess(current_spawn_schema)["admit_h400"] is True
@@ -483,6 +495,37 @@ def test_actor_present_confirmation_rejects_fallback_and_custody_faults() -> Non
     wrong_pairs = deepcopy(pairs)
     wrong_pairs["pairs"][0]["cells"][0]["external_rng_state_sha256"] = "x" * 64
     assert assess(rows, wrong_pairs)["admit_h400"] is False
+
+
+def test_execution_axes_are_copied_from_runtime_and_readiness_fails_closed() -> None:
+    """Row axes mirror observed kinematics and only complete baseline evidence is ready."""
+    rows, _cells, _pairs = _complete_synthetic_campaign()
+    goal = deepcopy(rows[0])
+    goal.pop("execution_mode")
+    goal.pop("readiness_status")
+    doorway_campaign._record_baseline_execution_axes(goal, "goal")
+    assert goal["execution_mode"] == "native"
+    assert goal["readiness_status"] == "native"
+    assert goal["algorithm_metadata"]["baseline_readiness"]["blockers"] == []
+
+    social_force = deepcopy(rows[9])
+    social_force.pop("execution_mode")
+    social_force.pop("readiness_status")
+    doorway_campaign._record_baseline_execution_axes(social_force, "social_force")
+    assert social_force["execution_mode"] == "adapter"
+    assert social_force["readiness_status"] == "native"
+
+    mismatched = deepcopy(goal)
+    mismatched.pop("execution_mode")
+    mismatched.pop("readiness_status")
+    mismatched["algorithm_metadata"]["planner_kinematics"]["execution_mode"] = "fallback"
+    doorway_campaign._record_baseline_execution_axes(mismatched, "goal")
+    assert mismatched["execution_mode"] == "fallback"
+    assert mismatched["readiness_status"] == "unknown"
+    assert (
+        "planner_kinematics_mode_or_adapter_mismatch"
+        in (mismatched["algorithm_metadata"]["baseline_readiness"]["blockers"])
+    )
 
 
 @pytest.mark.parametrize("digest_field", ["map_sha256", "scenario_sha256"])
@@ -993,7 +1036,34 @@ def test_h1_runner_pair_receipt_survives_episode_schema(tmp_path: Path) -> None:
             non_width_config_sha256=non_width_config_sha256(scenario, planner="goal"),
         ),
     )
+    doorway_campaign._record_baseline_execution_axes(row, "goal")
     assert row["algorithm_metadata"]["config_hash"] == "44136fa355b3678a"
+    assert row["execution_mode"] == "native"
+    assert row["readiness_status"] == "native"
+    assert row["algorithm_metadata"]["baseline_readiness"]["status"] == "native"
+    assert (
+        row["algorithm_metadata"]["baseline_readiness"]["decision_trace_status"]
+        == "empty_expected_for_baseline"
+    )
+    assert row["spawn_validity"]["schema_version"] == "spawn_validity.v2"
+    assert doorway_campaign._valid_spawn_evidence(row)
+    trace = row["algorithm_metadata"]["simulation_step_trace"]
+    assert doorway_campaign._valid_action_trace(trace, row)
+    step = trace["steps"][0]
+    assert step["step"] == 0
+    assert step["time_s"] == pytest.approx(0.1)
+    assert set(step["planner"]["selected_action"]) >= {"linear_velocity", "angular_velocity"}
+    assert set(step["planner"]["applied_environment_action"]) >= {
+        "linear_velocity",
+        "angular_velocity",
+    }
+    planner_trace = row["algorithm_metadata"]["planner_decision_trace"]
+    assert planner_trace["steps"] == []
+    if trace["reset"]["spawn"]["status"] == "unavailable":
+        assert (
+            "simulation_step_trace.reset.spawn.status=unavailable"
+            in doorway_campaign._ancillary_telemetry_gaps(row["algorithm_metadata"])
+        )
     stream = io.StringIO()
     schema = load_schema(_REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json")
     write_validated_to_handle(stream, schema, row)
@@ -1074,6 +1144,8 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
                         "scenario_id": scenario_id,
                         "horizon": 400,
                         "status": "success" if success else "failure",
+                        "execution_mode": _baseline_kinematics(planner)["execution_mode"],
+                        "readiness_status": "native",
                         "spawn_validity": _valid_spawn_block(),
                         "episode_id": f"{planner}-{seed}-{width}",
                         "steps": 100,

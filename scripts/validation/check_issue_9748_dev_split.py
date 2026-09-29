@@ -111,7 +111,13 @@ def _sha256(path: Path, *, label: str) -> str:
         raise ValidationError(f"could not hash {label}: {path}: {exc}") from exc
 
 
-def _frozen_commit_sha256(commit: str, path: Path, *, label: str) -> str:
+def _require_working_hash(recorded_hash: str, path: Path, *, label: str) -> None:
+    working_hash = _sha256(path, label=label)
+    if recorded_hash != working_hash:
+        raise ValidationError(f"{label} does not match the working tree file ({working_hash})")
+
+
+def _commit_sha256(commit: str, path: Path, *, label: str) -> str:
     relative_path = _repo_relative_path(path, label=label)
     try:
         result = subprocess.run(
@@ -121,9 +127,7 @@ def _frozen_commit_sha256(commit: str, path: Path, *, label: str) -> str:
             capture_output=True,
         )
     except (OSError, subprocess.CalledProcessError) as exc:
-        raise ValidationError(
-            f"could not read {label} from frozen source commit {commit}: {exc}"
-        ) from exc
+        raise ValidationError(f"could not read {label} from commit {commit}: {exc}") from exc
     return hashlib.sha256(result.stdout).hexdigest()
 
 
@@ -841,10 +845,16 @@ def _validate_candidate_provenance(raw: Any) -> dict[str, dict[str, str]]:
             record["sha256"],
             label=f"provenance.candidate_configs[{key!r}].sha256",
         )
-        expected_hash = _sha256(expected_path, label=f"candidate config {key}")
+        working_hash = _sha256(expected_path, label=f"candidate config {key}")
+        if recorded_hash != working_hash:
+            raise ValidationError(
+                f"provenance candidate config hash for {key} does not match the working "
+                f"tree file ({working_hash})"
+            )
+        expected_hash = _commit_sha256("HEAD", expected_path, label=f"candidate config {key}")
         if recorded_hash != expected_hash:
             raise ValidationError(
-                f"provenance candidate config hash for {key} does not match the current "
+                f"provenance candidate config hash for {key} does not match the current HEAD "
                 f"tracked file ({expected_hash})"
             )
         normalized_candidates[key] = {
@@ -868,14 +878,22 @@ def _validate_frozen_tuning_inputs(
     )
     for input_path in input_paths:
         input_label = input_path.relative_to(ROOT).as_posix()
-        current_input_hash = _sha256(input_path, label=f"transitive tuning input {input_label}")
-        frozen_input_hash = _frozen_commit_sha256(
+        working_input_hash = _sha256(input_path, label=f"transitive tuning input {input_label}")
+        current_input_hash = _commit_sha256(
+            "HEAD", input_path, label=f"transitive tuning input {input_label}"
+        )
+        frozen_input_hash = _commit_sha256(
             source_commit, input_path, label=f"transitive tuning input {input_label}"
         )
         if current_input_hash != frozen_input_hash:
             raise ValidationError(
                 f"transitive tuning input {input_label} differs from frozen source "
                 f"commit {source_commit}"
+            )
+        if working_input_hash != frozen_input_hash:
+            raise ValidationError(
+                f"transitive tuning input {input_label} differs from frozen source "
+                f"commit {source_commit} in the working tree"
             )
 
 
@@ -906,13 +924,16 @@ def _validate_frozen_provenance(
         provenance["campaign_config_sha256"],
         label="provenance.campaign_config_sha256",
     )
-    expected_campaign_hash = _sha256(config_path, label="development campaign config")
+    _require_working_hash(campaign_hash, config_path, label="provenance.campaign_config_sha256")
+    expected_campaign_hash = _commit_sha256(
+        "HEAD", config_path, label="development campaign config"
+    )
     if campaign_hash != expected_campaign_hash:
         raise ValidationError(
-            "provenance.campaign_config_sha256 does not match the current development "
+            "provenance.campaign_config_sha256 does not match the current HEAD development "
             f"campaign config ({expected_campaign_hash})"
         )
-    frozen_campaign_hash = _frozen_commit_sha256(
+    frozen_campaign_hash = _commit_sha256(
         source_commit, config_path, label="development campaign config"
     )
     if campaign_hash != frozen_campaign_hash:
@@ -925,13 +946,18 @@ def _validate_frozen_provenance(
         provenance["scenario_manifest_sha256"],
         label="provenance.scenario_manifest_sha256",
     )
-    expected_scenario_hash = _sha256(scenario_matrix_path, label="development scenario manifest")
+    _require_working_hash(
+        scenario_hash, scenario_matrix_path, label="provenance.scenario_manifest_sha256"
+    )
+    expected_scenario_hash = _commit_sha256(
+        "HEAD", scenario_matrix_path, label="development scenario manifest"
+    )
     if scenario_hash != expected_scenario_hash:
         raise ValidationError(
-            "provenance.scenario_manifest_sha256 does not match the current development "
+            "provenance.scenario_manifest_sha256 does not match the current HEAD development "
             f"scenario manifest ({expected_scenario_hash})"
         )
-    frozen_scenario_hash = _frozen_commit_sha256(
+    frozen_scenario_hash = _commit_sha256(
         source_commit, scenario_matrix_path, label="development scenario manifest"
     )
     if scenario_hash != frozen_scenario_hash:
@@ -942,7 +968,7 @@ def _validate_frozen_provenance(
 
     normalized_candidates = _validate_candidate_provenance(provenance["candidate_configs"])
     for key, candidate_path in EXPECTED_PLANNER_CONFIGS.items():
-        frozen_candidate_hash = _frozen_commit_sha256(
+        frozen_candidate_hash = _commit_sha256(
             source_commit, candidate_path, label=f"candidate config {key}"
         )
         if normalized_candidates[key]["sha256"] != frozen_candidate_hash:

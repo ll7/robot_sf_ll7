@@ -65,7 +65,10 @@ the runner's original scientific-candidate gate reports. Promotion to
 `accepted_pre_publication` occurs only after those gates pass and their report
 identities are checked. The DOI-bound derivative repeats full release
 acceptance before promoting its copied candidate state; a failed gate leaves
-that derivative unaccepted and preserves the producer.
+that derivative unaccepted and preserves the producer. Provenance injection
+may rewrite only the four identity-bound campaign metadata sidecars named in
+`docs/RELEASE.md`; their post-acceptance hashes are checked at promotion, while
+every other producer sidecar remains bound to its original identity digest.
 
 `versioned_changes` names each correction with a unique `id`, `kind`
 (`source`, `config`, `map`, `model`, or `planner`), `version`, `old_identity`, and

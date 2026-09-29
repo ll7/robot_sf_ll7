@@ -188,6 +188,10 @@ the accepted pre-publication identity, gate reports, and every raw and sidecar
 checksum. It copies the producer, binds DOI metadata only in the derivative,
 repeats full release acceptance, then exports and preflights the bundle. It
 checks every raw episode digest before and after the derivative work.
+Release-provenance injection may change only `campaign_manifest.json`,
+`manifest.json`, `run_meta.json`, and `reports/campaign_summary.json` among the
+identity-bound producer sidecars. Their post-acceptance hashes are rechecked at
+promotion; all remaining sidecars must still match the producer identity.
 Failed gates leave the candidate marked invalid and preserve the producer.
 Its sibling `*.finalization_receipt.json` records the source and output hashes.
 The receipt is written through a pending file and renamed only after the

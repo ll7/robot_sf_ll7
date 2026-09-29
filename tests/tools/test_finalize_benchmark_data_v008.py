@@ -333,6 +333,53 @@ def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
         identity,
         result,
     )
+    run_meta_path = producer / "run_meta.json"
+    original_run_meta = run_meta_path.read_bytes()
+    run_meta = json.loads(original_run_meta)
+    run_meta["benchmark_release"] = {"source_sha": SOURCE_SHA}
+    _write_json(run_meta_path, run_meta)
+    mutable_sidecar_hashes = {
+        name: finalizer._sha256(producer / name)
+        for name in finalizer._DOI_DERIVATIVE_MUTABLE_PRODUCER_SIDECARS
+    }
+    assert (
+        finalizer._require_scientific_candidate(
+            producer,
+            SOURCE_SHA,
+            manifest,
+            mutable_producer_sidecar_sha256=mutable_sidecar_hashes,
+        )[0]
+        == identity
+    )
+    arm_summary_path = producer / "runs/arm0__differential_drive/summary.json"
+    original_arm_summary = arm_summary_path.read_bytes()
+    arm_summary_path.write_bytes(original_arm_summary + b" ")
+    with pytest.raises(ValueError, match="sidecar bytes changed"):
+        finalizer._require_scientific_candidate(
+            producer,
+            SOURCE_SHA,
+            manifest,
+            mutable_producer_sidecar_sha256=mutable_sidecar_hashes,
+        )
+    arm_summary_path.write_bytes(original_arm_summary)
+    run_meta_path.write_bytes(run_meta_path.read_bytes() + b" ")
+    with pytest.raises(ValueError, match="sidecar bytes changed"):
+        finalizer._require_scientific_candidate(
+            producer,
+            SOURCE_SHA,
+            manifest,
+            mutable_producer_sidecar_sha256=mutable_sidecar_hashes,
+        )
+    run_meta_path.write_bytes(original_run_meta)
+    with pytest.raises(ValueError, match="allowlist"):
+        finalizer._require_scientific_candidate(
+            producer,
+            SOURCE_SHA,
+            manifest,
+            mutable_producer_sidecar_sha256={
+                "runs/arm0__differential_drive/summary.json": finalizer._sha256(arm_summary_path)
+            },
+        )
     identity_bytes = identity_path.read_bytes()
     identity["unbound_tamper"] = True
     _write_json(identity_path, identity)

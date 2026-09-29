@@ -17,7 +17,10 @@ import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 from robot_sf.benchmark.release_acceptance import validate_full_benchmark_release_acceptance
 from robot_sf.benchmark.release_protocol import (
@@ -64,6 +67,15 @@ _STAGE3_DEFAULT_IDENTITY = "release/candidate_identity.json"
 _STAGE3_DEFAULT_LEDGER = "reports/attribution_ledger.json"
 _STAGE3_DEFAULT_REPORT = "reports/stage3_comparison.json"
 _STAGE3_DEFAULT_FINDINGS = "reports/stage3_findings.jsonl"
+# `_merge_release_provenance` rewrites only these source-bound producer sidecars.
+_DOI_DERIVATIVE_MUTABLE_PRODUCER_SIDECARS = frozenset(
+    {
+        "campaign_manifest.json",
+        "manifest.json",
+        "run_meta.json",
+        "reports/campaign_summary.json",
+    }
+)
 
 
 def _sha256(path: Path) -> str:
@@ -307,17 +319,20 @@ def _require_scientific_candidate_pair(
     source_sha: str,
     manifest: Any,
     *,
-    verify_producer_sidecars: bool = True,
+    mutable_producer_sidecar_sha256: Mapping[str, str] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Require and reverify the paired science identity before any promotion."""
     identity_path = candidate_root / "release/scientific_candidate.json"
     result_path = candidate_root / "release/scientific_candidate_result.json"
     if not identity_path.is_file() or not result_path.is_file():
         raise ValueError("scientific candidate identity and result must be paired")
-    if verify_producer_sidecars:
+    if mutable_producer_sidecar_sha256 is None:
         return _require_scientific_candidate(candidate_root, source_sha, manifest)
     return _require_scientific_candidate(
-        candidate_root, source_sha, manifest, verify_producer_sidecars=False
+        candidate_root,
+        source_sha,
+        manifest,
+        mutable_producer_sidecar_sha256=mutable_producer_sidecar_sha256,
     )
 
 
@@ -330,14 +345,14 @@ def _promote_scientific_candidate(
     acceptance_report: Path,
     equivalence_report: Path | None = None,
     robot_force_report: Path | None = None,
-    verify_producer_sidecars: bool = True,
+    mutable_producer_sidecar_sha256: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Reverify the bound pair, then promote only after all supplied gates pass."""
     _require_scientific_candidate_pair(
         candidate_root,
         source_sha,
         manifest,
-        verify_producer_sidecars=verify_producer_sidecars,
+        mutable_producer_sidecar_sha256=mutable_producer_sidecar_sha256,
     )
     return _promote_scientific_candidate_result(
         candidate_root,
@@ -567,7 +582,7 @@ def _require_scientific_candidate(  # noqa: C901, PLR0912
     source_sha: str,
     manifest: Any,
     *,
-    verify_producer_sidecars: bool = True,
+    mutable_producer_sidecar_sha256: Mapping[str, str] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Reverify accepted pre-publication custody and DOI-bound science identity."""
     identity_path = producer_root / "release/scientific_candidate.json"
@@ -645,13 +660,16 @@ def _require_scientific_candidate(  # noqa: C901, PLR0912
             f"{Path(raw_name).parent.as_posix()}/summary.json",
         )
     )
-    if verify_producer_sidecars and (
-        not isinstance(sidecars, dict)
-        or set(sidecars) != expected_sidecars
-        or any(
-            _sha256(producer_root / name) != sidecar_digest
-            for name, sidecar_digest in sidecars.items()
-        )
+    mutable_sidecars = dict(mutable_producer_sidecar_sha256 or {})
+    if not isinstance(sidecars, dict) or set(sidecars) != expected_sidecars:
+        raise ValueError("accepted candidate producer sidecar bytes changed")
+    if mutable_sidecars and set(mutable_sidecars) != _DOI_DERIVATIVE_MUTABLE_PRODUCER_SIDECARS:
+        raise ValueError("mutable producer sidecars do not match the DOI derivative allowlist")
+    if not set(mutable_sidecars).issubset(expected_sidecars):
+        raise ValueError("mutable producer sidecars are outside the accepted producer identity")
+    if any(
+        _sha256(producer_root / name) != mutable_sidecars.get(name, sidecar_digest)
+        for name, sidecar_digest in sidecars.items()
     ):
         raise ValueError("accepted candidate producer sidecar bytes changed")
     required_reports = {
@@ -1149,6 +1167,10 @@ def finalize_pre_doi_candidate(  # noqa: C901, PLR0912, PLR0913, PLR0915
         if acceptance.get("status") != "valid":
             raise ValueError("DOI-bound derivative failed full release acceptance")
         _write_json(candidate_root / "reports/release_acceptance.json", acceptance)
+        mutable_producer_sidecar_sha256 = {
+            relative: _sha256(candidate_root / relative)
+            for relative in _DOI_DERIVATIVE_MUTABLE_PRODUCER_SIDECARS
+        }
         stage = "scientific_candidate_promotion"
         _promote_scientific_candidate(
             candidate_root,
@@ -1156,7 +1178,7 @@ def finalize_pre_doi_candidate(  # noqa: C901, PLR0912, PLR0913, PLR0915
             expected_source_sha,
             manifest,
             acceptance_report=candidate_root / "reports/release_acceptance.json",
-            verify_producer_sidecars=False,
+            mutable_producer_sidecar_sha256=mutable_producer_sidecar_sha256,
         )
         summary = _read_mapping(candidate_root / "reports/campaign_summary.json")
         campaign = summary.get("campaign")

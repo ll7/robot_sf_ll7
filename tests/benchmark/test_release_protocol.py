@@ -72,7 +72,7 @@ def test_v008_campaign_matches_corrected_live_science_and_defers_publication() -
         planner for planner in candidate["planners"] if planner["key"] == "socnav_sampling"
     )
     assert social_force["algo_config"] == (
-        "configs/algos/social_force_resolution_independent_v2.yaml"
+        "configs/algos/social_force_resolution_independent_v2_kernel_wrapped_v2.yaml"
     )
     assert socnav_sampling["algo_config"] == "configs/algos/socnav_sampling_bounded_v2.yaml"
     hybrid_configs = {

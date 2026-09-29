@@ -82,7 +82,7 @@ def test_successor_changes_one_map_without_changing_48_scenario_identities() -> 
     assert geometry.route_min_center_distance_m >= 1.0 + DEFAULT_CLEARANCE_MARGIN_M
 
 
-def test_seed_111_ordered_route_and_stationary_reset_pass_setup_preflight() -> None:
+def test_dev_seed_1001_ordered_route_and_stationary_reset_pass_setup_preflight() -> None:
     doorway = next(
         row
         for row in load_scenarios(SUCCESSOR_MATRIX)
@@ -92,7 +92,7 @@ def test_seed_111_ordered_route_and_stationary_reset_pass_setup_preflight() -> N
         (
             dict(doorway),
             str(SUCCESSOR_MATRIX),
-            (111,),
+            (1001,),
             DEFAULT_CLEARANCE_MARGIN_M,
             DEFAULT_RESPAWN_WINDOW_STEPS,
             DEFAULT_GRID_RESOLUTION_M,

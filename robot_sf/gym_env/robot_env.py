@@ -40,6 +40,7 @@ from robot_sf.gym_env.observation_mode import ObservationMode
 from robot_sf.gym_env.reset_metadata import build_reset_metadata
 from robot_sf.gym_env.reward import route_completion_v2_reward
 from robot_sf.gym_env.snqi_proxy import StepSNQIProxy
+from robot_sf.nav.map_config import ROBOT_GOAL_SAMPLING_LEGACY_V1
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.nav.occupancy_grid import OccupancyGrid
 from robot_sf.prediction.goal_intention import (
@@ -115,8 +116,14 @@ def _hash_payload_without_default_goal_policy(value: Any) -> Any:
             key: _hash_payload_without_default_goal_policy(item)
             for key, item in value.items()
             if not (
-                key == "goal_completion_policy"
-                and (item is None or item == _LEGACY_GOAL_COMPLETION_POLICY)
+                (
+                    key == "goal_completion_policy"
+                    and (item is None or item == _LEGACY_GOAL_COMPLETION_POLICY)
+                )
+                or (
+                    key == "robot_goal_sampling_policy"
+                    and (item is None or item == ROBOT_GOAL_SAMPLING_LEGACY_V1)
+                )
             )
         }
     if isinstance(value, list):

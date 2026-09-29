@@ -123,7 +123,9 @@ def test_candidate_config_path_binds_sha256(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    findings = linter._artifact_findings(repo, record.relative_to(repo), json.loads(record.read_text()))
+    findings = linter._artifact_findings(
+        repo, record.relative_to(repo), json.loads(record.read_text())
+    )
     assert findings == []
 
 

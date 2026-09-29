@@ -164,6 +164,9 @@ class GuardedPPOConfig:
 class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
     """Intervene on PPO actions only when they violate short-horizon safety checks."""
 
+    # Observational only: fallback target of the current step, ``None`` if not consulted.
+    last_fallback_target_xy: tuple[float, float] | None = None
+
     def __init__(
         self,
         config: GuardedPPOConfig | None = None,
@@ -588,6 +591,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             )
         if mode == "fallback":
             command = self.fallback_adapter.plan(observation)
+            self.last_fallback_target_xy = getattr(self.fallback_adapter, "last_target_xy", None)
             return (
                 (float(command[0]), float(command[1])),
                 "uncertainty_fallback_configured",
@@ -613,6 +617,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         Returns:
             ShieldDecision: Proposed action, selected action, and shield decision metadata.
         """
+        self.last_fallback_target_xy = None
         self._init_action_adaptation(ppo_command)
         cached_state = self._extract_state(observation)
         cached_grid = self._cache_grid_payload(observation)
@@ -930,6 +935,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             ShieldDecision: Always returns a decision (never ``None``).
         """
         fallback_command = self.fallback_adapter.plan(observation)
+        self.last_fallback_target_xy = getattr(self.fallback_adapter, "last_target_xy", None)
         fallback_eval = self._evaluate_command(
             observation, fallback_command, state=cached_state, grid_payload=cached_grid
         )

@@ -78,6 +78,9 @@ class PredictiveMPPIConfig:
 class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
     """Short-horizon sequence optimizer over learned pedestrian forecasts."""
 
+    # Observational only: the target chosen by the last ``plan`` call (world x, y).
+    _last_target_xy: tuple[float, float] | None = None
+
     def __init__(self, config: PredictiveMPPIConfig, *, allow_fallback: bool = False) -> None:
         """Initialize predictive optimizer and deterministic RNG state."""
         self.config = config
@@ -505,6 +508,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
     def plan(self, observation: dict[str, object]) -> tuple[float, float]:
         """Return the first action from the best sampled control sequence."""
         robot_pos, heading, _speed, goal = self._extract_state(observation)
+        self._last_target_xy = (float(goal[0]), float(goal[1]))
         if float(np.linalg.norm(goal - robot_pos)) <= float(self.config.goal_tolerance):
             return 0.0, 0.0
 
@@ -659,7 +663,10 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""
-        return {"planner_type": "PredictiveMPPIAdapter"}
+        return {
+            "planner_type": "PredictiveMPPIAdapter",
+            "planner_target_xy": list(self._last_target_xy) if self._last_target_xy else None,
+        }
 
     def foresight_diagnostics(self) -> dict[str, Any]:
         """Expose the nested predictor's checkpoint-load and fallback provenance.

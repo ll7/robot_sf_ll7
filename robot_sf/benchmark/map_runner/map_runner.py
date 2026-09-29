@@ -1262,7 +1262,9 @@ def _attach_checkpoint_runtime_stats(
 
 
 def _attach_guard_decision_stats(
-    policy: Callable[[dict[str, Any]], Any], metadata: dict[str, Any]
+    policy: Callable[[dict[str, Any]], Any],
+    metadata: dict[str, Any],
+    guard_adapter: Any = None,
 ) -> None:
     """Expose the latest shield decision through the per-step planner stats hook.
 
@@ -1281,6 +1283,9 @@ def _attach_guard_decision_stats(
             last_decision = shield_stats.get("last_decision")
             if isinstance(last_decision, dict):
                 runtime["last_decision"] = dict(last_decision)
+        fallback_target = getattr(guard_adapter, "last_fallback_target_xy", None)
+        if fallback_target is not None:
+            runtime["planner_target_xy"] = [float(fallback_target[0]), float(fallback_target[1])]
         return runtime
 
     policy._planner_stats = _planner_stats
@@ -1702,7 +1707,7 @@ def _build_guarded_ppo_policy(  # noqa: C901, PLR0915
 
     _policy._planner_close = _close_guarded_ppo
     _attach_checkpoint_runtime_stats(_policy, ppo_planner, ppo_config)
-    _attach_guard_decision_stats(_policy, meta)
+    _attach_guard_decision_stats(_policy, meta, guard_adapter)
     ppo_bind_env = getattr(ppo_planner, "bind_env", None)
     guard_bind_env = getattr(guard_adapter, "bind_env", None)
     bind_hooks = [hook for hook in (ppo_bind_env, guard_bind_env) if callable(hook)]

@@ -126,8 +126,8 @@ evidence_tree_refresh_addenda:
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 438
-refreshed_baseline_files_with_findings: 98
+refreshed_baseline_total_findings: 446
+refreshed_baseline_files_with_findings: 100
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -548,6 +548,22 @@ reviewed_files:
       the trace bundle disclaims aggregate/statistical/causal evidence and documents its startup /
       admission receipt exception. The #9431 full-campaign goal-adjacent timeout criterion remains
       unavailable, no waiver is claimed, and the issue stays open.
+  - path: docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/archive/report_schema_v1/convergence_report.json
+    codes: [artifact_hash_mismatch]
+    disposition: baseline
+    reason: >-
+      The report records the SHA-256 of the pilot search-space config as run (scenario seed 123, a
+      held-out evaluation seed). The in-tree config was re-seeded to a development seed afterwards;
+      the as-run bytes are kept, hash-pinned, at payload/inputs/issue_9645_pilot_space.v1.yaml.
+      The historical hash is not rewritten; the evidence manifest records the re-seed.
+  - path: docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/convergence_report.json
+    codes: [artifact_hash_mismatch]
+    disposition: baseline
+    reason: >-
+      The report records the SHA-256 of the pilot search-space config as run (scenario seed 123, a
+      held-out evaluation seed). The in-tree config was re-seeded to a development seed afterwards;
+      the as-run bytes are kept, hash-pinned, at payload/inputs/issue_9645_pilot_space.v1.yaml.
+      The historical hash is not rewritten; the evidence manifest records the re-seed.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

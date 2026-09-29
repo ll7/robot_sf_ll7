@@ -16,6 +16,8 @@ params:
   rollout_dt: 0.1
   robot_radius_default: 1.0
   pedestrian_radius_default: 0.4
+  stop_distance_human: 1.5
+  slow_distance_human: 3.5
   static_clearance_escape_enabled: true
   static_clearance_escape_min_clearance: 1.0
   static_clearance_escape_max_speed: 0.3

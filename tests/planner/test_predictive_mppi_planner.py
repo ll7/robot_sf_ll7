@@ -431,7 +431,7 @@ def test_mppi_social_batch_empty_pedestrians() -> None:
 
 
 def test_surface_v2_mppi_rejects_center_distance_that_overlaps_bodies() -> None:
-    """MPPI hard gates consume surface separation after subtracting each radius once."""
+    """Scalar and batched MPPI gates consume the same surface separation."""
     config = build_predictive_mppi_config(
         {
             "clearance_model": "surface_v2",
@@ -447,8 +447,19 @@ def test_surface_v2_mppi_rejects_center_distance_that_overlaps_bodies() -> None:
     )
     planner = PredictiveMPPIAdapter(config, allow_fallback=True)
     planner._predictor = _StubPredictor(np.asarray([[[2.0, 0.0]]], dtype=float))
+    sequence = np.zeros((1, 2), dtype=float)
+    scalar_cost = planner._sequence_rollout(
+        sequence,
+        robot_pos=np.asarray([0.0, 0.0]),
+        heading=0.0,
+        goal=np.asarray([3.0, 0.0]),
+        future=np.asarray([[[2.0, 0.0]]], dtype=float),
+        mask=np.asarray([1.0]),
+        observation=_obs(goal=(3.0, 0.0)),
+        anchor_action=(0.0, 0.0),
+    )
     costs = planner._batch_sequence_rollout(
-        np.zeros((1, 1, 2), dtype=float),
+        sequence[None, ...],
         robot_pos=np.asarray([0.0, 0.0]),
         heading=0.0,
         goal=np.asarray([3.0, 0.0]),
@@ -459,6 +470,8 @@ def test_surface_v2_mppi_rejects_center_distance_that_overlaps_bodies() -> None:
     )
 
     assert costs.shape == (1,)
+    assert scalar_cost == pytest.approx(float(costs[0]))
+    assert scalar_cost >= config.invalid_sequence_cost
     assert costs[0] >= config.invalid_sequence_cost
 
 

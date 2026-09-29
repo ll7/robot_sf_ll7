@@ -87,8 +87,8 @@ class RiskDWAPlannerConfig:
     progress_escape_speed: float = 0.45
     progress_escape_heading_gain: float = 1.4
     clearance_model: str = CENTER_CLEARANCE_V1
-    robot_radius_m: float = 0.0
-    pedestrian_radius_m: float = 0.0
+    robot_radius_m: float = 1.0
+    pedestrian_radius_m: float = 0.4
     hard_obstacle_clearance: float = 0.30
 
     def __post_init__(self) -> None:
@@ -554,8 +554,8 @@ def build_risk_dwa_config(cfg: dict[str, Any] | None) -> RiskDWAPlannerConfig:
         progress_escape_speed=float(cfg.get("progress_escape_speed", 0.45)),
         progress_escape_heading_gain=float(cfg.get("progress_escape_heading_gain", 1.4)),
         clearance_model=str(cfg.get("clearance_model", CENTER_CLEARANCE_V1)),
-        robot_radius_m=float(cfg.get("robot_radius_m", 0.0)),
-        pedestrian_radius_m=float(cfg.get("pedestrian_radius_m", 0.0)),
+        robot_radius_m=float(cfg.get("robot_radius_m", 1.0)),
+        pedestrian_radius_m=float(cfg.get("pedestrian_radius_m", 0.4)),
         hard_obstacle_clearance=float(cfg.get("hard_obstacle_clearance", 0.30)),
     )
 

@@ -214,6 +214,19 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
             robot_radius=self.config.socnav.predictive_robot_radius,
         )
 
+    def _pedestrian_clearance(self, center_distance: float | np.ndarray) -> float | np.ndarray:
+        """Convert pedestrian centre distance through the configured geometry model.
+
+        Returns:
+            float | np.ndarray: Centre or surface clearance in metres.
+        """
+        return pedestrian_clearance(
+            center_distance,
+            model=self.config.clearance_model,
+            robot_radius=self.config.socnav.predictive_robot_radius,
+            pedestrian_radius=self.config.socnav.predictive_pedestrian_radius,
+        )
+
     def _sequence_rollout(  # noqa: PLR0913
         self,
         sequence: np.ndarray,
@@ -263,11 +276,13 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                 dists = np.linalg.norm(ped_t - local_pos[None, :], axis=1)
                 valid_dist = dists[valid_idx]
                 if valid_dist.size > 0:
-                    min_clear = min(min_clear, float(np.min(valid_dist)))
+                    clearance = self._pedestrian_clearance(valid_dist)
+                    assert isinstance(clearance, np.ndarray)
+                    min_clear = min(min_clear, float(np.min(clearance)))
                     if step == 0:
-                        first_clear = min(first_clear, float(np.min(valid_dist)))
+                        first_clear = min(first_clear, float(np.min(clearance)))
                     threshold = float(self.config.near_distance)
-                    shortfall = np.maximum(0.0, threshold - valid_dist)
+                    shortfall = np.maximum(0.0, threshold - clearance)
                     time_weight = 1.0 / (float(step + 1) * dt + 1e-6)
                     ttc_penalty += float(np.sum(shortfall * time_weight))
 
@@ -397,15 +412,8 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                 dists = np.linalg.norm(ped_t - local_pos[:, None, :], axis=2)  # (samples, peds)
                 valid_dist = dists[:, valid_idx]  # (samples, valid_peds)
                 if valid_dist.size > 0:
-                    clearance = valid_dist
-                    if self.config.clearance_model == "surface_v2":
-                        clearance = pedestrian_clearance(
-                            valid_dist,
-                            model=self.config.clearance_model,
-                            robot_radius=self.config.socnav.predictive_robot_radius,
-                            pedestrian_radius=self.config.socnav.predictive_pedestrian_radius,
-                        )
-                        assert isinstance(clearance, np.ndarray)
+                    clearance = self._pedestrian_clearance(valid_dist)
+                    assert isinstance(clearance, np.ndarray)
                     sample_min = np.min(clearance, axis=1)  # (samples,)
                     min_clear = np.minimum(min_clear, sample_min)
                     if step == 0:

@@ -147,6 +147,7 @@ entries:
 - path: docs/context/evidence/issue_9860_pr9884_preflight_2026-09-29/checksums.sha256
   status: evidence
   freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_9666_force_custody.json
   status: evidence
   freshness: evidence

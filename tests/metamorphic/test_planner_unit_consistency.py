@@ -77,6 +77,7 @@ AUDITED_UNIT_FIELDS = frozenset(
     goal_posterior_crossing_lateral_margin goal_posterior_near_distance
     goal_posterior_turn_rate goal_posterior_yield_speed goal_tolerance
     guard_first_step_ped_clearance guard_hard_obstacle_clearance guard_hard_ped_clearance
+    guard_pedestrian_radius_m guard_robot_radius_m
     guard_min_ttc guard_near_field_distance guard_rollout_dt hard_collision_horizon
     hard_obstacle_clearance hard_ped_clearance hard_safety_margin
     height hrvo_neighbor_dist hrvo_time_horizon hrvo_uncertainty_offset
@@ -139,6 +140,7 @@ AUDITED_UNIT_FIELDS = frozenset(
 NON_PHYSICAL_NAMES = frozenset(
     """
     noise_std predictive_sequence_beam_width predictive_uncertainty_density_scale
+    clearance_model
     predictive_uncertainty_speed_scale social_force_max_force
     social_force_obstacle_factor social_force_factor social_force_gamma
     social_force_lambda_importance social_force_n social_force_n_prime
@@ -222,7 +224,13 @@ DRIVE_ANGULAR_ACCEL_FIELDS = frozenset(
     ("actuation_max_angular_accel", "max_angular_accel", "max_angular_acceleration")
 )
 ROBOT_RADIUS_FIELDS = frozenset(
-    ("predictive_robot_radius", "robot_radius", "robot_radius_default", "robot_radius_m")
+    (
+        "guard_robot_radius_m",
+        "predictive_robot_radius",
+        "robot_radius",
+        "robot_radius_default",
+        "robot_radius_m",
+    )
 )
 PEDESTRIAN_RADIUS_FIELDS = frozenset(
     (
@@ -230,6 +238,7 @@ PEDESTRIAN_RADIUS_FIELDS = frozenset(
         "pedestrian_radius_default",
         "pedestrian_radius_m",
         "predictive_pedestrian_radius",
+        "guard_pedestrian_radius_m",
         "social_force_ped_v3_default_ped_radius",
     )
 )

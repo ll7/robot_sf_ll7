@@ -444,6 +444,7 @@ _FAST_FILES = {
     # contracts for replay provenance, materialization, and report schemas.
     "test_replay_gallery.py",
     "test_search_evidence_packet.py",
+    "test_feasibility_frontier_report.py",
     # Recorded episode figure tests use pinned fixture traces and deterministic
     # render inputs; keep changed replay materialization coverage in PR shards.
     "test_episode_replay_figure.py",

@@ -413,6 +413,9 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # DWA occupancy-clearance tests are deterministic planner contracts; keep
+    # ego-frame and far-obstacle branches in exact-head changed coverage.
+    "test_dwa.py",
     # Scenario-admissibility tests exercise deterministic candidate, manifest,
     # materialization, and provenance contracts used by the adversarial search.
     "test_scenario_admissibility.py",

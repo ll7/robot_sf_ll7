@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
+import yaml
 from pysocialforce.config import SOCIAL_FORCE_KERNEL_WRAPPED_V2
 
+from robot_sf.planner.goal_target import select_goal_target
 from robot_sf.planner.guarded_ppo import (
     GuardedPPOAdapter,
     GuardedPPOConfig,
@@ -608,6 +612,25 @@ def test_guarded_ppo_tracks_current_goal_before_next_waypoint() -> None:
 
     assert command == (0.3, 0.1)
     assert decision == "ppo_clear"
+
+
+def test_guarded_ppo_outer_guard_looks_ahead_for_one_waypoint_boundary_step() -> None:
+    """The outer guard keeps its own lookahead while the v2 fallback uses current."""
+    release_path = (
+        Path(__file__).parents[2] / "configs/algos/guarded_ppo_camera_ready_cpu_goal_v2.yaml"
+    )
+    release_config = yaml.safe_load(release_path.read_text(encoding="utf-8"))
+    guard = GuardedPPOAdapter(config=build_guarded_ppo_config(release_config))
+    observation = _obs(robot=(8.0, 5.0), goal=(8.0, 5.0), next_goal=(8.0, 8.0))
+    _, _, outer_target, _, _ = guard._extract_state(observation)
+    np.testing.assert_array_equal(outer_target, [8.0, 8.0])
+    fallback_target = select_goal_target(
+        observation["robot"]["position"],
+        observation["goal"]["current"],
+        observation["goal"]["next"],
+        version=release_config["fallback_risk_dwa"]["goal_target_version"],
+    )
+    np.testing.assert_array_equal(fallback_target, [8.0, 5.0])
 
 
 def test_guarded_ppo_honors_array_pedestrian_count_for_padded_rows() -> None:

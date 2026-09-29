@@ -72,11 +72,12 @@ source commit without the runtime modules, as well as a manifest and result
 root that agree on forged runtime hashes. It rejects a missing or extra v4
 binding. The result root's
 `campaign_manifest.json` must match the reviewed campaign ID, source commit,
-config hash, scenario path, and scenario hash. Each row's run-directory planner
-key must occur in the pinned config. Its recorded algorithm, scenario config
-hash, algorithm metadata, effective planner config, and run provenance must
-match that key. Each row's recorded
-`provenance.config_identity.scenario_matrix_hash` must match the pinned runner's
+config hash, scenario path, and scenario hash. A row in an unconfigured planner
+arm is an extra-slot finding. For rows in expected slots, the recorded algorithm,
+scenario config hash, algorithm metadata, effective planner config, and run
+provenance must match that key. Every row in a configured arm, including an
+extra or duplicate slot, must record a
+`provenance.config_identity.scenario_matrix_hash` matching the pinned runner's
 hash of the full scenario list scoped to that planner and kinematics, including
 campaign track and observation settings. A row's campaign config hash, when
 recorded in its config identity, must match the pinned campaign runtime hash;

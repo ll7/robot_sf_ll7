@@ -815,13 +815,13 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
         if row["_source_commit"] != baseline_source:
             raise ValueError(f"0.0.7 row has wrong source at {key}")
     for key, row in [*new.items(), *duplicate_rows]:
+        if row["_source_commit"] != successor_identity["source_commit"]:
+            raise ValueError(f"0.0.8 row source differs from campaign manifest at {key}")
         scoped_hash = verified_successor["scoped_hashes"].get(key[:2])
         if scoped_hash is not None:
             _validate_row_runner_hashes(key, row, scoped_hash, successor_identity["config_hash"])
         if key in extra_slots:
             continue
-        if row["_source_commit"] != successor_identity["source_commit"]:
-            raise ValueError(f"0.0.8 row source differs from campaign manifest at {key}")
         _validate_successor_row(
             key,
             row,

@@ -83,7 +83,13 @@ def _root(tmp_path: Path, rows: list[dict], *, run: str = "goal__differential_dr
         algo = row["algo"]
         binding = manifest["versioned_planner_bindings"].get(run_planner)
         config = {"speed": 1, "name": run_planner} if binding else {}
-        scenario = {"id": row["scenario_id"], "algo": algo, "seed": row["seed"]}
+        scenario = {
+            "name": row["scenario_id"],
+            "id": row["scenario_id"],
+            "map_file": "maps/svg_maps/classic_crossing.svg",
+            "algo": algo,
+            "seed": row["seed"],
+        }
         row["scenario_params"] = scenario
         row["config_hash"] = _config_hash(scenario)
         row["algorithm_metadata"] = {
@@ -125,15 +131,49 @@ def _successor_contract(tmp_path: Path) -> tuple[Path, str, Path, str]:
             source,
             json.loads(payload)["source_commit"],
         )
+    # The pinned source must contain actual production runtime modules. A
+    # sparse local clone keeps each synthetic campaign fixture cheap.
+    subprocess.run(
+        [
+            "git",
+            "clone",
+            "--shared",
+            "--quiet",
+            "--sparse",
+            str(Path(__file__).parents[2]),
+            str(source),
+        ],
+        check=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(source),
+            "sparse-checkout",
+            "add",
+            "robot_sf",
+            "fast-pysf",
+            "configs/benchmarks",
+            "configs/scenarios",
+            "configs/algos",
+            "maps/svg_maps",
+        ],
+        check=True,
+    )
     scenario = source / "configs/scenarios/synthetic.yaml"
     config = source / "configs/benchmarks/synthetic.yaml"
-    scenario.parent.mkdir(parents=True)
-    config.parent.mkdir(parents=True)
+    scenario.parent.mkdir(parents=True, exist_ok=True)
+    config.parent.mkdir(parents=True, exist_ok=True)
     map_path = source / "maps/svg_maps/classic_crossing.svg"
     map_path.parent.mkdir(parents=True, exist_ok=True)
     map_path.write_text("<svg xmlns='http://www.w3.org/2000/svg'/>\n")
     scenario.write_text(
-        "- name: s1\n  map_file: ../../maps/svg_maps/classic_crossing.svg\n  seeds: [111]\n"
+        "".join(
+            f"- name: {name}\n  map_file: ../../maps/svg_maps/classic_crossing.svg\n"
+            "  seeds: [111, 112]\n"
+            for name in ("s1", "s2", "s3", "classic_bottleneck_low")
+        )
     )
     planner_bindings = {}
     planner_lines = ["  - key: goal", "    algo: goal"]
@@ -156,8 +196,7 @@ def _successor_contract(tmp_path: Path) -> tuple[Path, str, Path, str]:
         + "\n".join(planner_lines)
         + "\n"
     )
-    subprocess.run(["git", "init", "-q", str(source)], check=True)
-    subprocess.run(["git", "-C", str(source), "add", "configs", "maps"], check=True)
+    subprocess.run(["git", "-C", str(source), "add", "--sparse", "configs", "maps"], check=True)
     subprocess.run(
         [
             "git",
@@ -724,6 +763,120 @@ def test_forged_runtime_hashes_matching_result_root_exit_two(tmp_path: Path, mon
     )
     successor = _successor_kwargs(tmp_path)
     output = tmp_path / "forged-report"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "compare",
+            "--baseline-bundle",
+            str(bundle),
+            "--successor-root",
+            str(root),
+            "--successor-manifest",
+            str(successor["successor_manifest"]),
+            "--successor-manifest-sha256",
+            successor["successor_manifest_sha256"],
+            "--successor-source-root",
+            str(successor["successor_source_root"]),
+            "--output-dir",
+            str(output),
+        ],
+    )
+    with pytest.raises(SystemExit) as exc:
+        comparator.main()
+    assert exc.value.code == 2
+    assert not (output / "report.json").exists()
+
+
+def test_runtime_hash_and_planner_resolution_use_pinned_code(tmp_path: Path) -> None:
+    manifest_path, _, source, commit = _successor_contract(tmp_path)
+    original = json.loads(manifest_path.read_text())["campaign_config"]["runtime_hash"]
+    utils = source / "robot_sf/benchmark/utils.py"
+    code = utils.read_text()
+    target = "return hashlib.sha256(data).hexdigest()[:16]"
+    assert target in code
+    utils.write_text(code.replace(target, 'return "a" * 16', 1))
+    resolver = source / "robot_sf/benchmark/map_runner_policies/map_runner_policy_resolution.py"
+    code = resolver.read_text()
+    anchor = "    manifest = (\n        dict(algo_config)"
+    assert anchor in code
+    resolver.write_text(
+        code.replace(
+            anchor,
+            '    if default_algo == "goal":\n        return default_algo, {"pinned_runtime_marker": True}\n'
+            + anchor,
+            1,
+        )
+    )
+    subprocess.run(["git", "-C", str(source), "add", "robot_sf/benchmark"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(source),
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-qm",
+            "different runtime hash",
+        ],
+        check=True,
+    )
+    changed_commit = subprocess.check_output(
+        ["git", "-C", str(source), "rev-parse", "HEAD"], text=True
+    ).strip()
+    assert changed_commit != commit
+    slot = ("goal", "differential_drive", "s1", 111, "")
+    rows = {
+        slot: {
+            "_provenance": {
+                "scenario_params": {
+                    "name": "s1",
+                    "id": "s1",
+                    "map_file": "maps/svg_maps/classic_crossing.svg",
+                    "algo": "goal",
+                    "seed": 111,
+                }
+            }
+        }
+    }
+    observed, _, runtime_rows = comparator._runtime_successor_identity(
+        source, changed_commit, "configs/benchmarks/synthetic.yaml", rows
+    )
+    assert observed == "a" * 16
+    assert observed != original
+    assert runtime_rows[slot]["config"] == {"pinned_runtime_marker": True}
+
+
+def test_forged_row_map_with_recomputed_self_hash_exits_two(tmp_path: Path, monkeypatch) -> None:
+    row = _row("s1", 111)
+    bundle, digest = _archive(tmp_path, [row])
+    root = _root(tmp_path, [row])
+    path = root / "runs/goal__differential_drive/episodes.jsonl"
+    forged = json.loads(path.read_text())
+    forged["scenario_params"]["map_file"] = "maps/svg_maps/forged.svg"
+    forged["config_hash"] = _config_hash(forged["scenario_params"])
+    path.write_text(json.dumps(forged) + "\n")
+    with pytest.raises(ValueError, match="map_file differs from pinned scenario"):
+        _compare(bundle, root, digest)
+
+    real_compare = comparator.compare
+    monkeypatch.setattr(
+        comparator,
+        "compare",
+        lambda bundle_arg, root_arg, **kwargs: real_compare(
+            bundle_arg,
+            root_arg,
+            baseline_sha256=digest,
+            baseline_source=OLD_SOURCE,
+            expected_scenario_identity=SCENARIO,
+            **kwargs,
+        ),
+    )
+    successor = _successor_kwargs(tmp_path)
+    output = tmp_path / "forged-map-report"
     monkeypatch.setattr(
         sys,
         "argv",

@@ -60,18 +60,22 @@ runtime hashes, and the path and raw SHA-256 of each configured v4 planner
 input. The tool reads those files from the named Git commit in
 `--successor-source-root` and checks their bytes and the config's scenario and
 planner bindings. It creates a temporary detached checkout at that commit and
-recomputes the runtime hashes with the campaign runner's config loader and hash
-functions. This rejects even a manifest and result root that agree on forged
-runtime hashes. It rejects a missing or extra v4 binding. The result root's
+recomputes the runtime hashes and resolves planner configurations in an isolated
+Python subprocess whose project imports come from that checkout. It rejects a
+source commit without the runtime modules, as well as a manifest and result
+root that agree on forged runtime hashes. It rejects a missing or extra v4
+binding. The result root's
 `campaign_manifest.json` must match the reviewed campaign ID, source commit,
 config hash, scenario path, and scenario hash. Each row's run-directory planner
 key must occur in the pinned config. Its recorded algorithm, scenario config
 hash, algorithm metadata, effective planner config, and run provenance must
 match that key. Policy-search candidate base configs and scenario overrides are
-resolved from files in the pinned checkout with the production resolver; a
-referenced config outside that checkout is rejected. Every row's source commit
-must also match. Invalid
-identity exits 2 before writing a comparison report. A manifest checksum proves
+resolved from files in the pinned checkout with that commit's production
+resolver; a referenced config outside that checkout is rejected. Every row's source commit
+must also match. Matrix-owned scenario fields, including the scenario identity
+and `map_file`, must match the resolved scenario in the pinned commit. A row's
+self-recorded config hash cannot authenticate a changed map. Invalid identity
+exits 2 before writing a comparison report. A manifest checksum proves
 which reviewed assertion was supplied; it does not independently establish
 that a campaign was accepted for release.
 

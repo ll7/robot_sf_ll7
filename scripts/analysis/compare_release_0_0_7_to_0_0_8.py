@@ -14,14 +14,13 @@ import gzip
 import hashlib
 import json
 import math
-import os
 import re
 import subprocess
+import sys
 import tarfile
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from unittest.mock import patch
 
 import yaml
 
@@ -307,30 +306,13 @@ def _source_bytes(source_root: Path, commit: str, name: str) -> bytes:
     return result.stdout
 
 
-def _runtime_successor_identity(  # noqa: C901 - pinned config references and row binding fail closed
+def _runtime_successor_identity(
     source_root: Path,
     commit: str,
     config_path: str,
     rows: Mapping[tuple[str, str, str, int, str], dict[str, Any]],
 ) -> tuple[str, str, dict[tuple[str, str, str, int, str], dict[str, Any]]]:
     """Recreate the campaign runner's hashes from a detached source checkout."""
-    from robot_sf.benchmark.camera_ready import _util
-    from robot_sf.benchmark.camera_ready._config import (
-        _load_campaign_scenarios,
-        load_campaign_config,
-    )
-    from robot_sf.benchmark.camera_ready._preflight import (
-        _scenario_matrix_hash,
-    )
-    from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
-        _apply_planner_selector_v2_context,
-        _apply_scenario_uncertainty_envelope_config,
-        _parse_algo_config,
-        _resolve_config_path,
-        _resolve_policy_search_candidate_runtime,
-    )
-    from robot_sf.benchmark.utils import _config_hash
-
     with tempfile.TemporaryDirectory(prefix="slot-paired-source-") as directory:
         checkout = Path(directory) / "source"
         result = subprocess.run(
@@ -341,85 +323,31 @@ def _runtime_successor_identity(  # noqa: C901 - pinned config references and ro
         )
         if result.returncode:
             raise ValueError("cannot check out pinned successor source commit")
-        previous_cwd = Path.cwd()
         try:
-            os.chdir(checkout)
-            # The runner serializes repository-relative paths. Bind that root
-            # to the detached checkout while invoking its production helpers.
-            with patch.object(_util, "get_repository_root", return_value=checkout):
-                cfg = load_campaign_config(checkout / config_path, repository_root=checkout)
-                for path in (cfg.source_config_path, cfg.scenario_matrix_path):
-                    if path is None or not path.resolve().is_relative_to(checkout):
-                        raise ValueError("successor config source escapes pinned checkout")
-                scenarios = _load_campaign_scenarios(cfg, repository_root=checkout)
-                config_hash = _config_hash(_util._config_hash_payload(cfg))
-                scenario_hash = _scenario_matrix_hash(scenarios)
-            planners = {}
-            for planner in cfg.planners:
-                path = planner.algo_config_path
-                if path is not None and not path.resolve().is_relative_to(checkout):
-                    raise ValueError(
-                        f"successor planner config escapes pinned checkout: {planner.key}"
-                    )
-                raw = _parse_algo_config(str(path)) if path else {}
-                if not isinstance(raw, dict):
-                    raise ValueError(f"successor planner config must be a mapping: {planner.key}")
-                if path is not None:
-                    references = [raw.get("base_config_path")]
-                    overrides = raw.get("scenario_algo_overrides")
-                    if isinstance(overrides, dict):
-                        references.extend(
-                            entry.get("base_config_path")
-                            for entry in overrides.values()
-                            if isinstance(entry, dict)
-                        )
-                    for reference in references:
-                        if reference is None:
-                            continue
-                        resolved = _resolve_config_path(path.parent, reference)
-                        if (
-                            resolved is None
-                            or not resolved.is_file()
-                            or not resolved.is_relative_to(checkout)
-                        ):
-                            raise ValueError(
-                                f"successor planner referenced config escapes pinned checkout: {planner.key}"
-                            )
-                planners[planner.key] = {
-                    "algo": planner.algo,
-                    "config": raw,
-                    "path": path.relative_to(checkout).as_posix() if path else None,
-                    "absolute_path": str(path) if path else None,
-                }
-            runtime_rows = {}
-            for slot, row in rows.items():
-                planner = planners.get(slot[0])
-                if planner is None:
-                    raise ValueError(
-                        f"0.0.8 row planner is absent from verified successor config: {slot}"
-                    )
-                scenario = row["_provenance"]["scenario_params"]
-                if not isinstance(scenario, dict):
-                    raise ValueError(f"0.0.8 row lacks scenario provenance at {slot}")
-                algo, effective = _resolve_policy_search_candidate_runtime(
-                    default_algo=planner["algo"],
-                    algo_config_path=planner["absolute_path"],
-                    scenario=scenario,
-                    algo_config=planner["config"],
+            worker = Path(__file__).with_name("_pinned_successor_runtime.py")
+            request = {
+                "config_path": config_path,
+                "rows": [
+                    {"slot": slot, "scenario_params": row["_provenance"]["scenario_params"]}
+                    for slot, row in rows.items()
+                ],
+            }
+            resolved = subprocess.run(
+                [sys.executable, "-I", str(worker)],
+                input=json.dumps(request),
+                capture_output=True,
+                text=True,
+                cwd=checkout,
+                check=False,
+            )
+            if resolved.returncode:
+                raise ValueError(
+                    f"pinned successor runtime resolution failed: {resolved.stderr.strip()}"
                 )
-                effective = _apply_planner_selector_v2_context(
-                    algo, effective, scenario=scenario, seed=slot[3]
-                )
-                effective = _apply_scenario_uncertainty_envelope_config(algo, effective, scenario)
-                runtime_rows[slot] = {
-                    "algo": algo,
-                    "config": effective,
-                    "config_hash": _config_hash(effective),
-                    "path": planner["path"],
-                }
-            return config_hash, scenario_hash, runtime_rows
+            payload = json.loads(resolved.stdout)
+            runtime_rows = {tuple(item.pop("slot")): item for item in payload["rows"]}
+            return payload["config_hash"], payload["scenario_hash"], runtime_rows
         finally:
-            os.chdir(previous_cwd)
             subprocess.run(
                 ["git", "-C", str(source_root), "worktree", "remove", "--force", str(checkout)],
                 capture_output=True,
@@ -546,8 +474,6 @@ def _validate_successor_row(  # noqa: C901 - each provenance assertion fails ind
     source_commit: str,
 ) -> None:
     """Check the recorded algorithm and effective config against the pinned arm."""
-    from robot_sf.benchmark.utils import _config_hash
-
     planner = runtime_rows[slot]
     recorded = row["_provenance"]
     scenario = recorded["scenario_params"]
@@ -557,6 +483,9 @@ def _validate_successor_row(  # noqa: C901 - each provenance assertion fails ind
         raise ValueError(f"0.0.8 row lacks effective planner provenance at {slot}")
     if scenario.get("name", scenario.get("id", scenario.get("scenario_id"))) != slot[2]:
         raise ValueError(f"0.0.8 row scenario provenance differs from run slot at {slot}")
+    for field, expected in planner["scenario"].items():
+        if field not in {"seed", "seeds"} and scenario.get(field) != expected:
+            raise ValueError(f"0.0.8 row {field} differs from pinned scenario at {slot}")
     if recorded["algo"] != planner["algo"] or scenario.get("algo") != planner["algo"]:
         raise ValueError(f"0.0.8 row algorithm differs from configured planner at {slot}")
     if metadata.get("algorithm") != planner["algo"]:
@@ -568,7 +497,7 @@ def _validate_successor_row(  # noqa: C901 - each provenance assertion fails ind
         or metadata.get("config_hash") != planner["config_hash"]
     ):
         raise ValueError(f"0.0.8 row effective planner config differs from pinned source at {slot}")
-    if recorded["config_hash"] != _config_hash(scenario):
+    if recorded["config_hash"] != planner["scenario_config_hash"]:
         raise ValueError(
             f"0.0.8 row scenario config_hash differs from effective scenario at {slot}"
         )

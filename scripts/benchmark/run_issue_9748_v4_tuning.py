@@ -46,6 +46,7 @@ TUNABLE = frozenset(
         "goal_progress_weight",
     }
 )
+CellJob = tuple[dict[str, Any], int, dict[str, Any], str, str, int, dict[str, Any], float]
 
 
 def _sha256(path: Path) -> str:
@@ -167,22 +168,42 @@ def _effective_config_hash(
     return _hash_mapping(resolved)
 
 
-def _run_cell(
-    job: tuple[dict[str, Any], int, dict[str, Any], str, str, int, float],
-) -> dict[str, Any]:
-    scenario, seed, manifest, candidate_path, scenario_anchor, horizon, dt = job
+def _episode_runtime_options(cfg: Any, planner: Any, *, dt: float) -> dict[str, Any]:
+    """Use the release runner's arm wrapper and runtime profile conversions."""
+    from robot_sf.benchmark.camera_ready._util import (
+        _latency_stress_metadata,
+        _synthetic_actuation_metadata,
+    )
+    from robot_sf.benchmark.camera_ready.campaign import _resolve_arm_safety_wrapper
+
+    return {
+        "record_forces": cfg.record_forces,
+        "record_planner_decision_trace": cfg.record_planner_decision_trace,
+        "record_simulation_step_trace": cfg.record_simulation_step_trace,
+        "observation_mode": planner.observation_mode or cfg.observation_mode,
+        "observation_noise": cfg.observation_noise,
+        "synthetic_actuation_profile": _synthetic_actuation_metadata(
+            cfg.synthetic_actuation_profile
+        ),
+        "latency_stress_profile": _latency_stress_metadata(cfg.latency_stress_profile, dt=dt),
+        "safety_wrapper": _resolve_arm_safety_wrapper(cfg=cfg, planner=planner),
+    }
+
+
+def _run_cell(job: CellJob) -> dict[str, Any]:
+    scenario, seed, manifest, candidate_path, scenario_anchor, horizon, episode_options, dt = job
     started = time.perf_counter()
     try:
         _quiet_logs()
-        from robot_sf.benchmark.map_runner.map_runner import build_map_policy
-        from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
+        from robot_sf.benchmark.map_runner.map_runner import _run_map_episode, build_map_policy
 
-        record = run_map_episode(
+        # Use the same episode wrapper as the release batch. It captures the
+        # parser-consumed map input and binds selected_map_identity in each row.
+        record = _run_map_episode(
             scenario=scenario,
             seed=seed,
             horizon=horizon,
             dt=dt,
-            record_forces=True,
             snqi_weights=None,
             snqi_baseline=None,
             algo="hybrid_rule_local_planner",
@@ -190,6 +211,7 @@ def _run_cell(
             algo_config=manifest,
             algo_config_path=candidate_path,
             policy_builder=build_map_policy,
+            **episode_options,
         )
     except (
         AssertionError,
@@ -215,7 +237,7 @@ def _write_group(
     trial: dict[str, Any],
     scenario: dict[str, Any],
     seeds: list[int],
-    jobs: list[tuple[dict[str, Any], int, dict[str, Any], str, str, int, float]],
+    jobs: list[CellJob],
     executor: ProcessPoolExecutor | None,
     schema: dict[str, Any],
 ) -> dict[str, Any]:
@@ -362,6 +384,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
 
     from robot_sf.benchmark.camera_ready._config import (
         _load_campaign_scenarios,
+        _scenario_with_kinematics,
         load_campaign_config,
     )
     from scripts.validation.check_issue_9748_dev_split import (
@@ -375,7 +398,18 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
     cfg = load_campaign_config(CAMPAIGN_PATH)
     if cfg.horizon != 600 or cfg.dt != 0.1:
         raise ValueError("#9748 runner requires the frozen H600 / dt=0.1 contract")
-    scenarios = _load_campaign_scenarios(cfg)
+    if cfg.kinematics_matrix != ("differential_drive",):
+        raise ValueError("#9748 runner requires the frozen differential-drive contract")
+    scenarios = [
+        _scenario_with_kinematics(
+            row,
+            kinematics="differential_drive",
+            holonomic_command_mode=cfg.holonomic_command_mode,
+        )
+        for row in _load_campaign_scenarios(cfg)
+    ]
+    if cfg.telemetry is not None:
+        scenarios = [{**row, "telemetry": dict(cfg.telemetry)} for row in scenarios]
     if {row["name"] for row in scenarios} != EXPECTED_SCENARIO_IDS or len(scenarios) != 4:
         raise ValueError("resolved development scenario identities changed")
     if any(tuple(row["seeds"]) != EXPECTED_DEV_SEEDS for row in scenarios):
@@ -420,6 +454,12 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
     try:
         for candidate in candidates:
             candidate_path = EXPECTED_PLANNER_CONFIGS[candidate]
+            planner = planners[candidate]
+            effective_horizon = (
+                planner.horizon_override if planner.horizon_override is not None else cfg.horizon
+            )
+            effective_dt = planner.dt_override if planner.dt_override is not None else cfg.dt
+            episode_options = _episode_runtime_options(cfg, planner, dt=effective_dt)
             for trial in selected_trials:
                 manifest = _candidate_manifest(candidate_path, trial["params"])
                 for scenario in scenarios:
@@ -433,8 +473,9 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
                             manifest,
                             str(candidate_path),
                             str(SCENARIO_ANCHOR),
-                            cfg.horizon,
-                            cfg.dt,
+                            effective_horizon,
+                            episode_options,
+                            effective_dt,
                         )
                         for seed in seeds
                     ]

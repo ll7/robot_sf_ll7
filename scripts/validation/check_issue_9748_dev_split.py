@@ -22,12 +22,41 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.camera_ready._config import load_campaign_config
+from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios, load_campaign_config
+from robot_sf.benchmark.camera_ready.campaign import _resolve_arm_safety_wrapper
 from robot_sf.training.scenario_loader import load_scenarios
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = ROOT / "configs/benchmarks/issue_9748_hybrid_v4_dev_split_v1.yaml"
-DEFAULT_RELEASE_MATRIX = ROOT / "configs/scenarios/classic_interactions_francis2023.yaml"
+RELEASE_CONFIG_RELATIVE_PATH = (
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml"
+)
+DEFAULT_RELEASE_MATRIX = (
+    ROOT
+    / "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_kernel_wrapped_v2.yaml"
+)
+RELEASE_PARITY_SIMULATION_OVERRIDES = {
+    "goal_completion_policy": "goal_zone_entry_v1",
+    "social_force_kernel_version": "wrapped_v2",
+}
+SIMULATOR_CAMPAIGN_FIELDS = (
+    "horizon",
+    "dt",
+    "kinematics_matrix",
+    "holonomic_command_mode",
+    "observation_mode",
+    "observation_noise",
+    "synthetic_actuation_profile",
+    "latency_stress_profile",
+    "telemetry",
+    "record_forces",
+    "record_planner_decision_trace",
+    "record_simulation_step_trace",
+    "safety_wrapper",
+    "scenario_candidates",
+    "scenario_horizons_path",
+    "radius_sweep",
+)
 EXPECTED_DEV_SEEDS = tuple(range(1001, 1031))
 RELEASE_SEEDS = frozenset(range(111, 141))
 EXPECTED_PLANNER_ALGO = "hybrid_rule_local_planner"
@@ -147,6 +176,7 @@ _TUNING_LOADER_RELATIVE_PATHS = (
     "robot_sf/benchmark/camera_ready/_config.py",
     "robot_sf/benchmark/camera_ready/_config_types.py",
     "robot_sf/benchmark/camera_ready/_util.py",
+    "robot_sf/benchmark/camera_ready/campaign.py",
     "robot_sf/training/scenario_loader.py",
     "robot_sf/benchmark/map_runner_policies/map_runner_policy_resolution.py",
     "robot_sf/benchmark/policy_search_manifest.py",
@@ -201,7 +231,32 @@ def _tuning_input_paths(
             continue
         payload = _load_mapping(path, label="transitive tuning input")
         pending.extend(_iter_tuning_file_references(payload, owner_path=path))
+    # The candidate's release matrix is a comparator input for the dev split.
+    # Freeze its manifest chain without pulling in unrelated release arms/maps;
+    # the four selected map files are already in the dev input closure.
+    found.update(_release_parity_input_paths())
     return tuple(sorted(found, key=lambda path: path.as_posix()))
+
+
+def _release_parity_input_paths() -> set[Path]:
+    campaign_path = ROOT / RELEASE_CONFIG_RELATIVE_PATH
+    campaign = _load_mapping(campaign_path, label="0.0.8 candidate campaign")
+    matrix_raw = campaign.get("scenario_matrix")
+    if not isinstance(matrix_raw, str) or not matrix_raw.strip():
+        raise ValidationError("0.0.8 candidate campaign must select a scenario matrix")
+    pending = [_repo_path(matrix_raw, relative_to=campaign_path.parent)]
+    found = {campaign_path}
+    while pending:
+        path = pending.pop()
+        if path in found:
+            continue
+        payload = _load_mapping(path, label="0.0.8 candidate scenario matrix")
+        found.add(path)
+        includes = payload.get("includes", [])
+        if not isinstance(includes, list) or any(not isinstance(raw, str) for raw in includes):
+            raise ValidationError(f"invalid includes in 0.0.8 candidate matrix: {path}")
+        pending.extend(_repo_path(raw, relative_to=path.parent) for raw in includes)
+    return found
 
 
 def _current_source_commit() -> str:
@@ -393,6 +448,7 @@ def _validate_variant_source(
     expected["seeds"] = list(EXPECTED_DEV_SEEDS)
     expected["simulation_config"] = {
         **source_simulation,
+        **RELEASE_PARITY_SIMULATION_OVERRIDES,
         **spec["simulation_overrides"],
     }
     expected["metadata"] = {
@@ -533,8 +589,23 @@ def _load_development_rows(
     return scenario_path, rows
 
 
-def _validate_release_disjointness(*, release_matrix_path: Path) -> None:
-    release_rows = _load_scenario_rows(release_matrix_path, label="frozen release scenario matrix")
+def _load_release_candidate_rows(release_matrix_path: Path) -> tuple[Any, list[Mapping[str, Any]]]:
+    campaign_path = ROOT / RELEASE_CONFIG_RELATIVE_PATH
+    try:
+        campaign = load_campaign_config(campaign_path, repository_root=ROOT)
+        if campaign.scenario_matrix_path.resolve() != release_matrix_path.resolve():
+            raise ValidationError(
+                "0.0.8 candidate campaign scenario matrix differs from the parity comparator"
+            )
+        rows = _load_campaign_scenarios(campaign, repository_root=ROOT)
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        if isinstance(exc, ValidationError):
+            raise
+        raise ValidationError(f"could not resolve 0.0.8 candidate campaign: {exc}") from exc
+    return campaign, rows
+
+
+def _validate_release_disjointness(release_rows: Sequence[Mapping[str, Any]]) -> None:
     release_ids = {
         _scenario_id(row, label="frozen release scenario matrix") for row in release_rows
     }
@@ -546,15 +617,123 @@ def _validate_release_disjointness(*, release_matrix_path: Path) -> None:
         )
 
 
+def _effective_arm_action_observation(campaign: Any, planner: Any) -> dict[str, Any]:
+    """Resolve the per-arm overrides used by the release campaign runner."""
+    return {
+        "observation_mode": planner.observation_mode or campaign.observation_mode,
+        "horizon": (
+            planner.horizon_override if planner.horizon_override is not None else campaign.horizon
+        ),
+        "dt": planner.dt_override if planner.dt_override is not None else campaign.dt,
+    }
+
+
+def _validate_release_parity(
+    *,
+    development_campaign: Any,
+    development_rows: Sequence[Mapping[str, Any]],
+    release_campaign: Any,
+    release_rows: Sequence[Mapping[str, Any]],
+) -> None:
+    campaign_differences = [
+        field
+        for field in SIMULATOR_CAMPAIGN_FIELDS
+        if getattr(development_campaign, field) != getattr(release_campaign, field)
+    ]
+    if campaign_differences:
+        raise ValidationError(
+            "development simulator campaign settings differ from the 0.0.8 candidate: "
+            f"{campaign_differences!r}"
+        )
+
+    # The release runner lets an arm override campaign defaults. Compare each
+    # tuned arm's effective runtime settings as well as campaign values above.
+    release_planners = {planner.key: planner for planner in release_campaign.planners}
+    for planner in development_campaign.planners:
+        release_planner = release_planners.get(planner.key)
+        release_runtime = (
+            _effective_arm_action_observation(release_campaign, release_planner)
+            if release_planner is not None
+            else {
+                "observation_mode": release_campaign.observation_mode,
+                "horizon": release_campaign.horizon,
+                "dt": release_campaign.dt,
+            }
+        )
+        development_runtime = _effective_arm_action_observation(development_campaign, planner)
+        runtime_differences = sorted(
+            field
+            for field in release_runtime
+            if development_runtime[field] != release_runtime[field]
+        )
+        if runtime_differences:
+            raise ValidationError(
+                f"development planner {planner.key} effective action/observation settings "
+                f"differ from the 0.0.8 candidate: {runtime_differences!r}"
+            )
+        release_wrapper = (
+            _resolve_arm_safety_wrapper(cfg=release_campaign, planner=release_planner)
+            if release_planner is not None
+            else release_campaign.safety_wrapper
+        )
+        if (
+            _resolve_arm_safety_wrapper(cfg=development_campaign, planner=planner)
+            != release_wrapper
+        ):
+            raise ValidationError(
+                f"development planner {planner.key} effective safety_wrapper differs "
+                "from the 0.0.8 candidate"
+            )
+
+    release_by_id = {
+        _scenario_id(row, label="0.0.8 candidate scenario matrix"): row for row in release_rows
+    }
+    development_by_id = {
+        _scenario_id(row, label="development scenario matrix"): row for row in development_rows
+    }
+    for development_id, spec in EXPECTED_VARIANTS.items():
+        source_id = spec["source_id"]
+        release = release_by_id.get(source_id)
+        if release is None:
+            raise ValidationError(f"0.0.8 candidate is missing release source {source_id}")
+        release_simulation = release.get("simulation_config")
+        release_metadata = release.get("metadata")
+        if not isinstance(release_simulation, Mapping) or not isinstance(release_metadata, Mapping):
+            raise ValidationError(
+                f"0.0.8 candidate source {source_id} lacks simulation or metadata"
+            )
+        expected = dict(release)
+        expected["name"] = development_id
+        expected["seeds"] = list(EXPECTED_DEV_SEEDS)
+        expected["simulation_config"] = {
+            **release_simulation,
+            **spec["simulation_overrides"],
+        }
+        expected["metadata"] = {
+            **release_metadata,
+            **DEV_METADATA,
+            "source_scenario": source_id,
+            "development_variant": spec["development_variant"],
+        }
+        actual = development_by_id[development_id]
+        differences = sorted(
+            key
+            for key in expected.keys() | actual.keys()
+            if key not in expected or key not in actual or expected[key] != actual[key]
+        )
+        if differences:
+            raise ValidationError(
+                f"{development_id} differs from the 0.0.8 candidate outside approved "
+                f"development overrides: {differences!r}"
+            )
+
+
 def _load_canonical_campaign_rows(
     config_path: Path,
 ) -> tuple[Any, list[Mapping[str, Any]]]:
     try:
         loaded = load_campaign_config(config_path, repository_root=ROOT)
-        canonical_rows = load_scenarios(
-            loaded.scenario_matrix_path,
-            base_dir=loaded.scenario_matrix_path.parent,
-        )
+        canonical_rows = _load_campaign_scenarios(loaded, repository_root=ROOT)
     except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
         raise ValidationError(f"campaign config failed canonical loader validation: {exc}") from exc
     return loaded, canonical_rows
@@ -565,9 +744,16 @@ def _validate_campaign_config(config_path: Path, release_matrix_path: Path) -> d
     _validate_config_metadata(payload)
     _validate_config_seed_policy(payload)
     scenario_path, rows = _load_development_rows(payload, config_path=config_path)
-    _validate_release_disjointness(release_matrix_path=release_matrix_path)
     _validate_planner_specs(payload, config_path=config_path)
     loaded, canonical_rows = _load_canonical_campaign_rows(config_path)
+    release_campaign, release_rows = _load_release_candidate_rows(release_matrix_path)
+    _validate_release_disjointness(release_rows)
+    _validate_release_parity(
+        development_campaign=loaded,
+        development_rows=canonical_rows,
+        release_campaign=release_campaign,
+        release_rows=release_rows,
+    )
     if tuple(loaded.seed_policy.seeds) != EXPECTED_DEV_SEEDS:
         raise ValidationError("canonical campaign loader did not preserve development seeds")
     resolved_ids = {

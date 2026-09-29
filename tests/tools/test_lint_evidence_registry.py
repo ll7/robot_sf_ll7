@@ -102,6 +102,31 @@ def _write_projection_entry(
     return path
 
 
+def test_candidate_config_path_binds_sha256(tmp_path: Path) -> None:
+    """A tuning log candidate's config path binds its hash to the tracked file."""
+    linter = _load_linter()
+    repo, evidence, _commit, config_sha256 = _make_repo(tmp_path)
+    record = evidence / "candidate-config.json"
+    record.write_text(
+        json.dumps(
+            {
+                "provenance": {
+                    "candidate_configs": {
+                        "candidate": {
+                            "path": "configs/campaign.yaml",
+                            "sha256": config_sha256,
+                        }
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    findings = linter._artifact_findings(repo, record.relative_to(repo), json.loads(record.read_text()))
+    assert findings == []
+
+
 def _historical_binding_fixture(
     tmp_path: Path,
     linter,

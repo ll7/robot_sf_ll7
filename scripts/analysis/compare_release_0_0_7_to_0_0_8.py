@@ -24,6 +24,11 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from robot_sf.benchmark.infeasible_probe_safe_failure import (
+    DECLARED_PROBE_EPISODES,
+    PROBE_SCENARIO_IDS,
+    safe_failure_summary,
+)
 from scripts.analysis.compare_issue_9431_release import (
     EXPECTED_SUCCESSOR_SCENARIO_MANIFEST,
     EXPECTED_SUCCESSOR_SCENARIO_MANIFEST_SHA256,
@@ -128,6 +133,8 @@ def _insert_rows(
         compact = {
             "outcome": row["outcome"],
             "metrics": row["metrics"],
+            "termination_reason": row.get("termination_reason"),
+            "integrity": row.get("integrity"),
             "_source_commit": _row_source_commit(row),
         }
         if retain_provenance:
@@ -803,6 +810,33 @@ def _display(value: Any) -> str:
     )
 
 
+def _probe_gate(
+    probe_rows: list[dict[str, Any]], expected_probe_slots: int
+) -> dict[str, Any] | None:
+    """Compute the doorway safe-failure metric or refuse to report probe rows.
+
+    Blocking gate for issue #9974: no row of an infeasible-by-design probe
+    scenario is reported unless the declared metric is computed over all
+    declared probe episodes.
+
+    Returns:
+        The metric summary, or None when the successor has no probe slots or rows.
+
+    Raises:
+        ValueError: If probe rows exist but the metric cannot be computed.
+    """
+    if not probe_rows and not expected_probe_slots:
+        return None
+    summary = safe_failure_summary(probe_rows, expected_rows=DECLARED_PROBE_EPISODES)
+    if expected_probe_slots != DECLARED_PROBE_EPISODES or summary["status"] == "fail_admission":
+        raise ValueError(
+            "infeasible probe safe_failure_metric not computed: "
+            f"{len(probe_rows)} rows, {expected_probe_slots} expected slots, "
+            f"declared {DECLARED_PROBE_EPISODES}, classes {summary['class_counts']}"
+        )
+    return summary
+
+
 def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
     baseline_bundle: Path | None,
     successor_root: Path,
@@ -880,6 +914,10 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
             verified_successor["runtime_rows"],
             successor_identity["source_commit"],
         )
+    probe_summary = _probe_gate(
+        [row for key, row in [*new.items(), *duplicate_rows] if key[2] in PROBE_SCENARIO_IDS],
+        sum(1 for slot in expected_slots if slot[2] in PROBE_SCENARIO_IDS),
+    )
     rules = _read_rules(classification_file)
     broad_rules = []
     for rule in rules:
@@ -1082,6 +1120,7 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
         "only_0_0_8": len(set(new) - set(old)),
         "unexplained_count": unexplained,
         "status": "classified" if unexplained == 0 else "unexplained",
+        "infeasible_probe_safe_failure": probe_summary,
         "findings": findings,
         "rules": rule_coverage,
         "broad_rule_bound_threshold": broad_rule_bound_threshold,
@@ -1113,6 +1152,16 @@ def write_report(report: Mapping[str, Any], output_dir: Path) -> None:
         f"- Release-only rows: 0.0.7 `{report['only_0_0_7']}`, 0.0.8 `{report['only_0_0_8']}`.",
         f"- Findings: `{len(report['findings'])}`; unexplained: `{report['unexplained_count']}`.",
         f"- Verified successor manifest SHA-256: `{report['successor']['verified_manifest_sha256']}`.",
+        *(
+            [
+                "- Doorway probe safe-failure rate: "
+                f"`{report['infeasible_probe_safe_failure']['safe_failure_rate']}` "
+                f"({report['infeasible_probe_safe_failure']['class_counts']}); "
+                f"status `{report['infeasible_probe_safe_failure']['status']}`."
+            ]
+            if report["infeasible_probe_safe_failure"]
+            else []
+        ),
         "- Classification rules are analyst claims; this audit does not prove causality or admit a release.",
         "",
         "## Broad rules",
@@ -1163,6 +1212,10 @@ def main() -> int:
         write_report(report, args.output_dir)
     except (OSError, ValueError, json.JSONDecodeError, tarfile.TarError) as exc:
         parser.exit(2, f"comparison failed: {exc}\n")
+    probe = report.get("infeasible_probe_safe_failure")
+    if probe is not None and probe["status"] == "defect":
+        print("infeasible probe defect: a probe episode succeeded", file=sys.stderr)
+        return 1
     return 0 if report["unexplained_count"] == 0 else 1
 
 

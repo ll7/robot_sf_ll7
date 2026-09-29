@@ -180,82 +180,40 @@ class TestCheckConfigAbsPaths:
         assert result["status"] == "fail"
         assert len(result["violations"]) == 1
 
-    def test_issue_9645_producer_records_are_exactly_pinned(self) -> None:
-        """Only the 64 recovered producer records keep their source route paths.
+    def test_issue_9645_packet_has_no_pinned_exemption_and_no_absolute_paths(self) -> None:
+        """The issue-9645 packet ships no exact producer copies and needs no hook exemption.
 
-        Each retained file is bound to its exact producer digest; portable analysis
-        uses the separate path-normalized copies in the same evidence packet.
+        The exact producer records contained absolute host paths; they are withheld and
+        only their digests are recorded. The packet must pass the ordinary scan.
         """
         repo_root = Path(__file__).resolve().parents[2]
-        source_root = (
-            repo_root
-            / "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records"
-        )
-        source_files = sorted(source_root.rglob("episode_records.jsonl"))
-        prefix = source_root.relative_to(repo_root).as_posix() + "/"
-        pinned_paths = {
+        packet = "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24"
+        assert not [
             path
             for path in abs_path_hook.PINNED_VERBATIM_EVIDENCE_SHA256
-            if path.startswith(prefix)
-        }
-        expected_paths = {path.relative_to(repo_root).as_posix() for path in source_files}
+            if path.startswith(packet + "/")
+        ]
+        assert not (repo_root / packet / "payload/source_episode_records").exists()
+        files = sorted(str(path) for path in (repo_root / packet).rglob("*") if path.is_file())
+        assert files
+        result = find_abs_path_violations(files)
+        assert result["status"] == "pass", result["violations"][:3]
 
-        assert len(source_files) == 64
-        assert pinned_paths == expected_paths
-        for path in source_files:
-            rel = path.relative_to(repo_root).as_posix()
-            assert (
-                hashlib.sha256(path.read_bytes()).hexdigest()
-                == (abs_path_hook.PINNED_VERBATIM_EVIDENCE_SHA256[rel])
-            )
-        assert find_abs_path_violations([str(path) for path in source_files])["status"] == "pass"
-
-    def test_issue_9645_pinned_digest_does_not_allow_nested_path_alias(
+    def test_issue_9645_packet_path_with_absolute_route_is_rejected(
         self, tmp_path: Path, monkeypatch
     ) -> None:
-        """A byte-identical file at another path remains subject to the scanner."""
+        """A producer-style record with an absolute route path fails at the packet location."""
         monkeypatch.chdir(tmp_path)
-        repo_root = Path(__file__).resolve().parents[2]
-        rel = next(
-            path
-            for path in abs_path_hook.PINNED_VERBATIM_EVIDENCE_SHA256
-            if path.startswith("docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/")
+        rel = (
+            "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/"
+            "payload/source_episode_records/seed_1101_optuna/candidate_0000/episode_records.jsonl"
         )
-        source = repo_root / rel
-        alias = tmp_path / "docs/context/evidence/issue_9999_alias" / rel
-        alias.parent.mkdir(parents=True, exist_ok=True)
-        alias.write_bytes(source.read_bytes())
-
-        assert (
-            hashlib.sha256(alias.read_bytes()).hexdigest()
-            == (abs_path_hook.PINNED_VERBATIM_EVIDENCE_SHA256[rel])
+        path = _write(
+            tmp_path,
+            rel,
+            '{"scenario_params": {"route_overrides_file": "/home/user/out/route.yaml"}}\n',
         )
-        assert alias.as_posix().endswith(f"/{rel}")
-        result = find_abs_path_violations([str(alias)])
-        assert result["status"] == "fail"
-        assert len(result["violations"]) == 1
-
-    def test_issue_9645_pinned_digest_does_not_allow_symlink_alias(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
-        """A symlink at another path cannot inherit a pinned source's exception."""
-        monkeypatch.chdir(tmp_path)
-        repo_root = Path(__file__).resolve().parents[2]
-        rel = next(
-            path
-            for path in abs_path_hook.PINNED_VERBATIM_EVIDENCE_SHA256
-            if path.startswith("docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/")
-        )
-        source = repo_root / rel
-        alias = tmp_path / "docs/context/evidence/issue_9999_symlink_alias" / rel
-        alias.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            alias.symlink_to(source)
-        except (NotImplementedError, OSError) as exc:
-            pytest.skip(f"symlinks are unavailable in this environment: {exc}")
-
-        assert alias.is_symlink()
-        result = find_abs_path_violations([str(alias)])
+        result = find_abs_path_violations([path])
         assert result["status"] == "fail"
         assert len(result["violations"]) == 1
 

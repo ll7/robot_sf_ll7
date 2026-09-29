@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/evidence_bundle_manifest.json",
-  "artifact_sha256": "91a560add9daa7a6ac51bca3bc15a8f2921ea04515fc1a633490919dc239c3f1",
+  "artifact_sha256": "01faceecabe68111c567ebe1594a431da0adcc0501fffcd8d1c04d92a8f4e92f",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

@@ -184,9 +184,9 @@ for retention classes, preservation proof, and cleanup-eligibility workflows.
   historical execution remains unknown, so the candidate is not admitted to the corpus. It also
   preserves the #9646 convergence report, candidate accounting, provenance, selected replay
   traces, and five producer-exact comparison/manifest outputs. Separately, all 64 pilot candidate
-  episode records are retained as exact producer-byte copies under `payload/source_episode_records/`
-  and as path-normalized report inputs under `payload/path_normalized_episode_records/` (1.63 MB
-  total); the producer and normalized digests are both bound. Route-path rewrites are explicitly
+  episode records are retained as path-normalized report inputs under `payload/path_normalized_episode_records/`
+  (1.62 MB total); the exact producer bytes are withheld because they contain absolute host paths, and
+  the producer and normalized digests are both recorded. Route-path rewrites are explicitly
   recorded. The rebuilt convergence report verifies a consistent source revision, while
   severe-intrusion evidence is still absent and all pilot criticality remains unknown. Explicit
   unknown-feasibility and claim-boundary caveats remain. This is not a planner ranking,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,7 @@ PAYLOAD = (
     / "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload"
 )
 REPO_ROOT = Path(__file__).resolve().parents[2]
+WITHHELD = "withheld_contains_absolute_host_paths_digest_recorded"
 
 _PROVENANCE_ADDITIONS = {
     "inputs.scenario_matrix.producer_output_path",
@@ -103,20 +105,12 @@ def _assert_candidate_record_binding(
 
     source_relative = Path(binding["source_exact_copy_path"]).relative_to(payload_relative)
     assert source_relative == Path("source_episode_records", *relative.parts[1:])
-    source_path = PAYLOAD / source_relative
-    source_digest = _sha256(source_path)
-    assert source_digest == binding["source_exact_copy_sha256"]
-    assert source_digest == binding["source_sha256_before_path_normalization"]
-    assert binding["source_exact_copy_retention_status"] == "retained_exact_copy"
-    assert binding["source_exact_copy_size_bytes"] == source_path.stat().st_size
-
-    source_rows = [
-        json.loads(line) for line in source_path.read_text(encoding="utf-8").splitlines() if line
-    ]
-    assert len(source_rows) == 1
-    source_record = source_rows[0]
-    source_record["scenario_params"]["route_overrides_file"] = route_path
-    assert source_record == rows[0]
+    assert not (PAYLOAD / source_relative).exists()
+    assert not (PAYLOAD / "source_episode_records").exists()
+    assert binding["source_exact_copy_sha256"] == binding["source_sha256_before_path_normalization"]
+    assert binding["source_exact_copy_retention_status"] == WITHHELD
+    assert binding["source_exact_copy_size_bytes"] == binding["source_size_bytes"]
+    assert re.fullmatch(r"[0-9a-f]{64}", binding["source_exact_copy_sha256"])
 
     assert rebased["sha256"] == digest
     assert rebased["source_size_bytes"] == binding["source_exact_copy_size_bytes"]
@@ -167,15 +161,16 @@ def test_route_path_normalization_is_hash_bound_for_candidates_and_recorded_repl
     assert artifact_map["totals"]["path_normalized_candidate_episode_record_count"] == 64
     assert artifact_map["totals"]["exact_artifact_count"] == 5
     assert artifact_map["claim_boundary"] == (
-        "Mixed retention: all 64 candidate episode records have exact producer-byte copies and "
-        "separate path-normalized copies; producer and normalized SHA-256/size bindings are "
-        "recorded. Normalized records preserve scenario, planner, metric, event, and outcome "
+        "Mixed retention: all 64 candidate episode records have separate path-normalized copies; "
+        "the exact producer-byte copies are withheld because they contain absolute host paths, "
+        "and their SHA-256 and size bindings are recorded so anyone holding the private copy can "
+        "verify it. Normalized records preserve scenario, planner, metric, event, and outcome "
         "fields. These files lack detailed step/planner traces and are not portable replay "
         "bundles by themselves because candidate-specific route overrides are not retained for "
         "every case. No feasibility or planner safety claim."
     )
-    assert artifact_map["totals"]["producer_exact_copy_count"] == 64
-    assert artifact_map["totals"]["producer_exact_copy_bytes"] == 1_629_062
+    assert artifact_map["totals"]["producer_exact_copy_withheld_count"] == 64
+    assert artifact_map["totals"]["producer_exact_copy_withheld_bytes"] == 1_629_062
     rebase = _read_json(PAYLOAD / "reproduction_inputs/input_rebase_map.v1.json")
     artifact_map_sha256 = _sha256(PAYLOAD / "pilot_report_artifact_path_map.v1.json")
     assert rebase["source_episode_artifact_map_sha256"] == artifact_map_sha256
@@ -183,9 +178,9 @@ def test_route_path_normalization_is_hash_bound_for_candidates_and_recorded_repl
     assert recovery["count"] == 64
     assert recovery["artifact_path_map_sha256"] == artifact_map_sha256
     assert recovery["total_size_bytes"] == artifact_map["totals"]["candidate_episode_record_bytes"]
-    assert recovery["producer_bytes_retained_exactly"] is True
-    assert recovery["producer_exact_copy_count"] == 64
-    assert recovery["producer_exact_copy_total_size_bytes"] == 1_629_062
+    assert recovery["producer_bytes_retained_exactly"] is False
+    assert recovery["producer_exact_copy_withheld_count"] == 64
+    assert recovery["producer_exact_copy_withheld_total_size_bytes"] == 1_629_062
     assert recovery["producer_bytes_recovered_from_commit"] == (
         "7588b785a607680400adcc6398d8c983c160e4bd"
     )
@@ -226,11 +221,11 @@ def test_route_path_normalization_is_hash_bound_for_candidates_and_recorded_repl
         assert len(row["source_sha256_before_path_normalization"]) == 64
 
 
-def test_evidence_bundle_checksums_cover_exact_and_normalized_candidate_records() -> None:
+def test_evidence_bundle_checksums_cover_normalized_candidate_records() -> None:
     evidence_root = PAYLOAD.parent
     manifest = _read_json(evidence_root / "evidence_bundle_manifest.json")
     entries = {row["path"]: row for row in manifest["files"]}
-    assert manifest["totals"]["file_count"] == len(entries) == 394
+    assert manifest["totals"]["file_count"] == len(entries) == 266
     assert manifest["totals"]["total_bytes"] == sum(row["size_bytes"] for row in manifest["files"])
 
     expected_payload_files = {
@@ -282,7 +277,7 @@ def test_markerless_payload_artifacts_have_digest_bound_review_sidecars() -> Non
         _assert_exact_byte_review_sidecar(artifact)
         unmarked_artifacts.append(artifact)
 
-    assert len(unmarked_artifacts) == 196
+    assert len(unmarked_artifacts) == 132
 
 
 def test_rebuilt_report_provenance_binds_inputs_and_generated_outputs() -> None:

@@ -178,7 +178,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_optuna/candidate_0000/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_optuna/candidate_0000/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -188,7 +189,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_optuna/candidate_0001/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_optuna/candidate_0001/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -198,7 +200,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_optuna/candidate_0002/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_optuna/candidate_0002/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -208,7 +211,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_optuna/candidate_0003/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_optuna/candidate_0003/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -218,7 +222,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_optuna/candidate_0004/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_optuna/candidate_0004/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -228,7 +233,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_optuna/candidate_0005/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_optuna/candidate_0005/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -238,7 +244,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_optuna/candidate_0006/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_optuna/candidate_0006/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -248,7 +255,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_optuna/candidate_0007/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_optuna/candidate_0007/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -258,7 +266,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_optuna/candidate_0008/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_optuna/candidate_0008/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -268,7 +277,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_optuna/candidate_0009/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_optuna/candidate_0009/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -278,7 +288,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_optuna/candidate_0010/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_optuna/candidate_0010/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -288,7 +299,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_optuna/candidate_0011/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_optuna/candidate_0011/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -298,7 +310,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_optuna/candidate_0012/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_optuna/candidate_0012/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -308,7 +321,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_optuna/candidate_0013/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_optuna/candidate_0013/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -318,7 +332,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_optuna/candidate_0014/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_optuna/candidate_0014/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -328,7 +343,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_optuna/candidate_0015/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_optuna/candidate_0015/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -338,7 +354,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_random/candidate_0000/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_random/candidate_0000/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -348,7 +365,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_random/candidate_0001/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_random/candidate_0001/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -358,7 +376,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_random/candidate_0002/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_random/candidate_0002/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -368,7 +387,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_random/candidate_0003/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_random/candidate_0003/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -378,7 +398,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_random/candidate_0004/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_random/candidate_0004/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -388,7 +409,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_random/candidate_0005/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_random/candidate_0005/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -398,7 +420,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_random/candidate_0006/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_random/candidate_0006/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -408,7 +431,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_random/candidate_0007/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_random/candidate_0007/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -418,7 +442,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_random/candidate_0008/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_random/candidate_0008/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -428,7 +453,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_random/candidate_0009/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_random/candidate_0009/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -438,7 +464,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_random/candidate_0010/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_random/candidate_0010/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -448,7 +475,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_random/candidate_0011/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_random/candidate_0011/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -458,7 +486,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_random/candidate_0012/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_random/candidate_0012/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -468,7 +497,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_random/candidate_0013/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_random/candidate_0013/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -478,7 +508,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_random/candidate_0014/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_random/candidate_0014/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -488,7 +519,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_1101_random/candidate_0015/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_1101_random/candidate_0015/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -498,7 +530,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_optuna/candidate_0000/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_optuna/candidate_0000/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -508,7 +541,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_optuna/candidate_0001/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_optuna/candidate_0001/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -518,7 +552,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_optuna/candidate_0002/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_optuna/candidate_0002/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -528,7 +563,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_optuna/candidate_0003/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_optuna/candidate_0003/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -538,7 +574,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_optuna/candidate_0004/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_optuna/candidate_0004/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -548,7 +585,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_optuna/candidate_0005/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_optuna/candidate_0005/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -558,7 +596,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_optuna/candidate_0006/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_optuna/candidate_0006/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -568,7 +607,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_optuna/candidate_0007/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_optuna/candidate_0007/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -578,7 +618,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_optuna/candidate_0008/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_optuna/candidate_0008/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -588,7 +629,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_optuna/candidate_0009/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_optuna/candidate_0009/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -598,7 +640,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_optuna/candidate_0010/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_optuna/candidate_0010/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -608,7 +651,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_optuna/candidate_0011/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_optuna/candidate_0011/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -618,7 +662,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_optuna/candidate_0012/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_optuna/candidate_0012/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -628,7 +673,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_optuna/candidate_0013/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_optuna/candidate_0013/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -638,7 +684,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_optuna/candidate_0014/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_optuna/candidate_0014/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -648,7 +695,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_optuna/candidate_0015/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_optuna/candidate_0015/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -658,7 +706,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_random/candidate_0000/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_random/candidate_0000/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -668,7 +717,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_random/candidate_0001/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_random/candidate_0001/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -678,7 +728,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_random/candidate_0002/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_random/candidate_0002/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -688,7 +739,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_random/candidate_0003/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_random/candidate_0003/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -698,7 +750,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_random/candidate_0004/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_random/candidate_0004/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -708,7 +761,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_random/candidate_0005/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_random/candidate_0005/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -718,7 +772,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_random/candidate_0006/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_random/candidate_0006/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -728,7 +783,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_random/candidate_0007/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_random/candidate_0007/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -738,7 +794,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_random/candidate_0008/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_random/candidate_0008/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -748,7 +805,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_random/candidate_0009/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_random/candidate_0009/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -758,7 +816,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_random/candidate_0010/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_random/candidate_0010/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -768,7 +827,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_random/candidate_0011/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_random/candidate_0011/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -778,7 +838,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_random/candidate_0012/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_random/candidate_0012/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -788,7 +849,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_random/candidate_0013/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_random/candidate_0013/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -798,7 +860,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_random/candidate_0014/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_random/candidate_0014/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     },
     {
@@ -808,7 +871,8 @@
       "field_rewrites": {
         "scenario_params.route_overrides_file": 1
       },
-      "producer_bytes_retained_path": "source_episode_records/seed_2202_random/candidate_0015/episode_records.jsonl",
+      "producer_bytes_withheld_path": "source_episode_records/seed_2202_random/candidate_0015/episode_records.jsonl",
+      "producer_bytes_retention_status": "withheld_contains_absolute_host_paths_digest_recorded",
       "producer_bytes_recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd"
     }
   ],
@@ -823,7 +887,7 @@
     "total_size_bytes": 1623686,
     "producer_sha256_and_size_bindings": "source_sha256_before_path_normalization and source_size_bytes bind exact producer bytes; producer_bytes_retained_path identifies each retained source file.",
     "normalized_sha256_and_size_bindings": "sha256, normalized_sha256, and size_bytes in the same maps",
-    "producer_bytes_retained_exactly": true,
+    "producer_bytes_retained_exactly": false,
     "path_normalized_copy_count": 64,
     "field_rewrite": "scenario_params.route_overrides_file",
     "route_path_policy": "Use the repo-relative producer_output_path-derived route_overrides.yaml path; candidate-specific route inputs are not bundled for every case, and report generation does not dereference this field.",

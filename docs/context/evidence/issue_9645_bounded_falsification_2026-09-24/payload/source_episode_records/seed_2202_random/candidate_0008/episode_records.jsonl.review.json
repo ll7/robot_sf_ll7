@@ -1,7 +1,0 @@
-{
-  "artifact_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/source_episode_records/seed_2202_random/candidate_0008/episode_records.jsonl",
-  "artifact_sha256": "6f65a616b0b242501de15ee866bd77f08bb31e3ed946dcf9dff84c2d39a5fb05",
-  "preserved_exact_bytes": true,
-  "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "schema_version": "evidence-review-marker.v1"
-}

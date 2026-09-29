@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/archive/report_schema_v1/convergence_report.json",
-  "artifact_sha256": "c04a3c2d5b913846bc326ebc09989a3a3bee3b493cba77188b6ca5d8b8b46d35",
+  "artifact_sha256": "ceacd8934d6a75b3b3c8996b3d2027fe8cbd33315d338fbaf48eeeb78c282b4c",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

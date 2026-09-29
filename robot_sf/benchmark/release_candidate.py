@@ -77,6 +77,11 @@ _APPROVED_008_HYBRID_CONFIGS = {
         "hybrid_rule_v4_fast_progress_static_escape_continuous_s30_h600_release.yaml"
     ),
 }
+_APPROVED_008_ACTIVE_WAYPOINT_CONFIGS = {
+    "risk_dwa": "configs/algos/risk_dwa_camera_ready_goal_v2.yaml",
+    "predictive_mppi": "configs/algos/predictive_mppi_camera_ready_goal_v2.yaml",
+    "guarded_ppo": "configs/algos/guarded_ppo_camera_ready_cpu_goal_v2.yaml",
+}
 _APPROVED_008_HYBRID_ALGO_OVERRIDES = {
     "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": {
         "francis2023_leave_group": ("orca", "configs/algos/issue707_orca_tuned.yaml")
@@ -315,8 +320,24 @@ def _candidate_scenarios(
     return matrix_path, observed_ids, scenarios
 
 
+def _validate_active_waypoint_binding(root: Path, row: dict[str, Any]) -> None:
+    expected_config = _APPROVED_008_ACTIVE_WAYPOINT_CONFIGS.get(row["key"])
+    if expected_config is None:
+        return
+    if row.get("algo_config") != expected_config:
+        raise ValueError(f"{row['key']} must bind its active-waypoint v2 config path")
+    planner_config = _load_mapping(_root_file(root, expected_config, "planner.algo_config"))
+    selector_config = (
+        _require_mapping(planner_config.get("fallback_risk_dwa"), "fallback_risk_dwa")
+        if row["key"] == "guarded_ppo"
+        else planner_config
+    )
+    if selector_config.get("goal_target_version") != "active_waypoint_v2":
+        raise ValueError(f"{row['key']} must select active_waypoint_v2")
+
+
 def _candidate_planners(
-    payload: dict[str, Any], config: dict[str, Any]
+    root: Path, payload: dict[str, Any], config: dict[str, Any]
 ) -> tuple[tuple[str, ...], list[dict[str, Any]]]:
     section = _require_mapping(payload.get("planners"), "planners")
     keys = section.get("keys")
@@ -330,6 +351,8 @@ def _candidate_planners(
         for row in planner_rows
     ):
         raise ValueError("campaign planner keys and enabled flags must be explicit and valid")
+    if len({row["key"] for row in planner_rows}) != len(planner_rows):
+        raise ValueError("campaign planner keys must be unique")
     enabled = [row for row in planner_rows if row.get("enabled", True)]
     observed_keys = tuple(str(row.get("key") or "") for row in enabled)
     if (
@@ -345,6 +368,7 @@ def _candidate_planners(
         expected_config = _APPROVED_008_HYBRID_CONFIGS.get(row["key"])
         if expected_config is not None and row.get("algo_config") != expected_config:
             raise ValueError(f"v4 hybrid slot {row['key']} must bind its v4 config path")
+        _validate_active_waypoint_binding(root, row)
     return observed_keys, enabled
 
 
@@ -446,7 +470,7 @@ def load_prepublication_candidate(
     if config.get("release_tag") != "{{release_tag}}" or config.get("doi") != "{{version_doi}}":
         raise ValueError("candidate campaign config must retain unassigned publication slots")
     matrix_path, observed_ids, scenarios = _candidate_scenarios(root, payload, config)
-    observed_keys, enabled = _candidate_planners(payload, config)
+    observed_keys, enabled = _candidate_planners(root, payload, config)
     seed_policy = _candidate_seed_policy(root, payload, config)
 
     matrix = _require_mapping(payload.get("matrix"), "matrix")

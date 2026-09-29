@@ -273,6 +273,77 @@ def test_candidate_rejects_v4_key_bound_to_historical_v3_config(candidate_repo) 
         load_prepublication_candidate(path, repository_root=root)
 
 
+@pytest.mark.parametrize(
+    ("arm", "historical_path"),
+    [
+        ("risk_dwa", "configs/algos/risk_dwa_camera_ready.yaml"),
+        ("predictive_mppi", "configs/algos/predictive_mppi_camera_ready.yaml"),
+        ("guarded_ppo", "configs/algos/guarded_ppo_camera_ready_cpu.yaml"),
+    ],
+)
+def test_candidate_rejects_historical_waypoint_binding(
+    candidate_repo, arm: str, historical_path: str
+) -> None:
+    """A self-consistent candidate cannot restore any historical waypoint arm."""
+    root, path, payload = candidate_repo
+    config_path = root / payload["canonical_campaign_config"]
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    next(row for row in config["planners"] if row["key"] == arm)["algo_config"] = historical_path
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    historical_copy = root / historical_path
+    historical_copy.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(SOURCE_ROOT / historical_path, historical_copy)
+    payload["sha256_files"][payload["canonical_campaign_config"]] = hashlib.sha256(
+        config_path.read_bytes()
+    ).hexdigest()
+    payload["sha256_files"][historical_path] = hashlib.sha256(
+        historical_copy.read_bytes()
+    ).hexdigest()
+    _git(root, "add", payload["canonical_campaign_config"], historical_path)
+    _git(
+        root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "historical waypoint binding",
+    )
+    payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match=f"{arm} must bind its active-waypoint v2 config path"):
+        load_prepublication_candidate(path, repository_root=root)
+
+
+@pytest.mark.parametrize("arm", ["risk_dwa", "predictive_mppi", "guarded_ppo"])
+def test_candidate_rejects_mutated_effective_waypoint_selector(candidate_repo, arm: str) -> None:
+    root, path, payload = candidate_repo
+    campaign = yaml.safe_load((root / payload["canonical_campaign_config"]).read_text())
+    algo_path = next(row["algo_config"] for row in campaign["planners"] if row["key"] == arm)
+    config_path = root / algo_path
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    selector_config = config["fallback_risk_dwa"] if arm == "guarded_ppo" else config
+    selector_config["goal_target_version"] = "legacy_next_goal_v1"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    payload["sha256_files"][algo_path] = hashlib.sha256(config_path.read_bytes()).hexdigest()
+    _git(root, "add", algo_path)
+    _git(
+        root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "mutated waypoint selector",
+    )
+    payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match=f"{arm} must select active_waypoint_v2"):
+        load_prepublication_candidate(path, repository_root=root)
+
+
 def test_candidate_rejects_v4_config_bound_to_historical_v3_base(candidate_repo) -> None:
     root, path, payload = candidate_repo
     config_path = _APPROVED_008_HYBRID_CONFIGS[

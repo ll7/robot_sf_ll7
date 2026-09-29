@@ -23,7 +23,7 @@ optimizer and its anchor could disagree.
 `goal_target_version`. The default `legacy_next_goal_v1` reproduces the old
 selection formula. `active_waypoint_v2` always targets `goal.current`;
 `RouteNavigator.update_position` advances its waypoint index when the current
-target is reached (`robot_sf/nav/navigation.py:569-588`). Unknown
+target is reached (`robot_sf/nav/navigation.py:603-622`). Unknown
 selectors raise at config construction. The two existing camera-ready YAMLs
 remain untouched. The new `*_camera_ready_goal_v2.yaml` files differ in parsed
 values only by `goal_target_version: active_waypoint_v2`.
@@ -66,27 +66,20 @@ cannot count as model-provenance or benchmark evidence.
 
 ## Release integration and open gates
 
-The owner of #9751's 0.0.8 campaign template must replace only the Risk-DWA
-and Predictive-MPPI `algo_config` paths with the corresponding
-`*_camera_ready_goal_v2.yaml` paths after this PR is reviewed. A proposed
-0.0.8 row using either historical path is uncorrected and must fail admission.
-The currently separate #9879 release-candidate path hashes algo configs but
-does not enforce this semantic requirement. A read-only assertion against the
-current campaign template exits 1 and reports both violations:
+The 0.0.8 campaign template now binds Risk-DWA and Predictive-MPPI to their
+`*_camera_ready_goal_v2.yaml` paths, and guarded PPO to its v2 fallback
+profile. Candidate admission checks unique planner keys, those exact paths,
+and the effective `active_waypoint_v2` selector in all three arms. Each arm
+has a historical-path and selector-mutation regression test. This is static
+candidate proof, not a release or episode outcome.
 
-```text
-risk_dwa: expected configs/algos/risk_dwa_camera_ready_goal_v2.yaml;
-          found configs/algos/risk_dwa_camera_ready.yaml
-predictive_mppi: expected configs/algos/predictive_mppi_camera_ready_goal_v2.yaml;
-                 found configs/algos/predictive_mppi_camera_ready.yaml
-```
-
-Before #9883 can close, the #9879 candidate admission path needs a focused
-assertion that each of those arm keys occurs once, uses the exact corrected
-path, and parses to `goal_target_version: active_waypoint_v2`. Its regression
-test must reject the present old-path template and admit an otherwise
-identical corrected copy. This dependency is pending; the new configs alone
-do not enforce it.
+Guarded PPO has a deliberate one-step boundary difference: when the robot is
+already within `goal_tolerance` of `goal.current`, its outer guard looks ahead
+to `goal.next`, while its configured Risk-DWA fallback still targets
+`goal.current`. The simulator advances the active waypoint on the next step.
+`test_guarded_ppo_outer_guard_looks_ahead_for_one_waypoint_boundary_step`
+pins both targets without changing the guard's method. The active-waypoint
+claim for guarded PPO applies to its fallback, not its outer guard.
 The final campaign manifest must pin the corrected source/config hashes and
 the 14-arm, 48-identity, seed-111–140 contract. Release preflight, complete
 model-backed evaluation, and the paired 0.0.7/0.0.8 episode comparison remain

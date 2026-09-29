@@ -14,7 +14,7 @@ release_kind: benchmark-data
 release_status: runtime-smoke-only
 derived_from:
   config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
-  config_sha256: "7ec9112d999e84e73675d7df4501aea0850ba072ab2ffc74943d22ea7d270223"
+  config_sha256: "a5b339d1413b68d8acab4a122f441c559303cbcf8d03d0fb05400a14ad4febf9"
 claim_boundary:
   evidence_class: runtime-smoke
   snqi: advisory-no-ranking

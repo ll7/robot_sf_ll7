@@ -478,7 +478,11 @@ def _repulsion_direction(
             near += term
         else:
             far += term
-    weight = float(config.social_force_repulsion_weight)
+    weight = (
+        float(config.social_force_repulsion_weight)
+        if config.sampling_repulsion_weight is None
+        else float(config.sampling_repulsion_weight)
+    )
     far = weight * far
     far_norm = float(np.linalg.norm(far))
     cap = float(config.sampling_max_repulsion_ratio)

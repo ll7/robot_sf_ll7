@@ -207,6 +207,18 @@ def test_adapter_builds_network_input_and_agent_states(monkeypatch) -> None:
     )
     assert selected_states[:, -1].tolist() == pytest.approx([1.4, 0.4])
 
+    release_radius_states, release_count = adapter._build_other_agents_states(
+        np.array([[1.4, 0.0]]),
+        np.zeros((1, 2)),
+        np.zeros(2),
+        1.0,
+        0.4,
+        np.array([1.0, 0.0]),
+        np.array([0.0, 1.0]),
+    )
+    assert release_count == 1.0
+    assert release_radius_states[0, -1] == pytest.approx(0.0)
+
 
 def test_checkpoint_resolution_hashes_bundle_and_fails_closed(tmp_path: Path, monkeypatch) -> None:
     """Checkpoint resolution retains suffix handling, provenance hashing, and fail-closed errors."""

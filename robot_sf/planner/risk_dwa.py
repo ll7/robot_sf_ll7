@@ -13,6 +13,14 @@ from typing import Any
 import numpy as np
 
 from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
+from robot_sf.planner.clearance_geometry import (
+    CENTER_CLEARANCE_V1,
+    occupied_cell_clearance,
+    pedestrian_clearance,
+    time_to_circle_contact,
+    validate_clearance_model,
+    validate_surface_clearance_radii,
+)
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
 _DEFAULT_GOAL_PROGRESS_WEIGHT = 4.0
@@ -78,6 +86,23 @@ class RiskDWAPlannerConfig:
     progress_escape_distance: float = 1.0
     progress_escape_speed: float = 0.45
     progress_escape_heading_gain: float = 1.4
+    clearance_model: str = CENTER_CLEARANCE_V1
+    robot_radius_m: float = 0.0
+    pedestrian_radius_m: float = 0.0
+    hard_obstacle_clearance: float = 0.30
+
+    def __post_init__(self) -> None:
+        """Validate the versioned geometry mode and physical radii."""
+        validate_clearance_model(self.clearance_model)
+        validate_surface_clearance_radii(
+            self.clearance_model,
+            robot_radius=self.robot_radius_m,
+            pedestrian_radius=self.pedestrian_radius_m,
+        )
+        for field_name in ("robot_radius_m", "pedestrian_radius_m", "hard_obstacle_clearance"):
+            value = float(getattr(self, field_name))
+            if not np.isfinite(value) or value < 0.0:
+                raise ValueError(f"{field_name} must be finite and non-negative")
 
 
 class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -185,11 +210,15 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
 
         rc = self._world_to_grid(point, meta, grid_shape=(grid.shape[1], grid.shape[2]))
         if rc is None:
-            return 0.0
+            return (
+                -float(self.config.robot_radius_m)
+                if self.config.clearance_model == "surface_v2"
+                else 0.0
+            )
         row, col = rc
         channel_grid = np.asarray(grid[channel], dtype=float)
         threshold = float(self.config.obstacle_threshold)
-        if channel_grid[row, col] >= threshold:
+        if channel_grid[row, col] >= threshold and self.config.clearance_model != "surface_v2":
             return 0.0
 
         radius = max(int(self.config.obstacle_search_cells), 1)
@@ -204,9 +233,14 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
 
         dr = obs_idx[:, 0] + r0 - row
         dc = obs_idx[:, 1] + c0 - col
-        cell_dist = np.sqrt(dr.astype(float) ** 2 + dc.astype(float) ** 2)
         resolution = float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0])
-        return float(np.min(cell_dist) * max(resolution, 1e-6))
+        return occupied_cell_clearance(
+            dr,
+            dc,
+            resolution=max(resolution, 1e-6),
+            model=self.config.clearance_model,
+            robot_radius=self.config.robot_radius_m,
+        )
 
     def _ttc_proxy(
         self,
@@ -231,6 +265,18 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         valid = rel_speed_sq > 1e-6
         if not np.any(valid):
             return float("inf")
+        if self.config.clearance_model == "surface_v2":
+            contact_times = [
+                time_to_circle_contact(
+                    rel_pos,
+                    rel_vel,
+                    combined_radius=(
+                        float(self.config.robot_radius_m) + float(self.config.pedestrian_radius_m)
+                    ),
+                )
+                for rel_pos, rel_vel in zip(rel_pos[valid], rel_vel[valid], strict=True)
+            ]
+            return float(min(contact_times, default=float("inf")))
         ttc = -np.sum(rel_pos[valid] * rel_vel[valid], axis=1) / rel_speed_sq[valid]
         ttc = ttc[ttc > 0.0]
         if ttc.size == 0:
@@ -271,6 +317,11 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             observation=observation,
             grid_payload=grid_payload,
         )
+        if self.config.clearance_model == "surface_v2" and (
+            min_ped_clear < float(self.config.safe_distance)
+            or min_obs_clear < float(self.config.hard_obstacle_clearance)
+        ):
+            return float("-inf")
         x = trajectory[-1]
 
         end_dist = float(np.linalg.norm(goal - x))
@@ -355,6 +406,13 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             k = np.arange(1, steps + 1, dtype=float)
             forecast = ped_pos[None, :, :] + ped_vel[None, :, :] * (k[:, None, None] * dt)
             ped_dist = np.linalg.norm(forecast - positions[:, None, :], axis=-1)
+            ped_dist = pedestrian_clearance(
+                ped_dist,
+                model=self.config.clearance_model,
+                robot_radius=self.config.robot_radius_m,
+                pedestrian_radius=self.config.pedestrian_radius_m,
+            )
+            assert isinstance(ped_dist, np.ndarray)
             min_ped_clear = float(np.min(ped_dist))
 
         min_obs_clear = float("inf")
@@ -495,6 +553,10 @@ def build_risk_dwa_config(cfg: dict[str, Any] | None) -> RiskDWAPlannerConfig:
         progress_escape_distance=float(cfg.get("progress_escape_distance", 1.0)),
         progress_escape_speed=float(cfg.get("progress_escape_speed", 0.45)),
         progress_escape_heading_gain=float(cfg.get("progress_escape_heading_gain", 1.4)),
+        clearance_model=str(cfg.get("clearance_model", CENTER_CLEARANCE_V1)),
+        robot_radius_m=float(cfg.get("robot_radius_m", 0.0)),
+        pedestrian_radius_m=float(cfg.get("pedestrian_radius_m", 0.0)),
+        hard_obstacle_clearance=float(cfg.get("hard_obstacle_clearance", 0.30)),
     )
 
 

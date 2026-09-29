@@ -16,6 +16,7 @@ from robot_sf.planner.mppi_social import (
     build_mppi_social_config,
 )
 from robot_sf.planner.socnav import ORCAPlannerAdapter, SocNavPlannerConfig
+from robot_sf.planner.socnav_base import _SOCNAV_CONFIG_INIT_KEYS
 
 _DEFAULT_ROLLOUT_STEPS = 6
 _DEFAULT_ROUTE_STALL_CYCLES_BEFORE_SAMPLER = 3
@@ -328,9 +329,9 @@ def build_hybrid_orca_sampler_build_config(
     guard_raw = cfg.get("hybrid_guard", {}) if isinstance(cfg.get("hybrid_guard"), dict) else {}
     mppi_raw = cfg.get("mppi_social", {}) if isinstance(cfg.get("mppi_social"), dict) else {}
 
-    allowed_socnav = {field.name for field in fields(SocNavPlannerConfig)} | {
-        "social_force_kernel_version"
-    }
+    allowed_socnav = {
+        field.name for field in fields(SocNavPlannerConfig)
+    } | _SOCNAV_CONFIG_INIT_KEYS
     socnav_kwargs = {key: value for key, value in cfg.items() if key in allowed_socnav}
     socnav = SocNavPlannerConfig(**socnav_kwargs)
 

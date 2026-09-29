@@ -272,7 +272,7 @@ def test_diagnostic_cell_replay_reaches_goal_without_wall_contact(scenario_id: s
     scenario = select_scenario(load_classic_matrix(str(scenario_path)), scenario_id)
     record = _run_map_episode(
         scenario,
-        103,
+        1001,
         horizon=600,
         dt=0.1,
         record_forces=False,

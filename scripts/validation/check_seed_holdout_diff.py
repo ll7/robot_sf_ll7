@@ -10,6 +10,7 @@ import argparse
 import re
 import subprocess
 import sys
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,8 +28,13 @@ SEED = re.compile(
 SEED_FIELD = re.compile(
     r"(?i)(?:^|[\s,({])['\"]?(?:seed|seeds|seed_list|seed_set|resolved_seeds|"
     r"eval_seeds|evaluation_seeds|pilot_seeds|diagnostic_seeds|base_seed|"
-    r"master_seed|episode_seed)['\"]?\s*[:=]"
+    r"master_seed|episode_seed|scenario_seed)['\"]?\s*[:=]"
 )
+SCENARIO_SEEDS = re.compile(r"(?i)\bscenario\s*\[\s*['\"]seeds?['\"]\s*\]\s*=")
+EPISODE_SEED_LOOP = re.compile(
+    r"\bfor\s+seed\s+in\s+range\s*\([^)]*\)\s*:\s*.*\brun_episode\s*\(\s*seed\b"
+)
+SAMPLER_CLI_DEFAULT = re.compile(r"\bseeds?\s*=\s*\(?\s*args\.seed\s+or\b")
 CLI_SEED = re.compile(r"(?<![\w-])--seeds?(?:\s+|=)")
 SEED_PARAM = re.compile(r"(?i)\bparametrize\s*\(\s*['\"][^'\"]*\bseed\b")
 SEED_CONSTANT = re.compile(r"(?i)\b(?:DEFAULT|TEST|PILOT|DIAGNOSTIC|EVAL)_SEEDS?\s*=")
@@ -45,17 +51,62 @@ class Finding:
 
 
 def _eligible(path: str) -> bool:
+    if path.startswith("tests/analysis/fixtures/") and path.endswith(".jsonl"):
+        return False
     return path.startswith(
         ("configs/", "tests/", "scripts/", "docs/plan/", "docs/context/evidence/")
     )
 
 
-def _seed_context(path: str, text: str, before: list[str]) -> bool:
+def _rejection_test_seed(path: str, text: str, before: list[str], after: list[str]) -> bool:
+    """Recognize negative tests that pass holdout values only to validation."""
+    if not path.startswith("tests/"):
+        return False
+    if SEED_PARAM.search(text):
+        next_lines = "\n".join(after[:10])
+        return (
+            bool(re.search(r"def test_\w*reject\w*\(", next_lines))
+            and "pytest.raises" in next_lines
+        )
+    if text.lstrip().startswith("payload["):
+        declarations = [line for line in before if line.startswith("def test_")]
+        return bool(
+            declarations
+            and re.search(r"def test_\w*reject\w*\(", declarations[-1])
+            and "pytest.raises" in "\n".join(after[:20])
+        )
+    return False
+
+
+def _non_episode_seed(path: str, text: str, before: list[str], after: list[str]) -> bool:
+    """Recognize narrow setup metadata and sampler RNG defaults."""
+    if _rejection_test_seed(path, text, before, after):
+        return True
+    if path == "tests/benchmark/test_release_candidate.py" and re.search(
+        r"['\"]resolved_seeds['\"]\s*:", text
+    ):
+        # The candidate_repo fixture assembles preflight manifest metadata;
+        # no episode runner consumes this seed list in the test.
+        declarations = [line for line in before if line.lstrip().startswith("def ")]
+        if declarations and declarations[-1].lstrip().startswith("def candidate_repo("):
+            return True
+    return path == "scripts/tools/compare_adversarial_samplers.py" and bool(
+        SAMPLER_CLI_DEFAULT.search(text)
+    )
+
+
+def _seed_context(path: str, text: str, before: list[str], after: list[str]) -> bool:
     if CLI_SEED.search(text):
         return True
-    if path.startswith("docs/"):
+    if path.startswith("docs/") or _non_episode_seed(path, text, before, after):
         return False
-    if SEED_FIELD.search(text) or SEED_CONSTANT.search(text) or SEED_PARAM.search(text):
+    if (
+        SEED_FIELD.search(text)
+        or SCENARIO_SEEDS.search(text)
+        or EPISODE_SEED_LOOP.search(text)
+        or SEED_CONSTANT.search(text)
+        or SEED_PARAM.search(text)
+    ):
         return True
     # YAML block lists and multiline pytest parametrizations put the value on
     # a separate line from the seed key. Use the closest enclosing declaration.
@@ -80,38 +131,63 @@ def _seed_context(path: str, text: str, before: list[str]) -> bool:
     return False
 
 
+def _removed_lines(diff: str) -> dict[str, Counter[str]]:
+    """Count deleted lines by file, ignoring indentation changed by a move."""
+    removed: dict[str, Counter[str]] = defaultdict(Counter)
+    path = ""
+    for row in diff.splitlines():
+        if row.startswith("diff --git "):
+            path = row.rsplit(" b/", 1)[-1]
+        elif row.startswith("+++ b/"):
+            path = row[6:]
+        elif row.startswith("-") and not row.startswith("--- "):
+            removed[path][row[1:].strip()] += 1
+    return removed
+
+
+def _consume_moved(removed: dict[str, Counter[str]], path: str, content: str) -> bool:
+    """Consume one matching deletion for an added line, if present."""
+    normalized = content.strip()
+    if removed[path][normalized] == 0:
+        return False
+    removed[path][normalized] -= 1
+    return True
+
+
 def check_diff(diff: str, root: Path) -> list[Finding]:
     """Return violations on added lines; root supplies complete file context."""
     findings: list[Finding] = []
+    removed = _removed_lines(diff)
     path = ""
     line_number = 0
     before: list[str] = []
     file_marked = False
+    file_lines: list[str] = []
     for row in diff.splitlines():
         if row.startswith("+++ b/"):
             path = row[6:]
             file_path = root / path
-            file_marked = file_path.is_file() and any(
-                FILE_MARKER.fullmatch(line)
-                for line in file_path.read_text(errors="replace").splitlines()[:30]
+            file_lines = (
+                file_path.read_text(errors="replace").splitlines() if file_path.is_file() else []
             )
+            file_marked = any(FILE_MARKER.fullmatch(line) for line in file_lines[:30])
             before = []
         elif row.startswith("@@ "):
             match = HUNK.match(row)
             if match:
                 line_number = int(match.group(1))
-                file_path = root / path
-                if file_path.is_file():
-                    before = file_path.read_text(errors="replace").splitlines()[: line_number - 1]
+                if file_lines:
+                    before = file_lines[: line_number - 1]
         elif row.startswith("+") and not row.startswith("+++ "):
             content = row[1:]
             if (
-                _eligible(path)
+                not _consume_moved(removed, path, content)
+                and _eligible(path)
                 and path not in RELEASE_CONFIGS
                 and not file_marked
                 and not MARKER.search(content)
                 and SEED.search(content)
-                and _seed_context(path, content, before)
+                and _seed_context(path, content, before, file_lines[line_number:])
             ):
                 findings.append(Finding(path, line_number, content.strip()))
             before.append(content)

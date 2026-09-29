@@ -104,3 +104,108 @@ def test_removed_and_unchanged_lines_are_ignored(tmp_path: Path) -> None:
     path = "configs/adversarial/pilot.yaml"
     diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -1,2 +1,2 @@\n-seeds: [111]\n seeds: [112]\n+seeds: [1001]\n"
     assert check_diff(diff, tmp_path) == []
+
+
+def test_release_candidate_setup_manifest_is_not_episode_execution(tmp_path: Path) -> None:
+    path = "tests/benchmark/test_release_candidate.py"
+    diff = (
+        f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -0,0 +1,5 @@\n"
+        "+@pytest.fixture\n"
+        "+def candidate_repo(tmp_path: Path) -> tuple[Path, Path, dict]:\n"
+        '+    """Build a small committed checkout with a real 48-scenario source closure."""\n'
+        "+    seed_policy = {\n"
+        '+        "resolved_seeds": list(range(111, 141)),\n'
+    )
+    assert check_diff(diff, tmp_path) == []
+
+
+def test_moved_sampler_defaults_are_not_new_seeds(tmp_path: Path) -> None:
+    path = "scripts/tools/compare_adversarial_samplers.py"
+    diff = (
+        f"diff --git a/{path} b/{path}\n+++ b/{path}\n"
+        "@@ -1216,0 +1480 @@\n"
+        "+        seed=(args.seed or [123])[0],\n"
+        "@@ -1223,0 +1489 @@\n"
+        "+    seeds = args.seed or [123]\n"
+        "@@ -1302,52 +1577,12 @@\n"
+        "-            seed=(args.seed or [123])[0],\n"
+        "-        seeds = args.seed or [123]\n"
+    )
+    assert check_diff(diff, tmp_path) == []
+
+
+def test_moved_episode_seed_line_is_not_reintroduced(tmp_path: Path) -> None:
+    path = "scripts/benchmark/run_pilot.py"
+    diff = (
+        f"diff --git a/{path} b/{path}\n+++ b/{path}\n"
+        "@@ -20 +20,0 @@\n-    scenario_seed = 111\n"
+        "@@ -90,0 +90 @@\n+scenario_seed = 111\n"
+    )
+    assert check_diff(diff, tmp_path) == []
+
+
+def test_deletion_in_another_file_does_not_hide_new_episode_seed(tmp_path: Path) -> None:
+    removed_path = "scripts/benchmark/old_pilot.py"
+    added_path = "scripts/benchmark/new_pilot.py"
+    diff = (
+        f"diff --git a/{removed_path} b/{removed_path}\n"
+        "--- a/scripts/benchmark/old_pilot.py\n+++ /dev/null\n"
+        "@@ -1 +0,0 @@\n-scenario_seed = 111\n"
+        f"diff --git a/{added_path} b/{added_path}\n"
+        f"+++ b/{added_path}\n@@ -0,0 +1 @@\n+scenario_seed = 111\n"
+    )
+    assert len(check_diff(diff, tmp_path)) == 1
+
+
+@pytest.mark.parametrize(
+    "added",
+    [
+        "scenario_seed = 111",
+        'scenario["seeds"] = [111]',
+        "for seed in range(111, 141): run_episode(seed)",
+    ],
+)
+def test_direct_episode_seed_forms_fail(tmp_path: Path, added: str) -> None:
+    findings = check_diff(_diff("scripts/benchmark/run_pilot.py", added), tmp_path)
+    assert len(findings) == 1
+
+
+@pytest.mark.parametrize("added", ["sampler_seed = 111", "rng_seed = 111"])
+def test_sampler_rng_seeds_pass(tmp_path: Path, added: str) -> None:
+    assert check_diff(_diff("scripts/tools/compare_adversarial_samplers.py", added), tmp_path) == []
+
+
+def test_analysis_jsonl_episode_rows_are_stored_fixture_data(tmp_path: Path) -> None:
+    path = "tests/analysis/fixtures/issue_9668_0_0_7_goal_sample.jsonl"
+    row = '{"episode_id":"classic_bottleneck_low--111--example","seed":111}'
+    assert check_diff(_diff(path, row), tmp_path) == []
+
+
+def test_parametrized_rejection_seeds_do_not_run_episodes(tmp_path: Path) -> None:
+    path = "tests/benchmark/test_issue_9748_v4_tuning_runner.py"
+    file = tmp_path / path
+    file.parent.mkdir(parents=True)
+    decorator = '@pytest.mark.parametrize("seed", [101, 111, 140, 1031])'
+    file.write_text(
+        decorator
+        + "\ndef test_release_and_non_dev_seeds_are_rejected(seed: int) -> None:\n"
+        + "    with pytest.raises(ValueError):\n"
+        + '        runner._choose([seed], list(range(1001, 1031)), label="seed")\n'
+    )
+    assert check_diff(_diff(path, decorator), tmp_path) == []
+
+
+def test_seed_alias_rejection_payload_does_not_run_episodes(tmp_path: Path) -> None:
+    path = "tests/validation/test_issue_9748_dev_split.py"
+    file = tmp_path / path
+    file.parent.mkdir(parents=True)
+    assignment = '    payload["entries"][0]["metadata"] = {"trial": {"episode_seed": 111}}'
+    file.write_text(
+        "def test_tuning_log_rejects_seed_aliases_outside_entry_seeds() -> None:\n"
+        "    payload = _valid_log_payload()\n"
+        + assignment
+        + "\n    with pytest.raises(CHECKER.ValidationError):\n"
+        "        CHECKER._validate_tuning_log(path)\n"
+    )
+    diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -2,0 +3 @@\n+{assignment}\n"
+    assert check_diff(diff, tmp_path) == []

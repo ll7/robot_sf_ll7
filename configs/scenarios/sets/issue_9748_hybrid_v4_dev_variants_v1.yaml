@@ -58,6 +58,10 @@ scenario_overrides:
     - 1028
     - 1029
     - 1030
+  # Match the simulator policies selected by the 0.0.8 candidate matrix.
+  simulation_config:
+    goal_completion_policy: goal_zone_entry_v1
+    social_force_kernel_version: wrapped_v2
 
 # The name override is applied after source selection. This gives each
 # perturbed row a stable development-only identity while preserving the source

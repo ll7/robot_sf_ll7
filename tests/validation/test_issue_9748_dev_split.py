@@ -8,6 +8,7 @@ import importlib.util
 import json
 import shutil
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -65,6 +66,78 @@ def test_checked_in_rows_pin_author_values() -> None:
     )
     for row in rows:
         assert row["seeds"] == list(range(1001, 1031))
+        assert row["simulation_config"]["goal_completion_policy"] == "goal_zone_entry_v1"
+        assert row["simulation_config"]["social_force_kernel_version"] == "wrapped_v2"
+
+
+def test_development_rows_match_resolved_release_candidate_except_approved_changes() -> None:
+    development_campaign, development_rows = CHECKER._load_canonical_campaign_rows(
+        CHECKER.DEFAULT_CONFIG
+    )
+    release_campaign, release_rows = CHECKER._load_release_candidate_rows(
+        CHECKER.DEFAULT_RELEASE_MATRIX
+    )
+
+    CHECKER._validate_release_parity(
+        development_campaign=development_campaign,
+        development_rows=development_rows,
+        release_campaign=release_campaign,
+        release_rows=release_rows,
+    )
+
+
+@pytest.mark.parametrize("policy", ["goal_completion_policy", "social_force_kernel_version"])
+def test_release_policy_drift_blocks_development_parity(policy: str) -> None:
+    development_campaign, development_rows = CHECKER._load_canonical_campaign_rows(
+        CHECKER.DEFAULT_CONFIG
+    )
+    release_campaign, release_rows = CHECKER._load_release_candidate_rows(
+        CHECKER.DEFAULT_RELEASE_MATRIX
+    )
+    changed_release_rows = copy.deepcopy(release_rows)
+    source = next(row for row in changed_release_rows if row["name"] == "classic_doorway_medium")
+    source["simulation_config"][policy] = "changed_release_policy"
+
+    with pytest.raises(CHECKER.ValidationError, match="differs from the 0.0.8 candidate"):
+        CHECKER._validate_release_parity(
+            development_campaign=development_campaign,
+            development_rows=development_rows,
+            release_campaign=release_campaign,
+            release_rows=changed_release_rows,
+        )
+
+
+def test_observation_mode_drift_blocks_development_parity() -> None:
+    development_campaign, development_rows = CHECKER._load_canonical_campaign_rows(
+        CHECKER.DEFAULT_CONFIG
+    )
+    release_campaign, release_rows = CHECKER._load_release_candidate_rows(
+        CHECKER.DEFAULT_RELEASE_MATRIX
+    )
+
+    with pytest.raises(CHECKER.ValidationError, match="observation_mode"):
+        CHECKER._validate_release_parity(
+            development_campaign=development_campaign,
+            development_rows=development_rows,
+            release_campaign=replace(release_campaign, observation_mode="lidar"),
+            release_rows=release_rows,
+        )
+
+
+def test_tuning_input_hash_closure_binds_release_candidate_matrix_chain() -> None:
+    paths = set(
+        CHECKER._tuning_input_paths(
+            config_path=CHECKER.DEFAULT_CONFIG,
+            scenario_matrix_path=(
+                ROOT / "configs/scenarios/sets/issue_9748_hybrid_v4_dev_variants_v1.yaml"
+            ),
+            candidate_paths=CHECKER.EXPECTED_PLANNER_CONFIGS,
+        )
+    )
+
+    assert ROOT / CHECKER.RELEASE_CONFIG_RELATIVE_PATH in paths
+    assert CHECKER.DEFAULT_RELEASE_MATRIX in paths
+    assert ROOT / "configs/scenarios/classic_interactions_francis2023.yaml" in paths
 
 
 @pytest.mark.parametrize("planner_key", sorted(CHECKER.EXPECTED_PLANNER_CONFIGS))

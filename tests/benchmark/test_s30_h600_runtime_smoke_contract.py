@@ -494,9 +494,7 @@ def _assert_versioned_kernel_and_v4_freeze(
     for payload, profile_scenarios in zip(profiles, scenario_sets, strict=True):
         assert [row["key"] for row in payload["planners"]] == EXPECTED_0_0_8_PLANNER_KEYS
         social_force = next(row for row in payload["planners"] if row["key"] == "social_force")
-        assert social_force["algo_config"] == (
-            "configs/algos/social_force_release_v0_0_8.yaml"
-        )
+        assert social_force["algo_config"] == ("configs/algos/social_force_release_v0_0_8.yaml")
         assert (
             _algo_config(REPO_ROOT, social_force["algo_config"])["social_force_kernel_version"]
             == "wrapped_v2"

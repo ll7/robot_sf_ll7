@@ -684,6 +684,14 @@ def _artifact_path(
     mapping: Mapping[str, Any], ancestors: tuple[Mapping[str, Any], ...]
 ) -> str | None:
     """Find a neighboring artifact path, including ``reports_dir`` filename manifests."""
+    if any(
+        isinstance(candidates := parent.get("candidate_configs"), Mapping)
+        and any(candidate is mapping for candidate in candidates.values())
+        for parent in ancestors
+    ):
+        candidate_paths = _string_values(mapping, {"path"})
+        if candidate_paths:
+            return candidate_paths[0]
     paths = _string_values(mapping, ARTIFACT_PATH_KEYS)
     for value in paths:
         if value and not value.startswith("configs/"):

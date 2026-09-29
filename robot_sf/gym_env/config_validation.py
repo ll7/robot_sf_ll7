@@ -196,6 +196,11 @@ def get_resolved_config_dict(config: BaseSimulationConfig) -> dict:
         Dictionary representation with all defaults resolved
     """
     if is_dataclass(config):
-        return asdict(config)
+        payload = asdict(config)
+        sim_config = getattr(config, "sim_config", None)
+        serializer = getattr(sim_config, "to_dict", None)
+        if isinstance(payload.get("sim_config"), dict) and callable(serializer):
+            payload["sim_config"] = serializer()
+        return payload
     # Fallback for non-dataclass configs
     return {k: v for k, v in config.__dict__.items() if not k.startswith("_")}

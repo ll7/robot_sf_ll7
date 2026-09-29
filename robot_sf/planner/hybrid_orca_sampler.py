@@ -328,7 +328,9 @@ def build_hybrid_orca_sampler_build_config(
     guard_raw = cfg.get("hybrid_guard", {}) if isinstance(cfg.get("hybrid_guard"), dict) else {}
     mppi_raw = cfg.get("mppi_social", {}) if isinstance(cfg.get("mppi_social"), dict) else {}
 
-    allowed_socnav = {field.name for field in fields(SocNavPlannerConfig)}
+    allowed_socnav = {field.name for field in fields(SocNavPlannerConfig)} | {
+        "social_force_kernel_version"
+    }
     socnav_kwargs = {key: value for key, value in cfg.items() if key in allowed_socnav}
     socnav = SocNavPlannerConfig(**socnav_kwargs)
 

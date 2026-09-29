@@ -7907,3 +7907,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_9748_v4_tuning_log_v1.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

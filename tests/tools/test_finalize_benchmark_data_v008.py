@@ -85,12 +85,17 @@ def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
         elif name == "campaign_manifest.json":
             payload = {"config_hash": "c" * 64}
         _write_json(producer / name, payload)
+    v2_metrics = {}
+    for role in ("weights", "anchors", "family"):
+        asset = producer / f"assets/snqi_v2_{role}.json"
+        _write_json(asset, {"role": role})
+        relative = asset.relative_to(tmp_path).as_posix()
+        v2_metrics[f"snqi_v2_{role}_path"] = relative
+        v2_metrics[f"snqi_v2_{role}_sha256"] = finalizer._sha256(asset)
     science = {
         "provenance": {"source_sha": SOURCE_SHA},
-        **{
-            key: {}
-            for key in ("matrix", "scenario", "seed_policy", "planners", "kinematics", "metrics")
-        },
+        **{key: {} for key in ("matrix", "scenario", "seed_policy", "planners", "kinematics")},
+        "metrics": v2_metrics,
     }
     identity = {
         "schema_version": "benchmark-scientific-candidate.v1",
@@ -124,14 +129,59 @@ def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
     reports = {
         "full_acceptance_sha256": (
             "reports/scientific_candidate_acceptance.json",
-            {"status": "valid"},
+            {
+                "status": "valid",
+                "benchmark_success": True,
+                "expected_planner_arms": 14,
+                "expected_episode_cells": 20160,
+                "observed_episode_rows": 20160,
+                "unique_episode_identities": 20160,
+                "source_commits": [SOURCE_SHA],
+                "blockers": [],
+                "forbidden_status_counts": {},
+            },
         ),
-        "metric_equivalence_sha256": ("reports/metric_equivalence.json", {"status": "pass"}),
+        "metric_equivalence_sha256": (
+            "reports/metric_equivalence.json",
+            {
+                "status": "pass",
+                "baseline_archive_sha256": finalizer.BASELINE_ARCHIVE_SHA256,
+                "baseline_source_sha": finalizer.BASELINE_SOURCE_SHA,
+                "candidate_source_sha": SOURCE_SHA,
+                "expected_rows": 20160,
+                "baseline_rows": 20160,
+                "candidate_rows": 20160,
+                "paired_rows": 20160,
+                "mismatch_episodes": 0,
+                "scientific_manifest_differences": [],
+                "robot_force_metrics": {
+                    "status": "pass",
+                    "checked_rows": 20160,
+                    "failed_rows": 0,
+                },
+            },
+        ),
         "robot_force_validation_sha256": (
             "reports/robot_force_validation.json",
-            {"classification": "release_robot_force_validation", "episodes": 20160},
+            {
+                "classification": "release_robot_force_validation",
+                "episodes": 20160,
+                "source_commit": SOURCE_SHA,
+                "equivalence_report_sha256": "",
+                "sources": [],
+            },
         ),
     }
+    equivalence_path = producer / "reports/metric_equivalence.json"
+    force_report = reports["robot_force_validation_sha256"][1]
+    force_report["sources"] = [
+        {
+            "artifact_path": raw_name,
+            "sha256": digest,
+            "rows": 1,
+        }
+        for raw_name, digest in identity["raw_episode_sha256"].items()
+    ]
     result = {
         "schema_version": "benchmark-scientific-candidate-result.v1",
         "baseline_archive_sha256": finalizer.BASELINE_ARCHIVE_SHA256,
@@ -143,6 +193,11 @@ def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
     for key, (name, report) in reports.items():
         _write_json(producer / name, report)
         result[key] = finalizer._sha256(producer / name)
+    force_report["equivalence_report_sha256"] = finalizer._sha256(equivalence_path)
+    _write_json(producer / "reports/robot_force_validation.json", force_report)
+    result["robot_force_validation_sha256"] = finalizer._sha256(
+        producer / "reports/robot_force_validation.json"
+    )
     for key, name in (
         ("metric_equivalence_log_sha256", "reports/scientific_candidate_equivalence.log"),
         ("robot_force_log_sha256", "reports/scientific_candidate_force.log"),
@@ -151,6 +206,17 @@ def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
         log.write_text("synthetic gate passed\n", encoding="utf-8")
         result[key] = finalizer._sha256(log)
     _write_json(producer / "release/scientific_candidate_result.json", result)
+    snqi_report = {"provenance": v2_metrics, "episode_count": 20160}
+    _write_json(
+        producer / "reports/snqi_v2_diagnostics.json",
+        {**snqi_report, "family_report": "snqi_v2_family.json"},
+    )
+    _write_json(
+        producer / "reports/snqi_v2_family.json",
+        {**snqi_report, "family": "V2-F", "vectors": [{}] * 2013, "stratified_count": 2011},
+    )
+    for name in ("snqi_v2_diagnostics.md", "snqi_v2_family.md"):
+        (producer / "reports" / name).write_text("synthetic SNQI-v2 report\n", encoding="utf-8")
     manifest = SimpleNamespace(
         source_sha=SOURCE_SHA,
         resolved_manifest_payload={
@@ -160,6 +226,31 @@ def test_pre_doi_candidate_custody_rejects_changed_raw_bytes(  # noqa: PLR0915
         },
     )
     assert finalizer._require_scientific_candidate(producer, SOURCE_SHA, manifest)[0] == identity
+    missing_metrics_identity = {
+        **identity,
+        "scientific_manifest": {**science, "metrics": {}},
+    }
+    with pytest.raises(ValueError, match="SNQI-v2 metrics are incomplete"):
+        finalizer._require_scientific_report_identities(
+            producer, SOURCE_SHA, missing_metrics_identity
+        )
+    missing_asset = tmp_path / v2_metrics["snqi_v2_weights_path"]
+    asset_bytes = missing_asset.read_bytes()
+    missing_asset.unlink()
+    with pytest.raises(ValueError, match="SNQI-v2 asset is missing"):
+        finalizer._require_scientific_report_identities(producer, SOURCE_SHA, identity)
+    missing_asset.write_bytes(asset_bytes)
+    original_equivalence = equivalence_path.read_bytes()
+    equivalence = json.loads(original_equivalence)
+    equivalence["candidate_source_sha"] = "b" * 40
+    _write_json(equivalence_path, equivalence)
+    result["metric_equivalence_sha256"] = finalizer._sha256(equivalence_path)
+    _write_json(producer / "release/scientific_candidate_result.json", result)
+    with pytest.raises(ValueError, match="equivalence report identity"):
+        finalizer._require_scientific_candidate(producer, SOURCE_SHA, manifest)
+    equivalence_path.write_bytes(original_equivalence)
+    result["metric_equivalence_sha256"] = finalizer._sha256(equivalence_path)
+    _write_json(producer / "release/scientific_candidate_result.json", result)
     result["baseline_archive_sha256"] = "b" * 64
     _write_json(producer / "release/scientific_candidate_result.json", result)
     with pytest.raises(ValueError, match="accepted exact-source scientific candidate"):

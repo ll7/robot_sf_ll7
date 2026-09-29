@@ -107,6 +107,12 @@ _CAMPAIGN_LOCAL_PATH_FIELDS = frozenset(
         "publication_bundle",
     }
 )
+_V008_PUBLICATION_REPORTS = (
+    "reports/snqi_v2_diagnostics.json",
+    "reports/snqi_v2_family.json",
+    "reports/metric_equivalence.json",
+    "reports/robot_force_validation.json",
+)
 _CAMPAIGN_PUBLIC_RESULT_FIELDS = frozenset(
     {
         "campaign_id",
@@ -529,6 +535,26 @@ def _required_artifacts_missing(campaign_root: Path, required_paths: tuple[str, 
             resolve_campaign_artifact_path(campaign_root, relative_path)
         except (OSError, ValueError):
             missing.append(relative_path)
+    return missing
+
+
+def _v008_publication_reports_missing(campaign_root: Path, campaign_config: Any) -> list[str]:
+    """Require post-run scientific reports before a v0.0.8 bundle export.
+
+    Older release configs do not declare SNQI-v2 and retain their existing publication path.
+    The dedicated v0.0.8 template is publication-deferred until these reports exist.
+    """
+    if getattr(campaign_config, "snqi_v2_spec", None) is None:
+        return []
+    missing: list[str] = []
+    for relative in _V008_PUBLICATION_REPORTS:
+        try:
+            path = resolve_campaign_artifact_path(campaign_root, relative)
+        except (OSError, ValueError):
+            missing.append(relative)
+        else:
+            if not path.is_file():
+                missing.append(relative)
     return missing
 
 
@@ -1859,6 +1885,19 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
     result["release_benchmark_success"] = release_benchmark_success
     publication_requested = bool(getattr(cfg, "export_publication_bundle", True))
     result["publication_requested"] = publication_requested
+    publication_report_blockers = (
+        _v008_publication_reports_missing(campaign_root, cfg)
+        if release_benchmark_success and publication_requested
+        else []
+    )
+    if publication_report_blockers:
+        release_benchmark_success = False
+        result["release_benchmark_success"] = False
+        result["publication_preflight_status"] = "blocked"
+        result["publication_preflight_violations"] = [
+            "required 0.0.8 scientific reports are missing: "
+            + ", ".join(publication_report_blockers)
+        ]
     if release_benchmark_success and publication_requested:
         publication_payload = _build_publication_payload(
             campaign_root=campaign_root,
@@ -1869,7 +1908,9 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
     else:
         result["publication_bundle"] = None
         result["publication_preflight_status"] = (
-            "not_requested" if not publication_requested else None
+            "not_requested"
+            if not publication_requested
+            else ("blocked" if publication_report_blockers else None)
         )
 
     result["release_status"] = (
@@ -1877,6 +1918,8 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         if missing
         else "full_release_acceptance_failed"
         if full_release_acceptance_failed
+        else "scientific_reports_missing_before_publication"
+        if publication_report_blockers
         else (
             "ok"
             if release_benchmark_success
@@ -1893,7 +1936,12 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
                 "full benchmark release acceptance failed: "
                 + str((release_acceptance.get("blockers") or ["unspecified"])[0])
                 if full_release_acceptance_failed
-                else str(run_payload.get("status_reason", "benchmark release did not succeed"))
+                else (
+                    "required 0.0.8 scientific reports are missing before publication: "
+                    + ", ".join(publication_report_blockers)
+                    if publication_report_blockers
+                    else str(run_payload.get("status_reason", "benchmark release did not succeed"))
+                )
             )
         )
     )
@@ -1901,7 +1949,9 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         0
         if release_benchmark_success
         else (
-            2 if missing or full_release_acceptance_failed else int(run_payload.get("exit_code", 2))
+            2
+            if missing or full_release_acceptance_failed or publication_report_blockers
+            else int(run_payload.get("exit_code", 2))
         )
     )
 

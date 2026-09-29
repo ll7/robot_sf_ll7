@@ -104,7 +104,7 @@ def test_snqi_v2_manifest_assets_are_complete_and_hash_bound(tmp_path: Path) -> 
         paths={role: str(asset) for role in ("weights", "anchors", "family")},
         hashes=dict.fromkeys(("weights", "anchors", "family"), digest),
     )
-    bound_cfg = SimpleNamespace(**cfg.__dict__, snqi_v2_spec=spec)
+    bound_cfg = SimpleNamespace(**{**cfg.__dict__, "snqi_v2_spec": spec})
     report = validate_release_manifest(manifest, campaign_config=bound_cfg)
     assert report["status"] == "valid", report["problems"]
     resolved = build_resolved_release_manifest(manifest, campaign_config=bound_cfg)

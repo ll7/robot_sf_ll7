@@ -41,6 +41,18 @@ from scripts.validation.check_release_metric_equivalence import (
 BASELINE_ARCHIVE_SHA256 = "684da7c557c426756f22ddbf5cb3270141ee8ae385669a39d36f324852a6fb2f"
 BASELINE_SOURCE_SHA = "07f7e8d43084de748915e1b1eb8b2a1603357c6e"
 EXPECTED_EPISODES = 20160
+_SCIENTIFIC_REPORTS = (
+    "reports/scientific_candidate_acceptance.json",
+    "reports/metric_equivalence.json",
+    "reports/robot_force_validation.json",
+)
+_SNQI_V2_REPORTS = (
+    "reports/snqi_v2_diagnostics.json",
+    "reports/snqi_v2_diagnostics.md",
+    "reports/snqi_v2_family.json",
+    "reports/snqi_v2_family.md",
+)
+_SNQI_V2_ASSET_ROLES = ("weights", "anchors", "family")
 
 
 def _sha256(path: Path) -> str:
@@ -117,6 +129,138 @@ def _raw_episode_hashes(root: Path) -> dict[str, str]:
     if len(paths) != 14:
         raise ValueError("0.0.8 candidate must contain exactly 14 raw episode files")
     return {path.relative_to(root).as_posix(): _sha256(path) for path in paths}
+
+
+def _require_scientific_report_identities(  # noqa: C901, PLR0912
+    producer_root: Path,
+    source_sha: str,
+    identity: dict[str, Any],
+) -> None:
+    """Require report bytes and their declared scientific identities to agree.
+
+    The candidate result stores checksums, but a caller could otherwise replace a report and
+    update that result together.  Recheck the report's source, matrix, predecessor, and raw-arm
+    identities before any derivative copy or publication export is allowed.
+    """
+    report_paths = {name: producer_root / name for name in _SCIENTIFIC_REPORTS}
+    reports = {name: _read_mapping(path) for name, path in report_paths.items()}
+    acceptance = reports[_SCIENTIFIC_REPORTS[0]]
+    if (
+        acceptance.get("status") != "valid"
+        or acceptance.get("benchmark_success") is not True
+        or acceptance.get("expected_planner_arms") != 14
+        or acceptance.get("expected_episode_cells") != EXPECTED_EPISODES
+        or acceptance.get("observed_episode_rows") != EXPECTED_EPISODES
+        or acceptance.get("unique_episode_identities") != EXPECTED_EPISODES
+        or acceptance.get("source_commits") != [source_sha]
+        or acceptance.get("blockers") != []
+        or acceptance.get("forbidden_status_counts") != {}
+    ):
+        raise ValueError("scientific candidate acceptance report identity is invalid")
+
+    equivalence = reports[_SCIENTIFIC_REPORTS[1]]
+    if (
+        equivalence.get("status") != "pass"
+        or equivalence.get("baseline_archive_sha256") != BASELINE_ARCHIVE_SHA256
+        or equivalence.get("baseline_source_sha") != BASELINE_SOURCE_SHA
+        or equivalence.get("candidate_source_sha") != source_sha
+        or equivalence.get("expected_rows") != EXPECTED_EPISODES
+        or equivalence.get("baseline_rows") != EXPECTED_EPISODES
+        or equivalence.get("candidate_rows") != EXPECTED_EPISODES
+        or equivalence.get("paired_rows") != EXPECTED_EPISODES
+        or equivalence.get("mismatch_episodes") != 0
+        or equivalence.get("scientific_manifest_differences") != []
+    ):
+        raise ValueError("scientific candidate equivalence report identity is invalid")
+    force_metrics = equivalence.get("robot_force_metrics")
+    if (
+        not isinstance(force_metrics, dict)
+        or force_metrics.get("status") != "pass"
+        or force_metrics.get("checked_rows") != EXPECTED_EPISODES
+        or force_metrics.get("failed_rows") != 0
+    ):
+        raise ValueError("scientific candidate equivalence force report identity is invalid")
+
+    force = reports[_SCIENTIFIC_REPORTS[2]]
+    expected_episode_hashes = identity.get("raw_episode_sha256")
+    sources = force.get("sources")
+    if (
+        force.get("classification") != "release_robot_force_validation"
+        or force.get("episodes") != EXPECTED_EPISODES
+        or force.get("source_commit") != source_sha
+        or force.get("equivalence_report_sha256") != _sha256(report_paths[_SCIENTIFIC_REPORTS[1]])
+        or not isinstance(expected_episode_hashes, dict)
+        or not isinstance(sources, list)
+    ):
+        raise ValueError("scientific candidate robot-force report identity is invalid")
+    observed_sources: dict[str, dict[str, Any]] = {}
+    for source in sources:
+        if not isinstance(source, dict) or not isinstance(source.get("artifact_path"), str):
+            raise ValueError("scientific candidate robot-force source identity is invalid")
+        artifact_path = source["artifact_path"]
+        if artifact_path in observed_sources:
+            raise ValueError("scientific candidate robot-force source identity is duplicated")
+        observed_sources[artifact_path] = source
+    if set(observed_sources) != set(expected_episode_hashes):
+        raise ValueError("scientific candidate robot-force source set differs from raw custody")
+    for artifact_path, expected_hash in expected_episode_hashes.items():
+        source = observed_sources[artifact_path]
+        if source.get("sha256") != expected_hash or type(source.get("rows")) is not int:
+            raise ValueError("scientific candidate robot-force source checksum is invalid")
+
+    science = identity.get("scientific_manifest")
+    metrics = science.get("metrics") if isinstance(science, dict) else None
+    if not isinstance(metrics, dict) or any(
+        not isinstance(metrics.get(f"snqi_v2_{role}_path"), str)
+        or not metrics[f"snqi_v2_{role}_path"]
+        or not isinstance(metrics.get(f"snqi_v2_{role}_sha256"), str)
+        or len(metrics[f"snqi_v2_{role}_sha256"]) != 64
+        or any(char not in "0123456789abcdef" for char in metrics[f"snqi_v2_{role}_sha256"])
+        for role in _SNQI_V2_ASSET_ROLES
+    ):
+        raise ValueError("scientific candidate SNQI-v2 metrics are incomplete")
+    asset_root = get_repository_root().resolve()
+    for role in _SNQI_V2_ASSET_ROLES:
+        raw_path = Path(metrics[f"snqi_v2_{role}_path"])
+        asset_path = raw_path if raw_path.is_absolute() else asset_root / raw_path
+        try:
+            asset_path = asset_path.resolve()
+        except OSError as exc:
+            raise ValueError(f"scientific candidate SNQI-v2 asset path is invalid: {role}") from exc
+        if not asset_path.is_relative_to(asset_root) or not asset_path.is_file():
+            raise ValueError(f"scientific candidate SNQI-v2 asset is missing: {role}")
+        if _sha256(asset_path) != metrics[f"snqi_v2_{role}_sha256"]:
+            raise ValueError(f"scientific candidate SNQI-v2 asset checksum is invalid: {role}")
+    for relative in _SNQI_V2_REPORTS:
+        path = producer_root / relative
+        if not path.is_file() or path.stat().st_size == 0:
+            raise ValueError(f"scientific candidate SNQI-v2 report is missing: {relative}")
+    for relative in ("reports/snqi_v2_diagnostics.json", "reports/snqi_v2_family.json"):
+        report = _read_mapping(producer_root / relative)
+        provenance = report.get("provenance")
+        if not isinstance(provenance, dict):
+            raise ValueError(f"scientific candidate SNQI-v2 report identity is invalid: {relative}")
+        for role in ("weights", "anchors", "family"):
+            if provenance.get(f"snqi_v2_{role}_path") != metrics.get(
+                f"snqi_v2_{role}_path"
+            ) or provenance.get(f"snqi_v2_{role}_sha256") != metrics.get(f"snqi_v2_{role}_sha256"):
+                raise ValueError(
+                    f"scientific candidate SNQI-v2 report identity is invalid: {relative}"
+                )
+        if report.get("episode_count") != EXPECTED_EPISODES:
+            raise ValueError(
+                f"scientific candidate SNQI-v2 report row count is invalid: {relative}"
+            )
+    family = _read_mapping(producer_root / "reports/snqi_v2_family.json")
+    diagnostics = _read_mapping(producer_root / "reports/snqi_v2_diagnostics.json")
+    if (
+        family.get("family") != "V2-F"
+        or not isinstance(family.get("vectors"), list)
+        or len(family["vectors"]) != 2013
+        or family.get("stratified_count") != 2011
+        or diagnostics.get("family_report") != "snqi_v2_family.json"
+    ):
+        raise ValueError("scientific candidate SNQI-v2 family report identity is invalid")
 
 
 def _require_scientific_candidate(  # noqa: C901, PLR0912
@@ -227,6 +371,7 @@ def _require_scientific_candidate(  # noqa: C901, PLR0912
     ):
         if _sha256(producer_root / name) != result.get(key):
             raise ValueError(f"scientific candidate gate log changed: {name}")
+    _require_scientific_report_identities(producer_root, source_sha, identity)
     if result.get("scientific_identity_sha256") != identity_digest:
         raise ValueError("scientific candidate result is detached from identity")
     return identity, result

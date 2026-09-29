@@ -131,6 +131,8 @@ supervise() {
         --env RUNNER_TOOL_CACHE=/home/runner/_work/_tool \
         --env UV_CACHE_DIR=/home/runner/_work/_uv_cache \
         --env TMPDIR=/home/runner/_work/_tmp \
+        --env PYTEST_NUM_WORKERS=4 --env OPENBLAS_NUM_THREADS=1 \
+        --env OMP_NUM_THREADS=1 \
         "$image" "$name"; then
       echo "Runner $name finished its job; replacing its container"
     else

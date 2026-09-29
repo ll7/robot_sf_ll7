@@ -169,6 +169,9 @@ def test_container_setup_keeps_ephemeral_and_no_host_mounts() -> None:
         "RUNNER_TOOL_CACHE=/home/runner/_work/_tool",
         "UV_CACHE_DIR=/home/runner/_work/_uv_cache",
         "TMPDIR=/home/runner/_work/_tmp",
+        "PYTEST_NUM_WORKERS=4",
+        "OPENBLAS_NUM_THREADS=1",
+        "OMP_NUM_THREADS=1",
     ):
         assert environment in script
 

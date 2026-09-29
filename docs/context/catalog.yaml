@@ -7907,3 +7907,15 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_9735_vv5_full_matrix_2026-09-28.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9735_vv5_full_matrix_2026-09-28.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9735_vv5_full_matrix_2026-09-28.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

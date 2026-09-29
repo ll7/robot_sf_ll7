@@ -43,7 +43,7 @@ Classification: **`reward_refuted` at the bound evaluation boundary only**
 - 2026-09-28 rebased regeneration: the diagnostic was rebased onto current `origin/main` with the
   producer bytes unchanged (SHA-256 `7cf38669c725117b885568f5db850f0651413e4cef1ae7793478def21cbf9b4f`)
   and the committed artifacts regenerated at commit
-  `0628fa1247a9fcb1e6c51d23514e61bdfaa3c9f1` (branch
+  `5638cf1afa7a0ae7ce2876d2f9fb00a5339e5635` (branch
   `diagnostic/issue-9545-crash-vs-wait-20260928`, PR #9897). This run is newly generated diagnostic evidence
   on the current tree, distinct from the original #9546 executions and from the historical 0.0.6
   release-bundle analysis discussed in section 2. Against the previously committed bytes it

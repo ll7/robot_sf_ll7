@@ -70,11 +70,29 @@ def _valid_spawn_block() -> dict[str, Any]:
 
 def _baseline_kinematics(planner: str) -> dict[str, Any]:
     if planner == "goal":
-        return {"execution_mode": "native", "adapter_active": False, "adapter_name": "none"}
+        return {
+            "execution_mode": "native",
+            "adapter_active": False,
+            "adapter_name": "none",
+            "policy_callable": {
+                "module": "robot_sf.benchmark.map_runner_policies.goal",
+                "qualname": "build.<locals>._policy",
+            },
+            "planner_adapter": {"present": False, "module": None, "class": None},
+        }
     return {
         "execution_mode": "adapter",
         "adapter_active": True,
         "adapter_name": "SocialForcePlannerAdapter",
+        "policy_callable": {
+            "module": "robot_sf.benchmark.map_runner.map_runner",
+            "qualname": "_build_common_adapter_policy.<locals>._policy",
+        },
+        "planner_adapter": {
+            "present": True,
+            "module": "robot_sf.planner.socnav_social_force",
+            "class": "SocialForcePlannerAdapter",
+        },
         "projection_documented": True,
     }
 
@@ -95,6 +113,26 @@ def _action_trace(count: int) -> dict[str, Any]:
                         "angular_velocity": 0.0,
                     },
                 },
+            }
+            for index in range(count)
+        ],
+    }
+
+
+def _planner_invocation_trace(planner: str, count: int) -> dict[str, Any]:
+    """Build runtime route/command evidence matching the synthetic action trace."""
+    route = _baseline_kinematics(planner)
+    return {
+        "schema_version": "issue_9348_planner_invocation.v1",
+        "source": "constructed_policy_callable",
+        "steps": [
+            {
+                "step": index,
+                "event": "invocation",
+                "route_before": deepcopy(route),
+                "route_after": deepcopy(route),
+                "status": "returned",
+                "command": {"linear_velocity": 0.5, "angular_velocity": 0.0},
             }
             for index in range(count)
         ],
@@ -392,6 +430,7 @@ def _complete_synthetic_campaign() -> tuple[
                             "doorway_pair_receipt": receipt,
                             "planner_runtime": {},
                             "simulation_step_trace": _action_trace(100),
+                            "planner_invocation_trace": _planner_invocation_trace(planner, 100),
                             "planner_decision_trace": {"steps": [{}]},
                         },
                         "integrity": {"contradictions": []},
@@ -424,6 +463,9 @@ def test_actor_present_confirmation_rejects_fallback_and_custody_faults() -> Non
         row["horizon"] = 10
         row["steps"] = 5
         row["algorithm_metadata"]["simulation_step_trace"] = _action_trace(5)
+        row["algorithm_metadata"]["planner_invocation_trace"] = _planner_invocation_trace(
+            row["algo"], 5
+        )
         row["status"] = "failure"  # short-horizon timeout is not a success claim
         row["termination_reason"] = "max_steps"
 
@@ -498,7 +540,7 @@ def test_actor_present_confirmation_rejects_fallback_and_custody_faults() -> Non
 
 
 def test_execution_axes_are_copied_from_runtime_and_readiness_fails_closed() -> None:
-    """Row axes mirror observed kinematics and only complete baseline evidence is ready."""
+    """Row axes require callable route evidence and complete baseline evidence."""
     rows, _cells, _pairs = _complete_synthetic_campaign()
     goal = deepcopy(rows[0])
     goal.pop("execution_mode")
@@ -506,6 +548,7 @@ def test_execution_axes_are_copied_from_runtime_and_readiness_fails_closed() -> 
     doorway_campaign._record_baseline_execution_axes(goal, "goal")
     assert goal["execution_mode"] == "native"
     assert goal["readiness_status"] == "native"
+    assert goal["algorithm_metadata"]["baseline_readiness"]["observed_execution_mode"] == "native"
     assert goal["algorithm_metadata"]["baseline_readiness"]["blockers"] == []
 
     social_force = deepcopy(rows[9])
@@ -514,17 +557,60 @@ def test_execution_axes_are_copied_from_runtime_and_readiness_fails_closed() -> 
     doorway_campaign._record_baseline_execution_axes(social_force, "social_force")
     assert social_force["execution_mode"] == "adapter"
     assert social_force["readiness_status"] == "native"
+    assert (
+        social_force["algorithm_metadata"]["planner_invocation_trace"]["steps"][0]["route_after"][
+            "adapter_name"
+        ]
+        == "SocialForcePlannerAdapter"
+    )
 
     mismatched = deepcopy(goal)
     mismatched.pop("execution_mode")
     mismatched.pop("readiness_status")
     mismatched["algorithm_metadata"]["planner_kinematics"]["execution_mode"] = "fallback"
     doorway_campaign._record_baseline_execution_axes(mismatched, "goal")
-    assert mismatched["execution_mode"] == "fallback"
+    assert mismatched["execution_mode"] == "native"
     assert mismatched["readiness_status"] == "unknown"
+    assert (
+        mismatched["algorithm_metadata"]["baseline_readiness"]["declared_execution_mode"]
+        == "fallback"
+    )
     assert (
         "planner_kinematics_mode_or_adapter_mismatch"
         in (mismatched["algorithm_metadata"]["baseline_readiness"]["blockers"])
+    )
+
+    spoofed_runtime = deepcopy(goal)
+    spoofed_runtime.pop("execution_mode")
+    spoofed_runtime.pop("readiness_status")
+    for invocation in spoofed_runtime["algorithm_metadata"]["planner_invocation_trace"]["steps"]:
+        invocation["route_before"] = _baseline_kinematics("social_force")
+        invocation["route_after"] = _baseline_kinematics("social_force")
+    doorway_campaign._record_baseline_execution_axes(spoofed_runtime, "goal")
+    assert "execution_mode" not in spoofed_runtime
+    assert spoofed_runtime["readiness_status"] == "unknown"
+    assert (
+        "planner_invocation_route_mismatch"
+        in spoofed_runtime["algorithm_metadata"]["baseline_readiness"]["blockers"]
+    )
+
+    def spoofed_policy(_observation: Any) -> tuple[float, float]:
+        return 0.5, 0.0
+
+    spoofed_callable_route = doorway_campaign._runtime_policy_route(spoofed_policy)
+    assert spoofed_callable_route["execution_mode"] == "unknown"
+    spoofed_callable = deepcopy(goal)
+    spoofed_callable.pop("execution_mode")
+    spoofed_callable.pop("readiness_status")
+    for invocation in spoofed_callable["algorithm_metadata"]["planner_invocation_trace"]["steps"]:
+        invocation["route_before"] = deepcopy(spoofed_callable_route)
+        invocation["route_after"] = deepcopy(spoofed_callable_route)
+    doorway_campaign._record_baseline_execution_axes(spoofed_callable, "goal")
+    assert "execution_mode" not in spoofed_callable
+    assert spoofed_callable["readiness_status"] == "unknown"
+    assert (
+        "planner_invocation_route_mismatch"
+        in spoofed_callable["algorithm_metadata"]["baseline_readiness"]["blockers"]
     )
 
 
@@ -537,6 +623,9 @@ def test_pair_asset_digests_must_match_generated_cells(digest_field: str) -> Non
         row["horizon"] = 10
         row["steps"] = 5
         row["algorithm_metadata"]["simulation_step_trace"] = _action_trace(5)
+        row["algorithm_metadata"]["planner_invocation_trace"] = _planner_invocation_trace(
+            row["algo"], 5
+        )
         row["status"] = "failure"
         row["termination_reason"] = "max_steps"
 
@@ -574,6 +663,9 @@ def test_confirmation_separates_baseline_auxiliary_telemetry_from_execution() ->
         row["horizon"] = 10
         row["steps"] = 5
         row["algorithm_metadata"]["simulation_step_trace"] = _action_trace(5)
+        row["algorithm_metadata"]["planner_invocation_trace"] = _planner_invocation_trace(
+            row["algo"], 5
+        )
         row["status"] = "failure"
         metadata = row["algorithm_metadata"]
         metadata["planner_decision_trace"]["steps"] = []
@@ -612,6 +704,16 @@ def test_confirmation_separates_baseline_auxiliary_telemetry_from_execution() ->
     )
     assert rejected_action["admit_h400"] is False
     assert "missing_or_invalid_simulation_action_trace" in rejected_action["rows"][0]["blockers"]
+
+    mismatched_action = deepcopy(rows)
+    mismatched_action[0]["algorithm_metadata"]["planner_invocation_trace"]["steps"][0]["command"][
+        "linear_velocity"
+    ] = 0.4
+    rejected_binding = doorway_campaign.assess_confirmation_rows(
+        mismatched_action, cells, pairs, source_sha="d" * 40, manifest_sha256="manifest"
+    )
+    assert rejected_binding["admit_h400"] is False
+    assert "planner_invocation_action_binding_mismatch" in rejected_binding["rows"][0]["blockers"]
 
     wrong_clock = deepcopy(rows)
     wrong_clock[0]["algorithm_metadata"]["simulation_step_trace"]["steps"][0]["time_s"] = 0.2
@@ -1035,6 +1137,7 @@ def test_h1_runner_pair_receipt_survives_episode_schema(tmp_path: Path) -> None:
             map_sha256=asset["map_sha256"],
             non_width_config_sha256=non_width_config_sha256(scenario, planner="goal"),
         ),
+        policy_builder=doorway_campaign._observed_baseline_policy_builder,
     )
     doorway_campaign._record_baseline_execution_axes(row, "goal")
     assert row["algorithm_metadata"]["config_hash"] == "44136fa355b3678a"
@@ -1171,6 +1274,7 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
                             ),
                             "doorway_pair_receipt": receipt,
                             "simulation_step_trace": _action_trace(100),
+                            "planner_invocation_trace": _planner_invocation_trace(planner, 100),
                             "planner_decision_trace": {"steps": [{}]},
                         },
                         "integrity": {"contradictions": []},
@@ -1278,6 +1382,9 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
         row["horizon"] = 10
         row["steps"] = 5
         row["algorithm_metadata"]["simulation_step_trace"] = _action_trace(5)
+        row["algorithm_metadata"]["planner_invocation_trace"] = _planner_invocation_trace(
+            row["algo"], 5
+        )
         row["status"] = "failure"
         row["termination_reason"] = "max_steps"
     confirmation_lines = [json.dumps(row, sort_keys=True) + "\n" for row in confirmation_rows]

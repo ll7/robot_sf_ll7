@@ -23,7 +23,7 @@ from typing import Any
 import numpy as np
 
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
-from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
+from robot_sf.benchmark.map_runner.map_runner import _build_policy, _run_map_episode
 from robot_sf.benchmark.map_runner.map_runner_jsonl import write_validated_to_handle
 from robot_sf.benchmark.schema_validator import load_schema
 from robot_sf.benchmark.three_width_doorway_application import (
@@ -50,6 +50,19 @@ _CONFIRMATION_HORIZON = 10
 _DT = 0.1
 _BOOTSTRAP_DRAWS = 10000
 _BOOTSTRAP_SEED = 9348
+_PLANNER_INVOCATION_TRACE_SCHEMA = "issue_9348_planner_invocation.v1"
+_GOAL_POLICY_CALLABLE_IDENTITY = {
+    "module": "robot_sf.benchmark.map_runner_policies.goal",
+    "qualname": "build.<locals>._policy",
+}
+_SOCIAL_FORCE_POLICY_CALLABLE_IDENTITY = {
+    "module": "robot_sf.benchmark.map_runner.map_runner",
+    "qualname": "_build_common_adapter_policy.<locals>._policy",
+}
+_SOCIAL_FORCE_ADAPTER_IDENTITY = {
+    "module": "robot_sf.planner.socnav_social_force",
+    "class": "SocialForcePlannerAdapter",
+}
 _ENDPOINTS = {
     "success": ("success", "binary"),
     "total_collisions": ("total_collision_count", "runner_count"),
@@ -254,6 +267,123 @@ def _valid_action_trace(trace: Any, row: dict[str, Any] | None) -> bool:
     return True
 
 
+def _runtime_command_payload(command: Any) -> dict[str, float] | None:
+    """Normalize one returned baseline command for invocation custody."""
+    if isinstance(command, np.ndarray):
+        command = command.tolist()
+    if isinstance(command, (list, tuple)) and len(command) >= 2:
+        values = (command[0], command[1])
+        if all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in values):
+            numbers = tuple(float(value) for value in values)
+            if all(math.isfinite(value) for value in numbers):
+                return {
+                    "linear_velocity": numbers[0],
+                    "angular_velocity": numbers[1],
+                }
+    return None
+
+
+def _runtime_callable_identity(policy: Any) -> dict[str, str | None]:
+    """Return the stable module/qualname identity of one constructed callable."""
+    return {
+        "module": getattr(policy, "__module__", None),
+        "qualname": getattr(policy, "__qualname__", None),
+    }
+
+
+def _runtime_policy_route(policy: Any) -> dict[str, Any]:
+    """Read route and implementation identity from the constructed callable."""
+    policy_identity = _runtime_callable_identity(policy)
+    adapter = getattr(policy, "_planner_adapter", None)
+    adapter_type = type(adapter) if adapter is not None else None
+    adapter_identity = {
+        "module": getattr(adapter_type, "__module__", None),
+        "class": getattr(adapter_type, "__qualname__", None),
+    }
+    goal_callable = policy_identity == _GOAL_POLICY_CALLABLE_IDENTITY
+    social_force_route = (
+        policy_identity == _SOCIAL_FORCE_POLICY_CALLABLE_IDENTITY
+        and adapter_identity == _SOCIAL_FORCE_ADAPTER_IDENTITY
+    )
+    if goal_callable and adapter is None:
+        execution_mode = "native"
+    elif social_force_route:
+        execution_mode = "adapter"
+    else:
+        # A no-adapter callable is not native merely because the marker is absent.
+        # Unknown adapter/callable combinations are likewise not admissible baselines.
+        execution_mode = "unknown"
+    if adapter is None:
+        adapter_name = "none"
+        adapter_active = False
+    else:
+        adapter_name = type(adapter).__name__
+        adapter_active = True
+    return {
+        "execution_mode": execution_mode,
+        "adapter_active": adapter_active,
+        "adapter_name": adapter_name,
+        "policy_callable": policy_identity,
+        "planner_adapter": {
+            "present": adapter is not None,
+            **adapter_identity,
+        },
+    }
+
+
+def _observed_baseline_policy_builder(
+    algo: str,
+    algo_config: dict[str, Any],
+    **kwargs: Any,
+) -> tuple[Any, dict[str, Any]]:
+    """Build a baseline and retain callable route/command evidence per invocation."""
+    policy, metadata = _build_policy(algo, algo_config, **kwargs)
+    if algo not in _PLANNERS or not isinstance(metadata, dict):
+        return policy, metadata
+
+    invocation_steps: list[dict[str, Any]] = []
+    metadata["planner_invocation_trace"] = {
+        "schema_version": _PLANNER_INVOCATION_TRACE_SCHEMA,
+        "source": "constructed_policy_callable",
+        "steps": invocation_steps,
+    }
+
+    def observed_policy(observation: Any) -> Any:
+        """Invoke the constructed policy and retain its route and returned command."""
+        step = len(invocation_steps)
+        route_before = _runtime_policy_route(policy)
+        try:
+            command = policy(observation)
+        except Exception as exc:
+            invocation_steps.append(
+                {
+                    "step": step,
+                    "event": "invocation",
+                    "route_before": route_before,
+                    "route_after": _runtime_policy_route(policy),
+                    "status": "error",
+                    "error_type": type(exc).__name__,
+                    "command": None,
+                }
+            )
+            raise
+        invocation_steps.append(
+            {
+                "step": step,
+                "event": "invocation",
+                "route_before": route_before,
+                "route_after": _runtime_policy_route(policy),
+                "status": "returned",
+                "command": _runtime_command_payload(command),
+            }
+        )
+        return command
+
+    if hasattr(policy, "__dict__"):
+        observed_policy.__dict__.update(policy.__dict__)
+    return observed_policy, metadata
+
+
 def _execution_runtime_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     """Select execution-bearing fields for canonical fallback scanning."""
     runtime_fields = {
@@ -309,6 +439,115 @@ def _baseline_route_reasons(metadata: dict[str, Any], expected_algorithm: str | 
     return reasons
 
 
+def _planner_invocation_reasons(
+    metadata: dict[str, Any], row: dict[str, Any] | None, expected_algorithm: str | None
+) -> list[str]:
+    """Require per-step route and command evidence from the constructed policy."""
+    trace = metadata.get("planner_invocation_trace")
+    reasons: list[str] = []
+    if (
+        not isinstance(trace, dict)
+        or trace.get("schema_version") != _PLANNER_INVOCATION_TRACE_SCHEMA
+        or trace.get("source") != "constructed_policy_callable"
+    ):
+        return ["missing_or_invalid_planner_invocation_trace"]
+    steps = trace.get("steps")
+    expected_route = {
+        "goal": {
+            "execution_mode": "native",
+            "adapter_active": False,
+            "adapter_name": "none",
+            "policy_callable": _GOAL_POLICY_CALLABLE_IDENTITY,
+            "planner_adapter": {
+                "present": False,
+                "module": None,
+                "class": None,
+            },
+        },
+        "social_force": {
+            "execution_mode": "adapter",
+            "adapter_active": True,
+            "adapter_name": "SocialForcePlannerAdapter",
+            "policy_callable": _SOCIAL_FORCE_POLICY_CALLABLE_IDENTITY,
+            "planner_adapter": {
+                "present": True,
+                **_SOCIAL_FORCE_ADAPTER_IDENTITY,
+            },
+        },
+    }.get(expected_algorithm)
+    if (
+        row is None
+        or not isinstance(row.get("steps"), int)
+        or isinstance(row["steps"], bool)
+        or row["steps"] < 1
+        or not isinstance(steps, list)
+        or len(steps) != row["steps"]
+        or expected_route is None
+    ):
+        return ["missing_or_invalid_planner_invocation_trace"]
+    simulation_trace = metadata.get("simulation_step_trace")
+    simulation_steps = simulation_trace.get("steps") if isinstance(simulation_trace, dict) else None
+
+    def _route_matches(route: Any) -> bool:
+        return isinstance(route, dict) and all(
+            route.get(key) == value for key, value in expected_route.items()
+        )
+
+    for index, item in enumerate(steps):
+        if not isinstance(item, dict) or item.get("step") != index:
+            reasons.append("invalid_planner_invocation_step_binding")
+            break
+        if (
+            item.get("event") != "invocation"
+            or item.get("status") != "returned"
+            or not _route_matches(item.get("route_before"))
+            or not _route_matches(item.get("route_after"))
+        ):
+            reasons.append("planner_invocation_route_mismatch")
+            break
+        if not isinstance(simulation_steps, list) or index >= len(simulation_steps):
+            reasons.append("planner_invocation_action_binding_missing")
+            break
+        simulation_step = simulation_steps[index]
+        selected = simulation_step.get("planner", {}).get("selected_action")
+        command = item.get("command")
+        if (
+            not isinstance(selected, dict)
+            or not isinstance(command, dict)
+            or any(
+                not isinstance(command.get(field), (int, float))
+                or isinstance(command.get(field), bool)
+                or not math.isfinite(float(command[field]))
+                for field in ("linear_velocity", "angular_velocity")
+            )
+            or any(
+                not isinstance(selected.get(field), (int, float))
+                or isinstance(selected.get(field), bool)
+                or not math.isfinite(float(selected[field]))
+                for field in ("linear_velocity", "angular_velocity")
+            )
+            or any(
+                not math.isclose(
+                    float(command[field]), float(selected[field]), rel_tol=0.0, abs_tol=1.0e-9
+                )
+                for field in ("linear_velocity", "angular_velocity")
+            )
+        ):
+            reasons.append("planner_invocation_action_binding_mismatch")
+            break
+    return sorted(set(reasons))
+
+
+def _observed_execution_mode(
+    metadata: dict[str, Any], row: dict[str, Any] | None, expected_algorithm: str | None
+) -> str | None:
+    """Return the route observed on every invocation, or ``None`` when unavailable."""
+    if _planner_invocation_reasons(metadata, row, expected_algorithm):
+        return None
+    trace = metadata["planner_invocation_trace"]
+    return trace["steps"][0]["route_after"]["execution_mode"] if trace["steps"] else None
+
+
 def _baseline_execution_reasons(
     metadata: dict[str, Any], row: dict[str, Any] | None, expected_algorithm: str | None
 ) -> list[str]:
@@ -318,10 +557,14 @@ def _baseline_execution_reasons(
         "social_force": ("adapter", True, "SocialForcePlannerAdapter"),
     }.get(expected_algorithm)
     reasons = _baseline_route_reasons(metadata, expected_algorithm)
+    reasons.extend(_planner_invocation_reasons(metadata, row, expected_algorithm))
+    observed_mode = _observed_execution_mode(metadata, row, expected_algorithm)
     if row is None or not isinstance(row.get("execution_mode"), str):
         reasons.append("missing_execution_mode")
     elif expected is None or row["execution_mode"] != expected[0]:
         reasons.append(f"unexpected_execution_mode:{row.get('execution_mode')!r}")
+    elif observed_mode is None or row["execution_mode"] != observed_mode:
+        reasons.append("execution_mode_not_bound_to_runtime_invocation")
     if row is None or not isinstance(row.get("readiness_status"), str):
         reasons.append("missing_readiness_status")
     elif row["readiness_status"] != "native":
@@ -382,19 +625,22 @@ def _trace_exclusion_reasons(
 
 
 def _record_baseline_execution_axes(row: dict[str, Any], expected_algorithm: str) -> None:
-    """Copy observed command mode and derive readiness from the episode's recorded evidence."""
+    """Record runtime route evidence and derive readiness from the episode evidence."""
     metadata = row.get("algorithm_metadata")
     if not isinstance(metadata, dict):
+        row.pop("execution_mode", None)
         row["readiness_status"] = "unknown"
         return
 
-    execution_mode = _command_execution_mode(metadata)
+    declared_execution_mode = _command_execution_mode(metadata)
+    execution_mode = _observed_execution_mode(metadata, row, expected_algorithm)
     if execution_mode is not None:
         row["execution_mode"] = execution_mode
     else:
         row.pop("execution_mode", None)
 
     route_reasons = _baseline_route_reasons(metadata, expected_algorithm)
+    invocation_reasons = _planner_invocation_reasons(metadata, row, expected_algorithm)
     trace = metadata.get("simulation_step_trace")
     planner_trace = metadata.get("planner_decision_trace")
     action_trace_valid = _valid_action_trace(trace, row)
@@ -414,7 +660,7 @@ def _record_baseline_execution_axes(row: dict[str, Any], expected_algorithm: str
         algorithm_metadata=metadata,
     )
 
-    readiness_blockers = list(route_reasons)
+    readiness_blockers = list(route_reasons) + invocation_reasons
     if metadata.get("status") != "ok":
         readiness_blockers.append("planner_status_not_ok")
     if not action_trace_valid:
@@ -435,6 +681,7 @@ def _record_baseline_execution_axes(row: dict[str, Any], expected_algorithm: str
         "schema_version": "issue_9348_baseline_readiness.v1",
         "status": readiness_status,
         "expected_algorithm": expected_algorithm,
+        "declared_execution_mode": declared_execution_mode,
         "observed_execution_mode": execution_mode,
         "planner_status": metadata.get("status"),
         "action_trace_status": "complete" if action_trace_valid else "invalid_or_missing",
@@ -454,7 +701,7 @@ def _record_baseline_execution_axes(row: dict[str, Any], expected_algorithm: str
         ),
         "spawn_validity_status": "available" if spawn_valid else "invalid_or_missing",
         "runtime_marker": list(runtime_marker) if runtime_marker is not None else None,
-        "blockers": readiness_blockers,
+        "blockers": sorted(set(readiness_blockers)),
     }
 
 
@@ -520,7 +767,7 @@ def _row_inventory_item(
         "steps": row.get("steps"),
         "evidence_status": "native" if not reasons else "excluded",
         "exclusion_reasons": reasons,
-        "command_execution_mode": _command_execution_mode(metadata),
+        "command_execution_mode": _observed_execution_mode(metadata, row, planner),
         "ancillary_telemetry_gaps": _ancillary_telemetry_gaps(metadata),
         "trace_path": f"episodes.jsonl:line:{cell['line_number']}:algorithm_metadata.simulation_step_trace.steps",
         "trace_steps": len(trace.get("steps", [])) if isinstance(trace, dict) else 0,
@@ -690,7 +937,7 @@ def assess_confirmation_rows(
                 "gap_width_m": width,
                 "status": "eligible" if not reasons else "diagnostic",
                 "blockers": sorted(set(reasons)),
-                "command_execution_mode": _command_execution_mode(metadata)
+                "command_execution_mode": _observed_execution_mode(metadata, row, planner)
                 if isinstance(metadata, dict)
                 else None,
                 "ancillary_telemetry_gaps": _ancillary_telemetry_gaps(
@@ -773,6 +1020,7 @@ def _run_actor_present_confirmation(
                         record_planner_decision_trace=True,
                         record_simulation_step_trace=True,
                         pair_reset_hook=receipt_hook,
+                        policy_builder=_observed_baseline_policy_builder,
                     )
                     _record_baseline_execution_axes(row, planner)
                     serialized = io.StringIO()
@@ -1195,6 +1443,7 @@ def run_campaign(manifest_path: Path, output_root: Path) -> Path:
                             record_planner_decision_trace=True,
                             record_simulation_step_trace=True,
                             pair_reset_hook=receipt_hook,
+                            policy_builder=_observed_baseline_policy_builder,
                         )
                         _record_baseline_execution_axes(row, planner)
                         serialized = io.StringIO()

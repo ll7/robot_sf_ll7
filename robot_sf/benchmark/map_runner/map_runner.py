@@ -955,7 +955,7 @@ def _build_socnav_config(cfg: dict[str, Any]) -> SocNavPlannerConfig:
     """
     if not isinstance(cfg, dict):
         return SocNavPlannerConfig()
-    allowed = {f.name for f in fields(SocNavPlannerConfig)}
+    allowed = {f.name for f in fields(SocNavPlannerConfig)} | {"social_force_kernel_version"}
     filtered = {key: value for key, value in cfg.items() if key in allowed}
     return SocNavPlannerConfig(**filtered)
 

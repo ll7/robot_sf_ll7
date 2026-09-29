@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_9860_pr9884_preflight_2026-09-29/goal_clearance_runtime.patch.gz",
+  "artifact_sha256": "b578efe33e5f30f56241362afc5bb45b0aed05c398af83421ca51fbedffb04cc",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+}

@@ -18,7 +18,7 @@ latest_main_base_commit: "{{latest_main_base_commit}}"
 planning_base_sha: "{{latest_main_base_commit}}"
 
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
-campaign_config_sha256: "7dc9a2dd9df8585593c9bc8ecc001bed0d2ddff4ebb3803dfb92e8dad8762881"
+campaign_config_sha256: "3b5302c2546b5c9c03dbfb5c752b9b78ea062c4af7e957450de9b8595d44bec6"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: baseline-ready-core
 
@@ -108,10 +108,10 @@ planners:
     - ppo
     - socnav_sampling
     - sacadrl
-    - scenario_adaptive_hybrid_orca_v2_bottleneck_yield
-    - scenario_adaptive_hybrid_orca_v2_collision_guard
-    - hybrid_rule_v3_fast_progress_static_escape
-    - hybrid_rule_v3_fast_progress_static_escape_continuous
+    - scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4
+    - scenario_adaptive_hybrid_orca_v2_collision_guard_v4
+    - hybrid_rule_v4_fast_progress_static_escape
+    - hybrid_rule_v4_fast_progress_static_escape_continuous
     - guarded_ppo
     - predictive_mppi
     - risk_dwa
@@ -123,10 +123,10 @@ planners:
     ppo: experimental
     socnav_sampling: experimental
     sacadrl: experimental
-    scenario_adaptive_hybrid_orca_v2_bottleneck_yield: experimental
-    scenario_adaptive_hybrid_orca_v2_collision_guard: experimental
-    hybrid_rule_v3_fast_progress_static_escape: experimental
-    hybrid_rule_v3_fast_progress_static_escape_continuous: experimental
+    scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4: experimental
+    scenario_adaptive_hybrid_orca_v2_collision_guard_v4: experimental
+    hybrid_rule_v4_fast_progress_static_escape: experimental
+    hybrid_rule_v4_fast_progress_static_escape_continuous: experimental
     guarded_ppo: experimental
     predictive_mppi: experimental
     risk_dwa: experimental

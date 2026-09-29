@@ -55,18 +55,23 @@ pedestrian-force term. The candidate matrix selects `wrapped_v2` but does not se
 this recheck does not change that release input or claim that the kernel wrap fixes the separate
 pedestrian-force defect.
 
-## Reproduced paired diagnostic — 2026-09-28
+## Paired diagnostic — 2026-09-28 (final run, source `d2b6ac4e`)
 
 Earlier paired runs on seeds 111–113 used the reserved #9668 evaluation range. Their outputs remain
 quarantined and uncited in the private host bundle `issue9764-social-force-kernel-paired-diagnostic-450ca42b`,
-which carries a `QUARANTINED.md` marker. No values from that run are used below. The previous safe
-103–105 bundle was not retrievable from this checkout, so this is a fresh replacement run rather
-than a reanalysis of that unavailable bundle. Both selector arms ran on
-source commit `ca1b5f1d33ebfa3d466f384f2636bb001dccf23f` (tree
-`437db28eb434038bac9aa8c9e3341e5c97dc343b`) with the paired scenario and planner configs, seeds
+which carries a `QUARANTINED.md` marker. No values from that run are used below.
+
+This is the final paired diagnostic, and the same source and bundle are cited by merged PR #9878.
+Both selector arms ran on source commit `d2b6ac4e41c33290dfed477f1a1cb716009f07d2` (tree
+`4bea8cfe50034a9d2cf2d81451b57382892f8283`, base `origin/main` at
+`f608c52dda90778e8776a33f8ab2027036cea3c2`) with the paired scenario and planner configs, seeds
 103–105, 600-step horizon, 0.1 s step, one worker, recorded forces, and recorded simulation-step
 traces. All 12 episode jobs completed without runner failures. The raw records verified the intended
 kernel selector in both simulator and planner metadata, and all six pairs used the same map identity.
+
+An intermediate replacement run from source `ca1b5f1d33ebfa3d466f384f2636bb001dccf23f` (tree
+`437db28eb434038bac9aa8c9e3341e5c97dc343b`) reported the same measured result for the same six
+pairs. It is superseded by the run above, and its bundle is not cited here.
 
 The analyzer compares robot-attributable pedestrian-force vectors by the simulator's pedestrian
 row index. A changed interaction is one paired vector whose L2 difference exceeds `1e-9 m/s²`.
@@ -75,11 +80,11 @@ to named pedestrians. Trajectory differences use aligned trace step/time and ped
 For pairs with different episode lengths, force and trajectory comparisons use the common prefix.
 
 Across the six pairs, 555 of 4,898 compared robot-attributable force samples changed above the
-threshold; 565 legacy samples and 560 wrapped samples were nonzero. The largest force-vector
-difference was `0.580119708 m/s²`. Maximum same-index trajectory differences were `0.103352465 m`
-for the robot and `0.675855495 m` for a pedestrian. Terminal outcomes matched in all six pairs: five
-successes and one collision. The `classic_head_on_corridor_medium` seed 104 pair had 310 legacy
-versus 309 wrapped trace/force samples; both ended in success and 309 common samples were compared.
+threshold. The largest force-vector difference was `0.580119708 m/s²`. Maximum same-index trajectory
+differences were `0.103352465 m` for the robot and `0.675855495 m` for a pedestrian. Terminal outcomes
+matched in all six pairs: five successes and one collision. The `classic_head_on_corridor_medium`
+seed 104 pair had 310 legacy versus 309 wrapped steps; both ended in success and the common 309-step
+prefix was compared.
 
 | Scenario | Seed | Legacy outcome | Wrapped outcome | Changed force samples / compared | Robot max Δ (m) | Pedestrian max Δ (m) |
 |---|---:|---|---|---:|---:|---:|
@@ -90,12 +95,14 @@ versus 309 wrapped trace/force samples; both ended in success and 309 common sam
 | `classic_head_on_corridor_medium` | 104 | success | success | 131 / 1,236 | 0.103352465 | 0.675855495 |
 | `classic_head_on_corridor_medium` | 105 | success | success | 128 / 1,196 | 0.000019849 | 0.000043048 |
 
-The checksummed private bundle is under
-`.git/codex-agent-runs/issue-9764-social-force-final/paired-diagnostic-current-ca1b5f1/`.
-`SHA256SUMS` verified. The legacy and wrapped raw episode files have SHA-256
-`8cfe0536863d6e23487ea6bcd10d64eac604ab0a03a188858e61fef0977cc760` and
-`774029187e6a46ce7d0c64d2d02f708dff84c9194a0b3cca2dd4dec48bf73a3e`; the comparison report has
-SHA-256 `761f6c4d0b4f587497789fc17a9611af7dca47e0b0737d9d6c08d8019e62881f`, the run manifest has
-`b161db170ce5c0596527ba550118338628126a8691281dada551b6a71d963990`, and the `SHA256SUMS` file
-has `c772ea4c8823f5068f8d12c161fba35f3410909170ee547e36c1f7d47a5d8242`. This diagnostic makes
-no release-row equivalence or paper-facing claim.
+The checksummed bundle is host-local and retained at
+`.git/codex-agent-runs/issue-9764-social-force-final/paired-diagnostic-final-d2b6ac4e/`. PR #9878
+records that all 15 listed artifacts verified against `SHA256SUMS` at that source head. The legacy
+and wrapped raw episode files have SHA-256
+`4f425b031f6126b66c08d2ce6becacb428340232dc0adf297cbf287c4857720b` and
+`d4f12e5f074d55083aa476eca088afa4d371ba81c073110552bb4083ec9ce15f`; the comparison report has
+SHA-256 `f8fe389828e103f6e3e732b43cae0d224ee226ab5ec2f69dd08fc63631da12a2`, the run manifest has
+`949db1eded2a758d3578b8bd0069cf14d19df6428a03d4c6e185f0ec03e5830e`, and the `SHA256SUMS` file has
+`3f385cac7f6cf11647e34947f27685c47ee9b5cf65051661c418b679d4fd2411`. The bundle is evidence custody
+for a host-local diagnostic, not a published release bundle, and it makes no release-row equivalence
+or paper-facing claim.

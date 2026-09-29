@@ -6,8 +6,13 @@ a version from running a different version, and freezes v4 parameters only after
 #9748. These tests pin that contract on the tracked templates.
 """
 
+# evidence-writer-exempt: this test writes only a pytest tmp_path YAML fixture to
+# check version naming; it does not create or alter repository evidence artifacts.
+
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,7 +21,6 @@ from typing import Any
 import pytest
 import yaml
 
-from robot_sf.benchmark.camera_ready._preflight import prepare_campaign_preflight
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
     _parse_algo_config,
@@ -238,34 +242,91 @@ def test_version_naming_ignores_v2_filename_when_runtime_is_v3(tmp_path: Path) -
     assert version_naming_violations([row]) == ["example_v2: names v2 but runs ['example_v3']"]
 
 
-def test_v4_slots_bind_placeholders_for_real_v4_twins() -> None:
-    """Each v4 slot binds an unfrozen placeholder whose candidate is a genuine v4 twin."""
+def test_v4_slots_bind_reviewed_frozen_configs_for_real_v4_twins() -> None:
+    """The four release slots use explicit freezes derived from the v4 candidates."""
     rows = {row["key"]: row for row in _campaign_planners(CAMPAIGN_TEMPLATE)}
+    log_path = REPO_ROOT / "docs/context/evidence/issue_9748_v4_tuning_log_v1.json"
+    log = json.loads(log_path.read_text(encoding="utf-8"))
+    log_hash = hashlib.sha256(log_path.read_bytes()).hexdigest()
+    selected = {
+        "hybrid_rule_v4_fast_progress_static_escape": "goal_progress_weight_4p5",
+        "hybrid_rule_v4_fast_progress_static_escape_continuous": "baseline",
+    }
     for slot in ARM_SLOTS_0_0_7_TO_0_0_8:
         if slot.comparison != COMPARISON_IMPLEMENTATION_REPLACED:
             continue
         row = rows[slot.key_0_0_8]
-        placeholder = _load_yaml(row["algo_config"])
-        freeze = placeholder[RELEASE_PARAMETER_FREEZE_KEY]
-        assert freeze["status"] == "unfrozen"
-        assert freeze["required_gate"] == "ll7/robot_sf_ll7#9748"
-        assert freeze["replaces_0_0_7_slot"] == slot.key_0_0_7
+        frozen = _load_yaml(row["algo_config"])
+        freeze = frozen[RELEASE_PARAMETER_FREEZE_KEY]
+        assert freeze["status"] == "frozen"
         assert freeze["implementation_family"] == "hybrid_rule_v4_clearance_braking"
-        assert placeholder["algo"] == row["algo"] == HYBRID_ALGO
-        # A placeholder carries no runnable planner parameters.
-        assert not {"base_config_path", "params", "scenario_overrides"} & set(placeholder)
-
-        candidate = _load_yaml(freeze["unfrozen_candidate"])
+        assert freeze["source_tuning_log_path"] == log_path.relative_to(REPO_ROOT).as_posix()
+        assert freeze["source_tuning_log_sha256"] == log_hash
+        assert freeze["freeze_decision_url"] == (
+            "https://github.com/ll7/robot_sf_ll7/issues/9748#issuecomment-5884539753"
+        )
+        assert frozen["algo"] == row["algo"] == HYBRID_ALGO
+        assert release_parameter_freeze_blocker(frozen, label=row["key"]) is None
+        candidate = _load_yaml(
+            f"configs/policy_search/candidates/{slot.key_0_0_8}_s30_h600_release.yaml"
+        )
         assert (
             candidate["base_config_path"] == "configs/algos/hybrid_rule_v4_clearance_braking.yaml"
         )
+        expected_candidate = dict(candidate)
+        expected_candidate["name"] = frozen["name"]
+        if row["key"] in selected:
+            trial_id = selected[row["key"]]
+            assert freeze["trial_id"] == trial_id
+            entries = [
+                entry
+                for entry in log["entries"]
+                if entry["candidate"] == candidate["name"] and entry["trial_id"] == trial_id
+            ]
+            assert len(entries) == 4
+            assert {entry["effective_config_sha256"] for entry in entries} == {
+                freeze["effective_config_sha256"]
+            }
+            expected_candidate["params"] = {
+                **candidate["params"],
+                **entries[0]["parameter_overrides"],
+            }
+        else:
+            assert freeze["trial_id"] == "untuned_v4_base"
+            assert freeze["tuning_status"] == "untuned"
+            assert freeze["tuning_scope"] == "outside_pre_registered_9748_search"
+        assert {
+            key: value for key, value in frozen.items() if key != RELEASE_PARAMETER_FREEZE_KEY
+        } == (expected_candidate)
         _algo, runtime = resolve_candidate_manifest_runtime(
             default_algo=HYBRID_ALGO,
-            manifest=candidate,
+            manifest=frozen,
             scenario={"name": "__default__"},
             load_config=_load_base_config,
         )
         assert runtime["planner_variant"] == freeze["implementation_family"]
+        assert (
+            hashlib.sha256(
+                json.dumps(runtime, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+            ).hexdigest()
+            == freeze["effective_config_sha256"]
+        )
+        if row["key"] in selected:
+            for entry in entries:
+                _, resolved = resolve_candidate_manifest_runtime(
+                    default_algo=HYBRID_ALGO,
+                    manifest=frozen,
+                    scenario={"name": entry["scenario_id"]},
+                    load_config=_load_base_config,
+                )
+                assert (
+                    hashlib.sha256(
+                        json.dumps(
+                            resolved, sort_keys=True, separators=(",", ":"), allow_nan=False
+                        ).encode()
+                    ).hexdigest()
+                    == entry["effective_config_sha256"]
+                )
         # The twin keeps the replaced arm's scenario-override set (same scenarios).
         predecessor = _load_yaml(
             f"configs/policy_search/candidates/{slot.key_0_0_7}_s30_h600_release.yaml"
@@ -298,20 +359,15 @@ def test_placeholders_fail_closed_in_map_runner_parser_and_resolver() -> None:
             )
 
 
-def test_campaign_preflight_refuses_template_before_creating_output(tmp_path: Path) -> None:
-    """The template still loads, but preflight refuses it before any output directory exists."""
+def test_campaign_template_has_no_unfrozen_planner_blockers() -> None:
+    """The selected frozen v4 configs pass the release parameter gate."""
     cfg = load_campaign_config(CAMPAIGN_TEMPLATE)
     assert len(cfg.planners) == 14
-    blockers = unfrozen_planner_config_blockers(cfg.planners)
-    assert len(blockers) == 4
-    output_root = tmp_path / "campaigns"
-    with pytest.raises(UnfrozenReleaseParametersError, match="campaign preflight refused"):
-        prepare_campaign_preflight(cfg, output_root=output_root, label="issue-9751-guard")
-    assert not output_root.exists()
+    assert unfrozen_planner_config_blockers(cfg.planners) == []
 
 
-def test_release_roster_admission_blocks_exactly_the_four_unfrozen_slots() -> None:
-    """Release planner-roster admission reports the four unfrozen v4 slots and nothing else."""
+def test_release_roster_admission_accepts_the_four_frozen_slots() -> None:
+    """Release planner-roster admission accepts the reviewed v4 freezes."""
     cfg = load_campaign_config(CAMPAIGN_TEMPLATE)
     release = _load_yaml(RELEASE_TEMPLATE)
     manifest = SimpleNamespace(
@@ -320,18 +376,8 @@ def test_release_roster_admission_blocks_exactly_the_four_unfrozen_slots() -> No
         expected_kinematics_matrix=tuple(release["kinematics"]["matrix"]),
     )
     admission = validate_release_planner_roster(manifest, cfg)
-    assert admission["status"] == "invalid"
-    replaced = [
-        slot.key_0_0_8
-        for slot in ARM_SLOTS_0_0_7_TO_0_0_8
-        if slot.comparison == COMPARISON_IMPLEMENTATION_REPLACED
-    ]
-    assert len(admission["blockers"]) == len(replaced) == 4
-    for key in replaced:
-        assert any(
-            b.startswith(f"planner {key}: release parameters are not frozen")
-            for b in admission["blockers"]
-        )
+    assert admission["status"] == "valid"
+    assert admission["blockers"] == []
 
 
 @pytest.mark.parametrize(

@@ -61,7 +61,7 @@ PINNED_V04_MANIFEST_SHA256 = "aded0ca71e40bdc8f7193282bb8d28420a9b627f93d47a4303
 PINNED_V03_CONFIG_SHA256 = "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4"
 PINNED_V03_MANIFEST_SHA256 = "d6f3047adaacfb8cad2cc12430ee5ce7331f11b0777ac522209fd1e5af019241"
 HISTORICAL_V04_TEMPLATE_SHA256 = "f453b7c824fdd47298cbc66dae3afc1fffcd7eedf57ee4bb87cd1c67b4feb1d7"
-CAMPAIGN_TEMPLATE_SHA256 = "3b5302c2546b5c9c03dbfb5c752b9b78ea062c4af7e957450de9b8595d44bec6"
+CAMPAIGN_TEMPLATE_SHA256 = "2e37aa31cb6714b156f961bada10523e04e6b79fd4f38c51ccb5b50672a9dae1"
 
 EXPECTED_PLANNER_KEYS = [
     "prediction_planner",
@@ -488,7 +488,7 @@ def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
 def _assert_versioned_kernel_and_v4_freeze(
     profiles: list[dict[str, Any]], scenario_sets: list[dict[str, dict[str, Any]]]
 ) -> None:
-    """Every candidate profile selects wrapped_v2 and the same blocked v4 slots."""
+    """Every candidate profile selects wrapped_v2 and the same frozen v4 slots."""
     for payload, profile_scenarios in zip(profiles, scenario_sets, strict=True):
         assert [row["key"] for row in payload["planners"]] == EXPECTED_0_0_8_PLANNER_KEYS
         social_force = next(row for row in payload["planners"] if row["key"] == "social_force")
@@ -509,12 +509,12 @@ def _assert_versioned_kernel_and_v4_freeze(
                     _algo_config(REPO_ROOT, row["algo_config"])["release_parameter_freeze"][
                         "status"
                     ]
-                    == "unfrozen"
+                    == "frozen"
                 )
 
 
-def test_calibration_smoke_and_template_match_inputs_and_blocked_v4_slots() -> None:
-    """Runnable inputs match and all four v4 slots refuse resolution (#9850)."""
+def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> None:
+    """Runnable inputs and all four frozen v4 slots resolve identically (#9850)."""
     assert _sha256(CAMPAIGN_TEMPLATE_PATH) == CAMPAIGN_TEMPLATE_SHA256
     paths = (CALIBRATION_CONFIG_PATH, RUNTIME_SMOKE_V05_CONFIG_PATH, CAMPAIGN_TEMPLATE_PATH)
     raw = [_load_yaml(path) for path in paths]
@@ -603,7 +603,7 @@ def test_calibration_smoke_and_template_match_inputs_and_blocked_v4_slots() -> N
 
 
 def test_runtime_smoke_v0_4_manifest_is_source_bound_and_refused_until_v4_freeze() -> None:
-    """The v0_4 manifest binds its smoke config and template; unfrozen v4 slots block it."""
+    """The historical v0_4 manifest remains bound to its blocked placeholder inputs."""
     template = _load_yaml(CAMPAIGN_TEMPLATE_PATH)
     manifest_payload = _load_yaml(RUNTIME_SMOKE_V04_MANIFEST_PATH)
     manifest = load_release_manifest(RUNTIME_SMOKE_V04_MANIFEST_PATH)
@@ -699,11 +699,5 @@ def test_runtime_smoke_v0_5_advances_wrapped_kernel_and_preserves_v0_4() -> None
     assert validation["manifest_path"] == (
         "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml"
     )
-    assert validation["status"] == "invalid"
-    assert validation["problem_count"] == len(REPLACED_V4_KEYS) == 4
-    for key in REPLACED_V4_KEYS:
-        assert any(
-            problem.startswith(f"planner {key}: release parameters are not frozen")
-            and "ll7/robot_sf_ll7#9748" in problem
-            for problem in validation["problems"]
-        ), key
+    assert validation["status"] == "valid"
+    assert validation["problem_count"] == 0

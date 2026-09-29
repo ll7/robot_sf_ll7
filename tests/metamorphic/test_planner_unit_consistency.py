@@ -23,6 +23,7 @@ from typing import Any
 import pytest
 import yaml
 
+from robot_sf.benchmark.release_parameter_freeze import ARM_SLOTS_0_0_7_TO_0_0_8
 from robot_sf.planner.dwa import DWAPlannerConfig
 from robot_sf.planner.hybrid_rule_local_planner import HybridRuleLocalPlannerConfig
 from robot_sf.planner.risk_dwa import RiskDWAPlannerConfig
@@ -31,6 +32,8 @@ from robot_sf.robot.actuation_envelope import stopping_distance
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.sim.sim_config import SimulationSettings
 from tests.metamorphic.planner_arms import (
+    RELEASE_MANIFEST,
+    RELEASE_TEMPLATE_CAMPAIGN,
     ROOT,
     release_campaign_planners,
     resolve_release_algo_config,
@@ -547,13 +550,49 @@ def _violations_for(issue: str) -> list[str]:
 
 
 def test_release_campaign_planner_configs_are_audited() -> None:
-    """The audit reads the release roster, including its base configs and overrides."""
+    """Audit both contracted rosters, including frozen v4 bases and overrides."""
+    release_template = _load_yaml(
+        "configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml"
+    )
+    arm_count = release_template["matrix"]["planner_arms"]
+    matrix = release_template["matrix"]
+    assert matrix["expected_episode_cells"] == arm_count * matrix["scenarios"] * matrix["seeds"]
+    historical_manifest = _load_yaml(RELEASE_MANIFEST.relative_to(ROOT))
+    historical_campaign = (
+        RELEASE_MANIFEST.parent / historical_manifest["canonical_campaign_config"]
+    ).resolve()
+    rosters = [
+        _load_yaml(campaign.relative_to(ROOT))["planners"]
+        for campaign in (historical_campaign, RELEASE_TEMPLATE_CAMPAIGN)
+    ]
+    for roster in rosters:
+        assert len(roster) == len({entry["key"] for entry in roster}) == arm_count
+
     entries = release_campaign_planners()
-    assert len({entry["key"] for entry in entries}) == 14, "release roster lost or gained arms"
-    audited_sources = {source for source, _values in _all_values()}
+    assert {entry["key"] for entry in entries} == {
+        entry["key"] for roster in rosters for entry in roster
+    }
+    audited_values: dict[str, list[dict[str, Any]]] = {}
+    for source, values in _all_values():
+        audited_values.setdefault(source, []).append(values)
     for entry in entries:
         if entry.get("algo_config"):
-            assert entry["algo_config"] in audited_sources, entry
+            assert entry["algo_config"] in audited_values, entry
+    for slot in ARM_SLOTS_0_0_7_TO_0_0_8:
+        if slot.key_0_0_7 == slot.key_0_0_8:
+            continue
+        entry = next(entry for entry in rosters[1] if entry["key"] == slot.key_0_0_8)
+        path = entry["algo_config"]
+        manifest = _load_yaml(path)
+        base_fields = dict(_number_leaves(_load_yaml(manifest["base_config_path"])))
+        scenarios = {"__default__"}
+        for block in ("scenario_overrides", "scenario_algo_overrides"):
+            scenarios.update(manifest.get(block) or {})
+        for scenario in scenarios:
+            _algo, resolved = resolve_release_algo_config(entry["algo"], path, scenario)
+            if scenario == "__default__":
+                assert base_fields.keys() <= resolved.keys(), path
+            assert dict(_number_leaves(resolved)) in audited_values[path], (path, scenario)
     # base_config_path inheritance must reach the audited values: the hybrid base
     # file sets stop_distance_human, which no release candidate overrides.
     _algo, resolved = resolve_release_algo_config(

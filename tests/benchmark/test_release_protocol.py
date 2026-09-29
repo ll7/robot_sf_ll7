@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -48,8 +49,8 @@ def test_smoke_release_manifest_validates_against_campaign_config() -> None:
     assert not any(key.startswith("snqi_v2_") for key in resolved["metrics"])
 
 
-def test_v008_campaign_defers_publication_and_pins_frozen_social_force() -> None:
-    """The dedicated identity keeps frozen Social Force v1 after the live template moved."""
+def test_v008_campaign_matches_corrected_live_science_and_defers_publication() -> None:
+    """The dedicated campaign carries current fixes and adds only candidate controls."""
     root = Path("configs/benchmarks")
     predecessor = yaml.safe_load(
         (root / "paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml").read_text(
@@ -64,18 +65,73 @@ def test_v008_campaign_defers_publication_and_pins_frozen_social_force() -> None
     assert predecessor.pop("export_publication_bundle") is True
     assert candidate.pop("export_publication_bundle") is False
     assert set(candidate.pop("snqi_v2_spec")) == {"weights_path", "anchors_path", "family_path"}
-    generic_social_force = next(
-        planner for planner in predecessor["planners"] if planner["key"] == "social_force"
-    )
-    frozen_social_force = next(
+    social_force = next(
         planner for planner in candidate["planners"] if planner["key"] == "social_force"
     )
-    assert generic_social_force["algo_config"] == (
+    socnav_sampling = next(
+        planner for planner in candidate["planners"] if planner["key"] == "socnav_sampling"
+    )
+    assert social_force["algo_config"] == (
         "configs/algos/social_force_resolution_independent_v2.yaml"
     )
-    assert frozen_social_force["algo_config"] == "configs/algos/social_force_terminal_goal_v1.yaml"
-    generic_social_force["algo_config"] = frozen_social_force["algo_config"]
+    assert socnav_sampling["algo_config"] == "configs/algos/socnav_sampling_bounded_v2.yaml"
+    hybrid_configs = {
+        planner["key"]: planner["algo_config"]
+        for planner in candidate["planners"]
+        if planner["algo"] == "hybrid_rule_local_planner"
+    }
+    assert hybrid_configs == {
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": (
+            "configs/policy_search/release_0_0_8_placeholders/"
+            "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4.unfrozen.yaml"
+        ),
+        "scenario_adaptive_hybrid_orca_v2_collision_guard_v4": (
+            "configs/policy_search/release_0_0_8_placeholders/"
+            "scenario_adaptive_hybrid_orca_v2_collision_guard_v4.unfrozen.yaml"
+        ),
+        "hybrid_rule_v4_fast_progress_static_escape": (
+            "configs/policy_search/release_0_0_8_placeholders/"
+            "hybrid_rule_v4_fast_progress_static_escape.unfrozen.yaml"
+        ),
+        "hybrid_rule_v4_fast_progress_static_escape_continuous": (
+            "configs/policy_search/release_0_0_8_placeholders/"
+            "hybrid_rule_v4_fast_progress_static_escape_continuous.unfrozen.yaml"
+        ),
+    }
+    assert len(candidate["planners"]) == 14
     assert candidate == predecessor
+
+
+def test_v008_release_manifest_binds_candidate_and_snqi_v2_assets() -> None:
+    """The future release identity names the same source config/assets as the campaign."""
+    release_path = Path("configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml")
+    release_template = yaml.safe_load(release_path.read_text(encoding="utf-8"))
+    candidate_path = Path(
+        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_template.yaml"
+    )
+    candidate_payload = yaml.safe_load(candidate_path.read_text(encoding="utf-8"))
+    assert isinstance(candidate_payload, dict)
+    snqi_v2_spec = candidate_payload["snqi_v2_spec"]
+    assert isinstance(snqi_v2_spec, dict)
+    with pytest.raises(ValueError, match="calibration anchors are not frozen"):
+        release_protocol.load_campaign_config(candidate_path)
+    assert (
+        release_path.parent / release_template["canonical_campaign_config"]
+    ).resolve() == candidate_path.resolve()
+    assert (
+        release_template["campaign_config_sha256"]
+        == hashlib.sha256(candidate_path.read_bytes()).hexdigest()
+    )
+    for role in ("weights", "anchors", "family"):
+        asset = (Path.cwd() / snqi_v2_spec[f"{role}_path"]).resolve()
+        assert (
+            release_template["metrics"][f"snqi_v2_{role}_path"]
+            == Path(os.path.relpath(asset, release_path.parent.resolve())).as_posix()
+        )
+        assert (
+            release_template["metrics"][f"snqi_v2_{role}_sha256"]
+            == hashlib.sha256(asset.read_bytes()).hexdigest()
+        )
 
 
 def test_snqi_v2_manifest_assets_are_complete_and_hash_bound(tmp_path: Path) -> None:

@@ -87,7 +87,7 @@ planners:
   - key: social_force
     algo: social_force
     planner_group: core
-    algo_config: configs/algos/social_force_terminal_goal_v1.yaml
+    algo_config: configs/algos/social_force_resolution_independent_v2.yaml
     benchmark_profile: baseline-safe
 
   - key: orca
@@ -108,6 +108,8 @@ planners:
   - key: socnav_sampling
     algo: socnav_sampling
     planner_group: experimental
+    # #9854: match the corrected bounded-v2 release arm configuration.
+    algo_config: configs/algos/socnav_sampling_bounded_v2.yaml
     benchmark_profile: experimental
     socnav_missing_prereq_policy: fail-fast
 
@@ -117,32 +119,37 @@ planners:
     benchmark_profile: experimental
     socnav_missing_prereq_policy: fail-fast
 
-  - key: scenario_adaptive_hybrid_orca_v2_bottleneck_yield
+  # #9751 replaces the predecessor slot under a new v4-named comparison key.
+  # This placeholder fails closed until the #9748 dev-split freeze is accepted.
+  - key: scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4
     algo: hybrid_rule_local_planner
     planner_group: experimental
     algo_config: >-
-      configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_s30_h600_release.yaml
+      configs/policy_search/release_0_0_8_placeholders/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4.unfrozen.yaml
     benchmark_profile: experimental
 
-  - key: scenario_adaptive_hybrid_orca_v2_collision_guard
+  # #9751 replaces the predecessor slot under a new v4-named comparison key.
+  - key: scenario_adaptive_hybrid_orca_v2_collision_guard_v4
     algo: hybrid_rule_local_planner
     planner_group: experimental
     algo_config: >-
-      configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml
+      configs/policy_search/release_0_0_8_placeholders/scenario_adaptive_hybrid_orca_v2_collision_guard_v4.unfrozen.yaml
     benchmark_profile: experimental
 
-  - key: hybrid_rule_v3_fast_progress_static_escape
+  # #9751 replaces the predecessor slot under a new v4-named comparison key.
+  - key: hybrid_rule_v4_fast_progress_static_escape
     algo: hybrid_rule_local_planner
     planner_group: experimental
     algo_config: >-
-      configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_s30_h600_release.yaml
+      configs/policy_search/release_0_0_8_placeholders/hybrid_rule_v4_fast_progress_static_escape.unfrozen.yaml
     benchmark_profile: experimental
 
-  - key: hybrid_rule_v3_fast_progress_static_escape_continuous
+  # #9751 replaces the predecessor slot under a new v4-named comparison key.
+  - key: hybrid_rule_v4_fast_progress_static_escape_continuous
     algo: hybrid_rule_local_planner
     planner_group: experimental
     algo_config: >-
-      configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release.yaml
+      configs/policy_search/release_0_0_8_placeholders/hybrid_rule_v4_fast_progress_static_escape_continuous.unfrozen.yaml
     benchmark_profile: experimental
 
   - key: guarded_ppo

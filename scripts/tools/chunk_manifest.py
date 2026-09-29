@@ -170,7 +170,7 @@ def _fiemap_extents(fd: int, size: int) -> list[_FiemapExtent] | None:
     forward progress, or if pagination exceeds the bounded call count without ever
     observing FIEMAP_EXTENT_LAST.
     """
-    if fcntl is None:
+    if not sys.platform.startswith("linux") or fcntl is None:
         return None
     extents: list[_FiemapExtent] = []
     start = 0

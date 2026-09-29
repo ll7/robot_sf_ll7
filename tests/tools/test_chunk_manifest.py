@@ -215,6 +215,11 @@ def test_fiemap_unavailable_mapping_is_rejected(tmp_path: Path, monkeypatch) -> 
     assert cm._has_sparse_hole(path, size) is True
 
 
+def test_fiemap_non_linux_platform_is_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(cm.sys, "platform", "darwin")
+    assert cm._fiemap_extents(-1, 4096) is None
+
+
 def test_fiemap_ambiguous_extent_flags_are_rejected(tmp_path: Path, monkeypatch) -> None:
     path = tmp_path / "ambiguous.bin"
     path.write_bytes(b"x" * 4096)

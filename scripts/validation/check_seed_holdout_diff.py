@@ -4,7 +4,8 @@ This is a diff gate, not an audit of historical releases or archived evidence.
 See issue #9668 for the evaluation split and anchor barrier.
 
 Accepted syntactic limits: quoted seed values on continuation lines of multiline
-JSON lists and seeds passed through environment variables need exact-head review.
+JSON lists, non-literal or aliased seed generation (including dynamic ``range``
+bounds), and seeds passed through environment variables need exact-head review.
 """
 
 from __future__ import annotations
@@ -40,7 +41,7 @@ SCENARIO_SEEDS = re.compile(r"(?i)\bscenario\s*\[\s*['\"]seeds?['\"]\s*\]\s*=")
 EPISODE_SEED_LOOP = re.compile(
     r"\bfor\s+seed\s+in\s+range\s*\([^)]*\)\s*:\s*.*\brun_episode\s*\(\s*seed\b"
 )
-RANGE = re.compile(r"\brange\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)")
+RANGE = re.compile(r"\brange\s*\(\s*(-?\d+)\s*(?:,\s*(-?\d+)\s*(?:,\s*(-?\d+)\s*)?)?\)")
 YAML_RANGE_BOUND = re.compile(r"^\s*(?:-\s*)?(?:min|max|low|high)\s*:", re.I)
 CLI_SEED = re.compile(r"(?<![\w-])--seeds?(?:\s+|=)")
 SEED_PARAM = re.compile(r"(?i)\bparametrize\s*\(\s*['\"][^'\"]*\bseed\b")
@@ -139,10 +140,27 @@ def _non_episode_seed(path: str, text: str, before: list[str], after: list[str])
 
 
 def _range_overlaps_holdout(text: str) -> bool:
-    """Recognize literal two-bound ranges, whose stop bound is exclusive."""
-    return any(
-        int(match.group(1)) <= 140 and int(match.group(2)) > 111 for match in RANGE.finditer(text)
-    )
+    """Recognize literal Python ranges whose values include a held-out seed."""
+    for match in RANGE.finditer(text):
+        first = int(match.group(1))
+        second = match.group(2)
+        if second is None:
+            start, stop, step = 0, first, 1
+        else:
+            start, stop = first, int(second)
+            step = int(match.group(3)) if match.group(3) is not None else 1
+        if step == 0:
+            continue
+        if step > 0:
+            candidate = start + max(0, (111 - start + step - 1) // step) * step
+            if 111 <= candidate <= 140 and candidate < stop:
+                return True
+        else:
+            magnitude = -step
+            candidate = start - max(0, (start - 140 + magnitude - 1) // magnitude) * magnitude
+            if 111 <= candidate <= 140 and candidate > stop:
+                return True
+    return False
 
 
 def _marked_block_lines(lines: list[str]) -> set[int]:
@@ -261,7 +279,7 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
                 and path not in RELEASE_CONFIGS
                 and line_number not in marked_block_lines
                 and not MARKER.search(content)
-                and (SEED.search(content) or _range_overlaps_holdout(content))
+                and (SEED.search(RANGE.sub("", content)) or _range_overlaps_holdout(content))
                 and _seed_context(path, content, before, file_lines[line_number:])
             ):
                 findings.append(Finding(path, line_number, content.strip()))

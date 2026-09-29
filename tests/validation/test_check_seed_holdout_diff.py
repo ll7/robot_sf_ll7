@@ -146,6 +146,32 @@ def test_multiline_seed_range_overlapping_holdout_fails(
     assert len(findings) == 1
 
 
+@pytest.mark.parametrize(
+    ("path", "added"),
+    [
+        ("scripts/benchmark/run_pilot.py", "for seed in range(142): run_episode(seed)"),
+        ("scripts/benchmark/run_pilot.py", "for seed in range(110, 121, 5): run_episode(seed)"),
+        ("scripts/benchmark/run_pilot.py", "for seed in range(140, 110, -1): run_episode(seed)"),
+        ("tests/benchmark/test_pilot.py", "seeds = list(range(142))"),
+        ("tests/benchmark/test_pilot.py", "seeds = list(range(140, 110, -1))"),
+    ],
+)
+def test_one_and_three_argument_seed_ranges_fail(tmp_path: Path, path: str, added: str) -> None:
+    assert len(check_diff(_diff(path, added), tmp_path)) == 1
+
+
+@pytest.mark.parametrize(
+    "added",
+    [
+        "for seed in range(111): run_episode(seed)",
+        "for seed in range(100, 111): run_episode(seed)",
+        "for seed in range(141, 110, -50): run_episode(seed)",
+    ],
+)
+def test_seed_ranges_outside_holdout_pass(tmp_path: Path, added: str) -> None:
+    assert check_diff(_diff("scripts/benchmark/run_pilot.py", added), tmp_path) == []
+
+
 @pytest.mark.parametrize("bounds", ["range(100, 111)", "range(141, 150)"])
 def test_multiline_seed_range_outside_holdout_passes(tmp_path: Path, bounds: str) -> None:
     diff = _diff("tests/benchmark/test_pilot.py", bounds, context="seeds = [")

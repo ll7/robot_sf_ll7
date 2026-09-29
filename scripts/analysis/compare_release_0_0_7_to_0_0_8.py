@@ -14,11 +14,14 @@ import gzip
 import hashlib
 import json
 import math
+import os
 import re
 import subprocess
 import tarfile
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 
 import yaml
 
@@ -107,6 +110,8 @@ def _insert_rows(
     raw_lines: Any,
     run_name: str,
     source: str,
+    *,
+    retain_provenance: bool = False,
 ) -> None:
     for line_number, raw in enumerate(raw_lines, 1):
         if not raw.strip():
@@ -126,6 +131,18 @@ def _insert_rows(
             "metrics": row["metrics"],
             "_source_commit": _row_source_commit(row),
         }
+        if retain_provenance:
+            rows[key]["_provenance"] = {
+                name: row.get(name)
+                for name in (
+                    "algo",
+                    "planner_key",
+                    "scenario_params",
+                    "algorithm_metadata",
+                    "provenance",
+                    "config_hash",
+                )
+            }
 
 
 def _bundle_rows(bundle: Path) -> dict[tuple[str, str, str, int, str], dict[str, Any]]:
@@ -262,7 +279,7 @@ def _root_rows(root: Path) -> dict[tuple[str, str, str, int, str], dict[str, Any
         raise ValueError(f"0.0.8 root has no runs/*/episodes.jsonl: {root}")
     for path in paths:
         with path.open("rb") as stream:
-            _insert_rows(rows, stream, path.parent.name, str(path))
+            _insert_rows(rows, stream, path.parent.name, str(path), retain_provenance=True)
     return rows
 
 
@@ -290,8 +307,131 @@ def _source_bytes(source_root: Path, commit: str, name: str) -> bytes:
     return result.stdout
 
 
+def _runtime_successor_identity(  # noqa: C901 - pinned config references and row binding fail closed
+    source_root: Path,
+    commit: str,
+    config_path: str,
+    rows: Mapping[tuple[str, str, str, int, str], dict[str, Any]],
+) -> tuple[str, str, dict[tuple[str, str, str, int, str], dict[str, Any]]]:
+    """Recreate the campaign runner's hashes from a detached source checkout."""
+    from robot_sf.benchmark.camera_ready import _util
+    from robot_sf.benchmark.camera_ready._config import (
+        _load_campaign_scenarios,
+        load_campaign_config,
+    )
+    from robot_sf.benchmark.camera_ready._preflight import (
+        _scenario_matrix_hash,
+    )
+    from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
+        _apply_planner_selector_v2_context,
+        _apply_scenario_uncertainty_envelope_config,
+        _parse_algo_config,
+        _resolve_config_path,
+        _resolve_policy_search_candidate_runtime,
+    )
+    from robot_sf.benchmark.utils import _config_hash
+
+    with tempfile.TemporaryDirectory(prefix="slot-paired-source-") as directory:
+        checkout = Path(directory) / "source"
+        result = subprocess.run(
+            ["git", "-C", str(source_root), "worktree", "add", "--detach", str(checkout), commit],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode:
+            raise ValueError("cannot check out pinned successor source commit")
+        previous_cwd = Path.cwd()
+        try:
+            os.chdir(checkout)
+            # The runner serializes repository-relative paths. Bind that root
+            # to the detached checkout while invoking its production helpers.
+            with patch.object(_util, "get_repository_root", return_value=checkout):
+                cfg = load_campaign_config(checkout / config_path, repository_root=checkout)
+                for path in (cfg.source_config_path, cfg.scenario_matrix_path):
+                    if path is None or not path.resolve().is_relative_to(checkout):
+                        raise ValueError("successor config source escapes pinned checkout")
+                scenarios = _load_campaign_scenarios(cfg, repository_root=checkout)
+                config_hash = _config_hash(_util._config_hash_payload(cfg))
+                scenario_hash = _scenario_matrix_hash(scenarios)
+            planners = {}
+            for planner in cfg.planners:
+                path = planner.algo_config_path
+                if path is not None and not path.resolve().is_relative_to(checkout):
+                    raise ValueError(
+                        f"successor planner config escapes pinned checkout: {planner.key}"
+                    )
+                raw = _parse_algo_config(str(path)) if path else {}
+                if not isinstance(raw, dict):
+                    raise ValueError(f"successor planner config must be a mapping: {planner.key}")
+                if path is not None:
+                    references = [raw.get("base_config_path")]
+                    overrides = raw.get("scenario_algo_overrides")
+                    if isinstance(overrides, dict):
+                        references.extend(
+                            entry.get("base_config_path")
+                            for entry in overrides.values()
+                            if isinstance(entry, dict)
+                        )
+                    for reference in references:
+                        if reference is None:
+                            continue
+                        resolved = _resolve_config_path(path.parent, reference)
+                        if (
+                            resolved is None
+                            or not resolved.is_file()
+                            or not resolved.is_relative_to(checkout)
+                        ):
+                            raise ValueError(
+                                f"successor planner referenced config escapes pinned checkout: {planner.key}"
+                            )
+                planners[planner.key] = {
+                    "algo": planner.algo,
+                    "config": raw,
+                    "path": path.relative_to(checkout).as_posix() if path else None,
+                    "absolute_path": str(path) if path else None,
+                }
+            runtime_rows = {}
+            for slot, row in rows.items():
+                planner = planners.get(slot[0])
+                if planner is None:
+                    raise ValueError(
+                        f"0.0.8 row planner is absent from verified successor config: {slot}"
+                    )
+                scenario = row["_provenance"]["scenario_params"]
+                if not isinstance(scenario, dict):
+                    raise ValueError(f"0.0.8 row lacks scenario provenance at {slot}")
+                algo, effective = _resolve_policy_search_candidate_runtime(
+                    default_algo=planner["algo"],
+                    algo_config_path=planner["absolute_path"],
+                    scenario=scenario,
+                    algo_config=planner["config"],
+                )
+                effective = _apply_planner_selector_v2_context(
+                    algo, effective, scenario=scenario, seed=slot[3]
+                )
+                effective = _apply_scenario_uncertainty_envelope_config(algo, effective, scenario)
+                runtime_rows[slot] = {
+                    "algo": algo,
+                    "config": effective,
+                    "config_hash": _config_hash(effective),
+                    "path": planner["path"],
+                }
+            return config_hash, scenario_hash, runtime_rows
+        finally:
+            os.chdir(previous_cwd)
+            subprocess.run(
+                ["git", "-C", str(source_root), "worktree", "remove", "--force", str(checkout)],
+                capture_output=True,
+                check=False,
+            )
+
+
 def _verified_successor_manifest(  # noqa: C901, PLR0912
-    path: Path, digest: str, source_root: Path
+    path: Path,
+    digest: str,
+    source_root: Path,
+    rows: Mapping[tuple[str, str, str, int, str], dict[str, Any]],
 ) -> dict[str, Any]:
     _verify_sha256(
         path, _hex_digest(digest, "successor manifest digest"), label="successor manifest SHA-256"
@@ -317,12 +457,8 @@ def _verified_successor_manifest(  # noqa: C901, PLR0912
         actual = hashlib.sha256(_source_bytes(source_root, commit, binding.get("path"))).hexdigest()
         if actual != expected:
             raise ValueError(f"successor {key} SHA-256 mismatch")
-        runtime_hash = binding.get("runtime_hash")
-        if (
-            not isinstance(runtime_hash, str)
-            or re.fullmatch(r"[0-9a-f]{16}|[0-9a-f]{64}", runtime_hash) is None
-        ):
-            raise ValueError(f"successor {key} requires a 16- or 64-character runtime_hash")
+        if not isinstance(binding.get("runtime_hash"), str):
+            raise ValueError(f"successor {key} requires runtime_hash")
     config = yaml.safe_load(_source_bytes(source_root, commit, manifest["campaign_config"]["path"]))
     if (
         not isinstance(config, dict)
@@ -354,8 +490,15 @@ def _verified_successor_manifest(  # noqa: C901, PLR0912
         actual = hashlib.sha256(_source_bytes(source_root, commit, binding["path"])).hexdigest()
         if actual != expected:
             raise ValueError(f"successor planner binding SHA-256 mismatch: {key}")
+    config_hash, scenario_hash, runtime_rows = _runtime_successor_identity(
+        source_root, commit, manifest["campaign_config"]["path"], rows
+    )
+    for key, actual in (("campaign_config", config_hash), ("scenario_matrix", scenario_hash)):
+        if manifest[key]["runtime_hash"] != actual:
+            raise ValueError(f"successor {key} runtime_hash differs from pinned source")
     manifest["manifest_sha256"] = digest
     manifest["planner_keys"] = sorted(configured)
+    manifest["runtime_rows"] = runtime_rows
     return manifest
 
 
@@ -384,6 +527,64 @@ def _root_identity(root: Path, expected: Mapping[str, Any]) -> dict[str, str]:
         "scenario_matrix_hash": str(manifest.get("scenario_matrix_hash", "")),
         "config_hash": str(manifest.get("config_hash", "")),
     }
+
+
+def _matches_config_path(observed: Any, expected: str | None) -> bool:
+    if expected is None:
+        return observed is None
+    if not isinstance(observed, str) or not observed:
+        return False
+    observed_parts = Path(observed).parts
+    expected_parts = Path(expected).parts
+    return observed_parts[-len(expected_parts) :] == expected_parts
+
+
+def _validate_successor_row(  # noqa: C901 - each provenance assertion fails independently
+    slot: tuple[str, str, str, int, str],
+    row: Mapping[str, Any],
+    runtime_rows: Mapping[str, Any],
+    source_commit: str,
+) -> None:
+    """Check the recorded algorithm and effective config against the pinned arm."""
+    from robot_sf.benchmark.utils import _config_hash
+
+    planner = runtime_rows[slot]
+    recorded = row["_provenance"]
+    scenario = recorded["scenario_params"]
+    metadata = recorded["algorithm_metadata"]
+    provenance = recorded["provenance"]
+    if not isinstance(scenario, dict) or not isinstance(metadata, dict):
+        raise ValueError(f"0.0.8 row lacks effective planner provenance at {slot}")
+    if scenario.get("name", scenario.get("id", scenario.get("scenario_id"))) != slot[2]:
+        raise ValueError(f"0.0.8 row scenario provenance differs from run slot at {slot}")
+    if recorded["algo"] != planner["algo"] or scenario.get("algo") != planner["algo"]:
+        raise ValueError(f"0.0.8 row algorithm differs from configured planner at {slot}")
+    if metadata.get("algorithm") != planner["algo"]:
+        raise ValueError(f"0.0.8 row algorithm metadata differs from configured planner at {slot}")
+    if recorded["planner_key"] is not None and recorded["planner_key"] != slot[0]:
+        raise ValueError(f"0.0.8 row planner_key differs from run directory at {slot}")
+    if (
+        metadata.get("config") != planner["config"]
+        or metadata.get("config_hash") != planner["config_hash"]
+    ):
+        raise ValueError(f"0.0.8 row effective planner config differs from pinned source at {slot}")
+    if recorded["config_hash"] != _config_hash(scenario):
+        raise ValueError(
+            f"0.0.8 row scenario config_hash differs from effective scenario at {slot}"
+        )
+    if scenario.get("algo_config_hash", planner["config_hash"]) != planner["config_hash"]:
+        raise ValueError(
+            f"0.0.8 row scenario planner config hash differs from pinned source at {slot}"
+        )
+    if not isinstance(provenance, dict) or provenance.get("commit_hash") != source_commit:
+        raise ValueError(f"0.0.8 row run provenance source differs from campaign at {slot}")
+    identity = provenance.get("config_identity")
+    if (
+        not isinstance(identity, dict)
+        or identity.get("algo") != planner["algo"]
+        or not _matches_config_path(identity.get("algo_config_path"), planner["path"])
+    ):
+        raise ValueError(f"0.0.8 row run provenance differs from configured planner at {slot}")
 
 
 def _fields(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -565,8 +766,11 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
     baseline_manifest_digest: str = BASELINE_PRESERVATION_DIGEST,
     baseline_source: str = BASELINE_SOURCE,
     expected_scenario_identity: dict[str, str] | None = None,
+    broad_rule_bound_threshold: float = 1.0,
 ) -> dict[str, Any]:
     """Return an audit report; unexplained findings remain visible in the result."""
+    if not math.isfinite(broad_rule_bound_threshold) or broad_rule_bound_threshold < 0:
+        raise ValueError("broad rule bound threshold must be finite and nonnegative")
     if (baseline_bundle is None) == (baseline_root is None):
         raise ValueError("provide exactly one 0.0.7 bundle or preserved artifact root")
     if baseline_bundle is not None:
@@ -596,11 +800,11 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
     }
     if scenario_identity != expected:
         raise ValueError(f"0.0.7 scenario identity mismatch: {scenario_identity} != {expected}")
+    new = _root_rows(successor_root)
     verified_successor = _verified_successor_manifest(
-        successor_manifest, successor_manifest_sha256, successor_source_root
+        successor_manifest, successor_manifest_sha256, successor_source_root, new
     )
     successor_identity = _root_identity(successor_root, verified_successor)
-    new = _root_rows(successor_root)
     if any(key[0] not in verified_successor["planner_keys"] for key in new):
         raise ValueError("0.0.8 row planner is absent from verified successor config")
     for key, row in old.items():
@@ -609,7 +813,20 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
     for key, row in new.items():
         if row["_source_commit"] != successor_identity["source_commit"]:
             raise ValueError(f"0.0.8 row source differs from campaign manifest at {key}")
+        _validate_successor_row(
+            key, row, verified_successor["runtime_rows"], successor_identity["source_commit"]
+        )
     rules = _read_rules(classification_file)
+    broad_rules = []
+    for rule in rules:
+        reasons = []
+        if any(slot["seeds"] == "all" for slot in rule["slots"]):
+            reasons.append("seeds: all")
+        bound = rule["predicate"].get("max_abs_delta")
+        if bound is not None and bound > broad_rule_bound_threshold:
+            reasons.append(f"max_abs_delta: {bound}")
+        if reasons:
+            broad_rules.append({"rule_id": rule["rule_id"], "reasons": reasons})
     findings: list[dict[str, Any]] = []
     summaries: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
 
@@ -790,6 +1007,8 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
         "status": "classified" if unexplained == 0 else "unexplained",
         "findings": findings,
         "rules": rule_coverage,
+        "broad_rule_bound_threshold": broad_rule_bound_threshold,
+        "broad_rules": broad_rules,
         "planner_scenario_metrics": [summaries[key] for key in sorted(summaries)],
     }
 
@@ -818,6 +1037,12 @@ def write_report(report: Mapping[str, Any], output_dir: Path) -> None:
         f"- Verified successor manifest SHA-256: `{report['successor']['verified_manifest_sha256']}`.",
         "- Classification rules are analyst claims; this audit does not prove causality or admit a release.",
         "",
+        "## Broad rules",
+        "",
+        f"Rules with seeds `all` or max_abs_delta above `{report['broad_rule_bound_threshold']}` (review first; not rejected):",
+        *(f"- `{rule['rule_id']}`: {', '.join(rule['reasons'])}" for rule in report["broad_rules"]),
+        *([] if report["broad_rules"] else ["- (none)"]),
+        "",
         "## Rule coverage",
         "",
         *(
@@ -843,6 +1068,7 @@ def main() -> int:
     parser.add_argument("--successor-manifest-sha256", required=True)
     parser.add_argument("--successor-source-root", required=True, type=Path)
     parser.add_argument("--classification-file", type=Path)
+    parser.add_argument("--broad-rule-bound-threshold", type=float, default=1.0)
     parser.add_argument("--output-dir", required=True, type=Path)
     args = parser.parse_args()
     try:
@@ -854,6 +1080,7 @@ def main() -> int:
             successor_source_root=args.successor_source_root,
             baseline_root=args.baseline_root,
             classification_file=args.classification_file,
+            broad_rule_bound_threshold=args.broad_rule_bound_threshold,
         )
         write_report(report, args.output_dir)
     except (OSError, ValueError, json.JSONDecodeError, tarfile.TarError) as exc:

@@ -46,6 +46,7 @@ uv run python scripts/analysis/compare_release_0_0_7_to_0_0_8.py \
   --successor-manifest-sha256 <reviewed-manifest-sha256> \
   --successor-source-root /path/to/successor-source-clone \
   --classification-file /path/to/classifications.json \
+  --broad-rule-bound-threshold 1.0 \
   --output-dir /path/to/comparison-output
 ```
 
@@ -58,10 +59,18 @@ commit, campaign config and scenario matrix paths with raw SHA-256 and campaign
 runtime hashes, and the path and raw SHA-256 of each configured v4 planner
 input. The tool reads those files from the named Git commit in
 `--successor-source-root` and checks their bytes and the config's scenario and
-planner bindings. It rejects a missing or extra v4 binding. The result root's
+planner bindings. It creates a temporary detached checkout at that commit and
+recomputes the runtime hashes with the campaign runner's config loader and hash
+functions. This rejects even a manifest and result root that agree on forged
+runtime hashes. It rejects a missing or extra v4 binding. The result root's
 `campaign_manifest.json` must match the reviewed campaign ID, source commit,
-config hash, scenario path, and scenario hash. All run planner keys must appear
-in the verified config, and every row's source commit must match. Invalid
+config hash, scenario path, and scenario hash. Each row's run-directory planner
+key must occur in the pinned config. Its recorded algorithm, scenario config
+hash, algorithm metadata, effective planner config, and run provenance must
+match that key. Policy-search candidate base configs and scenario overrides are
+resolved from files in the pinned checkout with the production resolver; a
+referenced config outside that checkout is rejected. Every row's source commit
+must also match. Invalid
 identity exits 2 before writing a comparison report. A manifest checksum proves
 which reviewed assertion was supplied; it does not independently establish
 that a campaign was accepted for release.
@@ -118,7 +127,11 @@ presence, and displayed old/new values in the first pass `report.json`.
 No finding is explained unless all conditions hold. A rule matching more than
 `max_findings` explains none of those findings. Overlapping successful rules
 are invalid. Each rule's matching and covered finding IDs appear in
-`report.json`; covered IDs also appear in `summary.md`:
+`report.json`; covered IDs also appear in `summary.md`. A `Broad rules` section
+precedes rule coverage and lists any rule with `seeds: "all"` or
+`max_abs_delta` greater than `--broad-rule-bound-threshold` (default `1.0`).
+The threshold changes review visibility only; it never rejects or accepts a
+classification:
 
 ```json
 {

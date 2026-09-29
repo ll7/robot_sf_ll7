@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios, load_campaign_config
+from robot_sf.benchmark.camera_ready.campaign import _resolve_arm_safety_wrapper
+from robot_sf.benchmark.map_runner import map_runner
 from scripts.benchmark import run_issue_9748_v4_tuning as runner
 from scripts.validation.check_issue_9748_dev_split import EXPECTED_PLANNER_CONFIGS
 
@@ -36,6 +40,39 @@ def test_every_trial_resolves_to_v4_on_all_four_dev_identities() -> None:
                 for scenario in scenarios
             }
             assert len(hashes) == 1  # release-keyed overrides never fire on dev identities
+
+
+def test_enabled_campaign_wrapper_reaches_development_episode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    campaign = load_campaign_config(runner.CAMPAIGN_PATH)
+    planner = campaign.planners[0]
+    campaign = replace(campaign, safety_wrapper={"enabled": True, "arm_key": "wrapper_on"})
+    wrapper = _resolve_arm_safety_wrapper(cfg=campaign, planner=planner)
+    options = runner._episode_runtime_options(campaign, planner, dt=campaign.dt)
+    passed: dict = {}
+
+    def capture_episode(**kwargs: object) -> dict:
+        passed.update(kwargs)
+        return {"episode": "captured"}
+
+    monkeypatch.setattr(runner, "_quiet_logs", lambda: None)
+    monkeypatch.setattr(map_runner, "_run_map_episode", capture_episode)
+    result = runner._run_cell(
+        (
+            {"name": "issue_9748_dev_classic_doorway_medium"},
+            1001,
+            {},
+            str(planner.algo_config_path),
+            str(runner.SCENARIO_ANCHOR),
+            campaign.horizon,
+            options,
+            campaign.dt,
+        )
+    )
+
+    assert result["record"] == {"episode": "captured"}
+    assert passed["safety_wrapper"] == wrapper
 
 
 def test_ranking_excludes_degraded_and_prioritizes_collisions() -> None:

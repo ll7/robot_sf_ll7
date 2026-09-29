@@ -363,6 +363,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
 
     from robot_sf.benchmark.camera_ready._config import (
         _load_campaign_scenarios,
+        _scenario_with_kinematics,
         load_campaign_config,
     )
     from scripts.validation.check_issue_9748_dev_split import (
@@ -376,7 +377,16 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
     cfg = load_campaign_config(CAMPAIGN_PATH)
     if cfg.horizon != 600 or cfg.dt != 0.1:
         raise ValueError("#9748 runner requires the frozen H600 / dt=0.1 contract")
-    scenarios = _load_campaign_scenarios(cfg)
+    if cfg.kinematics_matrix != ("differential_drive",):
+        raise ValueError("#9748 runner requires the frozen differential-drive contract")
+    scenarios = [
+        _scenario_with_kinematics(
+            row,
+            kinematics="differential_drive",
+            holonomic_command_mode=cfg.holonomic_command_mode,
+        )
+        for row in _load_campaign_scenarios(cfg)
+    ]
     if {row["name"] for row in scenarios} != EXPECTED_SCENARIO_IDS or len(scenarios) != 4:
         raise ValueError("resolved development scenario identities changed")
     if any(tuple(row["seeds"]) != EXPECTED_DEV_SEEDS for row in scenarios):

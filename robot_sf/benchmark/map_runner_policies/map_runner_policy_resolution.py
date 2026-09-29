@@ -25,6 +25,7 @@ from robot_sf.benchmark.policy_search_manifest import (
 from robot_sf.benchmark.policy_search_manifest import (
     scenario_family as _scenario_family,
 )
+from robot_sf.benchmark.release_parameter_freeze import assert_release_parameters_frozen
 from robot_sf.planner.hybrid_rule_local_planner import (
     HybridRuleLocalPlannerAdapter,
     build_hybrid_rule_local_planner_config,
@@ -51,6 +52,7 @@ def _parse_algo_config(algo_config_path: str | None) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise TypeError("Algorithm config must be a mapping (YAML dict).")
     validate_no_local_model_artifacts(data, config_path=path)
+    assert_release_parameters_frozen(data, label=f"algorithm config {algo_config_path}")
     return data
 
 
@@ -234,7 +236,7 @@ def _build_socnav_config(cfg: dict[str, Any]) -> SocNavPlannerConfig:
     """
     if not isinstance(cfg, dict):
         return SocNavPlannerConfig()
-    allowed = {f.name for f in fields(SocNavPlannerConfig)}
+    allowed = {f.name for f in fields(SocNavPlannerConfig)} | {"social_force_kernel_version"}
     filtered = {key: value for key, value in cfg.items() if key in allowed}
     return SocNavPlannerConfig(**filtered)
 

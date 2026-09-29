@@ -2953,6 +2953,7 @@ def _apply_simulation_overrides(
         "goal_completion_policy",
         "robot_goal_sampling_policy",
         "pedestrian_model",
+        "social_force_kernel_version",
         "ttc_predictive_force",
         "zanlungo_collision_prediction",
         "anisotropic_fov",

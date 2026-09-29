@@ -1,10 +1,13 @@
 """Configuration dataclasses for simulator timing and pedestrian behavior."""
 
-from dataclasses import dataclass, field, replace
+from dataclasses import InitVar, asdict, dataclass, field, fields, replace
 from math import ceil, isfinite, pi
 from typing import Any
 
-from pysocialforce.config import resolve_obstacle_force_law_with_mode
+from pysocialforce.config import (
+    resolve_obstacle_force_law_with_mode,
+    resolve_social_force_kernel_version_with_mode,
+)
 from pysocialforce.scene import normalize_integration_scheme
 
 from robot_sf.nav.map_config import (
@@ -28,6 +31,17 @@ from robot_sf.sim.pedestrian_speed_tiers import (
     desired_speed_params_for_tier,
     normalize_ped_speed_tier,
 )
+
+
+def _restore_nested_config(value: Any, config_type: type[Any]) -> Any:
+    """Rebuild a nested dataclass config from a serialized mapping.
+
+    Returns:
+        The reconstructed config for mappings, or the original value otherwise.
+    """
+    if isinstance(value, dict):
+        return config_type(**value)
+    return value
 
 
 @dataclass(frozen=True)
@@ -234,7 +248,7 @@ def _pedestrian_model_alignment_torque_config(
     return alignment_config
 
 
-@dataclass
+@dataclass(eq=False)
 class SimulationSettings:
     """
     Configuration settings for the simulation.
@@ -431,6 +445,9 @@ class SimulationSettings:
     obstacle_force_law: Any = None
     """Versioned pedestrian obstacle-force law; defaults to the historical law."""
 
+    social_force_kernel_version: InitVar[Any] = None
+    """Versioned pedestrian pair-kernel selector; missing preserves 0.0.7."""
+
     def __setattr__(self, name: str, value: Any) -> None:
         """Resolve law assignments immediately and retain selector provenance."""
         if name == "obstacle_force_law":
@@ -438,7 +455,64 @@ class SimulationSettings:
             object.__setattr__(self, name, resolved)
             object.__setattr__(self, "_obstacle_force_law_resolution_mode", mode)
             return
+        if name == "social_force_kernel_version":
+            resolved, mode = resolve_social_force_kernel_version_with_mode(value)
+            object.__setattr__(self, "_social_force_kernel_version", resolved)
+            object.__setattr__(self, "_social_force_kernel_resolution_mode", mode)
+            return
         object.__setattr__(self, name, value)
+
+    def __getattribute__(self, name: str) -> Any:
+        """Expose the runtime selector without adding a default key to legacy config hashes.
+
+        Returns:
+            The resolved selector for ``social_force_kernel_version`` or the requested attribute.
+        """
+        if name == "social_force_kernel_version":
+            try:
+                return object.__getattribute__(self, "_social_force_kernel_version")
+            except AttributeError:
+                return resolve_social_force_kernel_version_with_mode(None)[0]
+        return object.__getattribute__(self, name)
+
+    def _config_hash_overrides(self) -> dict[str, str]:
+        """Include explicit selectors in config hashes while omitting the legacy default.
+
+        Returns:
+            Only the non-default selector field, or an empty mapping for the legacy default.
+        """
+        if self.social_force_kernel_resolution_mode == "defaulted_missing":
+            return {}
+        return {"social_force_kernel_version": str(self.social_force_kernel_version)}
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize settings with explicit version selectors while preserving legacy defaults.
+
+        Returns:
+            The standard dataclass mapping plus the selector only when it was supplied.
+        """
+        payload = asdict(self)
+        payload.update(self._config_hash_overrides())
+        return payload
+
+    __hash__ = None
+
+    def __eq__(self, other: object) -> bool:
+        """Compare runtime settings and selector provenance.
+
+        Returns:
+            Whether all settings and explicit selector identity match.
+        """
+        if not isinstance(other, SimulationSettings) or type(other) is not type(self):
+            return False
+        return all(
+            getattr(self, item.name) == getattr(other, item.name) for item in fields(self)
+        ) and (self._config_hash_overrides() == other._config_hash_overrides())
+
+    @property
+    def social_force_kernel_resolution_mode(self) -> str:
+        """Return how the pedestrian pair-kernel selector was resolved."""
+        return getattr(self, "_social_force_kernel_resolution_mode", "historical_unversioned")
 
     @property
     def resolved_action_latency_steps(self) -> int:
@@ -499,13 +573,15 @@ class SimulationSettings:
         if self.action_latency_steps != 0:
             raise ValueError("action_latency_steps and action_latency_ms cannot both be configured")
 
-    def __post_init__(self):  # noqa: C901
+    def __post_init__(self, *init_vars: Any) -> None:  # noqa: C901
         """
         Validate the simulation settings.
 
         This method is called after the object is initialized. It checks that all the
         settings are valid and raises a ValueError if any of them are not.
         """
+        if init_vars:
+            self.social_force_kernel_version = init_vars[0]
         # Check that the simulation time is positive
         if self.sim_time_in_secs <= 0:
             raise ValueError("Simulation length for episodes mustn't be negative or zero!")
@@ -581,6 +657,9 @@ class SimulationSettings:
         # Check that the difficulty level is within the valid range
         if not 0 <= self.difficulty < len(self.ped_density_by_difficulty):
             raise ValueError("No pedestrian density registered for selected difficulty level!")
+        # Restore nested force configuration objects serialized by ``to_dict``.
+        self.prf_config = _restore_nested_config(self.prf_config, PedRobotForceConfig)
+        self.apf_config = _restore_nested_config(self.apf_config, AdversarialPedForceConfig)
         # Check that the pedestrian-robot force configuration is specified
         if not self.prf_config:
             raise ValueError("Pedestrian-Robot-Force settings need to be specified!")

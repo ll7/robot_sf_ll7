@@ -32,8 +32,13 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from loguru import logger
 from pysocialforce import Simulator as PySFSimulator
-from pysocialforce.config import SimulatorConfig as PySFSimConfig
-from pysocialforce.config import obstacle_force_law_metadata
+from pysocialforce.config import (
+    SimulatorConfig as PySFSimConfig,
+)
+from pysocialforce.config import (
+    obstacle_force_law_metadata,
+    social_force_kernel_metadata,
+)
 from pysocialforce.force_trace import (
     ForceComputationResult,
     annotate_force_component,
@@ -445,6 +450,9 @@ def _build_pysf_simulation(  # noqa: PLR0913
         "obstacle_force_law_resolution_mode",
         pysf_config.obstacle_force_config.obstacle_force_law_resolution_mode,
     )
+    pysf_config.social_force_config.kernel_version = getattr(
+        config, "social_force_kernel_version", None
+    )
     _apply_ped_desired_speed_config(pysf_config, config)
     spawn_config = PedSpawnConfig(
         config.peds_per_area_m2,
@@ -777,6 +785,20 @@ class Simulator:
                 ),
             )
         return dict(metadata_fn())
+
+    def social_force_kernel_metadata(self) -> dict[str, Any]:
+        """Return the active fast-pysf pair-kernel selector and provenance."""
+        social_config = self.pysf_sim.config.social_force_config
+        metadata = social_force_kernel_metadata(
+            getattr(social_config, "kernel_version", None),
+            site="fast_pysf",
+        )
+        metadata["resolution_mode"] = getattr(
+            social_config,
+            "social_force_kernel_resolution_mode",
+            metadata["resolution_mode"],
+        )
+        return metadata
 
     def goal_completion_metadata(self) -> dict[str, Any]:
         """Return versioned success-definition and route-binding runtime metadata."""
@@ -1613,6 +1635,7 @@ class Simulator:
             lambda_importance=social_config.lambda_importance,
             gamma=social_config.gamma,
             factor=social_config.factor,
+            kernel_version=social_config.kernel_version,
         )
 
     def _reset_social_force_state(self) -> None:
@@ -1832,22 +1855,30 @@ class Simulator:
             )
         self.last_robot_ped_forces = total
         social_cfg = self.pysf_sim.config.social_force_config
+        social_force_config = {
+            key: getattr(social_cfg, key)
+            for key in (
+                "factor",
+                "lambda_importance",
+                "gamma",
+                "n",
+                "n_prime",
+                "activation_threshold",
+            )
+        }
         self.last_robot_force_inputs = {
             "peds_pos": positions.tolist(),
             "components": components,
             "ped_radius_m": float(self.pysf_sim.peds.agent_radius),
-            "social_force_config": {
-                key: getattr(social_cfg, key)
-                for key in (
-                    "factor",
-                    "lambda_importance",
-                    "gamma",
-                    "n",
-                    "n_prime",
-                    "activation_threshold",
-                )
-            },
+            "social_force_config": social_force_config,
         }
+        if getattr(social_cfg, "social_force_kernel_resolution_mode", "defaulted_missing") != (
+            "defaulted_missing"
+        ):
+            social_force_config["kernel_version"] = str(social_cfg.kernel_version)
+            self.last_robot_force_inputs["social_force_kernel"] = (
+                self.social_force_kernel_metadata()
+            )
 
     def step_once(self, actions: list[RobotAction]) -> None:
         """Advance simulation by one timestep.

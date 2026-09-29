@@ -58,6 +58,10 @@ from robot_sf.benchmark.observation_noise import (
     observation_noise_hash,
 )
 from robot_sf.benchmark.orca_preflight import check_orca_rvo2_preflight
+from robot_sf.benchmark.release_parameter_freeze import (
+    UnfrozenReleaseParametersError,
+    unfrozen_planner_config_blockers,
+)
 from robot_sf.benchmark.tuning_run_provenance import (
     aggregate_tuning_records,
     build_launch_records,
@@ -614,6 +618,8 @@ def _validate_and_setup_campaign(
     Returns:
         Tuple of ``(checkpoint_report, campaign_id, campaign_root, reports_dir, preflight_dir)``.
     """
+    # Issue #9751: refuse unfrozen release placeholders before any other check or directory.
+    _assert_release_parameters_frozen_preflight(cfg)
     ckpt_report = _run_preflight_checks(
         cfg,
         checkpoint_preflight_mode=checkpoint_preflight_mode,
@@ -1360,6 +1366,19 @@ def _finalize_campaign_preflight(  # noqa: PLR0913
         "git_meta": metadata["git_meta"],
         "config_hash": metadata["config_hash"],
     }
+
+
+def _assert_release_parameters_frozen_preflight(cfg: CampaignConfig) -> None:
+    """Refuse a campaign whose enabled arms bind unfrozen release placeholders (#9751).
+
+    Raises:
+        UnfrozenReleaseParametersError: If any enabled planner config is not frozen.
+    """
+    blockers = unfrozen_planner_config_blockers(cfg.planners)
+    if blockers:
+        raise UnfrozenReleaseParametersError(
+            "campaign preflight refused unfrozen release parameters: " + "; ".join(blockers)
+        )
 
 
 def prepare_campaign_preflight(  # noqa: PLR0913

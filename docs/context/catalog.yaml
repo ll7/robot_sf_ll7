@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-09-25
+updated_at: 2026-09-28
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -55,6 +55,10 @@ entries:
 - path: docs/context/issue_8222_obstacle_force_compatibility.md
   status: current
   freshness: policy
+  area: planner
+- path: docs/context/issue_9764_social_force_kernel_versioning.md
+  status: current
+  freshness: maintained
   area: planner
 - path: docs/context/pedestrian_goal_force_prediction_research.md
   status: current

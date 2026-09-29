@@ -486,6 +486,7 @@ def test_fetch_exact_commit_ci_status_preserves_materialized_replacement_authori
         "scripts.dev.check_pr_ci_status.required_check_identities",
         lambda: ("coverage-gate",),
     )
+    monkeypatch.setattr(ci_status, "AGGREGATE_JOB", "coverage-gate")
     replacement_job_url = "https://github.com/ll7/robot_sf_ll7/actions/runs/91002/job/92002"
     fetch_check_runs = MagicMock(
         return_value={

@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from pysocialforce.config import SOCIAL_FORCE_KERNEL_WRAPPED_V2
 
 from robot_sf.benchmark.ped_model_sensitivity import (
     build_pedestrian_model_provenance,
@@ -47,6 +48,23 @@ def test_episode_provenance_uses_unknown_for_missing_development_model() -> None
 
     assert provenance["development_model"] == "unknown"
     assert provenance["evaluation_model"] == SOCIAL_FORCE_DEFAULT
+
+
+def test_episode_provenance_records_explicit_social_force_kernel() -> None:
+    """Explicit next-release kernel selection is retained in diagnostic provenance."""
+
+    provenance = build_pedestrian_model_provenance(
+        sim_config=SimpleNamespace(
+            pedestrian_model=SOCIAL_FORCE_DEFAULT,
+            social_force_kernel_version=SOCIAL_FORCE_KERNEL_WRAPPED_V2,
+            social_force_kernel_resolution_mode="explicit",
+        ),
+        policy_cfg={},
+        algorithm_metadata={},
+    )
+
+    assert provenance["social_force_kernel_version"] == SOCIAL_FORCE_KERNEL_WRAPPED_V2
+    assert provenance["social_force_kernel_resolution_mode"] == "explicit"
 
 
 def test_development_model_resolver_uses_algorithm_metadata_fallback() -> None:

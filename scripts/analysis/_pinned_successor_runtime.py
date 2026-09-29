@@ -192,6 +192,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
                 raise ValueError(f"successor planner binding resolves non-v4 config: {planner.key}")
 
     expected_slots = set()
+    runner_scenario_by_slot = {}
     scoped_hashes = []
     suite_seeds = _resolve_seed_list(checkout / "configs/benchmarks/seed_list_v1.yaml")
     suite_key = _suite_key(cfg.scenario_matrix_path)
@@ -228,6 +229,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
                     if slot in expected_slots:
                         raise ValueError(f"duplicate pinned successor slot: {slot}")
                     expected_slots.add(slot)
+                    runner_scenario_by_slot[slot] = scenario
 
     runtime_rows = []
     for item in request["rows"]:
@@ -240,6 +242,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
         matrix_scenario = scenario_by_id.get(slot[2])
         if matrix_scenario is None:
             raise ValueError(f"0.0.8 row scenario is absent from pinned matrix: {slot}")
+        scoped_scenario = runner_scenario_by_slot[tuple(slot)]
         seeds = matrix_scenario.get("seeds")
         if isinstance(seeds, list) and slot[3] not in seeds:
             raise ValueError(f"0.0.8 row seed is absent from pinned scenario: {slot}")
@@ -249,19 +252,18 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
         algo, effective = _resolve_policy_search_candidate_runtime(
             default_algo=planner["algo"],
             algo_config_path=planner["absolute_path"],
-            scenario=matrix_scenario,
+            scenario=scoped_scenario,
             algo_config=planner["config"],
         )
         effective = _apply_planner_selector_v2_context(
-            algo, effective, scenario=matrix_scenario, seed=slot[3]
+            algo, effective, scenario=scoped_scenario, seed=slot[3]
         )
-        effective = _apply_scenario_uncertainty_envelope_config(algo, effective, matrix_scenario)
-        if (
-            slot[0] in versioned_keys
-            and algo == "hybrid_rule_local_planner"
-            and (effective.get("planner_variant") != V4_HYBRID_VARIANT)
-        ):
-            raise ValueError(f"successor planner row resolves non-v4 config: {slot}")
+        effective = _apply_scenario_uncertainty_envelope_config(algo, effective, scoped_scenario)
+        if slot[0] in versioned_keys:
+            if algo != planner["algo"]:
+                raise ValueError(f"successor v4 slot resolves wrong algorithm: {slot}")
+            if effective.get("planner_variant") != V4_HYBRID_VARIANT:
+                raise ValueError(f"successor planner row resolves non-v4 config: {slot}")
         spec = planner["spec"]
         effective_dt = spec.dt_override if spec.dt_override is not None else cfg.dt
         observation = resolve_learned_checkpoint_observation_contract(
@@ -282,7 +284,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
             spec.safety_wrapper if spec.safety_wrapper is not None else cfg.safety_wrapper
         )
         controls = _scenario_identity_payload(
-            _scenario_with_episode_seed_defaults(matrix_scenario, seed=slot[3]),
+            _scenario_with_episode_seed_defaults(scoped_scenario, seed=slot[3]),
             algo=algo,
             algo_config=effective,
             horizon=spec.horizon_override if spec.horizon_override is not None else cfg.horizon,
@@ -291,7 +293,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
             observation_mode=active_mode,
             observation_level=str(metadata["observation_level"]["key"]),
             benchmark_track=slot[4] or None,
-            track_schema_version=matrix_scenario.get("track_schema_version"),
+            track_schema_version=scoped_scenario.get("track_schema_version"),
             observation_noise=cfg.observation_noise,
             synthetic_actuation_profile=_util._synthetic_actuation_metadata(
                 cfg.synthetic_actuation_profile
@@ -331,7 +333,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
                 "config": effective,
                 "config_hash": _config_hash(effective),
                 "scenario_config_hash": _config_hash(scenario),
-                "scenario": matrix_scenario,
+                "scenario": scoped_scenario,
                 "path": planner["path"],
                 "controls": {key: controls[key] for key in control_fields if key in controls},
                 "observation_noise": normalize_observation_noise_spec(cfg.observation_noise),

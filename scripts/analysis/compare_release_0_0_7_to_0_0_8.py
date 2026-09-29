@@ -534,6 +534,16 @@ def _validate_successor_row(  # noqa: C901, PLR0912 - provenance assertions fail
         scenario[field] != slot[2] for field in ("name", "id", "scenario_id") if field in scenario
     ):
         raise ValueError(f"0.0.8 row scenario provenance differs from run slot at {slot}")
+    expected_robot = planner["scenario"]["robot_config"]
+    recorded_robot = scenario.get("robot_config")
+    if not isinstance(recorded_robot, dict) or recorded_robot.get("type") != expected_robot["type"]:
+        raise ValueError(f"0.0.8 row robot_config.type differs from pinned scoped runner at {slot}")
+    if slot[1] == "holonomic" and recorded_robot.get("command_mode") != expected_robot.get(
+        "command_mode"
+    ):
+        raise ValueError(
+            f"0.0.8 row holonomic command_mode differs from pinned scoped runner at {slot}"
+        )
     for field, expected in planner["scenario"].items():
         if field not in {"seed", "seeds"} and (
             field not in scenario or scenario[field] != expected

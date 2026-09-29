@@ -148,6 +148,10 @@ def _root(
         )
         if slot in runtime_rows:
             row["scenario_params"].update(runtime_rows[slot]["controls"])
+            row["scenario_params"]["robot_config"] = {
+                "type": slot[1],
+                **({"command_mode": "vx_vy"} if slot[1] == "holonomic" else {}),
+            }
         row["config_hash"] = _config_hash(row["scenario_params"])
     path.write_text("".join(json.dumps(row) + "\n" for row in updated), encoding="utf-8")
     (root / "campaign_manifest.json").write_text(
@@ -275,7 +279,9 @@ def _successor_contract(
         planner_bindings[key] = {"path": name, "sha256": sha256(path.read_bytes()).hexdigest()}
     template.write_text(template_text, encoding="utf-8")
     config.write_text(
-        "scenario_matrix: configs/scenarios/synthetic.yaml\nhorizon: 600\ndt: 0.1\nplanners:\n"
+        "scenario_matrix: configs/scenarios/synthetic.yaml\nhorizon: 600\ndt: 0.1\n"
+        + ("kinematics_matrix: [holonomic]\n" if run.endswith("__holonomic") else "")
+        + "planners:\n"
         + "\n".join(planner_lines)
         + "\n"
     )
@@ -1225,6 +1231,92 @@ def test_recorded_episode_controls_must_match_pinned_h600_campaign(
         _compare(bundle, root, digest)
     if field == "run_horizon":
         _assert_cli_exit_two(tmp_path, bundle, root, digest, monkeypatch)
+
+
+def test_differential_drive_row_declaring_holonomic_exits_two(tmp_path: Path, monkeypatch) -> None:
+    row = _row("s1", 111)
+    bundle, digest = _archive(tmp_path, [row])
+    root = _root(tmp_path, [row])
+    path = root / "runs/goal__differential_drive/episodes.jsonl"
+    changed = json.loads(path.read_text())
+    changed["scenario_params"]["robot_config"]["type"] = "holonomic"
+    changed["config_hash"] = _config_hash(changed["scenario_params"])
+    path.write_text(json.dumps(changed) + "\n")
+    with pytest.raises(ValueError, match="robot_config.type differs from pinned scoped runner"):
+        _compare(bundle, root, digest)
+    _assert_cli_exit_two(tmp_path, bundle, root, digest, monkeypatch)
+
+
+def test_holonomic_row_command_mode_must_match_scoped_runner(tmp_path: Path, monkeypatch) -> None:
+    row = _row("s1", 111)
+    run = "goal__holonomic"
+    bundle, digest = _archive(tmp_path, [row], run=run)
+    root = _root(tmp_path, [row], run=run)
+    path = root / "runs" / run / "episodes.jsonl"
+    changed = json.loads(path.read_text())
+    changed["scenario_params"]["robot_config"]["command_mode"] = "unicycle_vw"
+    changed["config_hash"] = _config_hash(changed["scenario_params"])
+    path.write_text(json.dumps(changed) + "\n")
+    with pytest.raises(
+        ValueError, match="holonomic command_mode differs from pinned scoped runner"
+    ):
+        _compare(bundle, root, digest)
+    _assert_cli_exit_two(tmp_path, bundle, root, digest, monkeypatch)
+
+
+def test_v4_scenario_algorithm_override_to_goal_exits_two(tmp_path: Path, monkeypatch) -> None:
+    v4 = "hybrid_rule_v4_fast_progress_static_escape"
+    row = _row("s1", 111, planner=v4)
+    bundle, digest = _archive(tmp_path, [_row("s1", 111)])
+    root = _root(tmp_path, [row], run=f"{v4}__differential_drive")
+    source = tmp_path / "successor-source"
+    config = source / f"configs/algos/{v4}.yaml"
+    config.write_text(config.read_text() + "scenario_algo_overrides:\n  s1:\n    algo: goal\n")
+    subprocess.run(["git", "-C", str(source), "add", "--sparse", str(config)], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(source),
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-qm",
+            "override v4 with goal",
+        ],
+        check=True,
+    )
+    commit = subprocess.check_output(
+        ["git", "-C", str(source), "rev-parse", "HEAD"], text=True
+    ).strip()
+    manifest_path = tmp_path / "successor-manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["source_commit"] = commit
+    manifest["versioned_planner_bindings"][v4]["sha256"] = sha256(config.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest))
+    path = root / "runs" / f"{v4}__differential_drive" / "episodes.jsonl"
+    changed = json.loads(path.read_text())
+    changed["git_hash"] = commit
+    changed["algo"] = "goal"
+    changed["scenario_params"]["algo"] = "goal"
+    changed["scenario_params"]["observation_mode"] = "goal_state"
+    changed["scenario_params"]["observation_level"] = "oracle_full_state"
+    changed["algorithm_metadata"]["algorithm"] = "goal"
+    changed["algorithm_metadata"]["config"] = {}
+    changed["algorithm_metadata"]["config_hash"] = _config_hash({})
+    changed["provenance"]["commit_hash"] = commit
+    changed["provenance"]["config_identity"]["algo"] = "goal"
+    changed["config_hash"] = _config_hash(changed["scenario_params"])
+    path.write_text(json.dumps(changed) + "\n")
+    campaign_path = root / "campaign_manifest.json"
+    campaign = json.loads(campaign_path.read_text())
+    campaign["git"]["commit"] = commit
+    campaign_path.write_text(json.dumps(campaign))
+    with pytest.raises(ValueError, match="v4 slot resolves wrong algorithm"):
+        _compare(bundle, root, digest)
+    _assert_cli_exit_two(tmp_path, bundle, root, digest, monkeypatch)
 
 
 def test_v4_key_bound_to_v3_config_fails_even_with_re_pinned_manifest(

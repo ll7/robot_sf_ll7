@@ -2169,6 +2169,7 @@ class _StepSimResult:
     step_visibility_reason: str | None
     selected_action_payload: dict[str, Any]
     applied_environment_action_payload: dict[str, Any]
+    action_conversion_payload: dict[str, Any] | None
     actuation_step: Any
     planner_step_decision: dict[str, Any] | None
 
@@ -2658,20 +2659,34 @@ def _step_convert_and_execute(
     policy_command: Any,
     step_is_native: bool,
     env: Any,
-) -> tuple[Any, float, bool, bool, dict[str, Any], dict[str, Any], dict[str, Any]]:
+) -> tuple[Any, float, bool, bool, dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
     """Convert command to env action, execute step, and update state.obs.
 
     Returns:
         Tuple of (obs, reward, terminated, truncated, info, selected_action_payload,
-        applied_environment_action_payload).
+        applied_environment_action_payload, action_conversion_payload).
     """
     selected_action_payload = _command_action_payload(policy_command)
     state.ammv_command_actions.append(selected_action_payload)
+    action_conversion_payload: dict[str, Any] = {}
     action_conversion_start = time.perf_counter() if slc.active_harness is not None else None
     if step_is_native:
         # Policy already outputs native env actions (e.g. delta velocities);
         # skip the absolute->delta conversion done by _policy_command_to_env_action.
         action = np.asarray(policy_command, dtype=np.float32)
+        action_conversion_payload.update(
+            {
+                "schema_version": "policy-action-conversion.v1",
+                "kind": "native_environment_action_passthrough",
+            }
+        )
+    elif slc.record_simulation_step_trace:
+        action = _policy_command_to_env_action(
+            env=env,
+            config=slc.config,
+            command=policy_command,
+            conversion_trace=action_conversion_payload,
+        )
     else:
         action = _policy_command_to_env_action(
             env=env,
@@ -2695,6 +2710,7 @@ def _step_convert_and_execute(
         info,
         selected_action_payload,
         applied_environment_action_payload,
+        action_conversion_payload,
     )
 
 
@@ -2836,6 +2852,8 @@ def _step_build_simulation_trace(
         "selected_action": sim.selected_action_payload,
         "applied_environment_action": sim.applied_environment_action_payload,
     }
+    if sim.action_conversion_payload:
+        planner_payload["action_conversion"] = sim.action_conversion_payload
     if sim.actuation_step is not None:
         planner_payload["amv"] = {
             "requested_linear_m_s": float(sim.actuation_step.requested_command[0]),
@@ -3491,6 +3509,7 @@ def _execute_step_loop(
             info,
             sel_payload,
             applied_environment_action_payload,
+            action_conversion_payload,
         ) = _step_convert_and_execute(
             state,
             slc,
@@ -3522,6 +3541,7 @@ def _execute_step_loop(
             step_visibility_reason=s_reason,
             selected_action_payload=sel_payload,
             applied_environment_action_payload=applied_environment_action_payload,
+            action_conversion_payload=action_conversion_payload,
             actuation_step=actuation_step,
             planner_step_decision=planner_step_decision,
         )

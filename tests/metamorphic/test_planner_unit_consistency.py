@@ -23,6 +23,12 @@ from typing import Any
 import pytest
 import yaml
 
+from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
+from robot_sf.benchmark.runner import (
+    _scenario_ped_radius_m,
+    _scenario_robot_radius_m,
+    load_scenario_matrix,
+)
 from robot_sf.planner.dwa import DWAPlannerConfig
 from robot_sf.planner.hybrid_rule_local_planner import HybridRuleLocalPlannerConfig
 from robot_sf.planner.risk_dwa import RiskDWAPlannerConfig
@@ -721,6 +727,32 @@ def test_0_0_8_candidate_resolves_versioned_physical_configs_for_all_arms() -> N
     _assert_reference_and_learned_arm_configs(resolved)
     _assert_guard_mppi_and_dwa_configs(resolved)
     _assert_hybrid_configs_use_drive_limits(resolved)
+
+
+def test_0_0_8_candidate_resolves_physical_geometry_for_all_scenarios() -> None:
+    """The actual candidate campaign binds physical radii before simulation and metrics."""
+    candidate = _load_yaml(
+        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml"
+    )
+    assert candidate["scenario_matrix"] == (
+        "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_0_0_8_physical_geometry.yaml"
+    )
+    assert candidate["dt"] == pytest.approx(SIM.time_per_step_in_secs)
+
+    scenarios = load_scenario_matrix(ROOT / candidate["scenario_matrix"])
+    assert len(scenarios) == 48
+    for scenario in scenarios:
+        assert scenario["robot_config"]["radius"] == pytest.approx(DRIVE.radius)
+        assert scenario["simulation_config"]["ped_radius"] == pytest.approx(SIM.ped_radius)
+        assert _scenario_robot_radius_m(scenario) == pytest.approx(DRIVE.radius)
+        assert _scenario_ped_radius_m(scenario) == pytest.approx(SIM.ped_radius)
+
+    # Verify the candidate's resolved settings reach the environment builder used
+    # by the map runner, not only the campaign's metric helper.
+    scenario_path = ROOT / candidate["scenario_matrix"]
+    env_config = build_env_config(scenarios[0], scenario_path=scenario_path)
+    assert env_config.robot_config.radius == pytest.approx(DRIVE.radius)
+    assert env_config.sim_config.ped_radius == pytest.approx(SIM.ped_radius)
 
 
 def test_representative_planner_physical_field_inventory_and_ranges() -> None:

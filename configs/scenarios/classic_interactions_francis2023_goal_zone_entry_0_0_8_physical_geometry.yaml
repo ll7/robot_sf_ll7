@@ -1,0 +1,13 @@
+# 0.0.8 candidate scenario matrix: bind physical collision geometry for the campaign.
+# The map family and wrapped Social Force kernel are inherited unchanged; only
+# the robot and pedestrian body radii are pinned here for physics and metrics.
+includes:
+  - classic_interactions_francis2023_goal_zone_entry_kernel_wrapped_v2.yaml
+map_search_paths:
+  - ../../maps/svg_maps
+scenario_overrides:
+  robot_config:
+    radius: 1.0
+  simulation_config:
+    ped_radius: 0.4
+    social_force_kernel_version: wrapped_v2

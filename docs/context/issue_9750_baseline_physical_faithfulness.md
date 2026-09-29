@@ -30,6 +30,18 @@ the global-planner fallback radius `0.4 m` are not the physics/metrics robot rad
 silently treated as the physical footprint in this audit. Observation fields `robot_radius` and
 `pedestrians_radius` are defined in metres in [`observation_contract.md`](../dev/observation_contract.md).
 
+## 0.0.8 candidate geometry binding
+
+The 0.0.8 candidate uses the versioned scenario matrix
+`configs/scenarios/classic_interactions_francis2023_goal_zone_entry_0_0_8_physical_geometry.yaml`.
+Its manifest-wide overrides bind `robot_config.radius=1.0 m` and
+`simulation_config.ped_radius=0.4 m`; these values flow into the map runner's environment builder,
+planner observations, collision context, and outcome metrics. A contract test loads the candidate's
+actual scenario matrix and checks the resolved radii across all 48 scenarios, then builds one
+environment config without resetting or stepping it. The frozen 0.0.7 config and scenario matrix
+remain untouched. This config audit does not establish spawn/route feasibility at the larger robot
+radius; the final 0.0.8 setup gates must check those before any planner episodes.
+
 ## Per-arm audit
 
 “Correctness” denotes a mismatch that changes the claimed method or its physical collision

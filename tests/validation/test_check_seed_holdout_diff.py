@@ -292,6 +292,23 @@ def test_sampler_exception_requires_exact_default(tmp_path: Path) -> None:
     assert len(check_diff(diff, tmp_path)) == 1
 
 
+def test_sampler_default_in_later_environment_call_is_flagged(tmp_path: Path) -> None:
+    path = "scripts/tools/compare_adversarial_samplers.py"
+    diff = _diff(
+        path,
+        "            seed=(args.seed or [123])[0],",
+        context=(
+            "        config = SearchConfig.from_files(\n"
+            "            seed=seeds[0],\n"
+            "        )\n"
+            "        env = make_robot_env("
+        ),
+    )
+    assert [(finding.path, finding.text) for finding in check_diff(diff, tmp_path)] == [
+        (path, "seed=(args.seed or [123])[0],")
+    ]
+
+
 def test_moved_episode_seed_line_is_flagged(tmp_path: Path) -> None:
     path = "scripts/benchmark/run_pilot.py"
     diff = (

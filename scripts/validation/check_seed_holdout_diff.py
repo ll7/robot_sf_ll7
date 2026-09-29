@@ -10,9 +10,11 @@ JSON lists and seeds passed through environment variables need exact-head review
 from __future__ import annotations
 
 import argparse
+import io
 import re
 import subprocess
 import sys
+import tokenize
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -83,6 +85,36 @@ def _rejection_test_seed(path: str, text: str, before: list[str], after: list[st
     return False
 
 
+def _enclosed_by_search_config(before: list[str]) -> bool:
+    """Require the seed argument's innermost open call to be SearchConfig.from_files."""
+    opened: list[tuple[str, bool]] = []
+    recent: list[str] = []
+    try:
+        tokens = tokenize.generate_tokens(io.StringIO("\n".join(before) + "\n").readline)
+        for token in tokens:
+            if token.type != tokenize.OP:
+                if token.type == tokenize.NAME:
+                    recent.append(token.string)
+                    recent = recent[-3:]
+                continue
+            symbol = token.string
+            if symbol in "([{":
+                opened.append(
+                    (symbol, symbol == "(" and recent[-3:] == ["SearchConfig", ".", "from_files"])
+                )
+            elif symbol in ")]}":
+                if opened:
+                    opened.pop()
+            recent.append(symbol)
+            recent = recent[-3:]
+    except tokenize.TokenError:
+        # The line under inspection is inside an unfinished call.
+        pass
+    except IndentationError:
+        return False
+    return bool(opened and opened[-1] == ("(", True))
+
+
 def _non_episode_seed(path: str, text: str, before: list[str], after: list[str]) -> bool:
     """Recognize narrow setup metadata and sampler RNG defaults."""
     if _rejection_test_seed(path, text, before, after):
@@ -101,11 +133,9 @@ def _non_episode_seed(path: str, text: str, before: list[str], after: list[str])
         return True
     if text.strip() != "seed=(args.seed or [123])[0],":  # seed-holdout: synthetic-fixture
         return False
-    # This keyword is the SearchConfig sampler RNG default, not an episode call.
-    for previous in reversed(before):
-        if re.search(r"\b(?:run_episode|SearchConfig\.from_files)\s*\(", previous):
-            return "SearchConfig.from_files(" in previous
-    return False
+    # Only the SearchConfig keyword is a sampler RNG default. An earlier
+    # SearchConfig call cannot exempt a later environment or episode call.
+    return _enclosed_by_search_config(before)
 
 
 def _range_overlaps_holdout(text: str) -> bool:

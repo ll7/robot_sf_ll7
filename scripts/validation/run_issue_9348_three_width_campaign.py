@@ -402,16 +402,14 @@ def _observed_baseline_policy_builder(
         """Invoke the constructed policy and retain its route and returned command."""
         step = len(invocation_steps)
         route_before = _runtime_policy_route(policy)
-        completed = False
+        error_type: str | None = "unfinished"
         try:
             command = policy(observation)
-            completed = True
+            error_type = None
         finally:
-            # Record any failure without a broad handler: the exception keeps
-            # propagating unchanged after this block. The flag, not exc_info
-            # alone, decides, so a call made inside a caller handler is safe.
-            failure = None if completed else sys.exc_info()[1]
-            if failure is not None:
+            if error_type is not None:
+                # Any exception (including BaseException) propagates unchanged;
+                # only the failure evidence is recorded here.
                 invocation_steps.append(
                     {
                         "step": step,
@@ -419,7 +417,7 @@ def _observed_baseline_policy_builder(
                         "route_before": route_before,
                         "route_after": _runtime_policy_route(policy),
                         "status": "error",
-                        "error_type": type(failure).__name__,
+                        "error_type": sys.exc_info()[0].__name__,
                         "command": None,
                     }
                 )

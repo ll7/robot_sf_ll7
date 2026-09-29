@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from random import Random
 
@@ -11,11 +13,37 @@ from robot_sf.adversarial.bundle import build_candidate_payload
 from robot_sf.adversarial.config import SearchSpaceConfig
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+EVIDENCE_DIR_NAME = "issue_9645_bounded_falsification_2026-09-24"
+EVIDENCE_DIR = REPO_ROOT / "docs/context/evidence" / EVIDENCE_DIR_NAME
+AS_RUN_SPACE_PATH = EVIDENCE_DIR / "payload/inputs/issue_9645_pilot_space.v1.yaml"
+LIVE_SPACE_PATH = REPO_ROOT / "configs/adversarial/issue_9645_pilot_space.v1.yaml"
+QUARANTINED_CONFIG_ROOTS = (
+    "benchmarks",
+    "snqi_v2",
+    "policy_search",
+    "releases",
+    "calibration",
+)
+
+
+def find_quarantine_references(config_root: Path) -> list[str]:
+    """Return config files under the tuning-relevant roots that name the quarantined bundle."""
+    hits: list[str] = []
+    for name in QUARANTINED_CONFIG_ROOTS:
+        root = config_root / name
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*")):
+            if path.is_file() and EVIDENCE_DIR_NAME in path.read_text(
+                encoding="utf-8", errors="ignore"
+            ):
+                hits.append(path.relative_to(config_root).as_posix())
+    return hits
 
 
 def test_issue_9645_space_varies_only_effective_dimensions_and_freezes_environment() -> None:
     """Keep the pilot's searched controls effective and its simulator seed fixed."""
-    search_space_path = REPO_ROOT / "configs/adversarial/issue_9645_pilot_space.v1.yaml"
+    search_space_path = AS_RUN_SPACE_PATH
     template_path = REPO_ROOT / "configs/scenarios/templates/crossing_ttc.yaml"
     search_space = SearchSpaceConfig.from_file(search_space_path)
     template = yaml.safe_load(template_path.read_text(encoding="utf-8"))
@@ -52,3 +80,57 @@ def test_issue_9645_space_varies_only_effective_dimensions_and_freezes_environme
     ]
     assert route_payload["ped_routes"] == []
     assert "single_pedestrians" not in specialized
+
+
+def test_live_config_is_reseeded_and_otherwise_matches_as_run_input() -> None:
+    """The in-tree config uses a dev seed; only scenario_seed differs from the as-run input."""
+    live = yaml.safe_load(LIVE_SPACE_PATH.read_text(encoding="utf-8"))
+    as_run = yaml.safe_load(AS_RUN_SPACE_PATH.read_text(encoding="utf-8"))
+
+    assert live["variables"]["scenario_seed"] == {"min": 1001, "max": 1001}
+    assert as_run["variables"]["scenario_seed"] == {"min": 123, "max": 123}
+    live["variables"].pop("scenario_seed")
+    as_run["variables"].pop("scenario_seed")
+    live.pop("description")
+    as_run.pop("description")
+    assert live == as_run
+    assert SearchSpaceConfig.from_file(LIVE_SPACE_PATH).scenario_seed.min == 1001
+
+
+def test_manifest_records_holdout_quarantine_and_reseed() -> None:
+    """The evidence manifest states the holdout use, the forbidden uses and the re-seed."""
+    manifest = json.loads((EVIDENCE_DIR / "evidence_bundle_manifest.json").read_text("utf-8"))
+    quarantine = manifest["quarantine"]
+
+    assert quarantine["reason"] == "holdout_seed_used"
+    assert quarantine["holdout_seed"] == 123
+    assert quarantine["used_on"] == "2026-09-24"
+    assert set(quarantine["must_not_inform"]) == {
+        "hybrid_v4_tuning",
+        "v4_freeze",
+        "snqi_calibration",
+        "anchors",
+        "0.0.8_campaign",
+    }
+    reseed = quarantine["config_path_reseed"]
+    assert reseed["path"] == "configs/adversarial/issue_9645_pilot_space.v1.yaml"
+    assert reseed["as_run_input"] == "inputs/issue_9645_pilot_space.v1.yaml"
+    assert reseed["as_run_sha256"] == hashlib.sha256(AS_RUN_SPACE_PATH.read_bytes()).hexdigest()
+    assert reseed["current_scenario_seed"] == 1001
+
+
+def test_no_tuning_or_campaign_config_references_quarantined_evidence() -> None:
+    """No benchmark, SNQI, policy-search, release or calibration config may cite the bundle."""
+    assert find_quarantine_references(REPO_ROOT / "configs") == []
+
+
+def test_quarantine_reference_finder_detects_a_citing_config(tmp_path: Path) -> None:
+    """The guard reports a config that names the bundle and ignores one that does not."""
+    bad = tmp_path / "snqi_v2" / "weights.yaml"
+    bad.parent.mkdir(parents=True)
+    bad.write_text(f"source: docs/context/evidence/{EVIDENCE_DIR_NAME}/payload\n")
+    good = tmp_path / "benchmarks" / "ok.yaml"
+    good.parent.mkdir()
+    good.write_text("source: docs/context/evidence/other\n")
+
+    assert find_quarantine_references(tmp_path) == ["snqi_v2/weights.yaml"]

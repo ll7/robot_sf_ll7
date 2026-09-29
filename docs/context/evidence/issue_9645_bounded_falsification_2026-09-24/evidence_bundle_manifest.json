@@ -6,6 +6,26 @@
   "command": "uv run python scripts/tools/report_falsification_search.py --comparison docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_comparison.json --manifest-path-map docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/pilot_report_manifest_path_map.v1.json --output-dir output/issue9645-report-v3-dual-byte-recovery-20260927 --repo-root .",
   "commit": "06af083bbce55c0f9c3bd830537d2f712b239fa3",
   "claim_boundary": "diagnostic_only_finite_search_budget_no_planner_safety_or_search_coverage_claim; report rebuilt without search_or_simulation_rerun; exact producer episode bytes and separate path-normalized report inputs are retained and digest/size bound",
+  "quarantine": {
+    "reason": "holdout_seed_used",
+    "holdout_seed": 123,
+    "used_on": "2026-09-24",
+    "statement": "The pilot ran with simulator scenario_seed 123, inside the held-out range 111-140. Its outputs must not inform hybrid v4 tuning, the v4 freeze, SNQI calibration, anchors or the 0.0.8 campaign.",
+    "must_not_inform": [
+      "hybrid_v4_tuning",
+      "v4_freeze",
+      "snqi_calibration",
+      "anchors",
+      "0.0.8_campaign"
+    ],
+    "config_path_reseed": {
+      "path": "configs/adversarial/issue_9645_pilot_space.v1.yaml",
+      "note": "Re-seeded after the run. The in-tree file now uses a dev seed; the run's input is the payload copy. Historical hashes that name the configs path (payload/source_hashes.sha256, run_metadata.json) describe the pre-re-seed bytes and are intentionally not rewritten.",
+      "as_run_input": "inputs/issue_9645_pilot_space.v1.yaml",
+      "as_run_sha256": "2d82db0265111a42b4936a958bea2f08c8b03ca1e02c8c4996452f85926b3392",
+      "current_scenario_seed": 1001
+    }
+  },
   "policy": {
     "large_raw_artifacts": "excluded",
     "output_tree_mirroring": "forbidden",

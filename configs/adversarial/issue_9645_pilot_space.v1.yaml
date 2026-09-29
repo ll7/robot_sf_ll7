@@ -1,3 +1,9 @@
+# Re-seeded after the issue #9645 pilot ran: scenario_seed is the dev seed 1001 for any
+# future run. The pilot itself ran with scenario_seed 123, a held-out evaluation seed
+# (111-140). Its exact input is the byte-identical, hash-pinned copy at
+# payload/inputs/issue_9645_pilot_space.v1.yaml inside the issue #9645 evidence bundle
+# under docs/context/evidence/. Do not cite that bundle from tuning, calibration or
+# campaign configs; its outputs are quarantined.
 schema_version: adversarial-search-space.v1
 description: >-
   Issue #9645 paired Random/TPE pilot derived from the crossing/TTC source bounds.
@@ -23,7 +29,7 @@ variables:
     min: 0.8
     max: 1.4
   scenario_seed:
-    min: 123
-    max: 123
+    min: 1001
+    max: 1001
 constraints:
   min_start_goal_distance_m: 2.0

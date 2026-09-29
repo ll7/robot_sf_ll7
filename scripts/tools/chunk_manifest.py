@@ -33,6 +33,7 @@ import hashlib
 import json
 import os
 import stat
+import struct
 import sys
 import tempfile
 import time
@@ -42,6 +43,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 from threading import Lock
 from typing import Any
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - fcntl is Unix-only
+    fcntl = None
 
 SCHEMA_VERSION = "chunk_manifest.v1"
 STATE_SCHEMA_VERSION = "chunk_manifest.state.v1"
@@ -125,23 +131,125 @@ def _looks_sparse_by_blocks(st: os.stat_result) -> bool:
     return blocks is not None and st.st_size > 0 and blocks * 512 < st.st_size
 
 
-def _has_sparse_hole(path: Path, size: int) -> bool:
-    """Confirm a hole with filesystem extent queries, failing closed if unavailable."""
-    if not hasattr(os, "SEEK_DATA") or not hasattr(os, "SEEK_HOLE"):
-        return True
+# Linux uapi/linux/fiemap.h: FS_IOC_FIEMAP = _IOWR('f', 11, struct fiemap).
+_FIEMAP_IOCTL = 0xC020660B
+_FIEMAP_FLAG_SYNC = 0x00000001
+_FIEMAP_EXTENT_LAST = 0x00000001
+_FIEMAP_EXTENT_UNKNOWN = 0x00000002
+_FIEMAP_EXTENT_DELALLOC = 0x00000004
+_FIEMAP_EXTENT_ENCODED = 0x00000008
+_FIEMAP_EXTENT_UNWRITTEN = 0x00000800
+_FIEMAP_AMBIGUOUS_FLAGS = (
+    _FIEMAP_EXTENT_UNKNOWN | _FIEMAP_EXTENT_DELALLOC | _FIEMAP_EXTENT_UNWRITTEN
+)
+_FIEMAP_HEADER = struct.Struct("=QQIIII")
+_FIEMAP_EXTENT = struct.Struct("=QQQQQIIII")
+_FIEMAP_EXTENTS_PER_CALL = 64
+_FIEMAP_MAX_CALLS = 4096
+
+
+@dataclass(frozen=True, slots=True)
+class _FiemapExtent:
+    """One decoded FIEMAP extent, trimmed to the fields the acceptance check needs."""
+
+    logical: int
+    length: int
+    flags: int
+
+    @property
+    def last(self) -> bool:
+        """Return whether this extent carries FIEMAP_EXTENT_LAST."""
+        return bool(self.flags & _FIEMAP_EXTENT_LAST)
+
+
+def _fiemap_extents(fd: int, size: int) -> list[_FiemapExtent] | None:
+    """Return every FIEMAP extent for one open file, or ``None`` if untrustworthy.
+
+    Pages through bounded ioctl calls starting at each prior extent's end. Returns
+    ``None`` (fail closed) on ioctl failure, a malformed reply, a reply that makes no
+    forward progress, or if pagination exceeds the bounded call count without ever
+    observing FIEMAP_EXTENT_LAST.
+    """
+    if fcntl is None:
+        return None
+    extents: list[_FiemapExtent] = []
+    start = 0
+    for _ in range(_FIEMAP_MAX_CALLS):
+        remaining = size - start
+        if remaining <= 0:
+            return extents
+        header = _FIEMAP_HEADER.pack(
+            start, remaining, _FIEMAP_FLAG_SYNC, 0, _FIEMAP_EXTENTS_PER_CALL, 0
+        )
+        buffer = bytearray(header + bytes(_FIEMAP_EXTENT.size * _FIEMAP_EXTENTS_PER_CALL))
+        try:
+            fcntl.ioctl(fd, _FIEMAP_IOCTL, buffer, True)
+        except OSError:
+            return None
+        _start, _length, _flags, mapped, _count, _reserved = _FIEMAP_HEADER.unpack_from(buffer, 0)
+        if mapped == 0:
+            return extents
+        if mapped > _FIEMAP_EXTENTS_PER_CALL:
+            return None
+        offset = _FIEMAP_HEADER.size
+        for _index in range(mapped):
+            logical, _physical, length, _r0, _r1, flags, _r2, _r3, _r4 = _FIEMAP_EXTENT.unpack_from(
+                buffer, offset
+            )
+            extents.append(_FiemapExtent(logical=logical, length=length, flags=flags))
+            offset += _FIEMAP_EXTENT.size
+        last = extents[-1]
+        if last.last:
+            return extents
+        next_start = last.logical + last.length
+        if next_start <= start:
+            return None
+        start = next_start
+    return None
+
+
+def _fiemap_confirms_low_allocation(path: Path, size: int) -> bool:
+    """Return True only when FIEMAP proves a gapless file explained by encoded extents.
+
+    Requires every extent to make strictly forward progress (no zero-length or
+    overlapping extents) and requires FIEMAP_EXTENT_LAST on the final extent of the
+    reply only, per the Linux FIEMAP contract that LAST marks the file's last extent.
+    """
     try:
         fd = os.open(path, os.O_RDONLY)
     except OSError:
-        return True
+        return False
     try:
-        try:
-            first_data = os.lseek(fd, 0, os.SEEK_DATA)
-            first_hole = os.lseek(fd, 0, os.SEEK_HOLE)
-        except OSError:
-            return True
-        return first_data > 0 or first_hole < size
+        extents = _fiemap_extents(fd, size)
     finally:
         os.close(fd)
+    if not extents:
+        return False
+    covered = 0
+    saw_encoded = False
+    last_index = len(extents) - 1
+    for index, extent in enumerate(extents):
+        if extent.length <= 0:
+            return False
+        if extent.logical != covered:
+            return False
+        if extent.flags & _FIEMAP_AMBIGUOUS_FLAGS:
+            return False
+        if extent.flags & _FIEMAP_EXTENT_ENCODED:
+            saw_encoded = True
+        if extent.last != (index == last_index):
+            return False
+        covered += extent.length
+    return saw_encoded and covered >= size
+
+
+def _has_sparse_hole(path: Path, size: int) -> bool:
+    """Confirm a hole via FIEMAP, failing closed unless encoded extents explain it.
+
+    SEEK_DATA/SEEK_HOLE are not used here: they may legally report a whole file as
+    data despite real sparse holes, so only an exhaustive FIEMAP mapping can accept.
+    """
+    return not _fiemap_confirms_low_allocation(path, size)
 
 
 def _stat_checked(path: Path, relative: str) -> tuple[int, int, int, int, int]:

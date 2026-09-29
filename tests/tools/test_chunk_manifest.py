@@ -177,14 +177,157 @@ def test_unsafe_members_fail_closed(tmp_path: Path, setup, code: str) -> None:
     assert error.value.code == code
 
 
-def test_compressed_allocation_without_holes_is_accepted(tmp_path: Path, monkeypatch) -> None:
+def test_dense_file_is_never_checked_for_sparse_holes(tmp_path: Path) -> None:
     path = tmp_path / "dense.bin"
-    path.write_bytes(b"dense bytes" * 100)
-    monkeypatch.setattr(cm, "_looks_sparse_by_blocks", lambda _st: True)
-    if not hasattr(os, "SEEK_HOLE") or not hasattr(os, "SEEK_DATA"):
-        pytest.skip("filesystem extent queries are unavailable")
-    assert cm._has_sparse_hole(path, path.stat().st_size) is False
+    path.write_bytes(hashlib.shake_256(b"dense fixture").digest(128 * 1024))
+    if cm._looks_sparse_by_blocks(path.stat()):
+        pytest.skip("filesystem reports low allocation for the dense fixture")
     assert cm._stat_checked(path, path.name)[0] == path.stat().st_size
+
+
+def test_fiemap_full_encoded_mapping_is_accepted(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "compressed.bin"
+    path.write_bytes(b"x" * 4096)
+    size = path.stat().st_size
+    flags = cm._FIEMAP_EXTENT_ENCODED | cm._FIEMAP_EXTENT_LAST
+    monkeypatch.setattr(
+        cm, "_fiemap_extents", lambda _fd, _size: [cm._FiemapExtent(0, size, flags)]
+    )
+    assert cm._has_sparse_hole(path, size) is False
+
+
+def test_fiemap_gap_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "gap.bin"
+    path.write_bytes(b"x" * 4096)
+    size = path.stat().st_size
+    flags = cm._FIEMAP_EXTENT_ENCODED | cm._FIEMAP_EXTENT_LAST
+    monkeypatch.setattr(
+        cm, "_fiemap_extents", lambda _fd, _size: [cm._FiemapExtent(100, size - 100, flags)]
+    )
+    assert cm._has_sparse_hole(path, size) is True
+
+
+def test_fiemap_unavailable_mapping_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "unavailable.bin"
+    path.write_bytes(b"x" * 4096)
+    size = path.stat().st_size
+    monkeypatch.setattr(cm, "_fiemap_extents", lambda _fd, _size: None)
+    assert cm._has_sparse_hole(path, size) is True
+
+
+def test_fiemap_ambiguous_extent_flags_are_rejected(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "ambiguous.bin"
+    path.write_bytes(b"x" * 4096)
+    size = path.stat().st_size
+    flags = cm._FIEMAP_EXTENT_ENCODED | cm._FIEMAP_EXTENT_UNWRITTEN | cm._FIEMAP_EXTENT_LAST
+    monkeypatch.setattr(
+        cm, "_fiemap_extents", lambda _fd, _size: [cm._FiemapExtent(0, size, flags)]
+    )
+    assert cm._has_sparse_hole(path, size) is True
+
+
+def test_fiemap_incomplete_coverage_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "incomplete.bin"
+    path.write_bytes(b"x" * 4096)
+    size = path.stat().st_size
+    flags = cm._FIEMAP_EXTENT_ENCODED | cm._FIEMAP_EXTENT_LAST
+    monkeypatch.setattr(
+        cm, "_fiemap_extents", lambda _fd, _size: [cm._FiemapExtent(0, size - 100, flags)]
+    )
+    assert cm._has_sparse_hole(path, size) is True
+
+
+def test_fiemap_without_encoded_extent_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "no_encoded.bin"
+    path.write_bytes(b"x" * 4096)
+    size = path.stat().st_size
+    monkeypatch.setattr(
+        cm,
+        "_fiemap_extents",
+        lambda _fd, _size: [cm._FiemapExtent(0, size, cm._FIEMAP_EXTENT_LAST)],
+    )
+    assert cm._has_sparse_hole(path, size) is True
+
+
+def test_fiemap_zero_length_trailing_extent_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "trailing_zero.bin"
+    path.write_bytes(b"x" * 4096)
+    size = path.stat().st_size
+    flags = cm._FIEMAP_EXTENT_ENCODED
+    last_flags = cm._FIEMAP_EXTENT_ENCODED | cm._FIEMAP_EXTENT_LAST
+    monkeypatch.setattr(
+        cm,
+        "_fiemap_extents",
+        lambda _fd, _size: [
+            cm._FiemapExtent(0, size, flags),
+            cm._FiemapExtent(size, 0, last_flags),
+        ],
+    )
+    assert cm._has_sparse_hole(path, size) is True
+
+
+def test_fiemap_missing_terminal_last_flag_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "no_last.bin"
+    path.write_bytes(b"x" * 4096)
+    size = path.stat().st_size
+    flags = cm._FIEMAP_EXTENT_ENCODED
+    monkeypatch.setattr(
+        cm, "_fiemap_extents", lambda _fd, _size: [cm._FiemapExtent(0, size, flags)]
+    )
+    assert cm._has_sparse_hole(path, size) is True
+
+
+def test_fiemap_last_flag_on_earlier_extent_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "early_last.bin"
+    path.write_bytes(b"x" * 8192)
+    size = path.stat().st_size
+    half = size // 2
+    flags = cm._FIEMAP_EXTENT_ENCODED | cm._FIEMAP_EXTENT_LAST
+    monkeypatch.setattr(
+        cm,
+        "_fiemap_extents",
+        lambda _fd, _size: [
+            cm._FiemapExtent(0, half, flags),
+            cm._FiemapExtent(half, size - half, flags),
+        ],
+    )
+    assert cm._has_sparse_hole(path, size) is True
+
+
+def test_sparse_file_rejected_even_if_seek_data_hole_report_dense(
+    tmp_path: Path, monkeypatch
+) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    _make_sparse(root)
+    size = (root / "sparse.bin").stat().st_size
+
+    def fake_lseek(_fd, offset, whence):
+        if whence == os.SEEK_DATA:
+            return 0
+        if whence == os.SEEK_HOLE:
+            return size
+        raise AssertionError(f"unexpected whence: {whence}")
+
+    monkeypatch.setattr(cm.os, "lseek", fake_lseek)
+    with pytest.raises(cm.ChunkManifestError) as error:
+        _build(root)
+    assert error.value.code == "sparse_file"
+
+
+def test_stat_checked_accepts_low_block_hint_confirmed_by_fiemap(
+    tmp_path: Path, monkeypatch
+) -> None:
+    path = tmp_path / "compressed.bin"
+    path.write_bytes(b"x" * 4096)
+    size = path.stat().st_size
+    flags = cm._FIEMAP_EXTENT_ENCODED | cm._FIEMAP_EXTENT_LAST
+    monkeypatch.setattr(cm, "_looks_sparse_by_blocks", lambda _st: True)
+    monkeypatch.setattr(
+        cm, "_fiemap_extents", lambda _fd, _size: [cm._FiemapExtent(0, size, flags)]
+    )
+    identity = cm._stat_checked(path, path.name)
+    assert identity[0] == size
 
 
 def test_source_mutation_guard_fails_closed(tmp_path: Path, monkeypatch) -> None:

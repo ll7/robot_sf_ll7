@@ -33,6 +33,7 @@ CI_JOB_TIMEOUTS = {
     "fast-pysf-compat": 10,
     "smoke-artifacts": 30,
     "scenario-validation": 15,
+    "new-tests-fail-on-base": 30,
     "reproducibility-check": 20,
     "reproducibility-check-reconciliation": 5,
     "xdist-scratch-isolation": 30,

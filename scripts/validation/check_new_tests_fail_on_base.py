@@ -12,6 +12,7 @@ only those tests, and classifies each one:
 * ``ERROR_UNRELATED``  - the run broke for reasons unrelated to the change (missing
   third-party dependency, fixture setup error, timeout, skip); reported separately.
 * ``EXEMPT``           - marked ``@pytest.mark.new_feature_no_base(reason=...)``; not run.
+* ``SKIPPED_TEST_ONLY`` - the diff touches no production files, so nothing can regress.
 * ``SKIPPED_SEED_GUARD`` - file uses benchmark/episode seeds 111-140; never run here.
 
 Limits (by design, advisory): only test functions whose own AST (body, decorators,
@@ -38,6 +39,7 @@ PASSES = "PASSES_ON_BASE"
 UNRELATED = "ERROR_UNRELATED"
 EXEMPT = "EXEMPT"
 SEED_GUARD = "SKIPPED_SEED_GUARD"
+SKIPPED_TEST_ONLY = "SKIPPED_TEST_ONLY"
 
 EXEMPT_MARKER = "new_feature_no_base"
 SEED_RANGE = range(111, 141)
@@ -107,6 +109,17 @@ def _show(repo: Path, ref: str, path: str) -> str | None:
         check=False,
     )
     return proc.stdout if proc.returncode == 0 else None
+
+
+def _changes_production(repo: Path, base: str, head: str) -> bool:
+    """Return whether the diff touches any file outside test dirs and documentation."""
+    for _status, head_path, _old in changed_files(repo, base, head):
+        if head_path.startswith(TEST_DIRS) or head_path.startswith("docs/"):
+            continue
+        if head_path.endswith((".md", ".rst", ".txt")):
+            continue
+        return True
+    return False
 
 
 def resolve_base(repo: Path, base: str | None, head: str) -> str:
@@ -225,8 +238,43 @@ def collect_tests(source: str) -> dict[str, tuple[str, str | None]]:
     return result
 
 
+def _in_seed_range(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Constant)
+        and isinstance(node.value, int)
+        and not isinstance(node.value, bool)
+        and node.value in SEED_RANGE
+    )
+
+
+def _seed_context_roots(node: ast.AST) -> list[ast.AST]:
+    """Return sub-expressions whose literals count as seeds for this node."""
+    if isinstance(node, ast.keyword) and node.arg and _SEED_WORD.search(node.arg):
+        return [node.value]
+    if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        if any(_SEED_WORD.search(ast.unparse(t)) for t in targets):
+            return [node.value]
+    if isinstance(node, ast.Dict):
+        return [
+            v
+            for k, v in zip(node.keys, node.values, strict=False)
+            if isinstance(k, ast.Constant)
+            and isinstance(k.value, str)
+            and _SEED_WORD.search(k.value)
+        ]
+    if isinstance(node, ast.Call) and _dotted(node.func) == "range":
+        return [node]
+    return []
+
+
 def has_seed_literals(source: str) -> bool:
-    """Return whether a file uses seeds 111-140 as literals in benchmark/episode context."""
+    """Return whether a file uses seeds 111-140 as literals in benchmark/episode context.
+
+    Conservative on purpose: the file must mention benchmark/episode, and a literal in
+    111-140 must be bound to a ``*seed*`` keyword, assignment target, or dict key, or
+    appear as an argument of ``range(...)``.
+    """
     if not (_BENCH_CONTEXT.search(source) and _SEED_WORD.search(source)):
         return False
     try:
@@ -234,11 +282,10 @@ def has_seed_literals(source: str) -> bool:
     except SyntaxError:
         return False
     return any(
-        isinstance(n, ast.Constant)
-        and isinstance(n.value, int)
-        and not isinstance(n.value, bool)
-        and n.value in SEED_RANGE
-        for n in ast.walk(tree)
+        _in_seed_range(sub)
+        for node in ast.walk(tree)
+        for root in _seed_context_roots(node)
+        for sub in ast.walk(root)
     )
 
 
@@ -434,33 +481,36 @@ def run_on_base(
             dest = wt / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(content)
-        junit = tmp / "junit.xml"
-        node_ids = sorted({r.node_id for r in runnable})
-        cmd = [
-            sys.executable,
-            "-m",
-            "pytest",
-            "-p",
-            "no:cacheprovider",
-            "--continue-on-collection-errors",
-            "--timeout=120",
-            "-q",
-            f"--junitxml={junit}",
-            *pytest_args,
-            *node_ids,
-        ]
-        try:
-            proc = subprocess.run(
-                cmd, cwd=wt, capture_output=True, text=True, timeout=timeout, check=False
-            )
-            tail = "\n".join(proc.stdout.splitlines()[-5:])
-            notes.append(f"pytest exit={proc.returncode}: {tail}")
-        except subprocess.TimeoutExpired:
-            notes.append(f"pytest run timed out after {timeout}s")
-        results = parse_junit(junit, runnable, _repo_packages(wt))
-        for rec in runnable:
-            cls, detail = results.get(rec.node_id, (UNRELATED, "no result reported by pytest"))
-            rec.classification, rec.detail = cls, detail
+        packages = _repo_packages(wt)
+        for path in sorted({r.path for r in runnable}):
+            file_recs = [r for r in runnable if r.path == path]
+            junit = tmp / f"junit_{abs(hash(path))}.xml"
+            cmd = [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-p",
+                "no:cacheprovider",
+                "--continue-on-collection-errors",
+                "--timeout=120",
+                "-q",
+                f"--junitxml={junit}",
+                *pytest_args,
+                *sorted({r.node_id for r in file_recs}),
+            ]
+            try:
+                proc = subprocess.run(
+                    cmd, cwd=wt, capture_output=True, text=True, timeout=timeout, check=False
+                )
+                if proc.returncode not in (0, 1):
+                    tail = " | ".join(proc.stdout.strip().splitlines()[-3:])[:300]
+                    notes.append(f"{path}: pytest exit={proc.returncode}: {tail}")
+            except subprocess.TimeoutExpired:
+                notes.append(f"{path}: pytest run timed out after {timeout}s")
+            results = parse_junit(junit, file_recs, packages)
+            for rec in file_recs:
+                cls, detail = results.get(rec.node_id, (UNRELATED, "no result reported by pytest"))
+                rec.classification, rec.detail = cls, detail
     finally:
         subprocess.run(
             ["git", "-C", str(repo), "worktree", "remove", "--force", str(wt)],
@@ -479,12 +529,22 @@ def check(
     max_tests: int = DEFAULT_MAX_TESTS,
     pytest_args: list[str] | None = None,
     timeout: int = 1800,
+    allow_test_only: bool = False,
 ) -> Report:
     """Run the full check and return the report."""
     base_sha = resolve_base(repo, base, head)
     head_sha = _git(repo, "rev-parse", head).strip()
     records, overlay, notes = select_tests(repo, base_sha, head_sha)
     report = Report(base=base_sha, head=head_sha, tests=records, notes=notes)
+    if records and not allow_test_only and not _changes_production(repo, base_sha, head_sha):
+        report.notes.append(
+            "test-only change (no production files touched): nothing on the base can be "
+            "regressed, so no tests were run; use --allow-test-only to run anyway"
+        )
+        for rec in records:
+            rec.classification = rec.classification or SKIPPED_TEST_ONLY
+            rec.detail = rec.detail or "test-only change"
+        return report
     runnable = [r for r in records if not r.classification]
     if len(runnable) > max_tests:
         for rec in runnable[max_tests:]:
@@ -522,7 +582,7 @@ def render_human(report: Report) -> str:
         lines.append("Tests that PASS on base (do not detect their regression):")
         lines += [f"- `{r.node_id}` ({r.reason})" for r in flagged]
         lines.append("")
-    for label in (UNRELATED, SEED_GUARD, EXEMPT):
+    for label in (UNRELATED, SEED_GUARD, SKIPPED_TEST_ONLY, EXEMPT):
         rows = [r for r in report.tests if r.classification == label]
         if rows:
             lines.append(f"{label}:")
@@ -542,6 +602,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--summary-out", type=Path, help="write Markdown summary here")
     ap.add_argument("--max-tests", type=int, default=DEFAULT_MAX_TESTS)
     ap.add_argument("--timeout", type=int, default=1800, help="overall pytest timeout in seconds")
+    ap.add_argument(
+        "--allow-test-only",
+        action="store_true",
+        help="also run when the diff touches no production files (default: skip)",
+    )
     ap.add_argument("--strict", action="store_true", help="exit 1 when any test PASSES on base")
     ap.add_argument("--pytest-arg", action="append", default=[], help="extra pytest argument")
     args = ap.parse_args(argv)
@@ -553,6 +618,7 @@ def main(argv: list[str] | None = None) -> int:
         max_tests=args.max_tests,
         pytest_args=args.pytest_arg,
         timeout=args.timeout,
+        allow_test_only=args.allow_test_only,
     )
     payload = {
         "base": report.base,

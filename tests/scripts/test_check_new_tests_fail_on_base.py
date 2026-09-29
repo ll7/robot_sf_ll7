@@ -90,6 +90,12 @@ def test_seed_guard_needs_benchmark_context() -> None:
     assert mod.has_seed_literals("def test_x():\n    run_episode(seed=120)\n")
     assert not mod.has_seed_literals("def test_x():\n    assert 120 == 120\n")
     assert not mod.has_seed_literals("def test_x():\n    run_episode(seed=42)\n")
+    assert mod.has_seed_literals("SEEDS = [1, 120]\ndef test_x():\n    benchmark(SEEDS)\n")
+    assert mod.has_seed_literals("def test_x():\n    benchmark(range(111, 141))\n# seed\n")
+    # a 111-140 literal unrelated to seeds does not trigger the guard
+    assert not mod.has_seed_literals(
+        "# episode seed docs\ndef test_x():\n    assert width == 120\n"
+    )
 
 
 def test_classify_error_separates_third_party_imports() -> None:
@@ -158,12 +164,13 @@ def test_collection_error_from_missing_api_fails_on_base(repo: Path) -> None:
         "from calc import missing_name\n\n\ndef test_it():\n    assert missing_name\n",
     )
     _commit(repo, "feature")
-    report = mod.check(repo, "base", "HEAD", timeout=300)
+    report = mod.check(repo, "base", "HEAD", timeout=300, allow_test_only=True)
     (rec,) = report.tests
     assert rec.classification == mod.FAILS
 
 
 def test_main_exit_codes_and_outputs(repo: Path, tmp_path: Path) -> None:
+    _write(repo, "calc.py", "def value():\n    return 4\n")
     _write(repo, "tests/test_weak.py", "def test_weak():\n    assert True\n")
     _commit(repo, "feature")
     out = tmp_path / "r.json"
@@ -181,3 +188,12 @@ def test_no_test_changes_is_clean(repo: Path) -> None:
     _commit(repo, "prod only")
     report = mod.check(repo, "base", "HEAD")
     assert report.tests == []
+
+
+def test_test_only_change_is_skipped_unless_allowed(repo: Path) -> None:
+    _write(repo, "tests/test_weak.py", "def test_weak():\n    assert True\n")
+    _commit(repo, "tests only")
+    report = mod.check(repo, "base", "HEAD", timeout=300)
+    assert [r.classification for r in report.tests] == [mod.SKIPPED_TEST_ONLY]
+    forced = mod.check(repo, "base", "HEAD", timeout=300, allow_test_only=True)
+    assert [r.classification for r in forced.tests] == [mod.PASSES]

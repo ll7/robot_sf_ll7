@@ -6,6 +6,9 @@ a version from running a different version, and freezes v4 parameters only after
 #9748. These tests pin that contract on the tracked templates.
 """
 
+# evidence-writer-exempt: this test writes only a pytest tmp_path YAML fixture to
+# check version naming; it does not create or alter repository evidence artifacts.
+
 from __future__ import annotations
 
 import hashlib

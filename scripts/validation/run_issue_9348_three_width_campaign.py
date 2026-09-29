@@ -667,8 +667,8 @@ def _baseline_execution_reasons(
         reasons.append("execution_mode_not_bound_to_runtime_invocation")
     if row is None or not isinstance(row.get("readiness_status"), str):
         reasons.append("missing_readiness_status")
-    elif row["readiness_status"] != "native":
-        reasons.append(f"non_native_readiness_status:{row.get('readiness_status')!r}")
+    elif expected is None or row["readiness_status"] != expected[0]:
+        reasons.append(f"unexpected_readiness_status:{row.get('readiness_status')!r}")
     return reasons
 
 
@@ -772,10 +772,14 @@ def _record_baseline_execution_axes(row: dict[str, Any], expected_algorithm: str
     if runtime_marker is not None:
         readiness_blockers.append("fallback_or_degraded_runtime_marker")
 
-    # `native` here means the declared baseline route completed without a fallback
-    # and has complete action and spawn evidence. Social Force remains explicitly
-    # adapter-routed in `execution_mode`; its adapter is its intended baseline path.
-    readiness_status = "native" if not readiness_blockers else "unknown"
+    # Readiness names the intended route that completed with complete evidence:
+    # Goal is native, while Social Force's source-backed adapter is its intended
+    # route. Either route becomes unknown when evidence is incomplete or degraded.
+    expected_readiness = {
+        "goal": "native",
+        "social_force": "adapter",
+    }.get(expected_algorithm)
+    readiness_status = expected_readiness if not readiness_blockers else "unknown"
     row["readiness_status"] = readiness_status
     metadata["baseline_readiness"] = {
         "schema_version": "issue_9348_baseline_readiness.v1",

@@ -436,7 +436,7 @@ def _complete_synthetic_campaign() -> tuple[
                         "horizon": 400,
                         "status": "success",
                         "execution_mode": _baseline_kinematics(planner)["execution_mode"],
-                        "readiness_status": "native",
+                        "readiness_status": _baseline_kinematics(planner)["execution_mode"],
                         "spawn_validity": _valid_spawn_block(),
                         "episode_id": f"{planner}-{seed}-{asset['gap_width_m']}",
                         "steps": 100,
@@ -584,7 +584,7 @@ def test_execution_axes_are_copied_from_runtime_and_readiness_fails_closed() -> 
     social_force.pop("readiness_status")
     doorway_campaign._record_baseline_execution_axes(social_force, "social_force")
     assert social_force["execution_mode"] == "adapter"
-    assert social_force["readiness_status"] == "native"
+    assert social_force["readiness_status"] == "adapter"
     assert (
         social_force["algorithm_metadata"]["planner_invocation_trace"]["steps"][0]["route_after"][
             "adapter_name"
@@ -652,6 +652,20 @@ def test_execution_axes_are_copied_from_runtime_and_readiness_fails_closed() -> 
     spoofed_social_policy._planner_adapter = SpoofedSocialForceAdapter()
     spoofed_social_route = doorway_campaign._runtime_policy_route(spoofed_social_policy)
     assert spoofed_social_route["execution_mode"] == "unknown"
+
+
+def test_social_force_adapter_requires_adapter_readiness() -> None:
+    """An adapter-routed row cannot pass with a mislabeled native readiness axis."""
+    rows, cells, pairs = _complete_synthetic_campaign()
+    social_force_row = next(row for row in rows if row["algo"] == "social_force")
+    social_force_row["readiness_status"] = "native"
+
+    report = analyze_rows(rows, cells, pairs)
+
+    assert report["native_rows"] == 17
+    excluded = next(row for row in report["row_inventory"] if row["planner"] == "social_force")
+    assert excluded["evidence_status"] == "excluded"
+    assert "unexpected_readiness_status:'native'" in excluded["exclusion_reasons"]
 
 
 @pytest.mark.parametrize("digest_field", ["map_sha256", "scenario_sha256"])
@@ -1272,7 +1286,7 @@ def test_h400_report_excludes_non_native_or_fallback_rows(marker: str) -> None:
             (
                 "unexpected_execution_mode:"
                 if marker == "execution_mode"
-                else "non_native_readiness_status:"
+                else "unexpected_readiness_status:"
             )
             in reason
             if marker in {"execution_mode", "readiness_status"}
@@ -1325,7 +1339,7 @@ def test_h400_report_excludes_missing_success_only_pairs(tmp_path: Path) -> None
                         "horizon": 400,
                         "status": "success" if success else "failure",
                         "execution_mode": _baseline_kinematics(planner)["execution_mode"],
-                        "readiness_status": "native",
+                        "readiness_status": _baseline_kinematics(planner)["execution_mode"],
                         "spawn_validity": _valid_spawn_block(),
                         "episode_id": f"{planner}-{seed}-{width}",
                         "steps": 100,

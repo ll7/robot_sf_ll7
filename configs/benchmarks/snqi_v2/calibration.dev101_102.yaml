@@ -5,7 +5,7 @@ name: snqi_v2_calibration_dev101_102
 paper_facing: false
 paper_profile_version: paper-matrix-v1
 scenario_matrix: configs/scenarios/classic_interactions_francis2023_goal_zone_entry_kernel_wrapped_v2.yaml
-comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v2.yaml
 route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
 amv_profile:
   name: amv-paper-v1

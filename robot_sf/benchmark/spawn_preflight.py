@@ -903,6 +903,8 @@ def _release_manifest_inputs(  # noqa: C901, PLR0912, PLR0915
     raw_seeds = getattr(manifest, "resolved_seeds", ())
     if not raw_seeds:
         raw_seeds = manifest.seed_policy.get("resolved_seeds", ())
+    if not raw_seeds and manifest.seed_policy.get("mode") == "fixed-list":
+        raw_seeds = manifest.seed_policy.get("seeds", ())
     if not raw_seeds or any(type(seed) is not int or seed < 0 for seed in raw_seeds):
         raise ValueError("release manifest has no valid resolved seed set")
     seeds = tuple(raw_seeds)
@@ -917,7 +919,7 @@ def _release_manifest_inputs(  # noqa: C901, PLR0912, PLR0915
     )
     seed_sets_sha256: str | None = None
     seed_sets_path_raw = seed_policy.get("seed_sets_path")
-    if seed_sets_path_raw:
+    if seed_sets_path_raw and seed_policy.get("mode") == "seed-set":
         seed_sets_path = (
             (repository_root if candidate else manifest_path.parent) / str(seed_sets_path_raw)
         ).resolve()
@@ -1212,7 +1214,7 @@ def run_manifest_preflight(  # noqa: C901
         if sha256_file(Path(manifest.scenario_matrix_path)) != identity["scenario_matrix_sha256"]:
             input_error = "scenario matrix changed while preflight was running"
         seed_sets_path_raw = manifest.seed_policy.get("seed_sets_path")
-        if seed_sets_path_raw:
+        if seed_sets_path_raw and manifest.seed_policy.get("mode") == "seed-set":
             seed_sets_base = (
                 manifest.repository_root
                 if isinstance(manifest, PrepublicationCandidate)

@@ -3,11 +3,11 @@
 name: paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5
 derived_from:
   config: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
-  config_sha256: 2e37aa31cb6714b156f961bada10523e04e6b79fd4f38c51ccb5b50672a9dae1
+  config_sha256: 8d26f65ac4f968170adcb98224dd54d3596f3c9d55ae4906340383fb9570f4e7
 paper_facing: true
 paper_profile_version: paper-matrix-v1
 scenario_matrix: configs/scenarios/single/francis2023_blind_corner_goal_zone_entry_kernel_wrapped_v2.yaml
-comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v2.yaml
 route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
 
 amv_profile:

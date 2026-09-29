@@ -28,7 +28,7 @@ files:
   sha256: 0ebb99246b388575887f7ac0479d089778e69b1d5872b55a51cf2b9bb19a5f0d
   role: diagnostic recurrent Gate-1 canary config with shared evaluation seed manifest
 - path: pyproject.toml
-  sha256: 98087d5fc64348026d949f79c0691e5014ee0ea342ed56eaf1b5541c8abffe9c
+  sha256: 7c0fe064630cf90d35a3ebbf2a5f7fe88054bee1bc7e3a7183fc9c2af9954101
   role: dependency extra and package constraints
 - path: robot_sf/benchmark/map_runner_policies/map_runner_actions.py
   sha256: 90b14f637094210c261d17a556b71e0952ed74f90afbb7fbcc5409881b73c4ce

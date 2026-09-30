@@ -3758,6 +3758,11 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
             env=env,
             planner_stats=args.planner_runtime.planner_stats,
             horizon_val=args.horizon_val,
+            normalize_budget_timeout=(args.scenario or {})
+            .get("metadata", {})
+            .get("scenario_horizon", {})
+            .get("policy")
+            != "legacy_runner_cap",
         )
         state.planner_obstacle_force_law_metadata = _read_policy_obstacle_force_law_metadata(
             args.planner_runtime.policy_fn

@@ -17,6 +17,9 @@ from robot_sf.benchmark.release_protocol import (
     validate_release_manifest,
 )
 
+pytestmark = pytest.mark.usefixtures("historical_horizon_policy")
+
+
 STRESS_MANIFEST = Path(
     "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_hybrid_stress_smoke_v0_1.yaml"
 )

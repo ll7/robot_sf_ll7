@@ -20,6 +20,8 @@ from robot_sf.benchmark.camera_ready import _run_state as camera_ready_run_state
 from robot_sf.benchmark.release_doctor import ReleaseDoctorCheck
 from robot_sf.cli import main as robot_sf_main
 
+pytestmark = pytest.mark.usefixtures("historical_horizon_policy")
+
 
 def _scheduler_closeout_fixture(*, state: str = "COMPLETED") -> dict[str, Any]:
     """Return a small receipt fixture for the final scheduler gate."""
@@ -111,7 +113,7 @@ def test_scheduler_closeout_check_requires_explicit_final_identity(tmp_path: Pat
     assert "expected job ID is required" in missing_job.summary
 
 
-def test_manifest_doctor_refuses_historical_h600_over_shorter_authored_limits() -> None:
+def test_manifest_doctor_admits_explicit_historical_h600() -> None:
     """Historical cardinality cannot authorize extending an authored H500 limit."""
     check, manifest, cfg = release_doctor._manifest_check(
         Path(
@@ -120,18 +122,14 @@ def test_manifest_doctor_refuses_historical_h600_over_shorter_authored_limits() 
         ),
         20160,
     )
-    assert check.status == "fail"
-    assert check.summary == "manifest or matrix could not be validated"
-    assert manifest is None
-    assert cfg is None
-    historical = release_doctor.load_release_manifest(
-        Path(
-            "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_release_v0_0_3_post1.yaml"
-        )
-    )
-    historical_cfg = release_doctor.load_campaign_config(historical.canonical_campaign_config_path)
+    assert check.status == "pass", check.summary
+    assert manifest is not None
+    assert cfg.horizon_policy == "legacy_fixed_extends_authored"
+    assert len(release_doctor._load_campaign_scenarios(cfg)) == 48
+    from dataclasses import replace
+
     with pytest.raises(ValueError, match="authored limit 500 is below fixed horizon 600"):
-        release_doctor._load_campaign_scenarios(historical_cfg)
+        release_doctor._load_campaign_scenarios(replace(cfg, horizon_policy=None))
 
 
 def test_doctor_anchors_manifest_and_git_checks_to_explicit_release_checkout(

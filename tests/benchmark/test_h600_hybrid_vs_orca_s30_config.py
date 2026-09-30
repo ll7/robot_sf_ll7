@@ -12,6 +12,8 @@ from robot_sf.benchmark.camera_ready._preflight import _load_campaign_scenarios
 from robot_sf.benchmark.camera_ready._util import _hash_payload
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 
+pytestmark = pytest.mark.usefixtures("historical_horizon_policy")
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = (
     REPO_ROOT / "configs/benchmarks/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30.yaml"
@@ -125,4 +127,17 @@ def test_h600_hybrid_vs_orca_s30_loader_preserves_s30_expansion_hash() -> None:
 
     scenarios = _load_campaign_scenarios(cfg)
     assert len(scenarios) == 48
-    assert _hash_payload(scenarios) == EXPECTED_S30_SCENARIO_SEED_HASH
+    # The historical digest describes authored inputs + seeds, before the
+    # explicit H600 runtime binding. Strip only its two accounting annotations
+    # and restore the independently recorded authored budget for that digest.
+    from copy import deepcopy
+
+    authored_inputs = deepcopy(scenarios)
+    for row in authored_inputs:
+        binding = row["metadata"].pop("scenario_horizon")
+        assert binding["policy"] == "legacy_fixed_extends_authored"
+        assert binding["applied_max_episode_steps"] == 600
+        assert row["simulation_config"]["max_episode_steps"] == 600
+        row["simulation_config"]["max_episode_steps"] = binding["authored_max_episode_steps"]
+        row["metadata"].pop("campaign_horizon")
+    assert _hash_payload(authored_inputs) == EXPECTED_S30_SCENARIO_SEED_HASH

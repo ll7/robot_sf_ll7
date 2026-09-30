@@ -675,7 +675,12 @@ def _prepare_campaign_planner_variant_run(
         effective_workers=effective_workers,
         effective_horizon=effective_horizon,
         effective_dt=effective_dt,
-        scoped_scenarios=_apply_fixed_campaign_horizon(scoped_scenarios, horizon=effective_horizon),
+        scoped_scenarios=_apply_fixed_campaign_horizon(
+            scoped_scenarios,
+            horizon=effective_horizon,
+            horizon_policy=cfg.horizon_policy,
+            protocol_version=cfg.protocol_version,
+        ),
     )
 
 

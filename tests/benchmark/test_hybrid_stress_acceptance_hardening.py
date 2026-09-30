@@ -34,6 +34,8 @@ from robot_sf.benchmark.result_provenance import (
 )
 from robot_sf.benchmark.utils import _config_hash
 
+pytestmark = pytest.mark.usefixtures("historical_horizon_policy")
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = REPO_ROOT / (
     "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_hybrid_stress_smoke_v0_1.yaml"
@@ -165,6 +167,10 @@ def stress_fixture(tmp_path: Path) -> tuple[Path, Any, Any]:
     manifest = load_release_manifest(MANIFEST_PATH)
     campaign_config = load_campaign_config(manifest.canonical_campaign_config_path)
     scenarios = _load_campaign_scenarios(campaign_config)
+    assert campaign_config.horizon_policy == "legacy_fixed_extends_authored"
+    assert all(
+        row["metadata"]["scenario_horizon"]["applied_max_episode_steps"] == 600 for row in scenarios
+    )
     effective_scenarios = [
         _scenario_with_kinematics(
             scenario,

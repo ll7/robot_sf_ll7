@@ -100,6 +100,30 @@ def _select_seeds(
     return [0]
 
 
+def _historical_authored_identity(payload: dict[str, Any]) -> dict[str, Any]:
+    """Keep legacy accounting annotations out of the published input identity.
+
+    Returns:
+        Authored scenario payload used by the historical episode identity contract.
+    """
+    horizon_metadata = payload.get("metadata", {}).get("scenario_horizon", {})
+    if horizon_metadata.get("policy") == "legacy_fixed_extends_authored":
+        # Historical IDs describe the authored input plus run_horizon. Keep the
+        # new accounting annotation in row provenance without changing that ID.
+        metadata = dict(payload.get("metadata", {}))
+        metadata.pop("scenario_horizon", None)
+        metadata.pop("campaign_horizon", None)
+        payload["metadata"] = metadata
+        simulation = dict(payload.get("simulation_config", {}))
+        authored = horizon_metadata.get("authored_max_episode_steps")
+        if authored is None:
+            simulation.pop("max_episode_steps", None)
+        else:
+            simulation["max_episode_steps"] = authored
+        payload["simulation_config"] = simulation
+    return payload
+
+
 def _scenario_identity_payload(  # noqa: C901,PLR0913
     scenario: dict[str, Any],
     *,
@@ -130,6 +154,7 @@ def _scenario_identity_payload(  # noqa: C901,PLR0913
         dict[str, Any]: Identity payload consumed by ``compute_map_episode_id``.
     """
     payload = {key: value for key, value in scenario.items() if key not in {"seed", "seeds"}}
+    payload = _historical_authored_identity(payload)
     scenario_id = (
         scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "unknown"
     )

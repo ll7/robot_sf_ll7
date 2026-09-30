@@ -505,16 +505,34 @@ def _load_scenario_horizon_schedule(path: Path) -> dict[str, dict[str, Any]]:
     return schedule
 
 
+def _validate_horizon_policy(policy: str | None, protocol_version: str | None) -> None:
+    """Fence authored-budget extension to explicitly identified historical protocols."""
+    if policy is None:
+        return
+    if policy != "legacy_fixed_extends_authored":
+        raise ValueError(f"Unknown horizon_policy: {policy!r}")
+    match = re.fullmatch(r"0\.0\.([2-7])", str(protocol_version))
+    if match is None:
+        raise ValueError(
+            "legacy_fixed_extends_authored requires historical protocol_version 0.0.2–0.0.7; "
+            "0.0.8+ and unidentified configs are refused"
+        )
+
+
 def _apply_fixed_campaign_horizon(
     scenarios: list[dict[str, Any]],
     *,
     horizon: int | None,
+    horizon_policy: str | None = None,
+    protocol_version: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Admit and bind a fixed budget without extending authored scenario limits.
+    """Bind a fixed budget, extending authored limits only for explicit historical protocols.
 
     Returns:
         Copied scenarios with the fixed episode budget, or the original list in scenario mode.
     """
+    _validate_horizon_policy(horizon_policy, protocol_version)
+    legacy = horizon_policy == "legacy_fixed_extends_authored"
     if horizon is None or horizon <= 0:
         return scenarios
     patched_scenarios = []
@@ -526,9 +544,12 @@ def _apply_fixed_campaign_horizon(
         authored_limit = prior_binding.get(
             "authored_max_episode_steps", simulation_config.get("max_episode_steps")
         )
-        if metadata.get("scenario_horizon") is not None:
+        prior_horizon = metadata.get("scenario_horizon")
+        if prior_horizon is not None and not (
+            legacy and prior_horizon.get("policy") == horizon_policy
+        ):
             raise ValueError("scenario_horizons cannot be combined with fixed horizon")
-        if authored_limit is not None and int(authored_limit) < horizon:
+        if not legacy and authored_limit is not None and int(authored_limit) < horizon:
             raise ValueError(
                 f"Scenario '{_campaign_scenario_id(scenario)}' authored limit {authored_limit} "
                 f"is below fixed horizon {horizon}; declare scenario_horizons explicitly"
@@ -539,6 +560,12 @@ def _apply_fixed_campaign_horizon(
             "horizon_steps": int(horizon),
             "authored_max_episode_steps": authored_limit,
         }
+        if legacy:
+            metadata["scenario_horizon"] = {
+                "policy": horizon_policy,
+                "authored_max_episode_steps": authored_limit,
+                "applied_max_episode_steps": int(horizon),
+            }
         patched_scenarios.append(patched)
     return patched_scenarios
 
@@ -790,6 +817,7 @@ def _load_campaign_scenarios(
     Returns:
         Scenario list consumable by benchmark runners.
     """
+    _validate_horizon_policy(cfg.horizon_policy, cfg.protocol_version)
     scenarios = load_scenarios(
         cfg.scenario_matrix_path,
         base_dir=cfg.scenario_matrix_path.parent,
@@ -835,9 +863,19 @@ def _load_campaign_scenarios(
         schedule_path=cfg.scenario_horizons_path,
         expected_sha256=cfg.scenario_horizons_sha256,
     )
-    scenario_dicts = _apply_fixed_campaign_horizon(scenario_dicts, horizon=cfg.horizon)
+    scenario_dicts = _apply_fixed_campaign_horizon(
+        scenario_dicts,
+        horizon=cfg.horizon,
+        horizon_policy=cfg.horizon_policy,
+        protocol_version=cfg.protocol_version,
+    )
     for planner in (p for p in cfg.planners if p.enabled and p.horizon_override is not None):
-        _apply_fixed_campaign_horizon(scenario_dicts, horizon=planner.horizon_override)
+        _apply_fixed_campaign_horizon(
+            scenario_dicts,
+            horizon=planner.horizon_override,
+            horizon_policy=cfg.horizon_policy,
+            protocol_version=cfg.protocol_version,
+        )
     seeds_override = _resolve_seed_override(cfg.seed_policy)
     if seeds_override is not None:
         seeded: list[dict[str, Any]] = []
@@ -891,6 +929,9 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
             "Route-clearance certification file not found: "
             f"{cfg.route_clearance_certifications_path}"
         )
+    _validate_horizon_policy(cfg.horizon_policy, cfg.protocol_version)
+    if cfg.horizon_policy is not None and cfg.scenario_horizons_path is not None:
+        raise ValueError("legacy_fixed_extends_authored cannot be combined with scenario_horizons")
     if cfg.scenario_horizons_path is not None:
         if cfg.scenario_horizons_sha256 is not None:
             observed = hashlib.sha256(cfg.scenario_horizons_path.read_bytes()).hexdigest()
@@ -1668,6 +1709,8 @@ def _assemble_campaign_config(
         seed_policy=parsed.seed_policy,
         workers=int(payload.get("workers", 1)),
         horizon=(int(payload["horizon"]) if payload.get("horizon") is not None else None),
+        horizon_policy=payload.get("horizon_policy"),
+        protocol_version=payload.get("protocol_version"),
         dt=(float(payload["dt"]) if payload.get("dt") is not None else None),
         record_forces=bool(payload.get("record_forces", True)),
         record_planner_decision_trace=bool(payload.get("record_planner_decision_trace", False)),

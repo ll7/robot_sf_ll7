@@ -4896,6 +4896,12 @@ def _finalize_record_provenance(  # noqa: PLR0913
 ) -> None:
     """Attach provenance, evidence, event ledger, and track fields to the record."""
     record["effective_budget_steps"] = min(horizon_val, int(config.sim_config.max_sim_steps))
+    horizon_metadata = scenario.get("metadata", {}).get("scenario_horizon", {})
+    if horizon_metadata.get("policy") == "legacy_fixed_extends_authored":
+        record.setdefault("metadata", {})["scenario_horizon"] = {
+            **horizon_metadata,
+            "applied_max_episode_steps": record["effective_budget_steps"],
+        }
     if scenario.get("metadata", {}).get("scenario_horizon") is not None:
         scenario_params["run_horizon"] = record["effective_budget_steps"]
     pedestrian_model_provenance = build_pedestrian_model_provenance(

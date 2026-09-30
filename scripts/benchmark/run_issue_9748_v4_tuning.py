@@ -30,7 +30,7 @@ from robot_sf._numerical_thread_env import pin_thread_env_for_determinism
 pin_thread_env_for_determinism()
 
 ROOT = Path(__file__).resolve().parents[2]
-CAMPAIGN_PATH = ROOT / "configs/benchmarks/issue_9748_hybrid_v4_dev_split_v1.yaml"
+CAMPAIGN_PATH = ROOT / "configs/benchmarks/issue_9748_hybrid_v4_dev_split_v2.yaml"
 SEARCH_PATH = ROOT / "configs/policy_search/issue_9748_v4_tuning_search_v1.yaml"
 SCHEMA_PATH = ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json"
 # Camera-ready's map runner anchors repository-relative map_file paths here.
@@ -46,7 +46,7 @@ TUNABLE = frozenset(
         "goal_progress_weight",
     }
 )
-CellJob = tuple[dict[str, Any], int, dict[str, Any], str, str, int, dict[str, Any], float]
+CellJob = tuple[dict[str, Any], int, dict[str, Any], str, str, int | None, dict[str, Any], float]
 
 
 def _sha256(path: Path) -> str:
@@ -396,8 +396,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
 
     validate(CAMPAIGN_PATH)
     cfg = load_campaign_config(CAMPAIGN_PATH)
-    if cfg.horizon != 600 or cfg.dt != 0.1:
-        raise ValueError("#9748 runner requires the frozen H600 / dt=0.1 contract")
+    if cfg.horizon is not None or cfg.scenario_horizons_path is None or cfg.dt != 0.1:
+        raise ValueError("#9748 runner requires the v2 authored-schedule / dt=0.1 contract")
     if cfg.kinematics_matrix != ("differential_drive",):
         raise ValueError("#9748 runner requires the frozen differential-drive contract")
     scenarios = [

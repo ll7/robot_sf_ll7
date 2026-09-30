@@ -24,6 +24,9 @@ from robot_sf.benchmark.release_protocol import load_release_manifest, validate_
 from robot_sf.benchmark.runtime_smoke_admission import RUNTIME_SMOKE_PLANNER_KEYS
 from robot_sf.benchmark.spawn_preflight import _release_manifest_inputs, run_manifest_preflight
 
+pytestmark = pytest.mark.usefixtures("historical_horizon_policy")
+
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_CONFIG_PATH = (
     REPO_ROOT / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml"
@@ -442,6 +445,9 @@ def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
 
     expected_config_differences = {
         "artifact_provenance",
+        "horizon",
+        "scenario_horizons",
+        "scenario_horizons_sha256",
         "bootstrap_samples",
         "claim_boundary",
         "comparability_mapping",
@@ -473,6 +479,10 @@ def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
     assert smoke["export_publication_bundle"] is False
     assert smoke["overwrite_publication_bundle"] is False
 
+    assert template.get("horizon") is None
+    assert template["scenario_horizons_sha256"] == _sha256(
+        REPO_ROOT / template["scenario_horizons"]
+    )
     assert cfg.horizon == 600
     assert cfg.dt == 0.1
     assert cfg.workers == 32

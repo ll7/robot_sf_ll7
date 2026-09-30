@@ -21,6 +21,9 @@ from scripts.validation.check_issue_4206_trace_capable_h600_rerun_preregistratio
     load_preregistration,
     main,
 )
+from tests.benchmark.conftest import historical_horizon_policy  # noqa: F401
+
+pytestmark = pytest.mark.usefixtures("historical_horizon_policy")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = (

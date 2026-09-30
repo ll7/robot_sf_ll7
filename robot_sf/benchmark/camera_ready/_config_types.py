@@ -193,6 +193,8 @@ class CampaignConfig:
     scenario_horizons_sha256: str | None = None
     workers: int = 1
     horizon: int | None = None
+    horizon_policy: str | None = None
+    protocol_version: str | None = None
     dt: float | None = None
     record_forces: bool = True
     record_planner_decision_trace: bool = False

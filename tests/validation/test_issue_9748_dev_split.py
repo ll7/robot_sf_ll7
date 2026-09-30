@@ -893,7 +893,7 @@ def test_tuning_log_rejects_changed_transitive_inputs_after_source_commit(
     "dependency,match",
     [
         (
-            "configs/benchmarks/issue_9748_hybrid_v4_dev_split_v1.yaml",
+            "configs/benchmarks/issue_9748_hybrid_v4_dev_split_v2.yaml",
             "campaign_config_sha256 does not match the current HEAD",
         ),
         (

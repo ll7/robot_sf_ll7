@@ -30,6 +30,8 @@ from robot_sf.benchmark.release_protocol import (
     validate_stress_smoke_runtime_identity,
 )
 
+pytestmark = pytest.mark.usefixtures("historical_horizon_policy")
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = REPO_ROOT / (
     "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_hybrid_stress_smoke_v0_1.yaml"
@@ -83,17 +85,29 @@ def _resolve_manifest_path(value: str) -> Path:
     return path if path.is_absolute() else (MANIFEST_PATH.parent / path).resolve()
 
 
-def test_historical_stress_h600_refuses_shorter_authored_budgets() -> None:
+def test_historical_stress_h600_admits_only_explicit_legacy_budgets() -> None:
     manifest = load_release_manifest(MANIFEST_PATH)
     campaign_config = load_campaign_config(manifest.canonical_campaign_config_path)
     report = validate_release_manifest(manifest, campaign_config=campaign_config)
 
-    # The historical stress source has H500/H400 authored limits. Current
-    # admission must refuse it; the original H600 artifact remains unchanged.
-    assert report["status"] == "invalid"
-    assert any("authored limit 500 is below fixed horizon 600" in p for p in report["problems"])
+    assert report["status"] == "valid", report["problems"]
+    resolved = _load_campaign_scenarios(campaign_config)
+    assert {s["simulation_config"]["max_episode_steps"] for s in resolved} == {600}
+    assert [s["metadata"]["scenario_horizon"]["authored_max_episode_steps"] for s in resolved] == [
+        600,
+        600,
+        500,
+        400,
+        400,
+    ]
+    assert all(
+        s["metadata"]["scenario_horizon"]["policy"] == "legacy_fixed_extends_authored"
+        for s in resolved
+    )
+    from dataclasses import replace
+
     with pytest.raises(ValueError, match="authored limit 500 is below fixed horizon 600"):
-        _load_campaign_scenarios(campaign_config)
+        _load_campaign_scenarios(replace(campaign_config, horizon_policy=None))
     from robot_sf.training.scenario_loader import load_scenarios
 
     scenarios = load_scenarios(campaign_config.scenario_matrix_path)

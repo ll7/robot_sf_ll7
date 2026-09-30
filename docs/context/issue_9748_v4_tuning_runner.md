@@ -1,5 +1,17 @@
 # Issue #9748: executable hybrid v4 development search
 
+
+Current execution uses `issue_9748_hybrid_v4_dev_split_v2.yaml` and its
+hash-pinned authored schedule: doorway/group crossing H500, perpendicular
+traffic/crowd navigation H400. The original v1 inputs and recorded H600 tuning
+log are retained unchanged. That log and the frozen v4 parameters selected from
+it do **not** establish tuning under the v2 horizons. No retuning is performed
+by this migration. The details below describe the historical v1 protocol; use
+`--config configs/benchmarks/issue_9748_hybrid_v4_dev_split_v2.yaml` for current
+preflight/validation. The tuning runner now selects v2 and still requires native,
+complete, nondegraded development cells. Any future run needs a new frozen input
+closure and a new log; the v1 log must not be rebound to v2.
+
 This runner consumes the development definitions in PR #9908. It uses
 only the four `issue_9748_dev_*` scenarios, seeds 1001–1030, H600, and dt 0.1.
 It calls the map runner's native `run_map_episode` and validates every written

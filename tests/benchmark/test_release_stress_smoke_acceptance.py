@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from robot_sf.benchmark import release_acceptance
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 from robot_sf.benchmark.release_acceptance import (
@@ -18,6 +20,9 @@ from robot_sf.benchmark.release_protocol import (
     STRESS_SMOKE_EXPECTED_SCENARIO_IDS,
     STRESS_SMOKE_EXPECTED_SEED,
 )
+
+pytestmark = pytest.mark.usefixtures("historical_horizon_policy")
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STRESS_CONFIG = (

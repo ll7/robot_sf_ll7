@@ -396,3 +396,124 @@ def test_duration_only_simulators_keep_ceiling_semantics(duration):
     settings = SimulationSettings(sim_time_in_secs=duration, time_per_step_in_secs=0.1)
     state = RobotState(None, None, None, 0.1, duration)
     assert settings.max_sim_steps == state.max_sim_steps == ceil(duration / 0.1)
+
+
+@pytest.mark.parametrize("version", ["0.0.2", "0.0.7"])
+def test_explicit_historical_horizon_extends_and_records_episode_provenance(tmp_path, version):
+    """Real YAML admission and episode output retain authored and applied budgets."""
+    import yaml
+
+    from robot_sf.benchmark.map_runner.map_runner import _build_policy
+    from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
+
+    raw = yaml.safe_load(TEMPLATE.read_text())
+    raw.pop("scenario_horizons")
+    raw.pop("scenario_horizons_sha256")
+    for field in (
+        "scenario_matrix",
+        "comparability_mapping",
+        "route_clearance_certifications",
+        "snqi_weights",
+        "snqi_baseline",
+    ):
+        if field in raw:
+            raw[field] = str(ROOT / raw[field])
+    raw.update(
+        protocol_version=version, horizon_policy="legacy_fixed_extends_authored", horizon=600
+    )
+    raw["scenario_candidates"] = ["classic_doorway_medium"]
+    raw["seed_policy"] = {"mode": "fixed-list", "seeds": [1001]}
+    raw["planners"] = [{"key": "goal", "algo": "goal", "planner_group": "core"}]
+    path = tmp_path / "historical.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    cfg = load_campaign_config(path, repository_root=ROOT)
+    scenario = _load_campaign_scenarios(cfg, repository_root=ROOT)[0]
+    assert scenario["simulation_config"]["max_episode_steps"] == 600
+    expected = {
+        "policy": "legacy_fixed_extends_authored",
+        "authored_max_episode_steps": 500,
+        "applied_max_episode_steps": 600,
+    }
+    assert scenario["metadata"]["scenario_horizon"] == expected
+    row = run_map_episode(
+        scenario,
+        1001,
+        horizon=600,
+        dt=0.1,
+        record_forces=False,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        scenario_path=ROOT / "scoped_scenarios.json",
+        policy_builder=_build_policy,
+    )
+    assert row["metadata"]["scenario_horizon"] == expected
+    assert row["horizon"] == row["effective_budget_steps"] == 600
+
+
+@pytest.mark.parametrize("version", [None, "0.0.8", "0.0.9", "0.1.0", "bad"])
+def test_legacy_horizon_policy_requires_historical_version(tmp_path, version):
+    """The opt-in cannot authorize a current or unidentified config."""
+    import yaml
+
+    raw = yaml.safe_load(TEMPLATE.read_text())
+    raw.pop("scenario_horizons")
+    raw.pop("scenario_horizons_sha256")
+    for field in (
+        "scenario_matrix",
+        "comparability_mapping",
+        "route_clearance_certifications",
+        "snqi_weights",
+        "snqi_baseline",
+    ):
+        if field in raw:
+            raw[field] = str(ROOT / raw[field])
+    raw.update(horizon_policy="legacy_fixed_extends_authored", horizon=600)
+    raw["seed_policy"] = {"mode": "fixed-list", "seeds": [1001]}
+    raw["planners"] = [{"key": "goal", "algo": "goal", "planner_group": "core"}]
+    if version is not None:
+        raw["protocol_version"] = version
+    path = tmp_path / "campaign.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    with pytest.raises(ValueError, match="legacy_fixed_extends_authored.*0.0.7"):
+        load_campaign_config(path, repository_root=ROOT)
+
+
+def test_legacy_provenance_preserves_historical_episode_identity():
+    """New accounting does not rename a published historical H600 input."""
+    from robot_sf.benchmark.camera_ready._config import _apply_fixed_campaign_horizon
+    from robot_sf.benchmark.map_runner.map_runner_identity import scenario_identity_payload
+
+    authored = {
+        "name": "historical",
+        "seeds": [1001],
+        "simulation_config": {"max_episode_steps": 400},
+        "metadata": {"study": "historical"},
+    }
+    resolved = _apply_fixed_campaign_horizon(
+        [authored],
+        horizon=600,
+        horizon_policy="legacy_fixed_extends_authored",
+        protocol_version="0.0.7",
+    )[0]
+    options = {"algo": "goal", "algo_config": {}, "horizon": 600, "dt": 0.1, "record_forces": False}
+    assert scenario_identity_payload(resolved, **options) == scenario_identity_payload(
+        authored, **options
+    )
+
+
+def test_legacy_mode_is_fenced_again_at_planner_preparation(tmp_path):
+    """A caller replacing the parsed config cannot bypass the current-version fence."""
+    cfg = load_campaign_config(TEMPLATE)
+    scenarios = _load_campaign_scenarios(cfg, repository_root=ROOT)
+    changed = replace(
+        cfg, horizon_policy="legacy_fixed_extends_authored", protocol_version="0.0.8", horizon=600
+    )
+    with pytest.raises(ValueError, match="legacy_fixed_extends_authored.*0.0.7"):
+        _prepare_campaign_planner_variant_run(
+            SimpleNamespace(cfg=changed, runs_dir=tmp_path, scenarios=scenarios),
+            planner=cfg.planners[0],
+            kinematics="differential_drive",
+            active_observation_mode="socnav_state",
+            log_run=False,
+        )

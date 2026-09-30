@@ -1266,7 +1266,9 @@ def _attach_checkpoint_runtime_stats(
 
 
 def _attach_guard_decision_stats(
-    policy: Callable[[dict[str, Any]], Any], metadata: dict[str, Any], guard_adapter=None
+    policy: Callable[[dict[str, Any]], Any],
+    metadata: dict[str, Any],
+    guard_adapter: Any = None,
 ) -> None:
     """Expose the latest shield decision through the per-step planner stats hook.
 
@@ -1294,6 +1296,9 @@ def _attach_guard_decision_stats(
                         "recovery_command_count",
                     ):
                         runtime["last_decision"][key] = runtime[key]
+        fallback_target = getattr(guard_adapter, "last_fallback_target_xy", None)
+        if fallback_target is not None:
+            runtime["planner_target_xy"] = [float(fallback_target[0]), float(fallback_target[1])]
         return runtime
 
     policy._planner_stats = _planner_stats

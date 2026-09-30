@@ -21,7 +21,7 @@ from scripts.analysis.compare_release_0_0_7_to_0_0_8 import _probe_gate, _root_f
 
 PROBE = "francis2023_narrow_doorway"
 ARMS = [(f"planner{i}", "differential_drive") for i in range(14)]
-SEEDS = list(range(111, 141))
+SEEDS = list(range(111, 141))  # seed-holdout: synthetic-fixture
 SLOTS = {(p, k, PROBE, seed, "") for p, k in ARMS for seed in SEEDS}
 
 
@@ -188,10 +188,12 @@ def test_missing_row_with_failure_record_is_crash() -> None:
 def test_failure_records_are_read_from_run_summary(tmp_path) -> None:
     run = tmp_path / "runs" / "planner0__differential_drive"
     run.mkdir(parents=True)
+    # seed-holdout: synthetic-fixture begin
     (run / "summary.json").write_text(
         f'{{"failures": [{{"scenario_id": "{PROBE}", "seed": 111, "error": "RuntimeError()"}}]}}'
     )
     assert _root_failure_slots(tmp_path) == {("planner0", "differential_drive", PROBE, 111)}
+    # seed-holdout: synthetic-fixture end
     (run / "summary.json").write_text('{"failures": "x"}')
     with pytest.raises(ValueError, match="not a list"):
         _root_failure_slots(tmp_path)

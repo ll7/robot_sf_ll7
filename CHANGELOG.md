@@ -396,14 +396,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   take the episode seed. An included manifest's relative `map_file` resolves beside that
   manifest first, and a same-named file beside the root manifest is rejected as ambiguous.
   SVG zone indices with an unfillable gap are rejected instead of compacted.
-  Full-rectangle sampling intentionally changes scenario difficulty: in the development
-  review (seeds 1001-1030, H600, dt 0.1), ORCA narrow_hallway success fell from 27 to
-  17 of 30, and overall success from 1242 to 1218 of 1440. After the robot-start
-  reaction-clearance repair, these counts are 17/30 and 1227/1440; robot_crowding
-  recovers from 5 to 13/30 (review baseline 17/30). These are development diagnostics,
-  not held-out release results. Zoned crowds now exclude buffered robot spawn and
-  goal zones, matching synthesized crowds; actual-start reset checks and route
-  respawns keep a one-second walking-speed buffer plus 0.1 m (0.75 m on these maps).
+  Full-rectangle sampling intentionally changes scenario difficulty. In the development
+  sweep of 48 release scenarios (seeds 1001-1030, H600, dt 0.1), goal-planner success
+  changes from 614/1440 on main to 624/1440 after these repairs; ORCA changes from
+  1242/1440 to 1223/1440. ORCA narrow_hallway changes from 27/30 to 17/30 and
+  robot_crowding from 17/30 to 11/30. These are development diagnostics, not held-out
+  release results. Zoned crowds reserve buffered robot spawn zones for their spawns
+  and goals, keeping robot goal zones available. This zoned sampling path adds the
+  reaction buffer; synthesized crowds retain their radius-only spawn/goal-zone
+  reservations without that extra buffer. Actual-start reset checks and route
+  respawns keep one second at the initialized walking-speed cap/current speed plus
+  0.1 m (0.75 m on these maps). The common buffer calculation uses nominal spawn
+  speed times the speed multiplier before population speeds are initialized.
   Robot zones and maps are unchanged. Missing route-zone fallbacks now encode a
   proper B-corner rectangle. Remaining goal-wall and bottleneck goal-zone geometry
   work is tracked for 0.0.9 in #10037.

@@ -28,6 +28,7 @@ from robot_sf.planner.clearance_geometry import (
     validate_surface_clearance_radii,
 )
 from robot_sf.planner.socnav_occupancy import OccupancyAwarePlannerMixin
+from robot_sf.robot.differential_drive import DifferentialDriveSettings
 
 _SOCNAV_ROOT_ENV = "ROBOT_SF_SOCNAV_ROOT"
 _SOCNAV_ALLOW_UNTRUSTED_ENV = "ROBOT_SF_SOCNAV_ALLOW_UNTRUSTED_ROOT"
@@ -1295,11 +1296,25 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         if robot_config is None:
             return
         limits: dict[str, float] = {}
-        for key in ("max_linear_speed", "max_linear_decel", "max_linear_accel", "radius"):
+        for key in (
+            "max_linear_speed",
+            "max_linear_decel",
+            "max_linear_accel",
+            "radius",
+            "max_angular_speed",
+            "max_angular_accel",
+            "wheel_radius",
+            "interaxis_length",
+        ):
             value = getattr(robot_config, key, None)
             if isinstance(value, int | float) and not isinstance(value, bool) and value > 0:
                 limits[key] = float(value)
         self._sampling_drive_limits = limits
+        settings = dict(limits)
+        backwards = getattr(robot_config, "allow_backwards", None)
+        if isinstance(backwards, bool):
+            settings["allow_backwards"] = backwards
+        self._sampling_drive_settings = DifferentialDriveSettings(**settings)
         self._sampling_path_fields = {}
         self._sampling_obstacle_segments = None
         if self._sampling_version() == SOCNAV_SAMPLING_LEGACY_V1:

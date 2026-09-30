@@ -2,3 +2,6 @@
 # Robot and pedestrian geometry are read from each environment observation.
 max_linear_speed: 2.0
 max_angular_speed: 1.0
+# SA-CADRL: release drive preference and upstream FullTestSuite observation capacity.
+sacadrl_pref_speed: 2.0
+sacadrl_max_other_agents: 19

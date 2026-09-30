@@ -183,6 +183,7 @@ def build_derived_inputs(  # noqa: C901
     from robot_sf.training.scenario_loader import load_scenarios
 
     seeds = assert_dev_seeds(seeds)
+    out_dir = out_dir.resolve()
     template_path = REPO_ROOT / SUITES[suite]
     if not template_path.is_file():
         raise FileNotFoundError(
@@ -198,9 +199,14 @@ def build_derived_inputs(  # noqa: C901
         item = dict(scenario)
         map_file = item.get("map_file")
         if isinstance(map_file, str) and not Path(map_file).is_absolute():
-            candidate = (matrix_path.parent / map_file).resolve()
-            if candidate.exists():
-                item["map_file"] = candidate.relative_to(REPO_ROOT).as_posix()
+            candidates = [
+                (matrix_path.parent / map_file).resolve(),
+                (REPO_ROOT / map_file).resolve(),
+            ]
+            candidate = next((p for p in candidates if p.is_file()), None)
+            if candidate is None:
+                raise FileNotFoundError(f"unresolved source map: {map_file}")
+            item["map_file"] = candidate.as_posix()
         if scenarios_filter and item["name"] not in scenarios_filter:
             continue
         cleaned = remove_pedestrians(item, seeds)
@@ -240,7 +246,7 @@ def build_derived_inputs(  # noqa: C901
     from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
 
     resolved = _load_campaign_scenarios(cfg)
-    verify_actor_free(scenarios, cfg.scenario_matrix_path)
+    verify_actor_free(resolved, REPO_ROOT / "scoped_scenarios.json")
     seen = {int(s) for sc in resolved for s in sc.get("seeds", [])}
     assert_dev_seeds(sorted(seen))
     return cfg_out, scenarios
@@ -260,11 +266,7 @@ def verify_actor_free(scenarios: list[dict[str, Any]], matrix_path: Path) -> lis
 
     records: list[dict[str, Any]] = []
     for scenario in scenarios:
-        probe = dict(scenario)
-        map_file = probe.get("map_file")
-        if isinstance(map_file, str) and not Path(map_file).is_absolute():
-            probe["map_file"] = (REPO_ROOT / map_file).as_posix()
-        config = build_robot_config_from_scenario(probe, scenario_path=matrix_path)
+        config = build_robot_config_from_scenario(scenario, scenario_path=matrix_path)
         census = scenario_actor_source_census(config)
         records.append({"scenario": scenario["name"], "verified_empty": census["verified_empty"]})
         if census["verified_empty"] is not True:
@@ -291,7 +293,8 @@ def load_rows(campaign_root: Path) -> list[dict[str, Any]]:
             row = json.loads(line)
             row.setdefault("_source_file", str(path.relative_to(campaign_root)))
             rows.append(row)
-    assert_dev_seeds(sorted({int(r["seed"]) for r in rows}) or [DEV_SEED_MIN])
+    if rows:
+        assert_dev_seeds(sorted({r["seed"] for r in rows}))
     return rows
 
 
@@ -303,6 +306,8 @@ def _num(value: Any) -> float | None:
 
 def _arm_key(row: dict[str, Any]) -> str | None:
     """Return the roster key (run directory ``<key>__<kinematics>``), not the shared algo name."""
+    if row.get("_sweep_arm"):
+        return row["_sweep_arm"]
     source = row.get("_source_file")
     if isinstance(source, str) and "__" in Path(source).parent.name:
         return Path(source).parent.name.split("__")[0]
@@ -317,7 +322,7 @@ def _trace_of(row: dict[str, Any]) -> dict[str, Any] | None:
 def _trace_geometry(trace: dict[str, Any]) -> tuple[float | None, int]:
     """Return (path length in metres, max pedestrians seen in any step) from a step trace."""
     length = 0.0
-    prev: list[float] | None = None
+    prev = ((trace.get("reset") or {}).get("robot") or {}).get("position")
     max_peds = 0
     for step in trace.get("steps") or []:
         pos = (step.get("robot") or {}).get("position")
@@ -331,6 +336,8 @@ def _trace_geometry(trace: dict[str, Any]) -> tuple[float | None, int]:
 
 def classify_outcome(row: dict[str, Any]) -> str:
     """Return success / collision / timeout / other for an episode row."""
+    if row.get("_sweep_execution_status") in {"missing_episode", "execution_failed"}:
+        return row["_sweep_execution_status"]
     outcome = row.get("outcome") or {}
     metrics = row.get("metrics") or {}
     if metrics.get("success") or outcome.get("route_complete"):
@@ -377,6 +384,10 @@ def flatten(row: dict[str, Any]) -> dict[str, Any]:
         "max_pedestrians_in_trace": max_peds,
         "has_step_trace": trace is not None,
         "status": row.get("status"),
+        "kinematics": _kinematics(row),
+        "execution_status": row.get("_sweep_execution_status", "written"),
+        "trace_complete": _trace_complete(row),
+        "execution_error": row.get("_sweep_execution_error"),
         "source_file": row.get("_source_file"),
     }
 
@@ -392,7 +403,9 @@ def summarize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         groups.setdefault((str(row["arm"]), str(row["scenario"])), []).append(row)
     out: list[dict[str, Any]] = []
     for (arm, scenario), items in sorted(groups.items()):
-        reasons = sorted({f"{i['outcome']}({i['termination_reason']})" for i in items})
+        reasons = sorted(
+            {f"{i['execution_status']}:{i['outcome']}({i['termination_reason']})" for i in items}
+        )
         clearances = [i["min_clearance"] for i in items if i["min_clearance"] is not None]
         ratios = [i["path_over_straight"] for i in items if i["path_over_straight"] is not None]
         out.append(
@@ -411,6 +424,168 @@ def summarize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+def _kinematics(row: dict[str, Any]) -> str:
+    """Read the runtime robot type or the arm directory suffix.
+
+    Returns:
+        The kinematics key of this episode slot.
+    """
+    source = row.get("_source_file")
+    if isinstance(source, str) and "__" in Path(source).parent.name:
+        return Path(source).parent.name.split("__", 1)[1]
+    return str(
+        row.get("_sweep_kinematics")
+        or (row.get("scenario_params") or {}).get("robot_config", {}).get("type")
+        or "differential_drive"
+    )
+
+
+def _trace_complete(row: dict[str, Any]) -> bool:
+    """Check that requested geometry covers reset and every recorded step.
+
+    Returns:
+        True for a finite, complete simulation trace, including empty actor lists.
+    """
+    trace = _trace_of(row)
+    if trace is None or trace.get("schema_version") != "simulation-step-trace.v1":
+        return False
+    steps = trace.get("steps")
+    dt = _num(trace.get("dt"))
+    reset = ((trace.get("reset") or {}).get("robot") or {}).get("position")
+
+    def pair(value: Any) -> bool:
+        return (
+            isinstance(value, list) and len(value) == 2 and all(_num(v) is not None for v in value)
+        )
+
+    if (
+        not isinstance(steps, list)
+        or not steps
+        or len(steps) != row.get("steps")
+        or not dt
+        or dt <= 0
+        or not pair(reset)
+    ):
+        return False
+    return all(
+        isinstance(step, dict)
+        and pair((step.get("robot") or {}).get("position"))
+        and isinstance(step.get("pedestrians"), list)
+        for step in steps
+    )
+
+
+def reconcile_execution(
+    cfg: Any,
+    scenarios: list[dict[str, Any]],
+    rows: list[dict[str, Any]],
+    root: Path,
+    result: dict[str, Any],
+    *,
+    step_trace: bool,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Keep written rows and materialize every failed or missing expected slot.
+
+    Returns:
+        Rows for all expected slots (plus duplicates/extras), and execution axes.
+        Episode outcomes such as timeout are diagnostic results, not execution failures.
+    """
+    expected = {
+        (planner.key, kin, str(sc.get("id") or sc.get("scenario_id") or sc["name"]), seed)
+        for planner in cfg.planners
+        for kin in cfg.kinematics_matrix
+        for sc in scenarios
+        for seed in sc["seeds"]
+    }
+    failed = {}
+    for file in sorted(root.glob("runs/*/summary.json")):
+        arm, sep, kin = file.parent.name.partition("__")
+        if not sep:
+            continue
+        summary = json.loads(file.read_text())
+        failures = summary.get("failures", [])
+        if not isinstance(failures, list):
+            raise ValueError(f"malformed failures in {file}")
+        for failure in failures:
+            failed[(arm, kin, str(failure["scenario_id"]), failure["seed"])] = failure.get(
+                "error", "runner failure"
+            )
+    observed = {}
+    annotated = []
+    duplicates, unexpected, incomplete_trace = [], [], []
+    for raw in rows:
+        row = dict(raw)
+        slot = (_arm_key(row), _kinematics(row), str(row.get("scenario_id")), row["seed"])
+        observed[slot] = observed.get(slot, 0) + 1
+        row["_sweep_execution_status"] = "written"
+        if slot not in expected:
+            unexpected.append(slot)
+            row["_sweep_execution_status"] = "unexpected_episode"
+        elif observed[slot] > 1:
+            duplicates.append(slot)
+            row["_sweep_execution_status"] = "duplicate_episode"
+        elif step_trace and not _trace_complete(row):
+            incomplete_trace.append(slot)
+            row["_sweep_execution_status"] = "incomplete_trace"
+        annotated.append(row)
+    missing = []
+    for arm, kin, scenario, seed in sorted(expected - observed.keys()):
+        slot = (arm, kin, scenario, seed)
+        status = (
+            "execution_failed"
+            if slot in failed or result.get("execution_error")
+            else "missing_episode"
+        )
+        missing.append(slot)
+        annotated.append(
+            {
+                "_sweep_arm": arm,
+                "_sweep_kinematics": kin,
+                "scenario_id": scenario,
+                "seed": seed,
+                "status": status,
+                "termination_reason": status,
+                "_sweep_execution_status": status,
+                "_sweep_execution_error": failed.get(slot) or result.get("execution_error"),
+            }
+        )
+    axes = {
+        key: result.get(key)
+        for key in (
+            "campaign_execution_status",
+            "status",
+            "exit_code",
+            "unexpected_failed_runs",
+            "total_episodes",
+            "non_success_runs",
+            "accepted_unavailable_runs",
+            "execution_error",
+        )
+    }
+    runner_ok = (
+        result.get("campaign_execution_status") == "completed"
+        and result.get("exit_code") == 0
+        and result.get("unexpected_failed_runs") == 0
+    )
+    axes.update(
+        expected_slots=len(expected),
+        written_rows=len(rows),
+        failed_slots=[list(slot) for slot in sorted(failed)],
+        missing_slots=[list(slot) for slot in missing],
+        duplicate_slots=[list(slot) for slot in duplicates],
+        unexpected_slots=[list(slot) for slot in unexpected],
+        incomplete_trace_slots=[list(slot) for slot in incomplete_trace],
+        trace_requested=step_trace,
+    )
+    axes["complete"] = (
+        bool(expected)
+        and runner_ok
+        and not (missing or failed or duplicates or unexpected or incomplete_trace)
+        and result.get("total_episodes") == len(rows)
+    )
+    return annotated, axes
 
 
 def write_outputs(out_dir: Path, rows: list[dict[str, Any]], suite: str, meta: dict) -> None:
@@ -455,7 +630,10 @@ def describe_trace(campaign_root: Path) -> str:
         A short markdown paragraph.
     """
     for path in find_episode_files(campaign_root):
-        line = path.read_text(encoding="utf-8").splitlines()[0]
+        lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        if not lines:
+            continue
+        line = lines[0]
         trace = _trace_of(json.loads(line))
         if trace is None:
             continue
@@ -476,7 +654,8 @@ def main(argv: list[str] | None = None) -> int:
     """Run the sweep.
 
     Returns:
-        Process exit code (0 when the campaign completed, regardless of episode outcomes).
+        Process exit code: 1 for failed/incomplete execution or requested traces;
+        episode outcomes alone do not cause a nonzero exit. CLI flags are unchanged.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--head-sha", required=True, help="Commit under test (checkout must match)")
@@ -511,8 +690,9 @@ def main(argv: list[str] | None = None) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     started = time.time()
     trace_notes: list[str] = []
+    incomplete_execution = False
     for suite in suites:
-        cfg_path, _ = build_derived_inputs(
+        cfg_path, scenarios = build_derived_inputs(
             suite,
             seeds=seeds,
             arms=args.arms,
@@ -521,28 +701,60 @@ def main(argv: list[str] | None = None) -> int:
             out_dir=out_dir,
             step_trace=not args.no_step_trace,
         )
+        cfg = load_campaign_config(cfg_path)
         if args.summarize_only:
             root = out_dir / "campaigns" / f"empty_world_{suite}"
-            write_outputs(out_dir, load_rows(root), suite, {"suite": suite, "head_sha": full_sha})
+            receipt = out_dir / f"execution_{suite}.json"
+            summary_path = root / "reports" / "campaign_summary.json"
+            result = (
+                json.loads(receipt.read_text())
+                if receipt.is_file()
+                else (json.loads(summary_path.read_text()) if summary_path.is_file() else {})
+            )
+            rows, axes = reconcile_execution(
+                cfg, scenarios, load_rows(root), root, result, step_trace=not args.no_step_trace
+            )
+            incomplete_execution |= not axes["complete"]
+            meta = {"suite": suite, "head_sha": full_sha, **axes}
+            write_outputs(out_dir, rows, suite, meta)
+            receipt.write_text(json.dumps(meta, indent=2) + "\n")
             continue
         if args.check_only:
             print(f"{suite}: derived inputs verified actor-free ({cfg_path})")
             continue
         cfg = load_campaign_config(cfg_path)
         t0 = time.time()
-        result = run_campaign(
-            cfg,
-            output_root=out_dir / "campaigns",
-            label=f"empty_world_{suite}",
-            campaign_id=f"empty_world_{suite}",
-            skip_publication_bundle=True,
-            invoked_command=" ".join(sys.argv),
-            arm_isolation=args.arm_isolation,
-        )
+        try:
+            result = run_campaign(
+                cfg,
+                output_root=out_dir / "campaigns",
+                label=f"empty_world_{suite}",
+                campaign_id=f"empty_world_{suite}",
+                skip_publication_bundle=True,
+                invoked_command=" ".join(sys.argv),
+                arm_isolation=args.arm_isolation,
+            )
+        except (RuntimeError, OSError, ValueError) as error:
+            result = {
+                "campaign_execution_status": "failed",
+                "status": "failed",
+                "exit_code": 1,
+                "unexpected_failed_runs": 1,
+                "total_episodes": None,
+                "execution_error": f"{type(error).__name__} during campaign execution",
+            }
         campaign_root = Path(
             result.get("campaign_root") or out_dir / "campaigns" / f"empty_world_{suite}"
         )
-        rows = load_rows(campaign_root)
+        rows, axes = reconcile_execution(
+            cfg,
+            scenarios,
+            load_rows(campaign_root),
+            campaign_root,
+            result,
+            step_trace=not args.no_step_trace,
+        )
+        incomplete_execution |= not axes["complete"]
         meta = {
             "suite": suite,
             "head_sha": full_sha,
@@ -550,11 +762,13 @@ def main(argv: list[str] | None = None) -> int:
             "workers": args.workers,
             "runtime_s": round(time.time() - t0, 1),
             "episodes": len(rows),
+            **axes,
         }
         write_outputs(out_dir, rows, suite, meta)
+        (out_dir / f"execution_{suite}.json").write_text(json.dumps(meta, indent=2) + "\n")
         trace_notes.append(f"### {suite}\n\n{describe_trace(campaign_root)}\n")
     if args.check_only or args.summarize_only:
-        return 0
+        return int(incomplete_execution)
     readme = (
         "# Empty-world sweep output (#9978)\n\n"
         f"Head under test: `{full_sha}`. Seeds: {seeds}. Total runtime: "
@@ -564,7 +778,7 @@ def main(argv: list[str] | None = None) -> int:
         "## Step-trace format\n\n" + "\n".join(trace_notes)
     )
     (out_dir / "README.md").write_text(readme, encoding="utf-8")
-    return 0
+    return int(incomplete_execution)
 
 
 if __name__ == "__main__":

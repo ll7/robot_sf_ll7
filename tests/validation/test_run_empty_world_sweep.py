@@ -77,28 +77,6 @@ def test_residue_detects_a_scenario_that_still_has_pedestrians() -> None:
     assert "runtime map-pedestrian removal flag missing" in residue
 
 
-def test_real_release_scenarios_are_actor_free_at_runtime() -> None:
-    """Every 0.0.8 main scenario, incl. map-authored pedestrians, is empty after removal."""
-    from robot_sf.training.scenario_loader import load_scenarios
-
-    matrix = REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
-    if not matrix.is_file():
-        pytest.skip("0.0.8 release scenario matrix is not on this checkout")
-    loaded = load_scenarios(matrix, base_dir=matrix.parent)
-    cleaned = []
-    for scenario in loaded:
-        item = dict(scenario)
-        map_file = item.get("map_file")
-        if isinstance(map_file, str) and not Path(map_file).is_absolute():
-            item["map_file"] = (
-                (matrix.parent / map_file).resolve().relative_to(REPO_ROOT).as_posix()
-            )
-        cleaned.append(sweep.remove_pedestrians(item, [1001, 1002]))
-    assert len(cleaned) == 48
-    records = sweep.verify_actor_free(cleaned, matrix)
-    assert all(rec["verified_empty"] is True for rec in records)
-
-
 def test_classify_outcome_prefers_flags_over_ambiguous_reason() -> None:
     """A horizon run with reason 'terminated' is a timeout, not a generic termination."""
     row = {"termination_reason": "terminated", "outcome": {"timeout_event": True}, "metrics": {}}

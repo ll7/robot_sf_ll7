@@ -10,6 +10,7 @@ structurally impossible on one machine).
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import robot_sf.benchmark.exact_repeat_campaign as erc
@@ -58,7 +59,9 @@ def test_ppo_only_manifest_slice_verifies_against_subset(tmp_path: Path, monkeyp
     _require_existing(BUNDLE_PATH)
     _require_existing(MANIFEST_PATH)
     # Feed the real slicing helpers development copies of the retained inputs.
-    # Only target seeds and their hashes change; original evidence bytes stay intact.
+    # Bind the copies to the checkout that actually executes them; retained
+    # release revisions are metadata, not the provenance of this development run.
+    source_revision = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     for attribute, source, hash_key in (
         ("BUNDLE_PATH", BUNDLE_PATH, "bundle_sha256"),
         ("MANIFEST_PATH", MANIFEST_PATH, "manifest_sha256"),
@@ -67,6 +70,7 @@ def test_ppo_only_manifest_slice_verifies_against_subset(tmp_path: Path, monkeyp
         for target in development["targets"]:
             if 111 <= int(target["seed"]) <= 140:
                 target["seed"] = int(target["seed"]) + 890
+            target["source_git_hash"] = source_revision
         development.pop(hash_key)
         development["review_marker"] = "AI-GENERATED NEEDS-REVIEW"
         development[hash_key] = erc.canonical_sha256(development)

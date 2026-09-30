@@ -585,12 +585,14 @@ def test_empirical_cpu_run_produces_certified_replayable_failures(tmp_path: Path
     simulator now prevents. The search RNG remains 1105; actual episode seeds are restricted to 1001..1030.
     """
     config, objectives, _samplers, _budgets, _seeds = load_package_b_manifest(SHIPPED_MANIFEST)
+    development_space = _development_search_space(
+        config.search_space_path, tmp_path / "development_space.yaml"
+    )
     config = replace(
         config,
         output_dir=tmp_path / "comparison",
-        search_space_path=_development_search_space(
-            config.search_space_path, tmp_path / "development_space.yaml"
-        ),
+        search_space_path=development_space,
+        search_space=type(config.search_space).from_file(development_space),
     )
     rows = run_sampler_comparison(
         config=config,

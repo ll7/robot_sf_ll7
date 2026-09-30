@@ -16,6 +16,10 @@ def pytest_configure(config: pytest.Config) -> None:
     )
     config._seedguard_previous = os.environ.get("ROBOT_SF_PYTEST_SEED_GUARD")
     os.environ["ROBOT_SF_PYTEST_SEED_GUARD"] = "1"
+    audit = os.environ.get("ROBOT_SF_PYTEST_SEED_AUDIT")
+    if audit:
+        worker = os.environ.get("PYTEST_XDIST_WORKER", "main")
+        Path(audit.replace("{worker}", worker)).touch(exist_ok=True)
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:

@@ -324,10 +324,11 @@ def test_rollout_respects_drive_limits() -> None:
     )
     assert points.shape == (20, 2)
     steps = np.diff(np.concatenate(([0.0], travelled)))
-    assert steps[0] == pytest.approx(0.01)
+    assert steps[0] == pytest.approx(0.005)
     assert np.all(np.diff(steps) <= 0.01 + 1e-9)
     _stopped, dist = _rollout(np.zeros(2), 0.0, 2.0, 0.0, 0.0, 3.0, 0.1, (1.0, 1.0, 1.0, 1.0))
-    assert dist[-1] == pytest.approx(sum(max(0.0, 2.0 - 0.1 * k) * 0.1 for k in range(1, 31)))
+    # Native trapezoidal braking from 2 m/s at 1 m/s² covers v²/(2a) = 2 m.
+    assert dist[-1] == pytest.approx(2.0)
 
 
 def test_bind_env_edge_cases() -> None:

@@ -94,7 +94,13 @@ class _SACADRLModel:
         return self._actions
 
     def predict(self, obs: np.ndarray) -> np.ndarray:
-        """Return softmax action probabilities for the provided observations."""
+        """Return probabilities, rejecting observations beyond the checkpoint's capacity."""
+        if obs.shape[-1] > self._input_dim:
+            slots = (self._input_dim - 5) // 7
+            raise ValueError(
+                f"SA-CADRL observation exceeds checkpoint capacity ({slots} agent slots): "
+                f"got {obs.shape[-1]} columns, expected at most {self._input_dim}"
+            )
         obs = self._crop(obs)
         return self._sess.run(self._softmax, feed_dict={self._x: obs})
 

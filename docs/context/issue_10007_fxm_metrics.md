@@ -432,8 +432,10 @@ recording. The trace-enabled companion contains the same 14 arms x 48 scenarios 
 seed 1001. All paired identities, step counts, terminations and old curvature scalars
 match exactly. Both directories were copied locally; no remote computation or new
 simulation was used. Source commit: `ea414933e61ce267389bd3bcbe97fb669a825c6e`.
-Input file SHA-256s and all per-episode values are in
-[the measurement receipt](evidence/curvfix/measurement.json). These are diagnostic
+Input file paths, locations, SHA-256s, arm quantiles and the full-receipt checksum
+are in [the compact measurement receipt](evidence/curvfix/measurement.json).
+All 672 per-episode values remain in the local full receipt; no public custody
+is claimed for that raw diagnostic artifact. These are diagnostic
 correctness data, not held-out, calibration, release or admitted research evidence.
 
 Old values are recomputed from post-step positions exactly as before; new values
@@ -542,3 +544,24 @@ Repository-wide `uv run ruff check`, `uv run ruff format --check`,
 `scripts/validation/check_seed_holdout_diff.py --base-ref origin/main` and
 `git diff --check` pass. Hosted CI is requested by marking the stacked PR ready;
 its outcome and domain review remain separate from these local proofs. No merge.
+
+### Evidence hygiene follow-up after orchestrator review
+
+The orchestrator review of PR #10054 at `b87e472d116fc45fec47cfcf669acce84b75373c`
+confirmed D-055 implementation and measurement correctness; its remaining findings
+were evidence registration, review markers, registry provenance and PR metadata.
+All four CURVFIX evidence files now carry the shared writer's AI-GENERATED /
+NEEDS-REVIEW marker and have exact catalog entries. The probe uses the shared marked
+writer for both summary and local full receipt.
+
+Following the repository artifact policy, the 5,731-line tracked receipt is replaced
+with a compact summary. Full episode values remain in the local diagnostic evidence
+directory, with their file name, location, size and SHA-256 recorded in the summary.
+Source hashes now carry explicit source paths and local locations; all 28 ambiguous
+hash findings are remediated instead of accepted into the baseline. The generated
+registry baseline and its review companion document the evidence-tree refresh and
+absence of new findings. No metric, frozen anchor or measured value changes.
+
+Reproduction uses the existing probe flags plus `--full-output` pointing outside
+`docs/context/evidence/`. The local URI locations in the summary identify copies in
+`~/curvfix_evidence/`; this is local diagnostic preservation, not public archival custody.

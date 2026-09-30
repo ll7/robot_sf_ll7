@@ -123,6 +123,38 @@ evidence_tree_refresh_addenda:
       findings across 98 files with no net-new finding and zero active strict-CI finding. This is a
       provenance inventory and metadata-integrity correction only; it records no maintainer sign-off
       and makes no scientific, planner-performance, or safety claim.
+  - issue: 10007
+    pr: 10054
+    reviewed_date: 2026-09-30
+    previous:
+      count: 2800
+      sha256: cb657420b8cbd912aa94df8083103930954e22f9ed3c3ef2b16420f94e780504
+    candidate:
+      count: 2804
+      sha256: d190ca31b09dd63351242d3a4e40a4b8070870230f7934dea0c8e94cc37db8b0
+    files_added: 4
+    finding_delta: none
+    remediated_findings:
+      path: docs/context/evidence/curvfix/measurement.json
+      code: hash_without_artifact_path
+      count: 28
+      disposition: remediate
+      resolution: >-
+        Bind every source-file checksum to runs/<arm>/episodes.jsonl plus an explicit
+        local-copy location. Preserve all 672 values in a marked local full receipt,
+        and bind the compact tracked summary to that receipt's file name, location,
+        byte size and SHA-256. Local diagnostic custody is not public archival custody.
+    decision: >-
+      Author requested repair of the three evidence-hygiene checks after confirming
+      D-055 implementation and measurement at b87e472d116fc45fec47cfcf669acce84b75373c.
+      Reviewed the four CURVFIX receipts and their exact catalog entries and shared
+      AI-GENERATED/NEEDS-REVIEW markers. All 672 original per-episode values, arm
+      quantiles and extrema agree with the preserved full local receipt. The 28
+      fixable hash-path findings observed in hosted CI are remediated, not baselined.
+      The candidate adds four evidence paths and retains the existing 446 findings
+      across 100 files, with no new finding or per-code increase. This is a reviewed
+      inventory/provenance refresh only; no metric change, scientific admission or
+      additional human sign-off is claimed.
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73

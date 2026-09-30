@@ -1,6 +1,4 @@
 {
-  "start_sha": "ca1217c4f9e0ef0570ae172b26722cfc03338702",
-  "exact_v1_episode_matches": 672,
   "analytic_controls": [
     {
       "dt": 0.5,
@@ -19,5 +17,8 @@
       "expected": 0.0
     }
   ],
-  "method": "Execute original curvature function AST on identical dev1001 arrays; compare equality to explicit v1 dispatch."
+  "exact_v1_episode_matches": 672,
+  "method": "Execute original curvature function AST on identical dev1001 arrays; compare equality to explicit v1 dispatch.",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "start_sha": "ca1217c4f9e0ef0570ae172b26722cfc03338702"
 }

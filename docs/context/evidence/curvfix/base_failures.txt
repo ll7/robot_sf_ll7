@@ -1,3 +1,4 @@
+<!-- AI-GENERATED (ll7/robot_sf_ll7#10007, 2026-09-30) - NEEDS-REVIEW -->
 Starting head ca1217c4f9e0ef0570ae172b26722cfc03338702
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 uv run pytest -n0 tests/benchmark/test_curvature_v2.py tests/benchmark/test_metrics_characterization.py::test_path_motion_metrics_on_curved_nonuniform_trajectory tests/benchmark/test_map_runner_utils.py::test_run_map_episode_excludes_live_foresight_fallback_from_evidence --deselect=tests/benchmark/test_curvature_v2.py::test_historical_v1_rows_keep_exact_values -q
 Four v1 controls are verified separately against the original function AST; the original API has no explicit version keyword.

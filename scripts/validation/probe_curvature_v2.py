@@ -16,6 +16,7 @@ import numpy as np
 
 from robot_sf.benchmark.metric_definitions import LEGACY_METRIC_SCHEMA_VERSION
 from robot_sf.benchmark.metrics import EpisodeData, curvature_mean
+from robot_sf.evidence.writers import sha256_file, write_json
 
 
 def _load_dev_rows(root: Path, cohort: str) -> tuple[dict, list]:
@@ -28,7 +29,13 @@ def _load_dev_rows(root: Path, cohort: str) -> tuple[dict, list]:
     for path in sorted(root.glob("runs/*/episodes.jsonl")):
         raw = path.read_bytes()
         sources.append(
-            {"cohort": cohort, "arm": path.parent.name, "sha256": hashlib.sha256(raw).hexdigest()}
+            {
+                "cohort": cohort,
+                "arm": path.parent.name,
+                "artifact_path": path.relative_to(root).as_posix(),
+                "location": f"local://{root.name}/{path.relative_to(root).as_posix()}",
+                "sha256": hashlib.sha256(raw).hexdigest(),
+            }
         )
         for line in raw.splitlines():
             row = json.loads(line)
@@ -160,10 +167,28 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--trace-root", type=Path, required=True)
     parser.add_argument("--rehearsal-root", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True, help="Compact marked summary.")
+    parser.add_argument(
+        "--full-output",
+        type=Path,
+        required=True,
+        help="Local full receipt, outside the checkout's evidence directory.",
+    )
     args = parser.parse_args()
+    if "docs/context/evidence" in args.full_output.resolve().as_posix():
+        raise ValueError("keep the full per-episode receipt outside the tracked evidence tree")
     result = measure(args.trace_root, args.rehearsal_root)
-    args.output.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
+    write_json(args.full_output, result)
+    summary = {key: value for key, value in result.items() if key != "records"}
+    summary["full_receipt"] = {
+        "artifact_path": args.full_output.name,
+        "location": f"local://{args.full_output.parent.name}/{args.full_output.name}",
+        "sha256": sha256_file(args.full_output),
+        "size_bytes": args.full_output.stat().st_size,
+        "record_count": len(result["records"]),
+        "custody": "Local diagnostic receipt only; no public or durable external custody claimed.",
+    }
+    write_json(args.output, summary, catalog_area="benchmark_evidence")
     print(
         f"episodes={result['episodes']}; pooled p95={result['new_pooled_p95']:.9g}; extremes={len(result['extremes'])}"
     )

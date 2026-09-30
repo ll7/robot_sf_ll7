@@ -450,6 +450,7 @@ def test_cross_planner_and_cohort_detectors_use_compatible_keys() -> None:
                 **peer,
                 "planner_id": "planner-a",
                 "episode_id": f"peer-{index}",
+                "outcome": {"label": "success"},
                 "seed": index,
                 "metrics": {"loss": 1.0},
             }
@@ -983,7 +984,7 @@ def test_statistical_detectors_cover_contract_edges_and_missing_features() -> No
         ).status
         == "unavailable"
     )
-    assert detectors._robust_z(2.0, [1.0, 1.0]) == 1_000_000_000.0
+    assert detectors._robust_z(2.0, [1.0, 1.0]) == pytest.approx(1 / (1.4826 * 0.05))
     assert detectors._robust_z(1.0, [0.0, 1.0, 2.0]) == pytest.approx(0.0)
 
     trajectory = {**_row("trajectory"), "trace": _trace([(0.0, 0.0), (1.0, 0.0)])}

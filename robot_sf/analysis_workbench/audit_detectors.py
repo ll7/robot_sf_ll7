@@ -29,7 +29,7 @@ from robot_sf.analysis_workbench.audit_contracts import (
 )
 
 DETECTOR_REGISTRY_SCHEMA_VERSION = "audit-detector-registry.v1"
-DETECTOR_ENGINE_VERSION = "audit-detectors.v1"
+DETECTOR_ENGINE_VERSION = "audit-detectors.v1.1"
 DETECTOR_REGISTRY_VERSION = DETECTOR_REGISTRY_SCHEMA_VERSION
 GOAL_ADJACENT_TIMEOUT_VERSION = "goal_adjacent_timeout.v1"
 
@@ -466,7 +466,17 @@ def _spec(  # noqa: PLR0913
         detector_id=detector_id,
         family=family,
         description=description,
-        version=version,
+        version="1.1.0"
+        if version == "1.0.0"
+        and detector_id
+        in {
+            "extreme_measurements",
+            "seed_outlier",
+            "cohort_multivariate_outlier",
+            "planner_disagreement",
+            "trajectory_shape_outlier",
+        }
+        else version,
         required_capabilities=tuple(required),
         optional_capabilities=tuple(optional),
         cohort_definition=cohort or {"kind": "episode", "key": ["campaign", "episode"]},
@@ -508,9 +518,15 @@ def default_registry(*, include_advisory: bool = True) -> DetectorRegistry:
             optional=("cohort", "metrics", "trace", "outcome"),
             cohort={
                 "kind": "same_configuration",
-                "key": ["planner_id", "scenario_id", "config_id"],
+                "key": ["campaign_digest", "planner_id", "scenario_id", "config_id", "outcome"],
+                "require_present": ["planner_id", "scenario_id", "config_id", "outcome"],
             },
-            parameters={"minimum_cohort": 4, "mad_z_threshold": 3.5},
+            parameters={
+                "minimum_cohort": 4,
+                "mad_z_threshold": 3.5,
+                "mad_absolute_floor": 0.01,
+                "mad_relative_floor": 0.05,
+            },
             units={"robust_distance": "dimensionless"},
             advisory=True,
         ),
@@ -582,7 +598,12 @@ def default_registry(*, include_advisory: bool = True) -> DetectorRegistry:
                 "key": ["scenario_id", "config_id", "seed", "initial_state"],
                 "require_present": ["scenario_id", "config_id", "seed", "initial_state"],
             },
-            parameters={"minimum_peers": 1, "metric_z_threshold": 3.0},
+            parameters={
+                "minimum_peers": 1,
+                "metric_z_threshold": 3.0,
+                "mad_absolute_floor": 0.01,
+                "mad_relative_floor": 0.05,
+            },
         ),
         _spec(
             "provenance_consistency",
@@ -600,9 +621,15 @@ def default_registry(*, include_advisory: bool = True) -> DetectorRegistry:
             optional=("cohort", "metrics"),
             cohort={
                 "kind": "same_configuration",
-                "key": ["planner_id", "scenario_id", "config_id"],
+                "key": ["campaign_digest", "planner_id", "scenario_id", "config_id", "outcome"],
+                "require_present": ["planner_id", "scenario_id", "config_id", "outcome"],
             },
-            parameters={"minimum_cohort": 4, "mad_z_threshold": 3.5},
+            parameters={
+                "minimum_cohort": 4,
+                "mad_z_threshold": 3.5,
+                "mad_absolute_floor": 0.01,
+                "mad_relative_floor": 0.05,
+            },
         ),
         _spec(
             "stuck_no_progress",
@@ -630,9 +657,15 @@ def default_registry(*, include_advisory: bool = True) -> DetectorRegistry:
             optional=("trace", "cohort"),
             cohort={
                 "kind": "same_configuration",
-                "key": ["planner_id", "scenario_id", "config_id"],
+                "key": ["campaign_digest", "planner_id", "scenario_id", "config_id", "outcome"],
+                "require_present": ["planner_id", "scenario_id", "config_id", "outcome"],
             },
-            parameters={"minimum_cohort": 4, "mad_z_threshold": 3.5},
+            parameters={
+                "minimum_cohort": 4,
+                "mad_z_threshold": 3.5,
+                "mad_absolute_floor": 0.01,
+                "mad_relative_floor": 0.05,
+            },
             units={"path_length": "m", "displacement": "m", "turns": "count"},
             advisory=True,
         ),
@@ -788,6 +821,101 @@ def _admission_containers(row: Mapping[str, Any]) -> tuple[tuple[str, Mapping[st
     return tuple(containers)
 
 
+def normalize_recorded_undefined(row: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Project documented unavailable release sentinels to null without editing source rows.
+
+    Positive infinity from disabled tracking and NaN predicted separation in a
+    pedestrian-free episode are undefined diagnostics, not corrupt identities.
+    Every projection retains the source path, token, and reason. Other
+    non-finite values still fail admission.
+
+    Returns:
+        A copy on normalization, otherwise the original read-only mapping.
+    """
+
+    metadata = row.get("algorithm_metadata")
+    tracking = metadata.get("tracking_precision") if isinstance(metadata, Mapping) else None
+    spec = tracking.get("spec") if isinstance(tracking, Mapping) else None
+    disabled = (
+        isinstance(spec, Mapping)
+        and spec.get("enabled") is False
+        and tracking.get("step_count") == 0
+    )
+    integrity = row.get("integrity")
+    view = integrity.get("effective_view") if isinstance(integrity, Mapping) else None
+    ped_free = (
+        isinstance(view, Mapping)
+        and type(view.get("observation_ped_count")) is int
+        and view.get("observation_ped_count") == 0
+    )
+    paths = []
+    if disabled:
+        paths.extend(
+            [
+                (
+                    ("algorithm_metadata", "tracking_precision", "min_separation_corrupted_m"),
+                    "Infinity",
+                    "tracking_disabled_no_samples",
+                ),
+                (
+                    ("metrics", "min_separation_corrupted_m"),
+                    "Infinity",
+                    "tracking_disabled_no_samples",
+                ),
+            ]
+        )
+    if ped_free:
+        paths.extend(
+            [
+                (("metric_values", "min_predicted_separation_m"), "NaN", "no_pedestrians"),
+                (
+                    ("metrics", "metric_values", "min_predicted_separation_m"),
+                    "NaN",
+                    "no_pedestrians",
+                ),
+            ]
+        )
+    result = row
+    missingness = []
+    for path, token, reason in paths:
+        leaf = result
+        for key in path:
+            leaf = leaf.get(key) if isinstance(leaf, Mapping) else None
+        if not isinstance(leaf, float) or not (
+            leaf == math.inf if token == "Infinity" else math.isnan(leaf)
+        ):
+            continue
+        updated = dict(result)
+        destination = updated
+        for key in path[:-1]:
+            destination[key] = dict(destination[key])
+            destination = destination[key]
+        destination[path[-1]] = None
+        result = updated
+        missingness.append({"path": ".".join(path), "source_token": token, "reason": reason})
+    if missingness:
+        # Do not let caller-authored metadata impersonate this adapter receipt.
+        result = {**result, "audit_adapter_missingness": missingness}
+    return result
+
+
+def release_timeout_status(row: Mapping[str, Any]) -> bool:
+    """Recognize the release's terminal failure label only with explicit timeout evidence.
+
+    Returns:
+        Whether the top-level status describes an explicit non-collision timeout.
+    """
+
+    outcome = row.get("outcome")
+    return (
+        row.get("status") == "failure"
+        and isinstance(outcome, Mapping)
+        and outcome.get("timeout_event") is True
+        and outcome.get("collision_event") is False
+        and outcome.get("route_complete") is False
+    )
+
+
 def _admission_failure(  # noqa: C901, PLR0912
     row: Mapping[str, Any], *, check_nonfinite: bool = True
 ) -> tuple[str, str] | None:
@@ -819,6 +947,8 @@ def _admission_failure(  # noqa: C901, PLR0912
             if not isinstance(value, str) or not value.strip():
                 return "error", f"{path}.{key}_malformed"
             token = _status_token(value)
+            if container is row and key == "status" and release_timeout_status(row):
+                continue
             if token in _NON_ADMISSIBLE_EXECUTION_STATUSES:
                 return "unavailable", f"non_admissible_execution_status_{token}"
             if token not in _NATIVE_EXECUTION_STATUSES:
@@ -1266,6 +1396,8 @@ def _cohort_key(row: Mapping[str, Any], keys: Sequence[str]) -> tuple[Any, ...]:
             value = row.get("initial_state_digest") or row.get("initial_state")
             if isinstance(value, Mapping):
                 value = canonical_json(value)
+        elif key == "outcome":
+            value = _outcome_label(row)
         elif key == "campaign_digest":
             value = row.get("campaign_digest") or row.get("campaign_id")
         else:
@@ -1287,6 +1419,8 @@ def _cohort_key(row: Mapping[str, Any], keys: Sequence[str]) -> tuple[Any, ...]:
 def _cohort_field_present(row: Mapping[str, Any], key: str) -> bool:
     """Return whether one declared compatibility field is actually recorded."""
 
+    if key == "outcome":
+        return _outcome_label(row) is not None
     if key in {"initial_state", "initial_state_digest"}:
         return row.get("initial_state_digest") is not None or row.get("initial_state") is not None
     if key == "planner_id":
@@ -1325,6 +1459,46 @@ def _group_cohort(
         if all(_cohort_field_present(item, key) for key in required_keys)
         and _cohort_key(item, string_keys) == target
     ]
+
+
+def cohort_shards(
+    rows: Sequence[Mapping[str, Any]], spec: DetectorSpec
+) -> dict[str, Sequence[Mapping[str, Any]]]:
+    """Partition detector peers by the declared compatibility key in one pass.
+
+    Each episode receives its complete compatible cohort, including across
+    input-file boundaries. Missing compatibility fields yield an empty shard.
+
+    Returns:
+        Compatible peer shards keyed by episode ID.
+    """
+
+    definition = spec.cohort_definition
+    keys = definition.get("key", [])
+    required = definition.get("require_present", keys)
+    if any(
+        not isinstance(value, Sequence) or isinstance(value, (str, bytes))
+        for value in (keys, required)
+    ):
+        return {str(row.get("episode_id", "")): () for row in rows}
+    keys = [key for key in keys if isinstance(key, str)]
+    required = [key for key in required if isinstance(key, str)]
+    if definition.get("kind") == "episode":
+        return {str(row.get("episode_id", "")): (row,) for row in rows}
+    groups: dict[tuple[Any, ...], list[Mapping[str, Any]]] = {}
+    episode_keys = {}
+    for row in rows:
+        if not all(_cohort_field_present(row, key) for key in required):
+            continue
+        key = _cohort_key(row, keys)
+        groups.setdefault(key, []).append(row)
+        episode_keys[str(row.get("episode_id", ""))] = key
+    return {
+        str(row.get("episode_id", "")): groups.get(
+            episode_keys.get(str(row.get("episode_id", ""))), ()
+        )
+        for row in rows
+    }
 
 
 def _signal_id(
@@ -1530,7 +1704,7 @@ def _unavailable(
         evidence = (
             {
                 "statistical_method": "robust_cohort_outlier_discovery",
-                "scaling": "median_and_MAD_robust_z",
+                "scaling": "median_and_floored_MAD_robust_z",
                 "cohort": dict(spec.cohort_definition),
                 "missingness": list(missing) or [reason],
                 "score_semantics": "uncalibrated review priority, not probability",
@@ -1561,7 +1735,7 @@ def _detector_error(
         evidence = (
             {
                 "statistical_method": "robust_cohort_outlier_discovery",
-                "scaling": "median_and_MAD_robust_z",
+                "scaling": "median_and_floored_MAD_robust_z",
                 "cohort": dict(spec.cohort_definition),
                 "missingness": list(missing) or [reason],
                 "score_semantics": "uncalibrated review priority, not probability",
@@ -2430,6 +2604,8 @@ def _extreme(  # noqa: C901, PLR0912
             continue
         if value is None:
             continue
+        if isinstance(value, Mapping):
+            continue
         if isinstance(value, bool):
             # Outcome booleans are often retained in the metrics block for
             # compatibility.  They are not scalar physical measurements.
@@ -2465,7 +2641,7 @@ def _extreme(  # noqa: C901, PLR0912
         elif "force" in lowered:
             if abs(value) > force_max:
                 extreme[name] = value
-        elif lowered in {"ttc", "ttc_s", "time_to_collision_s", "pet_s"}:
+        elif lowered in {"ttc", "ttc_s", "time_to_collision_s", "time_to_collision_min", "pet_s"}:
             # Explicitly undefined TTC/PET is represented by a missing key or
             # null, and therefore never becomes a corrupted measurement.
             if value < ttc_min:
@@ -2952,14 +3128,18 @@ def _planner_disagreement(
     if metric_z_threshold is None or metric_z_threshold < 0:
         return _detector_error(spec, row, "invalid_planner_disagreement_parameters", config=config)
     metrics = _metrics(row)
-    peer_metrics = [_metrics(item) for item in others]
+    peer_metrics = [
+        _metrics(item)
+        for item in others
+        if _outcome_label(item) == current_outcome and current_outcome is not None
+    ]
     for name, value in metrics.items():
         numeric = _finite_or_none(value)
         peers_numeric = [_finite_or_none(item.get(name)) for item in peer_metrics]
         peers_numeric = [item for item in peers_numeric if item is not None]
         if numeric is not None and peers_numeric:
             diff = abs(numeric - median(peers_numeric))
-            z_score = _robust_z(numeric, peers_numeric)
+            z_score = _robust_z(numeric, peers_numeric, {**spec.parameters, **config})
             if z_score >= metric_z_threshold:
                 metric_diffs[name] = diff
                 metric_z_scores[name] = z_score
@@ -2986,16 +3166,19 @@ def _planner_disagreement(
     )
 
 
-def _robust_z(value: float, peers: Sequence[float]) -> float:
+def _robust_z(
+    value: float, peers: Sequence[float], config: Mapping[str, Any] | None = None
+) -> float:
+    config = config or {}
     center = median(peers)
-    deviations = [abs(item - center) for item in peers]
-    mad = median(deviations)
-    if mad > 0:
-        return abs(value - center) / (1.4826 * mad)
-    # A zero-spread cohort makes any distinct value maximally unusual.  Keep
-    # that representation finite because BA-03 records reject non-finite
-    # measured values.
-    return 1_000_000_000.0 if value != center else 0.0
+    absolute = _finite_or_none(config.get("mad_absolute_floor", 0.01))
+    relative = _finite_or_none(config.get("mad_relative_floor", 0.05))
+    if absolute is None or absolute <= 0 or relative is None or relative < 0:
+        raise DetectorError("invalid_MAD_floor_parameters")
+    # Both floors are disclosed in the registry. The relative floor scales with
+    # the feature's units; the absolute floor protects zero-centered cohorts.
+    mad = max(median([abs(item - center) for item in peers]), absolute, abs(center) * relative)
+    return abs(value - center) / (1.4826 * mad)
 
 
 def _seed_outlier(
@@ -3029,7 +3212,10 @@ def _seed_outlier(
             candidates.append((name, numeric, peer_values))
     if not candidates:
         return _unavailable(spec, row, "cohort_metric_missing", missing=("metrics",), config=config)
-    scores = {name: _robust_z(value, peers) for name, value, peers in candidates}
+    scores = {
+        name: _robust_z(value, peers, {**spec.parameters, **config})
+        for name, value, peers in candidates
+    }
     flagged = any(score >= threshold for score in scores.values())
     return _make_signal(
         spec,
@@ -3047,7 +3233,7 @@ def _seed_outlier(
         evidence=(
             {
                 "features": sorted(scores),
-                "scaling": "median_and_MAD_robust_z",
+                "scaling": "median_and_floored_MAD_robust_z",
                 "cohort": dict(spec.cohort_definition),
                 "missingness": "features absent from an episode are excluded; small cohorts are unavailable",
             },
@@ -3092,7 +3278,7 @@ def _multivariate(
             missing.append(name)
             continue
         features[name] = value
-        z_scores[name] = _robust_z(value, peer_values)
+        z_scores[name] = _robust_z(value, peer_values, {**spec.parameters, **config})
     if not z_scores:
         return _unavailable(
             spec,
@@ -3119,7 +3305,7 @@ def _multivariate(
         evidence=(
             {
                 "features": sorted(features),
-                "scaling": "per-feature median_and_MAD_robust_z",
+                "scaling": "per-feature median_and_floored_MAD_robust_z",
                 "cohort": dict(spec.cohort_definition),
                 "missingness": missing,
                 "score_semantics": "uncalibrated review priority, not probability",
@@ -3182,7 +3368,7 @@ def _trajectory(
         for name in peer_features:
             peer_features[name].append(other[name])
     z_scores = {
-        name: _robust_z(value, peer_features[name])
+        name: _robust_z(value, peer_features[name], {**spec.parameters, **config})
         for name, value in features.items()
         if len(peer_features[name]) >= minimum - 1
     }
@@ -3212,7 +3398,7 @@ def _trajectory(
         evidence=(
             {
                 "features": sorted(features),
-                "scaling": "median_and_MAD_robust_z",
+                "scaling": "median_and_floored_MAD_robust_z",
                 "cohort": dict(spec.cohort_definition),
                 "missingness": "episodes without a valid trace are excluded",
                 "score_semantics": "uncalibrated review priority, not probability",
@@ -3283,6 +3469,7 @@ def detect(  # noqa: C901
     if not isinstance(episode_id, str) or not episode_id.strip():
         # Keep the error a BA-03 record with a stable synthetic identity.
         row = {**dict(row), "episode_id": "invalid-episode"}
+    row = normalize_recorded_undefined(row)
     admission_failure = _admission_failure(
         row, check_nonfinite=spec.detector_id != "telemetry_integrity"
     )
@@ -3376,10 +3563,19 @@ def run_detectors(
     )
     specs = [active.get(item) for item in selected]
     ordered_rows = sorted(rows, key=lambda row: str(row.get("episode_id", "")))
+    shards = {spec.detector_id: cohort_shards(ordered_rows, spec) for spec in specs}
     signals: list[Signal] = []
     for row in ordered_rows:
         for spec in specs:
-            signals.append(detect(spec, row, cohort=ordered_rows, config=config, registry=active))
+            signals.append(
+                detect(
+                    spec,
+                    row,
+                    cohort=shards[spec.detector_id].get(str(row.get("episode_id", "")), ()),
+                    config=config,
+                    registry=active,
+                )
+            )
     return tuple(signals)
 
 

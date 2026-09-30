@@ -175,3 +175,47 @@ Report these states explicitly rather than substituting a degraded success:
   receipts not yet exercised: `diagnostic_only` / `implemented_but_unproven`.
 
 These statuses are evidence, not reasons to close BA-06 or epic #9483.
+
+## Published release rows and campaign-sized scans
+
+For a supervised offline scan of a verified publication bundle, use a new private
+output directory. This command runs no planner episodes and uses one process:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- python scripts/analysis/scan_release_audit.py \
+  --bundle /absolute/path/to/publication_bundle.tar.gz \
+  --output-dir /absolute/path/to/new-audit-directory
+```
+
+The release loader checks the publication manifest and member hashes. The scan
+retains 48 scenario shards for the 0.0.7 campaign, a portable `queue.json`, a
+release-row gate report, and `receipt.json` with per-detector status counts and
+artifact SHA-256 values. A missing receipt means the run did not complete; use a
+fresh output directory after correcting a failure. The gate is diagnostic and
+records preflight as unavailable; this command does not adjudicate trace-based
+findings or certify a release. No initial-state equivalence is inferred from a
+scenario/seed match.
+
+The release adapter namespaces episode IDs by published arm and keeps episode
+and planner configuration hashes separate. Seed cohorts use the planner config
+hash plus scenario and outcome, because the episode config hash includes seed.
+Disabled tracking's positive-infinity separation and pedestrian-free NaN
+predicted separation become null, with source tokens and reasons retained in
+`audit_adapter_missingness`. Unknown non-finite values and nested execution
+failures still fail admission. A top-level `failure` is a terminal outcome only
+when explicit booleans identify a non-collision timeout.
+
+`orbit_zero_progress` uses `deadlock_stall` window counts. The TTC seconds bound
+includes `time_to_collision_min`; collision counts keep their own bound. Outlier
+methods disclose a MAD absolute floor of 0.01 feature units and a relative floor
+of 5% of the cohort median magnitude; both are configurable. Outliers compare
+matched outcomes, and planner disagreement compares metrics only among peers
+with the same outcome. These are review heuristics, not calibrated defect
+probabilities. Engine/method revisions invalidate earlier scan cache keys.
+
+The scan source limit is 1 GiB; queue input is bounded at 2 GiB and 50 million
+JSON nodes. Queue ranking promotes `common_mode_failure` to suspected benchmark
+configuration defects and puts one representative per scenario/seed cell in the
+first 100 slots when at least 100 eligible cells exist. Remaining planner views
+stay in the queue. Representative selection follows the original priority
+ordering, and the cell-diversity window is disclosed in ranking explanations.

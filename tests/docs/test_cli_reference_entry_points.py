@@ -7,6 +7,8 @@ import importlib.util
 import os
 import re
 import socket
+import subprocess
+import sys
 import textwrap
 import tomllib
 from pathlib import Path
@@ -174,6 +176,64 @@ def test_entry_point_sphinx_index_links_cli_reference() -> None:
     """The Sphinx navigation layer exposes the generated reference."""
     text = INDEX_RST.read_text(encoding="utf-8")
     assert "CLI Reference <cli_reference>" in text
+
+
+@pytest.fixture(autouse=True)
+def isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep CLI discovery independent of the invoking user's configuration."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+
+
+@pytest.mark.parametrize("module", ("robot_sf.cli", "robot_sf.benchmark.cli"))
+def test_cli_help_tolerates_unreadable_dotenv(module: str) -> None:
+    """Optional MoviePy configuration must not prevent production CLI help."""
+    script = textwrap.dedent(
+        """
+        import importlib
+        import os
+        from pathlib import Path
+        import sys
+        import dotenv
+        import dotenv.main
+
+        env_path = str(Path.home() / ".env")
+        Path(env_path).touch()
+        dotenv.find_dotenv = lambda: env_path
+        attempts = []
+        original_open = open
+
+        def denied_open(path, *args, **kwargs):
+            if os.fspath(path) == env_path:
+                attempts.append(path)
+                raise PermissionError(13, "Permission denied", path)
+            return original_open(path, *args, **kwargs)
+
+        dotenv.main.open = denied_open
+        module = sys.argv[1]
+        sys.argv = [module, "--help"]
+        try:
+            importlib.import_module(module).main()
+        except SystemExit as exc:
+            if exc.code != 0:
+                raise
+        if not attempts:
+            raise RuntimeError("unreadable dotenv path was not exercised")
+        print("PASS unreadable dotenv")
+        """
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script, module],
+        cwd=REPO_ROOT,
+        env=dict(os.environ),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "PASS unreadable dotenv" in result.stdout
 
 
 def test_entry_point_help_smoke_and_byte_stable_render() -> None:

@@ -52,6 +52,8 @@ class DifferentialDriveSettings:
     max_linear_decel: float | None = None
     # Diagnostic-only PPOEVAL reproduction, never enable for release.
     diagnostic_training_plant: bool = False
+    # PPOABL diagnostic selector, never a release profile.
+    diagnostic_plant_variant: str | None = None
 
     def __post_init__(self):
         """
@@ -160,13 +162,25 @@ class DifferentialDriveMotion:
             PolarVec2D: The new velocity clipped by configured accel and speed limits.
         """
         if self.config.diagnostic_training_plant:
-            # Map-runner converts the selected target to (target-current)/dt.
-            # Undo that scaling WITHOUT an acceleration bound, giving the exact
-            # instantaneous velocity transition at training commit 9fb131b6:109-113.
-            # Guard selection still precedes this plant for guarded_ppo.
+            # Keep target-to-acceleration conversion unchanged. Each ablation
+            # restores exactly one release constraint after guard selection.
+            linear_accel, angular_accel = action
+            if self.config.diagnostic_plant_variant == "a2":
+                linear_accel = clip_scalar(
+                    linear_accel, -self.config.max_linear_decel, self.config.max_linear_accel
+                )
+            if self.config.diagnostic_plant_variant == "a4":
+                angular_accel = clip_scalar(
+                    angular_accel, -self.config.max_angular_accel, self.config.max_angular_accel
+                )
+            angular_max = self.config.max_angular_speed
             return (
-                clip_scalar(velocity[0] + action[0] * d_t, -3.0, 3.0),
-                clip_scalar(velocity[1] + action[1] * d_t, -1.0, 1.0),
+                clip_scalar(
+                    velocity[0] + linear_accel * d_t,
+                    self.config.min_linear_speed,
+                    self.config.max_linear_speed,
+                ),
+                clip_scalar(velocity[1] + angular_accel * d_t, -angular_max, angular_max),
             )
         linear_accel = clip_scalar(
             action[0], -self.config.max_linear_decel, self.config.max_linear_accel

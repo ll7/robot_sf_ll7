@@ -47,7 +47,7 @@ def test_remove_pedestrians_clears_every_source_and_sets_dev_seeds() -> None:
         },
         "single_pedestrians": [{"id": "p1"}],
         "social_groups": [{"id": "g1"}],
-        "seeds": [131, 132],
+        "seeds": [131, 132],  # seed-holdout: synthetic-fixture
     }
     out = sweep.remove_pedestrians(scenario, [1001, 1002])
     assert sweep.pedestrian_residue(out) == []
@@ -58,7 +58,7 @@ def test_remove_pedestrians_clears_every_source_and_sets_dev_seeds() -> None:
     assert out["social_groups"] == []
     assert out["seeds"] == [1001, 1002]
     assert scenario["single_pedestrians"] == [{"id": "p1"}]  # input untouched
-    assert scenario["seeds"] == [131, 132]
+    assert scenario["seeds"] == [131, 132]  # seed-holdout: synthetic-fixture
 
 
 def test_remove_pedestrians_refuses_holdout_seeds() -> None:

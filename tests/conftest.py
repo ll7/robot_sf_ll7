@@ -413,6 +413,9 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # FX3 uses real release checkpoints and static SVG pose checks without episodes.
+    "test_fx3_static_recovery.py",
+    "test_release_horizons.py",
     # Scenario-admissibility tests exercise deterministic candidate, manifest,
     # materialization, and provenance contracts used by the adversarial search.
     "test_scenario_admissibility.py",

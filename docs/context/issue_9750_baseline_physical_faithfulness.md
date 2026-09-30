@@ -173,8 +173,10 @@ uses real release configs, registered MPPI checkpoint bytes, production SVG
 parsing/rasterization, TDIAG coordinates, three headings and three grid phases.
 The width controls procedurally vary the named wall faces in the real corridor
 map to 1.9/2.0/2.6/2.7 m and include penetrating poses; no tracked fixture is
-rewritten. The full final-head sweep is diagnostic development evidence, not
-release admission. Class f receives no policy-specific code change.
+rewritten; the release configs and checkpoint bytes remain the actual inputs.
+No episode sweep runs on this workstation. The orchestrator owns the final-head
+48 × 14 dev-seed Slurm sweep; its results will be diagnostic development
+evidence, not release admission. Class f receives no policy-specific code change.
 
 The 0.0.8 release template binds these corrections through new config files for the predictor, Guarded
 PPO, MPPI, RiskDWA, SocialForce, SocNav/ORCA/SACADRL, and bounded SocNav sampling. The PPO learned

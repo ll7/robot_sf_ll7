@@ -1680,6 +1680,7 @@ def _emit_resume_plan_preflight(
         planners=planners,
         kinematics_matrix=list(kinematics),
         scenarios=scenarios,
+        scenario_path=getattr(cfg, "scenario_matrix_path", None),
     )
 
     emit_resume_plan_log(verdicts)

@@ -36,7 +36,7 @@ parent with the same source/config bytes.
 The first policy call in `classic_head_on_corridor_medium`, seed 1001,
 receives a **flat** observation with `sim_timestep=0.10000000149011612` and
 no `sim` block. Nothing normalizes it before the common adapter calls
-`adapter.plan(obs)` (`map_runner.py:2140` at the reviewed parent).
+`adapter.plan(obs)` (`map_runner.py:2141` at the reviewed parent).
 Social force resolves **0.5 s**, its relaxation tau, on every recorded baseline
 step. After the correction it resolves the observed **0.10000000149011612 s**.
 The first `(v,w)` changes from `(0.9813681200523284, 0.19333665068859673)` to
@@ -69,7 +69,7 @@ requests at 0/45/90/135/180 degrees all commanded **1.5 m/s**. The fixed
 commands are **1.5 / 1.060660172 / 0 / 0 / 0 m/s**. The turn command remains
 bounded by 1 rad/s. The same observed heading bytes are used in both probes.
 
-Rule (`socnav_orca.py:972`): after occupancy steering, let `e` be the heading
+Rule (`socnav_orca.py:971`): after occupancy steering, let `e` be the heading
 error, `s` the ORCA speed, `p` the occupancy penalty, and `k` the configured
 heading slowdown. Command
 `v=min(s,v_max)*(1-p)*min(max(0,cos(e)), max(0,1-min(1,abs(e)/(pi/2))*k))`.
@@ -209,7 +209,9 @@ E       Expected: 0.0 ± 1.0e-08
 E       assert 0.848528137423857 == 0.6 ± 6.0e-07
 ```
 
-Fixed selection: **207 passed**, no skips/xfails. The exact `uv run pytest -n0`
+The identical final regression command passes **23 tests**, with no skips or
+xfails; see [final_fixed_regressions.txt](final_fixed_regressions.txt).
+Broader fixed selection: **207 passed**, no skips/xfails. The exact `uv run pytest -n0`
 argv is in [safe_test_command.json](safe_test_command.json), with the output
 in [final_targeted_tests.txt](final_targeted_tests.txt). It covers these new
 regressions and existing ORCA, SF, SA-CADRL, sampling, pedestrian-force and
@@ -217,7 +219,17 @@ map-runner integration tests, excluding the four historical episode nodes
 whose seeds violate this lane's explicit restrictions. Ruff check/format and
 `git diff --check` passed. Full repository readiness was not run: it would
 invoke prohibited historical episode seeds. This is not a full-suite green
-claim; the historical assertion above remains an explicit limitation.
+claim; the historical assertion above remains an explicit limitation. The
+seed-holdout diff gate passed. The evidence-registry check found no new
+findings (446 before/after), but required regeneration of its derived file
+inventory for this new evidence directory; no human disposition or exclusion
+policy was changed. **Registry readiness remains failed:** the guarded
+inventory refresh refused to write because the evidence-tree delta requires
+human review, even with no finding-count increase. The requested draft can
+be reviewed, but it is not merge-ready. Review the concrete nine-file evidence
+addition, then rerun `evidence_registry_ratchet.py --write-baseline
+--prewrite-review` with the independently reviewed companion. No override
+or machine-baseline relaxation was used.
 
 ## Preservation and reproduction
 
@@ -241,11 +253,13 @@ OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 uv run python \
   scripts/validation/probe_issue_10007_fxb_ped_term.py
 ```
 
-Use the pinned before/fixed source revisions in separate worktrees. There were
-at most two simultaneous simulation processes. Do not compare these results
+Use the pinned before/fixed source revisions in separate worktrees. Map-runner
+probes used at most two concurrent episode processes, and pytest used `-n0`.
+Do not compare these results
 as if they were held-out release evidence. The episode metrics themselves
 remain unchanged; `jerk_mean` is the existing per-step jerk proxy.
 
-Next disposition: draft PR for orchestrator review; no merge, release or
+Next disposition: **AUTHOR_DECISION_REQUIRED**, draft PR for orchestrator review;
+no merge, release or
 evidence-admission action. Reassess legacy tuning and the seed-policy deviation
 before any broader readiness or release conclusion.

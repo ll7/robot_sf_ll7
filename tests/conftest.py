@@ -413,6 +413,10 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # TRAIN1 deterministic benchmark contracts from PR #10019.
+    "test_multi_amv.py",
+    "test_rank_metrics.py",
+    "test_scenario_difficulty.py",
     # Optional encoder import contracts execute isolated modules without episodes.
     "test_optional_moviepy_imports.py",
     # Runner isolation and resource contracts must run before a PR changes CI.

@@ -421,6 +421,14 @@ _FAST_FILES = {
     "test_optional_moviepy_imports.py",
     # Runner isolation and resource contracts must run before a PR changes CI.
     "test_self_hosted_routing.py",
+    # Constructor-state, optimized-guard, and inventory drift checks must run on
+    # PR shards when planner code or shared provenance inputs change.
+    "test_diagnostics_conformance.py",
+    "test_optimized_assert_guards.py",
+    "test_issue_5303_search_promotion_contract_v2.py",
+    "test_issue_7330_assert_inventory.py",
+    "test_issue_7331_benchmark_namespace_inventory.py",
+    "test_coverage_paths_remap.py",
     # Clearance and LiDAR tracking contracts use fixed arrays without environment steps.
     "test_clearance_geometry.py",
     "test_lidar_tracked_agents.py",

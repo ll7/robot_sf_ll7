@@ -96,7 +96,11 @@ def test_development_calibration_matches_candidate_and_preserves_frozen_007():
     assert calibration["arm_isolation"] == "subprocess"
     assert calibration["planners"] == template["planners"]
 
+    # Release traces aid audit coverage; development calibration remains untraced.
+    assert template["record_simulation_step_trace"] is True
+    assert calibration.get("record_simulation_step_trace", False) is False
     allowed_deviations = {
+        "record_simulation_step_trace",
         "name",
         "paper_facing",
         "seed_policy",

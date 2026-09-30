@@ -130,7 +130,8 @@ def test_fixture_computes_trace_derivable_external_style_metrics() -> None:
 
     traversal_time = rows["common.traversal_time_s"]
     assert traversal_time.status == "approximate"
-    assert traversal_time.value == pytest.approx(2.0)
+    # Goal index 2 is zero-based: three executed steps at dt=1 second (metric v2).
+    assert traversal_time.value == pytest.approx(3.0)
     assert "timeout" in traversal_time.semantic_notes
 
     ttc = rows["common.time_to_collision_min_s"]

@@ -161,3 +161,52 @@ def test_step_trace_field_present_for_risk_dwa_and_null_for_goal() -> None:
         found[algo] = [s["planner"]["planner_target_xy"] for s in steps]
     assert all(t is not None and len(t) == 2 for t in found["risk_dwa"])
     assert all(t is None for t in found["goal"])
+
+
+def test_guard_stats_publish_live_fallback_target_and_preserve_checkpoint() -> None:
+    """The stats hook samples the current fallback target without losing provenance."""
+    from types import SimpleNamespace
+
+    from robot_sf.benchmark.map_runner.map_runner import _attach_guard_decision_stats
+
+    policy = SimpleNamespace(
+        _planner_stats=lambda: {"checkpoint_provenance": {"load_status": "loaded"}}
+    )
+    adapter = SimpleNamespace(last_fallback_target_xy=(8.0, 5.0))
+    decision = {"decision_label": "fallback_safe"}
+    _attach_guard_decision_stats(policy, {"shield_stats": {"last_decision": decision}}, adapter)
+
+    first = policy._planner_stats()
+    assert first["checkpoint_provenance"] == {"load_status": "loaded"}
+    assert first["last_decision"] == decision
+    assert _planner_target_xy_from_stats(first) == [8.0, 5.0]
+
+    adapter.last_fallback_target_xy = (9.0, 6.0)
+    assert _planner_target_xy_from_stats(policy._planner_stats()) == [9.0, 6.0]
+    adapter.last_fallback_target_xy = None
+    assert _planner_target_xy_from_stats(policy._planner_stats()) is None
+
+
+def test_uncertainty_fallback_target_is_recorded_then_cleared_on_safe_step() -> None:
+    """Uncertainty fallback telemetry belongs only to the step that consulted it."""
+    from tests.planner.test_guarded_ppo import _FallbackAdapter, _obs
+    from tests.planner.test_guarded_ppo_uncertainty_fallback import _uncertainty_guard
+
+    fallback = _FallbackAdapter((0.05, -0.3))
+    fallback.last_target_xy = (2.0, 0.0)
+    guard = _uncertainty_guard(mode="fallback", fallback_adapter=fallback)
+
+    decision = guard.choose_command_decision(
+        _obs(ped_positions=[(1.0, 0.0)], ped_velocities=[(0.0, 0.0)]),
+        (0.4, 0.0),
+    )
+    assert decision.decision_label == "uncertainty_fallback_configured"
+    assert decision.filtered_action == (0.05, -0.3)
+    assert fallback.plan_calls == 1
+    assert guard.last_fallback_target_xy == (2.0, 0.0)
+
+    safe = guard.choose_command_decision(_obs(), (0.4, 0.0))
+    assert safe.filtered_action == (0.4, 0.0)
+    assert not safe.override_applied
+    assert fallback.plan_calls == 1
+    assert guard.last_fallback_target_xy is None

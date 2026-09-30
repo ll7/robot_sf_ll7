@@ -62,7 +62,7 @@ PINNED_V04_MANIFEST_SHA256 = "aded0ca71e40bdc8f7193282bb8d28420a9b627f93d47a4303
 PINNED_V03_CONFIG_SHA256 = "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4"
 PINNED_V03_MANIFEST_SHA256 = "d6f3047adaacfb8cad2cc12430ee5ce7331f11b0777ac522209fd1e5af019241"
 HISTORICAL_V04_TEMPLATE_SHA256 = "f453b7c824fdd47298cbc66dae3afc1fffcd7eedf57ee4bb87cd1c67b4feb1d7"
-CAMPAIGN_TEMPLATE_SHA256 = "7ec9112d999e84e73675d7df4501aea0850ba072ab2ffc74943d22ea7d270223"
+CAMPAIGN_TEMPLATE_SHA256 = "fcb612892db16af523e9b4800828e452e216c1d503d5e9973252bf7e5fd46201"
 
 EXPECTED_PLANNER_KEYS = [
     "prediction_planner",
@@ -494,9 +494,7 @@ def _assert_versioned_kernel_and_v4_freeze(
     for payload, profile_scenarios in zip(profiles, scenario_sets, strict=True):
         assert [row["key"] for row in payload["planners"]] == EXPECTED_0_0_8_PLANNER_KEYS
         social_force = next(row for row in payload["planners"] if row["key"] == "social_force")
-        assert social_force["algo_config"] == (
-            "configs/algos/social_force_resolution_independent_v2_kernel_wrapped_v2.yaml"
-        )
+        assert social_force["algo_config"] == ("configs/algos/social_force_release_v0_0_8.yaml")
         assert (
             _algo_config(REPO_ROOT, social_force["algo_config"])["social_force_kernel_version"]
             == "wrapped_v2"

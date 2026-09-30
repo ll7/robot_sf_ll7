@@ -1958,6 +1958,7 @@ class _StepLoopState:
     hybrid_command_sources: list[str | None] | None = None
     planner_decision_trace: list[PlannerDecisionTraceEntry] = field(default_factory=list)
     simulation_step_trace: list[dict[str, Any]] = field(default_factory=list)
+    planner_target_xy: list[float] | None = None
     map_def: Any = None
     goal_vec: np.ndarray = field(default_factory=lambda: np.zeros(2, dtype=float))
     initial_goal_vec: np.ndarray = field(default_factory=lambda: np.zeros(2, dtype=float))
@@ -2523,6 +2524,31 @@ def _step_policy_inference(
     return policy_command, corrupted_ped_positions
 
 
+def _planner_target_xy_from_stats(payload: Any) -> list[float] | None:
+    """Extract the planner-selected navigation target from a planner-stats payload.
+
+    Reads ``planner_target_xy`` first, then the DWA ``last_decision.target_goal``.
+
+    Returns:
+        ``[x, y]`` world coordinates, or ``None`` when the arm exposes no target.
+    """
+    if not isinstance(payload, Mapping):
+        return None
+    candidate: Any = payload.get("planner_target_xy")
+    if candidate is None:
+        decision = payload.get("last_decision")
+        target_goal = decision.get("target_goal") if isinstance(decision, Mapping) else None
+        if isinstance(target_goal, Mapping):
+            candidate = [target_goal.get("x"), target_goal.get("y")]
+    try:
+        x_val, y_val = (float(candidate[0]), float(candidate[1]))
+    except (TypeError, ValueError, IndexError, KeyError):
+        return None
+    if not (np.isfinite(x_val) and np.isfinite(y_val)):
+        return None
+    return [x_val, y_val]
+
+
 def _step_hybrid_and_planner_stats(
     state: _StepLoopState,
     slc: _StepLoopConfig,
@@ -2535,11 +2561,20 @@ def _step_hybrid_and_planner_stats(
         Tuple of (step_is_native, planner_step_decision).
     """
     planner_step_decision = None
+    state.planner_target_xy = None
+    if slc.record_simulation_step_trace and callable(planner_stats):
+        # Observational only: read the planner-selected navigation target.
+        try:
+            state.planner_target_xy = _planner_target_xy_from_stats(planner_stats())
+        except (RuntimeError, ValueError, TypeError):
+            state.planner_target_xy = None
     # Hybrid handoff telemetry is part of the episode predicate contract, so
     # sample it even when the larger planner-decision trace is not requested.
-    if (slc.record_planner_decision_trace or state.hybrid_command_sources is not None) and callable(
-        planner_stats
-    ):
+    if (
+        slc.record_planner_decision_trace
+        or slc.record_simulation_step_trace
+        or state.hybrid_command_sources is not None
+    ) and callable(planner_stats):
         try:
             planner_stats_payload = planner_stats()
         except (RuntimeError, ValueError, TypeError):
@@ -2857,9 +2892,20 @@ def _step_build_simulation_trace(
     )
     planner_payload: dict[str, Any] = {
         "event": "step",
+        "planner_target_xy": state.planner_target_xy,
         "selected_action": sim.selected_action_payload,
         "applied_environment_action": sim.applied_environment_action_payload,
     }
+    decision = getattr(sim, "planner_step_decision", None)
+    if isinstance(decision, dict):
+        for key in (
+            "no_admissible_command",
+            "no_admissible_command_count",
+            "recovery_command",
+            "recovery_command_count",
+        ):
+            if key in decision:
+                planner_payload[key] = decision[key]
     if sim.action_conversion_payload:
         planner_payload["action_conversion"] = sim.action_conversion_payload
     if sim.actuation_step is not None:
@@ -3157,6 +3203,10 @@ def _step_planner_decision_dwa_keys(
     planners' traces are unchanged.
     """
     for dwa_key in (
+        "no_admissible_command",
+        "no_admissible_command_count",
+        "recovery_command",
+        "recovery_command_count",
         "constraint_reason",
         "candidate_total",
         "candidate_feasible",

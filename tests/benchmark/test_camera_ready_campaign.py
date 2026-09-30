@@ -2795,7 +2795,14 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
         encoding="utf-8",
     )
 
-    cfg = load_campaign_config(config_path)
+    # These fixtures exercise legacy scoring with explicitly declared legacy assets.
+    cfg = replace(
+        load_campaign_config(config_path),
+        snqi_weights_path=get_repository_root()
+        / "configs/benchmarks/snqi_weights_camera_ready_v1.json",
+        snqi_baseline_path=get_repository_root()
+        / "configs/benchmarks/snqi_baseline_camera_ready_v1.json",
+    )
     assert cfg.scenario_matrix_path == scenario_abs
     run_batch_calls: list[dict[str, object]] = []
 
@@ -5269,7 +5276,14 @@ def test_run_campaign_enforces_snqi_contract_error_mode(tmp_path: Path, monkeypa
         + "\n",
         encoding="utf-8",
     )
-    cfg = load_campaign_config(config_path)
+    # These fixtures exercise legacy scoring with explicitly declared legacy assets.
+    cfg = replace(
+        load_campaign_config(config_path),
+        snqi_weights_path=get_repository_root()
+        / "configs/benchmarks/snqi_weights_camera_ready_v1.json",
+        snqi_baseline_path=get_repository_root()
+        / "configs/benchmarks/snqi_baseline_camera_ready_v1.json",
+    )
 
     def _fake_run_batch(*args, **kwargs):
         """Write an episode record whose benchmark metrics fail the gate."""
@@ -5374,7 +5388,14 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
         + "\n",
         encoding="utf-8",
     )
-    cfg = load_campaign_config(config_path)
+    # These fixtures exercise legacy scoring with explicitly declared legacy assets.
+    cfg = replace(
+        load_campaign_config(config_path),
+        snqi_weights_path=get_repository_root()
+        / "configs/benchmarks/snqi_weights_camera_ready_v1.json",
+        snqi_baseline_path=get_repository_root()
+        / "configs/benchmarks/snqi_baseline_camera_ready_v1.json",
+    )
 
     def _fake_run_batch(*args, **kwargs):
         """Write an episode record with failed status despite successful metrics."""
@@ -5471,7 +5492,14 @@ def test_run_campaign_parity_table_includes_ci_columns(tmp_path: Path, monkeypat
         + "\n",
         encoding="utf-8",
     )
-    cfg = load_campaign_config(config_path)
+    # These fixtures exercise legacy scoring with explicitly declared legacy assets.
+    cfg = replace(
+        load_campaign_config(config_path),
+        snqi_weights_path=get_repository_root()
+        / "configs/benchmarks/snqi_weights_camera_ready_v1.json",
+        snqi_baseline_path=get_repository_root()
+        / "configs/benchmarks/snqi_baseline_camera_ready_v1.json",
+    )
 
     def _fake_run_batch(*args, **kwargs):
         """Write a successful episode record for CI report rendering."""
@@ -6821,7 +6849,14 @@ def test_run_campaign_fails_fast_on_missing_snqi_normalized_term(
         + "\n",
         encoding="utf-8",
     )
-    cfg = load_campaign_config(config_path)
+    # These fixtures exercise legacy scoring with explicitly declared legacy assets.
+    cfg = replace(
+        load_campaign_config(config_path),
+        snqi_weights_path=get_repository_root()
+        / "configs/benchmarks/snqi_weights_camera_ready_v1.json",
+        snqi_baseline_path=get_repository_root()
+        / "configs/benchmarks/snqi_baseline_camera_ready_v1.json",
+    )
 
     def _fake_run_batch(*args, **kwargs):
         del args

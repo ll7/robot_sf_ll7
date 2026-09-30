@@ -6,7 +6,7 @@ release_id: paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5
 release_tag: paper-matrix-v2-h600-s30-runtime-smoke-v0_5
 maturity: pre-1.0
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml
-campaign_config_sha256: "ac679b607fd8002c59fef6aa5ef4fa7210e0492b6223d394b1cf25f01d29b607"
+campaign_config_sha256: "99f18ed352a87242e15923942fbb2179bd9e55fb6df7a7cab14149621f2963e7"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: runtime-smoke-advisory-no-ranking
 
@@ -45,10 +45,6 @@ seed_policy:
   seed_sets_path: ../../benchmarks/seed_sets_v1.yaml
 
 metrics:
-  snqi_weights_path: ../snqi_weights_camera_ready_v3.json
-  snqi_weights_sha256: "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2"
-  snqi_baseline_path: ../snqi_baseline_camera_ready_v3.json
-  snqi_baseline_sha256: "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a"
   interpretation: advisory-only-no-ranking
 
 planners:
@@ -97,7 +93,6 @@ artifacts:
     - reports/campaign_report.md
     - reports/matrix_summary.json
     - reports/campaign_table.md
-    - reports/snqi_diagnostics.json
 
 provenance:
   repository_url: https://github.com/ll7/robot_sf_ll7

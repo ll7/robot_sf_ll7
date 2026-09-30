@@ -299,7 +299,7 @@ def _expected_input_paths(
         "snqi_baseline",
         "scenario_horizons",
     ):
-        if field in config:
+        if config.get(field) is not None:
             paths.add(_root_file(root, config[field], f"campaign.{field}"))
     for field in ("suite_policy_path", "route_certification_path"):
         paths.add(_root_file(root, seed_policy[field], f"candidate.inputs.{field}"))

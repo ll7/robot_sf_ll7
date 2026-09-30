@@ -466,6 +466,9 @@ def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
         "seed_policy.seed_set",
         "seed_policy.seeds",
         "snqi_contract.calibration_trials",
+        "snqi_contract.enabled",
+        "snqi_weights",
+        "snqi_baseline",
         "zenodo",
     }
     # The current template advances the simulator kernel and Social Force selector;
@@ -565,9 +568,6 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
         "seed_policy.seed_set",
         "seed_policy.seeds",
         "snqi_contract.calibration_trials",  # bounded runtime resources
-        "snqi_contract.enabled",  # 0.0.8 excludes legacy scoring
-        "snqi_weights",
-        "snqi_baseline",
         "zenodo",  # publication identity
     }
     assert _diff_paths(smoke, template) == allowed_smoke_differences
@@ -688,6 +688,9 @@ def test_runtime_smoke_v0_5_advances_wrapped_kernel_and_preserves_v0_4() -> None
         "release_tag",
         "scenario_matrix",
         "seed_policy.seeds",
+        "snqi_weights",
+        "snqi_baseline",
+        "snqi_contract.enabled",
     }
     assert successor["name"] == "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5"
     assert successor["release_tag"] == "paper-matrix-v2-h600-s30-runtime-smoke-v0_5"
@@ -708,6 +711,11 @@ def test_runtime_smoke_v0_5_advances_wrapped_kernel_and_preserves_v0_4() -> None
         "scenario.matrix_path",
         "scenario.matrix_sha256",
         "seed_policy.seeds",
+        "metrics.snqi_weights_path",
+        "metrics.snqi_weights_sha256",
+        "metrics.snqi_baseline_path",
+        "metrics.snqi_baseline_sha256",
+        "artifacts.required_paths",
     } | {f"planners.groups.{key}" for key in changed_group_keys}
     assert new_manifest["release_id"] == successor["name"]
     assert new_manifest["release_tag"] == successor["release_tag"]

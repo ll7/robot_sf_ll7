@@ -37,6 +37,7 @@ from robot_sf.benchmark.robot_force_contract import (
     declared_force_source_contract,
     validate_robot_force_provenance,
 )
+from robot_sf.benchmark.snqi.evaluation_seeds import SEALED_EVALUATION_SEEDS_SHA256
 from robot_sf.benchmark.snqi.v2_reports import read_episode_files, validate_episode_execution
 from robot_sf.benchmark.snqi.v2_spec import (
     PP_EQUIV_FORCE,
@@ -68,7 +69,10 @@ def _validate_calibration_grid(
     """
     if grid is None:
         candidate = _candidate_calibration_horizons()
-        grid = CalibrationGrid({scenario: candidate.get(scenario, 600) for scenario in scenarios})
+        missing = set(scenarios) - set(candidate)
+        if missing:
+            raise ValueError(f"SNQI-v2 scenarios missing from budget schedule: {sorted(missing)}")
+        grid = CalibrationGrid({scenario: candidate[scenario] for scenario in scenarios})
     if grid.diagnostic:
         if (
             not grid.seeds
@@ -163,6 +167,7 @@ def derive_calibration_anchors(
     ).hexdigest()
     return {
         "version": "SNQI-v2.0",
+        "evaluation_seeds_sha256": SEALED_EVALUATION_SEEDS_SHA256,
         "metric_schema_version": metric_version,
         "status": "diagnostic_only" if grid.diagnostic else "derived_pending_custody",
         "anchors": anchors,
@@ -817,7 +822,11 @@ def _validate_calibration_episode(
         )
     params = episode.get("scenario_params", {})
     if expected_horizon is None:
-        expected_horizon = _candidate_calibration_horizons().get(episode.get("scenario_id"), 600)
+        schedule = _candidate_calibration_horizons()
+        scenario = episode.get("scenario_id")
+        if scenario not in schedule:
+            raise ValueError(f"SNQI-v2 scenario missing from budget schedule: {scenario}")
+        expected_horizon = schedule[scenario]
     if (
         type(expected_horizon) is not int
         or expected_horizon < 1

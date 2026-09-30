@@ -1,10 +1,3338 @@
 {
+  "anchor_sensitivity": {
+    "fixed_normative_anchors": {
+      "N": 0.25,
+      "T": 3
+    },
+    "full_p95": {
+      "F": 80.9353165916145,
+      "J": 2.068711759770056,
+      "K": 3.5528968802818905,
+      "N": 0.4902005251850067,
+      "T": 3.125418263353946
+    },
+    "full_ranking": [
+      {
+        "arm": "socnav_sampling",
+        "collision_rate": 0.020833333333333332,
+        "episodes": 96,
+        "rank": 1,
+        "snqi_v2_mean": 0.6084058345396232,
+        "success_rate": 0.8958333333333334
+      },
+      {
+        "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+        "collision_rate": 0.0,
+        "episodes": 96,
+        "rank": 2,
+        "snqi_v2_mean": 0.5841866547403353,
+        "success_rate": 0.8854166666666666
+      },
+      {
+        "arm": "risk_dwa",
+        "collision_rate": 0.0,
+        "episodes": 96,
+        "rank": 3,
+        "snqi_v2_mean": 0.5687213147192709,
+        "success_rate": 0.8229166666666666
+      },
+      {
+        "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+        "collision_rate": 0.0,
+        "episodes": 96,
+        "rank": 4,
+        "snqi_v2_mean": 0.5336853739254742,
+        "success_rate": 0.8333333333333334
+      },
+      {
+        "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+        "collision_rate": 0.0,
+        "episodes": 96,
+        "rank": 5,
+        "snqi_v2_mean": 0.5333622720381029,
+        "success_rate": 0.8333333333333334
+      },
+      {
+        "arm": "hybrid_rule_v4_fast_progress_static_escape",
+        "collision_rate": 0.0,
+        "episodes": 96,
+        "rank": 6,
+        "snqi_v2_mean": 0.5147801435454608,
+        "success_rate": 0.8125
+      },
+      {
+        "arm": "orca",
+        "collision_rate": 0.11458333333333333,
+        "episodes": 96,
+        "rank": 7,
+        "snqi_v2_mean": 0.4221718979078845,
+        "success_rate": 0.8645833333333334
+      },
+      {
+        "arm": "guarded_ppo",
+        "collision_rate": 0.010416666666666666,
+        "episodes": 96,
+        "rank": 8,
+        "snqi_v2_mean": 0.3716117322245059,
+        "success_rate": 0.6666666666666666
+      },
+      {
+        "arm": "social_force",
+        "collision_rate": 0.0,
+        "episodes": 96,
+        "rank": 9,
+        "snqi_v2_mean": 0.36543502853935844,
+        "success_rate": 0.6458333333333334
+      },
+      {
+        "arm": "predictive_mppi",
+        "collision_rate": 0.0,
+        "episodes": 96,
+        "rank": 10,
+        "snqi_v2_mean": 0.2263238344197962,
+        "success_rate": 0.3958333333333333
+      },
+      {
+        "arm": "prediction_planner",
+        "collision_rate": 0.2604166666666667,
+        "episodes": 96,
+        "rank": 11,
+        "snqi_v2_mean": -0.3006181682498412,
+        "success_rate": 0.3854166666666667
+      },
+      {
+        "arm": "goal",
+        "collision_rate": 0.6458333333333334,
+        "episodes": 96,
+        "rank": 12,
+        "snqi_v2_mean": -1.0819138912708066,
+        "success_rate": 0.34375
+      },
+      {
+        "arm": "sacadrl",
+        "collision_rate": 0.7083333333333334,
+        "episodes": 96,
+        "rank": 13,
+        "snqi_v2_mean": -1.2791479779584074,
+        "success_rate": 0.2916666666666667
+      },
+      {
+        "arm": "ppo",
+        "collision_rate": 0.8541666666666666,
+        "episodes": 96,
+        "rank": 14,
+        "snqi_v2_mean": -1.7169773987023504,
+        "success_rate": 0.14583333333333334
+      }
+    ],
+    "leave_one_arm_out": {
+      "goal": {
+        "p95": {
+          "F": 84.7000206240603,
+          "J": 2.0805431005571227,
+          "K": 4.174333438419896,
+          "N": 0.5200357142857116,
+          "T": 3.2281916152704917
+        },
+        "ranking": [
+          {
+            "arm": "socnav_sampling",
+            "collision_rate": 0.020833333333333332,
+            "episodes": 96,
+            "rank": 1,
+            "snqi_v2_mean": 0.6117006397726749,
+            "success_rate": 0.8958333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 2,
+            "snqi_v2_mean": 0.588185953962268,
+            "success_rate": 0.8854166666666666
+          },
+          {
+            "arm": "risk_dwa",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 3,
+            "snqi_v2_mean": 0.5707391531889797,
+            "success_rate": 0.8229166666666666
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 4,
+            "snqi_v2_mean": 0.5372754431706781,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 5,
+            "snqi_v2_mean": 0.5369102961017931,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 6,
+            "snqi_v2_mean": 0.5181771618278682,
+            "success_rate": 0.8125
+          },
+          {
+            "arm": "orca",
+            "collision_rate": 0.11458333333333333,
+            "episodes": 96,
+            "rank": 7,
+            "snqi_v2_mean": 0.4249698270892166,
+            "success_rate": 0.8645833333333334
+          },
+          {
+            "arm": "guarded_ppo",
+            "collision_rate": 0.010416666666666666,
+            "episodes": 96,
+            "rank": 8,
+            "snqi_v2_mean": 0.37447326552474297,
+            "success_rate": 0.6666666666666666
+          },
+          {
+            "arm": "social_force",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 9,
+            "snqi_v2_mean": 0.3699186822760691,
+            "success_rate": 0.6458333333333334
+          },
+          {
+            "arm": "predictive_mppi",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 10,
+            "snqi_v2_mean": 0.2291192934138967,
+            "success_rate": 0.3958333333333333
+          },
+          {
+            "arm": "prediction_planner",
+            "collision_rate": 0.2604166666666667,
+            "episodes": 96,
+            "rank": 11,
+            "snqi_v2_mean": -0.2978510667682848,
+            "success_rate": 0.3854166666666667
+          },
+          {
+            "arm": "goal",
+            "collision_rate": 0.6458333333333334,
+            "episodes": 96,
+            "rank": 12,
+            "snqi_v2_mean": -1.0805885070244514,
+            "success_rate": 0.34375
+          },
+          {
+            "arm": "sacadrl",
+            "collision_rate": 0.7083333333333334,
+            "episodes": 96,
+            "rank": 13,
+            "snqi_v2_mean": -1.2769770706576082,
+            "success_rate": 0.2916666666666667
+          },
+          {
+            "arm": "ppo",
+            "collision_rate": 0.8541666666666666,
+            "episodes": 96,
+            "rank": 14,
+            "snqi_v2_mean": -1.7149380817007331,
+            "success_rate": 0.14583333333333334
+          }
+        ],
+        "relative_change": {
+          "F": 0.0465149725853529,
+          "J": 0.005719182835013024,
+          "K": 0.17490982121853754,
+          "N": 0.06086323365207498,
+          "T": 0.0328830714025001
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "guarded_ppo": {
+        "p95": {
+          "F": 78.62174593026253,
+          "J": 2.0005984731261286,
+          "K": 2.4335085190017063,
+          "N": 0.48652423012651935,
+          "T": 3.069199369543711
+        },
+        "ranking": [
+          {
+            "arm": "socnav_sampling",
+            "collision_rate": 0.020833333333333332,
+            "episodes": 96,
+            "rank": 1,
+            "snqi_v2_mean": 0.602560046656107,
+            "success_rate": 0.8958333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 2,
+            "snqi_v2_mean": 0.5772160409453017,
+            "success_rate": 0.8854166666666666
+          },
+          {
+            "arm": "risk_dwa",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 3,
+            "snqi_v2_mean": 0.5658160847674832,
+            "success_rate": 0.8229166666666666
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 4,
+            "snqi_v2_mean": 0.5275597840776475,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 5,
+            "snqi_v2_mean": 0.527206497905834,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 6,
+            "snqi_v2_mean": 0.5089396595510279,
+            "success_rate": 0.8125
+          },
+          {
+            "arm": "orca",
+            "collision_rate": 0.11458333333333333,
+            "episodes": 96,
+            "rank": 7,
+            "snqi_v2_mean": 0.41691091930664453,
+            "success_rate": 0.8645833333333334
+          },
+          {
+            "arm": "guarded_ppo",
+            "collision_rate": 0.010416666666666666,
+            "episodes": 96,
+            "rank": 8,
+            "snqi_v2_mean": 0.36660467616113496,
+            "success_rate": 0.6666666666666666
+          },
+          {
+            "arm": "social_force",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 9,
+            "snqi_v2_mean": 0.3583487219157271,
+            "success_rate": 0.6458333333333334
+          },
+          {
+            "arm": "predictive_mppi",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 10,
+            "snqi_v2_mean": 0.22261858783189148,
+            "success_rate": 0.3958333333333333
+          },
+          {
+            "arm": "prediction_planner",
+            "collision_rate": 0.2604166666666667,
+            "episodes": 96,
+            "rank": 11,
+            "snqi_v2_mean": -0.3048470681775434,
+            "success_rate": 0.3854166666666667
+          },
+          {
+            "arm": "goal",
+            "collision_rate": 0.6458333333333334,
+            "episodes": 96,
+            "rank": 12,
+            "snqi_v2_mean": -1.0838877909032478,
+            "success_rate": 0.34375
+          },
+          {
+            "arm": "sacadrl",
+            "collision_rate": 0.7083333333333334,
+            "episodes": 96,
+            "rank": 13,
+            "snqi_v2_mean": -1.284953625264025,
+            "success_rate": 0.2916666666666667
+          },
+          {
+            "arm": "ppo",
+            "collision_rate": 0.8541666666666666,
+            "episodes": 96,
+            "rank": 14,
+            "snqi_v2_mean": -1.7232422703650556,
+            "success_rate": 0.14583333333333334
+          }
+        ],
+        "relative_change": {
+          "F": -0.028585427953853996,
+          "J": -0.03292546016729686,
+          "K": -0.31506356615432385,
+          "N": -0.007499573887848959,
+          "T": -0.017987638476875564
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": true,
+          "N": false,
+          "T": false
+        }
+      },
+      "hybrid_rule_v4_fast_progress_static_escape": {
+        "p95": {
+          "F": 77.58937316149198,
+          "J": 2.0736471840283457,
+          "K": 4.0276966848556475,
+          "N": 0.4419826404751027,
+          "T": 3.1222096719210315
+        },
+        "ranking": [
+          {
+            "arm": "socnav_sampling",
+            "collision_rate": 0.020833333333333332,
+            "episodes": 96,
+            "rank": 1,
+            "snqi_v2_mean": 0.60767773537508,
+            "success_rate": 0.8958333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 2,
+            "snqi_v2_mean": 0.5833985063020612,
+            "success_rate": 0.8854166666666666
+          },
+          {
+            "arm": "risk_dwa",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 3,
+            "snqi_v2_mean": 0.5675519368274841,
+            "success_rate": 0.8229166666666666
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 4,
+            "snqi_v2_mean": 0.5328227315607031,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 5,
+            "snqi_v2_mean": 0.5325622532198929,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 6,
+            "snqi_v2_mean": 0.5142193975253421,
+            "success_rate": 0.8125
+          },
+          {
+            "arm": "orca",
+            "collision_rate": 0.11458333333333333,
+            "episodes": 96,
+            "rank": 7,
+            "snqi_v2_mean": 0.4218111109904777,
+            "success_rate": 0.8645833333333334
+          },
+          {
+            "arm": "guarded_ppo",
+            "collision_rate": 0.010416666666666666,
+            "episodes": 96,
+            "rank": 8,
+            "snqi_v2_mean": 0.37057768532400054,
+            "success_rate": 0.6666666666666666
+          },
+          {
+            "arm": "social_force",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 9,
+            "snqi_v2_mean": 0.36425193901878217,
+            "success_rate": 0.6458333333333334
+          },
+          {
+            "arm": "predictive_mppi",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 10,
+            "snqi_v2_mean": 0.2245955611238477,
+            "success_rate": 0.3958333333333333
+          },
+          {
+            "arm": "prediction_planner",
+            "collision_rate": 0.2604166666666667,
+            "episodes": 96,
+            "rank": 11,
+            "snqi_v2_mean": -0.3020793781935422,
+            "success_rate": 0.3854166666666667
+          },
+          {
+            "arm": "goal",
+            "collision_rate": 0.6458333333333334,
+            "episodes": 96,
+            "rank": 12,
+            "snqi_v2_mean": -1.082571376346367,
+            "success_rate": 0.34375
+          },
+          {
+            "arm": "sacadrl",
+            "collision_rate": 0.7083333333333334,
+            "episodes": 96,
+            "rank": 13,
+            "snqi_v2_mean": -1.2786380188971163,
+            "success_rate": 0.2916666666666667
+          },
+          {
+            "arm": "ppo",
+            "collision_rate": 0.8541666666666666,
+            "episodes": 96,
+            "rank": 14,
+            "snqi_v2_mean": -1.716089747982652,
+            "success_rate": 0.14583333333333334
+          }
+        ],
+        "relative_change": {
+          "F": -0.04134095684094948,
+          "J": 0.0023857476687995,
+          "K": 0.13363737270530796,
+          "N": -0.09836359251493261,
+          "T": -0.001026611852415337
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "hybrid_rule_v4_fast_progress_static_escape_continuous": {
+        "p95": {
+          "F": 78.62174593026253,
+          "J": 2.0736471840283457,
+          "K": 3.7823455804066146,
+          "N": 0.44871061643835486,
+          "T": 3.025639269395333
+        },
+        "ranking": [
+          {
+            "arm": "socnav_sampling",
+            "collision_rate": 0.020833333333333332,
+            "episodes": 96,
+            "rank": 1,
+            "snqi_v2_mean": 0.6077740957182418,
+            "success_rate": 0.8958333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 2,
+            "snqi_v2_mean": 0.5834932109516123,
+            "success_rate": 0.8854166666666666
+          },
+          {
+            "arm": "risk_dwa",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 3,
+            "snqi_v2_mean": 0.5678975712465136,
+            "success_rate": 0.8229166666666666
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 4,
+            "snqi_v2_mean": 0.532912000431625,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 5,
+            "snqi_v2_mean": 0.5326319317870605,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 6,
+            "snqi_v2_mean": 0.5142436764518671,
+            "success_rate": 0.8125
+          },
+          {
+            "arm": "orca",
+            "collision_rate": 0.11458333333333333,
+            "episodes": 96,
+            "rank": 7,
+            "snqi_v2_mean": 0.4217949618175529,
+            "success_rate": 0.8645833333333334
+          },
+          {
+            "arm": "guarded_ppo",
+            "collision_rate": 0.010416666666666666,
+            "episodes": 96,
+            "rank": 8,
+            "snqi_v2_mean": 0.37082691162925413,
+            "success_rate": 0.6666666666666666
+          },
+          {
+            "arm": "social_force",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 9,
+            "snqi_v2_mean": 0.3643984097323079,
+            "success_rate": 0.6458333333333334
+          },
+          {
+            "arm": "predictive_mppi",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 10,
+            "snqi_v2_mean": 0.22509599408359646,
+            "success_rate": 0.3958333333333333
+          },
+          {
+            "arm": "prediction_planner",
+            "collision_rate": 0.2604166666666667,
+            "episodes": 96,
+            "rank": 11,
+            "snqi_v2_mean": -0.30165796727386723,
+            "success_rate": 0.3854166666666667
+          },
+          {
+            "arm": "goal",
+            "collision_rate": 0.6458333333333334,
+            "episodes": 96,
+            "rank": 12,
+            "snqi_v2_mean": -1.0823938629475451,
+            "success_rate": 0.34375
+          },
+          {
+            "arm": "sacadrl",
+            "collision_rate": 0.7083333333333334,
+            "episodes": 96,
+            "rank": 13,
+            "snqi_v2_mean": -1.2789440454049168,
+            "success_rate": 0.2916666666666667
+          },
+          {
+            "arm": "ppo",
+            "collision_rate": 0.8541666666666666,
+            "episodes": 96,
+            "rank": 14,
+            "snqi_v2_mean": -1.7164970387283975,
+            "success_rate": 0.14583333333333334
+          }
+        ],
+        "relative_change": {
+          "F": -0.028585427953853996,
+          "J": 0.0023857476687995,
+          "K": 0.06458073731273602,
+          "N": -0.08463864605406757,
+          "T": -0.03192500508765126
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "orca": {
+        "p95": {
+          "F": 84.30086221942456,
+          "J": 2.0805431005571227,
+          "K": 3.7056457284638267,
+          "N": 0.5038394970414186,
+          "T": 3.10474690842662
+        },
+        "ranking": [
+          {
+            "arm": "socnav_sampling",
+            "collision_rate": 0.020833333333333332,
+            "episodes": 96,
+            "rank": 1,
+            "snqi_v2_mean": 0.610625879557983,
+            "success_rate": 0.8958333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 2,
+            "snqi_v2_mean": 0.5869268934293759,
+            "success_rate": 0.8854166666666666
+          },
+          {
+            "arm": "risk_dwa",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 3,
+            "snqi_v2_mean": 0.5703395234000502,
+            "success_rate": 0.8229166666666666
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 4,
+            "snqi_v2_mean": 0.536120943113593,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 5,
+            "snqi_v2_mean": 0.53575722275361,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 6,
+            "snqi_v2_mean": 0.517053087497272,
+            "success_rate": 0.8125
+          },
+          {
+            "arm": "orca",
+            "collision_rate": 0.11458333333333333,
+            "episodes": 96,
+            "rank": 7,
+            "snqi_v2_mean": 0.42397133825285066,
+            "success_rate": 0.8645833333333334
+          },
+          {
+            "arm": "guarded_ppo",
+            "collision_rate": 0.010416666666666666,
+            "episodes": 96,
+            "rank": 8,
+            "snqi_v2_mean": 0.3736974378536304,
+            "success_rate": 0.6666666666666666
+          },
+          {
+            "arm": "social_force",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 9,
+            "snqi_v2_mean": 0.3683818599258309,
+            "success_rate": 0.6458333333333334
+          },
+          {
+            "arm": "predictive_mppi",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 10,
+            "snqi_v2_mean": 0.2285851174964859,
+            "success_rate": 0.3958333333333333
+          },
+          {
+            "arm": "prediction_planner",
+            "collision_rate": 0.2604166666666667,
+            "episodes": 96,
+            "rank": 11,
+            "snqi_v2_mean": -0.29844084351997624,
+            "success_rate": 0.3854166666666667
+          },
+          {
+            "arm": "goal",
+            "collision_rate": 0.6458333333333334,
+            "episodes": 96,
+            "rank": 12,
+            "snqi_v2_mean": -1.0809050349952638,
+            "success_rate": 0.34375
+          },
+          {
+            "arm": "sacadrl",
+            "collision_rate": 0.7083333333333334,
+            "episodes": 96,
+            "rank": 13,
+            "snqi_v2_mean": -1.27798813720037,
+            "success_rate": 0.2916666666666667
+          },
+          {
+            "arm": "ppo",
+            "collision_rate": 0.8541666666666666,
+            "episodes": 96,
+            "rank": 14,
+            "snqi_v2_mean": -1.7159285487400142,
+            "success_rate": 0.14583333333333334
+          }
+        ],
+        "relative_change": {
+          "F": 0.04158315268959806,
+          "J": 0.005719182835013024,
+          "K": 0.04299276149264903,
+          "N": 0.027823250191876994,
+          "T": -0.006613948337635627
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "ppo": {
+        "p95": {
+          "F": 84.7000206240603,
+          "J": 1.928041821959871,
+          "K": 4.174333438419896,
+          "N": 0.5267857142857143,
+          "T": 3.221081092060211
+        },
+        "ranking": [
+          {
+            "arm": "socnav_sampling",
+            "collision_rate": 0.020833333333333332,
+            "episodes": 96,
+            "rank": 1,
+            "snqi_v2_mean": 0.6081667315959228,
+            "success_rate": 0.8958333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 2,
+            "snqi_v2_mean": 0.5844019918932006,
+            "success_rate": 0.8854166666666666
+          },
+          {
+            "arm": "risk_dwa",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 3,
+            "snqi_v2_mean": 0.568780756942088,
+            "success_rate": 0.8229166666666666
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 4,
+            "snqi_v2_mean": 0.5336925894039362,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 5,
+            "snqi_v2_mean": 0.533214169864907,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 6,
+            "snqi_v2_mean": 0.5143952766964647,
+            "success_rate": 0.8125
+          },
+          {
+            "arm": "orca",
+            "collision_rate": 0.11458333333333333,
+            "episodes": 96,
+            "rank": 7,
+            "snqi_v2_mean": 0.42225063447536854,
+            "success_rate": 0.8645833333333334
+          },
+          {
+            "arm": "guarded_ppo",
+            "collision_rate": 0.010416666666666666,
+            "episodes": 96,
+            "rank": 8,
+            "snqi_v2_mean": 0.3716647489348875,
+            "success_rate": 0.6666666666666666
+          },
+          {
+            "arm": "social_force",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 9,
+            "snqi_v2_mean": 0.3688995017434182,
+            "success_rate": 0.6458333333333334
+          },
+          {
+            "arm": "predictive_mppi",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 10,
+            "snqi_v2_mean": 0.22690031016073112,
+            "success_rate": 0.3958333333333333
+          },
+          {
+            "arm": "prediction_planner",
+            "collision_rate": 0.2604166666666667,
+            "episodes": 96,
+            "rank": 11,
+            "snqi_v2_mean": -0.30071556524213067,
+            "success_rate": 0.3854166666666667
+          },
+          {
+            "arm": "goal",
+            "collision_rate": 0.6458333333333334,
+            "episodes": 96,
+            "rank": 12,
+            "snqi_v2_mean": -1.0815232097181797,
+            "success_rate": 0.34375
+          },
+          {
+            "arm": "sacadrl",
+            "collision_rate": 0.7083333333333334,
+            "episodes": 96,
+            "rank": 13,
+            "snqi_v2_mean": -1.2800731614320582,
+            "success_rate": 0.2916666666666667
+          },
+          {
+            "arm": "ppo",
+            "collision_rate": 0.8541666666666666,
+            "episodes": 96,
+            "rank": 14,
+            "snqi_v2_mean": -1.7189109350677738,
+            "success_rate": 0.14583333333333334
+          }
+        ],
+        "relative_change": {
+          "F": 0.0465149725853529,
+          "J": -0.06799880995785566,
+          "K": 0.17490982121853754,
+          "N": 0.07463310874034662,
+          "T": 0.030608008479353816
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "prediction_planner": {
+        "p95": {
+          "F": 78.62174593026253,
+          "J": 2.076870812373129,
+          "K": 4.174333438419896,
+          "N": 0.5038394970414186,
+          "T": 3.2281916152704917
+        },
+        "ranking": [
+          {
+            "arm": "socnav_sampling",
+            "collision_rate": 0.020833333333333332,
+            "episodes": 96,
+            "rank": 1,
+            "snqi_v2_mean": 0.6085866934338703,
+            "success_rate": 0.8958333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 2,
+            "snqi_v2_mean": 0.5844088369246726,
+            "success_rate": 0.8854166666666666
+          },
+          {
+            "arm": "risk_dwa",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 3,
+            "snqi_v2_mean": 0.5681350977752769,
+            "success_rate": 0.8229166666666666
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 4,
+            "snqi_v2_mean": 0.533767933119275,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 5,
+            "snqi_v2_mean": 0.5334936106861795,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 6,
+            "snqi_v2_mean": 0.5150832976675437,
+            "success_rate": 0.8125
+          },
+          {
+            "arm": "orca",
+            "collision_rate": 0.11458333333333333,
+            "episodes": 96,
+            "rank": 7,
+            "snqi_v2_mean": 0.42254817517179744,
+            "success_rate": 0.8645833333333334
+          },
+          {
+            "arm": "guarded_ppo",
+            "collision_rate": 0.010416666666666666,
+            "episodes": 96,
+            "rank": 8,
+            "snqi_v2_mean": 0.3713700425379762,
+            "success_rate": 0.6666666666666666
+          },
+          {
+            "arm": "social_force",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 9,
+            "snqi_v2_mean": 0.36545929269981664,
+            "success_rate": 0.6458333333333334
+          },
+          {
+            "arm": "predictive_mppi",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 10,
+            "snqi_v2_mean": 0.22538527918330542,
+            "success_rate": 0.3958333333333333
+          },
+          {
+            "arm": "prediction_planner",
+            "collision_rate": 0.2604166666666667,
+            "episodes": 96,
+            "rank": 11,
+            "snqi_v2_mean": -0.30128714621678654,
+            "success_rate": 0.3854166666666667
+          },
+          {
+            "arm": "goal",
+            "collision_rate": 0.6458333333333334,
+            "episodes": 96,
+            "rank": 12,
+            "snqi_v2_mean": -1.082195706723749,
+            "success_rate": 0.34375
+          },
+          {
+            "arm": "sacadrl",
+            "collision_rate": 0.7083333333333334,
+            "episodes": 96,
+            "rank": 13,
+            "snqi_v2_mean": -1.2781079036957443,
+            "success_rate": 0.2916666666666667
+          },
+          {
+            "arm": "ppo",
+            "collision_rate": 0.8541666666666666,
+            "episodes": 96,
+            "rank": 14,
+            "snqi_v2_mean": -1.7156068411620726,
+            "success_rate": 0.14583333333333334
+          }
+        ],
+        "relative_change": {
+          "F": -0.028585427953853996,
+          "J": 0.003944025824061608,
+          "K": 0.17490982121853754,
+          "N": 0.027823250191876994,
+          "T": 0.0328830714025001
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "predictive_mppi": {
+        "p95": {
+          "F": 80.8284142274552,
+          "J": 2.076870812373129,
+          "K": 4.174333438419896,
+          "N": 0.4745762711864407,
+          "T": 3.1947834284387726
+        },
+        "ranking": [
+          {
+            "arm": "socnav_sampling",
+            "collision_rate": 0.020833333333333332,
+            "episodes": 96,
+            "rank": 1,
+            "snqi_v2_mean": 0.6097398103274724,
+            "success_rate": 0.8958333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 2,
+            "snqi_v2_mean": 0.585731587935832,
+            "success_rate": 0.8854166666666666
+          },
+          {
+            "arm": "risk_dwa",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 3,
+            "snqi_v2_mean": 0.5691091067542754,
+            "success_rate": 0.8229166666666666
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 4,
+            "snqi_v2_mean": 0.5350639275522693,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 5,
+            "snqi_v2_mean": 0.5347540892684916,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 6,
+            "snqi_v2_mean": 0.5162096493595388,
+            "success_rate": 0.8125
+          },
+          {
+            "arm": "orca",
+            "collision_rate": 0.11458333333333333,
+            "episodes": 96,
+            "rank": 7,
+            "snqi_v2_mean": 0.4234463220021894,
+            "success_rate": 0.8645833333333334
+          },
+          {
+            "arm": "guarded_ppo",
+            "collision_rate": 0.010416666666666666,
+            "episodes": 96,
+            "rank": 8,
+            "snqi_v2_mean": 0.3725247960512011,
+            "success_rate": 0.6666666666666666
+          },
+          {
+            "arm": "social_force",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 9,
+            "snqi_v2_mean": 0.3671471162996323,
+            "success_rate": 0.6458333333333334
+          },
+          {
+            "arm": "predictive_mppi",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 10,
+            "snqi_v2_mean": 0.22678338057918998,
+            "success_rate": 0.3958333333333333
+          },
+          {
+            "arm": "prediction_planner",
+            "collision_rate": 0.2604166666666667,
+            "episodes": 96,
+            "rank": 11,
+            "snqi_v2_mean": -0.30000447354510595,
+            "success_rate": 0.3854166666666667
+          },
+          {
+            "arm": "goal",
+            "collision_rate": 0.6458333333333334,
+            "episodes": 96,
+            "rank": 12,
+            "snqi_v2_mean": -1.081592226860806,
+            "success_rate": 0.34375
+          },
+          {
+            "arm": "sacadrl",
+            "collision_rate": 0.7083333333333334,
+            "episodes": 96,
+            "rank": 13,
+            "snqi_v2_mean": -1.2777040300247458,
+            "success_rate": 0.2916666666666667
+          },
+          {
+            "arm": "ppo",
+            "collision_rate": 0.8541666666666666,
+            "episodes": 96,
+            "rank": 14,
+            "snqi_v2_mean": -1.7153988214921423,
+            "success_rate": 0.14583333333333334
+          }
+        ],
+        "relative_change": {
+          "F": -0.0013208370419888146,
+          "J": 0.003944025824061608,
+          "K": 0.17490982121853754,
+          "N": -0.031873189023347605,
+          "T": 0.022193882303096775
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "risk_dwa": {
+        "p95": {
+          "F": 78.57195580284903,
+          "J": 2.0805431005571227,
+          "K": 2.7541696319411546,
+          "N": 0.4705116133082219,
+          "T": 3.1947834284387726
+        },
+        "ranking": [
+          {
+            "arm": "socnav_sampling",
+            "collision_rate": 0.020833333333333332,
+            "episodes": 96,
+            "rank": 1,
+            "snqi_v2_mean": 0.6055126156831954,
+            "success_rate": 0.8958333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 2,
+            "snqi_v2_mean": 0.580359915653093,
+            "success_rate": 0.8854166666666666
+          },
+          {
+            "arm": "risk_dwa",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 3,
+            "snqi_v2_mean": 0.5671663048679739,
+            "success_rate": 0.8229166666666666
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 4,
+            "snqi_v2_mean": 0.53038218181034,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 5,
+            "snqi_v2_mean": 0.5300937220549545,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 6,
+            "snqi_v2_mean": 0.5118506231109393,
+            "success_rate": 0.8125
+          },
+          {
+            "arm": "orca",
+            "collision_rate": 0.11458333333333333,
+            "episodes": 96,
+            "rank": 7,
+            "snqi_v2_mean": 0.4193107773897731,
+            "success_rate": 0.8645833333333334
+          },
+          {
+            "arm": "guarded_ppo",
+            "collision_rate": 0.010416666666666666,
+            "episodes": 96,
+            "rank": 8,
+            "snqi_v2_mean": 0.36900603285130934,
+            "success_rate": 0.6666666666666666
+          },
+          {
+            "arm": "social_force",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 9,
+            "snqi_v2_mean": 0.3604928767776705,
+            "success_rate": 0.6458333333333334
+          },
+          {
+            "arm": "predictive_mppi",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 10,
+            "snqi_v2_mean": 0.22418047085356183,
+            "success_rate": 0.3958333333333333
+          },
+          {
+            "arm": "prediction_planner",
+            "collision_rate": 0.2604166666666667,
+            "episodes": 96,
+            "rank": 11,
+            "snqi_v2_mean": -0.30281505064957964,
+            "success_rate": 0.3854166666666667
+          },
+          {
+            "arm": "goal",
+            "collision_rate": 0.6458333333333334,
+            "episodes": 96,
+            "rank": 12,
+            "snqi_v2_mean": -1.0830831795988962,
+            "success_rate": 0.34375
+          },
+          {
+            "arm": "sacadrl",
+            "collision_rate": 0.7083333333333334,
+            "episodes": 96,
+            "rank": 13,
+            "snqi_v2_mean": -1.2819049866430192,
+            "success_rate": 0.2916666666666667
+          },
+          {
+            "arm": "ppo",
+            "collision_rate": 0.8541666666666666,
+            "episodes": 96,
+            "rank": 14,
+            "snqi_v2_mean": -1.7193911953016023,
+            "success_rate": 0.14583333333333334
+          }
+        ],
+        "relative_change": {
+          "F": -0.029200612146741436,
+          "J": 0.005719182835013024,
+          "K": -0.2248101409229091,
+          "N": -0.04016501587662313,
+          "T": 0.022193882303096775
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "sacadrl": {
+        "p95": {
+          "F": 84.7000206240603,
+          "J": 2.0805431005571227,
+          "K": 4.174333438419896,
+          "N": 0.5267857142857143,
+          "T": 3.2281916152704917
+        },
+        "ranking": [
+          {
+            "arm": "socnav_sampling",
+            "collision_rate": 0.020833333333333332,
+            "episodes": 96,
+            "rank": 1,
+            "snqi_v2_mean": 0.6117006397726749,
+            "success_rate": 0.8958333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 2,
+            "snqi_v2_mean": 0.588185953962268,
+            "success_rate": 0.8854166666666666
+          },
+          {
+            "arm": "risk_dwa",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 3,
+            "snqi_v2_mean": 0.5707391531889797,
+            "success_rate": 0.8229166666666666
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 4,
+            "snqi_v2_mean": 0.5372754431706781,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 5,
+            "snqi_v2_mean": 0.5369102961017931,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 6,
+            "snqi_v2_mean": 0.5181771618278682,
+            "success_rate": 0.8125
+          },
+          {
+            "arm": "orca",
+            "collision_rate": 0.11458333333333333,
+            "episodes": 96,
+            "rank": 7,
+            "snqi_v2_mean": 0.4249698270892166,
+            "success_rate": 0.8645833333333334
+          },
+          {
+            "arm": "guarded_ppo",
+            "collision_rate": 0.010416666666666666,
+            "episodes": 96,
+            "rank": 8,
+            "snqi_v2_mean": 0.37447326552474297,
+            "success_rate": 0.6666666666666666
+          },
+          {
+            "arm": "social_force",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 9,
+            "snqi_v2_mean": 0.3699186822760691,
+            "success_rate": 0.6458333333333334
+          },
+          {
+            "arm": "predictive_mppi",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 10,
+            "snqi_v2_mean": 0.2291192934138967,
+            "success_rate": 0.3958333333333333
+          },
+          {
+            "arm": "prediction_planner",
+            "collision_rate": 0.2604166666666667,
+            "episodes": 96,
+            "rank": 11,
+            "snqi_v2_mean": -0.2978510667682848,
+            "success_rate": 0.3854166666666667
+          },
+          {
+            "arm": "goal",
+            "collision_rate": 0.6458333333333334,
+            "episodes": 96,
+            "rank": 12,
+            "snqi_v2_mean": -1.0805885070244514,
+            "success_rate": 0.34375
+          },
+          {
+            "arm": "sacadrl",
+            "collision_rate": 0.7083333333333334,
+            "episodes": 96,
+            "rank": 13,
+            "snqi_v2_mean": -1.2769770706576082,
+            "success_rate": 0.2916666666666667
+          },
+          {
+            "arm": "ppo",
+            "collision_rate": 0.8541666666666666,
+            "episodes": 96,
+            "rank": 14,
+            "snqi_v2_mean": -1.7149380817007331,
+            "success_rate": 0.14583333333333334
+          }
+        ],
+        "relative_change": {
+          "F": 0.0465149725853529,
+          "J": 0.005719182835013024,
+          "K": 0.17490982121853754,
+          "N": 0.07463310874034662,
+          "T": 0.0328830714025001
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": {
+        "p95": {
+          "F": 78.39366151376461,
+          "J": 2.0713163478520635,
+          "K": 4.0276966848556475,
+          "N": 0.4423988693467336,
+          "T": 3.025639269395333
+        },
+        "ranking": [
+          {
+            "arm": "socnav_sampling",
+            "collision_rate": 0.020833333333333332,
+            "episodes": 96,
+            "rank": 1,
+            "snqi_v2_mean": 0.6080639300318453,
+            "success_rate": 0.8958333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 2,
+            "snqi_v2_mean": 0.5838426766242758,
+            "success_rate": 0.8854166666666666
+          },
+          {
+            "arm": "risk_dwa",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 3,
+            "snqi_v2_mean": 0.567894886151752,
+            "success_rate": 0.8229166666666666
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 4,
+            "snqi_v2_mean": 0.533236052662979,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 5,
+            "snqi_v2_mean": 0.5329604329769276,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 6,
+            "snqi_v2_mean": 0.5145652823255085,
+            "success_rate": 0.8125
+          },
+          {
+            "arm": "orca",
+            "collision_rate": 0.11458333333333333,
+            "episodes": 96,
+            "rank": 7,
+            "snqi_v2_mean": 0.42211431220146406,
+            "success_rate": 0.8645833333333334
+          },
+          {
+            "arm": "guarded_ppo",
+            "collision_rate": 0.010416666666666666,
+            "episodes": 96,
+            "rank": 8,
+            "snqi_v2_mean": 0.3709740973216247,
+            "success_rate": 0.6666666666666666
+          },
+          {
+            "arm": "social_force",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 9,
+            "snqi_v2_mean": 0.36486406775975117,
+            "success_rate": 0.6458333333333334
+          },
+          {
+            "arm": "predictive_mppi",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 10,
+            "snqi_v2_mean": 0.22507464076401837,
+            "success_rate": 0.3958333333333333
+          },
+          {
+            "arm": "prediction_planner",
+            "collision_rate": 0.2604166666666667,
+            "episodes": 96,
+            "rank": 11,
+            "snqi_v2_mean": -0.30163208899033156,
+            "success_rate": 0.3854166666666667
+          },
+          {
+            "arm": "goal",
+            "collision_rate": 0.6458333333333334,
+            "episodes": 96,
+            "rank": 12,
+            "snqi_v2_mean": -1.0823549125915695,
+            "success_rate": 0.34375
+          },
+          {
+            "arm": "sacadrl",
+            "collision_rate": 0.7083333333333334,
+            "episodes": 96,
+            "rank": 13,
+            "snqi_v2_mean": -1.278528417382548,
+            "success_rate": 0.2916666666666667
+          },
+          {
+            "arm": "ppo",
+            "collision_rate": 0.8541666666666666,
+            "episodes": 96,
+            "rank": 14,
+            "snqi_v2_mean": -1.7160859638758597,
+            "success_rate": 0.14583333333333334
+          }
+        ],
+        "relative_change": {
+          "F": -0.03140353537720289,
+          "J": 0.001259038660029115,
+          "K": 0.13363737270530796,
+          "N": -0.09751449331930484,
+          "T": -0.03192500508765126
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "scenario_adaptive_hybrid_orca_v2_collision_guard_v4": {
+        "p95": {
+          "F": 78.39366151376461,
+          "J": 2.0713163478520635,
+          "K": 4.0276966848556475,
+          "N": 0.4423988693467336,
+          "T": 3.10474690842662
+        },
+        "ranking": [
+          {
+            "arm": "socnav_sampling",
+            "collision_rate": 0.020833333333333332,
+            "episodes": 96,
+            "rank": 1,
+            "snqi_v2_mean": 0.6080639300318453,
+            "success_rate": 0.8958333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 2,
+            "snqi_v2_mean": 0.5838426766242758,
+            "success_rate": 0.8854166666666666
+          },
+          {
+            "arm": "risk_dwa",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 3,
+            "snqi_v2_mean": 0.567894886151752,
+            "success_rate": 0.8229166666666666
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 4,
+            "snqi_v2_mean": 0.533236052662979,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 5,
+            "snqi_v2_mean": 0.5329604329769276,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 6,
+            "snqi_v2_mean": 0.5145652823255085,
+            "success_rate": 0.8125
+          },
+          {
+            "arm": "orca",
+            "collision_rate": 0.11458333333333333,
+            "episodes": 96,
+            "rank": 7,
+            "snqi_v2_mean": 0.42211431220146406,
+            "success_rate": 0.8645833333333334
+          },
+          {
+            "arm": "guarded_ppo",
+            "collision_rate": 0.010416666666666666,
+            "episodes": 96,
+            "rank": 8,
+            "snqi_v2_mean": 0.3709740973216247,
+            "success_rate": 0.6666666666666666
+          },
+          {
+            "arm": "social_force",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 9,
+            "snqi_v2_mean": 0.36486406775975117,
+            "success_rate": 0.6458333333333334
+          },
+          {
+            "arm": "predictive_mppi",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 10,
+            "snqi_v2_mean": 0.22507464076401837,
+            "success_rate": 0.3958333333333333
+          },
+          {
+            "arm": "prediction_planner",
+            "collision_rate": 0.2604166666666667,
+            "episodes": 96,
+            "rank": 11,
+            "snqi_v2_mean": -0.30163208899033156,
+            "success_rate": 0.3854166666666667
+          },
+          {
+            "arm": "goal",
+            "collision_rate": 0.6458333333333334,
+            "episodes": 96,
+            "rank": 12,
+            "snqi_v2_mean": -1.0823549125915695,
+            "success_rate": 0.34375
+          },
+          {
+            "arm": "sacadrl",
+            "collision_rate": 0.7083333333333334,
+            "episodes": 96,
+            "rank": 13,
+            "snqi_v2_mean": -1.278528417382548,
+            "success_rate": 0.2916666666666667
+          },
+          {
+            "arm": "ppo",
+            "collision_rate": 0.8541666666666666,
+            "episodes": 96,
+            "rank": 14,
+            "snqi_v2_mean": -1.7160859638758597,
+            "success_rate": 0.14583333333333334
+          }
+        ],
+        "relative_change": {
+          "F": -0.03140353537720289,
+          "J": 0.001259038660029115,
+          "K": 0.13363737270530796,
+          "N": -0.09751449331930484,
+          "T": -0.006613948337635627
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "social_force": {
+        "p95": {
+          "F": 80.8284142274552,
+          "J": 2.0805431005571227,
+          "K": 2.8099580452172157,
+          "N": 0.5038394970414186,
+          "T": 2.690917603752152
+        },
+        "ranking": [
+          {
+            "arm": "socnav_sampling",
+            "collision_rate": 0.020833333333333332,
+            "episodes": 96,
+            "rank": 1,
+            "snqi_v2_mean": 0.6068626881440099,
+            "success_rate": 0.8958333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 2,
+            "snqi_v2_mean": 0.5819347328319077,
+            "success_rate": 0.8854166666666666
+          },
+          {
+            "arm": "risk_dwa",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 3,
+            "snqi_v2_mean": 0.5682206933595361,
+            "success_rate": 0.8229166666666666
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 4,
+            "snqi_v2_mean": 0.531871387971076,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 5,
+            "snqi_v2_mean": 0.5315476088798593,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 6,
+            "snqi_v2_mean": 0.5131732395583622,
+            "success_rate": 0.8125
+          },
+          {
+            "arm": "orca",
+            "collision_rate": 0.11458333333333333,
+            "episodes": 96,
+            "rank": 7,
+            "snqi_v2_mean": 0.4203875155540157,
+            "success_rate": 0.8645833333333334
+          },
+          {
+            "arm": "guarded_ppo",
+            "collision_rate": 0.010416666666666666,
+            "episodes": 96,
+            "rank": 8,
+            "snqi_v2_mean": 0.3703279413039153,
+            "success_rate": 0.6666666666666666
+          },
+          {
+            "arm": "social_force",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 9,
+            "snqi_v2_mean": 0.36247126205189345,
+            "success_rate": 0.6458333333333334
+          },
+          {
+            "arm": "predictive_mppi",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 10,
+            "snqi_v2_mean": 0.22568233421595618,
+            "success_rate": 0.3958333333333333
+          },
+          {
+            "arm": "prediction_planner",
+            "collision_rate": 0.2604166666666667,
+            "episodes": 96,
+            "rank": 11,
+            "snqi_v2_mean": -0.3014114176103025,
+            "success_rate": 0.3854166666666667
+          },
+          {
+            "arm": "goal",
+            "collision_rate": 0.6458333333333334,
+            "episodes": 96,
+            "rank": 12,
+            "snqi_v2_mean": -1.0824134999075727,
+            "success_rate": 0.34375
+          },
+          {
+            "arm": "sacadrl",
+            "collision_rate": 0.7083333333333334,
+            "episodes": 96,
+            "rank": 13,
+            "snqi_v2_mean": -1.2812666601851241,
+            "success_rate": 0.2916666666666667
+          },
+          {
+            "arm": "ppo",
+            "collision_rate": 0.8541666666666666,
+            "episodes": 96,
+            "rank": 14,
+            "snqi_v2_mean": -1.7189506682438662,
+            "success_rate": 0.14583333333333334
+          }
+        ],
+        "relative_change": {
+          "F": -0.0013208370419888146,
+          "J": 0.005719182835013024,
+          "K": -0.20910790830656736,
+          "N": 0.027823250191876994,
+          "T": -0.139021603827042
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "socnav_sampling": {
+        "p95": {
+          "F": 84.12529895421332,
+          "J": 2.0736471840283457,
+          "K": 3.681597774457863,
+          "N": 0.48917861799217427,
+          "T": 3.1947834284387726
+        },
+        "ranking": [
+          {
+            "arm": "socnav_sampling",
+            "collision_rate": 0.020833333333333332,
+            "episodes": 96,
+            "rank": 1,
+            "snqi_v2_mean": 0.6103396586620956,
+            "success_rate": 0.8958333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 2,
+            "snqi_v2_mean": 0.5866005809539542,
+            "success_rate": 0.8854166666666666
+          },
+          {
+            "arm": "risk_dwa",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 3,
+            "snqi_v2_mean": 0.5701736190902681,
+            "success_rate": 0.8229166666666666
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 4,
+            "snqi_v2_mean": 0.5358180343675717,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 5,
+            "snqi_v2_mean": 0.5354518340079591,
+            "success_rate": 0.8333333333333334
+          },
+          {
+            "arm": "hybrid_rule_v4_fast_progress_static_escape",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 6,
+            "snqi_v2_mean": 0.5167487023846121,
+            "success_rate": 0.8125
+          },
+          {
+            "arm": "orca",
+            "collision_rate": 0.11458333333333333,
+            "episodes": 96,
+            "rank": 7,
+            "snqi_v2_mean": 0.4237433058686424,
+            "success_rate": 0.8645833333333334
+          },
+          {
+            "arm": "guarded_ppo",
+            "collision_rate": 0.010416666666666666,
+            "episodes": 96,
+            "rank": 8,
+            "snqi_v2_mean": 0.37345319801203547,
+            "success_rate": 0.6666666666666666
+          },
+          {
+            "arm": "social_force",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 9,
+            "snqi_v2_mean": 0.36814643603815517,
+            "success_rate": 0.6458333333333334
+          },
+          {
+            "arm": "predictive_mppi",
+            "collision_rate": 0.0,
+            "episodes": 96,
+            "rank": 10,
+            "snqi_v2_mean": 0.2283747119518635,
+            "success_rate": 0.3958333333333333
+          },
+          {
+            "arm": "prediction_planner",
+            "collision_rate": 0.2604166666666667,
+            "episodes": 96,
+            "rank": 11,
+            "snqi_v2_mean": -0.2986758030834677,
+            "success_rate": 0.3854166666666667
+          },
+          {
+            "arm": "goal",
+            "collision_rate": 0.6458333333333334,
+            "episodes": 96,
+            "rank": 12,
+            "snqi_v2_mean": -1.0810001192768095,
+            "success_rate": 0.34375
+          },
+          {
+            "arm": "sacadrl",
+            "collision_rate": 0.7083333333333334,
+            "episodes": 96,
+            "rank": 13,
+            "snqi_v2_mean": -1.278202138694658,
+            "success_rate": 0.2916666666666667
+          },
+          {
+            "arm": "ppo",
+            "collision_rate": 0.8541666666666666,
+            "episodes": 96,
+            "rank": 14,
+            "snqi_v2_mean": -1.7162270696665516,
+            "success_rate": 0.14583333333333334
+          }
+        ],
+        "relative_change": {
+          "F": 0.03941397274931192,
+          "J": 0.0023857476687995,
+          "K": 0.036224213230123745,
+          "N": -0.0020846717625337655,
+          "T": 0.022193882303096775
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      }
+    },
+    "leave_one_scenario_out": {
+      "classic_bottleneck_high": {
+        "p95": {
+          "F": 77.59034883267074,
+          "J": 2.068868256801873,
+          "K": 2.944104088727041,
+          "N": 0.43851461038961037,
+          "T": 3.0435047026386437
+        },
+        "relative_change": {
+          "F": -0.04132890189114694,
+          "J": 7.564951041513547e-05,
+          "K": -0.17135110082523622,
+          "N": -0.10543830971190721,
+          "T": -0.02620883152688796
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_bottleneck_low": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.068868256801873,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 7.564951041513547e-05,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_bottleneck_medium": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.068711759770056,
+          "K": 2.944104088727041,
+          "N": 0.44228329145728645,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 0.0,
+          "K": -0.17135110082523622,
+          "N": -0.09775027007495712,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_cross_trap_high": {
+        "p95": {
+          "F": 81.56557171112686,
+          "J": 2.0679226503213615,
+          "K": 3.61798875481499,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.00778714590927626,
+          "J": -0.00038144968479437394,
+          "K": 0.01832078912685331,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_cross_trap_low": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.066321200852706,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": -0.001155578541118755,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_cross_trap_medium": {
+        "p95": {
+          "F": 80.61460949913672,
+          "J": 2.0679226503213615,
+          "K": 3.5116718162716896,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": -0.00396251112596504,
+          "J": -0.00038144968479437394,
+          "K": -0.011603225592894255,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_doorway_high": {
+        "p95": {
+          "F": 81.56557171112686,
+          "J": 2.068711759770056,
+          "K": 3.61798875481499,
+          "N": 0.4970414201183432,
+          "T": 3.0235749649066053
+        },
+        "relative_change": {
+          "F": 0.00778714590927626,
+          "J": 0.0,
+          "K": 0.01832078912685331,
+          "N": 0.013955299070221685,
+          "T": -0.032585494121369456
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_doorway_low": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.068711759770056,
+          "K": 2.944104088727041,
+          "N": 0.4547818366311517,
+          "T": 2.910631737126776
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 0.0,
+          "K": -0.17135110082523622,
+          "N": -0.07225346921137553,
+          "T": -0.06872249028092593
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_doorway_medium": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.066584237335604,
+          "K": 3.61798875481499,
+          "N": 0.4970414201183432,
+          "T": 3.0435047026386437
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": -0.0010284286461874402,
+          "K": 0.01832078912685331,
+          "N": 0.013955299070221685,
+          "T": -0.02620883152688796
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_group_crossing_high": {
+        "p95": {
+          "F": 81.56557171112686,
+          "J": 2.0632214071109485,
+          "K": 3.61798875481499,
+          "N": 0.4658662900188324,
+          "T": 3.0435047026386437
+        },
+        "relative_change": {
+          "F": 0.00778714590927626,
+          "J": -0.002653995963032549,
+          "K": 0.01832078912685331,
+          "N": -0.049641389423216734,
+          "T": -0.02620883152688796
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_group_crossing_low": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.0632214071109485,
+          "K": 3.7823455804066146,
+          "N": 0.4745762711864407,
+          "T": 3.0435047026386437
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": -0.002653995963032549,
+          "K": 0.06458073731273602,
+          "N": -0.031873189023347605,
+          "T": -0.02620883152688796
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_group_crossing_medium": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.068868256801873,
+          "K": 3.61798875481499,
+          "N": 0.49397866488874076,
+          "T": 3.115792489055206
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 7.564951041513547e-05,
+          "K": 0.01832078912685331,
+          "N": 0.007707335079472174,
+          "T": -0.0030798355572448748
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_head_on_corridor_low": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.068868256801873,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 7.564951041513547e-05,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_head_on_corridor_medium": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.0700987478799155,
+          "K": 3.61798875481499,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 0.000670459817956246,
+          "K": 0.01832078912685331,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_merging_low": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.0700987478799155,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 0.000670459817956246,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_merging_medium": {
+        "p95": {
+          "F": 78.5150528000908,
+          "J": 2.068868256801873,
+          "K": 3.7823455804066146,
+          "N": 0.49397866488874076,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": -0.029903679795754975,
+          "J": 7.564951041513547e-05,
+          "K": 0.06458073731273602,
+          "N": 0.007707335079472174,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_overtaking_low": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.068868256801873,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.115792489055206
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 7.564951041513547e-05,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": -0.0030798355572448748
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_overtaking_medium": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.068711759770056,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.0435047026386437
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 0.0,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": -0.02620883152688796
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_realworld_double_bottleneck_high": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.0679226503213615,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": -0.00038144968479437394,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_station_platform_medium": {
+        "p95": {
+          "F": 77.71183891522571,
+          "J": 2.066321200852706,
+          "K": 3.3755545386652464,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": -0.039827825628382836,
+          "J": -0.001155578541118755,
+          "K": -0.049914857535232955,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_t_intersection_low": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.068711759770056,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.115792489055206
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 0.0,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": -0.0030798355572448748
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_t_intersection_medium": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.068868256801873,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.115792489055206
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 7.564951041513547e-05,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": -0.0030798355572448748
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "classic_urban_crossing_medium": {
+        "p95": {
+          "F": 81.56557171112686,
+          "J": 2.068868256801873,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.115792489055206
+        },
+        "relative_change": {
+          "F": 0.00778714590927626,
+          "J": 7.564951041513547e-05,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": -0.0030798355572448748
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_accompanying_peer": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.0700987478799155,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 0.000670459817956246,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_blind_corner": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.0700987478799155,
+          "K": 3.2527409183722824,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 0.000670459817956246,
+          "K": -0.0844820359339541,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_circular_crossing": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.068868256801873,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 7.564951041513547e-05,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_crowd_navigation": {
+        "p95": {
+          "F": 78.10921326212278,
+          "J": 2.068868256801873,
+          "K": 3.5116718162716896,
+          "N": 0.4658662900188324,
+          "T": 3.0235749649066053
+        },
+        "relative_change": {
+          "F": -0.03491804873948588,
+          "J": 7.564951041513547e-05,
+          "K": -0.011603225592894255,
+          "N": -0.049641389423216734,
+          "T": -0.032585494121369456
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_down_path": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.0700987478799155,
+          "K": 3.61798875481499,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 0.000670459817956246,
+          "K": 0.01832078912685331,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_entering_elevator": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.0632214071109485,
+          "K": 3.292387640906346,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": -0.002653995963032549,
+          "K": -0.07332305106329895,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_entering_room": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.068868256801873,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.127824706928633
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 7.564951041513547e-05,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": 0.0007699588893118225
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_exiting_elevator": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.0700987478799155,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.115792489055206
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 0.000670459817956246,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": -0.0030798355572448748
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_exiting_room": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.0700987478799155,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 0.000670459817956246,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_following_human": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.068868256801873,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 7.564951041513547e-05,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_frontal_approach": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.0700987478799155,
+          "K": 3.2527409183722824,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 0.000670459817956246,
+          "K": -0.0844820359339541,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_intersection_no_gesture": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.0700987478799155,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 0.000670459817956246,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_intersection_proceed": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.0700987478799155,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 0.000670459817956246,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_intersection_wait": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.0700987478799155,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 0.000670459817956246,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_join_group": {
+        "p95": {
+          "F": 77.71183891522571,
+          "J": 2.0679226503213615,
+          "K": 3.7823455804066146,
+          "N": 0.4417215949879266,
+          "T": 3.0967070897552613
+        },
+        "relative_change": {
+          "F": -0.039827825628382836,
+          "J": -0.00038144968479437394,
+          "K": 0.06458073731273602,
+          "N": -0.0988961204780097,
+          "T": -0.009186346011773216
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_leading_human": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.068868256801873,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 7.564951041513547e-05,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_leave_group": {
+        "p95": {
+          "F": 79.0865548336813,
+          "J": 2.068868256801873,
+          "K": 3.7823455804066146,
+          "N": 0.4271716101694915,
+          "T": 3.0967070897552613
+        },
+        "relative_change": {
+          "F": -0.022842460322503207,
+          "J": 7.564951041513547e-05,
+          "K": 0.06458073731273602,
+          "N": -0.1285778202537164,
+          "T": -0.009186346011773216
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_narrow_doorway": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.0700987478799155,
+          "K": 2.7868132197129283,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 0.000670459817956246,
+          "K": -0.2156222616030951,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_narrow_hallway": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.0700987478799155,
+          "K": 2.8926866448200923,
+          "N": 0.4745762711864407,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 0.000670459817956246,
+          "K": -0.18582307838031495,
+          "N": -0.031873189023347605,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_parallel_traffic": {
+        "p95": {
+          "F": 80.61460949913672,
+          "J": 2.0700987478799155,
+          "K": 3.7823455804066146,
+          "N": 0.49397866488874076,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": -0.00396251112596504,
+          "J": 0.000670459817956246,
+          "K": 0.06458073731273602,
+          "N": 0.007707335079472174,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_pedestrian_obstruction": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.0700987478799155,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 0.000670459817956246,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_pedestrian_overtaking": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.0700987478799155,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": 0.000670459817956246,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_perpendicular_traffic": {
+        "p95": {
+          "F": 80.61460949913672,
+          "J": 2.068868256801873,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": -0.00396251112596504,
+          "J": 7.564951041513547e-05,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_robot_crowding": {
+        "p95": {
+          "F": 71.66767605315063,
+          "J": 2.0679226503213615,
+          "K": 2.944104088727041,
+          "N": 0.4089903846153846,
+          "T": 2.9026428332092733
+        },
+        "relative_change": {
+          "F": -0.11450675587304816,
+          "J": -0.00038144968479437394,
+          "K": -0.17135110082523622,
+          "N": -0.1656671839324785,
+          "T": -0.07127859741422518
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      },
+      "francis2023_robot_overtaking": {
+        "p95": {
+          "F": 83.44317980128244,
+          "J": 2.0679226503213615,
+          "K": 3.7823455804066146,
+          "N": 0.4970414201183432,
+          "T": 3.1356369308459455
+        },
+        "relative_change": {
+          "F": 0.03098601840679992,
+          "J": -0.00038144968479437394,
+          "K": 0.06458073731273602,
+          "N": 0.013955299070221685,
+          "T": 0.00326953598877152
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      }
+    },
+    "per_arm_share_above_anchor": {
+      "goal": {
+        "F": 0.0,
+        "J": 0.0,
+        "K": 0.0,
+        "N": 0.03125,
+        "T": 0.0
+      },
+      "guarded_ppo": {
+        "F": 0.07291666666666667,
+        "J": 0.2604166666666667,
+        "K": 0.23958333333333334,
+        "N": 0.052083333333333336,
+        "T": 0.08333333333333333
+      },
+      "hybrid_rule_v4_fast_progress_static_escape": {
+        "F": 0.11458333333333333,
+        "J": 0.020833333333333332,
+        "K": 0.010416666666666666,
+        "N": 0.23958333333333334,
+        "T": 0.052083333333333336
+      },
+      "hybrid_rule_v4_fast_progress_static_escape_continuous": {
+        "F": 0.0625,
+        "J": 0.020833333333333332,
+        "K": 0.03125,
+        "N": 0.16666666666666666,
+        "T": 0.08333333333333333
+      },
+      "orca": {
+        "F": 0.010416666666666666,
+        "J": 0.0,
+        "K": 0.041666666666666664,
+        "N": 0.09375,
+        "T": 0.0625
+      },
+      "ppo": {
+        "F": 0.0,
+        "J": 0.2916666666666667,
+        "K": 0.0,
+        "N": 0.0,
+        "T": 0.010416666666666666
+      },
+      "prediction_planner": {
+        "F": 0.07291666666666667,
+        "J": 0.010416666666666666,
+        "K": 0.0,
+        "N": 0.052083333333333336,
+        "T": 0.0
+      },
+      "predictive_mppi": {
+        "F": 0.052083333333333336,
+        "J": 0.010416666666666666,
+        "K": 0.0,
+        "N": 0.08333333333333333,
+        "T": 0.020833333333333332
+      },
+      "risk_dwa": {
+        "F": 0.08333333333333333,
+        "J": 0.0,
+        "K": 0.16666666666666666,
+        "N": 0.08333333333333333,
+        "T": 0.020833333333333332
+      },
+      "sacadrl": {
+        "F": 0.0,
+        "J": 0.0,
+        "K": 0.0,
+        "N": 0.041666666666666664,
+        "T": 0.0
+      },
+      "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": {
+        "F": 0.08333333333333333,
+        "J": 0.03125,
+        "K": 0.020833333333333332,
+        "N": 0.22916666666666666,
+        "T": 0.08333333333333333
+      },
+      "scenario_adaptive_hybrid_orca_v2_collision_guard_v4": {
+        "F": 0.08333333333333333,
+        "J": 0.03125,
+        "K": 0.020833333333333332,
+        "N": 0.25,
+        "T": 0.0625
+      },
+      "social_force": {
+        "F": 0.052083333333333336,
+        "J": 0.0,
+        "K": 0.125,
+        "N": 0.0625,
+        "T": 0.23958333333333334
+      },
+      "socnav_sampling": {
+        "F": 0.020833333333333332,
+        "J": 0.020833333333333332,
+        "K": 0.052083333333333336,
+        "N": 0.125,
+        "T": 0.03125
+      }
+    },
+    "per_seed": {
+      "1001": {
+        "p95": {
+          "F": 77.24901245827603,
+          "J": 2.0151975897651857,
+          "K": 2.1606424624740876,
+          "N": 0.4745762711864407,
+          "T": 3.1190010804881187
+        },
+        "relative_change": {
+          "F": -0.045546299051857864,
+          "J": -0.025868354908379663,
+          "K": -0.3918645726912682,
+          "N": -0.031873189023347605,
+          "T": -0.002053223704830106
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": true,
+          "N": false,
+          "T": false
+        }
+      },
+      "1002": {
+        "p95": {
+          "F": 85.14047245843162,
+          "J": 2.117843577003343,
+          "K": 5.225228285115485,
+          "N": 0.5267857142857143,
+          "T": 3.122008332866156
+        },
+        "relative_change": {
+          "F": 0.051956995337840046,
+          "J": 0.023749957915233204,
+          "K": 0.4706951710630313,
+          "N": 0.07463310874034662,
+          "T": -0.0010910317277440696
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": true,
+          "N": false,
+          "T": false
+        }
+      }
+    },
+    "per_seed_pair": {
+      "1001-1002": {
+        "p95": {
+          "F": 80.9353165916145,
+          "J": 2.068711759770056,
+          "K": 3.5528968802818905,
+          "N": 0.4902005251850067,
+          "T": 3.125418263353946
+        },
+        "relative_change": {
+          "F": 0.0,
+          "J": 0.0,
+          "K": 0.0,
+          "N": 0.0,
+          "T": 0.0
+        },
+        "sets_anchor": {
+          "F": false,
+          "J": false,
+          "K": false,
+          "N": false,
+          "T": false
+        }
+      }
+    },
+    "row_scope": "calibration seeds 1001/1002 only",
+    "status": "report_only_no_gate"
+  },
   "anchors": {
     "anchors": {
       "F": {
         "lower": 0,
         "type": "calibration_p95",
-        "upper": 80.56302718724424
+        "upper": 80.9353165916145
       },
       "J": {
         "lower": 0,
@@ -14,7 +3342,7 @@
       "K": {
         "lower": 0,
         "type": "calibration_p95",
-        "upper": 2.8926866448200923
+        "upper": 3.5528968802818905
       },
       "N": {
         "lower": 0,
@@ -47,49 +3375,50 @@
       "benchmark_execution": "nonfallback",
       "command_mode_counts": {
         "goal": {
-          "native": 144
+          "native": 96
         },
         "guarded_ppo": {
-          "mixed": 144
+          "mixed": 96
         },
         "hybrid_rule_v4_fast_progress_static_escape": {
-          "adapter": 144
+          "adapter": 96
         },
         "hybrid_rule_v4_fast_progress_static_escape_continuous": {
-          "adapter": 144
+          "adapter": 96
         },
         "orca": {
-          "adapter": 144
+          "adapter": 96
         },
         "ppo": {
-          "native": 144
+          "native": 96
         },
         "prediction_planner": {
-          "adapter": 144
+          "adapter": 96
         },
         "predictive_mppi": {
-          "adapter": 144
+          "adapter": 96
         },
         "risk_dwa": {
-          "adapter": 144
+          "adapter": 96
         },
         "sacadrl": {
-          "adapter": 144
+          "adapter": 96
         },
         "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": {
-          "adapter": 144
+          "adapter": 96
         },
         "scenario_adaptive_hybrid_orca_v2_collision_guard_v4": {
-          "adapter": 144
+          "adapter": 96
         },
         "social_force": {
-          "adapter": 144
+          "adapter": 96
         },
         "socnav_sampling": {
-          "adapter": 144
+          "adapter": 96
         }
       },
-      "episode_count": 2016,
+      "episode_count": 1344,
+      "episode_file_scope": "all original files; fitting filters seeds 1001/1002",
       "episode_files_sha256": {
         "runs/goal__differential_drive/episodes.jsonl": "74ac622b4b13963849550c07ec801bd1fe38894a0fc05c5765d1544f379132a2",
         "runs/guarded_ppo__differential_drive/episodes.jsonl": "dc688de09bdb450152f27f7c0f6e1f79be8c37d555093d41a0006a5a55d79720",
@@ -107,7 +3436,7 @@
         "runs/socnav_sampling__differential_drive/episodes.jsonl": "06ce4ac62bdf15f2b023b5c7f635a4c0f00d79e7508952fe2bd3d4c9be559238"
       },
       "episodes_sha256": "93746395f16cb1eb8f2f88ca0990ed90ab2e7da92df75fd73dbb21af1940e0f7",
-      "grid_sha256": "863f5d598e67e525d784f2e5be22d9fdc9ff620341df1c9195b1827302a34be0",
+      "grid_sha256": "3253b281f6059bef111e86536163c1166422fa9f316b5b2acad5de233628c951",
       "quantile_method": "linear",
       "run_id": "reh_main_v2",
       "scenario_horizons": {
@@ -212,12 +3541,12 @@
       ],
       "seeds": [
         1001,
-        1002,
-        1003
+        1002
       ],
       "source_commit": "ea414933e61ce267389bd3bcbe97fb669a825c6e",
-      "split_id": "snqi-v2-diagnostic-863f5d598e67"
+      "split_id": "snqi-v2-diagnostic-3253b281f605"
     },
+    "evaluation_seeds_sha256": "eec33b8cc07b82685aa6ab7c22e97fb396472f3f9443c309c4d27480b2cdd1d6",
     "force_decision": {
       "N": "clip(near_misses/steps/0.25)",
       "selected_source_contract": {
@@ -227,10 +3556,10 @@
         "sample_timing": "pre_integration",
         "source": "recorded_robot_pedestrian_social_force"
       },
-      "selected_source_coverage": 2016,
+      "selected_source_coverage": 1344,
       "source": "robot_force_impulse_total",
-      "spearman_rho_F_N": 0.6201982779730981,
-      "spearman_rho_F_exposure_fraction": 0.6226368342177245,
+      "spearman_rho_F_N": 0.6049707267032405,
+      "spearman_rho_F_exposure_fraction": 0.6077979432185882,
       "threshold_absolute_rho": 0.9
     },
     "metric_schema_version": "robot-sf-metrics.v2",
@@ -244,140 +3573,353 @@
     "650": 42,
     "700": 42
   },
-  "claim_boundary": "Same-dev-data calibration and ranking; nothing pinned; not held-out or release evidence.",
+  "claim_boundary": "Anchors fitted on development 1001/1002; 1003 held apart; nothing pinned; not sealed evaluation or release evidence.",
+  "force_saturation": {
+    "force_source": "robot_force_impulse_total",
+    "per_arm_clipped_at_one_fraction": {
+      "goal": {
+        "F": 0.0,
+        "J": 0.0,
+        "K": 0.0,
+        "N": 0.03125,
+        "T": 0.0
+      },
+      "guarded_ppo": {
+        "F": 0.07291666666666667,
+        "J": 0.2604166666666667,
+        "K": 0.23958333333333334,
+        "N": 0.052083333333333336,
+        "T": 0.08333333333333333
+      },
+      "hybrid_rule_v4_fast_progress_static_escape": {
+        "F": 0.11458333333333333,
+        "J": 0.020833333333333332,
+        "K": 0.010416666666666666,
+        "N": 0.25,
+        "T": 0.052083333333333336
+      },
+      "hybrid_rule_v4_fast_progress_static_escape_continuous": {
+        "F": 0.0625,
+        "J": 0.020833333333333332,
+        "K": 0.03125,
+        "N": 0.17708333333333334,
+        "T": 0.08333333333333333
+      },
+      "orca": {
+        "F": 0.010416666666666666,
+        "J": 0.0,
+        "K": 0.041666666666666664,
+        "N": 0.09375,
+        "T": 0.0625
+      },
+      "ppo": {
+        "F": 0.0,
+        "J": 0.2916666666666667,
+        "K": 0.0,
+        "N": 0.0,
+        "T": 0.010416666666666666
+      },
+      "prediction_planner": {
+        "F": 0.07291666666666667,
+        "J": 0.010416666666666666,
+        "K": 0.0,
+        "N": 0.052083333333333336,
+        "T": 0.0
+      },
+      "predictive_mppi": {
+        "F": 0.052083333333333336,
+        "J": 0.010416666666666666,
+        "K": 0.0,
+        "N": 0.08333333333333333,
+        "T": 0.020833333333333332
+      },
+      "risk_dwa": {
+        "F": 0.08333333333333333,
+        "J": 0.0,
+        "K": 0.16666666666666666,
+        "N": 0.08333333333333333,
+        "T": 0.020833333333333332
+      },
+      "sacadrl": {
+        "F": 0.0,
+        "J": 0.0,
+        "K": 0.0,
+        "N": 0.041666666666666664,
+        "T": 0.0
+      },
+      "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": {
+        "F": 0.08333333333333333,
+        "J": 0.041666666666666664,
+        "K": 0.020833333333333332,
+        "N": 0.22916666666666666,
+        "T": 0.08333333333333333
+      },
+      "scenario_adaptive_hybrid_orca_v2_collision_guard_v4": {
+        "F": 0.08333333333333333,
+        "J": 0.041666666666666664,
+        "K": 0.020833333333333332,
+        "N": 0.25,
+        "T": 0.0625
+      },
+      "social_force": {
+        "F": 0.052083333333333336,
+        "J": 0.0,
+        "K": 0.125,
+        "N": 0.0625,
+        "T": 0.23958333333333334
+      },
+      "socnav_sampling": {
+        "F": 0.020833333333333332,
+        "J": 0.020833333333333332,
+        "K": 0.052083333333333336,
+        "N": 0.125,
+        "T": 0.03125
+      }
+    },
+    "rho_normalised_F_clipped_N": 0.6047014107010082,
+    "rho_raw_F_clipped_N": 0.6049707267032405,
+    "rho_raw_F_raw_N_fraction": 0.6077979432185882
+  },
+  "held_apart_development": {
+    "episode_count": 672,
+    "label": "held-apart development data; not sealed evaluation",
+    "ranking": [
+      {
+        "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+        "collision_rate": 0.020833333333333332,
+        "episodes": 48,
+        "rank": 1,
+        "snqi_v2_mean": 0.5814270333487824,
+        "success_rate": 0.9166666666666666
+      },
+      {
+        "arm": "risk_dwa",
+        "collision_rate": 0.020833333333333332,
+        "episodes": 48,
+        "rank": 2,
+        "snqi_v2_mean": 0.5459847114524131,
+        "success_rate": 0.8333333333333334
+      },
+      {
+        "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+        "collision_rate": 0.020833333333333332,
+        "episodes": 48,
+        "rank": 3,
+        "snqi_v2_mean": 0.5332239634702775,
+        "success_rate": 0.8333333333333334
+      },
+      {
+        "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+        "collision_rate": 0.020833333333333332,
+        "episodes": 48,
+        "rank": 4,
+        "snqi_v2_mean": 0.5293567163451628,
+        "success_rate": 0.8333333333333334
+      },
+      {
+        "arm": "hybrid_rule_v4_fast_progress_static_escape",
+        "collision_rate": 0.020833333333333332,
+        "episodes": 48,
+        "rank": 5,
+        "snqi_v2_mean": 0.5217348857491808,
+        "success_rate": 0.8333333333333334
+      },
+      {
+        "arm": "orca",
+        "collision_rate": 0.08333333333333333,
+        "episodes": 48,
+        "rank": 6,
+        "snqi_v2_mean": 0.5116414065947273,
+        "success_rate": 0.8958333333333334
+      },
+      {
+        "arm": "socnav_sampling",
+        "collision_rate": 0.08333333333333333,
+        "episodes": 48,
+        "rank": 7,
+        "snqi_v2_mean": 0.482592487211404,
+        "success_rate": 0.875
+      },
+      {
+        "arm": "guarded_ppo",
+        "collision_rate": 0.020833333333333332,
+        "episodes": 48,
+        "rank": 8,
+        "snqi_v2_mean": 0.3954379154598149,
+        "success_rate": 0.6875
+      },
+      {
+        "arm": "social_force",
+        "collision_rate": 0.020833333333333332,
+        "episodes": 48,
+        "rank": 9,
+        "snqi_v2_mean": 0.3701844637923369,
+        "success_rate": 0.6666666666666666
+      },
+      {
+        "arm": "predictive_mppi",
+        "collision_rate": 0.020833333333333332,
+        "episodes": 48,
+        "rank": 10,
+        "snqi_v2_mean": 0.21041230073541284,
+        "success_rate": 0.4166666666666667
+      },
+      {
+        "arm": "prediction_planner",
+        "collision_rate": 0.25,
+        "episodes": 48,
+        "rank": 11,
+        "snqi_v2_mean": -0.24431718314483833,
+        "success_rate": 0.4166666666666667
+      },
+      {
+        "arm": "goal",
+        "collision_rate": 0.5416666666666666,
+        "episodes": 48,
+        "rank": 12,
+        "snqi_v2_mean": -0.7936891893336208,
+        "success_rate": 0.4375
+      },
+      {
+        "arm": "sacadrl",
+        "collision_rate": 0.6666666666666666,
+        "episodes": 48,
+        "rank": 13,
+        "snqi_v2_mean": -1.1398126379763938,
+        "success_rate": 0.3333333333333333
+      },
+      {
+        "arm": "ppo",
+        "collision_rate": 0.75,
+        "episodes": 48,
+        "rank": 14,
+        "snqi_v2_mean": -1.414626238217939,
+        "success_rate": 0.25
+      }
+    ],
+    "seeds": [
+      1003
+    ]
+  },
   "manifest_sha256": "d594bd89d263fb3426a3721600562271a02f39c8e3c499ac66cb19915f62a2fb",
   "rank_alignment_spearman": {
-    "legacy_target_quality": -0.8109890109890111,
-    "success_minus_collision": 0.9856991663244494,
-    "success_rate": 0.9416947392563936
+    "success_minus_collision": 0.9777750027710651,
+    "success_rate": 0.8676956568381293
   },
   "ranking": [
     {
-      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
-      "collision_rate": 0.006944444444444444,
-      "episodes": 144,
-      "legacy_target_quality": -8.105423268545993,
+      "arm": "socnav_sampling",
+      "collision_rate": 0.020833333333333332,
+      "episodes": 96,
       "rank": 1,
-      "snqi_v2_mean": 0.5812076507177906,
+      "snqi_v2_mean": 0.6084058345396232,
       "success_rate": 0.8958333333333334
     },
     {
-      "arm": "socnav_sampling",
-      "collision_rate": 0.041666666666666664,
-      "episodes": 144,
-      "legacy_target_quality": -5.85490718541345,
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "collision_rate": 0.0,
+      "episodes": 96,
       "rank": 2,
-      "snqi_v2_mean": 0.5648978805709717,
-      "success_rate": 0.8888888888888888
+      "snqi_v2_mean": 0.5841866547403353,
+      "success_rate": 0.8854166666666666
     },
     {
       "arm": "risk_dwa",
-      "collision_rate": 0.006944444444444444,
-      "episodes": 144,
-      "legacy_target_quality": -7.473668800257155,
+      "collision_rate": 0.0,
+      "episodes": 96,
       "rank": 3,
-      "snqi_v2_mean": 0.5604657015516837,
-      "success_rate": 0.8263888888888888
-    },
-    {
-      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
-      "collision_rate": 0.006944444444444444,
-      "episodes": 144,
-      "legacy_target_quality": -9.402418023701502,
-      "rank": 4,
-      "snqi_v2_mean": 0.5315894228216811,
-      "success_rate": 0.8333333333333334
+      "snqi_v2_mean": 0.5687213147192709,
+      "success_rate": 0.8229166666666666
     },
     {
       "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
-      "collision_rate": 0.006944444444444444,
-      "episodes": 144,
-      "legacy_target_quality": -9.272209690368168,
+      "collision_rate": 0.0,
+      "episodes": 96,
+      "rank": 4,
+      "snqi_v2_mean": 0.5336853739254742,
+      "success_rate": 0.8333333333333334
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+      "collision_rate": 0.0,
+      "episodes": 96,
       "rank": 5,
-      "snqi_v2_mean": 0.5305216556867163,
+      "snqi_v2_mean": 0.5333622720381029,
       "success_rate": 0.8333333333333334
     },
     {
       "arm": "hybrid_rule_v4_fast_progress_static_escape",
-      "collision_rate": 0.006944444444444444,
-      "episodes": 144,
-      "legacy_target_quality": -11.344196869974894,
+      "collision_rate": 0.0,
+      "episodes": 96,
       "rank": 6,
-      "snqi_v2_mean": 0.5155175162936929,
-      "success_rate": 0.8194444444444444
+      "snqi_v2_mean": 0.5147801435454608,
+      "success_rate": 0.8125
     },
     {
       "arm": "orca",
-      "collision_rate": 0.10416666666666667,
-      "episodes": 144,
-      "legacy_target_quality": -4.286300546434797,
+      "collision_rate": 0.11458333333333333,
+      "episodes": 96,
       "rank": 7,
-      "snqi_v2_mean": 0.45028030922414725,
-      "success_rate": 0.875
+      "snqi_v2_mean": 0.4221718979078845,
+      "success_rate": 0.8645833333333334
     },
     {
       "arm": "guarded_ppo",
-      "collision_rate": 0.013888888888888888,
-      "episodes": 144,
-      "legacy_target_quality": -3.7666738365339034,
+      "collision_rate": 0.010416666666666666,
+      "episodes": 96,
       "rank": 8,
-      "snqi_v2_mean": 0.37820008056742666,
-      "success_rate": 0.6736111111111112
+      "snqi_v2_mean": 0.3716117322245059,
+      "success_rate": 0.6666666666666666
     },
     {
       "arm": "social_force",
-      "collision_rate": 0.006944444444444444,
-      "episodes": 144,
-      "legacy_target_quality": -4.668031172897376,
+      "collision_rate": 0.0,
+      "episodes": 96,
       "rank": 9,
-      "snqi_v2_mean": 0.36435822409915974,
-      "success_rate": 0.6527777777777778
+      "snqi_v2_mean": 0.36543502853935844,
+      "success_rate": 0.6458333333333334
     },
     {
       "arm": "predictive_mppi",
-      "collision_rate": 0.006944444444444444,
-      "episodes": 144,
-      "legacy_target_quality": -4.954520808586633,
+      "collision_rate": 0.0,
+      "episodes": 96,
       "rank": 10,
-      "snqi_v2_mean": 0.2201319859132873,
-      "success_rate": 0.4027777777777778
-    },
-    {
-      "arm": "prediction_planner",
-      "collision_rate": 0.2569444444444444,
-      "episodes": 144,
-      "legacy_target_quality": -4.085827092007191,
-      "rank": 11,
-      "snqi_v2_mean": -0.2828590183912577,
+      "snqi_v2_mean": 0.2263238344197962,
       "success_rate": 0.3958333333333333
     },
     {
+      "arm": "prediction_planner",
+      "collision_rate": 0.2604166666666667,
+      "episodes": 96,
+      "rank": 11,
+      "snqi_v2_mean": -0.3006181682498412,
+      "success_rate": 0.3854166666666667
+    },
+    {
       "arm": "goal",
-      "collision_rate": 0.6111111111111112,
-      "episodes": 144,
-      "legacy_target_quality": -2.4138979967899306,
+      "collision_rate": 0.6458333333333334,
+      "episodes": 96,
       "rank": 12,
-      "snqi_v2_mean": -0.9863804218747667,
-      "success_rate": 0.375
+      "snqi_v2_mean": -1.0819138912708066,
+      "success_rate": 0.34375
     },
     {
       "arm": "sacadrl",
-      "collision_rate": 0.6944444444444444,
-      "episodes": 144,
-      "legacy_target_quality": -1.817664231167952,
+      "collision_rate": 0.7083333333333334,
+      "episodes": 96,
       "rank": 13,
-      "snqi_v2_mean": -1.2345585760653026,
-      "success_rate": 0.3055555555555556
+      "snqi_v2_mean": -1.2791479779584074,
+      "success_rate": 0.2916666666666667
     },
     {
       "arm": "ppo",
-      "collision_rate": 0.8194444444444444,
-      "episodes": 144,
-      "legacy_target_quality": -1.2681265636690762,
+      "collision_rate": 0.8541666666666666,
+      "episodes": 96,
       "rank": 14,
-      "snqi_v2_mean": -1.6182373590002572,
-      "success_rate": 0.18055555555555555
+      "snqi_v2_mean": -1.7169773987023504,
+      "success_rate": 0.14583333333333334
     }
   ],
+  "ranking_label": "fitted and scored on the same data (calibration seeds 1001/1002)",
   "status": "diagnostic_only"
 }

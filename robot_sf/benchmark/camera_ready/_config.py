@@ -1874,4 +1874,12 @@ def load_campaign_config(path: Path, *, repository_root: Path | None = None) -> 
         repository_root=repository_root,
     )
     _validate_campaign_config(cfg)
+    if cfg.snqi_v2_spec is not None:
+        scenarios = _load_campaign_scenarios(cfg, repository_root)
+        cfg.snqi_v2_spec.validate_evaluation_schedule(
+            {
+                scenario["name"]: scenario["simulation_config"]["max_episode_steps"]
+                for scenario in scenarios
+            }
+        )
     return cfg

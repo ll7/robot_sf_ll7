@@ -65,7 +65,9 @@ records each episode's horizon rather than the global scheduled-mode `None`. A r
 `run_horizon` is not authority for its scheduled budget.
 
 The 0.0.8 template and calibration acquisition exclude legacy SNQI weights,
-baselines and contract diagnostics. Physical metric v2 requires fresh anchors;
+baselines, legacy diagnostic files and legacy score columns throughout campaign
+and publication bundles. Acquisition reports mark `snqi_v2: pending_calibration`.
+Physical metric v2 requires fresh anchors;
 relabeling v1 assets changes their label without correcting jerk/time units.
 The sequence is **execution freeze → dev calibration → reviewed anchor pin →
 release mint → campaign**. After pinning, the campaign can load `snqi_v2_spec`;
@@ -273,3 +275,16 @@ freeze writer or writes the production anchor path. Same-data diagnostic ranking
 is not held-out validation. Report both success/safety rank alignment and the
 legacy target-quality proxy; its raw near-miss count is sensitive to episode
 exposure and is not the v2 close-clearance fraction.
+
+Calibration uses seeds **1001/1002** from the development band 1001..1030,
+which is also used for tuning. Seed **1003** is held apart from anchor fitting
+for a development diagnostic; it is not sealed evaluation evidence. Historical
+101/102 and the entire development band are refused as evaluation inputs.
+Frozen anchors and the release receipt bind the sorted evaluation seeds by
+SHA256 of compact JSON to the author-approved sealed 0.0.8 commitment.
+The retired 111..140 band stays held out. Budget schedules must match the
+calibration schedule at load time. Missing schema identity is refused.
+
+Anchor sensitivity is report-only and uses calibration rows only. Force is a
+cumulative impulse: longer timeouts can accrue more F, while J/K are means;
+all arms face the same scenario budget. This diagnostic is not a release gate.

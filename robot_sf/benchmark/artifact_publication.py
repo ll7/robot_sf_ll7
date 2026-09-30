@@ -70,8 +70,6 @@ _REQUIRED_RELEASE_METADATA_ROLES = (
     "citation",
     "zenodo_metadata",
     "rights_provenance",
-    "snqi_weights",
-    "snqi_baseline",
 )
 _RELEASE_METADATA_PAYLOAD_PATHS = {
     "release_manifest": "payload/release/release_manifest.resolved.json",
@@ -650,6 +648,18 @@ evidence.
 """
 
 
+def _legacy_snqi_declared(metrics: Mapping[str, Any]) -> bool:
+    """Require paired legacy assets and distinguish an absent legacy score.
+
+    Returns:
+        Whether a legacy SNQI basis was explicitly declared.
+    """
+    weights = metrics.get("snqi_weights_path") is not None
+    if weights != (metrics.get("snqi_baseline_path") is not None):
+        raise ValueError("Release legacy SNQI requires both weights and baseline")
+    return weights
+
+
 def _resolve_release_publication_metadata(  # noqa: C901, PLR0912
     run_root: Path,
 ) -> _ReleasePublicationMetadata | None:
@@ -722,6 +732,13 @@ def _resolve_release_publication_metadata(  # noqa: C901, PLR0912
         "snqi_weights": weights_path,
         "snqi_baseline": baseline_path,
     }
+    legacy_declared = _legacy_snqi_declared(metrics)
+    if not legacy_declared:
+        resolved_sources = {
+            role: path
+            for role, path in resolved_sources.items()
+            if role not in {"snqi_weights", "snqi_baseline"}
+        }
     missing = [role for role, path in resolved_sources.items() if path is None]
     if missing:
         raise ValueError(
@@ -754,6 +771,9 @@ def _resolve_release_publication_metadata(  # noqa: C901, PLR0912
         "snqi_weights": (weights_path, _BUNDLED_SNQI_WEIGHTS_RELATIVE),  # type: ignore[arg-type]
         "snqi_baseline": (baseline_path, _BUNDLED_SNQI_BASELINE_RELATIVE),  # type: ignore[arg-type]
     }
+    if not legacy_declared:
+        files.pop("snqi_weights")
+        files.pop("snqi_baseline")
     for role, path in resolved_sources.items():
         if path is not None:
             source_paths[role] = _to_repo_relative(path)
@@ -1578,7 +1598,7 @@ def export_publication_bundle(  # noqa: C901, PLR0913, PLR0915
                 "local_output": "working-storage-not-citation-target",
             },
             "cold_verification": {
-                "required_inputs": list(_REQUIRED_RELEASE_METADATA_ROLES),
+                "required_inputs": list(metadata_records),
                 "credentials": "not_recorded",
                 "snqi_claim_policy": "advisory_no_ranking",
             },
@@ -2458,6 +2478,19 @@ def _preflight_check_channels(
         warnings.append("publication_manifest.json omits publication_channels")
 
 
+def _release_metadata_roles(payload_dir: Path) -> tuple[str, ...]:
+    """Derive required score assets from the signed resolved release bytes.
+
+    Returns:
+        Required cold-verification roles; missing release bytes retain the legacy guard.
+    """
+    release_path = payload_dir / "release/release_manifest.resolved.json"
+    legacy = not release_path.is_file() or _legacy_snqi_declared(
+        _read_json_file(release_path).get("metrics") or {}
+    )
+    return _REQUIRED_RELEASE_METADATA_ROLES + (("snqi_weights", "snqi_baseline") if legacy else ())
+
+
 def _preflight_check_release_metadata(  # noqa: C901, PLR0912
     payload_dir: Path,
     manifest: Mapping[str, Any],
@@ -2489,7 +2522,7 @@ def _preflight_check_release_metadata(  # noqa: C901, PLR0912
                 continue
             normalized_path = raw_manifest_path.removeprefix("payload/")
             manifest_entries_by_path.setdefault(f"payload/{normalized_path}", raw_entry)
-    required_roles = _REQUIRED_RELEASE_METADATA_ROLES if required else tuple(files)
+    required_roles = _release_metadata_roles(payload_dir) if required else tuple(files)
     for role in required_roles:
         entry = files.get(role)
         if not isinstance(entry, Mapping):
@@ -2665,6 +2698,33 @@ def _preflight_check_commit_provenance(
     return repository_commit, episode_commits
 
 
+def _publication_snqi_evidence(payload_dir: Path) -> dict[str, Any]:
+    """Keep legacy check 6 out of explicitly excluded acquisition/publication bundles.
+
+    Returns:
+        A consistency result, refusing contradictory excluded/legacy payloads.
+    """
+    campaign_path = payload_dir / "campaign_manifest.json"
+    campaign = _read_json_file(campaign_path) if campaign_path.is_file() else {}
+    excluded = (
+        campaign.get("legacy_snqi") == "excluded"
+        or campaign.get("snqi_v2") == "pending_calibration"
+    )
+    if not excluded:
+        return _check_snqi_field_consistency(payload_dir)
+    violations = []
+    if (payload_dir / "reports/snqi_diagnostics.json").exists():
+        violations.append("Legacy SNQI is excluded but its diagnostics are present")
+    release_path = payload_dir / "release/release_manifest.resolved.json"
+    if release_path.is_file() and _legacy_snqi_declared(
+        _read_json_file(release_path).get("metrics") or {}
+    ):
+        violations.append("Legacy SNQI is excluded but the release declares legacy assets")
+    if (payload_dir / "release_metadata/snqi").exists():
+        violations.append("Legacy SNQI is excluded but its bundle assets are present")
+    return {"checked": False, "reason": "legacy_snqi_excluded", "violations": violations}
+
+
 def verify_publication_bundle_preflight(
     bundle_dir: Path,
     *,
@@ -2751,7 +2811,7 @@ def verify_publication_bundle_preflight(
     # ---- Check 6: per-episode SNQI field vs diagnostics basis (issue #5580) --
     # Runs only on SNQI-bearing bundles (those declaring snqi_diagnostics.json); other
     # bundles report checked=False and are unaffected.
-    snqi_evidence = _check_snqi_field_consistency(payload_dir)
+    snqi_evidence = _publication_snqi_evidence(payload_dir)
     violations.extend(snqi_evidence.get("violations", []))
 
     status = "pass" if not violations else "fail"

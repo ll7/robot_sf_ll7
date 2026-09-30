@@ -1397,6 +1397,7 @@ def _write_planner_summary_table(lines: list[str], rows: list[dict[str, Any]]) -
     if not rows:
         lines.append("No planner rows were produced.")
         return
+    table_start = len(lines)
     lines.extend(
         [
             "| planner | algo | planner group | kinematics | status | started (UTC) | runtime (s) | episodes | eps/s | success | collisions | snqi | proj_rate | infeasible_rate |",
@@ -1421,6 +1422,12 @@ def _write_planner_summary_table(lines: list[str], rows: list[dict[str, Any]]) -
             f"{_escape_markdown_cell(row.get('projection_rate'))} | "
             f"{_escape_markdown_cell(row.get('infeasible_rate'))} |",
         )
+
+    if not any("snqi_mean" in row for row in rows):
+        for index in range(table_start, len(lines)):
+            cells = lines[index].split("|")
+            del cells[12]
+            lines[index] = "|".join(cells)
 
 
 def _write_aggregate_integrity(

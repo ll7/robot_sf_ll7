@@ -1743,7 +1743,7 @@ class _CampaignReportArtifacts:
     """Intermediate results from the report-writing phase of the orchestrator."""
 
     outcome: _CampaignOutcomeState
-    snqi: _SnqiSectionResult
+    snqi: _SnqiSectionResult | None
     seed_variability_payload: dict[str, Any]
     summary_json_path: Path
     report_md_path: Path
@@ -1788,6 +1788,27 @@ class _SnqiSectionResult:
     baseline_for_eval: dict[str, Any]
     baseline_source: str
     baseline_adjustments: int
+
+
+def _snqi_public_payload(payload: Any, snqi: _SnqiSectionResult | None) -> Any:
+    """Omit legacy score fields throughout outputs when no legacy basis was declared.
+
+    Returns:
+        The legacy-bearing payload, or its recursively filtered acquisition form.
+    """
+    if snqi is not None:
+        return payload
+    if isinstance(payload, dict):
+        return {
+            key: _snqi_public_payload(value, None)
+            for key, value in payload.items()
+            if not (
+                (key.startswith("snqi") and not key.startswith("snqi_v2")) or key == "mean_snqi"
+            )
+        }
+    if isinstance(payload, list):
+        return [_snqi_public_payload(value, None) for value in payload if value != "snqi"]
+    return payload
 
 
 def _unpack_campaign_preflight(prepared: dict[str, Any]) -> _CampaignPreflightPaths:
@@ -1893,6 +1914,15 @@ def _split_planner_rows_by_group(
     return core_rows, experimental_rows
 
 
+def _score_table_headers(headers: tuple[str, ...], legacy_declared: bool) -> tuple[str, ...]:
+    """Keep legacy score columns only with an explicitly declared legacy basis.
+
+    Returns:
+        Public report column names.
+    """
+    return tuple(key for key in headers if legacy_declared or not key.startswith("snqi"))
+
+
 def _write_campaign_table_artifacts(
     cfg: CampaignConfig,
     reports_dir: Path,
@@ -1909,20 +1939,24 @@ def _write_campaign_table_artifacts(
         reports_dir,
         "campaign_table",
         planner_rows,
-        headers=_CAMPAIGN_TABLE_HEADERS,
+        headers=_score_table_headers(_CAMPAIGN_TABLE_HEADERS, cfg.snqi_weights_path is not None),
     )
     core_rows, experimental_rows = _split_planner_rows_by_group(cfg, planner_rows)
     core_csv_path, core_md_path = _write_table_artifacts(
         reports_dir,
         "campaign_table_core",
         core_rows,
-        headers=_CORE_EXPERIMENTAL_TABLE_HEADERS,
+        headers=_score_table_headers(
+            _CORE_EXPERIMENTAL_TABLE_HEADERS, cfg.snqi_weights_path is not None
+        ),
     )
     experimental_csv_path, experimental_md_path = _write_table_artifacts(
         reports_dir,
         "campaign_table_experimental",
         experimental_rows,
-        headers=_CORE_EXPERIMENTAL_TABLE_HEADERS,
+        headers=_score_table_headers(
+            _CORE_EXPERIMENTAL_TABLE_HEADERS, cfg.snqi_weights_path is not None
+        ),
     )
     arm_identity_csv_path, arm_identity_md_path = _write_table_artifacts(
         reports_dir,
@@ -1946,6 +1980,7 @@ def _write_breakdown_and_parity_artifacts(
     reports_dir: Path,
     *,
     scenarios: list[Any],
+    legacy_snqi_declared: bool = True,
     run_entries: list[dict[str, Any]],
     planner_rows: list[dict[str, Any]],
 ) -> tuple[Path, Path, Path, Path, Path, Path, Path, Path]:
@@ -1966,15 +2001,17 @@ def _write_breakdown_and_parity_artifacts(
         reports_dir,
         "scenario_breakdown",
         scenario_rows,
-        headers=_SCENARIO_BREAKDOWN_HEADERS,
+        headers=_score_table_headers(_SCENARIO_BREAKDOWN_HEADERS, legacy_snqi_declared),
     )
     family_csv_path, family_md_path = _write_table_artifacts(
         reports_dir,
         "scenario_family_breakdown",
         family_rows,
-        headers=_FAMILY_BREAKDOWN_HEADERS,
+        headers=_score_table_headers(_FAMILY_BREAKDOWN_HEADERS, legacy_snqi_declared),
     )
-    parity_csv_path, parity_md_path = _write_parity_table(reports_dir, planner_rows)
+    parity_csv_path, parity_md_path = _write_parity_table(
+        reports_dir, planner_rows, legacy_snqi_declared=legacy_snqi_declared
+    )
     skipped_combo_rows = _build_skipped_combo_rows(run_entries)
     skipped_csv_path, skipped_md_path = _write_table_artifacts(
         reports_dir,
@@ -1994,7 +2031,9 @@ def _write_breakdown_and_parity_artifacts(
     )
 
 
-def _write_parity_table(reports_dir: Path, planner_rows: list[dict[str, Any]]) -> tuple[Path, Path]:
+def _write_parity_table(
+    reports_dir: Path, planner_rows: list[dict[str, Any]], *, legacy_snqi_declared: bool = True
+) -> tuple[Path, Path]:
     """Build and write the kinematics parity table.
 
     Returns:
@@ -2039,32 +2078,35 @@ def _write_parity_table(reports_dir: Path, planner_rows: list[dict[str, Any]]) -
         reports_dir,
         "kinematics_parity_table",
         parity_rows,
-        headers=(
-            "planner_key",
-            "algo",
-            "human_model_variant",
-            "human_model_source",
-            "planner_group",
-            "kinematics",
-            "execution_mode",
-            "status",
-            "episodes",
-            "success_mean",
-            "success_ci_low",
-            "success_ci_high",
-            "collisions_mean",
-            "ped_collision_count_mean",
-            "obstacle_collision_count_mean",
-            "total_collision_count_mean",
-            "collision_ci_low",
-            "collision_ci_high",
-            "near_misses_mean",
-            "comfort_exposure_mean",
-            "snqi_mean",
-            "snqi_ci_low",
-            "snqi_ci_high",
-            "projection_rate",
-            "infeasible_rate",
+        headers=_score_table_headers(
+            (
+                "planner_key",
+                "algo",
+                "human_model_variant",
+                "human_model_source",
+                "planner_group",
+                "kinematics",
+                "execution_mode",
+                "status",
+                "episodes",
+                "success_mean",
+                "success_ci_low",
+                "success_ci_high",
+                "collisions_mean",
+                "ped_collision_count_mean",
+                "obstacle_collision_count_mean",
+                "total_collision_count_mean",
+                "collision_ci_low",
+                "collision_ci_high",
+                "near_misses_mean",
+                "comfort_exposure_mean",
+                "snqi_mean",
+                "snqi_ci_low",
+                "snqi_ci_high",
+                "projection_rate",
+                "infeasible_rate",
+            ),
+            legacy_snqi_declared,
         ),
     )
 
@@ -2554,11 +2596,15 @@ def _write_seed_variability_section(  # noqa: PLR0913
         confidence_settings=confidence_settings,
         source_paths=seed_source_paths,
     )
+    if cfg.snqi_weights_path is None:
+        seed_variability_payload = _snqi_public_payload(seed_variability_payload, None)
     seed_variability_json_path, seed_variability_csv_path = _write_seed_variability_artifacts(
         reports_dir,
         seed_variability_payload,
     )
     seed_episode_rows = build_seed_episode_rows(seed_variability_records)
+    if cfg.snqi_weights_path is None:
+        seed_episode_rows = _snqi_public_payload(seed_episode_rows, None)
     seed_episode_rows_csv_path = _write_seed_episode_rows_artifact(reports_dir, seed_episode_rows)
     statistical_sufficiency_payload = _build_statistical_sufficiency_payload(
         campaign_id=campaign_id,
@@ -2679,12 +2725,47 @@ def _build_campaign_execution_metadata(
     }
 
 
+def _legacy_snqi_metadata(cfg: CampaignConfig, snqi: _SnqiSectionResult | None) -> dict[str, Any]:
+    """Return legacy score provenance only when its assets were explicitly declared."""
+    if snqi is None:
+        return {}
+    return {
+        "snqi_weights_version": (
+            cfg.snqi_weights_path.stem if cfg.snqi_weights_path is not None else "default"
+        ),
+        "snqi_weights_sha256": (snqi.weights_sha256 if snqi is not None else None),
+        "snqi_baseline_version": (
+            cfg.snqi_baseline_path.stem if cfg.snqi_baseline_path is not None else "derived"
+        ),
+        "snqi_baseline_sha256": (snqi.baseline_sha256 if snqi is not None else None),
+        "snqi_contract_status": (snqi.contract_eval.status if snqi is not None else None),
+        "snqi_contract_rank_alignment_spearman": (
+            snqi.contract_eval.rank_alignment_spearman if snqi is not None else None
+        ),
+        "snqi_contract_outcome_separation": (
+            snqi.contract_eval.outcome_separation if snqi is not None else None
+        ),
+        "snqi_contract_dominant_component": (
+            snqi.contract_eval.dominant_component if snqi is not None else None
+        ),
+        "snqi_contract_dominant_component_mean_abs": (
+            snqi.contract_eval.dominant_component_mean_abs if snqi is not None else None
+        ),
+        "snqi_positioning_recommendation": (
+            snqi.positioning.get("recommendation") if snqi is not None else None
+        ),
+        "snqi_positioning_claim_scope": (
+            snqi.positioning.get("claim_scope") if snqi is not None else None
+        ),
+    }
+
+
 def _build_campaign_metadata_section(
     cfg: CampaignConfig,
     *,
     paths: _CampaignPreflightPaths,
     outcome: _CampaignOutcomeState,
-    snqi: _SnqiSectionResult,
+    snqi: _SnqiSectionResult | None,
     run_entries: list[dict[str, Any]],
     kinematics_matrix: tuple[str, ...],
     invoked_command: str | None,
@@ -2702,7 +2783,7 @@ def _build_campaign_metadata_section(
         f"{repository_url}/releases/download/{release_tag_value}/{expected_archive_name}"
     )
     doi_url = f"https://doi.org/{cfg.doi}"
-    return {
+    payload = {
         **_build_campaign_execution_metadata(
             cfg,
             paths=paths,
@@ -2732,25 +2813,16 @@ def _build_campaign_metadata_section(
         "release_url": release_url,
         "release_asset_url": release_asset_url,
         "doi_url": doi_url,
-        **(cfg.snqi_v2_spec.provenance() if getattr(cfg, "snqi_v2_spec", None) else {}),
-        "snqi_weights_version": (
-            cfg.snqi_weights_path.stem if cfg.snqi_weights_path is not None else "default"
+        **(
+            cfg.snqi_v2_spec.provenance()
+            if getattr(cfg, "snqi_v2_spec", None)
+            else {"snqi_v2": "pending_calibration"}
+            if snqi is None
+            else {}
         ),
-        "snqi_weights_sha256": snqi.weights_sha256,
-        "snqi_baseline_version": (
-            cfg.snqi_baseline_path.stem if cfg.snqi_baseline_path is not None else "derived"
-        ),
-        "snqi_baseline_sha256": snqi.baseline_sha256,
-        "snqi_contract_status": snqi.contract_eval.status,
-        "snqi_contract_rank_alignment_spearman": (snqi.contract_eval.rank_alignment_spearman),
-        "snqi_contract_outcome_separation": snqi.contract_eval.outcome_separation,
-        "snqi_contract_dominant_component": snqi.contract_eval.dominant_component,
-        "snqi_contract_dominant_component_mean_abs": (
-            snqi.contract_eval.dominant_component_mean_abs
-        ),
-        "snqi_positioning_recommendation": snqi.positioning.get("recommendation"),
-        "snqi_positioning_claim_scope": snqi.positioning.get("claim_scope"),
+        **_legacy_snqi_metadata(cfg, snqi),
     }
+    return _snqi_public_payload(payload, snqi)
 
 
 def _build_campaign_summary_dict(  # noqa: PLR0913
@@ -2758,7 +2830,7 @@ def _build_campaign_summary_dict(  # noqa: PLR0913
     *,
     paths: _CampaignPreflightPaths,
     outcome: _CampaignOutcomeState,
-    snqi: _SnqiSectionResult,
+    snqi: _SnqiSectionResult | None,
     fairness_report: Any,
     planner_rows: list[dict[str, Any]],
     arm_rollup: dict[str, Any],
@@ -2774,7 +2846,7 @@ def _build_campaign_summary_dict(  # noqa: PLR0913
     Returns:
         Complete campaign summary dict.
     """
-    return {
+    payload = {
         "fairness_contract": fairness_report.to_dict(),
         "campaign": _build_campaign_metadata_section(
             cfg,
@@ -2790,9 +2862,10 @@ def _build_campaign_summary_dict(  # noqa: PLR0913
         "runs": run_entries,
         "campaign_integrity": campaign_integrity,
         "warnings": warnings,
-        "soft_contract_warning": snqi.soft_contract_warning,
+        "soft_contract_warning": (snqi.soft_contract_warning if snqi is not None else False),
         "artifacts": _build_campaign_artifacts_section(paths, snqi, table_paths),
     }
+    return _snqi_public_payload(payload, snqi)
 
 
 def _build_release_artifact_urls(
@@ -2816,7 +2889,7 @@ def _build_release_artifact_urls(
 
 def _build_campaign_artifacts_section(
     paths: _CampaignPreflightPaths,
-    snqi: _SnqiSectionResult,
+    snqi: _SnqiSectionResult | None,
     table_paths: dict[str, Any],
 ) -> dict[str, Any]:
     """Build the artifacts sub-dict for the campaign summary.
@@ -2829,7 +2902,7 @@ def _build_campaign_artifacts_section(
     expected_archive_name, release_url, release_asset_url, doi_url = _build_release_artifact_urls(
         paths, table_paths
     )
-    return {
+    payload = {
         "campaign_manifest": _repo_relative(campaign_root / "campaign_manifest.json"),
         "campaign_summary_json": _repo_relative(table_paths["summary_json_path"]),
         "campaign_credibility_scorecard_json": _repo_relative(
@@ -2885,13 +2958,20 @@ def _build_campaign_artifacts_section(
         "release_url": release_url,
         "release_asset_url": release_asset_url,
         "doi_url": doi_url,
-        "snqi_diagnostics_json": _repo_relative(snqi.snqi_diagnostics_json_path),
-        "snqi_diagnostics_md": _repo_relative(snqi.snqi_diagnostics_md_path),
-        "snqi_sensitivity_csv": _repo_relative(snqi.snqi_sensitivity_csv_path),
+        "snqi_diagnostics_json": (
+            _repo_relative(snqi.snqi_diagnostics_json_path) if snqi is not None else None
+        ),
+        "snqi_diagnostics_md": (
+            _repo_relative(snqi.snqi_diagnostics_md_path) if snqi is not None else None
+        ),
+        "snqi_sensitivity_csv": (
+            _repo_relative(snqi.snqi_sensitivity_csv_path) if snqi is not None else None
+        ),
         "assurance_fragment_json": _repo_relative(reports_dir / "assurance_fragment.json"),
         "assurance_fragment_md": _repo_relative(reports_dir / "assurance_fragment.md"),
         "assurance_fragment_svg": _repo_relative(reports_dir / "assurance_fragment.svg"),
     }
+    return _snqi_public_payload(payload, snqi)
 
 
 def _build_run_meta_preflight_artifacts(
@@ -2960,7 +3040,7 @@ def _build_run_meta(
     *,
     paths: _CampaignPreflightPaths,
     outcome: _CampaignOutcomeState,
-    snqi: _SnqiSectionResult,
+    snqi: _SnqiSectionResult | None,
     seed_variability_payload: dict[str, Any],
     invoked_command: str | None,
     table_paths: dict[str, Any],
@@ -2971,7 +3051,7 @@ def _build_run_meta(
         Run metadata dict.
     """
     git_meta = paths.git_meta
-    return {
+    payload = {
         "repo": {
             "remote": git_meta.get("remote", "unknown"),
             "branch": git_meta.get("branch", "unknown"),
@@ -3005,9 +3085,15 @@ def _build_run_meta(
             ),
         },
         "snqi_artifacts": {
-            "diagnostics_json": _repo_relative(snqi.snqi_diagnostics_json_path),
-            "diagnostics_md": _repo_relative(snqi.snqi_diagnostics_md_path),
-            "sensitivity_csv": _repo_relative(snqi.snqi_sensitivity_csv_path),
+            "diagnostics_json": (
+                _repo_relative(snqi.snqi_diagnostics_json_path) if snqi is not None else None
+            ),
+            "diagnostics_md": (
+                _repo_relative(snqi.snqi_diagnostics_md_path) if snqi is not None else None
+            ),
+            "sensitivity_csv": (
+                _repo_relative(snqi.snqi_sensitivity_csv_path) if snqi is not None else None
+            ),
         },
         "seed_variability_artifacts": {
             "json": _repo_relative(table_paths["seed_variability_json_path"]),
@@ -3027,13 +3113,14 @@ def _build_run_meta(
             (outcome.total_episodes / outcome.runtime_sec) if outcome.runtime_sec > 0 else 0.0
         ),
     }
+    return _snqi_public_payload(payload, snqi)
 
 
 def _build_campaign_manifest_payload(
     paths: _CampaignPreflightPaths,
     *,
     outcome: _CampaignOutcomeState,
-    snqi: _SnqiSectionResult,
+    snqi: _SnqiSectionResult | None,
     run_meta: dict[str, Any],
     table_paths: dict[str, Any],
 ) -> dict[str, Any]:
@@ -3043,13 +3130,22 @@ def _build_campaign_manifest_payload(
         Campaign manifest dict.
     """
     reports_dir = paths.reports_dir
-    return {
+    payload = {
         **paths.manifest_payload,
         "runtime_sec": outcome.runtime_sec,
+        **(
+            {"snqi_v2": "pending_calibration"}
+            if snqi is None and not paths.manifest_payload.get("metrics", {}).get("snqi_v2_version")
+            else {}
+        ),
         "finished_at_utc": outcome.campaign_finished_at_utc,
-        "snqi_contract_status": snqi.contract_eval.status,
-        "snqi_positioning_recommendation": snqi.positioning.get("recommendation"),
-        "snqi_positioning_claim_scope": snqi.positioning.get("claim_scope"),
+        "snqi_contract_status": (snqi.contract_eval.status if snqi is not None else None),
+        "snqi_positioning_recommendation": (
+            snqi.positioning.get("recommendation") if snqi is not None else None
+        ),
+        "snqi_positioning_claim_scope": (
+            snqi.positioning.get("claim_scope") if snqi is not None else None
+        ),
         "artifacts": {
             **dict(paths.manifest_payload.get("artifacts") or {}),
             "seed_variability_json": _repo_relative(table_paths["seed_variability_json_path"]),
@@ -3068,9 +3164,15 @@ def _build_campaign_manifest_payload(
                 if table_paths.get("actuation_envelope_md_path") is not None
                 else None
             ),
-            "snqi_diagnostics_json": _repo_relative(snqi.snqi_diagnostics_json_path),
-            "snqi_diagnostics_md": _repo_relative(snqi.snqi_diagnostics_md_path),
-            "snqi_sensitivity_csv": _repo_relative(snqi.snqi_sensitivity_csv_path),
+            "snqi_diagnostics_json": (
+                _repo_relative(snqi.snqi_diagnostics_json_path) if snqi is not None else None
+            ),
+            "snqi_diagnostics_md": (
+                _repo_relative(snqi.snqi_diagnostics_md_path) if snqi is not None else None
+            ),
+            "snqi_sensitivity_csv": (
+                _repo_relative(snqi.snqi_sensitivity_csv_path) if snqi is not None else None
+            ),
             "assurance_fragment_json": _repo_relative(reports_dir / "assurance_fragment.json"),
             "assurance_fragment_md": _repo_relative(reports_dir / "assurance_fragment.md"),
             "assurance_fragment_svg": _repo_relative(reports_dir / "assurance_fragment.svg"),
@@ -3079,6 +3181,7 @@ def _build_campaign_manifest_payload(
             **dict(run_meta.get("seed_variability") or {}),
         },
     }
+    return _snqi_public_payload(payload, snqi)
 
 
 def _write_run_level_files(
@@ -3086,7 +3189,7 @@ def _write_run_level_files(
     *,
     paths: _CampaignPreflightPaths,
     outcome: _CampaignOutcomeState,
-    snqi: _SnqiSectionResult,
+    snqi: _SnqiSectionResult | None,
     seed_variability_payload: dict[str, Any],
     invoked_command: str | None,
     table_paths: dict[str, Any],
@@ -3273,6 +3376,7 @@ def _write_table_and_breakdown_artifacts(
     ) = _write_breakdown_and_parity_artifacts(
         reports_dir,
         scenarios=paths.scenarios,
+        legacy_snqi_declared=cfg.snqi_weights_path is not None,
         run_entries=run_entries,
         planner_rows=planner_rows,
     )
@@ -3306,7 +3410,9 @@ def _write_diagnostic_sections(  # noqa: PLR0913
     snqi_weights: dict[str, Any] | None,
     snqi_baseline: dict[str, Any] | None,
     warnings: list[str],
-) -> tuple[_SnqiSectionResult, dict[str, Any], Path, Path, Path, Path, Path | None, Path | None]:
+) -> tuple[
+    _SnqiSectionResult | None, dict[str, Any], Path, Path, Path, Path, Path | None, Path | None
+]:
     """Write seed variability, actuation envelope, and SNQI diagnostic sections.
 
     Returns:
@@ -3344,17 +3450,19 @@ def _write_diagnostic_sections(  # noqa: PLR0913
         amv_summary=paths.amv_summary,
     )
 
-    snqi = _build_and_write_snqi_section(
-        cfg,
-        campaign_id=paths.campaign_id,
-        campaign_finished_at_utc=outcome.campaign_finished_at_utc,
-        reports_dir=reports_dir,
-        planner_rows=planner_rows,
-        run_entries=run_entries,
-        snqi_weights=snqi_weights,
-        snqi_baseline=snqi_baseline,
-        warnings=warnings,
-    )
+    snqi = None
+    if cfg.snqi_weights_path is not None:
+        snqi = _build_and_write_snqi_section(
+            cfg,
+            campaign_id=paths.campaign_id,
+            campaign_finished_at_utc=outcome.campaign_finished_at_utc,
+            reports_dir=reports_dir,
+            planner_rows=planner_rows,
+            run_entries=run_entries,
+            snqi_weights=snqi_weights,
+            snqi_baseline=snqi_baseline,
+            warnings=warnings,
+        )
 
     return (
         snqi,
@@ -3370,7 +3478,7 @@ def _write_diagnostic_sections(  # noqa: PLR0913
 
 def _assemble_report_artifacts(
     outcome: _CampaignOutcomeState,
-    snqi: _SnqiSectionResult,
+    snqi: _SnqiSectionResult | None,
     seed_variability_payload: dict[str, Any],
     summary_json_path: Path,
     report_md_path: Path,
@@ -3603,7 +3711,7 @@ def _export_and_write_final_artifacts(
         campaign_summary=campaign_summary,
         warnings=warnings,
         skip_publication_bundle=skip_publication_bundle,
-        snqi_hard_fail=snqi.snqi_hard_fail,
+        snqi_hard_fail=(snqi.snqi_hard_fail if snqi is not None else False),
         benchmark_success=outcome.benchmark_success,
         dependencies=dependencies,
     )
@@ -3618,12 +3726,12 @@ def _export_and_write_final_artifacts(
         warnings=warnings,
     )
 
-    if snqi.snqi_hard_fail:
+    if snqi.snqi_hard_fail if snqi is not None else False:
         raise RuntimeError(
             f"SNQI contract failed with enforcement={cfg.snqi_contract.enforcement}; "
-            f"rank_alignment={snqi.contract_eval.rank_alignment_spearman:.4f}, "
-            f"outcome_separation={snqi.contract_eval.outcome_separation:.4f}. "
-            f"See diagnostics: {_repo_relative(snqi.snqi_diagnostics_json_path)}"
+            f"rank_alignment={(snqi.contract_eval.rank_alignment_spearman if snqi is not None else None):.4f}, "
+            f"outcome_separation={(snqi.contract_eval.outcome_separation if snqi is not None else None):.4f}. "
+            f"See diagnostics: {(_repo_relative(snqi.snqi_diagnostics_json_path) if snqi is not None else None)}"
         )
 
     return publication_payload
@@ -3951,16 +4059,18 @@ def _build_orchestrator_return(
         outcome.total_episodes,
         paths.campaign_root,
     )
-    return {
+    payload = {
         "campaign_id": paths.campaign_id,
         "campaign_root": str(paths.campaign_root),
         "summary_json": str(artifacts.summary_json_path),
         "table_csv": str(artifacts.csv_path),
         "table_md": str(artifacts.md_table_path),
         "report_md": str(artifacts.report_md_path),
-        "snqi_diagnostics_json": str(snqi.snqi_diagnostics_json_path),
-        "snqi_diagnostics_md": str(snqi.snqi_diagnostics_md_path),
-        "snqi_sensitivity_csv": str(snqi.snqi_sensitivity_csv_path),
+        "snqi_diagnostics_json": (
+            str(snqi.snqi_diagnostics_json_path) if snqi is not None else None
+        ),
+        "snqi_diagnostics_md": (str(snqi.snqi_diagnostics_md_path) if snqi is not None else None),
+        "snqi_sensitivity_csv": (str(snqi.snqi_sensitivity_csv_path) if snqi is not None else None),
         "assurance_fragment_json": str(reports_dir / "assurance_fragment.json"),
         "assurance_fragment_md": str(reports_dir / "assurance_fragment.md"),
         "assurance_fragment_svg": str(reports_dir / "assurance_fragment.svg"),
@@ -4000,5 +4110,6 @@ def _build_orchestrator_return(
         "publication_bundle": publication_payload,
         "campaign_integrity": campaign_integrity,
         "warnings": warnings,
-        "soft_contract_warning": snqi.soft_contract_warning,
+        "soft_contract_warning": (snqi.soft_contract_warning if snqi is not None else False),
     }
+    return _snqi_public_payload(payload, snqi)

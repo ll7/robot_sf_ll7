@@ -166,12 +166,17 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
                 != planners[planner.key]["path"]
                 or template_freeze.get("status") != "frozen"
                 or template_freeze.get("implementation_family") != V4_HYBRID_VARIANT
-                or template_freeze.get("replaces_0_0_7_slot") != reviewed_slots[planner.key]
+                # Release slot lineage belongs to the source-pinned arm map;
+                # frozen parameter bytes need not repeat it. Any declaration
+                # present in either config must still agree with that map.
+                or template_freeze.get("replaces_0_0_7_slot", reviewed_slots[planner.key])
+                != reviewed_slots[planner.key]
                 or freeze.get("status") != "frozen"
                 or "unfrozen_candidate" in freeze
                 or freeze.get("implementation_family")
                 != template_freeze.get("implementation_family")
-                or freeze.get("replaces_0_0_7_slot") != template_freeze.get("replaces_0_0_7_slot")
+                or freeze.get("replaces_0_0_7_slot", reviewed_slots[planner.key])
+                != reviewed_slots[planner.key]
             ):
                 raise ValueError(
                     f"successor planner binding lacks reviewed v4 lineage: {planner.key}"

@@ -2852,8 +2852,9 @@ def _step_build_simulation_trace(
         "selected_action": sim.selected_action_payload,
         "applied_environment_action": sim.applied_environment_action_payload,
     }
-    if "ppoeval_proposal" in slc.algo_meta:
-        planner_payload["ppoeval_proposal"] = dict(slc.algo_meta["ppoeval_proposal"])
+    proposal_reader = getattr(slc.policy_fn, "_ppoeval_proposal", None)
+    if callable(proposal_reader):
+        planner_payload["ppoeval_proposal"] = proposal_reader()
     if sim.action_conversion_payload:
         planner_payload["action_conversion"] = sim.action_conversion_payload
     if sim.actuation_step is not None:
@@ -3567,6 +3568,9 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
         active_harness = LatencyMeasurementHarness.get_current()
         if active_harness is not None:
             policy_fn = active_harness.wrap_policy(policy_fn)
+            proposal_reader = getattr(args.planner_runtime.policy_fn, "_ppoeval_proposal", None)
+            if callable(proposal_reader):
+                policy_fn._ppoeval_proposal = proposal_reader
         obs = _prepare_episode_env(
             env,
             seed=args.seed,

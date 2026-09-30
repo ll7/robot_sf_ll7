@@ -55,6 +55,8 @@ def summarize(rows):  # noqa: C901
     deltas = [[], []]
     selected_deltas = [[], []]
     clearance = []
+    lengths = []
+    goal_times = []
     for row in rows:
         meta = row["algorithm_metadata"]
         # Runtime validity and declared guard interventions are separate from outcomes.
@@ -73,7 +75,8 @@ def summarize(rows):  # noqa: C901
             excluded += 1
             continue
         eligible.append(row)
-        steps = meta.get("simulation_step_trace", {}).get("steps")
+        trace = meta.get("simulation_step_trace", {})
+        steps = trace.get("steps")
         if not steps:
             raise ValueError("Missing required simulation step trace")
         proposal = [s["planner"]["ppoeval_proposal"]["requested_command"] for s in steps]
@@ -83,6 +86,12 @@ def summarize(rows):  # noqa: C901
         ]
         if any(len(c) != 2 or not all(finite(v) for v in c) for c in proposal + chosen):
             raise ValueError("Invalid command trace")
+        if len(steps) != row["steps"]:
+            raise ValueError("Incomplete step trace")
+        positions = [trace["reset"]["robot"]["position"]] + [s["robot"]["position"] for s in steps]
+        lengths.append(sum(math.dist(a, b) for a, b in pairwise(positions)))
+        if row["outcome"]["route_complete"]:
+            goal_times.append(steps[-1]["time_s"])
         commands.extend(proposal)
         selected.extend(chosen)
         for src, dst in [(proposal, deltas), (chosen, selected_deltas)]:
@@ -90,7 +99,6 @@ def summarize(rows):  # noqa: C901
                 for i in range(2):
                     dst[i].append(abs(now[i] - prev[i]))
         clearance.extend(p.get("surface_clearance_m") for s in steps for p in s["pedestrians"])
-    metrics = [r["metrics"] for r in eligible]
     n = len(eligible)
     negative = sum(c[0] < 0 for c in commands)
     above = sum(c[0] > 2 for c in commands)
@@ -101,21 +109,17 @@ def summarize(rows):  # noqa: C901
                 guard_counts[k] += v
     return {
         "episodes": len(rows),
+        "raw_success": sum(r["outcome"]["route_complete"] for r in rows),
+        "raw_collision": sum(r["outcome"]["collision_event"] for r in rows),
+        "raw_timeout": sum(r["outcome"]["timeout_event"] for r in rows),
         "eligible_episodes": n,
         "excluded_fallback_degraded": excluded,
-        "success": sum(m.get("success", 0) > 0 for m in metrics),
-        "collision": sum(
-            m.get("collisions", m.get("collision_count", 0)) > 0
-            or m.get("wall_collisions", 0) > 0
-            or m.get("agent_collisions", 0) > 0
-            for m in metrics
-        ),
-        "timeout": sum(m.get("timeout", 0) > 0 for m in metrics),
+        "success": sum(r["outcome"]["route_complete"] for r in eligible),
+        "collision": sum(r["outcome"]["collision_event"] for r in eligible),
+        "timeout": sum(r["outcome"]["timeout_event"] for r in eligible),
         "minimum_pedestrian_clearance_m": min([x for x in clearance if finite(x)], default=None),
-        "mean_path_length_m": mean([m.get("path_length") for m in metrics]),
-        "mean_time_to_goal_s_success_only": mean(
-            [m.get("time_to_goal") for m in metrics if m.get("success", 0) > 0]
-        ),
+        "mean_path_length_m": mean(lengths),
+        "mean_time_to_goal_s_success_only": mean(goal_times),
         "commands": len(commands),
         "fraction_v_negative": negative / len(commands) if commands else None,
         "fraction_v_above_2": above / len(commands) if commands else None,

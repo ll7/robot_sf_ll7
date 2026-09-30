@@ -1340,7 +1340,6 @@ def _build_ppo_policy(  # noqa: C901
         else:
             ppo_obs = _obs_to_ppo_format(obs)
         action = ppo_planner.step(ppo_obs)
-        meta["ppoeval_proposal"] = dict(getattr(ppo_planner, "_ppoeval_proposal", {}))
         if not isinstance(action, dict):
             raise TypeError(f"PPO planner returned non-dict action: {type(action)}")
         linear, angular, conversion_mode = _ppo_action_to_unicycle(
@@ -1359,6 +1358,7 @@ def _build_ppo_policy(  # noqa: C901
         _update_adapter_impact_metrics(meta, conversion_mode)
         return linear, angular
 
+    _policy._ppoeval_proposal = lambda: dict(getattr(ppo_planner, "_ppoeval_proposal", {}))
     _policy._planner_close = ppo_planner.close
     # PPO itself is stateless between predictions, but expose its reset hook so
     # a batch-owned cached policy still applies the episode seed before rollout.
@@ -1643,7 +1643,6 @@ def _build_guarded_ppo_policy(  # noqa: C901, PLR0915
         else:
             ppo_obs = _obs_to_ppo_format(obs)
         action = ppo_planner.step(ppo_obs)
-        meta["ppoeval_proposal"] = dict(getattr(ppo_planner, "_ppoeval_proposal", {}))
         if not isinstance(action, dict):
             raise TypeError(f"Guarded PPO planner returned non-dict action: {type(action)}")
         linear, angular, conversion_mode = _ppo_action_to_unicycle(

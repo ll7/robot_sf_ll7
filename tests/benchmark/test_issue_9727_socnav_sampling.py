@@ -257,7 +257,7 @@ def test_braking_helpers_are_consistent() -> None:
 @pytest.mark.slow
 @pytest.mark.parametrize(
     ("scenario_id", "seed"),
-    [("francis2023_crowd_navigation", 1003), ("francis2023_robot_crowding", 1011)],
+    [("francis2023_crowd_navigation", 1003), ("francis2023_robot_crowding", 1013)],
 )
 def test_release_cell_replay_reaches_goal_without_wall_contact(scenario_id: str, seed: int) -> None:
     """Both cells end in wall contact under legacy_v1 on these seeds (#9727, #9746).

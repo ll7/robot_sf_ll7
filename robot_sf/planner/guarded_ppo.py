@@ -1045,10 +1045,10 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 fallback_policy="stop",
             )
 
-        empty_pedestrians = cached_state[3].size == 0
+        static_ranking = cached_state[3].size == 0 and self._static_recovery_available()
 
         def clearance_rank(evaluation) -> tuple[float, ...]:
-            if self.config.clearance_model != "surface_v2" or not empty_pedestrians:
+            if not static_ranking:
                 return (float(evaluation["min_ped_clear"]),)
             return tuple(
                 float(evaluation.get(key, float("-inf")))
@@ -1059,8 +1059,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             cached_state[0], observation=observation, grid_payload=cached_grid
         )
         recovery = (
-            self._static_recovery_available()
-            and empty_pedestrians
+            static_ranking
             and 0.0 < current_obs < float(self.config.hard_obstacle_clearance)
             and float(fallback_eval["min_obs_clear"]) > 0.0
             and float(fallback_eval["min_obs_clear"]) >= current_obs
@@ -1070,9 +1069,9 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             alternatives.append(prior_eval)
         best_rank = max(map(clearance_rank, alternatives))
         fallback_rank = clearance_rank(fallback_eval)
-        # Empty pedestrian sets yield inf for all commands. Static clearance
-        # and then progress break those ties. At equal progress a nonzero
-        # recovery rotation preserves the circular footprint and beats stasis.
+        # With bound exact geometry, static clearance and progress break empty
+        # pedestrian ties. Otherwise preserve strict pedestrian arbitration:
+        # grid endpoints cannot authorize a below-margin translation.
         prefer_recovery_turn = (
             recovery
             and fallback_command[0] == 0.0
@@ -1080,9 +1079,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             and fallback_rank == best_rank
         )
         if (fallback_rank > best_rank or prefer_recovery_turn) and (
-            self.config.clearance_model != "surface_v2"
-            or not empty_pedestrians
-            or float(fallback_eval["min_obs_clear"]) > 0.0
+            not static_ranking or float(fallback_eval["min_obs_clear"]) > 0.0
         ):
             self._recovery_command_count += int(recovery)
             return self._shield_decision(

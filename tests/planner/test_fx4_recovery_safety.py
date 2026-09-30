@@ -118,6 +118,84 @@ def test_unbound_grid_rejects_between_sample_corner_penetration(arm):
         assert np.all(costs >= adapter.config.invalid_sequence_cost), costs
 
 
+def test_guard_unbound_grid_preserves_legacy_stop_for_penetrating_fallback():
+    """A real default DWA fallback must not win an unbound static/progress tie."""
+    guard = release("guarded_ppo")
+    # The guard supports standalone command planners, including default DWA;
+    # its own recovery boundary must hold independently of fallback settings.
+    guard.fallback_adapter = RiskDWAPlannerAdapter()
+    normal = np.array([-1.0, -1.0]) / np.sqrt(2)
+    tangent = np.array([1.0, -1.0]) / np.sqrt(2)
+    midpoint = np.array([23.0, 23.0]) + 0.9995 * normal
+    start = midpoint - 0.059 * tangent
+    obs = observation(guard, CORNER_MAP, start, -np.pi / 4, goal=start + 4 * tangent)
+    map_def = convert_map(str(CORNER_MAP))
+    lines, polygons = RobotEnv._normalize_obstacles_for_grid(map_def.obstacles, map_def.bounds)
+    grid = OccupancyGrid(
+        GridConfig(
+            resolution=0.2,
+            width=32,
+            height=32,
+            channels=[GridChannel.OBSTACLES, GridChannel.PEDESTRIANS, GridChannel.COMBINED],
+            use_ego_frame=False,
+            center_on_robot=False,
+        )
+    )
+    grid.generate(
+        lines, [], (tuple(start), -np.pi / 4), ego_frame=False, obstacle_polygons=polygons
+    )
+    obs["occupancy_grid"] = grid.to_observation()
+    obs["occupancy_grid_meta"] = grid.metadata_observation()
+    drive = DifferentialDriveRobot(DifferentialDriveSettings(radius=1.0))
+    # Reach the observed speed through native acceleration, keeping wheel
+    # speeds consistent with velocity before executing the corner chord.
+    for _ in range(12):
+        drive.apply_action((1.0, 0.0), 0.1)
+    drive.state.pose = (tuple(start), -np.pi / 4)
+    obs["robot"]["speed"] = list(drive.current_speed)
+    env = SimpleNamespace(simulator=SimpleNamespace(robots=[drive]))
+    config = SimpleNamespace(
+        robot_config=drive.config, sim_config=SimpleNamespace(time_per_step_in_secs=0.1)
+    )
+    fallback = guard.fallback_adapter.plan(obs)
+    assert fallback == pytest.approx((1.2, 0.0))
+    action = policy_command_to_env_action(env=env, config=config, command=fallback)
+    drive.apply_action(tuple(action), 0.1)
+    end = np.asarray(drive.pos)
+    np.testing.assert_allclose(end, start + 0.12 * tangent, rtol=0, atol=1e-12)
+    # Independent circle/corner oracle: clear endpoints hide 0.5 mm penetration.
+    assert np.linalg.norm(start - [23, 23]) > 1
+    assert np.linalg.norm(end - [23, 23]) > 1
+    assert np.linalg.norm(midpoint - [23, 23]) - 1 == pytest.approx(-0.0005)
+    assert guard._exact_obstacle_clearance(end, previous=start) == pytest.approx(-0.0005)
+    bound = guard.choose_command_decision(obs, (0.0, 0.0))
+    assert bound.filtered_action == (0.0, 0.0)
+    assert bound.decision_label == "stop_best_effort"
+
+    # Use the public lifecycle to remove exact geometry from guard and fallback.
+    guard.bind_env(SimpleNamespace())
+    assert not guard._static_recovery_available()
+    c0 = guard._min_obstacle_clearance(start, observation=obs)
+    c1 = guard._min_obstacle_clearance(end, observation=obs)
+    assert 0 < c0 < c1 < guard.config.hard_obstacle_clearance
+    assert guard.fallback_adapter.plan(obs) == pytest.approx(fallback)
+    fallback_eval = guard._evaluate_command(obs, fallback)
+    stop_eval = guard._evaluate_command(obs, (0.0, 0.0))
+    assert not fallback_eval["safe"]
+    assert not stop_eval["safe"]
+    assert fallback_eval["min_obs_clear"] > stop_eval["min_obs_clear"]
+    # 0cf58853's strict pedestrian-clearance arbitration stops on this inf tie,
+    # irrespective of the apparent static-clearance or progress improvement.
+    assert fallback_eval["min_ped_clear"] == stop_eval["min_ped_clear"] == np.inf
+    decision = guard.choose_command_decision(obs, (0.0, 0.0))
+    assert decision.filtered_action == (0.0, 0.0), (
+        "unbound endpoint-only grid checks cannot select a below-margin translation"
+    )
+    assert decision.decision_label == "stop_best_effort"
+    assert decision.selected_evaluation == stop_eval
+    assert guard.diagnostics()["recovery_command_count"] == 0
+
+
 @pytest.mark.parametrize("clearance", [0.01, 0.1])
 def test_mppi_moving_recovery_rejects_native_braking_into_wall(clearance):
     """At 0.3 m/s a zero-speed command still coasts 0.025 m in step one."""

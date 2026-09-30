@@ -133,6 +133,9 @@ class RiskDWAPlannerConfig:
 class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
     """Deterministic, non-learning dynamic-window style planner."""
 
+    # Observational only: the target chosen by the last ``plan`` call (world x, y).
+    _last_target_xy: tuple[float, float] | None = None
+
     def __init__(self, config: RiskDWAPlannerConfig | None = None) -> None:
         """Initialize adapter with an optional config override."""
         self.config = config or RiskDWAPlannerConfig()
@@ -520,6 +523,7 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         self._no_admissible_command = False
         self._recovery_command = False
         robot_pos, heading, goal, ped_pos, ped_vel = self._extract_robot_goal_ped(observation)
+        self._last_target_xy = (float(goal[0]), float(goal[1]))
         grid_payload = self._cache_grid_payload(observation)
         to_goal = float(np.linalg.norm(goal - robot_pos))
         current_speed = float(
@@ -620,7 +624,17 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             "no_admissible_command": getattr(self, "_no_admissible_command", False),
             "no_admissible_command_count": getattr(self, "_no_admissible_command_count", 0),
         }
-        return {"planner_type": "RiskDWAPlannerAdapter", **decision, "last_decision": decision}
+        return {
+            "planner_type": "RiskDWAPlannerAdapter",
+            **decision,
+            "last_decision": decision,
+            "planner_target_xy": list(self._last_target_xy) if self._last_target_xy else None,
+        }
+
+    @property
+    def last_target_xy(self) -> tuple[float, float] | None:
+        """Return the navigation target selected by the last ``plan`` call."""
+        return self._last_target_xy
 
 
 def build_risk_dwa_config(cfg: dict[str, Any] | None) -> RiskDWAPlannerConfig:

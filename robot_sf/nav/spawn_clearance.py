@@ -187,8 +187,14 @@ def relocate_overlapping_pedestrians(
     moved along the ray from the robot through its current position, to the
     nearest point on the exclusion circle; if that point is blocked (walls, other
     pedestrians with margin, other robots, or a wall between the old and new
+<<<<<<< HEAD
     position), rotated rays and slightly larger radii are tried in a fixed order.
     No random numbers are drawn, so the global RNG stream and
+=======
+    position), paired rotated rays and slightly larger radii are tried. Clear
+    candidates in each pair are ranked by geometric clearance, without preferring
+    a handed direction. No random numbers are drawn, so the global RNG stream and
+>>>>>>> 03b7b3b829ffaea5264e96a45ebe6a887c1a5ba7
     every non-overlapping spawn stay unchanged.
 
     Args:
@@ -245,9 +251,33 @@ def relocate_overlapping_pedestrians(
         new_xy = next(
             (
                 candidate
+<<<<<<< HEAD
                 for candidate in clear_candidates
                 if route_goals is None
                 or _route_heading_clears_robots(candidate, route_goals[row], robots)
+=======
+                for pair in _relocation_candidates(positions[row], hit, ped_radius, robot_margin)
+                for candidate in _rank_relocation_pair(
+                    [
+                        point
+                        for point in pair
+                        if _is_clear(
+                            point,
+                            row,
+                            positions,
+                            robots,
+                            ped_radius,
+                            margin,
+                            (blocked, walls),
+                            robot_margin=robot_margin,
+                        )
+                    ],
+                    blocked,
+                    [point for other, point in enumerate(positions) if other != row],
+                    robots,
+                    ped_radius,
+                )
+>>>>>>> 03b7b3b829ffaea5264e96a45ebe6a887c1a5ba7
             ),
             clear_candidates[0] if clear_candidates else None,
         )
@@ -277,11 +307,11 @@ def _relocation_candidates(
     robot: tuple[Vec2D, float],
     ped_radius: float,
     margin: float,
-) -> Iterator[Vec2D]:
-    """Yield candidate positions on and just beyond a robot exclusion circle.
+) -> Iterator[tuple[Vec2D, ...]]:
+    """Yield paired positions on and just beyond a robot exclusion circle.
 
     The ray through the current position comes first, then rays rotated in 15 degree
-    steps alternating sides, then the same sweep at slightly larger radii.
+    steps on both sides together, then the same sweep at slightly larger radii.
     """
     robot_xy, robot_radius = robot
     dx, dy = point[0] - robot_xy[0], point[1] - robot_xy[1]
@@ -292,9 +322,49 @@ def _relocation_candidates(
         radius = base_radius + extra
         for k in range(half_turn_steps + 1):
             signs = (1.0, -1.0) if 0 < k < half_turn_steps else (1.0,)
-            for sign in signs:
-                angle = base_angle + sign * k * _RELOCATION_ANGLE_STEP_RAD
-                yield (robot_xy[0] + radius * cos(angle), robot_xy[1] + radius * sin(angle))
+            yield tuple(
+                (
+                    robot_xy[0] + radius * cos(base_angle + sign * k * _RELOCATION_ANGLE_STEP_RAD),
+                    robot_xy[1] + radius * sin(base_angle + sign * k * _RELOCATION_ANGLE_STEP_RAD),
+                )
+                for sign in signs
+            )
+
+
+def _rank_relocation_pair(
+    candidates: list[Vec2D],
+    blocked: PreparedGeometry,
+    neighbors: Sequence[Vec2D],
+    robots: Sequence[tuple[Vec2D, float]],
+    ped_radius: float,
+) -> list[Vec2D]:
+    """Rank a clear pair by distances that commute with mirrors and rotations.
+
+    Prefer the largest minimum surface clearance, then the sorted clearances to
+    every feature. Nanometre rounding prevents floating point noise from choosing
+    a handed side. If the geometry cannot distinguish a pair, skip it: choosing
+    either side in an exactly symmetric scene would break reflection symmetry.
+
+    Returns:
+        Distinguishable candidates in descending clearance order, or no candidates
+        for an exact tie. The axial rays remain available later in the sweep.
+    """
+    if len(candidates) < 2:
+        return candidates
+
+    def score(candidate: Vec2D) -> tuple[float, ...]:
+        clearances = [blocked.context.distance(Point(candidate))]
+        clearances.extend(dist(candidate, other) - 2 * ped_radius for other in neighbors)
+        clearances.extend(
+            dist(candidate, robot_xy) - radius - ped_radius for robot_xy, radius in robots
+        )
+        ordered = sorted(round(clearance, 9) for clearance in clearances)
+        return tuple(ordered)
+
+    ranked = sorted(((score(candidate), candidate) for candidate in candidates), reverse=True)
+    if ranked[0][0] == ranked[1][0]:
+        return []
+    return [candidate for _score, candidate in ranked]
 
 
 def _is_clear(

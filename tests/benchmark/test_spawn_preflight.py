@@ -8,12 +8,13 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from shapely.geometry import LineString
+from shapely.geometry import LineString, Polygon
 from shapely.ops import unary_union
 
 from robot_sf.benchmark import spawn_preflight
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.release_protocol import load_release_manifest
+from robot_sf.nav.svg_map_parser import SvgMapConverter
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RELEASE_MANIFEST = REPO_ROOT / "configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml"
@@ -388,7 +389,7 @@ def test_continuous_margin_oracle_rejects_unsafe_goal_and_disconnected_leg() -> 
     assert reachability["continuous_oracle"]["first_blocked_segment_index"] == 0
 
 
-def test_known_unsafe_sampled_goals_stay_blocked_on_release_seeds() -> None:
+def test_known_unsafe_sampled_goals_stay_blocked_on_dev_seeds() -> None:
     """The exact-margin fallback cannot admit the observed unsafe nominal goals."""
     matrix = (
         REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v3.yaml"
@@ -398,7 +399,7 @@ def test_known_unsafe_sampled_goals_stay_blocked_on_release_seeds() -> None:
         for row in spawn_preflight._load_matrix(matrix)
         if row["name"] == "classic_t_intersection_low"
     )
-    unsafe_seeds = (111, 115, 118, 121, 122, 125, 134, 138)
+    unsafe_seeds = (1009, 1011, 1023, 1027, 1030)
     result = spawn_preflight._check_release_scenario(
         (scenario, str(matrix), unsafe_seeds, 0.1, 20, 0.1, False)
     )
@@ -463,7 +464,8 @@ def test_main_grid_doorway_probe_requires_pinned_map_and_oracle() -> None:
     )
 
 
-def test_station_platform_117_respawn_defect_is_removed_by_successor_map() -> None:
+def test_station_platform_successor_separates_the_respawn_zone_from_robot_spawns() -> None:
+    """Pin the authored respawn fix even when live exclusion sampling avoids contact."""
     matrix = REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
     scenario = next(
         row
@@ -471,17 +473,29 @@ def test_station_platform_117_respawn_defect_is_removed_by_successor_map() -> No
         if row["name"] == "classic_station_platform_medium"
     )
     corrected = spawn_preflight._check_release_scenario(
-        (scenario, str(matrix), (117,), 0.1, 20, 0.1, False)
-    )["rows"][0]
-    historical = dict(scenario)
-    historical["map_file"] = "../../maps/svg_maps/classic_station_platform.svg"
-    historical_result = spawn_preflight._check_release_scenario(
-        (historical, str(matrix), (117,), 0.1, 20, 0.1, False)
+        (scenario, str(matrix), (1001,), 0.1, 20, 0.1, False)
     )["rows"][0]
     assert corrected["overall_status"] == "valid"
     assert corrected["respawn_safety"]["status"] == "pass"
-    assert historical_result["overall_status"] == "blocked"
-    assert historical_result["respawn_safety"]["reason"] == ("episode_ended_before_respawn_window")
+
+    def rectangle(zone):
+        a, b, c = zone
+        return Polygon((a, b, c, (a[0] + c[0] - b[0], a[1] + c[1] - b[1])))
+
+    successor_path = (matrix.parent / scenario["map_file"]).resolve()
+    successor = SvgMapConverter(str(successor_path)).get_map_definition()
+    historical = SvgMapConverter(
+        str(REPO_ROOT / "maps/svg_maps/classic_station_platform.svg")
+    ).get_map_definition()
+    successor_respawn = rectangle(successor.ped_routes[0].spawn_zone)
+    successor_robot = rectangle(successor.robot_spawn_zones[0])
+    historical_respawn = rectangle(historical.ped_routes[0].spawn_zone)
+    historical_robot = rectangle(historical.robot_spawn_zones[0])
+    # The original 4 x 3 m respawn rectangle coincides with the robot spawn
+    # rectangle. The successor moves it 7 m north, leaving a 4 m surface gap.
+    assert historical_respawn.intersection(historical_robot).area == pytest.approx(12.0)
+    assert successor_respawn.distance(successor_robot) == pytest.approx(4.0)
+    assert successor_respawn.disjoint(successor_robot.buffer(1.0 + 0.4 + 0.75))
 
 
 def test_boundary_width_straight_route_requires_full_margin() -> None:

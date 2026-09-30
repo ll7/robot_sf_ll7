@@ -35,6 +35,13 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # #10063: retain held-out stepping tests without executing them during development CI.
+  # --ignore is ineffective under the repository collection hook; use exact deselection.
+  PYTEST_ADDOPTS: >-
+    --deselect=tests/test_public_api.py
+    --deselect=tests/benchmark/test_replay_noop_fidelity_issue_8568.py
+    --deselect=tests/benchmark/test_spawn_preflight.py::test_historical_narrow_doorway_probe_stays_blocked_on_all_release_seeds
+    --deselect=tests/benchmark/test_spawn_preflight.py::test_main_grid_doorway_probe_requires_pinned_map_and_oracle
   PYTHONUNBUFFERED: "1"
   SDL_VIDEODRIVER: dummy
   MPLBACKEND: Agg

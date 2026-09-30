@@ -89,10 +89,16 @@ scenario_overrides_by_name:
     simulation_config:
       robot_goal_sampling_policy: footprint_clearance_v1
   francis2023_pedestrian_overtaking:
-    # #10063: full rectangles must be separate from pedestrian spawn/lane geometry.
+    # #10063: spawn y=4..4.5 and h1 lane y=6.6 are separated across full rectangles.
+    # h1 still starts behind at x=1.5 and walks at 0.8 m/s. A slower robot makes
+    # the pedestrian overtake rather than lose ground; 600 steps covers the
+    # unchanged 34 m robot trip at the 0.7 m/s cap plus acceleration/interaction.
     map_id: null
     map_file: ../../maps/successor_svg_maps/issue_10063_francis2023_ped_overtaking_safe_spawn_v1.svg
+    robot_config:
+      max_linear_speed: 0.7
     simulation_config:
+      max_episode_steps: 600
       robot_goal_sampling_policy: footprint_clearance_v1
   francis2023_robot_overtaking:
     simulation_config:

@@ -24,6 +24,25 @@ def test_overtaking_lane_cannot_intersect_full_robot_spawn_rectangle():
     ), "pedestrian overtaking lane intersects full robot spawn rectangle"
 
 
+def test_overtaking_retains_a_faster_pedestrian_behind_the_full_robot_spawn():
+    scenario = next(
+        row for row in load_scenarios(MATRIX) if row["name"] == "francis2023_pedestrian_overtaking"
+    )
+    config = build_robot_config_from_scenario(scenario, scenario_path=MATRIX.resolve())
+    definition = next(iter(config.map_pool.map_defs.values()))
+    pedestrian = definition.single_pedestrians[0]
+    walker_speed = scenario["single_pedestrians"][0]["speed_m_s"]
+    assert pedestrian.start[0] < min(
+        _rect_polygon(zone).bounds[0] for zone in definition.robot_spawn_zones
+    ), "overtaking pedestrian must start behind every sampled robot"
+    assert config.robot_config.max_linear_speed < walker_speed, (
+        "the robot must be slower than the pedestrian being tested as an overtaker"
+    )
+    assert config.sim_config.sim_time_in_secs > (34 / config.robot_config.max_linear_speed + 5), (
+        "the slower robot needs enough time to finish the unchanged route"
+    )
+
+
 def test_active_crowd_zones_cannot_intersect_robot_destination_rectangles():
     for scenario in load_scenarios(MATRIX):
         if scenario["name"] not in {

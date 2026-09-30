@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Francis 2023 (c): Pedestrian Overtaking -->
-<!-- #10063: Robot spawn y=4.0..4.5, formerly 4.0..6.0: preserve h1 lane y=6 and robot route y=5. Pedestrian remains behind, beside the robot; minimum lateral reset offset 1.5 m. -->
+<!-- #10063: Robot spawn y=4.0..4.5 (formerly 4.0..6.0); h1 lane y=6.6 (formerly 6.0). Minimum spawn/lane gap 2.1 m; robot route y=5 gives a 1.6 m passing gap. h1 starts at x=1.5 behind every robot start and outside the reset reaction buffer. Release robot cap 0.7 m/s, unchanged h1 desired speed 0.8 m/s, 600-step budget: preserves a real overtake rather than outrunning h1. -->
 <svg
   width="40"
   height="10"
@@ -20,11 +20,11 @@
     <path d="M 7 5 L 37 5" stroke="#0300d5" stroke-width="0.3" fill="none" inkscape:label="robot_route_0_0" />
   </g>
   <g inkscape:label="pedestrians">
-    <circle cx="1.5" cy="6" r="0.6" fill="#7fa7ff" stroke="#3a5edb" stroke-width="0.2"
+    <circle cx="1.5" cy="6.6" r="0.6" fill="#7fa7ff" stroke="#3a5edb" stroke-width="0.2"
       inkscape:label="single_ped_h1_start" />
-    <circle cx="1.5" cy="6" r="0.4" fill="none" stroke="#8c4bff" stroke-width="0.2" class="poi" id="poi_h1_start" inkscape:label="poi_h1_start" />
-    <circle cx="35" cy="6" r="0.6" fill="none" stroke="#3a5edb" stroke-width="0.2"
+    <circle cx="1.5" cy="6.6" r="0.4" fill="none" stroke="#8c4bff" stroke-width="0.2" class="poi" id="poi_h1_start" inkscape:label="poi_h1_start" />
+    <circle cx="35" cy="6.6" r="0.6" fill="none" stroke="#3a5edb" stroke-width="0.2"
       inkscape:label="single_ped_h1_goal" />
-    <circle cx="35" cy="6" r="0.4" fill="none" stroke="#8c4bff" stroke-width="0.2" class="poi" id="poi_h1_goal" inkscape:label="poi_h1_goal" />
+    <circle cx="35" cy="6.6" r="0.4" fill="none" stroke="#8c4bff" stroke-width="0.2" class="poi" id="poi_h1_goal" inkscape:label="poi_h1_goal" />
   </g>
 </svg>

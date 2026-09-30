@@ -92,8 +92,11 @@ Opposite-end head-on passage, occupied destination entry and interior crossings
 remain deliberate interactions. Missing, stale, duplicate or changed dispositions
 fail; no scenario-wide exemption or global tolerance hides new overlap.
 
-The overtaking spawn now spans y=4.0–4.5 beside h1's unchanged y=6 lane, instead
-of y=4.0–6.0 across that lane. Station-platform reverse crowd spawn moves from
+The overtaking spawn now spans y=4.0–4.5 beside h1's y=6.6 lane (formerly y=6), instead
+of y=4.0–6.0 across that lane. The robot route stays at y=5, leaving a 1.6 m
+passing gap. h1 retains start x=1.5 and desired speed 0.8 m/s. The scenario
+sets a slower robot cap of 0.7 m/s and a 600-step budget so h1 can actually
+overtake from behind without reset relocation. Station-platform reverse crowd spawn moves from
 y=20–23 to y=16.5–19.5 and its departure route skirts the robot goal. Robot-crowding
 uses x=6.5–14.5 instead of x=3–17 with density 0.21 preserving 24 pedestrians.
 These release-only successor inputs leave historical SVGs and frozen artifacts intact.

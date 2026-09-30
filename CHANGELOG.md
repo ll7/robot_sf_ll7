@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-* **0.0.8 endpoint overlap repair (#10063).** Versioned release maps narrow the pedestrian-overtaking robot spawn to y=4.0–4.5, keeping the pedestrian at y=6 behind and beside the robot. Station-platform reverse-flow crowd spawn moves to y=16.5–19.5, clear of the robot goal; robot-crowding spawn moves to x=6.5–14.5, with density 0.21 preserving 24 pedestrians. Historical maps remain intact. CI audits every full robot spawn/goal rectangle across all 48 release scenarios and three doorway widths against radius-expanded single-pedestrian lanes and crowd spawn zones; intended interactions require exact geometry-bound dispositions.
+* **0.0.8 endpoint overlap repair (#10063).** Versioned release maps narrow the pedestrian-overtaking robot spawn to y=4.0–4.5, move the pedestrian lane from y=6 to y=6.6 (1.6 m passing separation from the unchanged robot route). The pedestrian keeps its original start x=1.5 and 0.8 m/s desired speed; a 0.7 m/s robot cap and 600-step budget preserve an actual overtake from behind. Station-platform reverse-flow crowd spawn moves to y=16.5–19.5, clear of the robot goal; robot-crowding spawn moves to x=6.5–14.5, with density 0.21 preserving 24 pedestrians. Historical maps remain intact. CI audits every full robot spawn/goal rectangle across all 48 release scenarios and three doorway widths against radius-expanded single-pedestrian lanes and crowd spawn zones; intended interactions require exact geometry-bound dispositions.
 
 ### Software release preparation
 

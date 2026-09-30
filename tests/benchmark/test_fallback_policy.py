@@ -964,7 +964,7 @@ def test_fallback_diagnostics_mapping_is_recursively_scanned():
         (-1, "invalid"),
         ("used", "invalid"),
         ({}, "invalid"),
-        (True, "invalid"),
+        (True, "true"),
     ],
 )
 def test_undeclared_degraded_counters_fail_closed(value, expected):
@@ -972,3 +972,37 @@ def test_undeclared_degraded_counters_fail_closed(value, expected):
         "events[0].step_degraded",
         expected,
     )
+
+
+@pytest.mark.parametrize("key", ["step_degraded", "ever_degraded", "unknown_degraded_marker"])
+@pytest.mark.parametrize("value", [False, True])
+def test_degraded_substring_booleans_are_markers(key, value):
+    payload = {"events": [{key: value}]}
+    expected = (f"events[0].{key}", "true") if value else None
+    assert runtime_fallback_or_degraded_marker(payload) == expected
+
+
+@pytest.mark.parametrize(
+    "key,value,expected",
+    [
+        ("degraded_reason", None, None),
+        ("degraded_reason", "", None),
+        ("degraded_reason", " NONE ", None),
+        ("degraded_reason", "missing visibility", ("degraded_reason", "missing visibility")),
+        ("degraded_reason", [], ("degraded_reason", "invalid")),
+        ("degraded_statuses", [], None),
+        ("degraded_statuses", ["ok", "native", "none"], None),
+        ("degraded_statuses", ["ok", "Degraded"], ("degraded_statuses[1]", "degraded")),
+        ("degraded_statuses", ["fallback"], ("degraded_statuses[0]", "fallback")),
+        ("degraded_statuses", ["unavailable"], ("degraded_statuses[0]", "unavailable")),
+        ("degraded_statuses", ["used"], ("degraded_statuses[0]", "invalid")),
+        ("degraded_statuses", [{}], ("degraded_statuses[0]", "invalid")),
+        ("degraded_statuses", "none", ("degraded_statuses", "invalid")),
+        ("degraded_statuses", None, ("degraded_statuses", "invalid")),
+        ("degraded_count", 0, None),
+        ("degraded_count", [], ("degraded_count", "invalid")),
+        ("degraded_count", "none", ("degraded_count", "invalid")),
+    ],
+)
+def test_typed_degraded_reasons_and_statuses_fail_closed(key, value, expected):
+    assert runtime_fallback_or_degraded_marker({key: value}) == expected

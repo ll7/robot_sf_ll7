@@ -413,6 +413,10 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Rehearsal pipeline and release audit regressions use dev-seed row fixtures
+    # and offline files; keep their real campaign branches covered in PR CI.
+    "test_pipefix_pipeline.py",
+    "test_scan_release_audit.py",
     # Clearance and LiDAR tracking contracts use fixed arrays without environment steps.
     "test_clearance_geometry.py",
     "test_lidar_tracked_agents.py",

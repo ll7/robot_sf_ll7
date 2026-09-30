@@ -7927,11 +7927,23 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_9668_campaign_horizon/source_manifest.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_9668_campaign_horizon/release_0_0_7_cells.csv
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_9668_campaign_horizon/release_0_0_7_cells.csv.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_9668_campaign_horizon/template_0_0_8_limits_on_main.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_9668_campaign_horizon/template_0_0_8_limits_on_main.json.review.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence

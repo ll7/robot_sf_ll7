@@ -1,0 +1,162 @@
+diff --git a/robot_sf/nav/spawn_clearance.py b/robot_sf/nav/spawn_clearance.py
+index 08234fa31..c8400ba08 100644
+--- a/robot_sf/nav/spawn_clearance.py
++++ b/robot_sf/nav/spawn_clearance.py
+@@ -164,6 +164,8 @@ def relocate_overlapping_pedestrians(
+     margin: float = SPAWN_CLEARANCE_MARGIN_M,
+     *,
+     rows: Sequence[int] | None = None,
++    reaction_clearance_m: Sequence[float] | None = None,
++    route_goals: Sequence[Vec2D] | None = None,
+ ) -> PedestrianRelocationReport:
+     """Find clear positions for pedestrians that overlap a robot footprint.
+ 
+@@ -182,6 +184,10 @@ def relocate_overlapping_pedestrians(
+         map_def: Map providing walls and bounds.
+         margin: Extra surface clearance to keep.
+         rows: Optional subset of rows that may be moved (defaults to all rows).
++        reaction_clearance_m: Extra robot surface clearance per row, beyond margin.
++        route_goals: When set, choose a point whose heading toward its goal is
++            preferably not closing on any robot. The reaction buffer still applies
++            when all clear candidates have closing route headings.
+ 
+     Returns:
+         Report with ``row -> (old, new)`` moves and the rows left unresolved.
+@@ -198,21 +204,34 @@ def relocate_overlapping_pedestrians(
+         if row not in movable:
+             report.unresolved.append(row)
+             continue
++        robot_margin = margin + (
++            reaction_clearance_m[row] if reaction_clearance_m is not None else 0.0
++        )
++        clear_candidates = [
++            candidate
++            for candidate in _relocation_candidates(positions[row], hit, ped_radius, robot_margin)
++            if _is_clear(
++                candidate,
++                row,
++                positions,
++                robots,
++                ped_radius,
++                margin,
++                (blocked, walls),
++                robot_margin=robot_margin,
++            )
++        ]
++        # Prefer a non-closing route heading. A goal inside a robot footprint
++        # makes that impossible: retain the full reaction buffer and route heading
++        # instead of leaving the pedestrian at an overlapping original position.
+         new_xy = next(
+             (
+                 candidate
+-                for candidate in _relocation_candidates(positions[row], hit, ped_radius, margin)
+-                if _is_clear(
+-                    candidate,
+-                    row,
+-                    positions,
+-                    robots,
+-                    ped_radius,
+-                    margin,
+-                    (blocked, walls),
+-                )
++                for candidate in clear_candidates
++                if route_goals is None
++                or _route_heading_clears_robots(candidate, route_goals[row], robots)
+             ),
+-            None,
++            clear_candidates[0] if clear_candidates else None,
+         )
+         if new_xy is None:
+             report.unresolved.append(row)
+@@ -268,6 +287,8 @@ def _is_clear(
+     ped_radius: float,
+     margin: float,
+     geometry: tuple[PreparedGeometry, PreparedGeometry],
++    *,
++    robot_margin: float | None = None,
+ ) -> bool:
+     """Return whether a relocation candidate is a clear, reachable position.
+ 
+@@ -277,7 +298,12 @@ def _is_clear(
+     crossing a wall (so a pedestrian is never moved through a wall).
+     """
+     blocked, walls = geometry
+-    if _overlapping_robot(candidate, robots, ped_radius, margin) is not None:
++    if (
++        _overlapping_robot(
++            candidate, robots, ped_radius, margin if robot_margin is None else robot_margin
++        )
++        is not None
++    ):
+         return False
+     if blocked.intersects(Point(candidate)):
+         return False
+@@ -290,6 +316,20 @@ def _is_clear(
+     )
+ 
+ 
++def _route_heading_clears_robots(
++    point: Vec2D,
++    goal: Vec2D,
++    robots: Sequence[tuple[Vec2D, float]],
++) -> bool:
++    """Check the route heading at relocation.
++
++    Returns:
++        Whether a velocity toward the goal is non-closing on every robot.
++    """
++    vx, vy = goal[0] - point[0], goal[1] - point[1]
++    return all(vx * (point[0] - xy[0]) + vy * (point[1] - xy[1]) >= -1e-9 for xy, _ in robots)
++
++
+ __all__ = [
+     "SPAWN_CLEARANCE_MARGIN_M",
+     "SPAWN_OVERLAP_INVALID_REASON",
+diff --git a/robot_sf/sim/simulator.py b/robot_sf/sim/simulator.py
+index d21dc76e7..1708a21ac 100644
+--- a/robot_sf/sim/simulator.py
++++ b/robot_sf/sim/simulator.py
+@@ -1764,7 +1764,9 @@ class Simulator:
+         Pedestrians are placed at construction, before any robot start is sampled, so a
+         route or crowd pedestrian can start inside the robot footprint (issue #9725).
+         Overlapping rows are moved deterministically to the nearest clear point on the
+-        exclusion circle (robot radius + pedestrian radius + margin); no random numbers
++        exclusion circle (robot radius + pedestrian radius + 0.1 m + one second
++        at the pedestrian speed cap). The new velocity points toward the current
++        route goal, preferring a non-closing heading when feasible; no random numbers
+         are drawn, so every other spawn of the seed stays unchanged. The next reset
+         restores the construction-time layout and checks it again.
+         """
+@@ -1795,19 +1797,32 @@ class Simulator:
+         if not overlapping_rows:
+             self.last_spawn_relocation = None
+             return
++        states = self.pysf_state.pysf_states()
++        # One second at the walking speed cap, plus the existing 0.1 m margin.
++        reaction_clearance = np.maximum(
++            np.linalg.norm(states[:, 2:4], axis=1), self.pysf_sim.peds.max_speeds
++        )
+         report = relocate_overlapping_pedestrians(
+             ped_xy,
+             ped_radius,
+             robots,
+             self.map_def,
+             rows=sorted(overlapping_rows),
++            reaction_clearance_m=reaction_clearance,
++            route_goals=states[:, 4:6],
+         )
+         self.last_spawn_relocation = report
+         if not report.relocated and not report.unresolved:
+             return
+         states = self.pysf_state.pysf_states()
+         for row, (_old, new_xy) in report.relocated.items():
++            speed = float(np.linalg.norm(states[row, 2:4]))
+             states[row, PYSF_POSITION_SLICE] = new_xy
++            direction = states[row, 4:6] - states[row, 0:2]
++            length = float(np.linalg.norm(direction))
++            states[row, 2:4] = direction * speed / length if length > 1e-9 else 0.0
++            if hasattr(self, "ped_headings"):
++                self.ped_headings[row] = np.arctan2(states[row, 3], states[row, 2])
+         if report.relocated:
+             logger.debug(
+                 "Moved {count} pedestrian(s) off the robot start footprint at reset: {rows}",

@@ -1,0 +1,42 @@
+{
+  "schema": "pedfix.diagnostic.v1",
+  "evidence_status": "diagnostic-only",
+  "base_sha": "32b58d273f3dbdec72a385844cb8c100f8581136",
+  "runtime_sha": "e8af63df613529517472671a891e4e684540ac5c",
+  "scenario_count": 48,
+  "stationary_episodes_per_version": 240,
+  "stationary_slots_per_version": 1020,
+  "roster_episodes": 56,
+  "roster_calls": 9029,
+  "roster_changed_calls": 0,
+  "paired_episodes_per_version": 30,
+  "heldout_environment_steps": 0,
+  "seed_band": [
+    1001,
+    1030
+  ],
+  "measurement_goal_threshold_m": 0.2,
+  "robot_exclusion_centre_m": 3.4,
+  "wall_near_threshold_m": 3.0,
+  "continuous_stall_threshold_s": 5,
+  "input_sha256": {
+    "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml": "8b16cb1ba6155567f31855ec453d596e17e4ed859caf60b6e1092f49b4766ac8",
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml": "a5b339d1413b68d8acab4a122f441c559303cbcf8d03d0fb05400a14ad4febf9",
+    "uv.lock": "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023",
+    "scripts/validation/measure_pedfix_planners.py": "dc181267009a2a7fd4e7f010d98a2b7b4c2d120116e8690121bc5e1c37b96493",
+    "scripts/validation/measure_pedfix_stationary.py": "e87b9795f72456d6a4ff3daba59ee883b35fde98145b9774bd86a495d21fc682"
+  },
+  "artifact_sha256": {
+    "early_contacts_clearance_only.jsonl": "166d8c5c37c38978fe72f1208f6b1be43b59ed22011690ab09bbccea7826028a",
+    "README.md": "2af22f508ad8414401b78ce6abb26a9a1614e11458167c7ff4fa31aa3053cd6f",
+    "roster_rng.json": "f35dc877f7cc1c50d4569e51001b58bec7a37a3827923a200cb8e52863bb7a65",
+    "test_value.md": "5910ef5a31770362500c29187d4078858360b2f013323eb29218dac78779cf0a",
+    "clearance_only.patch": "56ece4558020b772a2181b43d43c9d0cfaec5c5841d0ef5e7fe2c9eec711d98e",
+    "wall_stalls.csv": "53cfa71bfd5b32ea8dcd18950e1d5f44d505cb32996115b5a0fa6b1264650b93",
+    "environment.json": "7567eb52931be9859c5f81bead275f01555424530a751e7e1d8e322e21ee6400",
+    "early_contacts_fixed.jsonl": "c00bd67dd4d46cb74d19705131598339df36531958f6b28166060d0b86b783b8",
+    "stationary_fixed.jsonl": "e61ece5a57c02d322a81fcca3676c96e4f59feef6a1fc349cb8fd415d716d9bf",
+    "paired_outcomes.json": "ce87930b663cb02be7c6c1b9f2ef09a28f8d271c695c8450d111896c8fcf6235",
+    "stationary_base.jsonl": "cb230a816172b583cd3fe0141f2bfbe516fa6cf58925fbae4dbb5360e727efa8"
+  }
+}

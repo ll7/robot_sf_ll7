@@ -12,14 +12,14 @@ import csv
 import hashlib
 import json
 import math
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from scipy.stats import fisher_exact
 
-from robot_sf.benchmark.infeasible_probe_safe_failure import PROBE_SCENARIO_IDS
+from robot_sf.benchmark.infeasible_probe_safe_failure import PROBE_SCENARIO_IDS, classify_probe_row
 from robot_sf.benchmark.metric_definitions import CHANGED_METRICS, require_uniform_metric_schema
 from robot_sf.benchmark.release_parameter_freeze import ARM_SLOTS_0_0_7_TO_0_0_8
 
@@ -379,6 +379,7 @@ def compare_samples(  # noqa: C901 - separate unit definitions, metric statuses 
                 raise ValueError(f"unmapped successor arm: {arm}")
             grouped[index][canonical, kin, scenario, track].append(row)
     cells = []
+    probe_units = []
     fingerprints = {}
     pool = defaultdict(list)
     omitted = []
@@ -411,6 +412,23 @@ def compare_samples(  # noqa: C901 - separate unit definitions, metric statuses 
         }
         fingerprints["|".join(unit)] = {"0.0.7": f0, "0.0.8": f1}
         if scenario in PROBE_SCENARIO_IDS:
+            probe_units.append(
+                {
+                    **identity,
+                    "release_0_0_7": {
+                        "n": len(a),
+                        "safe_failure_classes": dict(
+                            sorted(Counter(classify_probe_row(row) for row in a).items())
+                        ),
+                    },
+                    "release_0_0_8": {
+                        "n": len(b),
+                        "safe_failure_classes": dict(
+                            sorted(Counter(classify_probe_row(row) for row in b).items())
+                        ),
+                    },
+                }
+            )
             continue
         pool[arm, successor, kin, track].append((a, b, flags))
         keys = set().union(*(_flatten(row["metrics"]).keys() for row in [*a, *b]))
@@ -475,6 +493,7 @@ def compare_samples(  # noqa: C901 - separate unit definitions, metric statuses 
             "jerk": "episode rows only; empty breakdown cells are missing (#10044)",
         },
         "fingerprints": fingerprints,
+        "probe_units": probe_units,
         "omitted_diagnostic_units": omitted,
         "cells": cells,
     }

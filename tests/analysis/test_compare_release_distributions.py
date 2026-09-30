@@ -229,6 +229,9 @@ def test_probe_excluded_from_unit_and_arm_pooling():
     report = cmp.compare_samples(old, new)
     assert not any(c["scenario_id"] == probe_id for c in report["cells"])
     assert cell(report, "success", "arm")["release_0_0_7"]["n"] == 30
+    assert len(report["probe_units"]) == 1
+    assert report["probe_units"][0]["release_0_0_8"]["n"] == 30
+    assert sum(report["probe_units"][0]["release_0_0_8"]["safe_failure_classes"].values()) == 30
 
 
 def test_scenario_and_planner_definition_changes_are_combined():

@@ -1,0 +1,35 @@
+Starting head ca1217c4f9e0ef0570ae172b26722cfc03338702
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 uv run pytest -n0 tests/benchmark/test_curvature_v2.py tests/benchmark/test_metrics_characterization.py::test_path_motion_metrics_on_curved_nonuniform_trajectory tests/benchmark/test_map_runner_utils.py::test_run_map_episode_excludes_live_foresight_fallback_from_evidence --deselect=tests/benchmark/test_curvature_v2.py::test_historical_v1_rows_keep_exact_values -q
+Four v1 controls are verified separately against the original function AST; the original API has no explicit version keyword.
+Observed failure assertions:
+E       assert 50000000000000.0 <= 1.0
+E       assert 0.0 == 0.7853981633974483 ± 7.9e-07
+E       assert 0.0 == 1.5707963267948966 ± 1.6e-06
+E       assert 1.25 == 1.5707963267948966 ± 1.6e-06
+E       assert 0.0 == 1.5707963267948966 ± 1.6e-06
+E       assert 0.0 == 0.7853981633974483 ± 7.9e-07
+E       assert 0.0 == 0.7853981633974483 ± 7.9e-07
+E       assert 0.0 == 0.7853981633974483 ± 7.9e-07
+E       assert 0.0 == 0.7853981633974483 ± 7.9e-07
+E       assert 0.0 == 0.5553603672697958 ± 5.6e-07
+E       assert 0.0 == 0.7853981633974483 ± 7.9e-07
+E       assert 0.0 == 0.7853981633974483 ± 7.9e-07
+E       AssertionError: assert False
+E       assert 1.0 == 1.0471975511965976 ± 1.0e-06
+E           ValueError: incompatible metric definitions: ['robot-sf-metrics.v1', 'robot-sf-metrics.v2']; recompute from traces
+FAILED tests/benchmark/test_curvature_v2.py::test_creep_segment_is_bounded - ...
+FAILED tests/benchmark/test_curvature_v2.py::test_stop_and_rotate_then_leave_counts_one_turn
+FAILED tests/benchmark/test_curvature_v2.py::test_reversal_counts_pi - assert...
+FAILED tests/benchmark/test_curvature_v2.py::test_short_path_length_floor - a...
+FAILED tests/benchmark/test_curvature_v2.py::test_displacement_threshold_is_inclusive[0.001]
+FAILED tests/benchmark/test_curvature_v2.py::test_timestep_does_not_change_path_geometry[0.01]
+FAILED tests/benchmark/test_curvature_v2.py::test_timestep_does_not_change_path_geometry[1.0]
+FAILED tests/benchmark/test_curvature_v2.py::test_timestep_does_not_change_path_geometry[0.0]
+FAILED tests/benchmark/test_curvature_v2.py::test_timestep_does_not_change_path_geometry[nan]
+FAILED tests/benchmark/test_curvature_v2.py::test_angle_wrap_across_pi_boundary
+FAILED tests/benchmark/test_curvature_v2.py::test_reset_to_first_step_is_part_of_path
+FAILED tests/benchmark/test_curvature_v2.py::test_nonfinite_positions_remain_finite
+FAILED tests/benchmark/test_curvature_v2.py::test_curvature_is_declared_as_changed_metric
+FAILED tests/benchmark/test_metrics_characterization.py::test_path_motion_metrics_on_curved_nonuniform_trajectory
+FAILED tests/benchmark/test_map_runner_utils.py::test_run_map_episode_excludes_live_foresight_fallback_from_evidence
+15 failed, 9 passed, 4 deselected in 4.15s

@@ -1,0 +1,5731 @@
+{
+  "decision": "D-055",
+  "seed": 1001,
+  "episodes": 672,
+  "trace_source_commits": [
+    "ea414933e61ce267389bd3bcbe97fb669a825c6e"
+  ],
+  "old_exact_matches": 653,
+  "old_max_relative_error": 3.9452664732273564e-16,
+  "new_includes_reset": true,
+  "sources": [
+    {
+      "cohort": "rehearsal",
+      "arm": "goal__differential_drive",
+      "sha256": "74ac622b4b13963849550c07ec801bd1fe38894a0fc05c5765d1544f379132a2"
+    },
+    {
+      "cohort": "rehearsal",
+      "arm": "guarded_ppo__differential_drive",
+      "sha256": "dc688de09bdb450152f27f7c0f6e1f79be8c37d555093d41a0006a5a55d79720"
+    },
+    {
+      "cohort": "rehearsal",
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "sha256": "52f927ddfc9bb171a68eca34415cb6c983dac09a9d7a0670fb1918da8efb9b47"
+    },
+    {
+      "cohort": "rehearsal",
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "sha256": "2b4fce61807a861d5ccd8d2df94feebfd71db19593145f21374fd45b480cd227"
+    },
+    {
+      "cohort": "rehearsal",
+      "arm": "orca__differential_drive",
+      "sha256": "81a0945209299a485f7db3d3034314ffd0b46b24e63e2a22031f2db3badbf029"
+    },
+    {
+      "cohort": "rehearsal",
+      "arm": "ppo__differential_drive",
+      "sha256": "772576e817d16fda440554688ae0a650b2f1ab6841dd2bb9e27d79b27cfd309b"
+    },
+    {
+      "cohort": "rehearsal",
+      "arm": "prediction_planner__differential_drive",
+      "sha256": "be4c76d4795848565417fc5885dd7b7f52770b551d3ae788c469ff08a93648dc"
+    },
+    {
+      "cohort": "rehearsal",
+      "arm": "predictive_mppi__differential_drive",
+      "sha256": "eaffa0fb6df10131add4974fe18ec9503ff93141e823c7210aebcff6aec558e4"
+    },
+    {
+      "cohort": "rehearsal",
+      "arm": "risk_dwa__differential_drive",
+      "sha256": "747ce716baee6d6c0e492efebe377a829e0627849da3841157a7bd52f6e190cf"
+    },
+    {
+      "cohort": "rehearsal",
+      "arm": "sacadrl__differential_drive",
+      "sha256": "4a6e3713f3c045212bb16de819ae3d125f73f9ebd2bbf2bec563fe0b219b29bd"
+    },
+    {
+      "cohort": "rehearsal",
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "sha256": "6d1e179b65df90e5bcf33b7ce95d4e2ac4ae84327629b0cf31c7ebb8de45f156"
+    },
+    {
+      "cohort": "rehearsal",
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "sha256": "0e9a6e4a621b740f1cf5246ad2e34eb7d70a4636ecedc6ebe33f5a2b7e1e7d40"
+    },
+    {
+      "cohort": "rehearsal",
+      "arm": "social_force__differential_drive",
+      "sha256": "3ddc7d5c8c5bbe0d37ba9c2b8782bbf2fb4fadd6921213c6d5f5a5ff2ffc6cb0"
+    },
+    {
+      "cohort": "rehearsal",
+      "arm": "socnav_sampling__differential_drive",
+      "sha256": "06ce4ac62bdf15f2b023b5c7f635a4c0f00d79e7508952fe2bd3d4c9be559238"
+    },
+    {
+      "cohort": "traces",
+      "arm": "goal__differential_drive",
+      "sha256": "1a6aba017017c0ca3d37f9828b4199209a4b73f7311cdf4572a96e737699d67e"
+    },
+    {
+      "cohort": "traces",
+      "arm": "guarded_ppo__differential_drive",
+      "sha256": "42a6a589f3099b45a936bf75a4becbf453da64e28c09a15a057af37f299c23d7"
+    },
+    {
+      "cohort": "traces",
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "sha256": "31fd090e3fc87ffe73e817a3f7bb0e4b12357b5ade2a7015771ddef16040a999"
+    },
+    {
+      "cohort": "traces",
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "sha256": "7cf0eeb288551bc41ec1b9fe9d51ed47f0bc916e82be05bf60ff502d3b290bda"
+    },
+    {
+      "cohort": "traces",
+      "arm": "orca__differential_drive",
+      "sha256": "589721cea1cc73a6f57d7424a2511a57006785ece406b2a842ea40c74887936e"
+    },
+    {
+      "cohort": "traces",
+      "arm": "ppo__differential_drive",
+      "sha256": "0935d887879d1d64140e862b71a551589608c8607d4c034ced2a86929c81620d"
+    },
+    {
+      "cohort": "traces",
+      "arm": "prediction_planner__differential_drive",
+      "sha256": "7cde821621c3c95bcda96228f8f356a4a61e22fad7b05101ccf2c17ba104b91d"
+    },
+    {
+      "cohort": "traces",
+      "arm": "predictive_mppi__differential_drive",
+      "sha256": "2c65bb8e17d5b1c0406b860515ef8a2adf00055d239b1a3e35396592e1ebcd95"
+    },
+    {
+      "cohort": "traces",
+      "arm": "risk_dwa__differential_drive",
+      "sha256": "4d60dca66f53731fdf06433fb5fad840b50b4753912856c551be087ce0ab0ec5"
+    },
+    {
+      "cohort": "traces",
+      "arm": "sacadrl__differential_drive",
+      "sha256": "0ac20d4e204e7584e121bff57ef183dfe5d022e13c6dbc1cee64b72954036d1c"
+    },
+    {
+      "cohort": "traces",
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "sha256": "e088593289b98f5251a2150f43067b7f2d536d5bab1d17e36d4b709658f070dd"
+    },
+    {
+      "cohort": "traces",
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "sha256": "de26f6b5f5212d92ecf7ac1c4a364ac3e90281a20e36fd06005102d3b759d07c"
+    },
+    {
+      "cohort": "traces",
+      "arm": "social_force__differential_drive",
+      "sha256": "64bb18cf180abc8b7cf1df8cda9630d54dd04d8a374d2de01821b54973a2c915"
+    },
+    {
+      "cohort": "traces",
+      "arm": "socnav_sampling__differential_drive",
+      "sha256": "1d62d53304aaffac86588a958ba3931120727bd6e1ed7810d7364f1b5cafb540"
+    }
+  ],
+  "arms": [
+    {
+      "arm": "goal__differential_drive",
+      "n": 48,
+      "old": {
+        "median": 0.05824675879592359,
+        "p95": 0.19254892869186113,
+        "max": 0.29020679006362704
+      },
+      "new": {
+        "median": 0.05126660427761648,
+        "p95": 0.1715182314476859,
+        "max": 0.27726260882711035
+      }
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "n": 48,
+      "old": {
+        "median": 0.26802832007685784,
+        "p95": 919554764249.2238,
+        "max": 11930325896265.887
+      },
+      "new": {
+        "median": 0.18132071715961295,
+        "p95": 0.37061924234578014,
+        "max": 0.4046245808897593
+      }
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "n": 48,
+      "old": {
+        "median": 0.09742910289786419,
+        "p95": 0.29061847633409565,
+        "max": 0.53773219593507
+      },
+      "new": {
+        "median": 0.07634565102925708,
+        "p95": 0.18687055132823238,
+        "max": 0.2643163701176298
+      }
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "n": 48,
+      "old": {
+        "median": 0.10404221631514017,
+        "p95": 1.2525141355655427,
+        "max": 211055.1944261884
+      },
+      "new": {
+        "median": 0.0801537610863609,
+        "p95": 0.18081645611891328,
+        "max": 0.22073681377448523
+      }
+    },
+    {
+      "arm": "orca__differential_drive",
+      "n": 48,
+      "old": {
+        "median": 0.11836102369096436,
+        "p95": 2.6064180763134437,
+        "max": 539.8059635017353
+      },
+      "new": {
+        "median": 0.07380010383756003,
+        "p95": 0.3617713026513708,
+        "max": 0.9182825074359747
+      }
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "n": 48,
+      "old": {
+        "median": 0.28159574709545965,
+        "p95": 0.5455378589385468,
+        "max": 0.6509656798771764
+      },
+      "new": {
+        "median": 0.26410199382994026,
+        "p95": 0.40461257779648563,
+        "max": 0.5385293190577221
+      }
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "n": 48,
+      "old": {
+        "median": 0.07002936381317246,
+        "p95": 0.398463080876633,
+        "max": 0.7519956152280762
+      },
+      "new": {
+        "median": 0.11259466039731517,
+        "p95": 0.38326374019460263,
+        "max": 1.0135022095293456
+      }
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "n": 48,
+      "old": {
+        "median": 0.0418562954614142,
+        "p95": 0.194498280984879,
+        "max": 1.0046221006099292
+      },
+      "new": {
+        "median": 0.0727027526106154,
+        "p95": 0.27312071253667225,
+        "max": 0.4244453820344684
+      }
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "n": 48,
+      "old": {
+        "median": 0.10392882977033088,
+        "p95": 4626427286.513173,
+        "max": 18160046443532.043
+      },
+      "new": {
+        "median": 0.07674308725187808,
+        "p95": 0.21526820130775415,
+        "max": 0.2819471308556835
+      }
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "n": 48,
+      "old": {
+        "median": 0.2982651224253361,
+        "p95": 0.5982290830766107,
+        "max": 0.6250088925722571
+      },
+      "new": {
+        "median": 0.29677378905130747,
+        "p95": 0.6092904656319222,
+        "max": 0.7125000000000323
+      }
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "n": 48,
+      "old": {
+        "median": 0.10045542521160647,
+        "p95": 0.19120618322751026,
+        "max": 0.32559966770216237
+      },
+      "new": {
+        "median": 0.07532851705847288,
+        "p95": 0.1829737103598588,
+        "max": 0.21263457590587126
+      }
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "n": 48,
+      "old": {
+        "median": 0.10045542521160647,
+        "p95": 0.19072485892658653,
+        "max": 0.32559966770216237
+      },
+      "new": {
+        "median": 0.07532851705847288,
+        "p95": 0.1829737103598588,
+        "max": 0.21263457590587126
+      }
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "n": 48,
+      "old": {
+        "median": 0.2968729984387181,
+        "p95": 4.919115412000369,
+        "max": 3283.654078699995
+      },
+      "new": {
+        "median": 0.16798013095678316,
+        "p95": 1.1766192863411091,
+        "max": 2.259891548968766
+      }
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "n": 48,
+      "old": {
+        "median": 0.14073180271000754,
+        "p95": 1.7937473479769706,
+        "max": 10.850166817189244
+      },
+      "new": {
+        "median": 0.10974750521838557,
+        "p95": 0.4989931176088106,
+        "max": 1.2396000934760842
+      }
+    }
+  ],
+  "new_pooled_p95": 0.41913666808708483,
+  "extremes": [],
+  "records": [
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 1001,
+      "old": 0.009884875314168599,
+      "new": 0.008941997996417223,
+      "steps": 203
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 1001,
+      "old": 0.013244546184807564,
+      "new": 0.012051612258131759,
+      "steps": 152
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 1001,
+      "old": 0.01360684856553674,
+      "new": 0.01238909304969423,
+      "steps": 148
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "seed": 1001,
+      "old": 0.006881445461421611,
+      "new": 0.006124986616524178,
+      "steps": 476
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_station_platform_medium",
+      "seed": 1001,
+      "old": 0.009491912201354409,
+      "new": 0.00774569526712038,
+      "steps": 128
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_cross_trap_low",
+      "seed": 1001,
+      "old": 0.04878446124884109,
+      "new": 0.040701047251103975,
+      "steps": 146
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_cross_trap_medium",
+      "seed": 1001,
+      "old": 0.04878446124884109,
+      "new": 0.040701047251103975,
+      "steps": 146
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 1001,
+      "old": 0.05242504423830555,
+      "new": 0.043829145520305354,
+      "steps": 136
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_doorway_low",
+      "seed": 1001,
+      "old": 0.29020679006362704,
+      "new": 0.27726260882711035,
+      "steps": 70
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 1001,
+      "old": 0.20286823378624924,
+      "new": 0.1864508161016949,
+      "steps": 100
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_doorway_high",
+      "seed": 1001,
+      "old": 0.20286823378624924,
+      "new": 0.1864508161016949,
+      "steps": 100
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_group_crossing_low",
+      "seed": 1001,
+      "old": 0.07683227910594605,
+      "new": 0.06831871729443548,
+      "steps": 171
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_group_crossing_medium",
+      "seed": 1001,
+      "old": 0.14743424618134202,
+      "new": 0.1357262584688482,
+      "steps": 90
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_group_crossing_high",
+      "seed": 1001,
+      "old": 0.14743424618134202,
+      "new": 0.1357262584688482,
+      "steps": 90
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 1001,
+      "old": 0.062155494014451085,
+      "new": 0.055407893045859,
+      "steps": 164
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_head_on_corridor_medium",
+      "seed": 1001,
+      "old": 0.062155494014451085,
+      "new": 0.055407893045859,
+      "steps": 164
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_merging_low",
+      "seed": 1001,
+      "old": 0.13378892039991397,
+      "new": 0.11063238797117082,
+      "steps": 300
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_merging_medium",
+      "seed": 1001,
+      "old": 0.1733845049451405,
+      "new": 0.14378628851881228,
+      "steps": 459
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_overtaking_low",
+      "seed": 1001,
+      "old": 0.12900672716207576,
+      "new": 0.11553123687878014,
+      "steps": 306
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_overtaking_medium",
+      "seed": 1001,
+      "old": 0.1105602680617141,
+      "new": 0.09888560993936332,
+      "steps": 284
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_t_intersection_low",
+      "seed": 1001,
+      "old": 0.15294839834378712,
+      "new": 0.12452074794879038,
+      "steps": 133
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_t_intersection_medium",
+      "seed": 1001,
+      "old": 0.15294839834378712,
+      "new": 0.12452074794879038,
+      "steps": 133
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "classic_urban_crossing_medium",
+      "seed": 1001,
+      "old": 0.003278983294649388,
+      "new": 0.002765535915522841,
+      "steps": 150
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_frontal_approach",
+      "seed": 1001,
+      "old": 0.03739907847066938,
+      "new": 0.03204053100760535,
+      "steps": 185
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_pedestrian_obstruction",
+      "seed": 1001,
+      "old": 0.025348265871146896,
+      "new": 0.021547247972877756,
+      "steps": 272
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_pedestrian_overtaking",
+      "seed": 1001,
+      "old": 0.021589601031429907,
+      "new": 0.018357183958926444,
+      "steps": 324
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_robot_overtaking",
+      "seed": 1001,
+      "old": 0.08770189350396472,
+      "new": 0.0776747481631155,
+      "steps": 80
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_down_path",
+      "seed": 1001,
+      "old": 0.0013799238164739424,
+      "new": 0.00122217584110232,
+      "steps": 312
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_intersection_no_gesture",
+      "seed": 1001,
+      "old": 0.019333884537631185,
+      "new": 0.016298529661211262,
+      "steps": 222
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 1001,
+      "old": 0.11505786882909458,
+      "new": 0.1039976667915864,
+      "steps": 263
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_narrow_hallway",
+      "seed": 1001,
+      "old": 0.030965109679497435,
+      "new": 0.026264768457240482,
+      "steps": 136
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "old": 0.06425611882417032,
+      "new": 0.05598938478852958,
+      "steps": 107
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_entering_room",
+      "seed": 1001,
+      "old": 0.06651334191272482,
+      "new": 0.05945978648901609,
+      "steps": 165
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_exiting_room",
+      "seed": 1001,
+      "old": 0.07561427128352803,
+      "new": 0.06833787459725409,
+      "steps": 183
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_entering_elevator",
+      "seed": 1001,
+      "old": 0.09220105558271602,
+      "new": 0.08326056547943372,
+      "steps": 104
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_exiting_elevator",
+      "seed": 1001,
+      "old": 0.0265386813871258,
+      "new": 0.023657133175440225,
+      "steps": 74
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 1001,
+      "old": 0.019333884537631185,
+      "new": 0.016298529661211262,
+      "steps": 222
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_intersection_proceed",
+      "seed": 1001,
+      "old": 0.019333884537631185,
+      "new": 0.016298529661211262,
+      "steps": 222
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_following_human",
+      "seed": 1001,
+      "old": 0.0013799238164739424,
+      "new": 0.00122217584110232,
+      "steps": 312
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_leading_human",
+      "seed": 1001,
+      "old": 0.0013799238164739424,
+      "new": 0.00122217584110232,
+      "steps": 312
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 1001,
+      "old": 0.0013799238164739424,
+      "new": 0.00122217584110232,
+      "steps": 312
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_join_group",
+      "seed": 1001,
+      "old": 0.07358741072409815,
+      "new": 0.06441505775428746,
+      "steps": 91
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_leave_group",
+      "seed": 1001,
+      "old": 0.12029634442470988,
+      "new": 0.10860602015907922,
+      "steps": 56
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_crowd_navigation",
+      "seed": 1001,
+      "old": 0.07353006279685377,
+      "new": 0.06447594734984292,
+      "steps": 94
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_parallel_traffic",
+      "seed": 1001,
+      "old": 0.034741276285018156,
+      "new": 0.02971210814147848,
+      "steps": 199
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_perpendicular_traffic",
+      "seed": 1001,
+      "old": 0.0402835420650803,
+      "new": 0.03446377471188234,
+      "steps": 105
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_circular_crossing",
+      "seed": 1001,
+      "old": 0.05433802357739608,
+      "new": 0.04712531550937396,
+      "steps": 124
+    },
+    {
+      "arm": "goal__differential_drive",
+      "scenario_id": "francis2023_robot_crowding",
+      "seed": 1001,
+      "old": 0.12940159439421584,
+      "new": 0.11750819161669422,
+      "steps": 52
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 1001,
+      "old": 0.04139121919478026,
+      "new": 0.05157473302780646,
+      "steps": 204
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 1001,
+      "old": 3641126190.3197,
+      "new": 0.03149299682548643,
+      "steps": 500
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 1001,
+      "old": 4201373024.534019,
+      "new": 0.03002912193866628,
+      "steps": 500
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "seed": 1001,
+      "old": 0.27415603308772335,
+      "new": 0.2731472939931993,
+      "steps": 97
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_station_platform_medium",
+      "seed": 1001,
+      "old": 0.31455022200397215,
+      "new": 0.3253993010080877,
+      "steps": 650
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_cross_trap_low",
+      "seed": 1001,
+      "old": 0.26375322002281637,
+      "new": 0.248390763694346,
+      "steps": 309
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_cross_trap_medium",
+      "seed": 1001,
+      "old": 2923583578413.7207,
+      "new": 0.30016687485714266,
+      "steps": 600
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 1001,
+      "old": 1.7179044731149087,
+      "new": 0.1229075326250404,
+      "steps": 600
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_doorway_low",
+      "seed": 1001,
+      "old": 11930325896265.887,
+      "new": 0.4046245808897593,
+      "steps": 285
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 1001,
+      "old": 30128728.363485336,
+      "new": 0.3580295899167198,
+      "steps": 500
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_doorway_high",
+      "seed": 1001,
+      "old": 578633.9579211808,
+      "new": 0.34527801232309363,
+      "steps": 234
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_group_crossing_low",
+      "seed": 1001,
+      "old": 0.22505949873300454,
+      "new": 0.23021537588258134,
+      "steps": 120
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_group_crossing_medium",
+      "seed": 1001,
+      "old": 1.6689469043575604,
+      "new": 0.24441938768090493,
+      "steps": 140
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_group_crossing_high",
+      "seed": 1001,
+      "old": 0.20691868111252615,
+      "new": 0.1883580482841224,
+      "steps": 148
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 1001,
+      "old": 0.22236615795192405,
+      "new": 0.2183335848925966,
+      "steps": 190
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_head_on_corridor_medium",
+      "seed": 1001,
+      "old": 0.5909966963981095,
+      "new": 0.29211185260940475,
+      "steps": 300
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_merging_low",
+      "seed": 1001,
+      "old": 0.21709911075139746,
+      "new": 0.26232601107427067,
+      "steps": 600
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_merging_medium",
+      "seed": 1001,
+      "old": 0.1826959883623249,
+      "new": 0.18455579410852244,
+      "steps": 600
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_overtaking_low",
+      "seed": 1001,
+      "old": 0.32456592817144114,
+      "new": 0.2859597423079438,
+      "steps": 524
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_overtaking_medium",
+      "seed": 1001,
+      "old": 0.3832662748958323,
+      "new": 0.35527308414293224,
+      "steps": 594
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_t_intersection_low",
+      "seed": 1001,
+      "old": 0.09151579349453917,
+      "new": 0.08882373924039891,
+      "steps": 267
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_t_intersection_medium",
+      "seed": 1001,
+      "old": 0.09510433826667236,
+      "new": 0.09450961207446909,
+      "steps": 265
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "classic_urban_crossing_medium",
+      "seed": 1001,
+      "old": 0.3650377175880765,
+      "new": 0.22221169599572957,
+      "steps": 467
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_frontal_approach",
+      "seed": 1001,
+      "old": 2277261.232486639,
+      "new": 0.040446063721074794,
+      "steps": 339
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_pedestrian_obstruction",
+      "seed": 1001,
+      "old": 0.05893383330381157,
+      "new": 0.0606322835373079,
+      "steps": 351
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_pedestrian_overtaking",
+      "seed": 1001,
+      "old": 0.04469836804142832,
+      "new": 0.04629921108351444,
+      "steps": 296
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_robot_overtaking",
+      "seed": 1001,
+      "old": 0.07844482375895245,
+      "new": 0.08877531569262713,
+      "steps": 392
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_down_path",
+      "seed": 1001,
+      "old": 0.10634342835534889,
+      "new": 0.08931347439312116,
+      "steps": 318
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_intersection_no_gesture",
+      "seed": 1001,
+      "old": 0.06840239211173711,
+      "new": 0.06822838605128491,
+      "steps": 222
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 1001,
+      "old": 1412437359524.0598,
+      "new": 0.1001733932038562,
+      "steps": 400
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_narrow_hallway",
+      "seed": 1001,
+      "old": 17104358.17842498,
+      "new": 0.037960093557835056,
+      "steps": 400
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "old": 1749527795.751967,
+      "new": 0.07117809814436565,
+      "steps": 400
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_entering_room",
+      "seed": 1001,
+      "old": 0.43588133556844283,
+      "new": 0.3648752870451613,
+      "steps": 198
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_exiting_room",
+      "seed": 1001,
+      "old": 0.2838318667520568,
+      "new": 0.2602849342535497,
+      "steps": 129
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_entering_elevator",
+      "seed": 1001,
+      "old": 0.15658015311092693,
+      "new": 0.17808564021070347,
+      "steps": 93
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_exiting_elevator",
+      "seed": 1001,
+      "old": 0.07075563116635071,
+      "new": 0.14209801711133985,
+      "steps": 400
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 1001,
+      "old": 0.06664502776722299,
+      "new": 0.06747124784960704,
+      "steps": 223
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_intersection_proceed",
+      "seed": 1001,
+      "old": 0.06664502776722299,
+      "new": 0.06747124784960704,
+      "steps": 223
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_following_human",
+      "seed": 1001,
+      "old": 0.17767145762974906,
+      "new": 0.1383066763382537,
+      "steps": 400
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_leading_human",
+      "seed": 1001,
+      "old": 0.10431897500493235,
+      "new": 0.09542436346998014,
+      "steps": 343
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 1001,
+      "old": 0.06012898274009727,
+      "new": 0.058477948568395305,
+      "steps": 331
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_join_group",
+      "seed": 1001,
+      "old": 0.2613317945317068,
+      "new": 0.2538189520404038,
+      "steps": 79
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_leave_group",
+      "seed": 1001,
+      "old": 0.023076304488978554,
+      "new": 0.09558967493730813,
+      "steps": 400
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_crowd_navigation",
+      "seed": 1001,
+      "old": 0.35657469660015284,
+      "new": 0.3737121413538057,
+      "steps": 400
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_parallel_traffic",
+      "seed": 1001,
+      "old": 0.0692650317004734,
+      "new": 0.07262168422187223,
+      "steps": 298
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_perpendicular_traffic",
+      "seed": 1001,
+      "old": 0.27390137934470227,
+      "new": 0.3105687506455703,
+      "steps": 400
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_circular_crossing",
+      "seed": 1001,
+      "old": 0.27230342013089937,
+      "new": 0.2586137813637386,
+      "steps": 76
+    },
+    {
+      "arm": "guarded_ppo__differential_drive",
+      "scenario_id": "francis2023_robot_crowding",
+      "seed": 1001,
+      "old": 0.37012957683667524,
+      "new": 0.37467791125882605,
+      "steps": 171
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 1001,
+      "old": 0.026811909875465768,
+      "new": 0.020594159785153845,
+      "steps": 113
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 1001,
+      "old": 0.09785421233032214,
+      "new": 0.054131204589058776,
+      "steps": 162
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 1001,
+      "old": 0.07290667597980062,
+      "new": 0.04271916327345302,
+      "steps": 175
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "seed": 1001,
+      "old": 0.07437709948198351,
+      "new": 0.039575098156471374,
+      "steps": 306
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_station_platform_medium",
+      "seed": 1001,
+      "old": 0.12732260772767884,
+      "new": 0.07725963531184456,
+      "steps": 650
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_cross_trap_low",
+      "seed": 1001,
+      "old": 0.07823166037249389,
+      "new": 0.06178508063161939,
+      "steps": 343
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_cross_trap_medium",
+      "seed": 1001,
+      "old": 0.08566940498279656,
+      "new": 0.06917376661633558,
+      "steps": 390
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 1001,
+      "old": 0.09314642382249733,
+      "new": 0.06992748737169881,
+      "steps": 430
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_doorway_low",
+      "seed": 1001,
+      "old": 0.3149781730679895,
+      "new": 0.25216798389698114,
+      "steps": 164
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 1001,
+      "old": 0.18173051789993577,
+      "new": 0.17827884765404378,
+      "steps": 99
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_doorway_high",
+      "seed": 1001,
+      "old": 0.17701352516714178,
+      "new": 0.17703794093362488,
+      "steps": 128
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_group_crossing_low",
+      "seed": 1001,
+      "old": 0.11014770572110463,
+      "new": 0.08625382095054983,
+      "steps": 118
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_group_crossing_medium",
+      "seed": 1001,
+      "old": 0.12542944938791226,
+      "new": 0.10819476009382158,
+      "steps": 153
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_group_crossing_high",
+      "seed": 1001,
+      "old": 0.15449019593284166,
+      "new": 0.13010364701045668,
+      "steps": 160
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 1001,
+      "old": 0.1101242367065112,
+      "new": 0.07543166674666961,
+      "steps": 237
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_head_on_corridor_medium",
+      "seed": 1001,
+      "old": 0.14170274108373476,
+      "new": 0.10596514635125752,
+      "steps": 260
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_merging_low",
+      "seed": 1001,
+      "old": 0.1876565093872346,
+      "new": 0.16828085505545634,
+      "steps": 466
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_merging_medium",
+      "seed": 1001,
+      "old": 0.2198760065322351,
+      "new": 0.16209299737733393,
+      "steps": 600
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_overtaking_low",
+      "seed": 1001,
+      "old": 0.1314279507166484,
+      "new": 0.11135418336522389,
+      "steps": 228
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_overtaking_medium",
+      "seed": 1001,
+      "old": 0.1320446537421142,
+      "new": 0.12075205954696658,
+      "steps": 254
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_t_intersection_low",
+      "seed": 1001,
+      "old": 0.10025496045050483,
+      "new": 0.08662965550692783,
+      "steps": 164
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_t_intersection_medium",
+      "seed": 1001,
+      "old": 0.10025496045050483,
+      "new": 0.08662965550692783,
+      "steps": 164
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "classic_urban_crossing_medium",
+      "seed": 1001,
+      "old": 0.012962265818635577,
+      "new": 0.010578878429964925,
+      "steps": 163
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_frontal_approach",
+      "seed": 1001,
+      "old": 0.09700399346540625,
+      "new": 0.0626726339563461,
+      "steps": 202
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_pedestrian_obstruction",
+      "seed": 1001,
+      "old": 0.06440781153003991,
+      "new": 0.048450681933966504,
+      "steps": 248
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_pedestrian_overtaking",
+      "seed": 1001,
+      "old": 0.05162088816105045,
+      "new": 0.03153259322108251,
+      "steps": 180
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_robot_overtaking",
+      "seed": 1001,
+      "old": 0.0627273505753098,
+      "new": 0.04324236822902876,
+      "steps": 244
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_down_path",
+      "seed": 1001,
+      "old": 0.03387141725573584,
+      "new": 0.02130532418493238,
+      "steps": 176
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_intersection_no_gesture",
+      "seed": 1001,
+      "old": 0.054664572236895734,
+      "new": 0.03201809131171292,
+      "steps": 128
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 1001,
+      "old": 0.07229844792180906,
+      "new": 0.0815246299077482,
+      "steps": 325
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_narrow_hallway",
+      "seed": 1001,
+      "old": 0.24537903954257892,
+      "new": 0.07221230364954816,
+      "steps": 188
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "old": 0.03506826828828551,
+      "new": 0.08860288223294432,
+      "steps": 400
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_entering_room",
+      "seed": 1001,
+      "old": 0.10964718331125076,
+      "new": 0.07836441198917916,
+      "steps": 102
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_exiting_room",
+      "seed": 1001,
+      "old": 0.10868318883706572,
+      "new": 0.09129817096319079,
+      "steps": 113
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_entering_elevator",
+      "seed": 1001,
+      "old": 0.14374264380822244,
+      "new": 0.10996010411441343,
+      "steps": 73
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_exiting_elevator",
+      "seed": 1001,
+      "old": 0.13524085197853894,
+      "new": 0.11772735178614284,
+      "steps": 115
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 1001,
+      "old": 0.054664572236895734,
+      "new": 0.03201809131171292,
+      "steps": 128
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_intersection_proceed",
+      "seed": 1001,
+      "old": 0.054664572236895734,
+      "new": 0.03201809131171292,
+      "steps": 128
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_following_human",
+      "seed": 1001,
+      "old": 0.02648472810752358,
+      "new": 0.02213264487555835,
+      "steps": 186
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_leading_human",
+      "seed": 1001,
+      "old": 0.53773219593507,
+      "new": 0.02820836161421911,
+      "steps": 181
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 1001,
+      "old": 0.03456093725167553,
+      "new": 0.022230015188820236,
+      "steps": 180
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_join_group",
+      "seed": 1001,
+      "old": 0.0630456445536041,
+      "new": 0.12641827748526693,
+      "steps": 400
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_leave_group",
+      "seed": 1001,
+      "old": 0.0380332316592675,
+      "new": 0.19149685330664165,
+      "steps": 400
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_crowd_navigation",
+      "seed": 1001,
+      "old": 0.19926866576050237,
+      "new": 0.0968176482803135,
+      "steps": 359
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_parallel_traffic",
+      "seed": 1001,
+      "old": 0.034736024288583196,
+      "new": 0.040083176932621485,
+      "steps": 400
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_perpendicular_traffic",
+      "seed": 1001,
+      "old": 0.06279828358613856,
+      "new": 0.04927547619366055,
+      "steps": 172
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_circular_crossing",
+      "seed": 1001,
+      "old": 0.09100812843733135,
+      "new": 0.056496181611735356,
+      "steps": 78
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape__differential_drive",
+      "scenario_id": "francis2023_robot_crowding",
+      "seed": 1001,
+      "old": 0.3444336732499291,
+      "new": 0.2643163701176298,
+      "steps": 383
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 1001,
+      "old": 0.053873526328849244,
+      "new": 0.028351465646851176,
+      "steps": 127
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 1001,
+      "old": 0.1250094642237597,
+      "new": 0.06750762540733574,
+      "steps": 189
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 1001,
+      "old": 0.08165597702392961,
+      "new": 0.04684646135112881,
+      "steps": 236
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "seed": 1001,
+      "old": 0.10928836451925612,
+      "new": 0.06917762616600164,
+      "steps": 331
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_station_platform_medium",
+      "seed": 1001,
+      "old": 7.186767162870509,
+      "new": 0.08854780533709834,
+      "steps": 650
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_cross_trap_low",
+      "seed": 1001,
+      "old": 0.06767083009631412,
+      "new": 0.06443001545958417,
+      "steps": 301
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_cross_trap_medium",
+      "seed": 1001,
+      "old": 0.0960678799887074,
+      "new": 0.0805942971367407,
+      "steps": 405
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 1001,
+      "old": 0.1011711483728693,
+      "new": 0.08333423560636602,
+      "steps": 398
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_doorway_low",
+      "seed": 1001,
+      "old": 0.24499461949375673,
+      "new": 0.22073681377448523,
+      "steps": 213
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 1001,
+      "old": 0.2532945457616552,
+      "new": 0.21258058475519911,
+      "steps": 140
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_doorway_high",
+      "seed": 1001,
+      "old": 0.12872585859015467,
+      "new": 0.1345385178911598,
+      "steps": 147
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_group_crossing_low",
+      "seed": 1001,
+      "old": 0.07799186055729505,
+      "new": 0.05399774703093203,
+      "steps": 128
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_group_crossing_medium",
+      "seed": 1001,
+      "old": 0.11698041219534928,
+      "new": 0.08581211201550053,
+      "steps": 144
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_group_crossing_high",
+      "seed": 1001,
+      "old": 0.0907731707300527,
+      "new": 0.0794389811349695,
+      "steps": 145
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 1001,
+      "old": 0.10691328425741105,
+      "new": 0.07971322503598109,
+      "steps": 229
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_head_on_corridor_medium",
+      "seed": 1001,
+      "old": 0.15683075083006293,
+      "new": 0.1230756141626856,
+      "steps": 255
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_merging_low",
+      "seed": 1001,
+      "old": 0.20944556537837555,
+      "new": 0.1515478266296748,
+      "steps": 481
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_merging_medium",
+      "seed": 1001,
+      "old": 0.19893652692050312,
+      "new": 0.14711752466538344,
+      "steps": 600
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_overtaking_low",
+      "seed": 1001,
+      "old": 0.1554802180841977,
+      "new": 0.1207610518140008,
+      "steps": 241
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_overtaking_medium",
+      "seed": 1001,
+      "old": 0.13816128249609855,
+      "new": 0.12390051833805464,
+      "steps": 286
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_t_intersection_low",
+      "seed": 1001,
+      "old": 0.15378251347282468,
+      "new": 0.09790719115346459,
+      "steps": 180
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_t_intersection_medium",
+      "seed": 1001,
+      "old": 0.15378251347282468,
+      "new": 0.09790719115346459,
+      "steps": 180
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "classic_urban_crossing_medium",
+      "seed": 1001,
+      "old": 0.04522324072775548,
+      "new": 0.034750017508701034,
+      "steps": 176
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_frontal_approach",
+      "seed": 1001,
+      "old": 1.7012244769705693,
+      "new": 0.08298360889795331,
+      "steps": 212
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_pedestrian_obstruction",
+      "seed": 1001,
+      "old": 0.08305472587751335,
+      "new": 0.061951535588671613,
+      "steps": 253
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_pedestrian_overtaking",
+      "seed": 1001,
+      "old": 0.04079350393047265,
+      "new": 0.02621679189808862,
+      "steps": 188
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_robot_overtaking",
+      "seed": 1001,
+      "old": 0.07688751000883381,
+      "new": 0.041859171668326846,
+      "steps": 222
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_down_path",
+      "seed": 1001,
+      "old": 0.024372153059576292,
+      "new": 0.02091106917628509,
+      "steps": 175
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_intersection_no_gesture",
+      "seed": 1001,
+      "old": 0.05198449441556363,
+      "new": 0.03421304031347865,
+      "steps": 128
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 1001,
+      "old": 0.07922755080786216,
+      "new": 0.08411046978269113,
+      "steps": 332
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_narrow_hallway",
+      "seed": 1001,
+      "old": 0.07361187275010866,
+      "new": 0.05431676626398479,
+      "steps": 223
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "old": 211055.1944261884,
+      "new": 0.08433991489864295,
+      "steps": 400
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_entering_room",
+      "seed": 1001,
+      "old": 0.09769885750121202,
+      "new": 0.08663461352231065,
+      "steps": 111
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_exiting_room",
+      "seed": 1001,
+      "old": 0.06518372499868975,
+      "new": 0.05757550911214836,
+      "steps": 130
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_entering_elevator",
+      "seed": 1001,
+      "old": 0.19184097988381502,
+      "new": 0.11645380113164149,
+      "steps": 83
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_exiting_elevator",
+      "seed": 1001,
+      "old": 0.153576613373001,
+      "new": 0.12284311637623298,
+      "steps": 140
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 1001,
+      "old": 0.05198449441556363,
+      "new": 0.03421304031347865,
+      "steps": 128
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_intersection_proceed",
+      "seed": 1001,
+      "old": 0.05198449441556363,
+      "new": 0.03421304031347865,
+      "steps": 128
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_following_human",
+      "seed": 1001,
+      "old": 0.0548237924870069,
+      "new": 0.02488125682195115,
+      "steps": 187
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_leading_human",
+      "seed": 1001,
+      "old": 0.032515826873261384,
+      "new": 0.022627748573911324,
+      "steps": 177
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 1001,
+      "old": 0.02676576587012892,
+      "new": 0.02209723353562397,
+      "steps": 179
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_join_group",
+      "seed": 1001,
+      "old": 0.29666118940414926,
+      "new": 0.17057879030597314,
+      "steps": 252
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_leave_group",
+      "seed": 1001,
+      "old": 0.1331161433303278,
+      "new": 0.18097318884898866,
+      "steps": 268
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_crowd_navigation",
+      "seed": 1001,
+      "old": 0.2068571967095585,
+      "new": 0.1658438198338322,
+      "steps": 263
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_parallel_traffic",
+      "seed": 1001,
+      "old": 0.08523357275340514,
+      "new": 0.06821458387674485,
+      "steps": 393
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_perpendicular_traffic",
+      "seed": 1001,
+      "old": 0.10073352728607836,
+      "new": 0.07061712232353257,
+      "steps": 171
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_circular_crossing",
+      "seed": 1001,
+      "old": 0.17391446037080982,
+      "new": 0.06419784393206687,
+      "steps": 88
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive",
+      "scenario_id": "francis2023_robot_crowding",
+      "seed": 1001,
+      "old": 0.4191949300990701,
+      "new": 0.1805253810487733,
+      "steps": 317
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 1001,
+      "old": 0.03188425264768674,
+      "new": 0.015656394058649183,
+      "steps": 109
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 1001,
+      "old": 1.0091979850762736,
+      "new": 0.0836638644422944,
+      "steps": 188
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 1001,
+      "old": 7.359538117585513,
+      "new": 0.4127956191442297,
+      "steps": 298
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "seed": 1001,
+      "old": 0.033715316359659554,
+      "new": 0.023509378194185793,
+      "steps": 247
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_station_platform_medium",
+      "seed": 1001,
+      "old": 539.8059635017353,
+      "new": 0.09861162329657093,
+      "steps": 565
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_cross_trap_low",
+      "seed": 1001,
+      "old": 0.057147314778596185,
+      "new": 0.0525544546798787,
+      "steps": 235
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_cross_trap_medium",
+      "seed": 1001,
+      "old": 0.11415189590820092,
+      "new": 0.07625567846398627,
+      "steps": 299
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 1001,
+      "old": 0.12482647485175759,
+      "new": 0.07136597614652326,
+      "steps": 346
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_doorway_low",
+      "seed": 1001,
+      "old": 0.3968803350475923,
+      "new": 0.33608468344976034,
+      "steps": 238
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 1001,
+      "old": 0.44915523710974786,
+      "new": 0.37560255914454577,
+      "steps": 223
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_doorway_high",
+      "seed": 1001,
+      "old": 0.4172574570646508,
+      "new": 0.3156254518134483,
+      "steps": 235
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_group_crossing_low",
+      "seed": 1001,
+      "old": 0.1471770031503371,
+      "new": 0.10076311229820906,
+      "steps": 98
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_group_crossing_medium",
+      "seed": 1001,
+      "old": 0.15171138321560887,
+      "new": 0.1180779598807443,
+      "steps": 109
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_group_crossing_high",
+      "seed": 1001,
+      "old": 0.16571150498054005,
+      "new": 0.14438012567036335,
+      "steps": 111
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 1001,
+      "old": 0.13117362422145698,
+      "new": 0.10015863010128725,
+      "steps": 177
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_head_on_corridor_medium",
+      "seed": 1001,
+      "old": 0.13117501238653453,
+      "new": 0.10015696202919253,
+      "steps": 177
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_merging_low",
+      "seed": 1001,
+      "old": 0.3820763136012589,
+      "new": 0.11459548838841038,
+      "steps": 242
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_merging_medium",
+      "seed": 1001,
+      "old": 0.24297267492688474,
+      "new": 0.11533000378200059,
+      "steps": 252
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_overtaking_low",
+      "seed": 1001,
+      "old": 2.822420643565686,
+      "new": 0.23154695987659724,
+      "steps": 350
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_overtaking_medium",
+      "seed": 1001,
+      "old": 0.18856907509693596,
+      "new": 0.12701125052709997,
+      "steps": 253
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_t_intersection_low",
+      "seed": 1001,
+      "old": 0.13992908267775409,
+      "new": 0.07078424799742648,
+      "steps": 142
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_t_intersection_medium",
+      "seed": 1001,
+      "old": 0.13992911023535978,
+      "new": 0.07078425415228937,
+      "steps": 142
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "classic_urban_crossing_medium",
+      "seed": 1001,
+      "old": 0.005440134860733366,
+      "new": 0.002481454520540397,
+      "steps": 156
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_frontal_approach",
+      "seed": 1001,
+      "old": 0.054991504480641815,
+      "new": 0.0416785346663451,
+      "steps": 173
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_pedestrian_obstruction",
+      "seed": 1001,
+      "old": 0.046920054764704545,
+      "new": 0.03380409013940213,
+      "steps": 175
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_pedestrian_overtaking",
+      "seed": 1001,
+      "old": 0.035863696616951685,
+      "new": 0.027496895289274282,
+      "steps": 172
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_robot_overtaking",
+      "seed": 1001,
+      "old": 0.05776679544713076,
+      "new": 0.03737158951411011,
+      "steps": 172
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_down_path",
+      "seed": 1001,
+      "old": 0.019549141889496247,
+      "new": 0.01003413976304807,
+      "steps": 164
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_intersection_no_gesture",
+      "seed": 1001,
+      "old": 0.035352827308326014,
+      "new": 0.01966189589841107,
+      "steps": 118
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 1001,
+      "old": 0.08344301912784223,
+      "new": 0.06772763455269294,
+      "steps": 233
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_narrow_hallway",
+      "seed": 1001,
+      "old": 1.9192634937599837,
+      "new": 0.1370734746123012,
+      "steps": 200
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "old": 1.2456309635368887,
+      "new": 0.13299258424794408,
+      "steps": 400
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_entering_room",
+      "seed": 1001,
+      "old": 0.1029320570333001,
+      "new": 0.07249275461543367,
+      "steps": 90
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_exiting_room",
+      "seed": 1001,
+      "old": 0.11296286516214854,
+      "new": 0.08387358969078368,
+      "steps": 113
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_entering_elevator",
+      "seed": 1001,
+      "old": 0.12301655627614129,
+      "new": 0.07992487894820766,
+      "steps": 61
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_exiting_elevator",
+      "seed": 1001,
+      "old": 0.12257015147372781,
+      "new": 0.09426041363434183,
+      "steps": 89
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 1001,
+      "old": 0.035352827308326014,
+      "new": 0.01966189589841107,
+      "steps": 118
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_intersection_proceed",
+      "seed": 1001,
+      "old": 0.035352827308326014,
+      "new": 0.01966189589841107,
+      "steps": 118
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_following_human",
+      "seed": 1001,
+      "old": 2.205270451416425,
+      "new": 0.9182825074359747,
+      "steps": 60
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_leading_human",
+      "seed": 1001,
+      "old": 0.01978867662769591,
+      "new": 0.009046471087922996,
+      "steps": 164
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 1001,
+      "old": 0.02132226710091719,
+      "new": 0.009877611709778638,
+      "steps": 164
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_join_group",
+      "seed": 1001,
+      "old": 0.06265207339780121,
+      "new": 0.035056593815167174,
+      "steps": 60
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_leave_group",
+      "seed": 1001,
+      "old": 0.07801967083058746,
+      "new": 0.044267584048462455,
+      "steps": 51
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_crowd_navigation",
+      "seed": 1001,
+      "old": 0.10626299844343919,
+      "new": 0.07510745305968639,
+      "steps": 143
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_parallel_traffic",
+      "seed": 1001,
+      "old": 0.05490702660004815,
+      "new": 0.0356896838199651,
+      "steps": 173
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_perpendicular_traffic",
+      "seed": 1001,
+      "old": 0.0597319129151152,
+      "new": 0.035709187941666644,
+      "steps": 120
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_circular_crossing",
+      "seed": 1001,
+      "old": 0.04585176204539089,
+      "new": 0.02832819962155734,
+      "steps": 84
+    },
+    {
+      "arm": "orca__differential_drive",
+      "scenario_id": "francis2023_robot_crowding",
+      "seed": 1001,
+      "old": 0.30083007134453843,
+      "new": 0.2809839283483241,
+      "steps": 66
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 1001,
+      "old": 0.29522517084974575,
+      "new": 0.26431451678891604,
+      "steps": 34
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 1001,
+      "old": 0.3179765633061442,
+      "new": 0.29510203864508644,
+      "steps": 33
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 1001,
+      "old": 0.28694126348882926,
+      "new": 0.25460494321579974,
+      "steps": 35
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "seed": 1001,
+      "old": 0.34310137523237183,
+      "new": 0.3176310559002873,
+      "steps": 80
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_station_platform_medium",
+      "seed": 1001,
+      "old": 0.34877061394762615,
+      "new": 0.3302165364996789,
+      "steps": 124
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_cross_trap_low",
+      "seed": 1001,
+      "old": 0.4472579016793064,
+      "new": 0.410639777468699,
+      "steps": 46
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_cross_trap_medium",
+      "seed": 1001,
+      "old": 0.5122574602050414,
+      "new": 0.4715852875758014,
+      "steps": 25
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 1001,
+      "old": 0.5634580736412036,
+      "new": 0.5385293190577221,
+      "steps": 24
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_doorway_low",
+      "seed": 1001,
+      "old": 0.36531076752747715,
+      "new": 0.3227931488800968,
+      "steps": 48
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 1001,
+      "old": 0.39385611107145196,
+      "new": 0.3805003668373381,
+      "steps": 131
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_doorway_high",
+      "seed": 1001,
+      "old": 0.5920431888122936,
+      "new": 0.33242765043498934,
+      "steps": 493
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_group_crossing_low",
+      "seed": 1001,
+      "old": 0.3531415069273844,
+      "new": 0.3425359503002443,
+      "steps": 115
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_group_crossing_medium",
+      "seed": 1001,
+      "old": 0.2761318370651488,
+      "new": 0.26251372110646143,
+      "steps": 153
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_group_crossing_high",
+      "seed": 1001,
+      "old": 0.36280140709315145,
+      "new": 0.3132339105760842,
+      "steps": 58
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 1001,
+      "old": 0.246697996499306,
+      "new": 0.2544952572367683,
+      "steps": 178
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_head_on_corridor_medium",
+      "seed": 1001,
+      "old": 0.27602020701158975,
+      "new": 0.2783938114097927,
+      "steps": 398
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_merging_low",
+      "seed": 1001,
+      "old": 0.2450285895383965,
+      "new": 0.23738955616090907,
+      "steps": 88
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_merging_medium",
+      "seed": 1001,
+      "old": 0.22151347129622811,
+      "new": 0.2141761752187236,
+      "steps": 132
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_overtaking_low",
+      "seed": 1001,
+      "old": 0.38235138273161307,
+      "new": 0.35561292309902176,
+      "steps": 318
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_overtaking_medium",
+      "seed": 1001,
+      "old": 0.34861011149294036,
+      "new": 0.3418505256244387,
+      "steps": 335
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_t_intersection_low",
+      "seed": 1001,
+      "old": 0.6509656798771764,
+      "new": 0.3934192069766609,
+      "steps": 160
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_t_intersection_medium",
+      "seed": 1001,
+      "old": 0.3151848606809813,
+      "new": 0.29464285714284794,
+      "steps": 80
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "classic_urban_crossing_medium",
+      "seed": 1001,
+      "old": 0.25219262063359327,
+      "new": 0.24772537147607476,
+      "steps": 151
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_frontal_approach",
+      "seed": 1001,
+      "old": 0.26935193595506074,
+      "new": 0.26717412878186303,
+      "steps": 140
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_pedestrian_obstruction",
+      "seed": 1001,
+      "old": 0.24989132625010127,
+      "new": 0.252383918484283,
+      "steps": 124
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_pedestrian_overtaking",
+      "seed": 1001,
+      "old": 0.3311171770719741,
+      "new": 0.2968073626415468,
+      "steps": 388
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_robot_overtaking",
+      "seed": 1001,
+      "old": 0.30534657502737844,
+      "new": 0.29728661749209867,
+      "steps": 200
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_down_path",
+      "seed": 1001,
+      "old": 0.23816030031807955,
+      "new": 0.23024499226699913,
+      "steps": 65
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_intersection_no_gesture",
+      "seed": 1001,
+      "old": 0.2341976115665098,
+      "new": 0.22492311618707772,
+      "steps": 97
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 1001,
+      "old": 0.25961392132043426,
+      "new": 0.2566412558837613,
+      "steps": 133
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_narrow_hallway",
+      "seed": 1001,
+      "old": 0.3086514039701059,
+      "new": 0.2749999999999973,
+      "steps": 42
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "old": 0.12473100465345945,
+      "new": 0.12897612381184828,
+      "steps": 59
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_entering_room",
+      "seed": 1001,
+      "old": 0.2779265740700706,
+      "new": 0.259635416666678,
+      "steps": 58
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_exiting_room",
+      "seed": 1001,
+      "old": 0.3704011811355666,
+      "new": 0.33333333333334786,
+      "steps": 55
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_entering_elevator",
+      "seed": 1001,
+      "old": 0.2352645086204436,
+      "new": 0.22037037037036672,
+      "steps": 64
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_exiting_elevator",
+      "seed": 1001,
+      "old": 0.21143525050938047,
+      "new": 0.19426727527070978,
+      "steps": 92
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 1001,
+      "old": 0.22883797374297624,
+      "new": 0.21882352941175862,
+      "steps": 95
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_intersection_proceed",
+      "seed": 1001,
+      "old": 0.22883797374297624,
+      "new": 0.21882352941175862,
+      "steps": 95
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_following_human",
+      "seed": 1001,
+      "old": 0.2630009179468136,
+      "new": 0.26271321835115574,
+      "steps": 197
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_leading_human",
+      "seed": 1001,
+      "old": 0.21641457107135575,
+      "new": 0.211679050295302,
+      "steps": 118
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 1001,
+      "old": 0.26453801834189683,
+      "new": 0.2638894708709645,
+      "steps": 179
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_join_group",
+      "seed": 1001,
+      "old": 0.16285521071728443,
+      "new": 0.1442611530666006,
+      "steps": 56
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_leave_group",
+      "seed": 1001,
+      "old": 0.26503192103157,
+      "new": 0.258602706608093,
+      "steps": 85
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_crowd_navigation",
+      "seed": 1001,
+      "old": 0.29913343430428774,
+      "new": 0.28655303649161196,
+      "steps": 181
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_parallel_traffic",
+      "seed": 1001,
+      "old": 0.2852649201208487,
+      "new": 0.2628199336734384,
+      "steps": 66
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_perpendicular_traffic",
+      "seed": 1001,
+      "old": 0.21165277649523567,
+      "new": 0.2033689275473415,
+      "steps": 125
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_circular_crossing",
+      "seed": 1001,
+      "old": 0.19154848344906278,
+      "new": 0.18001605108379523,
+      "steps": 70
+    },
+    {
+      "arm": "ppo__differential_drive",
+      "scenario_id": "francis2023_robot_crowding",
+      "seed": 1001,
+      "old": 0.36171567374267116,
+      "new": 0.3364680149964922,
+      "steps": 90
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 1001,
+      "old": 0.015996477257881236,
+      "new": 0.00894657258063518,
+      "steps": 132
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 1001,
+      "old": 0.00417578723655944,
+      "new": 0.011254121227507706,
+      "steps": 500
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 1001,
+      "old": 0.004175787238705961,
+      "new": 0.011389887063692088,
+      "steps": 500
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "seed": 1001,
+      "old": 0.024317917476821365,
+      "new": 0.015878684456618004,
+      "steps": 431
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_station_platform_medium",
+      "seed": 1001,
+      "old": 0.12212966642424854,
+      "new": 0.11199958080511124,
+      "steps": 650
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_cross_trap_low",
+      "seed": 1001,
+      "old": 0.20592032716424505,
+      "new": 0.17049795462206388,
+      "steps": 224
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_cross_trap_medium",
+      "seed": 1001,
+      "old": 0.24535021568926044,
+      "new": 0.167229002076666,
+      "steps": 228
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 1001,
+      "old": 0.18947232851836093,
+      "new": 0.13715631556321056,
+      "steps": 259
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_doorway_low",
+      "seed": 1001,
+      "old": 0.4167677062523418,
+      "new": 0.4369237011653725,
+      "steps": 132
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 1001,
+      "old": 0.648902554798461,
+      "new": 0.3906163054944273,
+      "steps": 94
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_doorway_high",
+      "seed": 1001,
+      "old": 0.18390995448746406,
+      "new": 0.36960897606635695,
+      "steps": 500
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_group_crossing_low",
+      "seed": 1001,
+      "old": 0.13127966115801806,
+      "new": 0.13845996313165188,
+      "steps": 157
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_group_crossing_medium",
+      "seed": 1001,
+      "old": 0.11148577011479807,
+      "new": 0.1346300959307536,
+      "steps": 177
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_group_crossing_high",
+      "seed": 1001,
+      "old": 0.10977606619710832,
+      "new": 0.1347198181699693,
+      "steps": 179
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 1001,
+      "old": 0.04080195761107605,
+      "new": 0.048913185068096006,
+      "steps": 330
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_head_on_corridor_medium",
+      "seed": 1001,
+      "old": 0.030997003572769008,
+      "new": 0.08398730866399551,
+      "steps": 500
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_merging_low",
+      "seed": 1001,
+      "old": 0.33480197572061915,
+      "new": 0.19249460708514965,
+      "steps": 196
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_merging_medium",
+      "seed": 1001,
+      "old": 0.36446877660745974,
+      "new": 0.1933183274637473,
+      "steps": 198
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_overtaking_low",
+      "seed": 1001,
+      "old": 0.17608978756354277,
+      "new": 0.17984126485094182,
+      "steps": 266
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_overtaking_medium",
+      "seed": 1001,
+      "old": 0.18001444338426897,
+      "new": 0.20409408508139698,
+      "steps": 327
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_t_intersection_low",
+      "seed": 1001,
+      "old": 0.2024250337683644,
+      "new": 0.1554070750988098,
+      "steps": 98
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_t_intersection_medium",
+      "seed": 1001,
+      "old": 0.2024250337683644,
+      "new": 0.1554070750988098,
+      "steps": 98
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "classic_urban_crossing_medium",
+      "seed": 1001,
+      "old": 0.04332667987845721,
+      "new": 0.030865250900763738,
+      "steps": 218
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_frontal_approach",
+      "seed": 1001,
+      "old": 0.03358102422741626,
+      "new": 0.06095750796603184,
+      "steps": 400
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_pedestrian_obstruction",
+      "seed": 1001,
+      "old": 0.07348957252550874,
+      "new": 0.06200635387672371,
+      "steps": 400
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_pedestrian_overtaking",
+      "seed": 1001,
+      "old": 0.04028591857781582,
+      "new": 0.03608264031583072,
+      "steps": 311
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_robot_overtaking",
+      "seed": 1001,
+      "old": 0.033617931253716184,
+      "new": 0.06827776346691698,
+      "steps": 400
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_down_path",
+      "seed": 1001,
+      "old": 0.00032069344805621896,
+      "new": 0.0004081366114865758,
+      "steps": 252
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_intersection_no_gesture",
+      "seed": 1001,
+      "old": 0.042646683792702506,
+      "new": 0.028614797985640116,
+      "steps": 143
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 1001,
+      "old": 0.14906149243695668,
+      "new": 0.15077766367626033,
+      "steps": 400
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_narrow_hallway",
+      "seed": 1001,
+      "old": 0.016921603177550003,
+      "new": 0.04484352879516526,
+      "steps": 400
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "old": 0.1378702709850558,
+      "new": 0.10805725279851287,
+      "steps": 75
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_entering_room",
+      "seed": 1001,
+      "old": 0.14559210432096428,
+      "new": 0.12270125352554886,
+      "steps": 108
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_exiting_room",
+      "seed": 1001,
+      "old": 0.18437796738885726,
+      "new": 0.18164714648336394,
+      "steps": 142
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_entering_elevator",
+      "seed": 1001,
+      "old": 0.03611051389940554,
+      "new": 0.17612364581787127,
+      "steps": 400
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_exiting_elevator",
+      "seed": 1001,
+      "old": 0.010466425682857744,
+      "new": 0.05503261017759475,
+      "steps": 400
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 1001,
+      "old": 0.042646683792702506,
+      "new": 0.028614797985640116,
+      "steps": 143
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_intersection_proceed",
+      "seed": 1001,
+      "old": 0.042646683792702506,
+      "new": 0.028614797985640116,
+      "steps": 143
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_following_human",
+      "seed": 1001,
+      "old": 0.0259837189869019,
+      "new": 0.06823384959172628,
+      "steps": 400
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_leading_human",
+      "seed": 1001,
+      "old": 0.015021200105688734,
+      "new": 0.01137757783867338,
+      "steps": 225
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 1001,
+      "old": 0.023141577186229445,
+      "new": 0.01904729859310591,
+      "steps": 232
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_join_group",
+      "seed": 1001,
+      "old": 0.06656915510083618,
+      "new": 0.18495238523254348,
+      "steps": 400
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_leave_group",
+      "seed": 1001,
+      "old": 0.028017034236207723,
+      "new": 0.20708921803567049,
+      "steps": 400
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_crowd_navigation",
+      "seed": 1001,
+      "old": 0.028234007407675725,
+      "new": 0.1521049602704432,
+      "steps": 400
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_parallel_traffic",
+      "seed": 1001,
+      "old": 0.11050570746474078,
+      "new": 0.11318973998951909,
+      "steps": 371
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_perpendicular_traffic",
+      "seed": 1001,
+      "old": 0.016389592780509103,
+      "new": 0.057803286932696527,
+      "steps": 400
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_circular_crossing",
+      "seed": 1001,
+      "old": 0.12835842024359154,
+      "new": 0.10062304604984465,
+      "steps": 82
+    },
+    {
+      "arm": "prediction_planner__differential_drive",
+      "scenario_id": "francis2023_robot_crowding",
+      "seed": 1001,
+      "old": 0.7519956152280762,
+      "new": 1.0135022095293456,
+      "steps": 400
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 1001,
+      "old": 0.022248303529301156,
+      "new": 0.023131096682518018,
+      "steps": 142
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 1001,
+      "old": 0.024768702124450273,
+      "new": 0.022154394027594313,
+      "steps": 275
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 1001,
+      "old": 0.026769210309535715,
+      "new": 0.024711530727691795,
+      "steps": 378
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "seed": 1001,
+      "old": 0.009289613233816437,
+      "new": 0.04172705823057103,
+      "steps": 700
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_station_platform_medium",
+      "seed": 1001,
+      "old": 0.021722314057575593,
+      "new": 0.051099159631401214,
+      "steps": 650
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_cross_trap_low",
+      "seed": 1001,
+      "old": 0.02651289647787188,
+      "new": 0.06145184435366186,
+      "steps": 600
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_cross_trap_medium",
+      "seed": 1001,
+      "old": 0.04429426210491577,
+      "new": 0.08889806077534203,
+      "steps": 600
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 1001,
+      "old": 0.03352944577794422,
+      "new": 0.08165645545879988,
+      "steps": 600
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_doorway_low",
+      "seed": 1001,
+      "old": 0.03065286161149332,
+      "new": 0.28947511190286634,
+      "steps": 500
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 1001,
+      "old": 0.08704240854260406,
+      "new": 0.4244453820344684,
+      "steps": 500
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_doorway_high",
+      "seed": 1001,
+      "old": 0.07262599270759557,
+      "new": 0.24274825657088347,
+      "steps": 500
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_group_crossing_low",
+      "seed": 1001,
+      "old": 0.11497118406113306,
+      "new": 0.09855252874163754,
+      "steps": 145
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_group_crossing_medium",
+      "seed": 1001,
+      "old": 0.13559208778893803,
+      "new": 0.11238241358729713,
+      "steps": 164
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_group_crossing_high",
+      "seed": 1001,
+      "old": 0.149739657893645,
+      "new": 0.12497979219069104,
+      "steps": 166
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 1001,
+      "old": 0.04976930946844059,
+      "new": 0.047460380797298606,
+      "steps": 238
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_head_on_corridor_medium",
+      "seed": 1001,
+      "old": 0.07453370245202538,
+      "new": 0.06987206433634068,
+      "steps": 277
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_merging_low",
+      "seed": 1001,
+      "old": 0.15169786951360703,
+      "new": 0.14023441870163228,
+      "steps": 600
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_merging_medium",
+      "seed": 1001,
+      "old": 0.19862352049347104,
+      "new": 0.19494663849584357,
+      "steps": 600
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_overtaking_low",
+      "seed": 1001,
+      "old": 0.045563649915993314,
+      "new": 0.20786255737650364,
+      "steps": 600
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_overtaking_medium",
+      "seed": 1001,
+      "old": 0.18683712189749382,
+      "new": 0.163375402833409,
+      "steps": 431
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_t_intersection_low",
+      "seed": 1001,
+      "old": 0.15463189101043834,
+      "new": 0.16022514348072872,
+      "steps": 500
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_t_intersection_medium",
+      "seed": 1001,
+      "old": 0.15463189101043834,
+      "new": 0.16022514348072872,
+      "steps": 500
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "classic_urban_crossing_medium",
+      "seed": 1001,
+      "old": 0.016128282374923367,
+      "new": 0.04027655762832919,
+      "steps": 600
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_frontal_approach",
+      "seed": 1001,
+      "old": 0.011539383871045304,
+      "new": 0.017697605948683432,
+      "steps": 400
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_pedestrian_obstruction",
+      "seed": 1001,
+      "old": 0.011038319067792714,
+      "new": 0.01725211373034574,
+      "steps": 400
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_pedestrian_overtaking",
+      "seed": 1001,
+      "old": 0.024233804125527638,
+      "new": 0.024321507030989675,
+      "steps": 331
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_robot_overtaking",
+      "seed": 1001,
+      "old": 0.056421833810461446,
+      "new": 0.08556447707236867,
+      "steps": 400
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_down_path",
+      "seed": 1001,
+      "old": 0.0007345827681189489,
+      "new": 0.0007334365577377258,
+      "steps": 284
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_intersection_no_gesture",
+      "seed": 1001,
+      "old": 0.03262577480509184,
+      "new": 0.0301730509057561,
+      "steps": 153
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 1001,
+      "old": 0.02511473179126949,
+      "new": 0.08066993396492421,
+      "steps": 400
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_narrow_hallway",
+      "seed": 1001,
+      "old": 0.017198467048738633,
+      "new": 0.014584677754088334,
+      "steps": 400
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "old": 0.02984785412624278,
+      "new": 0.05147065763318757,
+      "steps": 400
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_entering_room",
+      "seed": 1001,
+      "old": 0.11131810495375112,
+      "new": 0.09545816859447306,
+      "steps": 114
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_exiting_room",
+      "seed": 1001,
+      "old": 0.08878418335528471,
+      "new": 0.08776875604761888,
+      "steps": 148
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_entering_elevator",
+      "seed": 1001,
+      "old": 0.1388331854975443,
+      "new": 0.09719559120728394,
+      "steps": 93
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_exiting_elevator",
+      "seed": 1001,
+      "old": 1.0046221006099292,
+      "new": 0.08729034357328871,
+      "steps": 400
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 1001,
+      "old": 0.03262577480509184,
+      "new": 0.0301730509057561,
+      "steps": 153
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_intersection_proceed",
+      "seed": 1001,
+      "old": 0.03262577480509184,
+      "new": 0.0301730509057561,
+      "steps": 153
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_following_human",
+      "seed": 1001,
+      "old": 0.03941832881791262,
+      "new": 0.03437921556445729,
+      "steps": 267
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_leading_human",
+      "seed": 1001,
+      "old": 0.007935897602513366,
+      "new": 0.043559823701173256,
+      "steps": 400
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 1001,
+      "old": 0.010813160958023564,
+      "new": 0.06710164471883938,
+      "steps": 400
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_join_group",
+      "seed": 1001,
+      "old": 0.016176910389314843,
+      "new": 0.046366694107684875,
+      "steps": 400
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_leave_group",
+      "seed": 1001,
+      "old": 0.03203593978812019,
+      "new": 0.09434014024251659,
+      "steps": 400
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_crowd_navigation",
+      "seed": 1001,
+      "old": 0.08050475745499108,
+      "new": 0.06625496917674567,
+      "steps": 400
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_parallel_traffic",
+      "seed": 1001,
+      "old": 0.056887260323676345,
+      "new": 0.22042406079900684,
+      "steps": 400
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_perpendicular_traffic",
+      "seed": 1001,
+      "old": 0.3509733595488715,
+      "new": 0.06939244750234368,
+      "steps": 400
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_circular_crossing",
+      "seed": 1001,
+      "old": 0.09553422867757426,
+      "new": 0.07553344088489013,
+      "steps": 95
+    },
+    {
+      "arm": "predictive_mppi__differential_drive",
+      "scenario_id": "francis2023_robot_crowding",
+      "seed": 1001,
+      "old": 0.051163759547470135,
+      "new": 0.30022561785969615,
+      "steps": 400
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 1001,
+      "old": 0.02112889400476898,
+      "new": 0.01672591154859425,
+      "steps": 171
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 1001,
+      "old": 4626427286.513173,
+      "new": 0.020666646499171663,
+      "steps": 500
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 1001,
+      "old": 4626427286.513173,
+      "new": 0.021342517958300805,
+      "steps": 500
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "seed": 1001,
+      "old": 0.03797902405730162,
+      "new": 0.036541513543173074,
+      "steps": 406
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_station_platform_medium",
+      "seed": 1001,
+      "old": 2061834444.262514,
+      "new": 0.07917686985721249,
+      "steps": 650
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_cross_trap_low",
+      "seed": 1001,
+      "old": 0.06580408771152138,
+      "new": 0.06113086628770901,
+      "steps": 378
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_cross_trap_medium",
+      "seed": 1001,
+      "old": 0.09016271311272434,
+      "new": 0.07298512971072617,
+      "steps": 431
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 1001,
+      "old": 0.10308636390139016,
+      "new": 0.09015265050924164,
+      "steps": 431
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_doorway_low",
+      "seed": 1001,
+      "old": 18160046443532.043,
+      "new": 0.21561181771391283,
+      "steps": 188
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 1001,
+      "old": 0.2107086340619623,
+      "new": 0.2146300565534595,
+      "steps": 129
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_doorway_high",
+      "seed": 1001,
+      "old": 0.26515665032426255,
+      "new": 0.26720812042317227,
+      "steps": 137
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_group_crossing_low",
+      "seed": 1001,
+      "old": 0.10477129563927162,
+      "new": 0.09558600172212937,
+      "steps": 146
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_group_crossing_medium",
+      "seed": 1001,
+      "old": 0.13414492193261368,
+      "new": 0.12023593864852317,
+      "steps": 157
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_group_crossing_high",
+      "seed": 1001,
+      "old": 0.1440100310587669,
+      "new": 0.12416515030584709,
+      "steps": 163
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 1001,
+      "old": 0.07594957601751448,
+      "new": 0.07003149525688068,
+      "steps": 262
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_head_on_corridor_medium",
+      "seed": 1001,
+      "old": 0.1237244935591807,
+      "new": 0.11769969377768,
+      "steps": 270
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_merging_low",
+      "seed": 1001,
+      "old": 0.14538519059914176,
+      "new": 0.1431260396025463,
+      "steps": 591
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_merging_medium",
+      "seed": 1001,
+      "old": 0.20054328733617038,
+      "new": 0.17558260547229268,
+      "steps": 600
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_overtaking_low",
+      "seed": 1001,
+      "old": 0.11355914645084372,
+      "new": 0.10900141035527315,
+      "steps": 309
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_overtaking_medium",
+      "seed": 1001,
+      "old": 0.12666125368949208,
+      "new": 0.12231054337127373,
+      "steps": 333
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_t_intersection_low",
+      "seed": 1001,
+      "old": 0.0840238202619147,
+      "new": 0.08475844560013171,
+      "steps": 213
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_t_intersection_medium",
+      "seed": 1001,
+      "old": 0.0840238202619147,
+      "new": 0.08475844560013171,
+      "steps": 213
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "classic_urban_crossing_medium",
+      "seed": 1001,
+      "old": 0.03407893627632582,
+      "new": 0.0329137629575804,
+      "steps": 256
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_frontal_approach",
+      "seed": 1001,
+      "old": 0.06904453835002752,
+      "new": 0.06250974349415091,
+      "steps": 281
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_pedestrian_obstruction",
+      "seed": 1001,
+      "old": 0.05189689038841274,
+      "new": 0.04573935061659592,
+      "steps": 283
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_pedestrian_overtaking",
+      "seed": 1001,
+      "old": 0.02479692096407239,
+      "new": 0.020813623439932167,
+      "steps": 276
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_robot_overtaking",
+      "seed": 1001,
+      "old": 0.04593968660667114,
+      "new": 0.040100252220560205,
+      "steps": 283
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_down_path",
+      "seed": 1001,
+      "old": 0.004364231231951383,
+      "new": 0.0035900783895511383,
+      "steps": 267
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_intersection_no_gesture",
+      "seed": 1001,
+      "old": 0.047713658959057374,
+      "new": 0.03950104006733963,
+      "steps": 191
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 1001,
+      "old": 0.11103853808261506,
+      "new": 0.09506632649496001,
+      "steps": 381
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_narrow_hallway",
+      "seed": 1001,
+      "old": 1770455.6478037324,
+      "new": 0.027480634478854803,
+      "steps": 400
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "old": 1243405520.7934144,
+      "new": 0.060005830407110945,
+      "steps": 400
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_entering_room",
+      "seed": 1001,
+      "old": 0.08418659704313779,
+      "new": 0.07430930464654366,
+      "steps": 142
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_exiting_room",
+      "seed": 1001,
+      "old": 0.08962893900459963,
+      "new": 0.08205347180163908,
+      "steps": 154
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_entering_elevator",
+      "seed": 1001,
+      "old": 0.10823163356705987,
+      "new": 0.08354822056297696,
+      "steps": 99
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_exiting_elevator",
+      "seed": 1001,
+      "old": 0.10653533559016555,
+      "new": 0.10724947376291874,
+      "steps": 110
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 1001,
+      "old": 0.047713658959057374,
+      "new": 0.03950104006733963,
+      "steps": 191
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_intersection_proceed",
+      "seed": 1001,
+      "old": 0.047713658959057374,
+      "new": 0.03950104006733963,
+      "steps": 191
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_following_human",
+      "seed": 1001,
+      "old": 0.009700344639355134,
+      "new": 0.008809135624535816,
+      "steps": 270
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_leading_human",
+      "seed": 1001,
+      "old": 0.0037393458768782838,
+      "new": 0.0028566764992311415,
+      "steps": 267
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 1001,
+      "old": 0.0036724188664136567,
+      "new": 0.002857142895172049,
+      "steps": 268
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_join_group",
+      "seed": 1001,
+      "old": 0.17292084991317738,
+      "new": 0.16215090144102778,
+      "steps": 114
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_leave_group",
+      "seed": 1001,
+      "old": 0.18266299305149056,
+      "new": 0.1812551658136004,
+      "steps": 121
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_crowd_navigation",
+      "seed": 1001,
+      "old": 0.13089534445596387,
+      "new": 0.12453572772113855,
+      "steps": 215
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_parallel_traffic",
+      "seed": 1001,
+      "old": 0.04418616210254827,
+      "new": 0.0404705895963573,
+      "steps": 301
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_perpendicular_traffic",
+      "seed": 1001,
+      "old": 0.12265385870149945,
+      "new": 0.11716806237605976,
+      "steps": 205
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_circular_crossing",
+      "seed": 1001,
+      "old": 0.06477616465650331,
+      "new": 0.05337318477050528,
+      "steps": 109
+    },
+    {
+      "arm": "risk_dwa__differential_drive",
+      "scenario_id": "francis2023_robot_crowding",
+      "seed": 1001,
+      "old": 11478060509676.459,
+      "new": 0.2819471308556835,
+      "steps": 400
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 1001,
+      "old": 0.012924806850590654,
+      "new": 0.013197969543149515,
+      "steps": 202
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 1001,
+      "old": 0.0644588846222968,
+      "new": 0.06581632653063338,
+      "steps": 152
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 1001,
+      "old": 0.008510503103995176,
+      "new": 0.008695652173939585,
+      "steps": 143
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "seed": 1001,
+      "old": 0.12920391432524425,
+      "new": 0.12215447154470678,
+      "steps": 128
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_station_platform_medium",
+      "seed": 1001,
+      "old": 0.01357366872338207,
+      "new": 0.0140756302521015,
+      "steps": 124
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_cross_trap_low",
+      "seed": 1001,
+      "old": 0.07821990303627754,
+      "new": 0.0759637188208601,
+      "steps": 446
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_cross_trap_medium",
+      "seed": 1001,
+      "old": 0.21589747015856475,
+      "new": 0.2074999999999902,
+      "steps": 75
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 1001,
+      "old": 0.21589747015856475,
+      "new": 0.2074999999999902,
+      "steps": 75
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_doorway_low",
+      "seed": 1001,
+      "old": 0.5357227220267594,
+      "new": 0.5415441176470569,
+      "steps": 73
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 1001,
+      "old": 0.4401715292258024,
+      "new": 0.44166666666665944,
+      "steps": 74
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_doorway_high",
+      "seed": 1001,
+      "old": 0.6003909710558305,
+      "new": 0.6136363636363494,
+      "steps": 49
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_group_crossing_low",
+      "seed": 1001,
+      "old": 0.24782546941327793,
+      "new": 0.2451428571428623,
+      "steps": 180
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_group_crossing_medium",
+      "seed": 1001,
+      "old": 0.3338938418104982,
+      "new": 0.33220000000000544,
+      "steps": 130
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_group_crossing_high",
+      "seed": 1001,
+      "old": 0.3227847236707753,
+      "new": 0.3208333333333383,
+      "steps": 131
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 1001,
+      "old": 0.3318701580952638,
+      "new": 0.33138138138137685,
+      "steps": 338
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_head_on_corridor_medium",
+      "seed": 1001,
+      "old": 0.49554765210431606,
+      "new": 0.49758620689654876,
+      "steps": 150
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_merging_low",
+      "seed": 1001,
+      "old": 0.11737177662604831,
+      "new": 0.1149696048632251,
+      "steps": 334
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_merging_medium",
+      "seed": 1001,
+      "old": 0.13554991705869865,
+      "new": 0.13319935691318585,
+      "steps": 316
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_overtaking_low",
+      "seed": 1001,
+      "old": 0.19009991731096137,
+      "new": 0.18803278688523695,
+      "steps": 310
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_overtaking_medium",
+      "seed": 1001,
+      "old": 0.18926660435470904,
+      "new": 0.18706896551723276,
+      "steps": 295
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_t_intersection_low",
+      "seed": 1001,
+      "old": 0.1734466378213128,
+      "new": 0.17809917355372037,
+      "steps": 126
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_t_intersection_medium",
+      "seed": 1001,
+      "old": 0.18581822708757487,
+      "new": 0.19055118110236494,
+      "steps": 132
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "classic_urban_crossing_medium",
+      "seed": 1001,
+      "old": 0.6250088925722571,
+      "new": 0.7125000000000323,
+      "steps": 21
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_frontal_approach",
+      "seed": 1001,
+      "old": 0.5942141482580598,
+      "new": 0.6012195121951288,
+      "steps": 87
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_pedestrian_obstruction",
+      "seed": 1001,
+      "old": 0.6165500526670873,
+      "new": 0.6241379310344902,
+      "steps": 92
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_pedestrian_overtaking",
+      "seed": 1001,
+      "old": 0.22386482149365544,
+      "new": 0.2222138554216885,
+      "steps": 337
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_robot_overtaking",
+      "seed": 1001,
+      "old": 0.2737455211798969,
+      "new": 0.27271424476927664,
+      "steps": 354
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_down_path",
+      "seed": 1001,
+      "old": 0.3759478242893218,
+      "new": 0.3919354838709624,
+      "steps": 36
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_intersection_no_gesture",
+      "seed": 1001,
+      "old": 0.27306462471343823,
+      "new": 0.2712053571428521,
+      "steps": 229
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 1001,
+      "old": 0.2704068606006689,
+      "new": 0.2671370967741862,
+      "steps": 129
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_narrow_hallway",
+      "seed": 1001,
+      "old": 0.5130381872515192,
+      "new": 0.5153571428571417,
+      "steps": 145
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "old": 0.470770806906298,
+      "new": 0.472522522522529,
+      "steps": 116
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_entering_room",
+      "seed": 1001,
+      "old": 0.3941238357902612,
+      "new": 0.3938596491228205,
+      "steps": 119
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_exiting_room",
+      "seed": 1001,
+      "old": 0.4987350188004643,
+      "new": 0.5018518518518683,
+      "steps": 86
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_entering_elevator",
+      "seed": 1001,
+      "old": 0.5486022916209385,
+      "new": 0.5526548672566334,
+      "steps": 118
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_exiting_elevator",
+      "seed": 1001,
+      "old": 0.04368723756719458,
+      "new": 0.044827586206920324,
+      "steps": 121
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 1001,
+      "old": 0.27350495741325204,
+      "new": 0.27165178571428095,
+      "steps": 229
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_intersection_proceed",
+      "seed": 1001,
+      "old": 0.27306445814385055,
+      "new": 0.27120535714285227,
+      "steps": 229
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_following_human",
+      "seed": 1001,
+      "old": 0.5000998089239183,
+      "new": 0.5171874999999927,
+      "steps": 37
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_leading_human",
+      "seed": 1001,
+      "old": 0.4715759755962539,
+      "new": 0.48593749999999364,
+      "steps": 37
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 1001,
+      "old": 0.4715759755962539,
+      "new": 0.48593749999999364,
+      "steps": 37
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_join_group",
+      "seed": 1001,
+      "old": 0.37293920339290615,
+      "new": 0.371686746987937,
+      "steps": 88
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_leave_group",
+      "seed": 1001,
+      "old": 0.3613101672755594,
+      "new": 0.35949367088606743,
+      "steps": 84
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_crowd_navigation",
+      "seed": 1001,
+      "old": 0.22751719302571766,
+      "new": 0.225313807531377,
+      "steps": 244
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_parallel_traffic",
+      "seed": 1001,
+      "old": 0.5751062265957475,
+      "new": 0.5854166666666833,
+      "steps": 53
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_perpendicular_traffic",
+      "seed": 1001,
+      "old": 0.4083856190424199,
+      "new": 0.40808823529410415,
+      "steps": 107
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_circular_crossing",
+      "seed": 1001,
+      "old": 0.2439648913484384,
+      "new": 0.23999999999999108,
+      "steps": 130
+    },
+    {
+      "arm": "sacadrl__differential_drive",
+      "scenario_id": "francis2023_robot_crowding",
+      "seed": 1001,
+      "old": 0.54013829539566,
+      "new": 0.5488888888888662,
+      "steps": 50
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 1001,
+      "old": 0.0268590666530807,
+      "new": 0.020683327173354287,
+      "steps": 112
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 1001,
+      "old": 0.13046007420396044,
+      "new": 0.07041416042676563,
+      "steps": 160
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 1001,
+      "old": 0.032211281792206205,
+      "new": 0.026301085793403053,
+      "steps": 356
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "seed": 1001,
+      "old": 0.07870128560957612,
+      "new": 0.04225266593594012,
+      "steps": 306
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_station_platform_medium",
+      "seed": 1001,
+      "old": 0.11087508672845393,
+      "new": 0.07550080637106894,
+      "steps": 650
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_cross_trap_low",
+      "seed": 1001,
+      "old": 0.08191265303921061,
+      "new": 0.06487010552818662,
+      "steps": 347
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_cross_trap_medium",
+      "seed": 1001,
+      "old": 0.07072766467284844,
+      "new": 0.06008691878983173,
+      "steps": 399
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 1001,
+      "old": 0.09226697777781066,
+      "new": 0.06955026883197724,
+      "steps": 431
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_doorway_low",
+      "seed": 1001,
+      "old": 0.13598288014478196,
+      "new": 0.1930105719955833,
+      "steps": 208
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 1001,
+      "old": 0.1975229539326077,
+      "new": 0.18616989389706168,
+      "steps": 98
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_doorway_high",
+      "seed": 1001,
+      "old": 0.17701352516714178,
+      "new": 0.17703794093362488,
+      "steps": 128
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_group_crossing_low",
+      "seed": 1001,
+      "old": 0.10461922788616856,
+      "new": 0.07913414722049729,
+      "steps": 118
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_group_crossing_medium",
+      "seed": 1001,
+      "old": 0.13009060018270419,
+      "new": 0.11101449954986671,
+      "steps": 152
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_group_crossing_high",
+      "seed": 1001,
+      "old": 0.1547735236577249,
+      "new": 0.13053119845809097,
+      "steps": 160
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 1001,
+      "old": 0.10973127008962784,
+      "new": 0.07515622774587682,
+      "steps": 237
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_head_on_corridor_medium",
+      "seed": 1001,
+      "old": 0.1308586768000246,
+      "new": 0.09880140844283797,
+      "steps": 258
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_merging_low",
+      "seed": 1001,
+      "old": 0.1794750376323294,
+      "new": 0.16100022017408167,
+      "steps": 470
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_merging_medium",
+      "seed": 1001,
+      "old": 0.22538760423235635,
+      "new": 0.16309299176930678,
+      "steps": 600
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_overtaking_low",
+      "seed": 1001,
+      "old": 0.13621697902951152,
+      "new": 0.11904917755297527,
+      "steps": 230
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_overtaking_medium",
+      "seed": 1001,
+      "old": 0.1324542905419711,
+      "new": 0.12132426294848984,
+      "steps": 254
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_t_intersection_low",
+      "seed": 1001,
+      "old": 0.10045542521160647,
+      "new": 0.08734776701111606,
+      "steps": 162
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_t_intersection_medium",
+      "seed": 1001,
+      "old": 0.10045542521160647,
+      "new": 0.08734776701111606,
+      "steps": 162
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "classic_urban_crossing_medium",
+      "seed": 1001,
+      "old": 0.013270795516405176,
+      "new": 0.010857592651437514,
+      "steps": 163
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_frontal_approach",
+      "seed": 1001,
+      "old": 0.10585823773858558,
+      "new": 0.06486503219608389,
+      "steps": 201
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_pedestrian_obstruction",
+      "seed": 1001,
+      "old": 0.0821841633084318,
+      "new": 0.05624629394578775,
+      "steps": 251
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_pedestrian_overtaking",
+      "seed": 1001,
+      "old": 0.06349148032426256,
+      "new": 0.026700408663197495,
+      "steps": 181
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_robot_overtaking",
+      "seed": 1001,
+      "old": 0.045016102101293524,
+      "new": 0.03641778043351345,
+      "steps": 221
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_down_path",
+      "seed": 1001,
+      "old": 0.02385275663027727,
+      "new": 0.020072839094166097,
+      "steps": 175
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_intersection_no_gesture",
+      "seed": 1001,
+      "old": 0.04053028430686499,
+      "new": 0.028947702063242185,
+      "steps": 127
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 1001,
+      "old": 0.07350088902585455,
+      "new": 0.08391671212926115,
+      "steps": 325
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_narrow_hallway",
+      "seed": 1001,
+      "old": 0.13352002251543474,
+      "new": 0.05452209219228982,
+      "steps": 210
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "old": 0.03506826828828551,
+      "new": 0.08860288223294432,
+      "steps": 400
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_entering_room",
+      "seed": 1001,
+      "old": 0.10964718331125076,
+      "new": 0.07836441198917916,
+      "steps": 102
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_exiting_room",
+      "seed": 1001,
+      "old": 0.11037688506121784,
+      "new": 0.09218040214492836,
+      "steps": 113
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_entering_elevator",
+      "seed": 1001,
+      "old": 0.1374732552744795,
+      "new": 0.1095330389555211,
+      "steps": 72
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_exiting_elevator",
+      "seed": 1001,
+      "old": 0.1389060889745891,
+      "new": 0.12020507548740447,
+      "steps": 115
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 1001,
+      "old": 0.04053028430686499,
+      "new": 0.028947702063242185,
+      "steps": 127
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_intersection_proceed",
+      "seed": 1001,
+      "old": 0.04053028430686499,
+      "new": 0.028947702063242185,
+      "steps": 127
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_following_human",
+      "seed": 1001,
+      "old": 0.05547005439717751,
+      "new": 0.023958478512699305,
+      "steps": 187
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_leading_human",
+      "seed": 1001,
+      "old": 0.031296811558719946,
+      "new": 0.02156668675973933,
+      "steps": 177
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 1001,
+      "old": 0.023260353875635072,
+      "new": 0.02050928605727914,
+      "steps": 179
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_join_group",
+      "seed": 1001,
+      "old": 0.0630456445536041,
+      "new": 0.12641827748526693,
+      "steps": 400
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_leave_group",
+      "seed": 1001,
+      "old": 0.13769953988432573,
+      "new": 0.12516282886310412,
+      "steps": 118
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_crowd_navigation",
+      "seed": 1001,
+      "old": 0.15231026256727945,
+      "new": 0.10248364437108286,
+      "steps": 338
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_parallel_traffic",
+      "seed": 1001,
+      "old": 0.07039989116658428,
+      "new": 0.0663073276843652,
+      "steps": 400
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_perpendicular_traffic",
+      "seed": 1001,
+      "old": 0.059283868214947,
+      "new": 0.05118125415560939,
+      "steps": 172
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_circular_crossing",
+      "seed": 1001,
+      "old": 0.09100812843733135,
+      "new": 0.056496181611735356,
+      "steps": 78
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive",
+      "scenario_id": "francis2023_robot_crowding",
+      "seed": 1001,
+      "old": 0.32559966770216237,
+      "new": 0.21263457590587126,
+      "steps": 385
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 1001,
+      "old": 0.0268590666530807,
+      "new": 0.020683327173354287,
+      "steps": 112
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 1001,
+      "old": 0.13046007420396044,
+      "new": 0.07041416042676563,
+      "steps": 160
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 1001,
+      "old": 0.09012057147449061,
+      "new": 0.04358430708858238,
+      "steps": 208
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "seed": 1001,
+      "old": 0.07870128560957612,
+      "new": 0.04225266593594012,
+      "steps": 306
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_station_platform_medium",
+      "seed": 1001,
+      "old": 0.11087508672845393,
+      "new": 0.07550080637106894,
+      "steps": 650
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_cross_trap_low",
+      "seed": 1001,
+      "old": 0.08191265303921061,
+      "new": 0.06487010552818662,
+      "steps": 347
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_cross_trap_medium",
+      "seed": 1001,
+      "old": 0.07072766467284844,
+      "new": 0.06008691878983173,
+      "steps": 399
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 1001,
+      "old": 0.09226697777781066,
+      "new": 0.06955026883197724,
+      "steps": 431
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_doorway_low",
+      "seed": 1001,
+      "old": 0.13598288014478196,
+      "new": 0.1930105719955833,
+      "steps": 208
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 1001,
+      "old": 0.1975229539326077,
+      "new": 0.18616989389706168,
+      "steps": 98
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_doorway_high",
+      "seed": 1001,
+      "old": 0.17701352516714178,
+      "new": 0.17703794093362488,
+      "steps": 128
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_group_crossing_low",
+      "seed": 1001,
+      "old": 0.10461922788616856,
+      "new": 0.07913414722049729,
+      "steps": 118
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_group_crossing_medium",
+      "seed": 1001,
+      "old": 0.13009060018270419,
+      "new": 0.11101449954986671,
+      "steps": 152
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_group_crossing_high",
+      "seed": 1001,
+      "old": 0.1547735236577249,
+      "new": 0.13053119845809097,
+      "steps": 160
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 1001,
+      "old": 0.10973127008962784,
+      "new": 0.07515622774587682,
+      "steps": 237
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_head_on_corridor_medium",
+      "seed": 1001,
+      "old": 0.1308586768000246,
+      "new": 0.09880140844283797,
+      "steps": 258
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_merging_low",
+      "seed": 1001,
+      "old": 0.17809982534397592,
+      "new": 0.1600035453630276,
+      "steps": 470
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_merging_medium",
+      "seed": 1001,
+      "old": 0.22538760423235635,
+      "new": 0.16309299176930678,
+      "steps": 600
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_overtaking_low",
+      "seed": 1001,
+      "old": 0.13621697902951152,
+      "new": 0.11904917755297527,
+      "steps": 230
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_overtaking_medium",
+      "seed": 1001,
+      "old": 0.1324542905419711,
+      "new": 0.12132426294848984,
+      "steps": 254
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_t_intersection_low",
+      "seed": 1001,
+      "old": 0.10045542521160647,
+      "new": 0.08734776701111606,
+      "steps": 162
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_t_intersection_medium",
+      "seed": 1001,
+      "old": 0.10045542521160647,
+      "new": 0.08734776701111606,
+      "steps": 162
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "classic_urban_crossing_medium",
+      "seed": 1001,
+      "old": 0.013270795516405176,
+      "new": 0.010857592651437514,
+      "steps": 163
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_frontal_approach",
+      "seed": 1001,
+      "old": 0.10585823773858558,
+      "new": 0.06486503219608389,
+      "steps": 201
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_pedestrian_obstruction",
+      "seed": 1001,
+      "old": 0.0821841633084318,
+      "new": 0.05624629394578775,
+      "steps": 251
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_pedestrian_overtaking",
+      "seed": 1001,
+      "old": 0.06349148032426256,
+      "new": 0.026700408663197495,
+      "steps": 181
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_robot_overtaking",
+      "seed": 1001,
+      "old": 0.045016102101293524,
+      "new": 0.03641778043351345,
+      "steps": 221
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_down_path",
+      "seed": 1001,
+      "old": 0.02385275663027727,
+      "new": 0.020072839094166097,
+      "steps": 175
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_intersection_no_gesture",
+      "seed": 1001,
+      "old": 0.04053028430686499,
+      "new": 0.028947702063242185,
+      "steps": 127
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 1001,
+      "old": 0.07350088902585455,
+      "new": 0.08391671212926115,
+      "steps": 325
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_narrow_hallway",
+      "seed": 1001,
+      "old": 0.13352002251543474,
+      "new": 0.05452209219228982,
+      "steps": 210
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "old": 0.03506826828828551,
+      "new": 0.08860288223294432,
+      "steps": 400
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_entering_room",
+      "seed": 1001,
+      "old": 0.10964718331125076,
+      "new": 0.07836441198917916,
+      "steps": 102
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_exiting_room",
+      "seed": 1001,
+      "old": 0.11037688506121784,
+      "new": 0.09218040214492836,
+      "steps": 113
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_entering_elevator",
+      "seed": 1001,
+      "old": 0.1374732552744795,
+      "new": 0.1095330389555211,
+      "steps": 72
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_exiting_elevator",
+      "seed": 1001,
+      "old": 0.1389060889745891,
+      "new": 0.12020507548740447,
+      "steps": 115
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 1001,
+      "old": 0.04053028430686499,
+      "new": 0.028947702063242185,
+      "steps": 127
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_intersection_proceed",
+      "seed": 1001,
+      "old": 0.04053028430686499,
+      "new": 0.028947702063242185,
+      "steps": 127
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_following_human",
+      "seed": 1001,
+      "old": 0.05547005439717751,
+      "new": 0.023958478512699305,
+      "steps": 187
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_leading_human",
+      "seed": 1001,
+      "old": 0.031296811558719946,
+      "new": 0.02156668675973933,
+      "steps": 177
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 1001,
+      "old": 0.023260353875635072,
+      "new": 0.02050928605727914,
+      "steps": 179
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_join_group",
+      "seed": 1001,
+      "old": 0.0630456445536041,
+      "new": 0.12641827748526693,
+      "steps": 400
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_leave_group",
+      "seed": 1001,
+      "old": 0.13769953988432573,
+      "new": 0.12516282886310412,
+      "steps": 118
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_crowd_navigation",
+      "seed": 1001,
+      "old": 0.15231026256727945,
+      "new": 0.10248364437108286,
+      "steps": 338
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_parallel_traffic",
+      "seed": 1001,
+      "old": 0.07039989116658428,
+      "new": 0.0663073276843652,
+      "steps": 400
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_perpendicular_traffic",
+      "seed": 1001,
+      "old": 0.059283868214947,
+      "new": 0.05118125415560939,
+      "steps": 172
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_circular_crossing",
+      "seed": 1001,
+      "old": 0.09100812843733135,
+      "new": 0.056496181611735356,
+      "steps": 78
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive",
+      "scenario_id": "francis2023_robot_crowding",
+      "seed": 1001,
+      "old": 0.32559966770216237,
+      "new": 0.21263457590587126,
+      "steps": 385
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 1001,
+      "old": 0.1312701625353881,
+      "new": 0.1049671451745418,
+      "steps": 221
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 1001,
+      "old": 10.510168780067398,
+      "new": 2.259891548968766,
+      "steps": 500
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 1001,
+      "old": 0.8074929192453424,
+      "new": 0.3614948527817817,
+      "steps": 500
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "seed": 1001,
+      "old": 0.07498012070347007,
+      "new": 0.04799448064968989,
+      "steps": 534
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_station_platform_medium",
+      "seed": 1001,
+      "old": 0.28399198731832015,
+      "new": 0.10546676281653714,
+      "steps": 650
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_cross_trap_low",
+      "seed": 1001,
+      "old": 0.4410630669516781,
+      "new": 0.19836207535822528,
+      "steps": 600
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_cross_trap_medium",
+      "seed": 1001,
+      "old": 0.3664975693825782,
+      "new": 0.17949126686397657,
+      "steps": 600
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 1001,
+      "old": 0.3137733851899303,
+      "new": 0.18009653608019993,
+      "steps": 600
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_doorway_low",
+      "seed": 1001,
+      "old": 5.056056618240667,
+      "new": 0.7914634519479282,
+      "steps": 318
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 1001,
+      "old": 0.44831385290353887,
+      "new": 0.36265453325492214,
+      "steps": 249
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_doorway_high",
+      "seed": 1001,
+      "old": 0.7314316931349475,
+      "new": 0.523637639516079,
+      "steps": 332
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_group_crossing_low",
+      "seed": 1001,
+      "old": 0.1528929906014235,
+      "new": 0.1121795796183181,
+      "steps": 190
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_group_crossing_medium",
+      "seed": 1001,
+      "old": 0.15720702941194029,
+      "new": 0.12316701801143974,
+      "steps": 200
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_group_crossing_high",
+      "seed": 1001,
+      "old": 0.15807314985358284,
+      "new": 0.124480010763073,
+      "steps": 201
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 1001,
+      "old": 0.3097540095591161,
+      "new": 0.0935190241887213,
+      "steps": 377
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_head_on_corridor_medium",
+      "seed": 1001,
+      "old": 2.9198130710883263,
+      "new": 0.21358665626116802,
+      "steps": 459
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_merging_low",
+      "seed": 1001,
+      "old": 0.38283817992184666,
+      "new": 0.23000524515165768,
+      "steps": 600
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_merging_medium",
+      "seed": 1001,
+      "old": 0.47995135146257656,
+      "new": 0.2529987490970722,
+      "steps": 600
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_overtaking_low",
+      "seed": 1001,
+      "old": 0.20865790811555998,
+      "new": 0.16667130210672054,
+      "steps": 507
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_overtaking_medium",
+      "seed": 1001,
+      "old": 0.19265501392024695,
+      "new": 0.16197570763021216,
+      "steps": 522
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_t_intersection_low",
+      "seed": 1001,
+      "old": 0.9041190207420429,
+      "new": 0.23449215910363055,
+      "steps": 330
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_t_intersection_medium",
+      "seed": 1001,
+      "old": 0.9032817626062033,
+      "new": 0.23337508610400926,
+      "steps": 330
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "classic_urban_crossing_medium",
+      "seed": 1001,
+      "old": 2.948146941231939,
+      "new": 0.4147931748574086,
+      "steps": 600
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_frontal_approach",
+      "seed": 1001,
+      "old": 4.081050247729505,
+      "new": 0.39635606193166767,
+      "steps": 400
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_pedestrian_obstruction",
+      "seed": 1001,
+      "old": 0.03332075973975413,
+      "new": 0.024743329076549574,
+      "steps": 400
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_pedestrian_overtaking",
+      "seed": 1001,
+      "old": 0.02533618436476151,
+      "new": 0.02206220246814285,
+      "steps": 323
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_robot_overtaking",
+      "seed": 1001,
+      "old": 0.03878312518391537,
+      "new": 0.036456008465361074,
+      "steps": 400
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_down_path",
+      "seed": 1001,
+      "old": 0.035570007546473145,
+      "new": 0.03226971478535602,
+      "steps": 328
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_intersection_no_gesture",
+      "seed": 1001,
+      "old": 0.11170798179304715,
+      "new": 0.08953178246630775,
+      "steps": 238
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 1001,
+      "old": 2.3313212971122264,
+      "new": 0.2766183151550089,
+      "steps": 400
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_narrow_hallway",
+      "seed": 1001,
+      "old": 4.664796028982672,
+      "new": 1.1749654663686402,
+      "steps": 400
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "old": 3283.654078699995,
+      "new": 2.202821931752981,
+      "steps": 400
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_entering_room",
+      "seed": 1001,
+      "old": 0.08186410672101907,
+      "new": 0.07432784133403372,
+      "steps": 174
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_exiting_room",
+      "seed": 1001,
+      "old": 0.10730730248902473,
+      "new": 0.0936693757875342,
+      "steps": 198
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_entering_elevator",
+      "seed": 1001,
+      "old": 0.1511885692303782,
+      "new": 0.1301153185135771,
+      "steps": 114
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_exiting_elevator",
+      "seed": 1001,
+      "old": 0.13451710663261174,
+      "new": 0.16928895980684575,
+      "steps": 335
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 1001,
+      "old": 0.10986448894326026,
+      "new": 0.0873406523429149,
+      "steps": 237
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_intersection_proceed",
+      "seed": 1001,
+      "old": 0.1098637623335391,
+      "new": 0.08733986057408043,
+      "steps": 237
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_following_human",
+      "seed": 1001,
+      "old": 0.08213861258162475,
+      "new": 0.06520395919844287,
+      "steps": 363
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_leading_human",
+      "seed": 1001,
+      "old": 0.07050784031353045,
+      "new": 0.05102400929831636,
+      "steps": 331
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 1001,
+      "old": 0.0880900722910439,
+      "new": 0.06470242468761427,
+      "steps": 335
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_join_group",
+      "seed": 1001,
+      "old": 0.5987270189116667,
+      "new": 0.3052192812665254,
+      "steps": 227
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_leave_group",
+      "seed": 1001,
+      "old": 0.6477068673455888,
+      "new": 0.3952941309448973,
+      "steps": 276
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_crowd_navigation",
+      "seed": 1001,
+      "old": 2.1660954086693485,
+      "new": 0.5032367172706751,
+      "steps": 400
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_parallel_traffic",
+      "seed": 1001,
+      "old": 0.07318116381633219,
+      "new": 0.06359585106867281,
+      "steps": 393
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_perpendicular_traffic",
+      "seed": 1001,
+      "old": 1.1703877565862424,
+      "new": 0.47034374604672363,
+      "steps": 400
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_circular_crossing",
+      "seed": 1001,
+      "old": 0.05260573237447754,
+      "new": 0.044599222977695155,
+      "steps": 125
+    },
+    {
+      "arm": "social_force__differential_drive",
+      "scenario_id": "francis2023_robot_crowding",
+      "seed": 1001,
+      "old": 2.0517021886690276,
+      "new": 1.1775098047878232,
+      "steps": 400
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_bottleneck_low",
+      "seed": 1001,
+      "old": 0.05542346661243486,
+      "new": 0.03874835452309855,
+      "steps": 111
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 1001,
+      "old": 0.629530078689898,
+      "new": 0.1521413062180262,
+      "steps": 263
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 1001,
+      "old": 0.6058652026395779,
+      "new": 0.16482570678329656,
+      "steps": 286
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "seed": 1001,
+      "old": 0.06513015634661234,
+      "new": 0.044153590873526084,
+      "steps": 274
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_station_platform_medium",
+      "seed": 1001,
+      "old": 0.1561832992205975,
+      "new": 0.14336197780789495,
+      "steps": 344
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_cross_trap_low",
+      "seed": 1001,
+      "old": 0.08082869737968368,
+      "new": 0.07955930724678263,
+      "steps": 253
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_cross_trap_medium",
+      "seed": 1001,
+      "old": 0.25482859285090503,
+      "new": 0.13130916737287043,
+      "steps": 405
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 1001,
+      "old": 0.32071809852936733,
+      "new": 0.13162604947084416,
+      "steps": 405
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_doorway_low",
+      "seed": 1001,
+      "old": 10.850166817189244,
+      "new": 1.2396000934760842,
+      "steps": 500
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_doorway_medium",
+      "seed": 1001,
+      "old": 0.18911120866000727,
+      "new": 0.1500140896598377,
+      "steps": 77
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_doorway_high",
+      "seed": 1001,
+      "old": 0.38230030624576683,
+      "new": 0.3535292008538088,
+      "steps": 157
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_group_crossing_low",
+      "seed": 1001,
+      "old": 0.14685148949277463,
+      "new": 0.11819867074851438,
+      "steps": 100
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_group_crossing_medium",
+      "seed": 1001,
+      "old": 0.2389077592361636,
+      "new": 0.16414163459584924,
+      "steps": 133
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_group_crossing_high",
+      "seed": 1001,
+      "old": 0.2998794929505757,
+      "new": 0.21430755042204286,
+      "steps": 137
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 1001,
+      "old": 0.10170800364234714,
+      "new": 0.08166841211436118,
+      "steps": 173
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_head_on_corridor_medium",
+      "seed": 1001,
+      "old": 0.23534799444495344,
+      "new": 0.12445312957337983,
+      "steps": 201
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_merging_low",
+      "seed": 1001,
+      "old": 0.19916608490658969,
+      "new": 0.18850333614362005,
+      "steps": 467
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_merging_medium",
+      "seed": 1001,
+      "old": 0.26463169015814814,
+      "new": 0.2297213827343891,
+      "steps": 600
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_overtaking_low",
+      "seed": 1001,
+      "old": 0.16569985008806573,
+      "new": 0.14408935348418317,
+      "steps": 230
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_overtaking_medium",
+      "seed": 1001,
+      "old": 0.196380419942803,
+      "new": 0.1750276671907793,
+      "steps": 244
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_t_intersection_low",
+      "seed": 1001,
+      "old": 0.13461211592724046,
+      "new": 0.10782540009824301,
+      "steps": 142
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_t_intersection_medium",
+      "seed": 1001,
+      "old": 0.13461211592724046,
+      "new": 0.10782540009824301,
+      "steps": 142
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "classic_urban_crossing_medium",
+      "seed": 1001,
+      "old": 0.04567901408079384,
+      "new": 0.029575275153552127,
+      "steps": 158
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_frontal_approach",
+      "seed": 1001,
+      "old": 0.10794944887799451,
+      "new": 0.09167110673725154,
+      "steps": 185
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_pedestrian_obstruction",
+      "seed": 1001,
+      "old": 0.08775340528590142,
+      "new": 0.07290297965722954,
+      "steps": 181
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_pedestrian_overtaking",
+      "seed": 1001,
+      "old": 0.05205816303311023,
+      "new": 0.03480711592292668,
+      "steps": 175
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_robot_overtaking",
+      "seed": 1001,
+      "old": 0.06229776519726897,
+      "new": 0.04509370508634828,
+      "steps": 177
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_down_path",
+      "seed": 1001,
+      "old": 0.012771577135690547,
+      "new": 0.008656298442509088,
+      "steps": 168
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_intersection_no_gesture",
+      "seed": 1001,
+      "old": 0.04051153338613367,
+      "new": 0.026918902042390384,
+      "steps": 123
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_blind_corner",
+      "seed": 1001,
+      "old": 0.11652563804457926,
+      "new": 0.09937028787201681,
+      "steps": 247
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_narrow_hallway",
+      "seed": 1001,
+      "old": 2.1561809610416027,
+      "new": 0.4323209742619455,
+      "steps": 400
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_narrow_doorway",
+      "seed": 1001,
+      "old": 3.928611496661401,
+      "new": 0.9157190193139482,
+      "steps": 400
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_entering_room",
+      "seed": 1001,
+      "old": 0.12578127326786873,
+      "new": 0.10216213192094477,
+      "steps": 94
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_exiting_room",
+      "seed": 1001,
+      "old": 0.1324070525087328,
+      "new": 0.10521001974363305,
+      "steps": 106
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_entering_elevator",
+      "seed": 1001,
+      "old": 0.11800131572764208,
+      "new": 0.0868438344271976,
+      "steps": 63
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_exiting_elevator",
+      "seed": 1001,
+      "old": 0.15083294553107243,
+      "new": 0.13874479653391225,
+      "steps": 79
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_intersection_wait",
+      "seed": 1001,
+      "old": 0.04051153338613367,
+      "new": 0.026918902042390384,
+      "steps": 123
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_intersection_proceed",
+      "seed": 1001,
+      "old": 0.04051153338613367,
+      "new": 0.026918902042390384,
+      "steps": 123
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_following_human",
+      "seed": 1001,
+      "old": 0.012771577135690547,
+      "new": 0.008656298442509088,
+      "steps": 168
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_leading_human",
+      "seed": 1001,
+      "old": 0.012771577135690547,
+      "new": 0.008656298442509088,
+      "steps": 168
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_accompanying_peer",
+      "seed": 1001,
+      "old": 0.012771577135690547,
+      "new": 0.008656298442509088,
+      "steps": 168
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_join_group",
+      "seed": 1001,
+      "old": 0.16048020522351944,
+      "new": 0.1368355454067256,
+      "steps": 76
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_leave_group",
+      "seed": 1001,
+      "old": 0.15653826644899338,
+      "new": 0.13752552996243528,
+      "steps": 77
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_crowd_navigation",
+      "seed": 1001,
+      "old": 0.24270104491928585,
+      "new": 0.17272357586142423,
+      "steps": 213
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_parallel_traffic",
+      "seed": 1001,
+      "old": 0.07571128185847083,
+      "new": 0.06264612277330729,
+      "steps": 179
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_perpendicular_traffic",
+      "seed": 1001,
+      "old": 0.15840257755370904,
+      "new": 0.11166961033852812,
+      "steps": 146
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_circular_crossing",
+      "seed": 1001,
+      "old": 0.0977060880571363,
+      "new": 0.06974329932246608,
+      "steps": 74
+    },
+    {
+      "arm": "socnav_sampling__differential_drive",
+      "scenario_id": "francis2023_robot_crowding",
+      "seed": 1001,
+      "old": 1.1206563522855149,
+      "new": 0.534893502487892,
+      "steps": 212
+    }
+  ]
+}

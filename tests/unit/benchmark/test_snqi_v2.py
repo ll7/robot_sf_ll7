@@ -95,8 +95,11 @@ def test_development_calibration_matches_candidate_and_preserves_frozen_007():
     assert calibration["export_publication_bundle"] is False
     assert calibration["arm_isolation"] == "subprocess"
     assert calibration["planners"] == template["planners"]
+    assert template["protocol_version"] == "0.0.8"
+    assert calibration.get("protocol_version") is None
 
     allowed_deviations = {
+        "protocol_version",  # calibration has no fixed horizon; its schedule binds the budget
         "name",
         "paper_facing",
         "seed_policy",

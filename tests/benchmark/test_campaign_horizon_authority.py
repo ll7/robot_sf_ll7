@@ -635,8 +635,17 @@ def test_registry_admission_depends_on_exact_bytes(tmp_path):
     assert cfg.horizon_policy == "legacy_runner_cap"
     path.write_bytes(source.read_bytes() + b"\n# changed content\n")
     cfg = load_campaign_config(path, repository_root=ROOT)
-    with pytest.raises(ValueError, match="authored limit.*below fixed horizon"):
-        _load_campaign_scenarios(cfg, repository_root=ROOT)
+    assert cfg.protocol_version is None
+    assert cfg.horizon_policy is None
+    # Losing registered policy provenance does not opt an unidentified config
+    # into the new 0.0.8 simulator binding; ordinary main compatibility remains.
+    scenarios = _load_campaign_scenarios(cfg, repository_root=ROOT)
+    assert (
+        next(s for s in scenarios if s["name"] == "francis2023_narrow_doorway")[
+            "simulation_config"
+        ]["max_episode_steps"]
+        == 400
+    )
 
 
 def test_published_2026_08_manifest_is_valid_in_production():

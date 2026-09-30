@@ -62,7 +62,7 @@ PINNED_V04_MANIFEST_SHA256 = "aded0ca71e40bdc8f7193282bb8d28420a9b627f93d47a4303
 PINNED_V03_CONFIG_SHA256 = "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4"
 PINNED_V03_MANIFEST_SHA256 = "d6f3047adaacfb8cad2cc12430ee5ce7331f11b0777ac522209fd1e5af019241"
 HISTORICAL_V04_TEMPLATE_SHA256 = "f453b7c824fdd47298cbc66dae3afc1fffcd7eedf57ee4bb87cd1c67b4feb1d7"
-CAMPAIGN_TEMPLATE_SHA256 = "22ecfb909e4904b003fa8d8043cc6d56d40fe5a4dfec6a08313cbd055b72353c"
+CAMPAIGN_TEMPLATE_SHA256 = "41d4bcdbed9b72406dfa02611f4aa8e58a2c65bc7e2db452446b88d3a5bfeead"
 
 EXPECTED_PLANNER_KEYS = [
     "prediction_planner",
@@ -392,14 +392,16 @@ def test_runtime_smoke_manifest_validates_against_config_and_assets() -> None:
     assert manifest.expected_kinematics_matrix == ("differential_drive",)
 
 
-def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
+def test_runtime_smoke_v0_4_preserves_main_runner_cap_and_v0_3() -> None:
     """The predecessor keeps its original source pin and v4 fail-closed roster."""
     template = _load_yaml(CAMPAIGN_TEMPLATE_PATH)
     smoke = _load_yaml(RUNTIME_SMOKE_V04_CONFIG_PATH)
     cfg = load_campaign_config(RUNTIME_SMOKE_V04_CONFIG_PATH)
     assert cfg.horizon_policy is None
-    with pytest.raises(ValueError, match="authored limit 400 is below fixed horizon 600"):
-        _load_campaign_scenarios(cfg)
+    assert cfg.protocol_version is None
+    ordinary = _load_campaign_scenarios(cfg)
+    assert {s["simulation_config"]["max_episode_steps"] for s in ordinary} == {400}
+    assert all("campaign_horizon" not in s.get("metadata", {}) for s in ordinary)
 
     assert _sha256(RUNTIME_SMOKE_V04_CONFIG_PATH) == PINNED_V04_CONFIG_SHA256
     assert _sha256(RUNTIME_SMOKE_V04_MANIFEST_PATH) == PINNED_V04_MANIFEST_SHA256
@@ -443,6 +445,7 @@ def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
     )
 
     expected_config_differences = {
+        "protocol_version",
         "artifact_provenance",
         "horizon",
         "scenario_horizons",
@@ -534,9 +537,12 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
         {row["name"]: row for row in _load_campaign_scenarios(config)} for config in configs
     ]
     calibration, smoke, template = raw
+    assert template["protocol_version"] == smoke["protocol_version"] == "0.0.8"
+    assert calibration.get("protocol_version") is None
     assert calibration["planners"] == smoke["planners"] == template["planners"]
     _assert_versioned_kernel_and_v4_freeze(raw, scenarios)
     allowed_calibration_differences = {
+        "protocol_version",  # fixed-budget admission declaration; calibration is scheduled
         "arm_isolation",  # execution resource policy
         "export_publication_bundle",  # publication identity
         "name",  # publication identity
@@ -676,6 +682,7 @@ def test_runtime_smoke_v0_5_advances_wrapped_kernel_and_preserves_v0_4() -> None
     predecessor = _load_yaml(RUNTIME_SMOKE_V04_CONFIG_PATH)
     successor = _load_yaml(RUNTIME_SMOKE_V05_CONFIG_PATH)
     assert _diff_paths(predecessor, successor) == {
+        "protocol_version",
         "horizon",
         "scenario_horizons",
         "scenario_horizons_sha256",

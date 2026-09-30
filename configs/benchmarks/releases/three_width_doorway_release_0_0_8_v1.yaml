@@ -5,7 +5,7 @@ release_id: three_width_doorway_0_0_8_v1
 release_tag: three-width-doorway-0.0.8-v1
 maturity: pre-1.0
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml
-campaign_config_sha256: f2b04bc5fd475e872701e170671eadf5cbe338c8250634c62cc4cf1307b7e7e5
+campaign_config_sha256: 4958ed202e598129bcd4fb5ed4d6e014598b539105e4456d8c6f2dad4c4d0236
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: doorway-width-slice
 scenario:
@@ -116,7 +116,7 @@ width_slice_contract:
   planner_arms: 14
   evaluation_seeds: 30
   expected_episode_rows: 1260
-  requested_horizon_steps: 600
+  requested_horizon_steps: 400
   scenario_horizon_cap_steps: 400
   dt: 0.1
   pairing: same_seed_across_widths_requires_initial_actor_and_external_rng_identity_receipts

@@ -6,6 +6,7 @@
 # Zenodo coordinates are selected. Keep the scientific contract and all input
 # bytes stable when resolving a release.
 name: paper_experiment_matrix_v2_h600_s30_benchmark_data
+protocol_version: 0.0.8
 paper_facing: true
 paper_profile_version: paper-matrix-v1
 scenario_matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml

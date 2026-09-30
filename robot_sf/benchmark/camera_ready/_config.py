@@ -527,14 +527,20 @@ def _apply_fixed_campaign_horizon(
     horizon_policy: str | None = None,
     protocol_version: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Bind a fixed budget; historical runner caps keep the authored simulator limit.
+    """Bind declared 0.0.8+ budgets; other fixed horizons retain main's runner-only cap.
 
     Returns:
-        Copied scenarios with the fixed episode budget, or the original list in scenario mode.
+        Copied scenarios for admitted bindings, otherwise the untouched scenario list.
     """
     _validate_horizon_policy(horizon_policy, protocol_version)
     legacy = horizon_policy == "legacy_runner_cap"
     if horizon is None or horizon <= 0:
+        return scenarios
+    version = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:\.post\d+)?", str(protocol_version))
+    current_protocol = version is not None and tuple(map(int, version.groups())) >= (0, 0, 8)
+    if not legacy and not current_protocol:
+        # Older/unidentified campaigns never bound simulator budgets. Keep their
+        # entire payload untouched so historical resume and dedupe IDs survive.
         return scenarios
     patched_scenarios = []
     for scenario in scenarios:

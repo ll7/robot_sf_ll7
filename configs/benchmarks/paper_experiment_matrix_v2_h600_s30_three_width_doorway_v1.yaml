@@ -1,5 +1,6 @@
 # Preregistered 2.2/2.8/3.6 m full-roster doorway width slice.
 name: paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1
+protocol_version: 0.0.8
 paper_facing: true
 paper_profile_version: paper-matrix-v1
 scenario_matrix: configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml
@@ -41,7 +42,8 @@ snqi_contract:
   calibration_seed: 123
   calibration_trials: 6000
 workers: 32
-horizon: 600
+scenario_horizons: configs/benchmarks/horizon_schedules/three_width_doorway_release_0_0_8_authored_v1.yaml
+scenario_horizons_sha256: e420f41636e59dd1169bf2da048c482ec78ba9ccf8ec5dc2721534c61c8191c9
 dt: 0.1
 record_forces: true
 checkpoint_provenance_enforcement: error

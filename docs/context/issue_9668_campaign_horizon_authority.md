@@ -157,8 +157,10 @@ from the resolved authored closure and pinned by SHA-256
 The H650/H700 scenarios now receive their full authored budgets. Source scenario,
 frozen planner and historical evidence bytes remain unchanged.
 
-Fixed campaign and arm admission refuses an authored limit below the requested
-fixed horizon, before execution. Schedules cannot coexist with fixed horizons.
+Only explicitly declared 0.0.8+ campaign and arm admission refuses an authored
+limit below the requested fixed horizon, before execution. Older and unidentified
+fixed-horizon configs retain main's runner-only cap and untouched authored limits
+and identities. Schedules cannot coexist with fixed horizons.
 Schedule digest checks run at config intake and scenario preparation. Simulator
 seconds bind after the effective timestep is selected, while the integer step
 budget reaches the simulator directly via `episode_step_limit`. Duration-only

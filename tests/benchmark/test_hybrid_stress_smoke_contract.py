@@ -83,7 +83,7 @@ def _resolve_manifest_path(value: str) -> Path:
     return path if path.is_absolute() else (MANIFEST_PATH.parent / path).resolve()
 
 
-def test_historical_stress_h600_admits_only_explicit_legacy_budgets() -> None:
+def test_historical_stress_h600_registry_records_non_extending_budgets() -> None:
     manifest = load_release_manifest(MANIFEST_PATH)
     campaign_config = load_campaign_config(manifest.canonical_campaign_config_path)
     report = validate_release_manifest(manifest, campaign_config=campaign_config)
@@ -101,8 +101,15 @@ def test_historical_stress_h600_admits_only_explicit_legacy_budgets() -> None:
     assert all(s["metadata"]["scenario_horizon"]["policy"] == "legacy_runner_cap" for s in resolved)
     from dataclasses import replace
 
-    with pytest.raises(ValueError, match="authored limit 500 is below fixed horizon 600"):
-        _load_campaign_scenarios(replace(campaign_config, horizon_policy=None))
+    ordinary = _load_campaign_scenarios(replace(campaign_config, horizon_policy=None))
+    assert [s["simulation_config"]["max_episode_steps"] for s in ordinary] == [
+        600,
+        600,
+        500,
+        400,
+        400,
+    ]
+    assert all("campaign_horizon" not in s.get("metadata", {}) for s in ordinary)
     from robot_sf.training.scenario_loader import load_scenarios
 
     scenarios = load_scenarios(campaign_config.scenario_matrix_path)

@@ -19,6 +19,20 @@ horizon 600, and effective minimum. The simulator limit is never raised by the
 legacy policy. Input horizon provenance keys are reserved; a passed horizon
 must match its binding.
 
+Fixed-budget rewriting and shorter-authored-budget refusal apply only to configs
+that explicitly declare a 0.0.8+ `protocol_version`, including admitted 0.0.8
+release inputs. Every other fixed-horizon config, registered or not, retains
+main `93ba0d75` runner-cap semantics. Unregistered older/unidentified configs
+receive no new horizon annotations: simulator limits, scenario_params,
+config_hash, episode_id and timeout labels stay as on main. The exact registry
+remains the production authority for the explicit historical policy and its
+additive provenance; it is not required for ordinary runner-cap compatibility.
+
+The sealed three-width doorway campaign explicitly declares `protocol_version:
+0.0.8`, no fixed horizon, and the hash-pinned three-width authored schedule.
+Each of its three scenarios has budget 400; no sealed evaluation execution is
+needed to verify that declaration. Its v0.2 release template is owned by PR #10039.
+
 For 0.0.8+, preserve the authored budgets (25×400, 13×500, 8×600, 1×650, 1×700).
 A fixed horizon refuses shorter authored limits. Release acceptance must bind
 the scenario schedule independently of the campaign and check every row's

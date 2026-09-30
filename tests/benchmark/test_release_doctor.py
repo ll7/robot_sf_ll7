@@ -127,8 +127,15 @@ def test_manifest_doctor_admits_explicit_historical_h600() -> None:
     assert len(release_doctor._load_campaign_scenarios(cfg)) == 48
     from dataclasses import replace
 
-    with pytest.raises(ValueError, match="authored limit 500 is below fixed horizon 600"):
-        release_doctor._load_campaign_scenarios(replace(cfg, horizon_policy=None))
+    ordinary = release_doctor._load_campaign_scenarios(replace(cfg, horizon_policy=None))
+    assert {s["simulation_config"]["max_episode_steps"] for s in ordinary} == {
+        400,
+        500,
+        600,
+        650,
+        700,
+    }
+    assert all("campaign_horizon" not in s.get("metadata", {}) for s in ordinary)
 
 
 def test_doctor_anchors_manifest_and_git_checks_to_explicit_release_checkout(

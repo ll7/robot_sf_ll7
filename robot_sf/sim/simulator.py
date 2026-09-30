@@ -394,7 +394,11 @@ def _group_member_probabilities(config: SimulationSettings) -> list[float]:
     Let q(k) be the normalized default decay on sizes 2..N and m = E_q[k].
     If p is P(size>1), the pedestrian fraction is f = p*m/(1-p+p*m).
     Solving gives p = f/(m*(1-f)+f); preserve q within that mass.
-    A finite population may end with a truncated last group.
+    This is a large-crowd expectation. With small crowds, truncating the last
+    group lowers the realised fraction below the target. For f=0.5 and max
+    size 3, expected fractions at 2/3/4 pedestrians are 0.31/0.37/0.40.
+    Release map-runner diagnostics realised 0.17/0.36/0.44 on dev seeds
+    1001-1030 in the low/medium/high group scenarios.
 
     Returns:
         Group-size probabilities, or an empty list to retain the default law.

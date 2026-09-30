@@ -12,18 +12,23 @@ corrected fraction law. The refute review attributed outcome shifts to crowd
 re-realization noise, apart from the intended groups effect; it accepted the
 private streams and relocation contract.
 
-With the corrected pedestrian-fraction law, actual reset populations over seeds
-1001–1030 give:
+With the corrected pedestrian-fraction law, direct factory/reset diagnostics over
+dev seeds 1001–1030 give the values below. The reviewer measured the release
+scenarios separately through the map runner at head
+`17dca5dc1270d23a37409885574c0677d08dc851`; those crowds have different realised
+fractions and are shown in the final column:
 
-| Group-crossing scenario | Target | Reviewed law | Corrected law | Grouped / total pedestrians |
-| --- | ---: | ---: | ---: | ---: |
-| low | 0.5 | 0.4000 | 0.4000 | 24 / 60 |
-| medium | 0.5 | 0.6000 | 0.4778 | 43 / 90 |
-| high | 0.5 | 0.5417 | 0.4667 | 56 / 120 |
+| Group-crossing scenario | Target | Reviewed law | Corrected law | Grouped / total pedestrians | Release map runner |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| low | 0.5 | 0.4000 | 0.4000 | 24 / 60 | 0.17 |
+| medium | 0.5 | 0.6000 | 0.4778 | 43 / 90 | 0.36 |
+| high | 0.5 | 0.5417 | 0.4667 | 56 / 120 | 0.44 |
 
 These scenarios instantiate only 2, 3, and 4 pedestrians per reset. Last-group
-truncation and the 30-seed sample affect realised fractions; the distribution's
-size-weighted expectation is exactly 0.5 before finite-population truncation.
+truncation lowers the expected grouped fraction to 0.31/0.37/0.40 at these crowd
+sizes (max group size 3, target 0.5); sampling noise adds variation. The formula
+sets a large-crowd expectation, not exact small-crowd allocation. The release
+map runner does not reach the authored target of 0.5 in these scenarios.
 The two stationary-contact checks have been removed: their audit realizations
 needed no relocation. Forced-overlap tests protect reaction clearance, route
 velocity, and a waypoint inside the robot instead.
@@ -40,7 +45,7 @@ simulation keys still fail closed.
 
 Pedestrian placement, group-size draws, zone goals, route-end respawns, archetypes, response-law assignments, desired-speed sampling and the controlled ego pedestrian use private NumPy generators. `SeedSequence(episode_seed).spawn(4)` derives placement, archetype, response-law and desired-speed streams; explicit per-feature seed overrides remain supported. Robot-exclusion retries use a separate child stream, so extra retries do not consume the unguarded respawn stream. Robot route sampling retains its existing seeded global context; the pedestrian zone helper retains a global fallback only for compatibility. Seeded resets rebuild pedestrian population and behavior streams, including navigators. Unseeded construction uses private entropy only when no pedestrian episode seed was supplied. Shared-world creation/reset, map-runner episodes, direct seeded diagnostic callers, and counterfactual fixtures thread that seed explicitly. Unseeded ego resets advance their stream; explicit seeded resets rebuild it. Episode pedestrian seeds are excluded from the environment configuration hash; absent groups retain the historical hash.
 
-`simulation_config.groups` is the expected fraction of **pedestrians** in multi-member groups, as defined by the repository schema. With q(k) proportional to 0.3^(k-2) on sizes 2..N and m = sum(k*q(k)), set P(size>1) = f / (m*(1-f)+f), then P(size=k) = P(size>1)*q(k). This solves f = P(size>1)*m / (P(size=1)+P(size>1)*m). For max size 3 and f=0.5, probabilities are [29/42, 5/21, 1/14]. Finite populations may truncate their last group, so realised fractions fluctuate. Values outside [0,1], non-finite values, and groups>0 with max size 1 are rejected. The three group-crossing scenarios declare 0.5.
+`simulation_config.groups` is the large-crowd expected fraction of **pedestrians** in multi-member groups, as defined by the repository schema. With q(k) proportional to 0.3^(k-2) on sizes 2..N and m = sum(k*q(k)), set P(size>1) = f / (m*(1-f)+f), then P(size=k) = P(size>1)*q(k). This solves f = P(size>1)*m / (P(size=1)+P(size>1)*m). For max size 3 and f=0.5, probabilities are [29/42, 5/21, 1/14]. With small crowds the realised fraction falls below the target because the last group is truncated. At 2/3/4 pedestrians and max size 3, the expected fractions for target 0.5 are 0.31/0.37/0.40; the release map runner measured 0.17/0.36/0.44 over dev seeds 1001–1030. Keep this formula; exact small-crowd allocation is tracked for 0.0.9 in [#10040](https://github.com/ll7/robot_sf_ll7/issues/10040). Values outside [0,1], non-finite values, and groups>0 with max size 1 are rejected. The three group-crossing scenarios declare 0.5.
 
 The 48 release scenarios use these simulation keys: goal_completion_policy, groups, max_episode_steps, max_peds_per_group, ped_density, robot_goal_sampling_policy, route_spawn_distribution, route_spawn_jitter_frac, social_force_kernel_version. Only groups was unread before this change; all nine are now applied. Unknown keys fail before an episode runs.
 

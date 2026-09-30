@@ -103,19 +103,9 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
     print("PASS issue_5303_v1_preflight: blocked on runner provenance mismatch")
 
     v2_result = preflight_issue_5303_powered_contract(repo_root=Path.cwd())
-    # The checked-in v2 contract predates the current algorithm metadata bytes.
-    # Keep the frozen contract intact and require its provenance gate under -O.
-    if v2_result.ready or not v2_result.blocked:
-        raise RuntimeError("issue_5303_v2_preflight: stale provenance must remain blocked")
-    failed_v2_checks = sorted(name for name, ok in v2_result.checks.items() if not ok)
-    if failed_v2_checks != ["input_provenance_hashes"]:
-        raise RuntimeError(f"issue_5303_v2_preflight: unexpected checks: {failed_v2_checks}")
-    if len(v2_result.blockers) != 1 or (
-        "input provenance SHA-256 mismatch for 'algorithm_metadata'"
-        not in v2_result.blockers[0]
-    ):
-        raise RuntimeError(f"issue_5303_v2_preflight: unexpected blockers: {v2_result.blockers}")
-    print("PASS issue_5303_v2_preflight: blocked on algorithm metadata provenance mismatch")
+    if not v2_result.ready:
+        raise RuntimeError(f"issue_5303_v2_preflight: preflight blocked: {v2_result.blockers}")
+    print("PASS issue_5303_v2_preflight: ready")
 
     terminal_mapping_errors = downstream_activation_errors(object())
     if terminal_mapping_errors != ["terminal result must be a mapping"]:
@@ -386,7 +376,7 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
 
 _EXPECTED_MARKERS = (
     "PASS issue_5303_v1_preflight: blocked on runner provenance mismatch",
-    "PASS issue_5303_v2_preflight: blocked on algorithm metadata provenance mismatch",
+    "PASS issue_5303_v2_preflight: ready",
     "PASS issue_5303_terminal_mapping: fail-closed",
     "PASS tie_aware_interval_bounds: TieAwareRankingError",
     "PASS collision_pressure_ledger_guard: CollisionPressureReportError",

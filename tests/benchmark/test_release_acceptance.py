@@ -1094,8 +1094,8 @@ def test_guarded_ppo_safe_shield_state_remains_admitted() -> None:
         ),
         (
             {"guard_stats": {"stop_best_effort": 1}},
-            "invalid",
-            ("guard_stats.stop_best_effort", "1"),
+            "valid",
+            None,
         ),
         (
             {"guard_stats": {"stop_best_effort": "1"}},
@@ -1104,8 +1104,8 @@ def test_guarded_ppo_safe_shield_state_remains_admitted() -> None:
         ),
         (
             {"shield_stats": {"decision_counts": {"stop_best_effort": 1}}},
-            "invalid",
-            ("shield_stats.decision_counts.stop_best_effort", "1"),
+            "valid",
+            None,
         ),
         (
             {"shield_stats": {"decision_counts": {"stop_best_effort": "1"}}},
@@ -1114,8 +1114,8 @@ def test_guarded_ppo_safe_shield_state_remains_admitted() -> None:
         ),
         (
             {"shield_stats": {"last_decision": {"decision_label": "stop_best_effort"}}},
-            "invalid",
-            ("shield_stats.last_decision.decision_label", "stop_best_effort"),
+            "valid",
+            None,
         ),
     ],
 )
@@ -1126,7 +1126,7 @@ def test_full_release_handles_stop_best_effort_evidence(
     expected_status: str,
     expected_marker: tuple[str, str] | None,
 ) -> None:
-    """Full release rejects stop-best-effort evidence but admits an explicit zero count."""
+    """Verified native stops are telemetry; malformed counters still block release."""
     campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
     episode_path = campaign_root / "runs" / "planner_11__differential_drive" / "episodes.jsonl"
     rows = [json.loads(line) for line in episode_path.read_text(encoding="utf-8").splitlines()]

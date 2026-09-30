@@ -15,7 +15,6 @@ import yaml
 from robot_sf.benchmark import release_candidate, spawn_preflight
 from robot_sf.benchmark.release_candidate import (
     _APPROVED_008_HYBRID_CONFIGS,
-    _APPROVED_008_PLANNER_KEYS,
     CANDIDATE_SCHEMA,
     _expected_input_paths,
     create_prepublication_candidate,
@@ -31,7 +30,7 @@ CONFIG = (
     SOURCE_ROOT
     / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
 )
-MATRIX = SOURCE_ROOT / "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v3.yaml"
+MATRIX = SOURCE_ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
 SUITE_POLICY = (
     "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml"
 )
@@ -47,11 +46,6 @@ def _git(root: Path, *args: str) -> str:
 def candidate_repo(tmp_path: Path) -> tuple[Path, Path, dict]:
     """Build a small committed checkout with a real 48-scenario source closure."""
     config = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
-    config["scenario_matrix"] = MATRIX.relative_to(SOURCE_ROOT).as_posix()
-    for planner, approved_key in zip(config["planners"], _APPROVED_008_PLANNER_KEYS, strict=True):
-        planner["key"] = approved_key
-        if approved_key in _APPROVED_008_HYBRID_CONFIGS:
-            planner["algo_config"] = _APPROVED_008_HYBRID_CONFIGS[approved_key]
     scenarios = load_scenarios_for_validation(MATRIX, base_dir=SOURCE_ROOT)
     assert scenarios.load_error is None and not scenarios.load_issues and not scenarios.entry_issues
     rows = [dict(row) for row in scenarios.scenarios]
@@ -78,8 +72,6 @@ def candidate_repo(tmp_path: Path) -> tuple[Path, Path, dict]:
         target = tmp_path / source.relative_to(SOURCE_ROOT)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
-    config_path = tmp_path / CONFIG.relative_to(SOURCE_ROOT)
-    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     pins = {
         source.relative_to(SOURCE_ROOT).as_posix(): hashlib.sha256(
             (tmp_path / source.relative_to(SOURCE_ROOT)).read_bytes()
@@ -131,6 +123,75 @@ def test_doi_free_candidate_loads_but_publication_loader_rejects(candidate_repo)
     assert candidate.expected_episode_cells == 20160
     with pytest.raises(ValueError, match="schema_version"):
         load_release_manifest(path, repository_root=root)
+
+
+def _replace_campaign_algorithm(candidate_repo, arm: str) -> dict:
+    """Change only one algo value in real template bytes, then re-pin the checkout."""
+    root, path, payload = candidate_repo
+    config_path = root / payload["canonical_campaign_config"]
+    original = CONFIG.read_bytes()
+    assert config_path.read_bytes() == original
+    config = yaml.safe_load(original)
+    row = next(row for row in config["planners"] if row["key"] == arm)
+    replacement = "risk_dwa" if row["algo"] == "goal" else "goal"
+    old = f"  - key: {arm}\n    algo: {row['algo']}\n".encode()
+    new = f"  - key: {arm}\n    algo: {replacement}\n".encode()
+    assert original.count(old) == 1
+    changed = original.replace(old, new, 1)
+    config_path.write_bytes(changed)
+    changed_config = yaml.safe_load(changed)
+    row["algo"] = replacement
+    assert changed_config == config  # No matrix, config path, or other row changes.
+    payload["sha256_files"][payload["canonical_campaign_config"]] = hashlib.sha256(
+        changed
+    ).hexdigest()
+    _git(root, "add", payload["canonical_campaign_config"])
+    _git(
+        root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "substituted campaign algorithm",
+    )
+    payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return changed_config
+
+
+@pytest.mark.parametrize(
+    "arm", [row["key"] for row in yaml.safe_load(CONFIG.read_bytes())["planners"]]
+)
+def test_candidate_rejects_algo_only_substitution(candidate_repo, arm: str) -> None:
+    """Every real-template arm must retain its actual approved algorithm."""
+    root, path, _payload = candidate_repo
+    _replace_campaign_algorithm(candidate_repo, arm)
+    with pytest.raises(ValueError, match=f"{arm} must bind its approved algorithm"):
+        load_prepublication_candidate(path, repository_root=root)
+
+
+@pytest.mark.parametrize("arm", list(_APPROVED_008_HYBRID_CONFIGS))
+def test_hybrid_input_admission_uses_actual_campaign_algorithm(candidate_repo, arm: str) -> None:
+    """Runtime admission must use the row algo even without the roster identity gate."""
+    root, _path, payload = candidate_repo
+    config = _replace_campaign_algorithm(candidate_repo, arm)
+    matrix_path = root / payload["scenario"]["matrix_path"]
+    scenarios = load_scenarios_for_validation(matrix_path, base_dir=root)
+    assert scenarios.load_error is None and not scenarios.load_issues and not scenarios.entry_issues
+    with pytest.raises(
+        ValueError, match=f"v4 hybrid slot {arm} resolves to a non-v4 planner variant"
+    ):
+        _expected_input_paths(
+            root,
+            root / payload["canonical_campaign_config"],
+            config,
+            matrix_path,
+            [dict(row) for row in scenarios.scenarios],
+            {**payload["seed_policy"], **payload["inputs"]},
+            config["planners"],
+        )
 
 
 def test_candidate_rejects_changed_map_bytes(candidate_repo) -> None:
@@ -273,6 +334,77 @@ def test_candidate_rejects_v4_key_bound_to_historical_v3_config(candidate_repo) 
         load_prepublication_candidate(path, repository_root=root)
 
 
+@pytest.mark.parametrize(
+    ("arm", "historical_path"),
+    [
+        ("risk_dwa", "configs/algos/risk_dwa_camera_ready.yaml"),
+        ("predictive_mppi", "configs/algos/predictive_mppi_camera_ready.yaml"),
+        ("guarded_ppo", "configs/algos/guarded_ppo_camera_ready_cpu.yaml"),
+    ],
+)
+def test_candidate_rejects_historical_waypoint_binding(
+    candidate_repo, arm: str, historical_path: str
+) -> None:
+    """A self-consistent candidate cannot restore any historical waypoint arm."""
+    root, path, payload = candidate_repo
+    config_path = root / payload["canonical_campaign_config"]
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    next(row for row in config["planners"] if row["key"] == arm)["algo_config"] = historical_path
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    historical_copy = root / historical_path
+    historical_copy.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(SOURCE_ROOT / historical_path, historical_copy)
+    payload["sha256_files"][payload["canonical_campaign_config"]] = hashlib.sha256(
+        config_path.read_bytes()
+    ).hexdigest()
+    payload["sha256_files"][historical_path] = hashlib.sha256(
+        historical_copy.read_bytes()
+    ).hexdigest()
+    _git(root, "add", payload["canonical_campaign_config"], historical_path)
+    _git(
+        root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "historical waypoint binding",
+    )
+    payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match=f"{arm} must bind its active-waypoint v2 config path"):
+        load_prepublication_candidate(path, repository_root=root)
+
+
+@pytest.mark.parametrize("arm", ["risk_dwa", "predictive_mppi", "guarded_ppo"])
+def test_candidate_rejects_mutated_effective_waypoint_selector(candidate_repo, arm: str) -> None:
+    root, path, payload = candidate_repo
+    campaign = yaml.safe_load((root / payload["canonical_campaign_config"]).read_text())
+    algo_path = next(row["algo_config"] for row in campaign["planners"] if row["key"] == arm)
+    config_path = root / algo_path
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    selector_config = config["fallback_risk_dwa"] if arm == "guarded_ppo" else config
+    selector_config["goal_target_version"] = "legacy_next_goal_v1"
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    payload["sha256_files"][algo_path] = hashlib.sha256(config_path.read_bytes()).hexdigest()
+    _git(root, "add", algo_path)
+    _git(
+        root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "mutated waypoint selector",
+    )
+    payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match=f"{arm} must select active_waypoint_v2"):
+        load_prepublication_candidate(path, repository_root=root)
+
+
 def test_candidate_rejects_v4_config_bound_to_historical_v3_base(candidate_repo) -> None:
     root, path, payload = candidate_repo
     config_path = _APPROVED_008_HYBRID_CONFIGS[
@@ -366,7 +498,12 @@ def test_candidate_rejects_jointly_pinned_v3_hybrid_variant_override(
     )
     payload["source_commit"] = _git(root, "rev-parse", "HEAD")
     path.write_text(json.dumps(payload), encoding="utf-8")
-    with pytest.raises(ValueError, match="resolves to a non-v4 planner variant"):
+    reason = (
+        "frozen v4 slot resolves planner_variant=.*hybrid_rule_v3_teb_like_rollout"
+        if section == "params"
+        else "resolves to a non-v4 planner variant"
+    )
+    with pytest.raises(ValueError, match=reason):
         load_prepublication_candidate(path, repository_root=root)
 
 
@@ -519,6 +656,7 @@ def test_preflight_cli_accepts_candidate_and_rejects_mid_run_drift(
     root, path, payload = candidate_repo
     original_digest = hashlib.sha256(path.read_bytes()).hexdigest()
     monkeypatch.setattr(release_candidate, "get_repository_root", lambda: root)
+    monkeypatch.setattr(spawn_preflight, "get_repository_root", lambda: root)
     observed: dict[str, object] = {"changed": False}
 
     def diagnostic_scenario(job):

@@ -415,6 +415,8 @@ _FAST_FILE_PREFIXES = (
 _FAST_FILES = {
     # Step-trace invariant contracts inspect synthetic rows without simulation steps.
     "test_step_trace_invariants.py",
+    # Doorway safe-failure contracts classify synthetic rows without planner steps.
+    "test_infeasible_probe_safe_failure.py",
     # Scenario-admissibility tests exercise deterministic candidate, manifest,
     # materialization, and provenance contracts used by the adversarial search.
     "test_scenario_admissibility.py",

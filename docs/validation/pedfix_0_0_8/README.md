@@ -213,3 +213,14 @@ All flagged slots also have a qualifying stall within 3 m of a wall/obstacle seg
 ## Clearance-only control with the original crowds
 
 The base plus only the reset-clearance method and geometry helper (see [clearance_only.patch](clearance_only.patch)) preserves the old NumPy population path. Both original problem seeds now have no contact for the first 20 stationary steps. Minimum centre distances are 1001: 2.150001 m, 1008: 2.089636 m. Every relocated row starts at 2.150001 m with route-consistent velocity. This isolates the clearance repair from the RNG migration. Apply the patch with `git apply --unidiff-zero` to the base and run the two circular-crossing dev-seed regression cases.
+
+## Extended stationary contact proof
+
+Both audit seeds were also stepped for 600 steps (60 s, dt 0.1), with a zero robot action throughout and termination ignored for this contact check. There are **zero contacts** over all 600 steps in both the full fix and the clearance-only control on the original crowd code. This extends the reset regression beyond its first-two-second assertion.
+
+| Seed | Full fix minimum centre distance | Clearance-only minimum centre distance | Contact steps in either run |
+|---|---:|---:|---|
+| 1001 | 1.663094 m | 1.647748 m | none |
+| 1008 | 1.736550 m | 1.761613 m | none |
+
+Full records: [full_contacts_fixed.jsonl](full_contacts_fixed.jsonl) and [full_contacts_clearance_only.jsonl](full_contacts_clearance_only.jsonl). Contact means centre distance <1.4 m. Fixed measured checkout is `2aff51e910d682a75f439cdc5800540207ce7903`, with unchanged runtime code. The raw runner is preserved with the complete external evidence archive; it follows the circular-crossing regression's zero-action loop extended to 600 steps. The original 20-step records remain the reset-window comparison.

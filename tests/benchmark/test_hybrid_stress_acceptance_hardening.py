@@ -165,7 +165,11 @@ def stress_fixture(tmp_path: Path) -> tuple[Path, Any, Any]:
     return _build_stress_fixture(tmp_path)
 
 
-def _build_stress_fixture(tmp_path: Path, *, seed: int = 116) -> tuple[Path, Any, Any]:
+def _build_stress_fixture(
+    tmp_path: Path,
+    *,
+    seed: int = 116,  # seed-holdout: synthetic-fixture
+) -> tuple[Path, Any, Any]:
     """Build a complete accepted 14-arm stress campaign with tiny JSONL files."""
     manifest = load_release_manifest(MANIFEST_PATH)
     campaign_config = load_campaign_config(manifest.canonical_campaign_config_path)

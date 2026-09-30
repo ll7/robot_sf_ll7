@@ -67,7 +67,10 @@ def _fixture_checkpoint_provenance(planner: str, index: int) -> dict[str, object
 
 
 def _fixture(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, seed: int = 111
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    seed: int = 111,  # seed-holdout: synthetic-fixture
 ) -> tuple[Path, tuple[str, ...]]:
     planners = RUNTIME_SMOKE_PLANNER_KEYS
     manifest = tmp_path / RUNTIME_SMOKE_MANIFEST

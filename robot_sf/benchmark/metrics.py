@@ -3066,10 +3066,10 @@ def _is_valid_nonnegative_finite(value: Any) -> bool:
         return False
 
 
-def _cooperative_duration(step: int, dt: Any) -> float:
+def _cooperative_duration(step: int, dt: Any, *, includes_reset: bool = False) -> float:
     """Return a finite cooperative duration, or NaN when multiplication overflows."""
     try:
-        duration = (step + 1) * dt
+        duration = (step + int(not includes_reset)) * dt
         if not math.isfinite(duration) or duration < 0.0:
             return float("nan")
         return float(duration)
@@ -3082,7 +3082,8 @@ def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None =
 
     From paper 2306.16740v4 Table 1: Aggregated Time (AT).
 
-    Formula: AT = max((reached_goal_step[agent] + 1) * dt) over the requested agents.
+    Formula: AT = max((reached_goal_step[agent] + offset) * dt) over requested agents.
+    The offset is zero for reset-inclusive samples and one for post-step samples.
 
     Parameters
     ----------
@@ -3145,7 +3146,7 @@ def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None =
             max_step = step
     if not seen or max_step is None:
         return float("nan")
-    return _cooperative_duration(max_step, data.dt)
+    return _cooperative_duration(max_step, data.dt, includes_reset=data.robot_pos_includes_reset)
 
 
 # --- Orchestrator ---

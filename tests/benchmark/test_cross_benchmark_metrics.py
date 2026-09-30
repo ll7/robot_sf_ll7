@@ -179,3 +179,19 @@ def test_context_note_links_mapping_and_wrapper_surfaces() -> None:
     assert "configs/benchmarks/cross_benchmark_metric_mapping_v1.yaml" in note
     assert "robot_sf/benchmark/cross_benchmark_metrics.py" in note
     assert "not simulator parity or paper-grade evidence" in note
+
+
+def test_report_declares_metric_definition_version() -> None:
+    """Persisted traversal-time reports identify the metric definition they use."""
+    data = EpisodeData(
+        robot_pos=np.array([[0.0, 0.0], [1.0, 0.0]]),
+        robot_vel=np.zeros((2, 2)),
+        robot_acc=np.zeros((2, 2)),
+        peds_pos=np.zeros((2, 0, 2)),
+        ped_forces=np.zeros((2, 0, 2)),
+        goal=np.array([1.0, 0.0]),
+        dt=1.0,
+        reached_goal_step=1,
+    )
+    report = build_cross_benchmark_metric_report(data, horizon=10)
+    assert report["metric_schema_version"] == "robot-sf-metrics.v2"

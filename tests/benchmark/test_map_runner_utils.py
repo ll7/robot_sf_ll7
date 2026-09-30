@@ -3434,7 +3434,7 @@ def test_run_map_episode_records_synthetic_actuation_metrics(
     assert any(step["command_clipped"] is True for step in trace["steps"])
     assert any(step["yaw_rate_saturated"] is True for step in trace["steps"])
     step_trace = record["algorithm_metadata"]["simulation_step_trace"]
-    assert step_trace["schema_version"] == "simulation-step-trace.v1"
+    assert step_trace["schema_version"] == "simulation-step-trace.v2"
     assert step_trace["dt"] == pytest.approx(0.1)
     assert len(step_trace["steps"]) == 4
     first_frame = step_trace["steps"][0]

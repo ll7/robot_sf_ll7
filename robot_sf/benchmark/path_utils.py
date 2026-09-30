@@ -138,7 +138,7 @@ def _shortest_visible_distance(vertices, goal_edges, zone, obstacle_parts, domai
         The minimum visible distance to any admissible goal edge, or NaN.
     """
 
-    def visible(a, b):
+    def visible(a, b) -> bool:
         if a == b:
             return True
         line = LineString([a, b])

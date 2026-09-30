@@ -42,11 +42,12 @@ require_slot() {
 
 # Per-slot container size: CPUs, memory (also the swap cap) and pytest workers.
 # Measured 2026-09-30: a 2-worker shard peaks near 6 GiB, so memory, not CPU,
-# bounds workers. imech156-u (32 cores, 62 GiB, 3 slots) runs larger slots;
+# bounds workers; tmpfs mounts (up to 3 GiB) count against the same limit.
+# imech156-u (32 cores, 62 GiB, 3 slots) runs larger slots;
 # imech036/imech039 (20 cores, 31 GiB, 2 slots) keep the original size.
 slot_limits() {
   case "$host" in
-    imech156-u) printf '8 14g 4\n' ;;
+    imech156-u) printf '8 16g 4\n' ;;
     *) printf '4 8g 2\n' ;;
   esac
 }

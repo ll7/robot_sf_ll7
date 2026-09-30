@@ -334,7 +334,7 @@ def test_setup_accepts_auxme_hostname_prefix(tmp_path: Path, reported: str) -> N
     [
         ("auxme-imech036", "4", "8g", "2"),
         ("auxme-imech039", "4", "8g", "2"),
-        ("imech156-u", "8", "14g", "4"),
+        ("imech156-u", "8", "16g", "4"),
     ],
 )
 def test_runner_container_uses_host_slot_size(

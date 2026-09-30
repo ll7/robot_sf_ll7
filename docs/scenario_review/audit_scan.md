@@ -46,17 +46,22 @@ explicitly does not claim geometrical impossibility. In particular, a nearby
 wall, force response, or observed limit cycle is diagnostic context rather
 than a reachability proof.
 
-## Scalar and systematic sensitivity (engine v1.2)
+## Scalar and systematic sensitivity (engine v1.3)
 
 Physical scalar measurements cannot be nested objects, booleans, strings or
 non-finite numbers. `extreme_measurements` reports
 `error / nonfinite_or_malformed_measurement` for these values. Null remains
-explicit missingness. Only these named structured metric records bypass scalar
-validation: `deadlock_stall`, `distributional_disruption`, `force_quantiles`,
+explicit missingness. These named structured metric records use their documented
+numeric field schemas: `deadlock_stall`, `distributional_disruption`, `force_quantiles`,
 `force_sample_stats`, `metric_values`, `signal_metrics_evidence`,
 `social_compliance`, and `social_mini_game`. These records come from
-`robot_sf/benchmark/metrics.py`; structured admission does not excuse non-finite
-contents. Named terminal-outcome and validity booleans are also accepted; a
+the benchmark metric producers. Recorded physical scalar fields reject booleans,
+strings, lists, Mappings, non-finite values, and impossible negative magnitudes
+(including every force quantile). Count fields must be nonnegative integers;
+fraction fields respect their documented bounds. Null/missing fields remain
+missing. Status strings and arbitrary extension metadata are not inferred to be
+measurements. Force quantiles also use the declared force magnitude ceiling.
+Named terminal-outcome and validity booleans are accepted; a
 boolean physical measurement is malformed. The source-admission layer still
 rejects unexpected non-finite raw rows; documented sentinel normalization is
 unchanged.
@@ -74,19 +79,34 @@ Within-outcome outliers are accompanied by independent default channels:
   triage signals, not significance tests or proof that a failure is unexpected.
 - `planner_cohort_shift` compares unconditioned per-planner scalar-feature medians
   against other planners' medians in the same scenario. It needs at least four
-  recorded episodes per planner and one external planner control. It catches
+  valid episodes per planner/feature and one external planner control. Each
+  feature requires **100% finite numeric scalar coverage** within its planner's
+  recorded cell. `feature_sample_sizes` and `feature_missing_counts` disclose
+  valid and missing/malformed counts for every planner/feature, alongside full
+  `planner_sizes`. `feature_excluded_planners` names incomplete or too-small
+  cells omitted from each comparison. A target feature with incomplete coverage
+  is unavailable; a complete feature needs an admitted external control.
+  With no admitted feature comparisons the signal is unavailable, never clear.
+  Other complete features may still produce a signal with partial missingness.
+  It catches
   uniform per-planner shifts without requiring unavailable initial-state digests
   or equating planner-specific config hashes. Outcomes, intended planner behavior
   and different configurations can explain the differences; no causal inference
   follows. With no external control it stays unavailable.
 - `horizon_consistency` compares `steps` (or `episode_steps`) with recorded
-  `run_horizon` (or `horizon_steps`), termination reason and terminal outcome.
+  `run_horizon` (or `horizon_steps`), the simulator's `max_episode_steps`, and
+  `effective_budget_steps` when recorded, for **every outcome**, including
+  unrecorded outcomes. Each `limit_comparisons` entry reports clear, flagged, or
+  unavailable; missing fields appear in signal missingness without suppressing
+  checks against available maxima. Termination reason and terminal outcome are
+  also checked when available.
   A timeout before the runner horizon, steps beyond it, or an explicit reason
   contradicting the outcome flags. The simulator's
   `scenario_params.simulation_config.max_episode_steps` remains separate: a
   smaller simulator limit flags the timeout's runner/simulator mismatch and is
   retained as an explanation when steps equal that limit. Early successes and
-  collisions do not violate a maximum horizon. Missing contracts stay unavailable
+  collisions within every recorded maximum are consistent. Comparisons without
+  steps or a recorded maximum stay unavailable
   and malformed counts are errors. This requires no trace and makes no goal-zone
   or deadlock diagnosis.
 

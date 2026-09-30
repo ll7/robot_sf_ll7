@@ -25,9 +25,39 @@ from robot_sf.analysis_workbench.review_contracts import (
 )
 from robot_sf.render import review_sessions
 
+# Hang guard for Event.wait/Thread.join: an Event returns at once when set, so a
+# large bound costs nothing when healthy. It is not a performance assertion.
+HANG_GUARD_S = 60.0
+
 FIXTURE_ROOT = (
     Path(__file__).resolve().parents[1] / "fixtures" / "scenario_review" / "review_sessions"
 )
+
+
+class FakeClock:
+    """Monotonic clock that advances only when a test says so."""
+
+    def __init__(self) -> None:  # noqa: D107
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        """Move the clock forward by ``seconds``."""
+        self.now += seconds
+
+
+@pytest.fixture(autouse=True)
+def fake_loop_clock(monkeypatch: pytest.MonkeyPatch) -> FakeClock:
+    """Keep the loop's wall budget independent of host speed (#9990).
+
+    Completion tests must not depend on how fast the runner is; only tests that
+    advance this clock past the budget exercise the wall-timeout path.
+    """
+    clock = FakeClock()
+    monkeypatch.setattr(loop, "_default_clock", clock)
+    return clock
 
 
 def _request(
@@ -134,6 +164,54 @@ class SlowExecutor(FakeExecutor):
         self.started.set()
         time.sleep(self.delay_s)
         return super().execute(operation_id, candidate, kind, spec, attempt)
+
+
+class ClockAdvancingExecutor(FakeExecutor):
+    """Executor whose first call consumes ``advance_s`` of fake wall time."""
+
+    def __init__(self, clock: FakeClock, advance_s: float) -> None:  # noqa: D107
+        super().__init__()
+        self.clock = clock
+        self.advance_s = advance_s
+
+    def execute(
+        self,
+        operation_id: str,
+        candidate: dict[str, Any],
+        kind: str,
+        spec: dict[str, Any],
+        attempt: int,
+    ) -> dict[str, Any]:
+        if not self.calls:
+            self.clock.advance(self.advance_s)
+        return super().execute(operation_id, candidate, kind, spec, attempt)
+
+
+def test_wall_timeout_is_driven_only_by_the_injected_clock(tmp_path: Path) -> None:
+    request = _request(tmp_path, wall_timeout_s=5.0)
+    clock = FakeClock()
+    executor = ClockAdvancingExecutor(clock, advance_s=6.0)
+    result = review_sessions.run(
+        request,
+        base=tmp_path,
+        autonomous=True,
+        executor=executor,
+        source_admission=_proof(tmp_path, request),
+        clock=clock,
+    )
+    assert result.status == "partial"
+    assert "wall_timeout" in str(result.reason)
+
+    healthy_request = _request(tmp_path, output="healthy", wall_timeout_s=5.0)
+    healthy = review_sessions.run(
+        healthy_request,
+        base=tmp_path,
+        autonomous=True,
+        executor=FakeExecutor(),
+        source_admission=_proof(tmp_path, healthy_request),
+        clock=FakeClock(),
+    )
+    assert healthy.status == "complete"
 
 
 def test_descriptor_is_contract_valid_and_explicitly_diagnostic() -> None:
@@ -844,11 +922,11 @@ def test_stop_waits_for_owned_work_and_terminal_journal(tmp_path: Path) -> None:
     )
     worker = threading.Thread(target=session.start)
     worker.start()
-    assert executor.started.wait(timeout=2)
+    assert executor.started.wait(timeout=HANG_GUARD_S)
     started = time.monotonic()
     stopped = session.stop()
     elapsed = time.monotonic() - started
-    worker.join(timeout=2)
+    worker.join(timeout=HANG_GUARD_S)
     assert not worker.is_alive()
     assert elapsed >= executor.delay_s
     assert stopped.status == "cancelled"
@@ -868,7 +946,7 @@ def test_concurrent_start_preserves_active_owner_for_stop(tmp_path: Path) -> Non
     second_results: list[Any] = []
     first = threading.Thread(target=lambda: first_results.append(session.start()))
     first.start()
-    assert executor.started.wait(timeout=2)
+    assert executor.started.wait(timeout=HANG_GUARD_S)
     live_progress = session.progress()
     assert live_progress["status"] == "running", live_progress
     second = threading.Thread(target=lambda: second_results.append(session.start()))
@@ -899,7 +977,7 @@ def test_running_lease_tamper_is_bounded_while_owner_can_settle(tmp_path: Path) 
     )
     worker = threading.Thread(target=session.start)
     worker.start()
-    assert executor.started.wait(timeout=2)
+    assert executor.started.wait(timeout=HANG_GUARD_S)
     session_id = review_sessions._control_context(request)["session_id"]
     lease_path = review_sessions._lifecycle_state_path(tmp_path, request, str(session_id))
     lease = json.loads(lease_path.read_text(encoding="utf-8"))
@@ -925,7 +1003,7 @@ def test_running_lease_shape_tamper_is_bounded(tmp_path: Path) -> None:
     )
     worker = threading.Thread(target=session.start)
     worker.start()
-    assert executor.started.wait(timeout=2)
+    assert executor.started.wait(timeout=HANG_GUARD_S)
     session_id = review_sessions._control_context(request)["session_id"]
     lease_path = review_sessions._lifecycle_state_path(tmp_path, request, str(session_id))
     original = json.loads(lease_path.read_text(encoding="utf-8"))
@@ -1056,7 +1134,7 @@ def test_cross_controller_stop_reports_existing_owner_contract(tmp_path: Path) -
     )
     worker = threading.Thread(target=owner.start)
     worker.start()
-    assert executor.started.wait(timeout=2)
+    assert executor.started.wait(timeout=HANG_GUARD_S)
     foreign_stop = other.stop()
     assert foreign_stop.status == "failed"
     assert "session_lock_owned" in foreign_stop.reason
@@ -1449,7 +1527,7 @@ def test_settled_anchor_rejects_replayed_running_lease(tmp_path: Path) -> None:
     )
     worker = threading.Thread(target=session.start)
     worker.start()
-    assert executor.started.wait(timeout=2)
+    assert executor.started.wait(timeout=HANG_GUARD_S)
     session_id = review_sessions._control_context(request)["session_id"]
     lease_path = review_sessions._lifecycle_state_path(tmp_path, request, str(session_id))
     saved_lease = lease_path.read_bytes()

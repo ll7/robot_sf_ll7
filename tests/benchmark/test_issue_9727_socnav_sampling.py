@@ -22,6 +22,7 @@ from robot_sf.planner.socnav_base import (
 from robot_sf.planner.socnav_sampling_v2 import (
     GoalPathField,
     _ObstacleClearance,
+    _repulsion_direction,
     _rollout,
     braking_speed_limit,
     plan_bounded_v2,
@@ -123,6 +124,24 @@ def test_default_stays_legacy_and_release_config_opts_in() -> None:
     assert SocNavPlannerConfig().sampling_pedestrian_prediction is False
     assert "socnav_sampling_version" not in _adapter().diagnostics()
     assert _adapter("bounded_v2").diagnostics()["socnav_sampling_version"] == "bounded_v2"
+
+
+def test_0_0_8_reference_profile_disables_unpublished_repulsion_vector() -> None:
+    """The v0.8 sampler keeps its path direction when no reference repulsion exists."""
+    path = Path("configs/algos/socnav_sampling_release_v0_0_8.yaml")
+    config = SocNavPlannerConfig(**yaml.safe_load(path.read_text(encoding="utf-8")))
+    direction = _repulsion_direction(
+        config,
+        np.asarray([0.0, 0.0]),
+        np.asarray([1.0, 0.0]),
+        np.asarray([[0.0, 2.0]]),
+        ROBOT_RADIUS,
+        PED_RADIUS,
+    )
+
+    np.testing.assert_allclose(direction, np.asarray([1.0, 0.0]), atol=1e-12, rtol=0.0)
+    assert config.socnav_sampling_version == SOCNAV_SAMPLING_BOUNDED_V2
+    assert config.sampling_braking_envelope is False
 
 
 def test_distant_crowd_keeps_heading_near_goal() -> None:

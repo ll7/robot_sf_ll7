@@ -106,5 +106,18 @@ def test_protocol_member_diagnostics_payload(module_name: str, cls_name: str) ->
     cls = getattr(import_module(module_name), cls_name)
     planner = cls.__new__(cls)
 
+    # These adapters now report decision state initialized by their constructors.
+    # Keep this constructor-free protocol fixture aligned with that initial state.
+    if cls_name in {"GuardedPPOAdapter", "PredictiveMPPIAdapter", "RiskDWAPlannerAdapter"}:
+        planner._no_admissible_command = False
+        planner._no_admissible_command_count = 0
+        planner._recovery_command_count = 0
+        if cls_name == "GuardedPPOAdapter":
+            from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter
+
+            planner.fallback_adapter = RiskDWAPlannerAdapter()
+        else:
+            planner._recovery_command = False
+
     diagnostics = planner.diagnostics()
     assert diagnostics["planner_type"] == cls_name

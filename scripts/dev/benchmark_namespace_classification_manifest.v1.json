@@ -110,6 +110,7 @@
     "hybrid_global_rl_diagnostic.py",
     "identity",
     "imitation_manifest.py",
+    "infeasible_probe_safe_failure.py",
     "interaction_exposure.py",
     "issue_2557_replica_readiness.py",
     "issue_5302_oracle_gap.py",

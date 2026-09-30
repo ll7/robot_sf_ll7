@@ -168,7 +168,7 @@ input_provenance:
       # registry metadata; the powered-search contract fields are unchanged.
       # Refreshed for issue #7603: additive experimental anisotropic Gaussian
       # human-cost planner registry metadata; the powered-search contract fields are unchanged.
-      sha256: 8b4bb11ddf651b079f3e0ad4a2975aa982cadaf00ff7f82ef620ae193970f908
+      sha256: bea0ba751ed1092d12b23d7cc23dcdeac5b1767c4e30cdafbc20378114f521d7
     - id: powered_search_space
       path: configs/adversarial/issue_5303_search_promotion_space_v2.yaml
       sha256: 1f65d0913d0871ee4e658a560a870f8e8a9f74589397c6c613440a90f2757099

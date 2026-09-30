@@ -413,6 +413,12 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Constructor-state, optimized-guard, and inventory drift checks must run on
+    # PR shards when planner code or shared provenance inputs change.
+    "test_diagnostics_conformance.py",
+    "test_optimized_assert_guards.py",
+    "test_issue_7330_assert_inventory.py",
+    "test_issue_7331_benchmark_namespace_inventory.py",
     # Clearance and LiDAR tracking contracts use fixed arrays without environment steps.
     "test_clearance_geometry.py",
     "test_lidar_tracked_agents.py",

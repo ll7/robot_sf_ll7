@@ -1,0 +1,9 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_9952_auditor/aud2/green.txt",
+  "artifact_sha256": "af4ec8eb7ec387e0ab9bfd9fc406e5b44822ebefafc1c03e9b84f2a671be1a09",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": false,
+  "source_artifact_sha256": "af4ec8eb7ec387e0ab9bfd9fc406e5b44822ebefafc1c03e9b84f2a671be1a09",
+  "presentation_normalization": "line endings and trailing whitespace only"
+}

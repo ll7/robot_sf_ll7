@@ -138,9 +138,9 @@ def test_updated_legacy_report_keeps_collision_gate_opt_in() -> None:
         source=_source("goal", "social_force"),
     )
 
-    # Golden changed intentionally for orbit v1.1 (stall-window method/missingness).
+    # Golden includes detector engine v1.2 provenance; collision opt-in is unchanged.
     assert hashlib.sha256(canonical_json(report).encode()).hexdigest() == (
-        "335fee4a91e5921c8df1256e7c1103e31cb2da753975d4cb727cc0e8a63669ee"
+        "948d9f76aaeac8bb8da750515d0114de1b8f206009633080b1c032bf1b9806a2"
     )
     assert "collision_metric_contract" not in report["config"]
     assert "collision_metric_inconsistent" not in {

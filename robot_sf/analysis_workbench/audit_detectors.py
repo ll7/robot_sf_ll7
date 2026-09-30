@@ -29,7 +29,7 @@ from robot_sf.analysis_workbench.audit_contracts import (
 )
 
 DETECTOR_REGISTRY_SCHEMA_VERSION = "audit-detector-registry.v1"
-DETECTOR_ENGINE_VERSION = "audit-detectors.v1.1"
+DETECTOR_ENGINE_VERSION = "audit-detectors.v1.2"
 DETECTOR_REGISTRY_VERSION = DETECTOR_REGISTRY_SCHEMA_VERSION
 GOAL_ADJACENT_TIMEOUT_VERSION = "goal_adjacent_timeout.v1"
 
@@ -48,6 +48,9 @@ DETERMINISTIC_DETECTOR_IDS = (
     "common_mode_anomaly",
     "planner_disagreement",
     "seed_outlier",
+    "outcome_incidence",
+    "planner_cohort_shift",
+    "horizon_consistency",
 )
 ADVISORY_DETECTOR_IDS = (
     "cohort_multivariate_outlier",
@@ -83,6 +86,40 @@ DETECTOR_ALIASES = {
     "multivariate_outlier": "cohort_multivariate_outlier",
     "trajectory_outlier": "trajectory_shape_outlier",
 }
+# Structured records emitted by benchmark.metrics and described in audit_scan.md.
+# Every other non-null metric remains a scalar and is validated by _extreme.
+STRUCTURED_DIAGNOSTIC_METRICS = frozenset(
+    {
+        "deadlock_stall",
+        "distributional_disruption",
+        "force_quantiles",
+        "force_sample_stats",
+        "metric_values",
+        "signal_metrics_evidence",
+        "social_compliance",
+        "social_mini_game",
+    }
+)
+
+BOOLEAN_DIAGNOSTIC_METRICS = frozenset(
+    {
+        "success",
+        "route_complete",
+        "reached_goal",
+        "completed",
+        "collision",
+        "collision_event",
+        "timeout",
+        "timed_out",
+        "timeout_event",
+        "horizon_reached",
+        "deadlock",
+        "time_to_goal_ideal_ratio_valid",
+        "time_to_goal_success_only_valid",
+        "tracking_contract_honored",
+    }
+)
+
 _NON_ADMISSIBLE_EXECUTION_STATUSES = frozenset(
     {
         "fallback",
@@ -466,7 +503,7 @@ def _spec(  # noqa: PLR0913
         detector_id=detector_id,
         family=family,
         description=description,
-        version="1.1.0"
+        version="1.2.0"
         if version == "1.0.0"
         and detector_id
         in {
@@ -524,8 +561,8 @@ def default_registry(*, include_advisory: bool = True) -> DetectorRegistry:
             parameters={
                 "minimum_cohort": 4,
                 "mad_z_threshold": 3.5,
-                "mad_absolute_floor": 0.01,
-                "mad_relative_floor": 0.05,
+                "mad_absolute_floor": 1e-5,
+                "mad_relative_floor": 1e-6,
             },
             units={"robust_distance": "dimensionless"},
             advisory=True,
@@ -566,6 +603,44 @@ def default_registry(*, include_advisory: bool = True) -> DetectorRegistry:
             version=GOAL_ADJACENT_TIMEOUT_VERSION,
         ),
         _spec(
+            "horizon_consistency",
+            "horizon and termination consistency",
+            "Compare recorded episode steps, runner horizon, simulator limit and termination.",
+            optional=("outcome", "config"),
+            units={"steps": "count", "horizon": "count"},
+        ),
+        _spec(
+            "outcome_incidence",
+            "planner by scenario outcome incidence",
+            "Retain adverse outcomes independently of outcome-matched metric cohorts.",
+            optional=("cohort", "outcome"),
+            cohort={
+                "kind": "planner_scenario",
+                "key": ["campaign_digest", "scenario_id"],
+                "require_present": ["planner_id", "scenario_id"],
+            },
+            parameters={"absolute_failure_rate_floor": 0.0, "excess_rate_threshold": 0.1},
+            units={"rate": "fraction of recorded terminal outcomes"},
+        ),
+        _spec(
+            "planner_cohort_shift",
+            "cross-planner cohort median shift",
+            "Compare planner feature medians within a scenario without outcome conditioning.",
+            optional=("cohort", "metrics"),
+            cohort={
+                "kind": "planner_scenario",
+                "key": ["campaign_digest", "scenario_id"],
+                "require_present": ["planner_id", "scenario_id"],
+            },
+            parameters={
+                "minimum_cohort": 4,
+                "metric_z_threshold": 3.5,
+                "mad_absolute_floor": 1e-5,
+                "mad_relative_floor": 1e-6,
+            },
+            units={"robust_z": "dimensionless"},
+        ),
+        _spec(
             "initial_reset_anomaly",
             "initial/reset anomaly",
             "Detect initial overlap, immediate collision, or a reset mismatch under declared geometry.",
@@ -601,8 +676,8 @@ def default_registry(*, include_advisory: bool = True) -> DetectorRegistry:
             parameters={
                 "minimum_peers": 1,
                 "metric_z_threshold": 3.0,
-                "mad_absolute_floor": 0.01,
-                "mad_relative_floor": 0.05,
+                "mad_absolute_floor": 1e-5,
+                "mad_relative_floor": 1e-6,
             },
         ),
         _spec(
@@ -627,8 +702,8 @@ def default_registry(*, include_advisory: bool = True) -> DetectorRegistry:
             parameters={
                 "minimum_cohort": 4,
                 "mad_z_threshold": 3.5,
-                "mad_absolute_floor": 0.01,
-                "mad_relative_floor": 0.05,
+                "mad_absolute_floor": 1e-5,
+                "mad_relative_floor": 1e-6,
             },
         ),
         _spec(
@@ -663,8 +738,8 @@ def default_registry(*, include_advisory: bool = True) -> DetectorRegistry:
             parameters={
                 "minimum_cohort": 4,
                 "mad_z_threshold": 3.5,
-                "mad_absolute_floor": 0.01,
-                "mad_relative_floor": 0.05,
+                "mad_absolute_floor": 1e-5,
+                "mad_relative_floor": 1e-6,
             },
             units={"path_length": "m", "displacement": "m", "turns": "count"},
             advisory=True,
@@ -2604,16 +2679,22 @@ def _extreme(  # noqa: C901, PLR0912
             continue
         if value is None:
             continue
-        if isinstance(value, Mapping):
+        if isinstance(value, Mapping) and name in STRUCTURED_DIAGNOSTIC_METRICS:
             continue
-        if isinstance(value, bool):
-            # Outcome booleans are often retained in the metrics block for
-            # compatibility.  They are not scalar physical measurements.
+        if isinstance(value, bool) and name in BOOLEAN_DIAGNOSTIC_METRICS:
+            # Named outcome/validity booleans are compatibility diagnostics.
+            # Boolean-valued physical scalars remain malformed measurements.
             continue
-        if not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(float(value))
+        ):
             invalid.append(name)
             continue
         values[name] = float(value)
+    if _contains_nonfinite(metrics):
+        invalid.extend(name for name, value in metrics.items() if _contains_nonfinite(value))
     if not values and not invalid:
         return _unavailable(
             spec, row, "measurements_not_recorded", missing=("metrics",), config=config
@@ -2626,6 +2707,8 @@ def _extreme(  # noqa: C901, PLR0912
             missing=tuple(f"metrics.{name}" for name in invalid),
             config=config,
         )
+    if _contains_nonfinite(row):
+        return _detector_error(spec, row, "row_contains_nonfinite_value", config=config)
     extreme: dict[str, float] = {}
     clearance_min = _configured_number(config, spec, "clearance_min_m", minimum=0.0)
     force_max = _configured_number(config, spec, "force_max_N", minimum=0.0, strictly_greater=True)
@@ -3171,12 +3254,13 @@ def _robust_z(
 ) -> float:
     config = config or {}
     center = median(peers)
-    absolute = _finite_or_none(config.get("mad_absolute_floor", 0.01))
-    relative = _finite_or_none(config.get("mad_relative_floor", 0.05))
+    absolute = _finite_or_none(config.get("mad_absolute_floor", 1e-5))
+    relative = _finite_or_none(config.get("mad_relative_floor", 1e-6))
     if absolute is None or absolute <= 0 or relative is None or relative < 0:
         raise DetectorError("invalid_MAD_floor_parameters")
-    # Both floors are disclosed in the registry. The relative floor scales with
-    # the feature's units; the absolute floor protects zero-centered cohorts.
+    # Numerical-noise guard only: tolerate micro-unit serialization differences
+    # near zero and one-part-per-million relative perturbations at large centers.
+    # These floors are not feature-specific physical or behavioral tolerance bands.
     mad = max(median([abs(item - center) for item in peers]), absolute, abs(center) * relative)
     return abs(value - center) / (1.4826 * mad)
 
@@ -3409,6 +3493,310 @@ def _trajectory(
     )
 
 
+def _planner_scenario_cells(
+    spec: DetectorSpec, row: Mapping[str, Any], cohort: Sequence[Mapping[str, Any]]
+) -> dict[str, list[Mapping[str, Any]]]:
+    """Group complete scenario peers by planner without outcome conditioning.
+
+    Returns:
+        Admissible recorded rows keyed by planner identity.
+    """
+    cells: dict[str, list[Mapping[str, Any]]] = {}
+    for item in _group_cohort(row, cohort, spec):
+        if execution_admission_failure(item, check_nonfinite=False) is None:
+            cells.setdefault(_identity(item, "planner_id"), []).append(item)
+    return cells
+
+
+def _incidence_label(row: Mapping[str, Any]) -> str | None:
+    """Classify only recorded terminal outcomes, preserving unknown denominators.
+
+    Returns:
+        A terminal category or None for an unrecorded/unknown outcome.
+    """
+    if _collision(row) is True:
+        return "collision"
+    if _timeout(row) is True:
+        return "timeout"
+    if _success(row) is True:
+        return "success"
+    if _outcome_label(row) in {"failure", "failed"} or _outcome(row).get("route_complete") is False:
+        return "failure"
+    return None
+
+
+def _outcome_incidence(
+    spec: DetectorSpec,
+    row: Mapping[str, Any],
+    cohort: Sequence[Mapping[str, Any]],
+    config: Mapping[str, Any],
+) -> Signal:
+    cells = _planner_scenario_cells(spec, row, cohort)
+    planner = _identity(row, "planner_id")
+    absolute = _configured_number(config, spec, "absolute_failure_rate_floor", minimum=0.0)
+    excess = _configured_number(config, spec, "excess_rate_threshold", minimum=0.0)
+    if absolute is None or excess is None or absolute > 1 or excess > 1:
+        return _detector_error(spec, row, "invalid_outcome_incidence_parameters", config=config)
+    target = cells.get(planner, [])
+    if not target or _incidence_label(row) is None:
+        return _unavailable(
+            spec, row, "outcome_cohort_not_recorded", missing=("cohort.outcome",), config=config
+        )
+    rates: dict[str, dict[str, float]] = {}
+    sizes: dict[str, int] = {}
+    missing: dict[str, int] = {}
+    for name, items in sorted(cells.items()):
+        labels = [_incidence_label(item) for item in items]
+        missing[name] = labels.count(None)
+        # Do not silently shrink a planner's incidence denominator.
+        if missing[name]:
+            continue
+        counts = Counter(labels)
+        sizes[name] = len(items)
+        rates[name] = {
+            label: counts[label] / len(items) for label in ("timeout", "collision", "failure")
+        }
+        rates[name]["adverse"] = 1 - counts["success"] / len(items)
+    if planner not in rates:
+        return _unavailable(
+            spec, row, "outcome_denominator_incomplete", missing=("cohort.outcome",), config=config
+        )
+    # All planners receive equal weight; large cells cannot dominate the control.
+    medians = (
+        {label: median([values[label] for values in rates.values()]) for label in rates[planner]}
+        if len(rates) > 1
+        else None
+    )
+    differences = (
+        {label: rates[planner][label] - medians[label] for label in medians} if medians else {}
+    )
+    adverse_row = _incidence_label(row) != "success"
+    absolute_flag = adverse_row and rates[planner]["adverse"] > absolute
+    relative_flag = bool(differences) and max(differences.values()) > excess
+    flagged = absolute_flag or relative_flag
+    return _make_signal(
+        spec,
+        row,
+        "flagged" if flagged else "clear",
+        reason="adverse_outcome_incidence" if flagged else "outcome_incidence_within_controls",
+        measured={
+            "planner_id": planner,
+            "planner_size": sizes[planner],
+            "planner_count": len(rates),
+            "planner_rates": rates[planner],
+            "cross_planner_median_rates": medians,
+            "excess_rates": differences,
+            "planner_sizes": sizes,
+            "missing_outcomes": missing,
+            "absolute_adverse_outcome": absolute_flag,
+            "excess_incidence": relative_flag,
+        },
+        threshold={"absolute_failure_rate_floor": absolute, "excess_rate_threshold": excess},
+        evidence=(
+            {
+                "cohort": dict(spec.cohort_definition),
+                "denominator": "all recorded terminal outcomes per planner and exact scenario; no outcome matching",
+                "interpretation": "absolute adverse outcomes remain candidates even without external controls; rates are descriptive, not significance or defect probability",
+            },
+        ),
+        config=config,
+    )
+
+
+def _planner_cohort_shift(
+    spec: DetectorSpec,
+    row: Mapping[str, Any],
+    cohort: Sequence[Mapping[str, Any]],
+    config: Mapping[str, Any],
+) -> Signal:
+    cells = _planner_scenario_cells(spec, row, cohort)
+    planner = _identity(row, "planner_id")
+    minimum = _configured_integer(config, spec, "minimum_cohort", minimum=2)
+    threshold = _configured_number(config, spec, "metric_z_threshold", minimum=0.0)
+    if minimum is None or threshold is None:
+        return _detector_error(spec, row, "invalid_planner_cohort_shift_parameters", config=config)
+    cells = {name: items for name, items in cells.items() if len(items) >= minimum}
+    if planner not in cells or len(cells) < 2:
+        return _unavailable(
+            spec,
+            row,
+            "external_planner_control_unavailable",
+            missing=("cohort.planners",),
+            config=config,
+        )
+    features = config.get("features")
+    if features is not None and (
+        not isinstance(features, list) or any(not isinstance(k, str) or not k for k in features)
+    ):
+        return _detector_error(spec, row, "features_malformed", config=config)
+    metrics = {name: [_metrics(item) for item in items] for name, items in cells.items()}
+    names = features or sorted(
+        {
+            key
+            for values in metrics.values()
+            for item in values
+            for key in item
+            if isinstance(key, str)
+        }
+    )
+    centers: dict[str, dict[str, float]] = {}
+    for name, values in metrics.items():
+        centers[name] = {}
+        for feature in names:
+            scalars = [_finite_or_none(item.get(feature)) for item in values]
+            scalars = [value for value in scalars if value is not None]
+            if len(scalars) >= minimum:
+                centers[name][feature] = median(scalars)
+    scores: dict[str, float] = {}
+    controls: dict[str, list[float]] = {}
+    for feature, value in centers[planner].items():
+        peers = [
+            other[feature]
+            for name, other in sorted(centers.items())
+            if name != planner and feature in other
+        ]
+        if peers:
+            controls[feature] = peers
+            scores[feature] = _robust_z(value, peers, {**spec.parameters, **config})
+    if not scores:
+        return _unavailable(
+            spec, row, "cohort_features_unavailable", missing=("metrics",), config=config
+        )
+    flagged = any(score >= threshold for score in scores.values())
+    return _make_signal(
+        spec,
+        row,
+        "flagged" if flagged else "clear",
+        reason="planner_cohort_median_shift"
+        if flagged
+        else "planner_cohort_medians_within_controls",
+        measured={
+            "planner_id": planner,
+            "planner_count": len(cells),
+            "planner_sizes": {name: len(items) for name, items in sorted(cells.items())},
+            "planner_feature_medians": centers[planner],
+            "peer_feature_medians": controls,
+            "feature_z_scores": scores,
+        },
+        threshold={"metric_z_threshold": threshold},
+        evidence=(
+            {
+                "cohort": dict(spec.cohort_definition),
+                "scaling": "planner medians versus equal-weight other-planner medians with numerical-noise MAD floors",
+                "interpretation": "unconditioned outcomes; planner configuration and behavior differences may explain shifts; no causal defect inference",
+            },
+        ),
+        config=config,
+    )
+
+
+def _horizon_consistency(  # noqa: C901
+    spec: DetectorSpec,
+    row: Mapping[str, Any],
+    cohort: Sequence[Mapping[str, Any]],
+    config: Mapping[str, Any],
+) -> Signal:
+    steps = row.get("steps", row.get("episode_steps"))
+    horizon = _lookup(row, "run_horizon", "horizon_steps")
+    params = row.get("scenario_params")
+    simulation = (
+        params.get("simulation_config")
+        if isinstance(params, Mapping)
+        else row.get("simulation_config")
+    )
+    simulator = simulation.get("max_episode_steps") if isinstance(simulation, Mapping) else None
+    reason = row.get("termination_reason")
+    timeout, success, collision = _timeout(row), _success(row), _collision(row)
+    if steps is None or horizon is None:
+        return _unavailable(
+            spec,
+            row,
+            "horizon_contract_not_recorded",
+            missing=tuple(
+                name
+                for name, value in (("steps", steps), ("run_horizon", horizon))
+                if value is None
+            ),
+            config=config,
+        )
+    for name, value, minimum in (
+        ("steps", steps, 0),
+        ("run_horizon", horizon, 1),
+        ("simulator_max_episode_steps", simulator, 1),
+    ):
+        if value is None:
+            continue
+        numeric = _finite_or_none(value)
+        if numeric is None or not numeric.is_integer() or numeric < minimum:
+            return _detector_error(spec, row, f"malformed_horizon_contract:{name}", config=config)
+    if reason is not None and (not isinstance(reason, str) or not reason.strip()):
+        return _detector_error(spec, row, "termination_reason_malformed", config=config)
+    if _incidence_label(row) is None:
+        return _unavailable(
+            spec,
+            row,
+            "termination_not_recorded",
+            missing=("outcome", "termination_reason"),
+            config=config,
+        )
+    signatures = []
+    reason_token = _status_token(reason) if isinstance(reason, str) else ""
+    reason_states = {
+        "timeout": {
+            "timeout",
+            "timed_out",
+            "horizon",
+            "horizon_reached",
+            "time_limit",
+            "max_steps",
+        },
+        "success": {"success", "completed", "complete", "goal_reached"},
+        "collision": {"collision", "collided"},
+    }
+    for state, tokens in reason_states.items():
+        if (
+            reason_token in tokens
+            and {"timeout": timeout, "success": success, "collision": collision}[state] is False
+        ):
+            signatures.append("termination_reason_outcome_mismatch")
+    if steps > horizon:
+        signatures.append("episode_steps_exceed_run_horizon")
+    if timeout is True:
+        if steps < horizon:
+            signatures.append("timeout_before_run_horizon")
+        if simulator is not None and simulator < horizon:
+            signatures.append("runner_simulator_horizon_mismatch")
+    measured = {
+        "steps": steps,
+        "run_horizon": horizon,
+        "simulator_max_episode_steps": simulator,
+        "termination_reason": reason,
+        "timeout": timeout,
+        "success": success,
+        "collision": collision,
+        "signatures": signatures,
+        "simulator_limit_explains_early_timeout": timeout is True
+        and simulator is not None
+        and steps == simulator
+        and simulator < horizon,
+    }
+    return _make_signal(
+        spec,
+        row,
+        "flagged" if signatures else "clear",
+        reason="horizon_termination_inconsistent"
+        if signatures
+        else "horizon_termination_consistent",
+        measured=measured,
+        evidence=(
+            {
+                "interpretation": "runner/simulator limits retain distinct roles; an explained early timeout still exposes the configured horizon mismatch; no trace or goal-zone diagnosis"
+            },
+        ),
+        config=config,
+    )
+
+
 _DETECTORS: dict[
     str,
     Callable[
@@ -3429,6 +3817,9 @@ _DETECTORS: dict[
     "seed_outlier": _seed_outlier,
     "cohort_multivariate_outlier": _multivariate,
     "trajectory_shape_outlier": _trajectory,
+    "outcome_incidence": _outcome_incidence,
+    "planner_cohort_shift": _planner_cohort_shift,
+    "horizon_consistency": _horizon_consistency,
 }
 
 
@@ -3471,7 +3862,7 @@ def detect(  # noqa: C901
         row = {**dict(row), "episode_id": "invalid-episode"}
     row = normalize_recorded_undefined(row)
     admission_failure = _admission_failure(
-        row, check_nonfinite=spec.detector_id != "telemetry_integrity"
+        row, check_nonfinite=spec.detector_id not in {"telemetry_integrity", "extreme_measurements"}
     )
     if admission_failure is not None:
         failure_status, failure_reason = admission_failure

@@ -1,0 +1,9 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_9952_auditor/aud2/focused.txt",
+  "artifact_sha256": "d5a065f1c009951360857891e59477f3bfb733df4ba03a959c4c17640b14a971",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": false,
+  "source_artifact_sha256": "d5a065f1c009951360857891e59477f3bfb733df4ba03a959c4c17640b14a971",
+  "presentation_normalization": "line endings and trailing whitespace only"
+}

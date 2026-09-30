@@ -108,7 +108,7 @@ def test_registry_is_versioned_closed_and_deterministic() -> None:
         item.detector_id for item in registry if not item.advisory
     }
     assert set(ADVISORY_DETECTOR_IDS) == {item.detector_id for item in registry if item.advisory}
-    assert len(registry) == 14
+    assert len(registry) == 17
     assert registry.digest == default_registry().digest
     document = registry_document()
     assert document["schema_version"] == "audit-detector-registry.v1"
@@ -984,7 +984,7 @@ def test_statistical_detectors_cover_contract_edges_and_missing_features() -> No
         ).status
         == "unavailable"
     )
-    assert detectors._robust_z(2.0, [1.0, 1.0]) == pytest.approx(1 / (1.4826 * 0.05))
+    assert detectors._robust_z(2.0, [1.0, 1.0]) == pytest.approx(1 / (1.4826 * 1e-5))
     assert detectors._robust_z(1.0, [0.0, 1.0, 2.0]) == pytest.approx(0.0)
 
     trajectory = {**_row("trajectory"), "trace": _trace([(0.0, 0.0), (1.0, 0.0)])}

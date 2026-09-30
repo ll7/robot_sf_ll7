@@ -1,5 +1,118 @@
 # Auditor preparation for issue #9952
 
+## AUD2 RV10 repair (current)
+
+The comparison below supersedes the initial AUD results retained later in this
+note. Comparator: reviewed head `2e0d42e4505cce1be7c2ba5180b650fe42424eb9`. Source is the identical
+verified public 0.0.7 bundle; both comparisons are **full raw-row scans**, not
+projections. All producer and retained artifact hashes were verified. Compact
+[comparison](evidence/issue_9952_auditor/aud2/comparison.json),
+[before receipt](evidence/issue_9952_auditor/aud2/before-receipt.json), and
+[after receipt](evidence/issue_9952_auditor/aud2/after-receipt.json) retain all four
+signal-status denominators. The new channels were absent in the comparator;
+"not registered" is not an observed zero.
+
+Malformed physical Mappings and booleans now return measurement errors. Direct
+non-finite measurements use the same error reason; public source inventory still
+rejects unexpected non-finite rows before detector evaluation. Only documented
+structured records are admitted by name. The scalar physical bounds and
+undefined-tracking normalization are unchanged.
+
+The [channel and floor contracts](../scenario_review/audit_scan.md#scalar-and-systematic-sensitivity-engine-v12)
+add unconditioned planner/scenario outcome incidence and cross-planner feature
+medians, and lower MAD floors to numerical-noise guards (absolute `1e-5`, relative
+`1e-6`). All six timeouts in the reviewer's 24-success / 6-timeout single-planner
+cohort retain an incidence flag with denominator 30 and timeout rate 0.2. Uniform
+per-planner failures and uniform metric shifts have separate cross-planner
+controls. The absolute incidence floor is zero: every adverse episode is a
+candidate even without other planners; a cross-planner excess above 0.1 flags
+its cell. This is intentionally sensitive descriptive triage, not statistical
+significance or proof of unexpected failures. Exact scenario cells preserve the
+production scenario-shard boundary; planner config hashes and outcomes do not
+partition these controls.
+
+`horizon_consistency` independently catches recorded timeout/steps/horizon and
+reason/outcome mismatches. The unresolved parallel-traffic seed-126 bottleneck
+cell is **flagged** by both horizon consistency and outcome incidence. Its raw
+row records steps 400, runner horizon 600, simulator `max_episode_steps=400`,
+termination reason `terminated`, timeout true and zero stall windows. The
+smaller simulator limit explains the early timeout and is explicitly reported;
+this establishes a configured runner/simulator discrepancy, not a causal
+termination, goal-zone or deadlock defect. Its outcome-matched outliers remain
+unavailable, while the cross-planner median-shift channel is clear.
+The [fixture provenance](evidence/issue_9952_auditor/aud2/fixture-provenance.json)
+pins archive/member/raw-line digests and was independently checked against archive
+bytes, member line 1336. No held-out episodes were executed.
+
+Both scans admit 20,160/20,160 rows, use 48 serial scenario shards and one process.
+Before: 494.30 s; after: 935.33 s. Both have **zero detector errors**.
+
+| Detector | Before flagged | After flagged | Before unavailable | After unavailable |
+| --- | ---: | ---: | ---: | ---: |
+| actuator_mismatch | 0 | 0 | 20160 | 20160 |
+| cohort_multivariate_outlier | 6799 | 9102 | 358 | 358 |
+| common_mode_anomaly | 0 | 0 | 20160 | 20160 |
+| extreme_measurements | 3430 | 3430 | 0 | 0 |
+| goal_adjacent_timeout | 0 | 0 | 2186 | 2186 |
+| horizon_consistency | not registered | 1505 | not registered | 0 |
+| initial_reset_anomaly | 0 | 0 | 20160 | 20160 |
+| oscillation_limit_cycle | 0 | 0 | 20160 | 20160 |
+| outcome_incidence | not registered | 11585 | not registered | 0 |
+| outcome_metric_contradiction | 0 | 0 | 20160 | 20160 |
+| planner_cohort_shift | not registered | 17220 | not registered | 0 |
+| planner_disagreement | 0 | 0 | 20160 | 20160 |
+| provenance_consistency | 0 | 0 | 0 | 0 |
+| seed_outlier | 7651 | 10293 | 358 | 358 |
+| stuck_no_progress | 0 | 0 | 20160 | 20160 |
+| telemetry_integrity | 0 | 0 | 0 | 0 |
+| trajectory_shape_outlier | 0 | 0 | 20160 | 20160 |
+
+| Release-row gate detector | Before | After |
+| --- | ---: | ---: |
+| impossible_contact_speed | 97 | 97 |
+| orbit_zero_progress | 4796 | 4796 |
+| pedestrian_free_baseline_regression | 6 | 6 |
+| same_step_all_planners | 26 | 26 |
+| short_collision | 456 | 456 |
+| universal_failure_unannotated | 74 | 74 |
+
+
+Release-row gate findings remain 5,455. Preflight remains unrecorded (zero
+`invalid_run_preflight_mismatch` findings does not establish preflight validity).
+Existing trace/initial-state contract unavailability remains explicit. The broad
+new median-shift channel flags 17,220 rows; intended planner/config differences
+can explain these candidates. No population precision or reduced-noise claim is
+made for this head, and no thresholds were tuned against this campaign.
+
+Regression proof: **28 final new nodes fail on the reviewed head; 28 pass on the
+fixed implementation**. This includes the four imported reviewer public-scan
+nodes, subgroup/uniform-shift/noise/horizon sensitivity and non-finite/boolean
+physical corruption. The [test-value gate](evidence/issue_9952_auditor/aud2/test_value.md)
+records behavior, credible regression, coverage gap and no production seams;
+[red output](evidence/issue_9952_auditor/aud2/red.txt),
+[green output](evidence/issue_9952_auditor/aud2/green.txt),
+[focused output](evidence/issue_9952_auditor/aud2/focused.txt): **365 passed,
+2 skipped**. The focused paths add `test_aud2_refutations.py` and
+`test_aud2_detectors.py` to the initial AUD command below. Ruff check/format and
+`git diff --check` pass. The
+[840-row shard proof](evidence/issue_9952_auditor/aud2/new-shards-proof.json)
+compares each new channel's indexed peers with complete-campaign peer lists,
+with zero differences in complete signal records; it is structural equality
+proof, while the literal sensitivity tests establish the new detector behavior.
+
+The [queue validation](evidence/issue_9952_auditor/aud2/queue_validation.json)
+loads the 1,238,250,933-byte full queue through the CLI and its top
+100 has 100 distinct campaign/scenario/seed cells. All 20,160 input candidates
+remain retained.
+
+Full suite/readiness pipeline, hosted-CI acceptance, 0.0.8 scanning, planner
+execution and trace adjudication remain unrun. No subagents, merges, force
+pushes, release actions or claim admission. Large artifacts remain reconstructable
+local diagnostics in `/home/luttkule/aud2-evidence/`; the public bundle remains
+the durable input. Delivery requires a new review at the pushed head.
+
+## Initial AUD delivery (historical, reviewed head 2e0d42e4)
+
 This is offline tooling validation on the published **0.0.7** rows, not a 0.0.8
 campaign audit or a release certificate. No planner episodes, Slurm jobs, merges,
 or subagents were used. Main comparator: `46809b6bc18caef2a9cd82686e9670c224459c42`.

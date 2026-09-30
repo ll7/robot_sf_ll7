@@ -21,8 +21,20 @@ def _write_shard(path: Path, root: str, rel: str, lines: list[int]) -> None:
     data.write()
 
 
-def test_paths_config_combines_self_hosted_and_github_hosted_roots(tmp_path: Path) -> None:
+@pytest.mark.parametrize("hosted_checkout", [False, True])
+def test_paths_config_combines_self_hosted_and_github_hosted_roots(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, hosted_checkout: bool
+) -> None:
     """Both workspace roots map onto the repository source and merge into one file."""
+    if hosted_checkout:
+        checkout = tmp_path / "home/runner/_work/robot_sf_ll7/robot_sf_ll7"
+        for rel in ("robot_sf/__init__.py", "fast-pysf/pysocialforce/__init__.py"):
+            source = checkout / rel
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_bytes((REPO_ROOT / rel).read_bytes())
+        (checkout / "pyproject.toml").write_bytes((REPO_ROOT / "pyproject.toml").read_bytes())
+        monkeypatch.setitem(globals(), "REPO_ROOT", checkout)
+
     shards = tmp_path / "shards"
     shards.mkdir()
     _write_shard(shards / ".coverage.a", SELF_HOSTED, "robot_sf/__init__.py", [1, 2])
@@ -53,7 +65,10 @@ def test_paths_config_combines_self_hosted_and_github_hosted_roots(tmp_path: Pat
     data.read()
     files = {Path(f).resolve() for f in data.measured_files()}
     init = (REPO_ROOT / "robot_sf" / "__init__.py").resolve()
-    assert init in files
-    assert (REPO_ROOT / "fast-pysf/pysocialforce/__init__.py").resolve() in files
-    assert not any("/home/runner" in f for f in data.measured_files())
+    # A canonical checkout can itself live under /home/runner in hosted CI.
+    # Require exactly the local source paths, regardless of the checkout's root.
+    assert files == {
+        init,
+        (REPO_ROOT / "fast-pysf/pysocialforce/__init__.py").resolve(),
+    }
     assert sorted(data.lines(str(init)) or []) == [1, 2, 3]

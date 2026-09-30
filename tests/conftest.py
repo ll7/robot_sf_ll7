@@ -419,6 +419,8 @@ _FAST_FILES = {
     "test_optimized_assert_guards.py",
     "test_issue_7330_assert_inventory.py",
     "test_issue_7331_benchmark_namespace_inventory.py",
+    "test_self_hosted_routing.py",
+    "test_coverage_paths_remap.py",
     # Clearance and LiDAR tracking contracts use fixed arrays without environment steps.
     "test_clearance_geometry.py",
     "test_lidar_tracked_agents.py",

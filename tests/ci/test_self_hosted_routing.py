@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -170,7 +171,8 @@ def test_container_setup_keeps_ephemeral_and_no_host_mounts() -> None:
         "--cap-drop ALL",
         "--security-opt no-new-privileges",
         "--tmpfs /home/runner:",
-        "--cpus 4 --memory 8g",
+        "read -r cpus memory workers < <(slot_limits)",
+        '--cpus "$cpus" --memory "$memory" --memory-swap "$memory"',
         "--jq .token |",
         "--rm --detach --interactive",
         "flock -x",
@@ -185,6 +187,7 @@ def test_container_setup_keeps_ephemeral_and_no_host_mounts() -> None:
     assert re.findall(r"--mount(?:\s+|=)([^\s\\]+)", script) == [
         "type=volume,dst=/home/runner/_work"
     ]
+
     assert re.search(r"(?<!\S)-v(?:\s|=)", script) is None
     assert "src=" not in script
     assert "source=" not in script
@@ -198,11 +201,29 @@ def test_container_setup_keeps_ephemeral_and_no_host_mounts() -> None:
         "UV_CACHE_DIR=/home/runner/_work/_uv_cache",
         "TMPDIR=/home/runner/_work/_tmp",
         "PIP_CACHE_DIR=/home/runner/_work/_pip_cache",
-        "PYTEST_NUM_WORKERS=2",
+        'PYTEST_NUM_WORKERS="$workers"',
         "OPENBLAS_NUM_THREADS=1",
         "OMP_NUM_THREADS=1",
     ):
         assert environment in script
+
+
+@pytest.mark.parametrize(
+    ("host", "expected"),
+    [("imech036", "4 8g 2"), ("imech039", "4 8g 2"), ("imech156-u", "8 16g 4")],
+)
+def test_container_slot_limits_match_host_capacity(host: str, expected: str) -> None:
+    """Evaluate the production sizing function without starting a runner."""
+    script = SETUP_SCRIPT.read_text(encoding="utf-8")
+    function = re.search(r"(?ms)^slot_limits\(\) \{\n.*?^\}", script)
+    assert function is not None
+    result = subprocess.run(
+        ["bash", "-c", f'host="$1"\n{function.group()}\nslot_limits', "slot-limits", host],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert result.stdout.strip() == expected
 
 
 def test_runner_temporary_paths_resolve_to_intended_mounts() -> None:

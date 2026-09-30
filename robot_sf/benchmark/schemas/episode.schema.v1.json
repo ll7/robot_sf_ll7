@@ -516,7 +516,10 @@
                     ],
                     "properties": {
                         "schema_version": {
-                            "const": "deadlock-stall.v1"
+                            "enum": [
+                                "deadlock-stall.v1",
+                                "deadlock-stall.v2"
+                            ]
                         },
                         "window_steps": {
                             "type": "integer",
@@ -1288,6 +1291,13 @@
                             "social_force_config"
                         ]
                     }
+                },
+                "metric_schema_version": {
+                    "type": "string",
+                    "enum": [
+                        "robot-sf-metrics.v1",
+                        "robot-sf-metrics.v2"
+                    ]
                 }
             },
             "additionalProperties": {
@@ -1493,6 +1503,13 @@
                 "renderer"
             ],
             "additionalProperties": true
+        },
+        "metric_schema_version": {
+            "type": "string",
+            "enum": [
+                "robot-sf-metrics.v1",
+                "robot-sf-metrics.v2"
+            ]
         }
     }
 }

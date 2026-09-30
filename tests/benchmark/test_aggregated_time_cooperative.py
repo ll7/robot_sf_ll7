@@ -27,7 +27,7 @@ def test_none_preserves_single_robot_time_to_goal() -> None:
     episode = _make_episode()
     episode.reached_goal_step = 8
 
-    assert aggregated_time(episode) == 8 * 0.1
+    assert aggregated_time(episode) == 9 * 0.1
 
     episode.reached_goal_step = None
     assert np.isnan(aggregated_time(episode))
@@ -71,10 +71,10 @@ def test_subset_returns_maximum_completion_time() -> None:
     episode = _make_episode()
     episode.cooperative_goal_steps = {0: 10, 1: 30, 2: 20}
 
-    assert aggregated_time(episode, cooperative_agents=[0, 2]) == 20 * 0.1
-    assert aggregated_time(episode, cooperative_agents=[1]) == 30 * 0.1
+    assert aggregated_time(episode, cooperative_agents=[0, 2]) == 21 * 0.1
+    assert aggregated_time(episode, cooperative_agents=[1]) == 31 * 0.1
     # All-agent aggregation is explicit: pass every known index.
-    assert aggregated_time(episode, cooperative_agents=[0, 1, 2]) == 30 * 0.1
+    assert aggregated_time(episode, cooperative_agents=[0, 1, 2]) == 31 * 0.1
 
 
 def test_duplicates_and_ordering_are_deterministic() -> None:
@@ -82,7 +82,7 @@ def test_duplicates_and_ordering_are_deterministic() -> None:
     episode = _make_episode()
     episode.cooperative_goal_steps = {0: 10, 1: 30, 2: 20}
 
-    assert aggregated_time(episode, cooperative_agents=[2, 0, 2, 0]) == 20 * 0.1
+    assert aggregated_time(episode, cooperative_agents=[2, 0, 2, 0]) == 21 * 0.1
 
     reordered = _make_episode()
     reordered.cooperative_goal_steps = {2: 20, 0: 10, 1: 30}

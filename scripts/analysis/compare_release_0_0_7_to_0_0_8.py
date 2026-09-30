@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from robot_sf.benchmark.metric_definitions import changed_metric_field, metric_schema_version
 from scripts.analysis.compare_issue_9431_release import (
     EXPECTED_SUCCESSOR_SCENARIO_MANIFEST,
     EXPECTED_SUCCESSOR_SCENARIO_MANIFEST_SHA256,
@@ -77,6 +78,7 @@ SUMMARY_COLUMNS = (
     "mean_0_0_7",
     "mean_0_0_8",
     "mean_paired_delta",
+    "metric_comparability",
     "only_0_0_7",
     "only_0_0_8",
 )
@@ -128,6 +130,7 @@ def _insert_rows(
         compact = {
             "outcome": row["outcome"],
             "metrics": row["metrics"],
+            "metric_schema_version": metric_schema_version(row),
             "_source_commit": _row_source_commit(row),
         }
         if retain_provenance:
@@ -909,6 +912,7 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 "mean_0_0_7": None,
                 "mean_0_0_8": None,
                 "mean_paired_delta": None,
+                "metric_comparability": "compatible",
                 "only_0_0_7": 0,
                 "only_0_0_8": 0,
                 "_old": [],
@@ -970,6 +974,18 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 "rule_id": "",
             }
         )
+        if (
+            slot in old
+            and slot in new
+            and changed_metric_field(field)
+            and metric_schema_version(old[slot]) != metric_schema_version(new[slot])
+        ):
+            finding.update(
+                classification="metric_definition_change",
+                delta_0_0_8_minus_0_0_7=None,
+                issue="10007",
+                explanation="F4/F5/F7/F8 changed metric definitions; recompute both releases from traces before interpreting a paired effect.",
+            )
         findings.append(finding)
 
     for slot in sorted(missing_slots):
@@ -1000,16 +1016,22 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
             old_value = old_fields.get(field, MISSING)
             new_value = new_fields.get(field, MISSING)
             item = summary(slot, field)
+            incompatible = changed_metric_field(field) and metric_schema_version(
+                old_row
+            ) != metric_schema_version(new_row)
+            if incompatible:
+                item["metric_comparability"] = "incompatible_definitions"
             if old_value is not MISSING and new_value is not MISSING:
                 item["paired_count"] += 1
                 a, b = _number(old_value), _number(new_value)
                 if a is not None and b is not None:
                     item["_old"].append(a)
                     item["_new"].append(b)
-                    item["_delta"].append(b - a)
+                    if not incompatible:
+                        item["_delta"].append(b - a)
             else:
                 item["only_0_0_7" if new_value is MISSING else "only_0_0_8"] += 1
-            if _different(old_value, new_value):
+            if incompatible or _different(old_value, new_value):
                 item["changed_count"] += 1
                 add_finding(slot, "paired", field, old_value, new_value)
 
@@ -1021,9 +1043,17 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
         ):
             values = item.pop(private)
             item[public] = sum(values) / len(values) if values else None
+        if item["metric_comparability"] == "incompatible_definitions":
+            item["mean_paired_delta"] = None
     rule_coverage = []
     rule_matches = [
-        [finding for finding in findings if _rule_matches(rule, finding)] for rule in rules
+        [
+            finding
+            for finding in findings
+            if finding["classification"] != "metric_definition_change"
+            and _rule_matches(rule, finding)
+        ]
+        for rule in rules
     ]
     over_limit_findings = {
         finding["finding_id"]
@@ -1068,6 +1098,7 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
             "verified_manifest_sha256": successor_manifest_sha256,
             **successor_identity,
         },
+        "metric_definition_policy": "Unmarked 0.0.7 rows use robot-sf-metrics.v1; v2 changes F4/F5/F7/F8. Changed fields have no paired delta across schemas; old/new means are diagnostic only. Outcomes retain their definitions.",
         "slot_columns": list(SLOT_COLUMNS),
         "v4_slot_replacements": V4_SLOT_REPLACEMENTS,
         "numeric_tolerance_absolute": TOLERANCE,
@@ -1130,6 +1161,7 @@ def write_report(report: Mapping[str, Any], output_dir: Path) -> None:
         "",
         "See `findings.csv` for every changed field and release-only row, and",
         "`planner_scenario_metrics.csv` for paired means and differences.",
+        report["metric_definition_policy"],
         "",
     ]
     (output_dir / "summary.md").write_text("\n".join(lines), encoding="utf-8")

@@ -117,6 +117,7 @@ from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
 from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
     load_synthetic_actuation_profile as _load_synthetic_actuation_profile,
 )
+from robot_sf.benchmark.metric_definitions import METRIC_SCHEMA_VERSION
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.observation_noise import (
     ObservationNoiseState,
@@ -1542,6 +1543,7 @@ class _MetadataFinalizationOptions:
 def _compute_post_loop_metrics(  # noqa: PLR0913
     *,
     robot_positions: list[np.ndarray],
+    initial_robot_pos: np.ndarray | None = None,
     robot_headings: list[float],
     hybrid_command_sources: list[str | None] | None = None,
     ped_positions: list[np.ndarray],
@@ -1624,7 +1626,11 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
         sample_obstacle_points(map_def.obstacles, map_def.bounds) if map_def is not None else None
     )
     if robot_pos_arr.size:
-        shortest_path = compute_shortest_path_length(map_def, robot_pos_arr[0], goal_vec)
+        shortest_path = compute_shortest_path_length(
+            map_def,
+            initial_robot_pos if initial_robot_pos is not None else robot_pos_arr[0],
+            goal_vec,
+        )
     else:
         shortest_path = float("nan")
 
@@ -1646,6 +1652,8 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
             goal=goal_vec,
             dt=float(config.sim_config.time_per_step_in_secs),
             reached_goal_step=reached_goal_step,
+            initial_robot_pos=initial_robot_pos,
+            collision_event=collision_seen,
             robot_radius=float(getattr(robot_config, "radius", 1.0)),
             ped_radius=float(getattr(config.sim_config, "ped_radius", 0.4)),
             episode_metadata=_episode_metadata_for_benchmark_metrics(scenario, map_def),
@@ -2246,8 +2254,14 @@ def _init_step_loop_state(
         _StepLoopState: Initialized mutable state bundle.
     """
     map_def = getattr(env.simulator, "map_def", None)
-    goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
-    initial_robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
+    navigators = getattr(env.simulator, "robot_navs", None)
+    if navigators is not None:
+        # Freeze the sampled terminal target; waypoint handoffs and route reset
+        # after success must not alter episode metric/trace denominators.
+        goal_vec = np.array(navigators[0].waypoints[-1], dtype=float, copy=True)
+    else:
+        goal_vec = np.array(env.simulator.goal_pos[0], dtype=float, copy=True)
+    initial_robot_pos = np.array(env.simulator.robot_pos[0], dtype=float, copy=True)
     initial_ped_positions = np.array(env.simulator.ped_pos, dtype=float, copy=True).reshape(-1, 2)
     initial_robot_velocity = _initial_robot_velocity(env.simulator)
     initial_ped_velocities = _initial_ped_velocities(env.simulator, len(initial_ped_positions))
@@ -3655,7 +3669,6 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
             state.respawn_overlap_events = _read_respawn_overlap_events(env.simulator)
             state.simulator_obstacle_force_law_metadata = _read_obstacle_force_law_metadata(env)
             state.map_def = env.simulator.map_def
-            state.goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
     finally:
         _teardown_step_loop(
             env,
@@ -4514,6 +4527,7 @@ def _build_episode_record_dict(  # noqa: PLR0913
         retained_metric_values = {}
     return {
         "version": "v1",
+        "metric_schema_version": METRIC_SCHEMA_VERSION,
         "episode_id": _compute_map_episode_id(scenario_params, seed),
         "scenario_id": scenario_id,
         "seed": seed,
@@ -5503,6 +5517,7 @@ def run_map_episode(  # noqa: PLR0913
     )
     post_loop = _compute_post_loop_metrics(
         robot_positions=loop_result.robot_positions,
+        initial_robot_pos=loop_result.initial_robot_pos,
         robot_headings=loop_result.robot_headings,
         hybrid_command_sources=loop_result.hybrid_command_sources,
         ped_positions=loop_result.ped_positions,

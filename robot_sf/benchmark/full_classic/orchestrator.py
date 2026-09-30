@@ -577,6 +577,7 @@ def _compute_episode_metrics(  # noqa: PLR0913
     horizon: int,
     robot_radius: float,
     ped_radius: float,
+    initial_robot_pos: np.ndarray | None = None,
 ) -> dict[str, float]:
     """Compute episode metrics for the classic benchmark pipeline.
 
@@ -591,7 +592,9 @@ def _compute_episode_metrics(  # noqa: PLR0913
         except (OSError, ValueError, KeyError):  # pragma: no cover - defensive fallback
             map_def = None
     shortest_path = (
-        compute_shortest_path_length(map_def, robot_pos[0], goal)
+        compute_shortest_path_length(
+            map_def, robot_pos[0] if initial_robot_pos is None else initial_robot_pos, goal
+        )
         if len(robot_pos)
         else float("nan")
     )
@@ -620,10 +623,11 @@ def _compute_episode_metrics(  # noqa: PLR0913
         robot_radius=float(robot_radius),
         ped_radius=float(ped_radius),
         episode_metadata=_episode_metadata_for_metrics(scenario),
+        initial_robot_pos=initial_robot_pos,
     )
     metrics_raw = compute_all_metrics(ep, horizon=horizon, shortest_path_len=shortest_path)
     time_to_goal = (
-        dt * float(reached_goal_step)
+        dt * float(reached_goal_step + 1)
         if reached_goal_step is not None
         else dt * float(horizon if horizon > 0 else len(robot_pos))
     )
@@ -989,6 +993,13 @@ def _orchestrate_real_episode(
     )
     try:
         env.reset(seed=int(job.seed))
+        initial_robot_pos = np.array(env.simulator.robot_pos[0], dtype=float, copy=True)
+        navs = getattr(env.simulator, "robot_navs", None)
+        goal_vec = np.array(
+            navs[0].waypoints[-1] if navs else env.simulator.goal_pos[0],
+            dtype=float,
+            copy=True,
+        )
         robot_positions, ped_positions, ped_forces, reached_goal_step = _rollout_episode(
             env,
             horizon,
@@ -1024,6 +1035,7 @@ def _orchestrate_real_episode(
         dt=dt,
         reached_goal_step=reached_goal_step,
         goal=goal_vec,
+        initial_robot_pos=initial_robot_pos,
         horizon=horizon,
         robot_radius=float(getattr(robot_cfg, "radius", 1.0)),
         ped_radius=float(getattr(sim_cfg, "ped_radius", 0.4)),

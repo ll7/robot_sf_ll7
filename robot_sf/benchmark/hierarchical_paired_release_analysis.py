@@ -42,6 +42,7 @@ from robot_sf.benchmark.interaction_exposure import (
     INTERACTION_EXPOSURE_SCHEMA_VERSION,
     is_not_derivable_status,
 )
+from robot_sf.benchmark.metric_definitions import require_uniform_metric_schema
 from robot_sf.errors import RobotSfError
 
 if TYPE_CHECKING:
@@ -245,6 +246,7 @@ def build_matched_cells_from_ledger_rows(
         raise HierarchicalPairedReleaseAnalysisError(
             "cannot build matched cells from empty successor row set"
         )
+    require_uniform_metric_schema(rows)
     buckets: dict[tuple[str, int, str], Mapping[str, Any]] = {}
     for index, row in enumerate(rows):
         _validate_ledger_row(row, index=index)

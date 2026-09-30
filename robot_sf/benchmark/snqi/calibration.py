@@ -8,6 +8,11 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.benchmark.metric_definitions import (
+    require_anchor_compatibility,
+    require_uniform_metric_schema,
+)
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -135,6 +140,9 @@ def normalization_anchor_variants(
     baseline: Mapping[str, Mapping[str, float]],
 ) -> dict[str, dict[str, dict[str, float]]]:
     """Return v3 and dataset-derived anchor variants for normalized SNQI terms."""
+    metric_version = require_uniform_metric_schema(episodes)
+    for episode in episodes:
+        require_anchor_compatibility(episode, baseline)
     values_by_metric: dict[str, list[float]] = {name: [] for name in _NORMALIZED_METRIC_NAMES}
     for episode in episodes:
         metrics = episode.get("metrics")
@@ -180,6 +188,7 @@ def normalization_anchor_variants(
     variants: dict[str, dict[str, dict[str, float]]] = {}
     for name, raw in raw_variants.items():
         sanitized, _warnings = sanitize_baseline_stats(raw, metric_names=_NORMALIZED_METRIC_NAMES)
+        sanitized["_metadata"] = {"metric_schema_version": metric_version}
         variants[name] = sanitized
     return variants
 
@@ -401,6 +410,7 @@ def analyze_snqi_calibration(
     recommendation = _recommend(rows, sensitivity)
     return {
         "schema_version": "snqi-calibration-analysis.v1",
+        "metric_schema_version": require_uniform_metric_schema(episodes),
         "weights_epsilon": float(epsilon),
         "episodes": len(episodes),
         "planners": len(baseline_ordering),

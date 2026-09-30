@@ -498,3 +498,11 @@ def test_find_or_download_bundle_repairs_a_partial_implicit_cache(
 
     assert script.find_or_download_bundle(None, repo_root=tmp_path) == target
     assert download_calls == [target]
+
+
+def test_adapter_preserves_corrected_metric_definition_identity():
+    record = _raw_episode(scenario_id="s", seed=1001)
+    record["metric_schema_version"] = "robot-sf-metrics.v2"
+    record["metrics"]["metric_schema_version"] = "robot-sf-metrics.v2"
+    row, _ = adapt_record_to_typed_ledger(record, planner_name="orca")
+    assert row.get("metric_schema_version") == "robot-sf-metrics.v2"

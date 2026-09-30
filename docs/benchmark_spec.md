@@ -292,6 +292,12 @@ Below is the credibility scorecard emitted for the camera-ready campaign `paper_
 Full details live in
 [`docs/dev/issues/social-navigation-benchmark/metrics_spec.md`](./dev/issues/social-navigation-benchmark/metrics_spec.md).
 
+Metric meaning is versioned separately from the episode envelope:
+`robot-sf-metrics.v2` fixes route-goal references, window deadlock, physical jerk,
+and completed-step time/path geometry. Unmarked 0.0.7 rows are v1; changed metrics
+have no direct cross-version release contrast, and SNQI requires matching anchors.
+See [the metric migration](context/issue_10007_fxm_metrics.md).
+
 **Core metrics**
 * `success`: goal reached before horizon without collision.
 * `time_to_goal_norm`: backward-compatible horizon normalization (clamped to `1.0` on failure).

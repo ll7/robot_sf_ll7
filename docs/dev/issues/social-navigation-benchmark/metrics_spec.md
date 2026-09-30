@@ -3,6 +3,33 @@
 Let episode index $i$, timestep $t \in \{0,\dots,T-1\}$, robot state $r_t$, pedestrians $P_t = \{ p_t^k \}$.
 Use Euclidean norm $\|\cdot\|$.
 
+## Metric definition versions
+
+`robot-sf-metrics.v2` corrects issue #10007 F4/F5/F7/F8. Unmarked historical
+rows and anchors, including published 0.0.7, mean `robot-sf-metrics.v1`.
+The episode JSON envelope remains `v1`; its `metric_schema_version` identifies meaning.
+These versions cannot be pooled or scored with each other's SNQI normalization assets.
+See [the migration and probe evidence](../../../context/issue_10007_fxm_metrics.md).
+
+- Freeze the reset navigator's final sampled route goal for all episode metric and
+  trace-progress references. Shortest paths start at the reset pose. This is a point
+  reference even when success uses goal-zone entry, so efficiency still clips at one.
+- With post-step samples, `reached_goal_step` is a zero-based **completed action index**.
+  Elapsed successful goal time is `(index + 1) * dt`, and normalized time is `(index + 1) / H`.
+  The synthetic runner retains reset as sample 0 and explicitly sets
+  `robot_pos_includes_reset=True`; its completion sample index already counts completed steps.
+- Path geometry includes reset-to-first-post-step travel. Safety, pedestrian, and force
+  arrays remain post-step aligned; reset adds no collision/force exposure sample.
+- Deadlock v2: for each **15-sample** window (14 intervals), first minus last distance
+  to the frozen goal must be **<= 0.05 m**. Count overlapping windows only when their
+  last sample precedes the episode's terminal sample. Deadlock requires at least one
+  such window and **neither success nor collision**. Diagnostics retain stall windows
+  even on successful/collision episodes; `max_no_progress_run` counts consecutive
+  stalled window starts. This radial-progress screen can still flag a route detour.
+- `jerk_mean` divides acceleration differences by `dt`, preserving the existing first
+  `T-2` differences and denominator. Fewer than three acceleration samples give zero;
+  invalid `dt` gives an unavailable (`NaN`) value.
+
 ## Core Metrics
 1. $\text{success} = 1$ if goal reached before horizon $H$ without collision; else $0$.
 2. $\text{time\_to\_goal\_norm} = \frac{\text{steps\_to\_goal}}{H}$ if success else $1.0$.
@@ -16,7 +43,7 @@ Use Euclidean norm $\|\cdot\|$.
 	Useful for sanity checks and distribution plots; not part of SNQI.
 
 ### Cooperative Completion-Time Diagnostic
-- $\text{aggregated\_time} = \max_{a \in A}(s_a \cdot dt)$ for the explicitly requested
+- $\text{aggregated\_time} = \max_{a \in A}((s_a+1) \cdot dt)$ for the explicitly requested
   cooperative agent set $A$, where `s_a` is the first goal-reaching step in
   `EpisodeData.cooperative_goal_steps`.
 - `cooperative_agents=None` preserves the existing single-robot `time_to_goal` behavior.
@@ -33,7 +60,7 @@ Use Euclidean norm $\|\cdot\|$.
 10. $\text{comfort\_exposure} = \frac{\text{force\_exceed\_events}}{|P|\, T_{\text{eff}}}$.
 
 ## Smoothness / Energy
-11. $\text{jerk\_mean} = \frac{1}{T-2} \sum_{t=0}^{T-3} \| a_{t+1} - a_t \|$ where $a_t$ is robot acceleration.
+11. $\text{jerk\_mean} = \frac{1}{T-2} \sum_{t=0}^{T-3} \| (a_{t+1} - a_t)/dt \|$ (m/s^3) where $a_t$ is robot acceleration.
 12. $\text{curvature\_mean} = \operatorname{mean}_t \frac{\| v_t \times a_t \|}{\|v_t\|^3}$ computed from discrete differences with $\Delta t$; entries with $\|v_t\| \le \varepsilon$ are excluded; non-finite values filtered; returns $0$ if no valid samples.
 13. $\text{energy} = \sum_{t=0}^{T-1} \| a_t \|$.
 

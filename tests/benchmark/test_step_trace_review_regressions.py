@@ -144,3 +144,45 @@ def test_empty_world_generator_removes_real_map_actors(monkeypatch, tmp_path):
     )
     assert generator.main() == 0
     assert seen
+
+
+def test_runtime_trace_records_reset_angular_velocity(runtime_row):
+    """Measured reset yaw rate makes the first acceleration step checkable."""
+    from robot_sf.benchmark.step_trace_invariants import invariant_coverage
+
+    trace = runtime_row["algorithm_metadata"]["simulation_step_trace"]
+    assert trace["reset"]["robot"]["angular_velocity"] == 0.0
+    assert invariant_coverage(runtime_row)["b_drive_limits"]["eligible"]
+
+
+def test_initial_yaw_acceleration_is_checked(runtime_row):
+    row = deepcopy(runtime_row)
+    trace = row["algorithm_metadata"]["simulation_step_trace"]
+    trace["steps"] = [deepcopy(trace["steps"][0])]
+    trace["reset"]["robot"].update(position=[0, 0], heading=0, velocity=[0, 0])
+    trace["steps"][0]["robot"].update(position=[0, 0], heading=0.2)
+    violations, _ = check_episode(row, enabled=["b_drive_limits"])
+    yaw_accel = [v for v in violations if v.kind == "yaw_accel"]
+    assert yaw_accel and yaw_accel[0].step_start == 0
+    assert yaw_accel[0].detail["limit"] == 1.0
+
+
+def test_new_v2_trace_can_have_complete_coverage():
+    """A real dev1001 episode has every step invariant available, including reset rates."""
+    from robot_sf.benchmark.step_trace_invariants import invariant_coverage
+
+    path = Path("configs/scenarios/canary_corridor.yaml")
+    row = _run_map_episode(
+        load_scenarios(path)[0],
+        1001,
+        horizon=40,
+        dt=0.1,
+        record_forces=False,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        scenario_path=path,
+        record_simulation_step_trace=True,
+    )
+    coverage = invariant_coverage(row)
+    assert all(c["eligible"] for c in coverage.values()), coverage

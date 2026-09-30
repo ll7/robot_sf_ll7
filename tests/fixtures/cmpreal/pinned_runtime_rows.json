@@ -1,0 +1,262 @@
+[
+  {
+    "slot": [
+      "goal",
+      "differential_drive",
+      "classic_bottleneck_low",
+      1001,
+      ""
+    ],
+    "algo": "goal",
+    "config": {},
+    "config_hash": "44136fa355b3678a",
+    "metadata_algorithm": "goal",
+    "metadata_config": {},
+    "metadata_config_hash": "44136fa355b3678a",
+    "scenario_config_hash": "9384ad90b6d65de0",
+    "scenario": {
+      "name": "classic_bottleneck_low",
+      "map_file": "maps/successor_svg_maps/issue_9762_classic_bottleneck_goal_zone_entry_v2.svg",
+      "simulation_config": {
+        "max_episode_steps": 500,
+        "ped_density": 0.0,
+        "goal_completion_policy": "goal_zone_entry_v1",
+        "social_force_kernel_version": "wrapped_v2",
+        "robot_goal_sampling_policy": "footprint_clearance_v1",
+        "route_spawn_seed": 1001
+      },
+      "robot_config": {
+        "type": "differential_drive"
+      },
+      "metadata": {
+        "archetype": "bottleneck",
+        "density": "low",
+        "spawn_mode": "markers",
+        "density_advisory": "zero_baseline_route_spawn",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-29",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": "ped_density=0.0; use map single_ped markers to control count.",
+          "metrics": {
+            "min_distance": null,
+            "mean_distance": null,
+            "robot_ped_within_5m_frac": null,
+            "ped_force_mean": null,
+            "force_q95": null
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml",
+          "sha256": "3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650",
+          "authored_max_episode_steps": 500,
+          "recommended_horizon_steps": 500,
+          "status": "authored",
+          "bucket": ""
+        }
+      },
+      "seeds": [
+        1001,
+        1002,
+        1003
+      ],
+      "map_id": null
+    },
+    "path": null,
+    "controls": {
+      "run_horizon": 500,
+      "run_dt": 0.1,
+      "record_forces": true,
+      "record_planner_decision_trace": false,
+      "record_simulation_step_trace": false,
+      "observation_mode": "goal_state",
+      "observation_level": "oracle_full_state"
+    },
+    "observation_noise": {
+      "enabled": false,
+      "profile": "none",
+      "seed": null,
+      "pose_noise_std_m": 0.0,
+      "heading_noise_std_rad": 0.0,
+      "lidar_dropout_prob": 0.0,
+      "lidar_dropout_value": 0.0,
+      "pedestrian_position_noise_std_m": 0.0,
+      "pedestrian_false_negative_prob": 0.0,
+      "pedestrian_occlusion_max_range_m": null,
+      "observation_delay_steps": 0,
+      "pedestrian_false_positive_prob": 0.0,
+      "pedestrian_false_positive_radius_m": 4.0,
+      "pedestrian_false_positive_radius": 0.35,
+      "interpretation": "non_calibrated_benchmark_robustness_noise_not_a_real_sensor_model"
+    },
+    "observation_noise_hash": "0a5609f0b2b1"
+  },
+  {
+    "slot": [
+      "guarded_ppo",
+      "differential_drive",
+      "classic_bottleneck_low",
+      1001,
+      ""
+    ],
+    "algo": "guarded_ppo",
+    "config": {
+      "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+      "device": "cpu",
+      "predictive_foresight_device": "cpu",
+      "deterministic": true,
+      "obs_mode": "dict",
+      "action_space": "unicycle",
+      "v_max": 2.0,
+      "omega_max": 1.0,
+      "fallback_to_goal": true,
+      "guard_rollout_dt": 0.1,
+      "guard_rollout_steps": 12,
+      "guard_near_field_distance": 2.0,
+      "guard_hard_ped_clearance": 0.58,
+      "guard_first_step_ped_clearance": 0.72,
+      "guard_hard_obstacle_clearance": 0.3,
+      "guard_min_ttc": 0.7,
+      "fallback_risk_dwa": {
+        "goal_target_version": "active_waypoint_v2",
+        "max_linear_speed": 0.9,
+        "max_angular_speed": 1.0,
+        "rollout_dt": 0.1,
+        "rollout_steps": 16,
+        "near_field_distance": 2.5,
+        "near_field_speed_cap": 0.55,
+        "goal_progress_weight": 4.5,
+        "heading_weight": 0.8,
+        "ped_clearance_weight": 2.0,
+        "obstacle_clearance_weight": 1.2,
+        "smoothness_weight": 0.15,
+        "ttc_weight": 0.35,
+        "progress_escape_enabled": false,
+        "clearance_model": "surface_v2",
+        "robot_radius_m": 1.0,
+        "pedestrian_radius_m": 0.4,
+        "hard_obstacle_clearance": 0.3,
+        "dynamic_window_version": "drive_limited_v2",
+        "dynamic_window_dt": 0.1,
+        "max_linear_accel": 1.0,
+        "max_linear_decel": 1.0,
+        "max_angular_accel": 1.0
+      },
+      "guard_clearance_model": "surface_v2",
+      "guard_robot_radius_m": 1.0,
+      "guard_pedestrian_radius_m": 0.4
+    },
+    "config_hash": "8abb75fdc1a4ca2e",
+    "metadata_algorithm": "ppo",
+    "metadata_config": {
+      "model_path": "ppo_model_retrained_10m_2025-02-01.zip",
+      "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+      "device": "cpu",
+      "deterministic": true,
+      "obs_mode": "dict",
+      "nearest_k": 5,
+      "action_space": "unicycle",
+      "action_semantics": "velocity_delta",
+      "v_max": 2.0,
+      "omega_max": 1.0,
+      "fallback_to_goal": true,
+      "predictive_foresight_enabled": false,
+      "predictive_foresight_model_id": "predictive_proxy_selected_v2_full",
+      "predictive_foresight_checkpoint_path": null,
+      "predictive_foresight_device": "cpu",
+      "predictive_foresight_max_agents": 16,
+      "predictive_foresight_horizon_steps": 8,
+      "predictive_foresight_rollout_dt": 0.2,
+      "predictive_foresight_ego_conditioning": false,
+      "predictive_foresight_near_distance": 0.7,
+      "predictive_foresight_front_corridor_length": 3.0,
+      "predictive_foresight_front_corridor_half_width": 1.0
+    },
+    "metadata_config_hash": "6aa04076fd9a22b3",
+    "scenario_config_hash": "f606a42e0390c38f",
+    "scenario": {
+      "name": "classic_bottleneck_low",
+      "map_file": "maps/successor_svg_maps/issue_9762_classic_bottleneck_goal_zone_entry_v2.svg",
+      "simulation_config": {
+        "max_episode_steps": 500,
+        "ped_density": 0.0,
+        "goal_completion_policy": "goal_zone_entry_v1",
+        "social_force_kernel_version": "wrapped_v2",
+        "robot_goal_sampling_policy": "footprint_clearance_v1",
+        "route_spawn_seed": 1001
+      },
+      "robot_config": {
+        "type": "differential_drive"
+      },
+      "metadata": {
+        "archetype": "bottleneck",
+        "density": "low",
+        "spawn_mode": "markers",
+        "density_advisory": "zero_baseline_route_spawn",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-29",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": "ped_density=0.0; use map single_ped markers to control count.",
+          "metrics": {
+            "min_distance": null,
+            "mean_distance": null,
+            "robot_ped_within_5m_frac": null,
+            "ped_force_mean": null,
+            "force_q95": null
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        },
+        "scenario_horizon": {
+          "source": "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml",
+          "sha256": "3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650",
+          "authored_max_episode_steps": 500,
+          "recommended_horizon_steps": 500,
+          "status": "authored",
+          "bucket": ""
+        }
+      },
+      "seeds": [
+        1001,
+        1002,
+        1003
+      ],
+      "map_id": null
+    },
+    "path": "configs/algos/guarded_ppo_release_v0_0_8.yaml",
+    "controls": {
+      "run_horizon": 500,
+      "run_dt": 0.1,
+      "record_forces": true,
+      "record_planner_decision_trace": false,
+      "record_simulation_step_trace": false,
+      "observation_mode": "socnav_state",
+      "observation_level": "tracked_agents_no_noise"
+    },
+    "observation_noise": {
+      "enabled": false,
+      "profile": "none",
+      "seed": null,
+      "pose_noise_std_m": 0.0,
+      "heading_noise_std_rad": 0.0,
+      "lidar_dropout_prob": 0.0,
+      "lidar_dropout_value": 0.0,
+      "pedestrian_position_noise_std_m": 0.0,
+      "pedestrian_false_negative_prob": 0.0,
+      "pedestrian_occlusion_max_range_m": null,
+      "observation_delay_steps": 0,
+      "pedestrian_false_positive_prob": 0.0,
+      "pedestrian_false_positive_radius_m": 4.0,
+      "pedestrian_false_positive_radius": 0.35,
+      "interpretation": "non_calibrated_benchmark_robustness_noise_not_a_real_sensor_model"
+    },
+    "observation_noise_hash": "0a5609f0b2b1"
+  }
+]

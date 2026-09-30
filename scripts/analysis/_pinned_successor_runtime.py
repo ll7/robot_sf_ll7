@@ -312,8 +312,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
         safety_wrapper = (
             spec.safety_wrapper if spec.safety_wrapper is not None else cfg.safety_wrapper
         )
+        seeded_scenario = _scenario_with_episode_seed_defaults(scoped_scenario, seed=slot[3])
         controls = _scenario_identity_payload(
-            _scenario_with_episode_seed_defaults(scoped_scenario, seed=slot[3]),
+            seeded_scenario,
             algo=algo,
             algo_config=effective,
             horizon=spec.horizon_override if spec.horizon_override is not None else cfg.horizon,
@@ -355,14 +356,27 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
             "benchmark_track",
             "track_schema_version",
         )
+        metadata_config = effective
+        if algo in {"ppo", "guarded_ppo"}:
+            # Reproduce the producer's typed PPO metadata without loading a model
+            # or stepping a policy/environment. The full guard/adapter config
+            # remains bound separately by scenario.algo_config_hash.
+            from robot_sf.baselines.ppo import PPOPlanner
+            from robot_sf.benchmark.map_runner.map_runner import _ppo_planner_config
+
+            deferred = PPOPlanner(_ppo_planner_config(effective), defer_model_loading=True)
+            metadata_config = deferred.get_metadata()["config"]
         runtime_rows.append(
             {
                 "slot": slot,
                 "algo": algo,
                 "config": effective,
                 "config_hash": _config_hash(effective),
+                "metadata_algorithm": metadata["algorithm"],
+                "metadata_config": metadata_config,
+                "metadata_config_hash": _config_hash(metadata_config),
                 "scenario_config_hash": _config_hash(scenario),
-                "scenario": scoped_scenario,
+                "scenario": seeded_scenario,
                 "path": planner["path"],
                 "controls": {key: controls[key] for key in control_fields if key in controls},
                 "observation_noise": normalize_observation_noise_spec(cfg.observation_noise),

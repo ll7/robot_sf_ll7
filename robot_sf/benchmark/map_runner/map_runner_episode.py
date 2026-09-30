@@ -78,6 +78,7 @@ from robot_sf.benchmark.map_runner.map_runner_trace import (
     _fast_bicycle_actor_summary,
     _intent_conditioned_behavior_summary,
     _observation_heading,
+    _optional_trace_float,
     _single_pedestrian_intent_metadata,
     _single_pedestrian_vru_metadata,
     _trace_pedestrians,
@@ -1899,6 +1900,7 @@ class _EpisodeStepLoopResult:
     initial_robot_heading: float
     initial_ped_positions: np.ndarray
     initial_robot_velocity: np.ndarray | None
+    initial_robot_angular_velocity: float | None
     initial_ped_velocities: np.ndarray | None
     initial_ped_headings: np.ndarray | None
     trace_actor_ids: list[str] | None
@@ -1989,6 +1991,7 @@ class _StepLoopState:
     initial_robot_heading: float = 0.0
     initial_ped_positions: np.ndarray = field(default_factory=lambda: np.empty((0, 2), dtype=float))
     initial_robot_velocity: np.ndarray | None = None
+    initial_robot_angular_velocity: float | None = None
     initial_ped_velocities: np.ndarray | None = None
     initial_ped_headings: np.ndarray | None = None
     trace_actor_ids: list[str] | None = field(default_factory=list)
@@ -2341,6 +2344,7 @@ def _init_step_loop_state(
         state.completion_policy = getattr(navigators[0], "completion_policy", "waypoint_radius_v1")
     state.initial_ped_positions = initial_ped_positions
     state.initial_robot_velocity = initial_robot_velocity
+    state.initial_robot_angular_velocity = _initial_robot_angular_velocity(env.simulator)
     state.initial_ped_velocities = initial_ped_velocities
     state.initial_ped_headings = initial_ped_headings
     state.trace_actor_ids = trace_actor_ids
@@ -2370,6 +2374,27 @@ def _reset_robot_heading(simulator: Any, obs: Any) -> float:
         if numeric is not None and np.isfinite(numeric):
             return numeric
     return _observation_heading(obs)
+
+
+def _initial_robot_angular_velocity(simulator: Any) -> float | None:
+    """Read the differential-drive reset yaw rate from measured robot state.
+
+    Returns:
+        A finite rad/s value, or None for unavailable/unsupported state.
+    """
+    from robot_sf.robot.differential_drive import DifferentialDriveState  # noqa: PLC0415
+
+    robots = getattr(simulator, "robots", None)
+    if not isinstance(robots, (list, tuple)) or not robots:
+        return None
+    state = getattr(robots[0], "state", None)
+    if not isinstance(state, DifferentialDriveState):
+        return None
+    try:
+        value = float(state.velocity[1])
+    except (TypeError, ValueError, IndexError):
+        return None
+    return value if math.isfinite(value) else None
 
 
 def _initial_robot_velocity(simulator: Any) -> np.ndarray | None:  # noqa: C901
@@ -2939,6 +2964,27 @@ def _surface_clearances_m(
     return clearance
 
 
+def _trace_planner_decision_fields(sim: _StepSimResult) -> dict[str, Any]:
+    """Retain available per-step planner diagnostics in the simulation trace.
+
+    Returns:
+        The producer-owned admissibility/recovery counters, including false values.
+    """
+    decision = getattr(sim, "planner_step_decision", None)
+    if not isinstance(decision, dict):
+        return {}
+    return {
+        key: decision[key]
+        for key in (
+            "no_admissible_command",
+            "no_admissible_command_count",
+            "recovery_command",
+            "recovery_command_count",
+        )
+        if key in decision
+    }
+
+
 def _step_build_simulation_trace(
     state: _StepLoopState,
     slc: _StepLoopConfig,
@@ -2961,16 +3007,7 @@ def _step_build_simulation_trace(
         "selected_action": sim.selected_action_payload,
         "applied_environment_action": sim.applied_environment_action_payload,
     }
-    decision = getattr(sim, "planner_step_decision", None)
-    if isinstance(decision, dict):
-        for key in (
-            "no_admissible_command",
-            "no_admissible_command_count",
-            "recovery_command",
-            "recovery_command_count",
-        ):
-            if key in decision:
-                planner_payload[key] = decision[key]
+    planner_payload.update(_trace_planner_decision_fields(sim))
     if sim.action_conversion_payload:
         planner_payload["action_conversion"] = sim.action_conversion_payload
     if sim.actuation_step is not None:
@@ -3506,6 +3543,7 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
         initial_robot_heading=state.initial_robot_heading,
         initial_ped_positions=state.initial_ped_positions,
         initial_robot_velocity=state.initial_robot_velocity,
+        initial_robot_angular_velocity=state.initial_robot_angular_velocity,
         initial_ped_velocities=state.initial_ped_velocities,
         initial_ped_headings=state.initial_ped_headings,
         trace_actor_ids=(
@@ -4138,6 +4176,7 @@ def _build_reset_provenance(  # noqa: PLR0913 - explicit reset inputs keep prove
     ped_radius: float,
     scenario: dict[str, Any] | None,
     sampler_capture: dict[str, Any] | None = None,
+    initial_robot_angular_velocity: float | None = None,
 ) -> dict[str, Any]:
     """Build the reset-time provenance block for the simulation step trace.
 
@@ -4204,6 +4243,7 @@ def _build_reset_provenance(  # noqa: PLR0913 - explicit reset inputs keep prove
             "position": [float(origin[0]), float(origin[1])] if origin_ok else None,
             "heading": robot_heading,
             "velocity": robot_velocity,
+            "angular_velocity": _optional_trace_float(initial_robot_angular_velocity),
         },
         "pedestrians": pedestrians,
         "min_surface_clearance_m": min_clearance,
@@ -4244,6 +4284,7 @@ def _finalize_trace_metadata(  # noqa: PLR0913
     termination_reason: str,
     safety_events: list[dict[str, Any]],
     sampler_capture: dict[str, Any] | None = None,
+    initial_robot_angular_velocity: float | None = None,
 ) -> None:
     """Attach planner-decision and simulation-step traces to algorithm metadata."""
     if record_planner_decision_trace:
@@ -4268,6 +4309,7 @@ def _finalize_trace_metadata(  # noqa: PLR0913
                 initial_robot_pos=initial_robot_pos,
                 initial_robot_heading=initial_robot_heading,
                 initial_robot_velocity=initial_robot_velocity,
+                initial_robot_angular_velocity=initial_robot_angular_velocity,
                 initial_ped_positions=initial_ped_positions,
                 initial_ped_velocities=initial_ped_velocities,
                 initial_ped_headings=initial_ped_headings,
@@ -4700,6 +4742,7 @@ def _finalize_metadata_outputs(
         initial_robot_heading=loop_result.initial_robot_heading,
         initial_ped_positions=loop_result.initial_ped_positions,
         initial_robot_velocity=loop_result.initial_robot_velocity,
+        initial_robot_angular_velocity=loop_result.initial_robot_angular_velocity,
         initial_ped_velocities=loop_result.initial_ped_velocities,
         initial_ped_headings=loop_result.initial_ped_headings,
         trace_actor_ids=loop_result.trace_actor_ids,

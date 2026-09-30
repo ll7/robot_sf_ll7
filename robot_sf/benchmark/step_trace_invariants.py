@@ -1,7 +1,7 @@
 """Step-trace invariant checks for benchmark episode rows (#9979).
 
 The checker reads episode rows that carry ``algorithm_metadata.simulation_step_trace``
-(schema ``simulation-step-trace.v1``) and tests five invariant families:
+(schema ``simulation-step-trace.v1`` or ``simulation-step-trace.v2``) and tests five invariant families:
 
 * ``a_goal_heading``: the robot moves towards ``goal.current`` and not, in a
   sustained way, towards ``goal.next`` or towards the world origin (the #9883 class).
@@ -38,6 +38,8 @@ INVARIANTS = (
     "d_position_jump",
     "e_termination",
 )
+
+SUPPORTED_TRACE_SCHEMAS = ("simulation-step-trace.v1", "simulation-step-trace.v2")
 
 _TIMEOUT_REASONS = {"terminated", "truncated", "max_steps"}
 
@@ -216,8 +218,12 @@ def invariant_coverage(  # noqa: C901, PLR0912
             for name, reasons in issues.items()
         }
     steps = trace["steps"]
-    if trace.get("schema_version") != "simulation-step-trace.v1":
+    if trace.get("schema_version") not in SUPPORTED_TRACE_SCHEMAS:
         add(issues, "unsupported_trace_schema")
+        return {
+            name: {"eligible": False, "checked_steps": 0, "issues": reasons}
+            for name, reasons in issues.items()
+        }
     dt = _num(trace.get("dt"))
     if dt is None or dt <= 0:
         add(("b_drive_limits", "d_position_jump"), "invalid_dt")
@@ -759,6 +765,9 @@ def check_episode(
     limits = resolve_limits(row, overrides)
     trace = _trace_of(row)
     out: list[Violation] = []
+    if trace is not None and trace.get("schema_version") not in SUPPORTED_TRACE_SCHEMAS:
+        # Unknown schemas cannot be interpreted as numeric trace evidence.
+        trace = None
     if trace is not None:
         if "a_goal_heading" in enabled:
             out += check_goal_heading(episode_id, trace, tol)

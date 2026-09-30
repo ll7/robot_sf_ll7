@@ -81,9 +81,6 @@ def _root(
         tmp_path, rows=rows, run=run, enable_all_v4=enable_all_v4
     )
     manifest = json.loads(manifest_path.read_text())
-    _, _, _, scoped_hashes, _ = comparator._runtime_successor_identity(
-        source, source_commit, "configs/benchmarks/synthetic.yaml", {}
-    )
     root = tmp_path / "successor"
     path = root / "runs" / run / "episodes.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -103,7 +100,6 @@ def _root(
             "id": row["scenario_id"],
             "map_file": "maps/svg_maps/classic_crossing.svg",
             "algo": algo,
-            "seed": row["seed"],
         }
         if row.get("benchmark_track"):
             scenario["benchmark_track"] = row["benchmark_track"]
@@ -111,18 +107,11 @@ def _root(
         row["config_hash"] = _config_hash(scenario)
         row["algorithm_metadata"] = {
             "algorithm": algo,
+            "canonical_algorithm": algo,
             "config": config,
             "config_hash": _config_hash(config),
         }
-        row["provenance"] = {
-            "commit_hash": source_commit,
-            "config_identity": {
-                "algo": algo,
-                "algo_config_path": binding["path"] if binding else None,
-                "scenario_matrix_hash": scoped_hashes[(run_planner, run.rsplit("__", 1)[1])],
-                "campaign_config_hash": manifest["campaign_config"]["runtime_hash"],
-            },
-        }
+        row["provenance"] = {"git_hash": source_commit, "config_hash": row["config_hash"]}
     _, _, runtime_rows, _, _ = comparator._runtime_successor_identity(
         source,
         source_commit,
@@ -148,11 +137,15 @@ def _root(
         )
         if slot in runtime_rows:
             row["scenario_params"].update(runtime_rows[slot]["controls"])
+            row["scenario_params"]["simulation_config"] = runtime_rows[slot]["scenario"][
+                "simulation_config"
+            ]
             row["scenario_params"]["robot_config"] = {
                 "type": slot[1],
                 **({"command_mode": "vx_vy"} if slot[1] == "holonomic" else {}),
             }
         row["config_hash"] = _config_hash(row["scenario_params"])
+        row["provenance"]["config_hash"] = row["config_hash"]
     path.write_text("".join(json.dumps(row) + "\n" for row in updated), encoding="utf-8")
     (root / "campaign_manifest.json").write_text(
         json.dumps(
@@ -686,29 +679,29 @@ def test_missing_extra_and_duplicate_successor_slots_are_unclassifiable_findings
     assert comparator.main() == 1
     assert (output / "findings.csv").exists()
 
-    extra["provenance"]["config_identity"]["scenario_matrix_hash"] = "f" * 16
+    extra["provenance"]["config_hash"] = "f" * 16
     path.write_text("".join(json.dumps(row) + "\n" for row in [recorded[0], extra]))
-    with pytest.raises(ValueError, match="scenario_matrix_hash differs from pinned scoped runner"):
+    with pytest.raises(ValueError, match="provenance config_hash differs from effective scenario"):
         _compare(bundle, root, digest)
 
     duplicate = copy.deepcopy(recorded[0])
-    duplicate["provenance"]["config_identity"]["scenario_matrix_hash"] = "f" * 16
+    duplicate["provenance"]["config_hash"] = "f" * 16
     path.write_text("".join(json.dumps(row) + "\n" for row in [recorded[0], duplicate]))
-    with pytest.raises(ValueError, match="scenario_matrix_hash differs from pinned scoped runner"):
+    with pytest.raises(ValueError, match="provenance config_hash differs from effective scenario"):
         _compare(bundle, root, digest)
 
 
-def test_mixed_scoped_matrix_hashes_exit_two_before_report(tmp_path: Path, monkeypatch) -> None:
-    """Rows from differently scoped runner inputs cannot share one campaign."""
+def test_mixed_episode_config_hashes_exit_two_before_report(tmp_path: Path, monkeypatch) -> None:
+    """Rows with invalid effective scenario hashes cannot share one campaign."""
     rows = [_row("s1", 111), _row("s2", 111)]
     bundle, digest = _archive(tmp_path, rows)
     root = _root(tmp_path, rows)
     path = root / "runs/goal__differential_drive/episodes.jsonl"
     recorded = [json.loads(line) for line in path.read_text().splitlines()]
-    recorded[1]["provenance"]["config_identity"]["scenario_matrix_hash"] = "f" * 16
+    recorded[1]["provenance"]["config_hash"] = "f" * 16
     path.write_text("".join(json.dumps(row) + "\n" for row in recorded))
 
-    with pytest.raises(ValueError, match="scenario_matrix_hash differs from pinned scoped runner"):
+    with pytest.raises(ValueError, match="provenance config_hash differs from effective scenario"):
         _compare(bundle, root, digest)
 
     real_compare = comparator.compare
@@ -750,12 +743,10 @@ def test_mixed_scoped_matrix_hashes_exit_two_before_report(tmp_path: Path, monke
     assert exc.value.code == 2
     assert not (output / "report.json").exists()
 
-    recorded[1]["provenance"]["config_identity"]["scenario_matrix_hash"] = recorded[0][
-        "provenance"
-    ]["config_identity"]["scenario_matrix_hash"]
-    recorded[1]["provenance"]["config_identity"]["campaign_config_hash"] = "f" * 16
+    recorded[1]["provenance"]["config_hash"] = recorded[1]["config_hash"]
+    recorded[1]["config_hash"] = "f" * 16
     path.write_text("".join(json.dumps(row) + "\n" for row in recorded))
-    with pytest.raises(ValueError, match="campaign_config_hash differs from pinned campaign"):
+    with pytest.raises(ValueError, match="provenance config_hash differs from effective scenario"):
         _compare(bundle, root, digest)
 
 
@@ -1148,6 +1139,7 @@ def test_forged_row_map_with_recomputed_self_hash_exits_two(tmp_path: Path, monk
     forged = json.loads(path.read_text())
     forged["scenario_params"]["map_file"] = "maps/svg_maps/forged.svg"
     forged["config_hash"] = _config_hash(forged["scenario_params"])
+    forged["provenance"]["config_hash"] = forged["config_hash"]
     path.write_text(json.dumps(forged) + "\n")
     with pytest.raises(ValueError, match="map_file differs from pinned scenario"):
         _compare(bundle, root, digest)
@@ -1200,6 +1192,7 @@ def test_row_identity_alias_must_match_pinned_scenario(tmp_path: Path) -> None:
     forged = json.loads(path.read_text())
     forged["scenario_params"]["id"] = "s2"
     forged["config_hash"] = _config_hash(forged["scenario_params"])
+    forged["provenance"]["config_hash"] = forged["config_hash"]
     path.write_text(json.dumps(forged) + "\n")
     with pytest.raises(ValueError, match="scenario provenance differs from run slot"):
         _compare(bundle, root, digest)
@@ -1226,6 +1219,7 @@ def test_recorded_episode_controls_must_match_pinned_h600_campaign(
     changed = json.loads(path.read_text())
     changed["scenario_params"][field] = wrong
     changed["config_hash"] = _config_hash(changed["scenario_params"])
+    changed["provenance"]["config_hash"] = changed["config_hash"]
     path.write_text(json.dumps(changed) + "\n")
     with pytest.raises(ValueError, match="pinned (episode controls|slot)"):
         _compare(bundle, root, digest)
@@ -1241,6 +1235,7 @@ def test_differential_drive_row_declaring_holonomic_exits_two(tmp_path: Path, mo
     changed = json.loads(path.read_text())
     changed["scenario_params"]["robot_config"]["type"] = "holonomic"
     changed["config_hash"] = _config_hash(changed["scenario_params"])
+    changed["provenance"]["config_hash"] = changed["config_hash"]
     path.write_text(json.dumps(changed) + "\n")
     with pytest.raises(ValueError, match="robot_config.type differs from pinned scoped runner"):
         _compare(bundle, root, digest)
@@ -1256,6 +1251,7 @@ def test_holonomic_row_command_mode_must_match_scoped_runner(tmp_path: Path, mon
     changed = json.loads(path.read_text())
     changed["scenario_params"]["robot_config"]["command_mode"] = "unicycle_vw"
     changed["config_hash"] = _config_hash(changed["scenario_params"])
+    changed["provenance"]["config_hash"] = changed["config_hash"]
     path.write_text(json.dumps(changed) + "\n")
     with pytest.raises(
         ValueError, match="holonomic command_mode differs from pinned scoped runner"
@@ -1306,9 +1302,9 @@ def test_v4_scenario_algorithm_override_to_goal_exits_two(tmp_path: Path, monkey
     changed["algorithm_metadata"]["algorithm"] = "goal"
     changed["algorithm_metadata"]["config"] = {}
     changed["algorithm_metadata"]["config_hash"] = _config_hash({})
-    changed["provenance"]["commit_hash"] = commit
-    changed["provenance"]["config_identity"]["algo"] = "goal"
+    changed["provenance"]["git_hash"] = commit
     changed["config_hash"] = _config_hash(changed["scenario_params"])
+    changed["provenance"]["config_hash"] = changed["config_hash"]
     path.write_text(json.dumps(changed) + "\n")
     campaign_path = root / "campaign_manifest.json"
     campaign = json.loads(campaign_path.read_text())
@@ -1362,7 +1358,7 @@ def test_v4_key_bound_to_v3_config_fails_even_with_re_pinned_manifest(
     row_path = root / "runs" / f"{v4}__differential_drive" / "episodes.jsonl"
     recorded = json.loads(row_path.read_text())
     recorded["git_hash"] = commit
-    recorded["provenance"]["commit_hash"] = commit
+    recorded["provenance"]["git_hash"] = commit
     row_path.write_text(json.dumps(recorded) + "\n")
     campaign_path = root / "campaign_manifest.json"
     campaign = json.loads(campaign_path.read_text())
@@ -1437,14 +1433,12 @@ def test_effective_planner_config_and_referenced_path_must_match(tmp_path: Path)
         "planner_variant": "hybrid_rule_v4_clearance_braking",
         "name": v4,
     }
-    original["provenance"]["config_identity"]["algo_config_path"] = "configs/algos/other.yaml"
+    original["provenance"]["config_hash"] = "f" * 16
     path.write_text(json.dumps(original) + "\n")
-    with pytest.raises(ValueError, match="run provenance differs"):
+    with pytest.raises(ValueError, match="provenance config_hash differs"):
         _compare(bundle, root, digest)
-    original["provenance"]["config_identity"]["algo_config_path"] = json.loads(
-        (tmp_path / "successor-manifest.json").read_text()
-    )["versioned_planner_bindings"][v4]["path"]
-    original["provenance"]["commit_hash"] = "f" * 40
+    original["provenance"]["config_hash"] = original["config_hash"]
+    original["provenance"]["git_hash"] = "f" * 40
     path.write_text(json.dumps(original) + "\n")
     with pytest.raises(ValueError, match="run provenance source differs"):
         _compare(bundle, root, digest)
@@ -1521,6 +1515,8 @@ def test_pinned_v4_lineage_rejects_contradictory_config_declaration(tmp_path: Pa
     )
     assert result.returncode != 0
     assert f"successor planner binding lacks reviewed v4 lineage: {key}" in result.stderr
+
+
 @pytest.mark.parametrize("mixed_successor_definitions", [False, True])
 def test_changed_definitions_suppress_paired_metric_delta(tmp_path, mixed_successor_definitions):
     """Read actual JSONL bytes and fence metrics even when numerical values agree."""
@@ -1540,3 +1536,40 @@ def test_changed_definitions_suppress_paired_metric_delta(tmp_path, mixed_succes
     finding = next(x for x in report["findings"] if x["field"] == "metrics.path_length")
     assert finding["classification"] == "metric_definition_change"
     assert finding["delta_0_0_8_minus_0_0_7"] is None
+
+
+def test_real_camera_ready_row_provenance_is_admitted():
+    """The unedited dev1001 row binds its scenario through camera-ready provenance."""
+    row = json.loads(
+        (Path(__file__).parents[1] / "fixtures/cmpreal/camera_ready_row.json").read_text()
+    )
+    slot = ("goal", "differential_drive", "classic_bottleneck_low", 1001, "")
+    compact = {"_provenance": row}
+    # Scoped/campaign hashes live in campaign manifests, not episode provenance.
+    comparator._validate_row_runner_hashes(slot, compact)
+    assert row["provenance"]["config_hash"] == "9384ad90b6d65de0"
+
+
+@pytest.mark.parametrize("arm", ["goal", "guarded_ppo"])
+def test_real_camera_ready_rows_match_pinned_runtime(arm):
+    """Actual producer rows have no scenario seed and retain typed PPO metadata."""
+    fixtures = Path(__file__).parents[1] / "fixtures/cmpreal"
+    row = json.loads((fixtures / f"{arm}_row.json").read_text())
+    expected = next(
+        r
+        for r in json.loads((fixtures / "pinned_runtime_rows.json").read_text())
+        if r["slot"][0] == arm
+    )
+    slot = tuple(expected.pop("slot"))
+    comparator._validate_successor_row(
+        slot, {"_provenance": row}, {slot: expected}, "ea414933e61ce267389bd3bcbe97fb669a825c6e"
+    )
+    if arm == "guarded_ppo":
+        row["algorithm_metadata"]["canonical_algorithm"] = "ppo"
+        with pytest.raises(ValueError, match="canonical algorithm differs"):
+            comparator._validate_successor_row(
+                slot,
+                {"_provenance": row},
+                {slot: expected},
+                "ea414933e61ce267389bd3bcbe97fb669a825c6e",
+            )

@@ -516,16 +516,6 @@ def _root_identity(root: Path, expected: Mapping[str, Any]) -> dict[str, str]:
     }
 
 
-def _matches_config_path(observed: Any, expected: str | None) -> bool:
-    if expected is None:
-        return observed is None
-    if not isinstance(observed, str) or not observed:
-        return False
-    observed_parts = Path(observed).parts
-    expected_parts = Path(expected).parts
-    return observed_parts[-len(expected_parts) :] == expected_parts
-
-
 def _validate_successor_row(  # noqa: C901, PLR0912 - provenance assertions fail independently
     slot: tuple[str, str, str, int, str],
     row: Mapping[str, Any],
@@ -559,7 +549,9 @@ def _validate_successor_row(  # noqa: C901, PLR0912 - provenance assertions fail
             field not in scenario or scenario[field] != expected
         ):
             raise ValueError(f"0.0.8 row {field} differs from pinned scenario at {slot}")
-    if scenario.get("seed") != slot[3]:
+    # Camera-ready identity payloads omit seed; the row slot and pinned seed
+    # inventory bind it. A legacy explicit seed must still agree.
+    if "seed" in scenario and scenario["seed"] != slot[3]:
         raise ValueError(f"0.0.8 row seed differs from pinned slot at {slot}")
     controls = planner["controls"]
     control_fields = {
@@ -597,13 +589,17 @@ def _validate_successor_row(  # noqa: C901, PLR0912 - provenance assertions fail
             raise ValueError(f"0.0.8 row {field} differs from pinned episode controls at {slot}")
     if recorded["algo"] != planner["algo"] or scenario.get("algo") != planner["algo"]:
         raise ValueError(f"0.0.8 row algorithm differs from configured planner at {slot}")
-    if metadata.get("algorithm") != planner["algo"]:
+    if metadata.get("algorithm") != planner["metadata_algorithm"]:
         raise ValueError(f"0.0.8 row algorithm metadata differs from configured planner at {slot}")
-    if recorded["planner_key"] is not None and recorded["planner_key"] != slot[0]:
+    if ("canonical_algorithm" in metadata or planner["algo"] == "guarded_ppo") and metadata.get(
+        "canonical_algorithm"
+    ) != planner["algo"]:
+        raise ValueError(f"0.0.8 row canonical algorithm differs from configured planner at {slot}")
+    if recorded.get("planner_key") is not None and recorded["planner_key"] != slot[0]:
         raise ValueError(f"0.0.8 row planner_key differs from run directory at {slot}")
     if (
-        metadata.get("config") != planner["config"]
-        or metadata.get("config_hash") != planner["config_hash"]
+        metadata.get("config") != planner["metadata_config"]
+        or metadata.get("config_hash") != planner["metadata_config_hash"]
     ):
         raise ValueError(f"0.0.8 row effective planner config differs from pinned source at {slot}")
     if recorded["config_hash"] != planner["scenario_config_hash"]:
@@ -614,33 +610,34 @@ def _validate_successor_row(  # noqa: C901, PLR0912 - provenance assertions fail
         raise ValueError(
             f"0.0.8 row scenario planner config hash differs from pinned source at {slot}"
         )
-    if not isinstance(provenance, dict) or provenance.get("commit_hash") != source_commit:
+    if not isinstance(provenance, dict) or provenance.get("git_hash") != source_commit:
         raise ValueError(f"0.0.8 row run provenance source differs from campaign at {slot}")
-    identity = provenance.get("config_identity")
-    if (
-        not isinstance(identity, dict)
-        or identity.get("algo") != planner["algo"]
-        or not _matches_config_path(identity.get("algo_config_path"), planner["path"])
-    ):
-        raise ValueError(f"0.0.8 row run provenance differs from configured planner at {slot}")
 
 
 def _validate_row_runner_hashes(
-    slot: tuple[str, str, str, int, str],
-    row: Mapping[str, Any],
-    scoped_hash: str,
-    campaign_config_hash: str,
+    slot: tuple[str, str, str, int, str], row: Mapping[str, Any]
 ) -> None:
-    """Bind every row in a configured arm to its pinned runner scope."""
-    provenance = row["_provenance"]["provenance"]
-    identity = provenance.get("config_identity") if isinstance(provenance, dict) else None
-    if not isinstance(identity, dict) or identity.get("scenario_matrix_hash") != scoped_hash:
+    """Verify camera-ready episode provenance against its effective scenario.
+
+    The map runner records a scenario config_hash and git_hash, not the classic
+    runner's config_identity. Campaign/matrix hashes are verified on the pinned
+    campaign manifest; expected slots and effective controls bind rows to that
+    scope in _validate_successor_row.
+    """
+    from robot_sf.benchmark.utils import _config_hash
+
+    recorded = row["_provenance"]
+    provenance = recorded["provenance"]
+    scenario = recorded["scenario_params"]
+    if (
+        not isinstance(provenance, dict)
+        or not isinstance(scenario, dict)
+        or provenance.get("config_hash") != recorded["config_hash"]
+        or provenance.get("config_hash") != _config_hash(scenario)
+    ):
         raise ValueError(
-            f"0.0.8 row scenario_matrix_hash differs from pinned scoped runner at {slot}"
+            f"0.0.8 row provenance config_hash differs from effective scenario at {slot}"
         )
-    for field in ("campaign_config_hash", "config_hash"):
-        if field in identity and identity[field] != campaign_config_hash:
-            raise ValueError(f"0.0.8 row {field} differs from pinned campaign config at {slot}")
 
 
 def _fields(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -951,7 +948,7 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
             raise ValueError(f"0.0.8 row source differs from campaign manifest at {key}")
         scoped_hash = verified_successor["scoped_hashes"].get(key[:2])
         if scoped_hash is not None:
-            _validate_row_runner_hashes(key, row, scoped_hash, successor_identity["config_hash"])
+            _validate_row_runner_hashes(key, row)
         if key in extra_slots:
             continue
         _validate_successor_row(

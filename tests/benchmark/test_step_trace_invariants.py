@@ -78,6 +78,7 @@ def _row(  # noqa: PLR0913
         "scenario_params": {"robot_config": robot_config or {"type": "differential_drive"}},
         "algorithm_metadata": {
             "simulation_step_trace": {
+                "schema_version": "simulation-step-trace.v1",
                 "dt": DT,
                 "steps": steps,
                 "reset": {"robot": {"position": list(first), "heading": h0}},

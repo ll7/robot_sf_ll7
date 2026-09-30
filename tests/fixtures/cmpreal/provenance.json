@@ -1,0 +1,89 @@
+{
+  "source_campaign": "reh_probe_traces_v2",
+  "source_commit": "ea414933e61ce267389bd3bcbe97fb669a825c6e",
+  "seed_inventory": [
+    1001
+  ],
+  "rows": [
+    {
+      "run": "goal__differential_drive",
+      "episode_id": "classic_bottleneck_low--1001--cc9633dffef61762",
+      "source_line_sha256": "657ae3537a2e62e690dff3ad659dcdf62390aba0a45f07737b4781a3d31fa719"
+    },
+    {
+      "run": "guarded_ppo__differential_drive",
+      "episode_id": "classic_merging_low--1001--02fae6cb44a2b9cb",
+      "source_line_sha256": "455cfa7b2f3575dd6c7a82bbbf15b4d15d93c23cafa249c38ebcb80ec9c0bbde"
+    },
+    {
+      "run": "guarded_ppo__differential_drive",
+      "episode_id": "classic_overtaking_low--1001--86bf94448d5f0097",
+      "source_line_sha256": "c6e0f11fc1cd3a0cc4dfdb97780775c42ae5f2cd722b2bf44ca9b59f70cbc9be"
+    },
+    {
+      "run": "guarded_ppo__differential_drive",
+      "episode_id": "classic_overtaking_medium--1001--732dceff777bb7e4",
+      "source_line_sha256": "7b78f1d9f0b90647ea2a4726d1bbcdb9baea6978d5e45c95a803d4edb13bb571"
+    },
+    {
+      "run": "guarded_ppo__differential_drive",
+      "episode_id": "francis2023_following_human--1001--9ccd07b517aa69a3",
+      "source_line_sha256": "c1d8eebf5c86a885394585f278bff8d95e04979fa482cc891e0d7b3ffb4f1748"
+    },
+    {
+      "run": "guarded_ppo__differential_drive",
+      "episode_id": "francis2023_crowd_navigation--1001--52635fb6f6b1638e",
+      "source_line_sha256": "ec01362bd7e0850431c288d04b21f6735dd66e5a2e7953820b4dc4888136a3c5"
+    },
+    {
+      "run": "orca__differential_drive",
+      "episode_id": "classic_overtaking_low--1001--02580b50b47373aa",
+      "source_line_sha256": "121e89585f5989bb06c66ec8ea23adb2ceb0ea07b29b32bdbe5cd765a8f791ad"
+    },
+    {
+      "run": "ppo__differential_drive",
+      "episode_id": "classic_head_on_corridor_medium--1001--72b57a026b5ff83c",
+      "source_line_sha256": "2dfb2bd210f5e3217411ca7a824621a89cbfb8cf452d0e9edea1a92018637687"
+    },
+    {
+      "run": "ppo__differential_drive",
+      "episode_id": "classic_overtaking_low--1001--a971b22af077f50c",
+      "source_line_sha256": "89cd1e3ce6a572fd9b79f5465ce6d23b9626c5c4ffd24260f8fd9404f663aed0"
+    },
+    {
+      "run": "ppo__differential_drive",
+      "episode_id": "classic_overtaking_medium--1001--480360c428a6add0",
+      "source_line_sha256": "9512a0a2aea0fecf72524b7a34b42c6b30a8836b39081d626af6e2834e208162"
+    },
+    {
+      "run": "ppo__differential_drive",
+      "episode_id": "francis2023_pedestrian_overtaking--1001--c0f4575e5843ad36",
+      "source_line_sha256": "76536f825efbabec187c57ab1dabc954a21f90e1bb0dc34e1a4880bc20524ef4"
+    }
+  ],
+  "camera_ready_source": "reh_main_v2/runs/goal__differential_drive/episodes.jsonl:1",
+  "camera_ready_sha256": "1fb2b59808bb07dbbe9b1ed6650a745238abb3e77ba99da5bdb26f2b3a881cd4",
+  "pinned_runtime_rows": "Pinned source runtime config resolution (no model loading or steps), configs/benchmarks/rehearsal_0_0_8_dev_seeds.yaml",
+  "camera_ready_rows": {
+    "camera_ready_row.json": {
+      "sha256": "1fb2b59808bb07dbbe9b1ed6650a745238abb3e77ba99da5bdb26f2b3a881cd4",
+      "bytes": 27490
+    },
+    "goal_row.json": {
+      "sha256": "1fb2b59808bb07dbbe9b1ed6650a745238abb3e77ba99da5bdb26f2b3a881cd4",
+      "bytes": 27490
+    },
+    "guarded_ppo_row.json": {
+      "sha256": "8683f6a6aa40eccb88a698a251eeb791350fda0a05b7bdf9d96ef78a6e5fdadc",
+      "bytes": 33489
+    },
+    "pinned_runtime_rows.json": {
+      "sha256": "55f8b1eea48b71fa7d11e5ab1852b3d1e0011caf52c2babb97e2de72a7536778",
+      "bytes": 8808
+    },
+    "rehearsal_traces.jsonl.gz": {
+      "sha256": "28cf997addfe503630b291f51edbf44e689eabbf68a22cd80a815f7868d659c5",
+      "bytes": 2619889
+    }
+  }
+}

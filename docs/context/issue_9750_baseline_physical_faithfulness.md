@@ -155,9 +155,14 @@ an exact bound map: the bound map's physical wall segments define its boundary.
 For a positive current obstacle clearance below `0.3 m`, Risk-DWA and MPPI admit
 only rollouts with strictly positive clearance that never falls below the current
 clearance. At-rest rotation qualifies for a circular body. Otherwise the full
-hard margin applies. MPPI also retains `0.35 m` first-step padding outside
-recovery: a centered `2.6 m` corridor fits the hard margin but fails that stronger
-constraint. At an exactly `2.7 m` corridor the first-step threshold is a floating
+hard margin applies. MPPI retains `0.35 m` first-step padding when the current state meets it.
+With bound exact geometry and a supported native drive, a state already below
+that padding instead requires strictly positive, nondecreasing first-step
+clearance. The independent `0.30 m` whole-rollout hard gate remains intact;
+below that hard margin, the existing whole-rollout monotone recovery rule applies.
+This avoids the TDIAG2 `0.30–0.35 m` dead band without lowering either threshold: a
+centered `2.6 m` corridor can retain its hard margin rather than demanding an
+unreachable instantaneous clearance increase. At an exactly `2.7 m` corridor the first-step threshold is a floating
 point boundary, conservatively rejected if rounded below `0.35 m`.
 MPPI explicitly scores a zero-speed recovery turn because continuous CEM samples
 almost never contain one, and chooses it over a stationary recovery winner.
@@ -176,7 +181,8 @@ map to 1.9/2.0/2.6/2.7 m and include penetrating poses; no tracked fixture is
 rewritten; the release configs and checkpoint bytes remain the actual inputs.
 No episode sweep runs on this workstation. The orchestrator owns the final-head
 48 × 14 dev-seed Slurm sweep; its results will be diagnostic development
-evidence, not release admission. Class f receives no policy-specific code change.
+evidence, not release admission. The earlier class labels were superseded by TDIAG2; its class f now has the
+native-drive shield correction described below.
 
 The 0.0.8 release template binds these corrections through new config files for the predictor, Guarded
 PPO, MPPI, RiskDWA, SocialForce, SocNav/ORCA/SACADRL, and bounded SocNav sampling. The PPO learned
@@ -197,6 +203,63 @@ The separate standalone DWA grid-resolution defect is already tracked by [#9740]
 with active [PR #9804](https://github.com/ll7/robot_sf_ll7/pull/9804); this audit does not duplicate
 that implementation. [PR #9744](https://github.com/ll7/robot_sf_ll7/pull/9744) is the metamorphic
 review that surfaced the DWA/body-radius follow-up now covered here by #9750.
+
+## FX6 TDIAG2 physical prediction and arbitration repairs
+
+The surface-clearance guard binds the actual `DifferentialDriveSettings` and
+uses FX4's native velocity-to-acceleration conversion, wheel initialization,
+trapezoidal odometry and midpoint heading for PPO, fallback and stop. Native
+limits remain `2.0 m/s`, no reverse and the bound accel/decel/yaw authority.
+The stop forecast includes residual translation and the full terminal braking
+coast, including when stopping exceeds the configured rollout horizon. MPPI's
+bound surface-clearance rollouts reuse the same native implementation in nominal
+states as well as recovery. Legacy center-distance dynamics remain replayable.
+The braking tail checks static geometry; the pedestrian prediction horizon and
+all hard/first-step pedestrian and TTC thresholds remain unchanged. An emergency
+brake from an already inevitable-contact state is reported unsafe, never certified.
+
+In empty worlds with bound exact geometry, guard best-effort arbitration compares
+fallback with stop, excluding vetoed PPO/prior proposals. A below-margin fallback
+must satisfy the same strictly positive, nondecreasing swept-clearance recovery
+contract, now evaluated using native motion and its braking tail. With pedestrians
+or unbound geometry, FX4/FX5's strict pedestrian-clearance arbitration is retained.
+Fallback scoring, checkpoint inputs and learned feature cadence are unchanged.
+
+[`test_fx6_tdiag2_repairs.py`](../../tests/planner/test_fx6_tdiag2_repairs.py) uses
+TDIAG2 dev-seed 1001/1002 poses, actual release maps and configs: ten contact
+states, seven dead-band states and the three exact-target forward-recovery
+arbitration errors. These are deterministic command/geometry regressions, not
+new episode outcomes or a guarantee of global progress.
+
+### Documented limitations
+
+TDIAG2 classified 54 empty-world failures at sweep head `2e6f8171`, checked against
+`cb3cf2ee`. Counts below describe those historical traces, not FX6 outcomes.
+
+- **a (six):** the Francis narrow doorway is exactly `2.0 m`, equal to the body's
+  diameter, and smaller than the `2.6 m` required for two-sided hard margins.
+  Refusal is correct; widening the map or shrinking radius/margins changes the comparison.
+- **c (six):** cross-trap/doorway MPPI stasis has admissible commands. Bounded
+  local search and re-evaluation of a sampled winner's first action as a constant
+  sequence can favor stop near corners. Candidate ledgers were not retained, so
+  no unique scoring defect is proven. This arbitration is a repository method
+  deviation if claiming textbook MPPI equivalence; no such equivalence is established.
+- **d recovery (three):** cross-trap seed 1001 at all densities admits in-place
+  recovery turns, but the direct target-bearing turn approaches zero yaw at
+  `(12.788823,17.725279,2.125855)`. Positive forward motion initially reduces
+  clearance. Monotone local recovery need not make progress; reverse, temporary
+  clearance loss or global rerouting would be separately declared enhancements.
+- **e remaining scoring limits:** fixing the three demonstrated forward-fallback
+  rejections does not promise to resolve the other fifteen guard deadlocks.
+  Fourteen exact-target fallback probes already selected stop; entering-elevator's
+  sampled final target was unavailable. Arbitrary escape turns are outside this repair.
+- **h (four):** Risk-DWA station-platform seeds 1001/1002 require at least
+  `62.014497/61.345231 s` at its unchanged `1.2 m/s` cap, exceeding the `60 s`
+  horizon even before acceleration/bends. Guarded crowd-navigation exhibits
+  PPO/intervention sensitivity without a uniquely established cause; guarded
+  station-platform overshoots a middle waypoint and tries to return. These are
+  horizon, learned-trajectory and waypoint-capture limits; no failed trace entered
+  its goal zone. Speed/horizon/waypoint tuning is not a physical-faithfulness repair.
 
 ## Validation and limits
 

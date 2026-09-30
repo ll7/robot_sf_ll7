@@ -178,19 +178,14 @@ def test_real_corridor_widths_preserve_body_and_margin(planner, tmp_path):
                 obs = observation(adapter, path, [10.0, 10.0], heading, phase)
                 clearance = adapter._min_obstacle_clearance(np.array([10.0, 10.0]), observation=obs)
                 assert clearance == pytest.approx(width / 2 - 1, abs=1e-7)
-                if arm == "predictive_mppi":
-                    # MPPI retains its stricter 0.35 m first-step margin; exact
-                    # 2.7 m tangency to that threshold may round downward.
-                    if width < 2.7:
-                        assert not admissible(arm, adapter, obs, (0, 0.1))
-                    else:
-                        # Just inside the 0.3 hard margin is recovery; this
-                        # rotation must be admitted despite first-step padding.
-                        shifted = [10.0, 10.050001]
-                        recovery_obs = observation(adapter, path, shifted, heading, phase)
-                        assert admissible(arm, adapter, recovery_obs, (0, 0.1))
-                else:
-                    assert admissible(arm, adapter, obs, (0, 0.1)) == (width >= 2.6)
+                # A bound at-rest turn preserves positive clearance, including
+                # the MPPI first-step dead band. Neither arm may admit contact.
+                assert admissible(arm, adapter, obs, (0, 0.1)) == (width >= 2.6)
+                if arm == "predictive_mppi" and width == 2.7:
+                    # Just inside the hard margin, retain monotone recovery.
+                    shifted = [10.0, 10.050001]
+                    recovery_obs = observation(adapter, path, shifted, heading, phase)
+                    assert admissible(arm, adapter, recovery_obs, (0, 0.1))
                 intruding = [10.0, 10 + width / 2 - 0.99]
                 obs = observation(adapter, path, intruding, heading, phase)
                 assert not admissible(arm, adapter, obs, (0, 0.1))

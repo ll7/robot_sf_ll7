@@ -1125,9 +1125,10 @@ def test_surface_v2_guard_uses_body_to_body_clearance() -> None:
         (0.0, 0.0),
     )
 
-    assert unsafe["min_ped_clear"] == pytest.approx(0.3)
+    # Observed 0.2 m/s brakes to 0.1: trapezoidal displacement is 0.015 m.
+    assert unsafe["min_ped_clear"] == pytest.approx(0.285)
     assert unsafe["safe"] is False
-    assert safe["min_ped_clear"] == pytest.approx(0.8)
+    assert safe["min_ped_clear"] == pytest.approx(0.785)
     assert safe["safe"] is True
 
 
@@ -1148,7 +1149,8 @@ def test_surface_v2_guard_reports_ttc_from_rollout_start() -> None:
         _obs(ped_positions=[(3.0, 0.0)], ped_velocities=[(-1.0, 0.0)]),
         (0.0, 0.0),
     )
-    assert result["min_ttc"] == pytest.approx(1.6)
+    # At t=.1, gap=3-.1-.015-1.4=1.485; relative speed=1+.1.
+    assert result["min_ttc"] == pytest.approx(0.1 + 1.485 / 1.1)
 
 
 def test_surface_v2_guard_requires_positive_body_radii() -> None:

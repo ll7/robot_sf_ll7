@@ -14,6 +14,7 @@ import numpy as np
 from robot_sf.benchmark.uncertainty_safety import compute_intrusion_metrics
 from robot_sf.planner.clearance_geometry import (
     CENTER_CLEARANCE_V1,
+    obstacle_rollout_admissible,
     occupied_cell_clearance,
     pedestrian_clearance,
     surface_search_radius_cells,
@@ -21,6 +22,7 @@ from robot_sf.planner.clearance_geometry import (
     validate_clearance_model,
     validate_surface_clearance_radii,
 )
+from robot_sf.planner.drive_rollout import native_drive_rollout
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, _wrap_angle, build_risk_dwa_config
 from robot_sf.planner.safety_shield import ShieldDecision
 from robot_sf.planner.socnav import (
@@ -29,6 +31,7 @@ from robot_sf.planner.socnav import (
     SocNavPlannerConfig,
 )
 from robot_sf.planner.socnav_base import _SOCNAV_CONFIG_INIT_KEYS
+from robot_sf.robot.differential_drive import DifferentialDriveSettings
 
 _DEFAULT_GUARD_ROLLOUT_STEPS = 6
 
@@ -196,6 +199,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
     ) -> None:
         """Initialize guard and fallback local planner."""
         self.config = config or GuardedPPOConfig()
+        self._drive_settings = DifferentialDriveSettings()
         self.fallback_adapter = fallback_adapter or RiskDWAPlannerAdapter()
         self.prior_adapter = prior_adapter
         self._last_action_adaptation: dict[str, Any] | None = None
@@ -212,6 +216,13 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
     def bind_env(self, env: Any) -> None:
         """Propagate environment binding to child planners that need map context."""
         self._bind_static_obstacles(env)
+        self._drive_settings = DifferentialDriveSettings()
+        robots = getattr(getattr(env, "simulator", None), "robots", None)
+        if robots:
+            settings = getattr(robots[0], "config", None)
+            self._drive_settings = (
+                settings if isinstance(settings, DifferentialDriveSettings) else None
+            )
         for adapter in self._child_adapters():
             bind_env = getattr(adapter, "bind_env", None)
             if callable(bind_env):
@@ -461,6 +472,56 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             point_offset_xy_m=self._point_offset_in_grid_cell(point, meta, row, col),
         )
 
+    def _command_drive_rollout(self, observation, command, robot_pos, heading):
+        """Forecast commands, with native dynamics for surface-clearance guards.
+
+        Returns:
+            tuple: World positions, headings and endpoint velocities; native
+            forecasts include the terminal static braking tail.
+        """
+        if self.config.clearance_model != "surface_v2" or self._drive_settings is None:
+            x, theta = np.array(robot_pos, dtype=float), float(heading)
+            positions, headings = [], []
+            steps = max(int(self.config.rollout_steps), 1)
+            dt = float(self.config.rollout_dt)
+            for _ in range(steps):
+                x = x + command[0] * dt * np.array([np.cos(theta), np.sin(theta)])
+                theta = _wrap_angle(theta + command[1] * dt)
+                positions.append(x)
+                headings.append(theta)
+            return np.asarray(positions), np.asarray(headings), np.tile(command, (steps, 1))
+        robot_state, _, _ = self._socnav_fields(observation)
+        speed = float(self._as_1d_float(robot_state.get("speed", [0.0]), pad=1)[0])
+        angular = float(self._as_1d_float(robot_state.get("angular_velocity", [0.0]), pad=1)[0])
+        sequence = np.tile(command, (max(int(self.config.rollout_steps), 1), 1))
+        positions, headings, velocities = native_drive_rollout(
+            sequence, self._drive_settings, speed, angular, float(self.config.rollout_dt)
+        )
+        cos_h, sin_h = np.cos(heading), np.sin(heading)
+        rotation = np.array([[cos_h, -sin_h], [sin_h, cos_h]])
+        return robot_pos + positions @ rotation.T, headings + heading, velocities
+
+    def _terminal_obstacle_clearance(self, positions, observation, grid_payload):
+        """Check static braking viability without extending the pedestrian horizon.
+
+        Returns:
+            float: Swept minimum during the terminal coast, or infinity if empty.
+        """
+        minimum = float("inf")
+        previous = positions[0]
+        for point in positions[1:]:
+            swept = self._exact_obstacle_clearance(point, previous=previous)
+            if swept is not None:
+                minimum = min(minimum, swept)
+            minimum = min(
+                minimum,
+                self._min_obstacle_clearance(
+                    point, observation=observation, grid_payload=grid_payload
+                ),
+            )
+            previous = point
+        return minimum
+
     def _evaluate_command(
         self,
         observation: dict[str, Any],
@@ -488,17 +549,13 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         min_obs_clear = float("inf")
         min_ttc = float("inf")
 
+        drive_rollout = self._command_drive_rollout(observation, command, robot_pos, heading)
         previous_x = x.copy()
         for step in range(steps):
             t = (step + 1) * dt
-            x = x + np.array(
-                [
-                    float(command[0]) * np.cos(theta) * dt,
-                    float(command[0]) * np.sin(theta) * dt,
-                ],
-                dtype=float,
-            )
-            theta = _wrap_angle(theta + float(command[1]) * dt)
+            x = drive_rollout[0][step]
+            theta = float(drive_rollout[1][step])
+            speed = float(drive_rollout[2][step, 0])
 
             if ped_pos.size > 0:
                 ped_t = ped_pos + ped_vel * t
@@ -517,13 +574,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                     if step == 0:
                         first_ped_clear = min(first_ped_clear, float(np.min(ped_dist)))
 
-                    robot_vel = np.array(
-                        [
-                            float(command[0]) * np.cos(theta),
-                            float(command[0]) * np.sin(theta),
-                        ],
-                        dtype=float,
-                    )
+                    robot_vel = speed * np.array([np.cos(theta), np.sin(theta)])
                     rel_pos = ped_t - x[None, :]
                     rel_vel = ped_vel - robot_vel[None, :]
                     rel_speed_sq = np.sum(rel_vel * rel_vel, axis=1)
@@ -566,6 +617,13 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 self._min_obstacle_clearance(x, observation=observation, grid_payload=grid_payload),
             )
 
+        min_obs_clear = min(
+            min_obs_clear,
+            self._terminal_obstacle_clearance(
+                drive_rollout[0][steps - 1 :], observation, grid_payload
+            ),
+        )
+
         end_dist = float(np.linalg.norm(goal - x))
         progress = start_dist - end_dist
         safe = (
@@ -605,26 +663,15 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             robot_pos, heading, _goal, ped_pos, ped_vel = self._extract_state(observation)
         steps = max(int(self.config.rollout_steps), 1)
         dt = float(self.config.rollout_dt)
-        x = np.array(robot_pos, dtype=float)
-        theta = float(heading)
-        robot_rollout: list[np.ndarray] = []
-        pedestrian_rollout: list[np.ndarray] = []
-        for step in range(steps):
-            t = (step + 1) * dt
-            x = x + np.array(
-                [
-                    float(command[0]) * np.cos(theta) * dt,
-                    float(command[0]) * np.sin(theta) * dt,
-                ],
-                dtype=float,
-            )
-            theta = _wrap_angle(theta + float(command[1]) * dt)
-            robot_rollout.append(np.array(x, dtype=float))
-            pedestrian_rollout.append(
-                np.asarray(ped_pos + ped_vel * t, dtype=float)
-                if ped_pos.size > 0
-                else np.zeros((0, 2), dtype=float)
-            )
+        robot_rollout = self._command_drive_rollout(observation, command, robot_pos, heading)[0][
+            :steps
+        ]
+        pedestrian_rollout = [
+            np.asarray(ped_pos + ped_vel * (step + 1) * dt, dtype=float)
+            if ped_pos.size > 0
+            else np.zeros((0, 2), dtype=float)
+            for step in range(steps)
+        ]
 
         current_pedestrians = (
             np.broadcast_to(ped_pos[None, :, :], (steps, ped_pos.shape[0], 2)).copy()
@@ -1061,11 +1108,17 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         recovery = (
             static_ranking
             and 0.0 < current_obs < float(self.config.hard_obstacle_clearance)
-            and float(fallback_eval["min_obs_clear"]) > 0.0
-            and float(fallback_eval["min_obs_clear"]) >= current_obs
+            and self._drive_settings is not None
+            and obstacle_rollout_admissible(
+                current_obs,
+                float(fallback_eval["min_obs_clear"]),
+                float(self.config.hard_obstacle_clearance),
+            )
         )
-        alternatives = [ppo_eval, stop_eval]
-        if prior_eval is not None:
+        # Vetoed proposals are unavailable: they cannot defeat an executable
+        # fallback's static recovery rank. Preserve FX4/FX5 pedestrian behavior.
+        alternatives = [stop_eval] if static_ranking else [ppo_eval, stop_eval]
+        if not static_ranking and prior_eval is not None:
             alternatives.append(prior_eval)
         best_rank = max(map(clearance_rank, alternatives))
         fallback_rank = clearance_rank(fallback_eval)
@@ -1078,9 +1131,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             and fallback_command[1] != 0.0
             and fallback_rank == best_rank
         )
-        if (fallback_rank > best_rank or prefer_recovery_turn) and (
-            not static_ranking or float(fallback_eval["min_obs_clear"]) > 0.0
-        ):
+        if (fallback_rank > best_rank or prefer_recovery_turn) and (not static_ranking or recovery):
             self._recovery_command_count += int(recovery)
             return self._shield_decision(
                 ppo_command=ppo_command,

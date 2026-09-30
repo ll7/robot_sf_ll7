@@ -228,6 +228,29 @@ def _apply_planner_selector_v2_context(
     )
 
 
+def resolve_episode_policy_runtime(
+    *,
+    default_algo: str,
+    algo_config_path: str | None,
+    scenario: dict[str, Any],
+    seed: int,
+    algo_config: dict[str, Any] | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """Resolve the complete episode planner contract for execution and validation.
+
+    Returns:
+        Effective algorithm and config, including selector and uncertainty context.
+    """
+    algo, config = _resolve_policy_search_candidate_runtime(
+        default_algo=default_algo,
+        algo_config_path=algo_config_path,
+        scenario=scenario,
+        algo_config=algo_config,
+    )
+    config = _apply_planner_selector_v2_context(algo, config, scenario=scenario, seed=seed)
+    return algo, _apply_scenario_uncertainty_envelope_config(algo, config, scenario)
+
+
 def _build_socnav_config(cfg: dict[str, Any]) -> SocNavPlannerConfig:
     """Build a SocNav planner config from a loose mapping.
 

@@ -148,6 +148,10 @@ def _root(
         )
         if slot in runtime_rows:
             row["scenario_params"].update(runtime_rows[slot]["controls"])
+            row["scenario_params"]["simulation_config"] = {
+                "ped_density": 0.0,
+                "route_spawn_seed": row["seed"],
+            }
             row["scenario_params"]["robot_config"] = {
                 "type": slot[1],
                 **({"command_mode": "vx_vy"} if slot[1] == "holonomic" else {}),
@@ -234,6 +238,7 @@ def _successor_contract(
         "".join(
             f"- name: {name}\n  map_file: ../../maps/svg_maps/classic_crossing.svg\n"
             f"  seeds: {sorted(item['seeds'])}\n"
+            "  simulation_config: {ped_density: 0.0}\n"
             + (f"  benchmark_track: {item['track']}\n" if item["track"] else "")
             for name, item in by_scenario.items()
         )
@@ -1521,3 +1526,22 @@ def test_pinned_v4_lineage_rejects_contradictory_config_declaration(tmp_path: Pa
     )
     assert result.returncode != 0
     assert f"successor planner binding lacks reviewed v4 lineage: {key}" in result.stderr
+
+
+def test_cmpfix_runner_seeded_scenario_matches_expected_mapping(tmp_path: Path) -> None:
+    from robot_sf.benchmark.map_runner.map_runner_identity import (
+        _scenario_with_episode_seed_defaults,
+    )
+
+    row = _row("s1", 1001)
+    bundle, digest = _archive(tmp_path, [row])
+    root = _root(tmp_path, [row])
+    path = root / "runs/goal__differential_drive/episodes.jsonl"
+    recorded = json.loads(path.read_text())
+    recorded["scenario_params"] = _scenario_with_episode_seed_defaults(
+        recorded["scenario_params"], seed=1001
+    )
+    recorded["config_hash"] = _config_hash(recorded["scenario_params"])
+    path.write_text(json.dumps(recorded) + "\n")
+    result = _compare(bundle, root, digest)
+    assert result["paired_rows"] == 1

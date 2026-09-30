@@ -2396,6 +2396,20 @@ def _manifest_checksum_mapping(
     return manifest_checksums
 
 
+def _checksum_payload_candidate(bundle_dir: Path, rel_path: str) -> Path:
+    """Resolve only canonical payload paths, never root-level aliases.
+
+    Returns:
+        The payload file signed by both checksum list and manifest.
+    """
+    path = Path(rel_path)
+    if ".." in path.parts or path.is_absolute():
+        raise ValueError(f"checksum path escapes bundle root: {rel_path}")
+    if not rel_path.startswith("payload/") or path.as_posix() != rel_path:
+        raise ValueError(f"checksum entry must use canonical payload path: {rel_path}")
+    return bundle_dir / path
+
+
 def _preflight_check_checksums(
     bundle_dir: Path,
     manifest: dict[str, Any],
@@ -2410,9 +2424,10 @@ def _preflight_check_checksums(
     """
     checksums = _parse_checksum_lines(checksums_path.read_text(encoding="utf-8"))
     for rel_path, expected in checksums.items():
-        candidate = bundle_dir / rel_path
-        if ".." in Path(rel_path).parts or Path(rel_path).is_absolute():
-            violations.append(f"checksum path escapes bundle root: {rel_path}")
+        try:
+            candidate = _checksum_payload_candidate(bundle_dir, rel_path)
+        except ValueError as exc:
+            violations.append(str(exc))
             continue
         if not candidate.is_file():
             violations.append(f"checksum-signed file is missing from bundle root: {rel_path}")
@@ -2426,11 +2441,9 @@ def _preflight_check_checksums(
         # checksums.sha256 is always written relative to the bundle root
         # (``payload/...``); normalize both sides before comparing.
         manifest_checksums = _manifest_checksum_mapping(manifest_files, violations=violations)
-        manifest_paths = {path.removeprefix("payload/") for path in manifest_checksums}
-        normalized_checksums = {key.removeprefix("payload/") for key in checksums}
-        for rel_path in sorted(normalized_checksums - manifest_paths):
+        for rel_path in sorted(set(checksums) - set(manifest_checksums)):
             violations.append(f"checksum entry not listed in manifest files: {rel_path}")
-        for rel_path in sorted(manifest_paths - normalized_checksums):
+        for rel_path in sorted(set(manifest_checksums) - set(checksums)):
             violations.append(f"manifest file not present in checksums.sha256: {rel_path}")
         for path in sorted(set(manifest_checksums) & set(checksums)):
             if manifest_checksums[path] != checksums[path]:

@@ -57,6 +57,7 @@ from robot_sf.benchmark.camera_ready._reporting import (
 )
 from robot_sf.benchmark.camera_ready._resume_plan import (
     ArmResumeVerdict,
+    _validate_resume_runtime_identities,
     build_resume_plan,
     emit_resume_plan_log,
     verify_resume_context,
@@ -754,6 +755,15 @@ def _resolve_campaign_planner_batch_result(
                 "resume-plan episodes path does not match scheduler arm path: "
                 f"{resume_verdict.episodes_path} != {run.episodes_path}"
             )
+        _validate_resume_runtime_identities(
+            run.episodes_path,
+            {
+                "key": planner.key,
+                "algo": planner.algo,
+                "algo_config_path": planner.algo_config_path,
+            },
+            run.scoped_scenarios,
+        )
         logger.info(
             "Skipping completed campaign arm: planner={} kinematics={} episodes={}/{}",
             planner.key,
@@ -1662,6 +1672,8 @@ def _emit_resume_plan_preflight(
     planners = [
         {
             "key": planner.key,
+            "algo": planner.algo,
+            "algo_config_path": planner.algo_config_path,
             "enabled": planner.enabled,
         }
         for planner in cfg.planners

@@ -24,6 +24,10 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from robot_sf.benchmark.camera_ready._config import _sanitize_name
+from robot_sf.benchmark.camera_ready._runtime_identity import (
+    expected_runtime_identity,
+    row_runtime_identity_errors,
+)
 from robot_sf.benchmark.camera_ready._util import _utc_now
 from robot_sf.benchmark.utils import load_optional_json
 
@@ -165,6 +169,39 @@ def _build_verdict_str(
     return f"continue-from-{episodes_found}"
 
 
+def _validate_resume_runtime_identities(
+    episodes_path: Path, planner: dict[str, Any], scenarios: list[dict[str, Any]]
+) -> None:
+    """Refuse contaminated complete or partial arms before any rows are reused."""
+    scenarios_by_id = {
+        str(sc.get("name") or sc.get("scenario_id") or sc.get("id") or "unknown"): sc
+        for sc in scenarios
+    }
+    expected_identities: dict[tuple[str, int], tuple[str, str]] = {}
+    seen: set[tuple[str, int]] = set()
+    with episodes_path.open(encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            try:
+                key = (str(record["scenario_id"]), int(record["seed"]))
+                scenario = scenarios_by_id[key[0]]
+                seeds = scenario.get("seeds")
+                if key in seen or (isinstance(seeds, list) and key[1] not in seeds):
+                    raise ValueError(f"unexpected or duplicate episode identity: {key}")
+                seen.add(key)
+                if key not in expected_identities:
+                    expected_identities[key] = expected_runtime_identity(planner, scenario, key[1])
+                errors = row_runtime_identity_errors(record, expected_identities[key])
+            except (KeyError, TypeError, ValueError, OSError) as exc:
+                errors = {"expected_runtime_identity": str(exc)}
+            if errors:
+                raise ResumeMismatchError(
+                    f"resume runtime identity mismatch in {episodes_path}: {errors}"
+                )
+
+
 def build_resume_plan(
     runs_dir: Path,
     *,
@@ -208,6 +245,7 @@ def build_resume_plan(
             prior_summary = None
             if episodes_path is not None and episodes_path.exists():
                 episodes_found = _count_jsonl_episodes(episodes_path)
+                _validate_resume_runtime_identities(episodes_path, planner, scenarios)
 
             summary_path = arm_dir / "summary.json" if arm_dir.exists() else None
             if summary_path is not None and summary_path.exists():

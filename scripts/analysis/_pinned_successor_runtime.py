@@ -312,8 +312,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
         safety_wrapper = (
             spec.safety_wrapper if spec.safety_wrapper is not None else cfg.safety_wrapper
         )
+        seeded_scenario = _scenario_with_episode_seed_defaults(scoped_scenario, seed=slot[3])
         controls = _scenario_identity_payload(
-            _scenario_with_episode_seed_defaults(scoped_scenario, seed=slot[3]),
+            seeded_scenario,
             algo=algo,
             algo_config=effective,
             horizon=spec.horizon_override if spec.horizon_override is not None else cfg.horizon,
@@ -362,7 +363,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
                 "config": effective,
                 "config_hash": _config_hash(effective),
                 "scenario_config_hash": _config_hash(scenario),
-                "scenario": scoped_scenario,
+                "scenario": seeded_scenario,
                 "path": planner["path"],
                 "controls": {key: controls[key] for key in control_fields if key in controls},
                 "observation_noise": normalize_observation_noise_spec(cfg.observation_noise),

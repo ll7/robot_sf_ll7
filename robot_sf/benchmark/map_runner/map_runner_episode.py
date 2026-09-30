@@ -1477,6 +1477,13 @@ def _resolve_episode_run_context(  # noqa: PLR0913
         seed=int(seed),
     )
     policy_cfg = _apply_scenario_uncertainty_envelope_config(algo, policy_cfg, scenario)
+    if policy_cfg.get("diagnostic_training_plant", False):
+        if algo not in {"ppo", "guarded_ppo"} or robot_kinematics != "differential_drive":
+            raise ValueError("PPOEVAL training plant is restricted to the two PPO arms")
+        config.robot_config.max_linear_speed = 3.0
+        config.robot_config.max_angular_speed = 1.0
+        config.robot_config.allow_backwards = True
+        config.robot_config.diagnostic_training_plant = True
     return _EpisodeRunContext(
         scenario=scenario,
         scenario_id=scenario_id,

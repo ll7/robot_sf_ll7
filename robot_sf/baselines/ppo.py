@@ -89,6 +89,8 @@ class PPOPlannerConfig:
     action_semantics: str | None = None  # registry-bound for the release checkpoints
     v_max: float = 2.0
     omega_max: float = 1.0
+    # PPOEVAL diagnostic branch only; never a release profile.
+    diagnostic_training_plant: bool = False
 
     # Robustness
     fallback_to_goal: bool = True
@@ -914,7 +916,8 @@ class PPOPlanner:
             # Expect target [v, omega]
             v = float(act[0]) if act.size >= 1 else 0.0
             w = float(act[1]) if act.size >= 2 else 0.0
-            v = max(0.0, min(v, self.config.v_max))
+            v_min = -self.config.v_max if self.config.diagnostic_training_plant else 0.0
+            v = max(v_min, min(v, self.config.v_max))
             w = max(-self.config.omega_max, min(w, self.config.omega_max))
             return {"v": v, "omega": w}
         # Default velocity space: expect [vx, vy]

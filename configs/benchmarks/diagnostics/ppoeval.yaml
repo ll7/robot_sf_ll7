@@ -69,14 +69,14 @@ planners:
     planner_group: experimental
     # CPU inference is the established parallel-matrix profile. GPU-backed
     # model loading in forked workers failed closed on both imech192 and LiCCA.
-    algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
+    algo_config: configs/benchmarks/diagnostics/ppoeval_ppo_training_plant.yaml
     benchmark_profile: experimental
     adapter_impact_eval: true
 
   - key: guarded_ppo
     algo: guarded_ppo
     planner_group: experimental
-    algo_config: configs/algos/guarded_ppo_camera_ready_cpu.yaml
+    algo_config: configs/benchmarks/diagnostics/ppoeval_guarded_training_plant.yaml
     benchmark_profile: experimental
 
 

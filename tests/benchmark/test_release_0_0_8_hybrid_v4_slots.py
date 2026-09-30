@@ -179,9 +179,9 @@ def test_0_0_8_release_selects_active_waypoint_for_all_risk_dwa_paths() -> None:
     """The release template must bind v2 for both arms and guarded PPO fallback."""
     planners = {row["key"]: row for row in _campaign_planners(CAMPAIGN_TEMPLATE)}
     expected_paths = {
-        "risk_dwa": "configs/algos/risk_dwa_camera_ready_goal_v2.yaml",
-        "predictive_mppi": "configs/algos/predictive_mppi_camera_ready_goal_v2.yaml",
-        "guarded_ppo": "configs/algos/guarded_ppo_camera_ready_cpu_goal_v2.yaml",
+        "risk_dwa": "configs/algos/risk_dwa_release_v0_0_8.yaml",
+        "predictive_mppi": "configs/algos/predictive_mppi_release_v0_0_8.yaml",
+        "guarded_ppo": "configs/algos/guarded_ppo_release_v0_0_8.yaml",
     }
     for key, path in expected_paths.items():
         assert planners[key]["algo_config"] == path

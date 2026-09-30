@@ -7,6 +7,7 @@ within an explicitly documented tolerance on a fixed seed/observation set.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -70,6 +71,61 @@ def _flat_observation(
         "pedestrians_velocities": np.asarray(pedestrian_velocities, dtype=float),
         "pedestrians_count": np.asarray([count], dtype=float),
     }
+
+
+def test_release_dynamic_window_scores_only_next_step_reachable_commands() -> None:
+    """At rest the 1 m/s² drive can change either velocity by 0.1 in 0.1 s."""
+    release_path = Path(__file__).parents[2] / "configs/algos/risk_dwa_release_v0_0_8.yaml"
+    release = build_risk_dwa_config(yaml.safe_load(release_path.read_text(encoding="utf-8")))
+    observation = _observation(goal=(5.0, 0.0))
+    command = RiskDWAPlannerAdapter(release).plan(observation)
+    assert 0.0 <= command[0] <= 0.1 + 1e-12
+    assert abs(command[1]) <= 0.1 + 1e-12
+    assert command[0] == pytest.approx(0.1)
+    assert release.dynamic_window_version == "drive_limited_v2"
+
+    historical_path = Path(__file__).parents[2] / "configs/algos/risk_dwa_camera_ready.yaml"
+    historical = build_risk_dwa_config(yaml.safe_load(historical_path.read_text(encoding="utf-8")))
+    assert historical.dynamic_window_version == "fixed_v1"
+    legacy = RiskDWAPlannerAdapter(replace(release, dynamic_window_version="fixed_v1"))
+    assert legacy.plan(observation)[0] > 0.1
+
+    moving = _observation(speed=0.7, goal=(0.0, 0.0))
+    moving["robot"]["angular_velocity"] = np.asarray([0.4])
+    braking = RiskDWAPlannerAdapter(release).plan(moving)
+    assert braking == pytest.approx((0.6, 0.3))
+
+
+def test_release_risk_dwa_horizon_scoring_sees_pedestrian_crossing_at_one_second() -> None:
+    """Horizon scoring only: a prescribed 0.5 m/s command bypasses the rest window."""
+    release_path = Path(__file__).parents[2] / "configs/algos/risk_dwa_release_v0_0_8.yaml"
+    release = build_risk_dwa_config(yaml.safe_load(release_path.read_text(encoding="utf-8")))
+    assert release.rollout_dt * release.rollout_steps == pytest.approx(1.6)
+    observation = _observation(
+        goal=(5.0, 0.0),
+        pedestrians=[(0.5, 2.7)],
+        pedestrian_velocities=[(0.0, -1.0)],
+    )
+    robot_pos, heading, goal, ped_pos, ped_vel = RiskDWAPlannerAdapter(
+        release
+    )._extract_robot_goal_ped(observation)
+    assert np.hypot(0.1, 1.9) - 1.4 > release.safe_distance  # t=0.8 s
+    assert 1.7 - 1.4 < release.safe_distance  # t=1.0 s
+
+    def score(config: RiskDWAPlannerConfig) -> float:
+        return RiskDWAPlannerAdapter(config)._rollout_score(
+            robot_pos=robot_pos,
+            heading=heading,
+            goal=goal,
+            command=(0.5, 0.0),
+            ped_pos=ped_pos,
+            ped_vel=ped_vel,
+            observation=observation,
+            current_speed=0.0,
+        )
+
+    assert np.isfinite(score(replace(release, rollout_steps=8)))
+    assert score(release) == float("-inf")
 
 
 def test_risk_dwa_goal_target_versions_follow_route_contract() -> None:
@@ -518,3 +574,103 @@ def test_risk_dwa_normalized_none_count_preserves_padded_rows() -> None:
     assert ped_pos.shape == ped_vel.shape == (4, 2)
     np.testing.assert_allclose(ped_pos, np.asarray([[1.0, 0.5]] * 4))
     np.testing.assert_allclose(ped_vel, np.asarray([[-1.0, 2.0]] * 4))
+
+
+def test_surface_v2_rejects_commands_inside_physical_clearance_margin() -> None:
+    """The 0.0.8 hard gate rejects circle-surface gaps below safe_distance."""
+    config = RiskDWAPlannerConfig(
+        rollout_steps=1,
+        rollout_dt=0.1,
+        clearance_model="surface_v2",
+        robot_radius_m=1.0,
+        pedestrian_radius_m=0.4,
+        safe_distance=0.35,
+    )
+    planner = RiskDWAPlannerAdapter(config)
+    observation = _observation(pedestrians=[(1.7, 0.0)], pedestrian_velocities=[(0.0, 0.0)])
+    robot_pos, heading, goal, ped_pos, ped_vel = planner._extract_robot_goal_ped(observation)
+
+    unsafe = planner._rollout_score(
+        robot_pos=robot_pos,
+        heading=heading,
+        goal=goal,
+        command=(0.0, 0.0),
+        ped_pos=ped_pos,
+        ped_vel=ped_vel,
+        observation=observation,
+        current_speed=0.0,
+    )
+    assert unsafe == float("-inf")
+
+    observation = _observation(pedestrians=[(1.8, 0.0)], pedestrian_velocities=[(0.0, 0.0)])
+    robot_pos, heading, goal, ped_pos, ped_vel = planner._extract_robot_goal_ped(observation)
+    safe = planner._rollout_score(
+        robot_pos=robot_pos,
+        heading=heading,
+        goal=goal,
+        command=(0.0, 0.0),
+        ped_pos=ped_pos,
+        ped_vel=ped_vel,
+        observation=observation,
+        current_speed=0.0,
+    )
+    assert np.isfinite(safe)
+
+
+def test_surface_v2_ttc_reports_contact_time_for_circle_radii() -> None:
+    """Risk-DWA TTC reaches the physical contact boundary before centre overlap."""
+    planner = RiskDWAPlannerAdapter(
+        RiskDWAPlannerConfig(
+            clearance_model="surface_v2",
+            robot_radius_m=1.0,
+            pedestrian_radius_m=0.4,
+        )
+    )
+    ttc = planner._ttc_proxy(
+        np.asarray([0.0, 0.0]),
+        (0.0, 0.0),
+        np.asarray([[3.0, 0.0]]),
+        np.asarray([[-1.0, 0.0]]),
+        0.0,
+    )
+    assert ttc == pytest.approx(1.6)
+
+
+def test_surface_v2_config_requires_positive_body_radii() -> None:
+    """Surface-clearance configs must declare actual body extents."""
+    with pytest.raises(ValueError, match="pedestrian_radius must be finite and positive"):
+        RiskDWAPlannerConfig(
+            clearance_model="surface_v2",
+            robot_radius_m=1.0,
+            pedestrian_radius_m=0.0,
+        )
+
+
+def test_release_all_rejected_commands_report_emergency_brake_and_reset_flag() -> None:
+    """An overlapping obstacle rejects every candidate; the bounded brake is a fallback."""
+    release_path = Path(__file__).parents[2] / "configs/algos/risk_dwa_release_v0_0_8.yaml"
+    planner = RiskDWAPlannerAdapter(build_risk_dwa_config(yaml.safe_load(release_path.read_text())))
+    observation = _observation(robot=(1.1, 1.1), speed=0.7, goal=(5.0, 1.1))
+    observation["robot"]["angular_velocity"] = np.asarray([0.4])
+    grid = np.zeros((1, 20, 20))
+    grid[0, 5, 5] = 1.0
+    observation["occupancy_grid"] = grid
+    observation["occupancy_grid_meta"] = {
+        "origin": [0.0, 0.0],
+        "size": [4.0, 4.0],
+        "resolution": [0.2],
+        "channel_indices": [0, -1, -1, 0],
+        "use_ego_frame": [0.0],
+    }
+    assert planner.plan(observation) == pytest.approx((0.6, 0.3))
+    diagnostics = planner.diagnostics()
+    assert diagnostics.get("no_admissible_command") is True
+    assert diagnostics.get("no_admissible_command_count") == 1
+    assert diagnostics["last_decision"]["no_admissible_command"] is True
+    planner.plan(observation)
+    assert planner.diagnostics()["no_admissible_command_count"] == 2
+    planner.plan(_observation(goal=(5.0, 0.0)))
+    assert planner.diagnostics()["no_admissible_command"] is False
+    assert planner.diagnostics()["no_admissible_command_count"] == 2
+    planner.plan(_observation(goal=(0.0, 0.0)))
+    assert planner.diagnostics()["no_admissible_command"] is False

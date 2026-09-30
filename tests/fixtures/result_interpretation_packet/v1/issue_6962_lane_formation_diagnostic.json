@@ -213,7 +213,6 @@
     "question_id": "q_6962_lane_formation_non_result",
     "text": "Does the lane-formation non-result vary with corridor configuration or remain unresolved under the tested native diagnostic screen?"
   },
-  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "reviewed_packet_digest": null,
   "reviewer": null,
   "schema_version": "result_interpretation_packet.v1",

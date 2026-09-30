@@ -1621,7 +1621,7 @@ def test_calibration_records_actual_command_modes_without_relabeling(
     assert sum(counts.get("native", 0) for counts in census.values()) == 1344 - adapter_count
     assert all(sum(counts.values()) == 96 for counts in census.values())
     spec_files[1].write_text(json.dumps(_add_synthetic_freeze_custody(anchors)))
-    load_snqi_v2_spec(*spec_files)
+    load_snqi_v2_spec(*spec_files, evaluation_scenario_horizons=kwargs["grid"].scenario_horizons)
 
 
 @pytest.mark.parametrize("marker", ["fallback_used", "fallback_triggered", "degraded"])

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.map_runner.map_runner_identity import _scenario_with_episode_seed_defaults
@@ -10,16 +11,25 @@ from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import 
     resolve_episode_policy_runtime,
 )
 from robot_sf.benchmark.utils import _config_hash
+from robot_sf.common.artifact_paths import get_repository_root
 
 
 def expected_runtime_identity(
-    planner: Mapping[str, Any], scenario: Mapping[str, Any], seed: int
+    planner: Mapping[str, Any],
+    scenario: Mapping[str, Any],
+    seed: int,
+    *,
+    config_root: Path | None = None,
 ) -> tuple[str, str]:
     """Return the effective algorithm/config hash using the execution resolver."""
     algo = planner.get("algo")
     if not isinstance(algo, str) or not algo.strip():
         raise ValueError("planner is missing its expected algorithm")
     path = planner.get("algo_config_path") or planner.get("algo_config")
+    if path:
+        path = Path(str(path))
+        if not path.is_absolute():
+            path = (config_root or get_repository_root()) / path
     algo, config = resolve_episode_policy_runtime(
         default_algo=algo,
         algo_config_path=str(path) if path else None,

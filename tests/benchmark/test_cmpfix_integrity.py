@@ -49,27 +49,27 @@ def _integrity(tmp_path, rows, scenarios, planner=None):
             }
         ],
         scenarios=scenarios,
-        resolved_seeds=[111, 112],
+        resolved_seeds=[1001, 1002],
         campaign_root=tmp_path,
         campaign_manifest={"git": {"commit": "commit-a"}},
     )
 
 
 def test_cmpfix_equal_count_wrong_episode_set(tmp_path):
-    scenario = {"name": "S", "seeds": [111, 112]}
-    verdict = _integrity(tmp_path, [_row(scenario, 111), _row(scenario, 999)], [scenario])
+    scenario = {"name": "S", "seeds": [1001, 1002]}
+    verdict = _integrity(tmp_path, [_row(scenario, 1001), _row(scenario, 1003)], [scenario])
     assert verdict["benchmark_success_allowed"] is False
     blocker = next(b for b in verdict["blockers"] if b["invariant"] == "episode_identity_mismatch")
-    assert blocker["details"]["missing_identities"] == [["S", 112]]
-    assert blocker["details"]["unexpected_identities"] == [["S", 999]]
+    assert blocker["details"]["missing_identities"] == [["S", 1002]]
+    assert blocker["details"]["unexpected_identities"] == [["S", 1003]]
 
 
 @pytest.mark.parametrize("corruption", ["algorithm", "config", "recorded_hash"])
 def test_cmpfix_wrong_runtime_identity(tmp_path, corruption):
-    scenario = {"name": "S", "seeds": [111]}
+    scenario = {"name": "S", "seeds": [1001]}
     row = _row(
         scenario,
-        111,
+        1001,
         algo="goal" if corruption == "algorithm" else "social_force",
         config={"wrong": True} if corruption == "config" else {},
     )
@@ -166,3 +166,15 @@ def test_cmpfix_skip_complete_rechecks_runtime_identity(tmp_path):
         _resolve_campaign_planner_batch_result(
             None, planner=planner, run=run, resume_verdict=verdict
         )
+
+
+def test_cmpfix_runtime_config_identity_is_independent_of_cwd(tmp_path, monkeypatch):
+    from robot_sf.benchmark.camera_ready._runtime_identity import expected_runtime_identity
+
+    planner = {
+        "algo": "guarded_ppo",
+        "algo_config_path": "configs/algos/guarded_ppo_camera_ready_cpu.yaml",
+    }
+    scenario = {"name": "dev", "seeds": [1001]}
+    monkeypatch.chdir(tmp_path)
+    assert expected_runtime_identity(planner, scenario, 1001) == ("guarded_ppo", "44a39b76607347cc")

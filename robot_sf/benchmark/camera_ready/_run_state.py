@@ -208,6 +208,7 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
     resolved_seeds: Sequence[int],
     campaign_root: Path,
     campaign_manifest: Mapping[str, Any],
+    config_root: Path | None = None,
 ) -> dict[str, Any]:
     """Validate final arm aggregates without modifying or deduplicating their rows.
 
@@ -312,7 +313,10 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
                 runtime_key = (identity[0], int(identity[1]))
                 if runtime_key not in runtime_identities:
                     runtime_identities[runtime_key] = expected_runtime_identity(
-                        entry.get("planner") or {}, scenario, runtime_key[1]
+                        entry.get("planner") or {},
+                        scenario,
+                        runtime_key[1],
+                        config_root=config_root,
                     )
                 errors = row_runtime_identity_errors(record, runtime_identities[runtime_key])
             except (KeyError, TypeError, ValueError, OSError) as exc:

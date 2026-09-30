@@ -116,6 +116,7 @@ def _repo_relative(path: Path) -> str:
 def _row(*, algo: str, scenario_id: str, seed: int) -> dict[str, Any]:
     scenario_params = {
         "algo": algo,
+        "algo_config_hash": _config_hash({}),
         "id": scenario_id,
         "robot_config": {"type": "differential_drive"},
         "run_dt": 0.1,

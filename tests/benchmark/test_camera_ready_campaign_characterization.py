@@ -23,6 +23,7 @@ import pytest
 
 import robot_sf.benchmark.camera_ready.campaign as campaign_module
 from robot_sf.benchmark.camera_ready._resume_plan import ResumeMismatchError
+from robot_sf.benchmark.utils import _config_hash
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -372,10 +373,19 @@ def test_resume_partial_plan_is_deterministic_and_context_mismatch_is_fail_close
         json.dumps({"campaign_id": "campaign", "config_hash": "config"}) + "\n",
         encoding="utf-8",
     )
-    (arm_dir / "episodes.jsonl").write_text('{"episode_id": "fixture-1"}\n', encoding="utf-8")
+    params = {"algo": "goal", "algo_config_hash": _config_hash({})}
+    row = {
+        "episode_id": "fixture-1",
+        "scenario_id": "fixture",
+        "seed": 1001,
+        "algo": "goal",
+        "scenario_params": params,
+        "config_hash": _config_hash(params),
+    }
+    (arm_dir / "episodes.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
     cfg = SimpleNamespace(
         resume=True,
-        planners=(SimpleNamespace(key="goal", enabled=True),),
+        planners=(SimpleNamespace(key="goal", algo="goal", algo_config_path=None, enabled=True),),
         kinematics_matrix=("differential_drive",),
     )
     kwargs = {
@@ -384,7 +394,7 @@ def test_resume_partial_plan_is_deterministic_and_context_mismatch_is_fail_close
         "config_hash": "config",
         "campaign_root": campaign_root,
         "runs_dir": runs_dir,
-        "scenarios": [{"name": "fixture", "repeats": 2}],
+        "scenarios": [{"name": "fixture", "repeats": 2, "seeds": [1001, 1002]}],
     }
 
     verdicts = campaign_module._emit_resume_plan_preflight(**kwargs)

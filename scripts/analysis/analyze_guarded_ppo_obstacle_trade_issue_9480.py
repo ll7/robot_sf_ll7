@@ -826,7 +826,12 @@ def _validate_arm(  # noqa: PLR0915 - fixed campaign provenance requires explici
         [
             {
                 "status": "ok",
-                "planner": {"key": expected["planner_key"], "kinematics": "differential_drive"},
+                "planner": {
+                    "key": expected["planner_key"],
+                    "algo": expected["algo"],
+                    "algo_config_path": expected["config_path"],
+                    "kinematics": "differential_drive",
+                },
                 "episodes_path": f"payload/runs/{arm}/episodes.jsonl",
                 "summary": {"written": len(rows)},
             }

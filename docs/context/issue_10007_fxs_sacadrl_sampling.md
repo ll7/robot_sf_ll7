@@ -1,6 +1,9 @@
 # Issue #10007 FXS: SA-CADRL inputs and sampling drive forecasts
 
 Scope: B1-B4 on PR #9926 head `d41cceb7f9422337bd34b602ae49f3dddbddb2a5`.
+Delivery base refreshed to `b3fa204dc4eda5004d67e4fcf518f3370fcd0966`.
+The refreshed base has identical planner/drive/environment/map-runner/scenario/map/checkpoint
+bytes on the inspected contract paths, so the baseline probes remain applicable.
 Development diagnostics only; no held-out performance or publication claim. Frozen
 manifests and historical 0.0.2/0.0.7 artifacts are unchanged.
 
@@ -94,4 +97,41 @@ Regression file: `tests/planner/test_fxs_release_contract.py`.
 | bound drive / turn state | Binding or flat angular velocity is lost | Existing binding fixture has only linear limits and radius | Real flat observation, nondefault drive settings, actual DifferentialDriveRobot applied action; production candidate compared across consumer boundary |
 
 No production test-only seams. Base failures and numeric episode outcomes are in the
-adjacent evidence summary. These probes support implementation integrity only.
+[compact evidence summary](evidence/issue_10007_fxs_summary.json). These probes support implementation integrity only.
+
+## Measured outcomes and limitations
+
+Ten seeds (1001–1010) per scenario, before → after. Entries are
+success / collision / timeout episode counts:
+
+| Planner | Group crossing high | Doorway medium | Head-on corridor medium |
+|---|---|---|---|
+| SA-CADRL | 7 / 3 / 0 → 1 / 9 / 0 | 0 / 10 / 0 → 0 / 10 / 0 | 4 / 6 / 0 → 2 / 8 / 0 |
+| Sampling | 10 / 0 / 0 → 10 / 0 / 0 | 10 / 0 / 0 → 10 / 0 / 0 | 10 / 0 / 0 → 10 / 0 / 0 |
+
+SA-CADRL's maximum issued speed is 1 → 2 m/s. Actual observed pedestrians are
+3 → 4 for crossing/corridor and 3 → 6 for doorway; omitted-agent steps are
+4,696 → 0. Comparing three versus nineteen agents on the same baseline states
+changes the checkpoint argmax on 689 steps. Episodes contain 4–6 pedestrians;
+the regression tensor verifies the 19-agent ceiling separately. B1/B2 change together,
+so the outcome difference cannot be attributed to either one separately. Preferred
+speed and observation fidelity do not imply better performance: successes decrease
+from 11/30 to 3/30, collisions increase from 19/30 to 27/30. No retuning is included.
+
+Sampling's 213,120 baseline candidates have up to 2.427882 m forecast error against
+the native drive, 32,367 differing swept blocking indices and 1,300 candidates
+predicted clear while the drive reference blocks them. The 213,252 fixed candidates
+have maximum error 1.4211e-14 m, zero blocking-index disagreements and zero false-clear
+candidates. Sampling succeeds on all 30 episodes both before and after. These are
+candidate forecast diagnoses, not counts of executed collisions or a safety guarantee.
+
+The new tests and updated native-distance assertion fail on both the initial and
+refreshed base (five failures); the focused fixed suite passes 44 tests. Ruff check,
+format and diff whitespace checks pass. No skip/xfail/timeout edits were made.
+
+**Validation exception:** an additional run of `tests/test_socnav_env_integration.py`
+executed its existing `env.reset(seed=123)` fixture before its seed values were
+inspected. That violates the task's seed restriction. The run is excluded from
+accepted evidence; all admitted before/after probe episodes use 1001–1010. The full
+readiness suite is unrun because its broad test lanes include fixtures outside the
+authorized seed set. This draft does not claim full readiness or held-out evaluation.

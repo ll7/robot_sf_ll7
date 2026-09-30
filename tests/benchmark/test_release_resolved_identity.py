@@ -157,7 +157,9 @@ def test_checked_in_future_benchmark_templates_pin_contract_without_historical_i
         "unresolved_rows": "fail_admission",
     }
     assert "issue_9856_" in by_name["francis2023_entering_room"]["map_file"]
-    assert "issue_9762_" in by_name["classic_station_platform_medium"]["map_file"]
+    assert by_name["classic_station_platform_medium"]["map_file"].endswith(
+        "issue_10063_classic_station_platform_safe_spawn_v1.svg"
+    )
     assert manifest["seed_policy"]["resolved_seeds"] == list(range(111, 141))
     loaded_template, metadata_path, metadata_bytes = release_protocol._identity_template_payload(
         PUBLIC_RELEASE_TEMPLATE,

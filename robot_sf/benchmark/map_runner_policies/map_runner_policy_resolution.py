@@ -245,12 +245,13 @@ def resolve_episode_policy_runtime(
     Returns:
         Effective algorithm and config, including selector and uncertainty context.
     """
+    root_kwargs = {"config_root": config_root} if config_root is not None else {}
     algo, config = _resolve_policy_search_candidate_runtime(
         default_algo=default_algo,
         algo_config_path=algo_config_path,
         scenario=scenario,
         algo_config=algo_config,
-        config_root=config_root,
+        **root_kwargs,
     )
     config = _apply_planner_selector_v2_context(algo, config, scenario=scenario, seed=seed)
     return algo, _apply_scenario_uncertainty_envelope_config(algo, config, scenario)

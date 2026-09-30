@@ -1131,7 +1131,16 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             )
             and clearance_rank(fallback_eval) == clearance_rank(stop_eval)
         )
-        use_fallback = clearance_rank(fallback_eval) > clearance_rank(stop_eval) or recovery_turn
+        # Endpoint-only grids cannot justify below-margin static translation:
+        # keep the swept-geometry contract for pedestrian-free standalone guards.
+        unbound_static = (
+            self.config.clearance_model == "surface_v2"
+            and cached_state[3].size == 0
+            and not self._static_recovery_available()
+        )
+        use_fallback = not unbound_static and (
+            clearance_rank(fallback_eval) > clearance_rank(stop_eval) or recovery_turn
+        )
         self._recovery_command_count += int(recovery_turn)
         self._fallback_kind = "least_bad_clearance" if use_fallback else "brake"
         return self._shield_decision(

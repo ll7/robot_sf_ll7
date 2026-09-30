@@ -1,4 +1,10 @@
-"""Release checkpoint action-contract regressions using the shipped algorithm configs."""
+"""Release checkpoint action-contract checks using the shipped algorithm configs.
+
+On base 46809b6b, the two explicit-override nodes fail with TypeError for the
+unsupported action_semantics keyword, rather than the intended conflict rejection.
+The two release-limit nodes pass on base: they are shipped-limit invariants,
+not evidence that the delta interpretation changed.
+"""
 
 from pathlib import Path
 from types import SimpleNamespace
@@ -23,11 +29,12 @@ def release_config(arm):
     return yaml.safe_load(Path(CONFIGS[arm]).read_text())
 
 
-def stub_planner(arm, raw):
+def stub_planner(arm, raw, *, fallback_to_goal=None):
     """Stub inference only; keep the production config, semantics and action wrapper."""
-    planner = PPOPlanner(
-        map_runner._ppo_planner_config(release_config(arm)), defer_model_loading=True
-    )
+    config = map_runner._ppo_planner_config(release_config(arm))
+    if fallback_to_goal is not None:
+        config["fallback_to_goal"] = fallback_to_goal
+    planner = PPOPlanner(config, defer_model_loading=True)
     planner._initialized = True
     planner._model = SimpleNamespace(predict=lambda *args, **kwargs: (np.asarray(raw), None))
     return planner
@@ -52,6 +59,7 @@ def test_signed_delta_precedes_release_clipping(arm, form):
 def test_release_checkpoints_fail_closed_without_delta_declaration(monkeypatch, arm, declaration):
     """Missing/wrong registry semantics must fail even with defer-loading and fallback enabled."""
     config = map_runner._ppo_planner_config(release_config(arm))
+    config["fallback_to_goal"] = True
     entry = dict(get_registry_entry(config["model_id"]))
     entry.pop("action_semantics", None)
     if declaration is not None:
@@ -75,14 +83,15 @@ def test_checkpoint_declaration_cannot_be_overridden(arm):
 @pytest.mark.parametrize("arm", CONFIGS)
 def test_delta_requires_current_speed_even_when_fallback_enabled(arm):
     """Unavailable state must not silently turn deltas into targets or goal fallback."""
-    planner = stub_planner(arm, [0.3, 0.2])
+    planner = stub_planner(arm, [0.3, 0.2], fallback_to_goal=True)
+    assert planner.config.fallback_to_goal is True
     with pytest.raises(ValueError, match="finite current robot_speed"):
         planner.step({"robot_position": [0, 0], "goal_current": [1, 0]})
 
 
 @pytest.mark.parametrize("arm", CONFIGS)
 def test_delta_target_keeps_shared_release_limits(arm):
-    """The adapter clamps the summed target to 2 m/s, no reverse and +/-1 rad/s."""
+    """Shipped-limit invariant: targets stay at 2 m/s, no reverse and +/-1 rad/s."""
     planner = stub_planner(arm, [3.0, 1.0])
     assert planner.step({"robot_speed": [0.6, 0.2]}) == {"v": 2.0, "omega": 1.0}
     planner._model.predict = lambda *args, **kwargs: (np.array([-3.0, -1.0]), None)

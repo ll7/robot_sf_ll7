@@ -18,6 +18,7 @@ seed_policy:
   seed_sets_path: ../../benchmarks/seed_sets_v1.yaml
   seed_sets_sha256: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
   resolved_seeds:
+  # seed-holdout: release-evaluation begin
   - 111
   - 112
   - 113
@@ -48,6 +49,7 @@ seed_policy:
   - 138
   - 139
   - 140
+  # seed-holdout: release-evaluation end
 metrics:
   snqi_weights_path: ../snqi_weights_camera_ready_v3.json
   snqi_weights_sha256: 71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2

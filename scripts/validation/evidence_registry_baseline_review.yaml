@@ -14,9 +14,9 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 9759
+latest_reconciliation_issue: 9645
 latest_reviewed_date: 2026-09-28
-latest_reviewed_by: Codex #9759 integration lane; evidence inventory and row audit only, no additional human sign-off is claimed.
+latest_reviewed_by: Codex autonomous lead; exact packet checksums and combined-tree inventory verified; no maintainer sign-off is claimed.
 evidence_tree_refresh_addenda:
   - issue: 9647
     reviewed_date: 2026-09-26
@@ -103,11 +103,31 @@ evidence_tree_refresh_addenda:
       jobs and 600 explicit reflected-map exclusions, with no official benchmark or performance
       claim. Raw episode rows and logs remain private. Inventory and row audit are complete;
       this addendum records path inventory and finding delta only, with no additional human sign-off.
+  - issue: 9645
+    reviewed_date: 2026-09-28
+    previous:
+      count: 2487
+      sha256: 746fa1210ba77d193e7d12a9e5589bcde626360a7ce487dbd60fff74eebfb628
+    candidate:
+      count: 2885
+      sha256: dbe5cff4d3f0db9bb621b242391fb21aee610029dfa16332915cbd04adbd6ca6
+    files_added: 398
+    finding_delta: none
+    decision: >-
+      Recomputed the evidence-tree manifest on top of origin/main after rebasing the #9645
+      packet; its 394 payload checksums were verified and all 398 tracked packet paths are bound.
+      The #9645 linter change exposed stale size/SHA declarations for the #9759 agent_run_manifest.yaml.
+      Its tracked payload, payload checksum list, and AI-needs-review sidecar agreed; the canonical
+      bundle publisher rebuilt only evidence_bundle_manifest.json, and its AI-needs-review sidecar
+      now binds those exact bytes. No payload bytes changed. The candidate baseline remains at 438
+      findings across 98 files with no net-new finding and zero active strict-CI finding. This is a
+      provenance inventory and metadata-integrity correction only; it records no maintainer sign-off
+      and makes no scientific, planner-performance, or safety claim.
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 438
-refreshed_baseline_files_with_findings: 98
+refreshed_baseline_total_findings: 446
+refreshed_baseline_files_with_findings: 100
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -528,6 +548,22 @@ reviewed_files:
       the trace bundle disclaims aggregate/statistical/causal evidence and documents its startup /
       admission receipt exception. The #9431 full-campaign goal-adjacent timeout criterion remains
       unavailable, no waiver is claimed, and the issue stays open.
+  - path: docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/archive/report_schema_v1/convergence_report.json
+    codes: [artifact_hash_mismatch]
+    disposition: baseline
+    reason: >-
+      The report records the SHA-256 of the pilot search-space config as run (scenario seed 123, a
+      held-out evaluation seed). The in-tree config was re-seeded to a development seed afterwards;
+      the as-run bytes are kept, hash-pinned, at payload/inputs/issue_9645_pilot_space.v1.yaml.
+      The historical hash is not rewritten; the evidence manifest records the re-seed.
+  - path: docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/convergence_report.json
+    codes: [artifact_hash_mismatch]
+    disposition: baseline
+    reason: >-
+      The report records the SHA-256 of the pilot search-space config as run (scenario seed 123, a
+      held-out evaluation seed). The in-tree config was re-seeded to a development seed afterwards;
+      the as-run bytes are kept, hash-pinned, at payload/inputs/issue_9645_pilot_space.v1.yaml.
+      The historical hash is not rewritten; the evidence manifest records the re-seed.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

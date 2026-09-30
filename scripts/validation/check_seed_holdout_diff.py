@@ -8,6 +8,13 @@ JSON lists, non-literal or aliased seed generation (including dynamic ``range``
 bounds), and seeds passed through environment variables need exact-head review.
 Literal Python ``range`` calls and nearby episode loops are checked across common
 wrappers and line breaks; unknown syntax remains an exact-head review obligation.
+
+Markers: ``# seed-holdout: setup-only`` and ``synthetic-fixture`` (line or
+``begin``/``end`` block) exempt fixtures anywhere. ``release-evaluation`` (line
+or block) exempts the evaluation seed list of a release manifest and is valid
+only under ``configs/benchmarks/releases/`` and
+``configs/benchmarks/paper_experiment_matrix_*``; elsewhere it is reported as an
+error. Unpaired or mismatched blocks exempt nothing.
 """
 
 from __future__ import annotations
@@ -27,8 +34,17 @@ RELEASE_CONFIGS = frozenset(
         "configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml",
     }
 )
-MARKER = re.compile(r"#\s*seed-holdout:\s*(?:setup-only|synthetic-fixture)\b")
-BLOCK_MARKER = re.compile(r"\s*#\s*seed-holdout:\s*(setup-only|synthetic-fixture)\s+(begin|end)\s*")
+MARKER_KINDS = "setup-only|synthetic-fixture|release-evaluation"
+MARKER = re.compile(rf"#\s*seed-holdout:\s*(?P<kind>{MARKER_KINDS})\b")
+BLOCK_MARKER = re.compile(rf"\s*#\s*seed-holdout:\s*({MARKER_KINDS})\s+(begin|end)\s*")
+# The release-evaluation marker is valid only in release evaluation manifests,
+# where the held-out seeds 111-140 are the intended evaluation set. Anywhere
+# else it is an error, so it cannot become a blanket escape.
+RELEASE_EVALUATION_KIND = "release-evaluation"
+RELEASE_EVALUATION_PREFIXES = (
+    "configs/benchmarks/releases/",
+    "configs/benchmarks/paper_experiment_matrix_",
+)
 SEED = re.compile(
     r"(?<![\w.])(?:11[1-9]|12\d|13\d|140)(?![\w.])"  # seed-holdout: synthetic-fixture
 )
@@ -78,6 +94,24 @@ class Finding:
     path: str
     line: int
     text: str
+
+
+def _release_evaluation_path(path: str) -> bool:
+    return path.startswith(RELEASE_EVALUATION_PREFIXES)
+
+
+def _marker_allowed(path: str, kind: str) -> bool:
+    return kind != RELEASE_EVALUATION_KIND or _release_evaluation_path(path)
+
+
+def _line_marker_exempts(path: str, content: str) -> bool:
+    return any(_marker_allowed(path, match.group("kind")) for match in MARKER.finditer(content))
+
+
+def _misplaced_release_marker(path: str, content: str) -> bool:
+    return not _release_evaluation_path(path) and any(
+        match.group("kind") == RELEASE_EVALUATION_KIND for match in MARKER.finditer(content)
+    )
 
 
 def _eligible(path: str) -> bool:
@@ -222,8 +256,11 @@ def _episode_range_context(text: str, before: list[str], after: list[str]) -> bo
     )
 
 
-def _marked_block_lines(lines: list[str]) -> set[int]:
-    """Only complete, matching marker pairs exempt their enclosed lines."""
+def _marked_block_lines(lines: list[str], path: str = "") -> set[int]:
+    """Only complete, matching marker pairs exempt their enclosed lines.
+
+    A release-evaluation pair exempts lines only inside release manifests.
+    """
     marked: set[int] = set()
     opened: tuple[str, int] | None = None
     for number, line in enumerate(lines, 1):
@@ -231,6 +268,8 @@ def _marked_block_lines(lines: list[str]) -> set[int]:
         if marker is None:
             continue
         kind, boundary = marker.groups()
+        if not _marker_allowed(path, kind):
+            continue
         if boundary == "begin":
             opened = (kind, number) if opened is None else None
         elif opened is not None and opened[0] == kind:
@@ -324,7 +363,7 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
             file_lines = (
                 file_path.read_text(errors="replace").splitlines() if file_path.is_file() else []
             )
-            marked_block_lines = _marked_block_lines(file_lines)
+            marked_block_lines = _marked_block_lines(file_lines, path)
             before = []
         elif row.startswith("@@ "):
             match = HUNK.match(row)
@@ -334,11 +373,19 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
                     before = file_lines[: line_number - 1]
         elif row.startswith("+") and not row.startswith("+++ "):
             content = row[1:]
-            if (
+            if _eligible(path) and _misplaced_release_marker(path, content):
+                findings.append(
+                    Finding(
+                        path,
+                        line_number,
+                        f"{content.strip()}  [release-evaluation marker outside release manifests]",
+                    )
+                )
+            elif (
                 _eligible(path)
                 and path not in RELEASE_CONFIGS
                 and line_number not in marked_block_lines
-                and not MARKER.search(content)
+                and not _line_marker_exempts(path, content)
                 and (
                     SEED.search(RANGE.sub("", content))
                     or _range_overlaps_holdout(content)
@@ -385,7 +432,12 @@ def main() -> int:
         )
     if findings:
         print(
-            "Use dev seeds 1001-1030 for tests/tuning; calibration 101-102 and diagnostics 103-105 are reserved for their registered roles. Mark setup-only or synthetic fixtures explicitly.",
+            "Use dev seeds 1001-1030 for tests/tuning; calibration 101-102 and diagnostics 103-105 are reserved for their registered roles. Mark setup-only or synthetic fixtures explicitly "
+            "(# seed-holdout: setup-only|synthetic-fixture, line or begin/end block). "
+            "Release evaluation manifests under configs/benchmarks/releases/ and "
+            "configs/benchmarks/paper_experiment_matrix_* may mark their evaluation seed "
+            "lists in a seed-holdout release-evaluation begin/end block (see the module "
+            "docstring); that marker kind is an error in any other path.",
             file=sys.stderr,
         )
         return 1

@@ -27,33 +27,43 @@ Canonical benchmark fallback policy:
 
 ## Effective Episode Horizon
 
-A positive camera-ready campaign `horizon` is the fixed episode budget. Campaign
-preparation copies each selected scenario and sets its simulator
-`simulation_config.max_episode_steps` to that budget, including limits above the
-campaign budget. A planner's explicit `horizon` overrides the campaign value for
-that arm. Both in-process and subprocess execution receive these prepared scenarios.
-The runner binds simulator duration using the effective timestep, so a `dt`
-override does not shorten the step budget.
+The 0.0.8 release template explicitly declares the authored per-scenario budgets
+through `scenario_horizons` and pins the schedule with `scenario_horizons_sha256`.
+The schedule replaces the fixed campaign horizon, preserving all 48 authored
+limits: 25 H400, 13 H500, eight H600, one H650 and one H700. The historical
+`h600` filename is retained for existing references; it is not the budget contract.
 
-`metadata.campaign_horizon` records the effective fixed budget and the authored
-scenario limit (`null` when absent). Source YAML files retain their authored values.
-With no positive fixed horizon, scenario limits retain authority. An explicit
-`scenario_horizons` schedule continues to set each scenario's limit; it cannot be
-combined with a fixed campaign or planner horizon. The separate 0.0.8 H400 doorway
-slice retains its declared H400 budget.
+A fixed campaign or planner horizon is refused when any selected authored limit
+would end an episode earlier. To use different budgets, declare a schedule;
+schedules cannot coexist with fixed campaign or planner horizons. Admitted fixed
+budgets may shorten longer authored limits and record `metadata.campaign_horizon`.
+Both execution modes receive the same prepared scenarios. Simulator duration is
+bound after timestep overrides, so explicit budgets remain step budgets.
 
-A pure simulator timeout on the last runner step is recorded as `max_steps`.
-Collision and route completion retain precedence at that boundary; simulator
-timeouts before the runner budget and other intentional terminal events retain
-their existing labels. The source-pinned successor comparator reconstructs the
-same per-arm simulator binding and scoped hash as campaign execution.
+Schedule provenance records the source path, SHA-256, authored limit and effective
+limit in `metadata.scenario_horizon`. Every episode records `effective_budget_steps`
+as well as `horizon`; successful or collided episodes retain their declared budget,
+independent of observed episode length. Rates should report the budget distribution;
+time-to-goal normalization uses the effective episode horizon in scheduled mode.
+A pure simulator timeout at that budget is `max_steps`, with collision and success
+precedence. Early and intentional terminal events retain their existing labels.
+The pinned successor comparator reconstructs each arm's simulator binding and hash.
 
-This corrects the earlier split between the runner loop budget and simulator
-termination. Published 0.0.7 rows remain immutable: their recorded `horizon: 600`
-does not imply every simulator ran with a 600-step limit. See the
-[HZN audit](context/issue_9668_campaign_horizon_authority.md) for the measured impact
-and missing trajectory evidence. The correction changes future timeout exposure;
-it is implementation evidence and does not predict recovered successes.
+Regenerate and verify the release schedule from the authored scenario closure:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- python scripts/tools/generate_authored_horizon_schedule.py \
+  --template configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml \
+  --output configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml --check
+```
+
+Omit `--check` to regenerate, then explicitly update the template's SHA-256 and
+review the budgets. Candidate manifests pin the schedule and declare its mode.
+Publication-manifest admission remains a separate contract; existing fixed-H600
+publication gates are not waived by diagnostic candidate acceptance.
+Published 0.0.7 rows remain immutable and require their old source for reproduction.
+See the [HZN audit](context/issue_9668_campaign_horizon_authority.md) for recorded
+budget exposure and the 2026-09-30 author ruling. No recovered-success claim follows.
 
 ## Entry Point
 

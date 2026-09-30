@@ -141,28 +141,43 @@ The full include closure and all 48 resolved limits are in `evidence/issue_9668_
 
 The separately authored three-width doorway file has H400 scalars at `configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml:6`, `:43`, `:80`. It is **not included in the 48-scenario main template**. Its preregistered separate H400 slice remains intentional and untouched.
 
-## 4. Intent and design record
+## 4. Author ruling and explicit budget contract (2026-09-30)
 
-The documented design supports **fixed campaign horizon authority**, while per-scenario horizons are an explicit alternative mode. I did not find an explicit maintainer sentence saying “override the 400 defaults”; the conclusion below is an inference from the mode contract and ablation design, not a fabricated author ruling.
+The HZN3 author input supersedes the earlier inference that fixed campaign horizons
+should extend the inherited 400/500 limits. Those short budgets were deliberately
+authored: the dynamic relevant part ends, and extra waiting time can let a planner
+succeed after pedestrians leave. Whether those choices remain appropriate is a
+separate data check; this PR does not answer it.
 
-- `docs/context/issue_1023_scenario_horizon_benchmark.md:37`–`:47` records the explicit `scenario_horizons` sidecar, joining by scenario identity, patching simulator limits, and reporting the horizon mode. `docs/benchmark_camera_ready.md` (main lines 113–117) describes this as replacing the fixed campaign horizon. `robot_sf/benchmark/camera_ready/_config.py` (main lines 843–854) refuses mixing a schedule with fixed or planner horizons.
-- `docs/context/issue_5409_paired_horizon_analysis.md:3`–`:5` says the treatment changes the **fixed episode horizon** from 500 to 600 while holding the scenario matrix and other factors constant. `configs/benchmarks/issue_5409_horizon_ablation_h500.yaml:4`, `:50` and its H600 counterpart declare that only the **campaign-level** horizon changes. Their inherited 400/500 scenario values would suppress the treatment for 38 scenarios under the old runner behavior.
-- [Issue #5409](https://github.com/ll7/robot_sf_ll7/issues/5409) explicitly approves estimating the within-simulator effect of changing only episode horizon 500→600 on a matched frozen roster/scenario/seed suite. [Issue #8889](https://github.com/ll7/robot_sf_ll7/issues/8889) requires configs without changing source scenario definitions and horizon as the only treatment axis. Its recorded blocker concerns planner readiness, not an intent to preserve hidden H400 limits.
-- `git log -S "max_episode_steps: 400" -- configs/scenarios/single/francis2023_parallel_traffic.yaml` traces the limit to `52b3fc58ddc1a43b47f503a2bb15f7a13b5ce2f6` (2026-01-29, scenario manifest/source split); the added file line 5 carries 400. The classic bottleneck 500 limits entered in the same commit. Later archetype edits adjust layout, spawn metadata, density units, and plausibility; the inspected history provides no H600-specific cutoff decision. Archetype files with 400 added in #596, #4154, #6125 are separate scenario suites, not this release matrix.
+For 0.0.8, the template declares the existing `scenario_horizons` mode from
+[issue 1023](issue_1023_scenario_horizon_benchmark.md). The schedule replaces fixed
+H600 and preserves 400/500/600/650/700 exactly (25/13/8/1/1 scenarios). It is generated
+from the resolved authored closure and pinned by SHA-256
+`3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650`.
+The H650/H700 scenarios now receive their full authored budgets. Source scenario,
+frozen planner and historical evidence bytes remain unchanged.
 
-Thus the inherited values are valid defaults for scenario-controlled runs, but stale ceilings when a fixed H600 campaign is requested. Making the campaign authoritative matches the documented fixed/scheduled distinction; an admission-only refusal would leave an already declared fixed episode budget unresolved.
+Fixed campaign and arm admission refuses an authored limit below the requested
+fixed horizon, before execution. Schedules cannot coexist with fixed horizons.
+Schedule digest checks run at config intake and scenario preparation. Simulator
+seconds bind after the effective timestep is selected. Schedule metadata preserves
+source, digest, authored limit and declared limit, while each row records
+`effective_budget_steps` independently of its actual length. Scheduled metrics use
+the effective horizon as the time-to-goal denominator.
 
-## Implementation and validation
+HZN2's pure-budget-timeout `max_steps` labeling and collision/success precedence
+remain. The comparator retains per-arm binding and scoped hashes. Its fixed-arm
+controls explicitly author H700 fixture limits before testing H500/H700 arms;
+the real-template schedule control keeps the authored bottleneck H500.
+The complete 0.0.7 comparator fixture file is part of validation.
 
-Implemented on `fix/campaign-horizon-authority` in `~/hzn-work`, from the inspected latest main.
+DOI-free candidate admission now declares and pins the schedule rather than H600.
+This does not change publication-manifest admission or admit release/claim evidence.
+The old fixed-H600 publication gates require a separate source-bound protocol update
+before a scheduled candidate can be promoted; they remain fail-closed.
 
-- Campaign loading binds positive fixed horizons to copied scenarios before preflight; planner scoping reapplies the effective arm override. Both execution paths share the prepared scenarios.
-- `metadata.campaign_horizon` preserves the original authored limit and effective fixed budget. Repeated arm binding keeps the original provenance. No scenario YAML, frozen config, seed roster, planner, historical artifact or release identity changes.
-- Episode context binds simulator seconds using the effective step budget and actual runner timestep. Scenario-controlled runs retain existing limits and explicit schedules; standalone map-runner callers without the campaign binding retain existing behavior.
-- Real-template regression failed on main at `classic_bottleneck_low: assert 500 == 600`; three planner-override cases also failed for incorrect limits (four intended failures, one preservation pass). Added dt controls failed at 1200 and 300 simulator steps for a 600-step runner, then passed after duration binding.
-- Final seven-node regression file against unchanged main: **6 failed, 1 passed**, with failures on the intended budget assertions; on fixed code: **7 passed**.
-- Focused complete-environment suite: **327 passed, 1 skipped**. Final expanded seven regression nodes include all 48 real scenarios, H500/H700 arm overrides, authored provenance preservation, absent fixed budget, and dt 0.05/0.2. No environment step or planner invocation is required by these tests.
-
-Test-value gate: (1) protects declared campaign budgets reaching the simulator, including arm and timestep overrides; (2) removing scenario binding or converting seconds before dt makes a credible regression; (3) nearest existing schedule test covers explicit sidecars, not the real H600 release matrix, and existing episode decomposition tests use already-matched toy limits; (4) existing loader/config/context boundaries suffice, no test-only production seam.
-
-Evidence boundary: static/configuration and orchestrator implementation proof only. No held-out planner steps, campaign, Slurm, success uplift, corrected release, horizon-ablation finding, or release admission. Broad readiness and domain review are reported in the delivery section of `~/hzn_report.md`. Historical rows require their pinned old runtime to reproduce; any future correction needs a fresh source-bound candidate and review under #9668.
+Validation and exact-head delivery receipts are recorded in the HZN3 lane report.
+Only development-seed simulator diagnostics and static reconstruction run here.
+No held-out episode, calibration, cluster campaign, success uplift, publication,
+or thesis claim admission is performed. The author may reopen budget selection
+when the separate data check supplies new relevant evidence.

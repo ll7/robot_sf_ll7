@@ -1440,7 +1440,10 @@ def _resolve_episode_run_context(  # noqa: PLR0913
         horizon_val = 200
     if dt is not None and dt > 0:
         config.sim_config.time_per_step_in_secs = float(dt)
-    if scenario.get("metadata", {}).get("campaign_horizon", {}).get("mode") == "fixed":
+    if (
+        scenario.get("metadata", {}).get("campaign_horizon", {}).get("mode") == "fixed"
+        or scenario.get("metadata", {}).get("scenario_horizon") is not None
+    ):
         # The scenario loader converts steps to seconds before the runner applies dt.
         # Rebind the campaign budget using the actual episode timestep.
         config.sim_config.sim_time_in_secs = horizon_val * config.sim_config.time_per_step_in_secs
@@ -4791,6 +4794,7 @@ def _finalize_record_provenance(  # noqa: PLR0913
     track_schema_version: str | None,
 ) -> None:
     """Attach provenance, evidence, event ledger, and track fields to the record."""
+    record["effective_budget_steps"] = min(horizon_val, int(config.sim_config.max_sim_steps))
     pedestrian_model_provenance = build_pedestrian_model_provenance(
         sim_config=config.sim_config,
         policy_cfg=policy_cfg,

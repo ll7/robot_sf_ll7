@@ -1489,8 +1489,10 @@ def test_broad_rules_are_reported_first_without_rejection(tmp_path: Path) -> Non
     assert summary.index("## Broad rules") < summary.index("## Rule coverage")
 
 
-@pytest.mark.parametrize("budget", [500, 700])
-def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(tmp_path: Path, budget: int) -> None:
+@pytest.mark.parametrize("budget", [None, 500, 700])
+def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
+    tmp_path: Path, budget: int | None
+) -> None:
     """Comparator accepts actual producer binding and hashes for shorter and longer fixed arms."""
     from dataclasses import replace
     from types import SimpleNamespace
@@ -1516,7 +1518,22 @@ def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(tmp_path: Path, bu
     )
     payload = yaml.safe_load(template_path.read_text())
     payload["planners"] = [p for p in payload["planners"] if p["key"] == "goal"]
-    payload["planners"][0]["horizon"] = budget
+    if budget is not None:
+        payload["planners"][0]["horizon"] = budget
+    if budget is not None:
+        # A fixed-budget arm may shorten a declared scenario, but may not silently extend it.
+        # Keep real bottleneck geometry; this explicit fixture authors a 700-step limit.
+        from robot_sf.training.scenario_loader import load_scenarios
+
+        authored = load_scenarios(source / payload["scenario_matrix"])
+        for item in authored:
+            item["simulation_config"]["max_episode_steps"] = 700
+        fixture_matrix = source / "configs/scenarios/arm_budgets.yaml"
+        fixture_matrix.write_text(yaml.safe_dump(authored))
+        payload["scenario_matrix"] = "configs/scenarios/arm_budgets.yaml"
+        payload.pop("scenario_horizons", None)
+        payload.pop("scenario_horizons_sha256", None)
+        payload["horizon"] = 600
     config_path = source / "configs/benchmarks/override.yaml"
     config_path.write_text(yaml.safe_dump(payload))
     with patch.object(_util, "get_repository_root", return_value=source):
@@ -1565,12 +1582,21 @@ def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(tmp_path: Path, bu
     assert result.returncode == 0, result.stderr
     resolved = json.loads(result.stdout)
     expected = resolved["rows"][0]
-    assert expected["scenario"]["simulation_config"]["max_episode_steps"] == budget
-    assert expected["scenario"]["metadata"]["campaign_horizon"] == {
-        "mode": "fixed",
-        "horizon_steps": budget,
-        "authored_max_episode_steps": 500,
-    }
+    assert expected["scenario"]["simulation_config"]["max_episode_steps"] == (budget or 500)
+    if budget is None:
+        assert (
+            expected["scenario"]["metadata"]["scenario_horizon"]["recommended_horizon_steps"] == 500
+        )
+        assert (
+            expected["scenario"]["metadata"]["scenario_horizon"]["sha256"]
+            == payload["scenario_horizons_sha256"]
+        )
+    else:
+        assert expected["scenario"]["metadata"]["campaign_horizon"] == {
+            "mode": "fixed",
+            "horizon_steps": budget,
+            "authored_max_episode_steps": 700,
+        }
     scoped_hash = next(
         item["hash"] for item in resolved["scoped_hashes"] if item["planner"] == "goal"
     )

@@ -1,6 +1,6 @@
 # Context Retrieval Index
 
-Issue #9668/#9952 campaign horizon authority: 0.0.7 all-outcome budget exposure,
+Issue #9668/#9952 explicit scenario budgets: 0.0.7 all-outcome budget exposure,
 real 0.0.8 template limits, explicit fixed/scheduled modes, and missing trajectory evidence:
 [issue_9668_campaign_horizon_authority.md](issue_9668_campaign_horizon_authority.md).
 

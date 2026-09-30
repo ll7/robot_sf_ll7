@@ -1,6 +1,6 @@
 # Context Notes Workflow
 
-* [Issue #9668 Campaign Horizon Authority](issue_9668_campaign_horizon_authority.md):
+* [Issue #9668 Explicit Scenario Budgets](issue_9668_campaign_horizon_authority.md):
   recorded 0.0.7 budget exposure, real 0.0.8 limits, and the fixed/scheduled contract.
 
 `docs/context/` is the repository's Markdown knowledge base for issue execution history, durable

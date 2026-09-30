@@ -510,7 +510,7 @@ def _apply_fixed_campaign_horizon(
     *,
     horizon: int | None,
 ) -> list[dict[str, Any]]:
-    """Bind a positive fixed campaign budget to simulator limits, retaining authored provenance.
+    """Admit and bind a fixed budget without extending authored scenario limits.
 
     Returns:
         Copied scenarios with the fixed episode budget, or the original list in scenario mode.
@@ -526,6 +526,13 @@ def _apply_fixed_campaign_horizon(
         authored_limit = prior_binding.get(
             "authored_max_episode_steps", simulation_config.get("max_episode_steps")
         )
+        if metadata.get("scenario_horizon") is not None:
+            raise ValueError("scenario_horizons cannot be combined with fixed horizon")
+        if authored_limit is not None and int(authored_limit) < horizon:
+            raise ValueError(
+                f"Scenario '{_campaign_scenario_id(scenario)}' authored limit {authored_limit} "
+                f"is below fixed horizon {horizon}; declare scenario_horizons explicitly"
+            )
         simulation_config["max_episode_steps"] = int(horizon)
         metadata["campaign_horizon"] = {
             "mode": "fixed",
@@ -540,6 +547,7 @@ def _apply_scenario_horizon_schedule(
     scenarios: list[dict[str, Any]],
     *,
     schedule_path: Path | None,
+    expected_sha256: str | None = None,
 ) -> list[dict[str, Any]]:
     """Apply a scenario-specific horizon schedule to scenario max-step limits.
 
@@ -548,6 +556,10 @@ def _apply_scenario_horizon_schedule(
     """
     if schedule_path is None:
         return scenarios
+
+    schedule_sha256 = hashlib.sha256(schedule_path.read_bytes()).hexdigest()
+    if expected_sha256 is not None and schedule_sha256 != expected_sha256:
+        raise ValueError("scenario_horizons_sha256 differs from schedule bytes")
 
     schedule = _load_scenario_horizon_schedule(schedule_path)
     missing = [
@@ -574,6 +586,7 @@ def _apply_scenario_horizon_schedule(
             raise ValueError(
                 f"Scenario '{scenario_id}' simulation_config must be a mapping for horizon patching"
             )
+        authored_limit = simulation_config.get("max_episode_steps")
         simulation_config["max_episode_steps"] = horizon_steps
 
         metadata = patched.setdefault("metadata", {})
@@ -581,6 +594,8 @@ def _apply_scenario_horizon_schedule(
             raise ValueError(f"Scenario '{scenario_id}' metadata must be a mapping")
         metadata["scenario_horizon"] = {
             "source": _repo_relative(schedule_path),
+            "sha256": schedule_sha256,
+            "authored_max_episode_steps": authored_limit,
             "recommended_horizon_steps": horizon_steps,
             "status": entry["status"],
             "bucket": entry["bucket"],
@@ -618,6 +633,7 @@ def _scenario_horizon_summary(
 
     return {
         "path": _repo_relative(schedule_path),
+        "sha256": hashlib.sha256(schedule_path.read_bytes()).hexdigest(),
         "scenario_count": len(horizons),
         "min_horizon_steps": min(horizons) if horizons else None,
         "max_horizon_steps": max(horizons) if horizons else None,
@@ -817,8 +833,11 @@ def _load_campaign_scenarios(
     scenario_dicts = _apply_scenario_horizon_schedule(
         scenario_dicts,
         schedule_path=cfg.scenario_horizons_path,
+        expected_sha256=cfg.scenario_horizons_sha256,
     )
     scenario_dicts = _apply_fixed_campaign_horizon(scenario_dicts, horizon=cfg.horizon)
+    for planner in (p for p in cfg.planners if p.enabled and p.horizon_override is not None):
+        _apply_fixed_campaign_horizon(scenario_dicts, horizon=planner.horizon_override)
     seeds_override = _resolve_seed_override(cfg.seed_policy)
     if seeds_override is not None:
         seeded: list[dict[str, Any]] = []
@@ -873,6 +892,10 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
             f"{cfg.route_clearance_certifications_path}"
         )
     if cfg.scenario_horizons_path is not None:
+        if cfg.scenario_horizons_sha256 is not None:
+            observed = hashlib.sha256(cfg.scenario_horizons_path.read_bytes()).hexdigest()
+            if cfg.scenario_horizons_sha256 != observed:
+                raise ValueError("scenario_horizons_sha256 differs from schedule bytes")
         if cfg.horizon is not None:
             raise ValueError("scenario_horizons cannot be combined with fixed horizon")
         planners_with_horizon_override = [
@@ -885,6 +908,8 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
             raise ValueError(
                 f"scenario_horizons cannot be combined with per-planner horizon overrides: {names}"
             )
+    elif cfg.scenario_horizons_sha256 is not None:
+        raise ValueError("scenario_horizons_sha256 requires scenario_horizons")
     enforcement = cfg.amv_profile.coverage_enforcement
     if enforcement not in _AMV_COVERAGE_ENFORCEMENT:
         known = ", ".join(sorted(_AMV_COVERAGE_ENFORCEMENT))
@@ -1637,6 +1662,7 @@ def _assemble_campaign_config(
         scenario_amv_overrides=parsed.scenario_amv_overrides,
         radius_sweep=parsed.radius_sweep,
         scenario_horizons_path=parsed.scenario_horizons_path,
+        scenario_horizons_sha256=payload.get("scenario_horizons_sha256"),
         seed_policy=parsed.seed_policy,
         workers=int(payload.get("workers", 1)),
         horizon=(int(payload["horizon"]) if payload.get("horizon") is not None else None),

@@ -190,6 +190,7 @@ class CampaignConfig:
     radius_sweep: RadiusSweepConfig | None = None
     seed_policy: SeedPolicy = SeedPolicy()
     scenario_horizons_path: Path | None = None
+    scenario_horizons_sha256: str | None = None
     workers: int = 1
     horizon: int | None = None
     dt: float | None = None

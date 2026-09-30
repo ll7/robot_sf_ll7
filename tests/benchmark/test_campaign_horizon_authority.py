@@ -17,76 +17,93 @@ TEMPLATE = (
 )
 
 
-def test_real_release_0_0_8_template_has_600_step_simulator_budget():
-    """The actual release matrix must give all 48 scenarios the declared H600 budget."""
+def test_real_release_0_0_8_template_preserves_authored_budgets():
+    """All 48 real release scenarios use the explicitly pinned authored schedule."""
+    from collections import Counter
+    from hashlib import sha256
+
+    from scripts.tools.generate_authored_horizon_schedule import authored_schedule_bytes
+
     cfg = load_campaign_config(TEMPLATE)
     scenarios = _load_campaign_scenarios(cfg, repository_root=ROOT)
+    raw_cfg = replace(cfg, horizon=None, scenario_horizons_path=None, scenario_horizons_sha256=None)
     authored = {
         s["name"]: s["simulation_config"]["max_episode_steps"]
-        for s in _load_campaign_scenarios(replace(cfg, horizon=None), repository_root=ROOT)
+        for s in _load_campaign_scenarios(raw_cfg, repository_root=ROOT)
     }
-    assert cfg.horizon == 600
+    assert cfg.horizon is None
+    assert cfg.scenario_horizons_path is not None
+    schedule_bytes = cfg.scenario_horizons_path.read_bytes()
+    assert sha256(schedule_bytes).hexdigest() == cfg.scenario_horizons_sha256
+    assert authored_schedule_bytes(TEMPLATE, repository_root=ROOT) == schedule_bytes
     assert len(scenarios) == 48
+    assert Counter(authored.values()) == {400: 25, 500: 13, 600: 8, 650: 1, 700: 1}
     for scenario in scenarios:
+        expected = authored[scenario["name"]]
         config = build_env_config(scenario, scenario_path=ROOT / "scoped_scenarios.json")
-        assert config.sim_config.max_sim_steps == cfg.horizon, scenario["name"]
-        assert scenario["simulation_config"]["max_episode_steps"] == cfg.horizon
-        assert scenario["metadata"]["campaign_horizon"] == {
-            "mode": "fixed",
-            "horizon_steps": 600,
-            "authored_max_episode_steps": authored[scenario["name"]],
-        }
+        assert config.sim_config.max_sim_steps == expected, scenario["name"]
+        assert scenario["simulation_config"]["max_episode_steps"] == expected
+        assert scenario["metadata"]["scenario_horizon"]["authored_max_episode_steps"] == expected
+        assert scenario["metadata"]["scenario_horizon"]["sha256"] == cfg.scenario_horizons_sha256
+        assert "campaign_horizon" not in scenario["metadata"]
 
 
-@pytest.mark.parametrize("override", [None, 500, 700])
-def test_planner_budget_matches_scoped_scenarios_without_mutating_inputs(tmp_path, override):
-    """Planner overrides reach both execution modes through their shared scoped scenario list."""
+@pytest.mark.parametrize("arm_override", [False, True])
+def test_undeclared_shorter_scenario_limit_is_refused(arm_override):
+    """Neither campaign nor arm admission may silently extend authored limits."""
+    cfg = load_campaign_config(TEMPLATE)
+    cfg = replace(
+        cfg,
+        scenario_horizons_path=None,
+        scenario_horizons_sha256=None,
+        horizon=None if arm_override else 600,
+    )
+    if arm_override:
+        cfg = replace(cfg, planners=(replace(cfg.planners[0], horizon_override=600),))
+    with pytest.raises(ValueError, match="below fixed horizon.*declare scenario_horizons"):
+        _load_campaign_scenarios(cfg, repository_root=ROOT)
+
+
+def test_schedule_hash_drift_is_refused_after_config_load(tmp_path):
+    """Pin enforcement happens again at scenario preparation, detecting changed sidecar bytes."""
+    cfg = load_campaign_config(TEMPLATE)
+    changed = tmp_path / "schedule.yaml"
+    changed.write_bytes(cfg.scenario_horizons_path.read_bytes().replace(b": 500", b": 501", 1))
+    with pytest.raises(ValueError, match="scenario_horizons_sha256"):
+        _load_campaign_scenarios(replace(cfg, scenario_horizons_path=changed), repository_root=ROOT)
+
+
+def test_planner_schedule_preserves_limits_without_mutating_inputs(tmp_path):
+    """The shared prepared list used by both execution modes retains the full schedule."""
     cfg = load_campaign_config(TEMPLATE)
     scenarios = _load_campaign_scenarios(cfg, repository_root=ROOT)
     original = deepcopy(scenarios)
-    planner = replace(cfg.planners[0], horizon_override=override)
-    context = SimpleNamespace(cfg=cfg, runs_dir=tmp_path, scenarios=scenarios)
     run = _prepare_campaign_planner_variant_run(
-        context,
-        planner=planner,
+        SimpleNamespace(cfg=cfg, runs_dir=tmp_path, scenarios=scenarios),
+        planner=cfg.planners[0],
         kinematics="differential_drive",
         active_observation_mode="socnav_state",
         log_run=False,
     )
-    expected = override if override is not None else cfg.horizon
-    assert run.effective_horizon == expected
-    for scenario in run.scoped_scenarios:
-        assert scenario["simulation_config"]["max_episode_steps"] == expected, scenario["name"]
-        assert scenario["metadata"]["campaign_horizon"]["horizon_steps"] == expected
-        source = next(s for s in original if s["name"] == scenario["name"])
-        assert (
-            scenario["metadata"]["campaign_horizon"]["authored_max_episode_steps"]
-            == (source["metadata"]["campaign_horizon"]["authored_max_episode_steps"])
-        )
-        config = build_env_config(scenario, scenario_path=ROOT / "scoped_scenarios.json")
-        assert config.sim_config.max_sim_steps == expected
+    assert run.effective_horizon is None
+    assert [s["simulation_config"] for s in run.scoped_scenarios] == [
+        s["simulation_config"] for s in scenarios
+    ]
     assert scenarios == original
 
 
-def test_absent_fixed_budget_preserves_real_scenario_limits():
-    """Scenario-controlled campaigns retain authored limits when no fixed budget is requested."""
-    cfg = load_campaign_config(TEMPLATE)
-    scenarios = _load_campaign_scenarios(replace(cfg, horizon=None), repository_root=ROOT)
-    assert any(s["simulation_config"]["max_episode_steps"] == 400 for s in scenarios)
-    assert any(s["simulation_config"]["max_episode_steps"] == 500 for s in scenarios)
-
-
 @pytest.mark.parametrize("dt", [0.05, 0.2])
-def test_campaign_budget_survives_runner_timestep_override(dt):
-    """Converting a fixed budget to seconds must use the actual runner timestep."""
+def test_scheduled_budget_survives_runner_timestep_override(dt):
+    """Scheduled steps must convert to seconds after the effective timestep override."""
     from robot_sf.benchmark.map_runner.map_runner_episode import _resolve_episode_run_context
 
     cfg = load_campaign_config(TEMPLATE)
     scenario = _load_campaign_scenarios(cfg, repository_root=ROOT)[0]
+    expected = scenario["simulation_config"]["max_episode_steps"]
     ctx = _resolve_episode_run_context(
         scenario=scenario,
         seed=103,
-        horizon=cfg.horizon,
+        horizon=0,
         dt=dt,
         algo="goal",
         scenario_path=ROOT / "scoped_scenarios.json",
@@ -106,28 +123,27 @@ def test_campaign_budget_survives_runner_timestep_override(dt):
         safety_wrapper=None,
         cbf_safety_filter=None,
     )
-    assert ctx.horizon_val == 600
-    assert ctx.config.sim_config.max_sim_steps == 600
-    assert ctx.config.sim_config.sim_time_in_secs == pytest.approx(600 * dt)
-    assert ctx.scenario["simulation_config"]["max_episode_steps"] == 600
+    assert ctx.horizon_val == expected
+    assert ctx.config.sim_config.max_sim_steps == expected
+    assert ctx.config.sim_config.sim_time_in_secs == pytest.approx(expected * dt)
 
 
 @pytest.mark.parametrize(
     ("signal", "terminal_step", "expected"),
     [
-        ("timeout", 600, "max_steps"),
-        ("collision", 600, "collision"),
-        ("success", 600, "success"),
-        ("collision_and_success", 600, "collision"),
+        ("timeout", 500, "max_steps"),
+        ("collision", 500, "collision"),
+        ("success", 500, "success"),
+        ("collision_and_success", 500, "collision"),
         ("early_timeout", 20, "terminated"),
         ("intentional", 20, "terminated"),
-        ("intentional", 600, "terminated"),
+        ("intentional", 500, "terminated"),
     ],
 )
 def test_real_simulator_budget_timeout_and_terminal_controls(
     monkeypatch, signal, terminal_step, expected
 ):
-    """Observe a real H600 RobotEnv timeout; injected info controls preserve terminal precedence."""
+    """Observe a real H500 RobotEnv timeout; injected info controls preserve terminal precedence."""
     import numpy as np
 
     import robot_sf.benchmark.map_runner.map_runner_episode as episode
@@ -143,7 +159,7 @@ def test_real_simulator_budget_timeout_and_terminal_controls(
 
     def observe_terminal(state, slc, *, step_idx, sim, **kwargs):
         if step_idx + 1 == terminal_step:
-            if terminal_step == 600:
+            if terminal_step == 500:
                 # Require RobotEnv itself to terminate on timeout before changing any control.
                 assert sim.terminated and not sim.truncated
                 assert sim.info["meta"]["is_timesteps_exceeded"]
@@ -169,7 +185,7 @@ def test_real_simulator_budget_timeout_and_terminal_controls(
     row = episode.run_map_episode(
         deepcopy(scenario),
         1001,
-        horizon=600,
+        horizon=0,
         dt=0.1,
         record_forces=False,
         snqi_weights=None,
@@ -182,6 +198,24 @@ def test_real_simulator_budget_timeout_and_terminal_controls(
     assert observed == [terminal_step]
     trace = row["algorithm_metadata"]["simulation_step_trace"]
     assert len(trace["steps"]) == terminal_step
-    assert row["scenario_params"]["simulation_config"]["max_episode_steps"] == 600
+    assert row["scenario_params"]["simulation_config"]["max_episode_steps"] == 500
+    assert row["horizon"] == 500
+    assert row["effective_budget_steps"] == 500
     assert row["termination_reason"] == expected
     assert row["outcome"]["timeout_event"] == (signal in ("timeout", "early_timeout"))
+
+
+def test_schedule_refuses_fixed_arm_override(tmp_path):
+    """An explicit schedule cannot be silently replaced by an arm's fixed horizon."""
+    cfg = load_campaign_config(TEMPLATE)
+    context = SimpleNamespace(
+        cfg=cfg, runs_dir=tmp_path, scenarios=_load_campaign_scenarios(cfg, repository_root=ROOT)
+    )
+    with pytest.raises(ValueError, match="scenario_horizons cannot be combined"):
+        _prepare_campaign_planner_variant_run(
+            context,
+            planner=replace(cfg.planners[0], horizon_override=700),
+            kinematics="differential_drive",
+            active_observation_mode="socnav_state",
+            log_run=False,
+        )

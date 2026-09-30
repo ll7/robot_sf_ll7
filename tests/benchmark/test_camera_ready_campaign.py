@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import csv
+import hashlib
 import inspect
 import io
 import json
@@ -2086,6 +2087,7 @@ def test_preflight_reports_scenario_horizon_schedule_summary(tmp_path: Path) -> 
     )
 
     assert validate_payload["scenario_horizons"] == {
+        "sha256": hashlib.sha256(schedule_path.read_bytes()).hexdigest(),
         "path": str(schedule_path.resolve()),
         "scenario_count": 2,
         "min_horizon_steps": 176,

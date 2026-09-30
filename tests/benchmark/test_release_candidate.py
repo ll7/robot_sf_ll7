@@ -17,6 +17,7 @@ from robot_sf.benchmark.release_candidate import (
     _APPROVED_008_HYBRID_CONFIGS,
     _APPROVED_008_PLANNER_KEYS,
     CANDIDATE_SCHEMA,
+    _candidate_horizon_contract,
     _expected_input_paths,
     create_prepublication_candidate,
     load_preflight_input,
@@ -111,7 +112,7 @@ def candidate_repo(tmp_path: Path) -> tuple[Path, Path, dict]:
         },
         "planners": {"keys": [row["key"] for row in config["planners"]]},
         "seed_policy": seed_policy,
-        "matrix": {"expected_episode_cells": 20160, "horizon_steps": 600},
+        "matrix": _candidate_horizon_contract(SOURCE_ROOT, config, rows),
         "inputs": inputs,
         "sha256_files": pins,
     }
@@ -125,6 +126,12 @@ def test_doi_free_candidate_loads_but_publication_loader_rejects(candidate_repo)
     candidate = load_prepublication_candidate(path, repository_root=root)
     assert load_preflight_input(path, repository_root=root) == candidate
     assert candidate.release_id == payload["candidate_id"]
+    assert candidate.expected_horizon_steps is None
+    assert payload["matrix"]["horizon_mode"] == "scenario_horizons"
+    schedule_path = root / payload["matrix"]["scenario_horizons"]
+    assert (
+        dict(candidate.pinned_files)[schedule_path] == payload["matrix"]["scenario_horizons_sha256"]
+    )
     assert len(candidate.planner_keys) == 14
     assert len(candidate.scenario_identities) == 48
     assert candidate.resolved_seeds == tuple(range(111, 141))

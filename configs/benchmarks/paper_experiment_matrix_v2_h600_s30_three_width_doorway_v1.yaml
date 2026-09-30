@@ -1,10 +1,8 @@
-# Development-only calibration candidate; 14 arms x48 scenarios x2 seeds.
-# The four v4 slots fail closed until #9748 freezes their parameters.
-# No SNQI-v2 scoring until calibration anchors are reviewed and merged.
-name: snqi_v2_calibration_dev101_102
-paper_facing: false
+# Preregistered 2.2/2.8/3.6 m full-roster doorway width slice.
+name: paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1
+paper_facing: true
 paper_profile_version: paper-matrix-v1
-scenario_matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+scenario_matrix: configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml
 comparability_mapping: configs/benchmarks/alyassi_comparability_map_v2.yaml
 route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
 amv_profile:
@@ -26,15 +24,13 @@ amv_profile:
     - crossing
     - bottleneck
 seed_policy:
-  mode: fixed-list
-  seeds:
-  - 101
-  - 102
+  mode: seed-set
+  seed_set: paper_eval_s30
   seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
 snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
 snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
 snqi_contract:
-  enabled: true
+  enabled: false
   enforcement: warn
   rank_alignment_warn_threshold: 0.5
   rank_alignment_fail_threshold: 0.3
@@ -44,12 +40,12 @@ snqi_contract:
   max_component_dominance_fail_threshold: 0.27
   calibration_seed: 123
   calibration_trials: 6000
-workers: 16
+workers: 32
 horizon: 600
 dt: 0.1
 record_forces: true
 checkpoint_provenance_enforcement: error
-resume: true
+resume: false
 stop_on_failure: true
 bootstrap_samples: 300
 bootstrap_confidence: 0.95
@@ -60,9 +56,9 @@ export_publication_bundle: false
 include_videos_in_publication: false
 overwrite_publication_bundle: true
 repository_url: https://github.com/ll7/robot_sf_ll7
-release_tag: '{{release_tag}}'
-doi: '{{version_doi}}'
-paper_interpretation_profile: baseline-ready-core
+release_tag: three-width-doorway-0.0.8-v1
+doi: diagnostic-only-unpublished
+paper_interpretation_profile: doorway-width-slice
 planners:
 - key: prediction_planner
   algo: prediction_planner
@@ -135,4 +131,3 @@ planners:
   planner_group: experimental
   algo_config: configs/algos/risk_dwa_camera_ready.yaml
   benchmark_profile: experimental
-arm_isolation: subprocess

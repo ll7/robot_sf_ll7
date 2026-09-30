@@ -2097,10 +2097,17 @@ def sealed_seed_execution_problem(
         return (
             "sealed evaluation seeds require source_sha equal to HEAD at the freeze commit (D-049)"
         )
+    if getattr(manifest, "resolved_identity_path", None) is None:
+        return "sealed evaluation seeds require a materialized resolved identity (D-049)"
     try:
+        _require_clean_exact_checkout(
+            root,
+            source_commit=declared,
+            template_path=getattr(manifest, "identity_template_path", None) or config_path,
+        )
         _require_sealed_source_inputs(manifest, root, declared)
     except (OSError, TypeError, ValueError) as exc:
-        return f"sealed evaluation input is not pinned at source_sha (D-049): {exc}"
+        return f"sealed evaluation source admission refused (D-049): {exc}"
     return None
 
 
@@ -3077,6 +3084,14 @@ def _build_resolved_release_identity(
         materialized_path = scratch_root / "release_manifest.materialized.json"
         materialized_path.write_bytes(_canonical_json_bytes(materialized_payload))
         manifest = load_release_manifest(materialized_path, repository_root=repository_root)
+        # This trusted resolver has materialized the v0.2 inputs. Bind the in-flight
+        # identity before validation; the ignored envelope is written only after all
+        # source, content and metadata checks succeed.
+        manifest = replace(
+            manifest,
+            resolved_identity_path=output_path,
+            identity_template_path=template_path,
+        )
         cfg = load_campaign_config(
             manifest.canonical_campaign_config_path,
             repository_root=repository_root,

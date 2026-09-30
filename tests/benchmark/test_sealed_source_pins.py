@@ -15,6 +15,7 @@ from robot_sf.benchmark import spawn_preflight as spawn
 from robot_sf.benchmark.camera_ready import _config as campaign_config
 from robot_sf.benchmark.camera_ready import _run_state as campaign_paths
 from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
+from robot_sf.evidence.writers import write_json, write_text
 from scripts.benchmark import preflight_spawn_clearance as standalone
 from scripts.tools import resolve_benchmark_release_identity as identity_cli
 from scripts.tools import run_benchmark_release as runner
@@ -37,6 +38,8 @@ def sealed_repository(tmp_path, monkeypatch):
     shutil.copytree(ROOT / "configs", repo / "configs")
     shutil.copytree(ROOT / "maps", repo / "maps")
     (repo / "docs").mkdir()
+    (repo / "robot_sf/nav").mkdir(parents=True)
+    shutil.copy2(ROOT / "robot_sf/nav/svg_map_parser.py", repo / "robot_sf/nav/svg_map_parser.py")
     shutil.copy2(ROOT / "docs/RELEASE.md", repo / "docs/RELEASE.md")
     shutil.copy2(ROOT / "CITATION.cff", repo / "CITATION.cff")
     (repo / ".gitignore").write_text("output/\n")
@@ -45,7 +48,15 @@ def sealed_repository(tmp_path, monkeypatch):
     git(repo, "config", "user.email", "fixture@example.invalid")
     git(repo, "add", ".gitignore")
     git(repo, "commit", "-qm", "initialize")
-    git(repo, "add", "configs", "maps", "docs/RELEASE.md", "CITATION.cff")
+    git(
+        repo,
+        "add",
+        "configs",
+        "maps",
+        "docs/RELEASE.md",
+        "CITATION.cff",
+        "robot_sf/nav/svg_map_parser.py",
+    )
     git(repo, "commit", "-qm", "freeze real inputs")
     for module in (protocol, spawn, runner, campaign_config, campaign_paths):
         monkeypatch.setattr(module, "get_repository_root", lambda: repo)
@@ -275,7 +286,7 @@ def test_forged_sealed_inputs_refused_before_workers(
     monkeypatch.setattr(runner, "validate_runtime_smoke_result", lambda *_a, **_kw: {})
     monkeypatch.setattr(runner, "_admit_release_resume", lambda **_kw: None)
     receipt = repo / "output/receipt.json"
-    receipt.write_text("{}\n")
+    write_json(receipt, {})
     try:
         if entry == "standalone":
             rc = standalone.main(
@@ -369,7 +380,13 @@ def test_canonical_inputs_must_equal_source_blobs(sealed_repository, input_kind)
         manifest, tuple(manifest.resolved_seeds), repository_root=repo
     )
     assert problem is not None, f"{input_kind} mutation accepted at frozen source"
-    assert ("not tracked" if input_kind == "untracked-planner" else "bytes differ") in problem
+    assert "worktree is not clean" in problem
+    # Keep the independent source-byte/index proof when the stronger tree gate
+    # refuses first; status cleanliness does not replace these content pins.
+    with pytest.raises(
+        ValueError, match="not tracked" if input_kind == "untracked-planner" else "bytes differ"
+    ):
+        protocol._require_sealed_source_inputs(manifest, repo, manifest.source_sha)
 
 
 def test_planner_symlink_cannot_substitute_another_tracked_blob(sealed_repository):
@@ -384,7 +401,184 @@ def test_planner_symlink_cannot_substitute_another_tracked_blob(sealed_repositor
         manifest, tuple(manifest.resolved_seeds), repository_root=repo
     )
     assert problem is not None, "planner symlink substituted another tracked source blob"
-    assert "symlink" in problem
+    assert "worktree is not clean" in problem
+    with pytest.raises(ValueError, match="symlink"):
+        protocol._require_sealed_source_inputs(manifest, repo, manifest.source_sha)
+
+
+def _entry_with_stub_workers(repo, path, entry, monkeypatch):
+    """Exercise public admission without running a campaign or clearance worker."""
+    reached = worker_stub(monkeypatch)
+
+    def campaign(*_a, **_kw):
+        raise CampaignReached("dirty sealed campaign reached execution")
+
+    monkeypatch.setattr(runner, "run_campaign", campaign)
+    monkeypatch.setattr(
+        runner,
+        "prepare_campaign_preflight",
+        lambda *_a, **_kw: {
+            "campaign_id": "stub",
+            "campaign_root": "stub",
+            "validate_config_path": "stub",
+            "preview_scenarios_path": "stub",
+            "matrix_summary_json_path": "stub",
+            "matrix_summary_csv_path": "stub",
+            "checkpoint_preflight_summary": {},
+        },
+    )
+    monkeypatch.setattr(
+        runner,
+        "validate_checkpoint_staging_receipt",
+        lambda *_a, **_kw: {"generated_at_utc": "stub"},
+    )
+    monkeypatch.setattr(runner, "validate_runtime_smoke_result", lambda *_a, **_kw: {})
+    monkeypatch.setattr(runner, "_admit_release_resume", lambda **_kw: None)
+    receipt = repo / "output/receipt.json"
+    receipt.parent.mkdir(parents=True, exist_ok=True)
+    write_json(receipt, {})
+    try:
+        if entry == "standalone":
+            rc = standalone.main(
+                [
+                    "--manifest",
+                    str(path),
+                    "--workers",
+                    "1",
+                    "--json-output",
+                    str(repo / "output/spawn.json"),
+                    "--markdown-output",
+                    str(repo / "output/spawn.md"),
+                ]
+            )
+        else:
+            args = [
+                "--manifest",
+                str(path),
+                "--mode",
+                entry,
+                "--output-root",
+                str(repo / "output/run"),
+            ]
+            if entry == "run":
+                args += [
+                    "--checkpoint-receipt",
+                    str(receipt),
+                    "--runtime-smoke-receipt",
+                    str(receipt),
+                ]
+            rc = runner.main(args)
+    except CampaignReached:
+        rc = 0
+    return rc, reached
+
+
+def _edit_unpinned_input(repo, mutation):
+    if mutation == "slice-map":
+        target = repo / "maps/successor_svg_maps/issue_9348_francis2023_narrow_doorway_2p20_v1.svg"
+        replacement = (
+            repo
+            / "maps/successor_svg_maps/issue_9728_francis2023_narrow_doorway_feasible_3p60_v1.svg"
+        )
+        write_text(target, replacement.read_text().split("\n", 1)[1], issue_ref="robot_sf#10039")
+    elif mutation == "main-map":
+        target = repo / "maps/successor_svg_maps/issue_9762_classic_doorway_goal_zone_entry_v2.svg"
+        write_text(
+            target,
+            target.read_text().split("\n", 1)[1] + "\n<!-- dirty map -->\n",
+            issue_ref="robot_sf#10039",
+        )
+    elif mutation == "code":
+        target = repo / "robot_sf/nav/svg_map_parser.py"
+        write_text(target, "# AI-GENERATED NEEDS-REVIEW\n" + target.read_text())
+    elif mutation == "untracked":
+        write_text(repo / "untracked.txt", "not ignored\n", issue_ref="robot_sf#10039")
+    elif mutation == "other-head":
+        git(repo, "commit", "--allow-empty", "-qm", "different source checkout")
+
+
+@pytest.mark.parametrize(
+    "kind,mutation", [("slice", "slice-map"), ("main", "main-map"), ("slice", "code")]
+)
+@pytest.mark.parametrize("entry", ["preflight", "run", "standalone"])
+def test_plain_sealed_identity_refused_before_workers(
+    sealed_repository, monkeypatch, capsys, kind, mutation, entry
+):
+    repo = sealed_repository
+    payload = plain_payload(repo, kind)
+    path = repo / "output/plain.json"
+    write_json(path, payload)
+    _edit_unpinned_input(repo, mutation)
+    capsys.readouterr()
+    rc, reached = _entry_with_stub_workers(repo, path, entry, monkeypatch)
+    output = capsys.readouterr().out
+    assert reached == [], f"plain {kind}/{mutation} reached {len(reached)} workers"
+    assert rc == 2, output
+    assert "materialized resolved identity" in output, output
+
+
+@pytest.mark.parametrize("kind", ["main", "slice"])
+def test_clean_plain_sealed_identity_is_refused(sealed_repository, kind):
+    repo = sealed_repository
+    path = repo / "output/plain.json"
+    write_json(path, plain_payload(repo, kind))
+    assert git(repo, "status", "--porcelain=v1", "--untracked-files=normal") == ""
+    manifest = protocol.load_release_manifest(path, repository_root=repo)
+    assert manifest.resolved_identity_path is None
+    with pytest.raises(ValueError, match="materialized resolved identity"):
+        spawn.guard_manifest_execution(
+            manifest, source_commit=manifest.source_sha, repository_root=repo
+        )
+
+
+@pytest.mark.parametrize(
+    "kind,mutation",
+    [
+        ("main", "main-map"),
+        ("slice", "slice-map"),
+        ("slice", "code"),
+        ("slice", "untracked"),
+        ("slice", "other-head"),
+    ],
+)
+@pytest.mark.parametrize("entry", ["api", "preflight", "run", "standalone"])
+def test_loaded_sealed_identity_rechecks_clean_exact_source(
+    sealed_repository, monkeypatch, capsys, kind, mutation, entry
+):
+    repo = sealed_repository
+    manifest = materialize(repo, kind)
+    _edit_unpinned_input(repo, mutation)
+    capsys.readouterr()
+    reached = worker_stub(monkeypatch)
+    # Model the already-verified object retained by a caller before the tree
+    # changed. Reuse that real object; only bypass reloading, never the guard.
+    monkeypatch.setattr(runner, "load_release_manifest", lambda *_a, **_kw: manifest)
+    monkeypatch.setattr(spawn, "load_preflight_input", lambda *_a, **_kw: manifest)
+    if entry == "api":
+        report = spawn.run_manifest_preflight(manifest, workers=1)
+        assert report["status"] == "invalid", report
+        output = report["input_error"]
+        rc = 2
+    else:
+        rc, reached = _entry_with_stub_workers(repo, manifest.path, entry, monkeypatch)
+        output = capsys.readouterr().out
+    assert reached == [], f"loaded {kind}/{mutation} reached {len(reached)} workers"
+    assert rc == 2, output
+    assert "not clean" in output or "source" in output, output
+
+
+def test_nonsealed_smoke_allows_dirty_source(sealed_repository, monkeypatch):
+    repo = sealed_repository
+    manifest = protocol.load_release_manifest(
+        repo / RELEASES / "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml",
+        repository_root=repo,
+    )
+    _edit_unpinned_input(repo, "code")
+    assert protocol.validate_release_manifest(manifest, repository_root=repo)["status"] == "valid"
+    reached = worker_stub(monkeypatch)
+    report = spawn.run_manifest_preflight(manifest, workers=1)
+    assert report["status"] == "valid", report
+    assert reached == [[103]]
 
 
 # seed-holdout: synthetic-fixture end

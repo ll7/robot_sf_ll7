@@ -9,6 +9,11 @@ resolution, ORCA forward projection, explicit release speed binding, and
 development-only before/after probes with test-value evidence:
 [FXB diagnostic report](evidence/issue_10007_fxb/README.md).
 
+Issue #10007 prediction planner hunt lane FXP: collector velocity frame, static-obstacle limitation,
+model-horizon rejection, distinct turn candidates, and checkpoint/retraining provenance.
+Dev-only scorer diagnostics; no retraining or release claim:
+[issue_10007_fxp_prediction_defects.md](issue_10007_fxp_prediction_defects.md).
+
 Issue #9750 per-arm physical-faithfulness audit against the actual 0.0.7 roster:
 release-bundle identity, resolved configuration inheritance, cited method, correctness or
 enhancement classification, and deterministic oracle-test anchors. Unit tests only; no campaign

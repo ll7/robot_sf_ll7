@@ -255,3 +255,27 @@ Original #6960 representative replay values, using exactly the archived selected
 | bidirectional_corridor | literature_typical | 5157 | lane_segregation_index | 0.0575945 | 0.0266854 |
 | narrow_doorway | released_default | 5156 | oscillation_flips | 3 | 0 |
 | narrow_doorway | literature_typical | 5153 | oscillation_flips | 1 | 2 |
+
+
+Released-speed doorway plausibility (follow-up RR10057). Seeds 1001–1005, separate 300/1000-step runs, original 20-agent bidirectional configuration; 0.1 s per step. Actual walls match intended endpoints within 1e-9. Gap 1.20 m; pedestrian radius 0.35 m, leaving 0.50 m of center-position width for one pedestrian, but less than two diameters (1.40 m) abreast. Jambs are correctly at x=8, y=±0.6 to ±3.
+
+| Seed | Steps | Throughput (peds/s) | Ever within 2 m / 20 | Final within 2 m | Closest door plane (m) | Closest jamb tip (m) | Last 10 s mean speed (m/s) | Slow queue agents |
+|---|---|---|---|---|---|---|---|---|
+| 1001 | 300 | 0.000 | 19 | 12 | 0.536 | 0.621 | 0.202 | 0 |
+| 1001 | 1000 | 0.000 | 20 | 13 | 0.536 | 0.607 | 0.216 | 0 |
+| 1002 | 300 | 0.000 | 19 | 14 | 0.583 | 0.605 | 0.188 | 0 |
+| 1002 | 1000 | 0.000 | 20 | 13 | 0.487 | 0.584 | 0.189 | 1 |
+| 1003 | 300 | 0.000 | 20 | 13 | 0.611 | 0.654 | 0.205 | 0 |
+| 1003 | 1000 | 0.000 | 20 | 12 | 0.585 | 0.621 | 0.208 | 0 |
+| 1004 | 300 | 0.000 | 17 | 12 | 0.528 | 0.595 | 0.180 | 0 |
+| 1004 | 1000 | 0.000 | 20 | 13 | 0.369 | 0.534 | 0.206 | 0 |
+| 1005 | 300 | 0.000 | 20 | 13 | 0.429 | 0.591 | 0.190 | 0 |
+| 1005 | 1000 | 0.000 | 20 | 12 | 0.388 | 0.496 | 0.185 | 0 |
+
+Approach means center within 2 m of x=8; slow queue means final approach region and mean speed <0.05 m/s over the last 10 s. Closest distances are over the whole trajectory, not the final snapshot. All runs have zero crossing events and zero flow reversals. The compact JSON also retains positions and leading-agent forces at steps 0/100/300/500/1000, including final jamb-tip distances and counts within 1.5 m of the jamb tips. The snapshot overlays initial, 30 s and 100 s positions. Agents reach the approach region, but no center reaches the door plane. They accumulate and mill upstream rather than forming a stationary slow queue under the stated definition.
+
+A lone centerline walker on seed 1001 stalls at x≈6.489, 1.511 m before the door, with speed effectively zero at 100 s. Its obstacle repulsion balances the forward desired force even without other pedestrians. Keeping the same walls but disabling only the obstacle force lets that walker cross once (0.009990 peds/s over 100.1 s). Thus zero flow is a wall-induced stand-off under the released force calibration, not a remaining tuple-order, misplaced-jamb, or physically impossible-gap defect. It is not credible evidence of realistic crowd-induced clogging: even a lone walker cannot traverse. Obstacle-force calibration/potential plausibility is a separate model follow-up; no defaults or thresholds are changed here. Main's 0.63 peds/s at seed 1001/300 steps was obtained with the defective walls.
+
+Full trajectories and probe source/log remain external; their archive SHA-256 is `35916f64185e49eec268a19bf8b0941e07271348e48fdd6b39c7d62019899583`. See `doorway_plausibility.json` for custody, original force settings and time-indexed positions/force components.
+
+![Released-speed doorway approach at 0, 30 and 100 seconds](doorway_queue.png)

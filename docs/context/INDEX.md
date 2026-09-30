@@ -214,7 +214,7 @@ scientific evidence:
 Issue #7086 trace dossier representative selection: deterministic majority,
 weaker-label, median-order, and seed-identity selection for one campaign cell,
 plus the shared `robot_sf.research.representative_selection` rule that the
-emergent-phenomena campaign, its figures, and its replay videos all call
+historical emergent-phenomena campaign (affected by #10056), its figures, and its replay videos all call
 instead of carrying private copies, plus the diagnostic h600 trace pin for
 retained trace-series conversion, without evidence admission:
 [issue_7086_trace_dossiers.md](issue_7086_trace_dossiers.md).
@@ -249,11 +249,11 @@ Issue #6792 package portfolio references to the tracked source config, preservin
 release-cell-only claim boundary:
 [issue_7047_ch7_portfolio_companion_binding.md](issue_7047_ch7_portfolio_companion_binding.md).
 
-Issue #6969 lane-formation reference and Stage A diagnostic: the lane metric separates known
-mixed/separated controls, while 8 frozen space-filling parameter profiles plus released and
-literature anchors produced no robust clear-hit regime across three seeds; no default or tuning
-claim follows:
-[issue_6969_lane_formation_reference/README.md](evidence/issue_6969_lane_formation_reference/README.md).
+Issue #6969 historical lane-formation reference and Stage A diagnostic: affected by the
+wall-order defect #10056. Retained for comparison; use the
+[corrected-wall replay](evidence/issue_10056_wall_order_2026-09/README.md) for current
+geometry diagnostics. The [historical README](evidence/issue_6969_lane_formation_reference/README.md)
+contains the original measurements; no default or tuning claim follows.
 
 Issue #6972 analysis-trace overhead repair: reuses the episode commit hash and
 trace builder digest on the opt-in path, with action-sequence regression proof
@@ -537,11 +537,14 @@ stop rules without authorizing campaign execution:
 Issue #5263 exact-repeat campaign definitions (140 hash-matched targets and fail-closed two-host matrix):
 [README.md](evidence/issue_5263_exact_repeat/README.md).
 
-Registered emergent-phenomena demonstration for the released pedestrian substrate (lane formation, doorway oscillation, exit arching) at released + literature-typical speed:
+Historical emergent-phenomena demonstration at released + literature speed: affected and superseded by #10056; retained for comparison:
 [README.md](evidence/issue_5149_emergent_phenomena_2026-07/README.md).
 
-Multi-seed measured emergent-phenomena campaign (10 seeds per scenario x calibration, per-seed run records, aggregate statistics, full provenance manifest) elevating the pinned single-seed exhibit to measured face-validity evidence:
+Historical multi-seed emergent-phenomena campaign (10 seeds per scenario x calibration): affected and superseded by #10056; its misplaced-wall measurements are not current face-validity evidence:
 [README.md](evidence/issue_5149_emergent_phenomena_multiseed_2026-08/README.md).
+
+Current corrected-wall diagnostics for #5149, #6962 sensitivity, and #6969 reference/Stage A:
+[issue_10056_wall_order_2026-09/README.md](evidence/issue_10056_wall_order_2026-09/README.md).
 
 Publication figure style pack (opt-in vector export, colorblind-safe planner palette, provenance sidecars, LaTeX-safe captions):
 [issue_4777_publication_figure_style_pack.md](issue_4777_publication_figure_style_pack.md).

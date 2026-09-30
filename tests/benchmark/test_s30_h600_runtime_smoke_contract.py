@@ -62,7 +62,7 @@ PINNED_V04_MANIFEST_SHA256 = "aded0ca71e40bdc8f7193282bb8d28420a9b627f93d47a4303
 PINNED_V03_CONFIG_SHA256 = "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4"
 PINNED_V03_MANIFEST_SHA256 = "d6f3047adaacfb8cad2cc12430ee5ce7331f11b0777ac522209fd1e5af019241"
 HISTORICAL_V04_TEMPLATE_SHA256 = "f453b7c824fdd47298cbc66dae3afc1fffcd7eedf57ee4bb87cd1c67b4feb1d7"
-CAMPAIGN_TEMPLATE_SHA256 = "fcb612892db16af523e9b4800828e452e216c1d503d5e9973252bf7e5fd46201"
+CAMPAIGN_TEMPLATE_SHA256 = "22ecfb909e4904b003fa8d8043cc6d56d40fe5a4dfec6a08313cbd055b72353c"
 
 EXPECTED_PLANNER_KEYS = [
     "prediction_planner",
@@ -568,6 +568,14 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
     assert {seed for row in scenarios[0].values() for seed in row["seeds"]} == {101, 102}
     assert {seed for row in scenarios[1].values() for seed in row["seeds"]} == {103}
     assert {seed for row in scenarios[2].values() for seed in row["seeds"]} == set(range(111, 141))
+    assert configs[2].horizon is None
+    assert {row["simulation_config"]["max_episode_steps"] for row in scenarios[2].values()} == {
+        400,
+        500,
+        600,
+        650,
+        700,
+    }
 
     mismatches: list[str] = []
     for index, label in ((0, "calibration"), (1, "smoke")):
@@ -657,6 +665,9 @@ def test_runtime_smoke_v0_5_advances_wrapped_kernel_and_preserves_v0_4() -> None
     predecessor = _load_yaml(RUNTIME_SMOKE_V04_CONFIG_PATH)
     successor = _load_yaml(RUNTIME_SMOKE_V05_CONFIG_PATH)
     assert _diff_paths(predecessor, successor) == {
+        "horizon",
+        "scenario_horizons",
+        "scenario_horizons_sha256",
         "comparability_mapping",
         "derived_from.config_sha256",
         "name",

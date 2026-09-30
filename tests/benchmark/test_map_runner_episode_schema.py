@@ -222,7 +222,7 @@ def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.Monkey
         "Cfg",
         (),
         {
-            "sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})(),
+            "sim_config": type("SC", (), {"max_sim_steps": 600, "time_per_step_in_secs": 0.1})(),
             "map_id": "episode-schema-smoke",
         },
     )()

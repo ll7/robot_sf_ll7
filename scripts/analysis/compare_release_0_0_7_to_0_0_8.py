@@ -24,6 +24,11 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from robot_sf.benchmark.infeasible_probe_safe_failure import (
+    DECLARED_PROBE_EPISODES,
+    PROBE_SCENARIO_IDS,
+    classify_probe_slots,
+)
 from scripts.analysis.compare_issue_9431_release import (
     EXPECTED_SUCCESSOR_SCENARIO_MANIFEST,
     EXPECTED_SUCCESSOR_SCENARIO_MANIFEST_SHA256,
@@ -128,6 +133,8 @@ def _insert_rows(
         compact = {
             "outcome": row["outcome"],
             "metrics": row["metrics"],
+            "termination_reason": row.get("termination_reason"),
+            "integrity": row.get("integrity"),
             "_source_commit": _row_source_commit(row),
         }
         if retain_provenance:
@@ -803,6 +810,76 @@ def _display(value: Any) -> str:
     )
 
 
+def _root_failure_slots(root: Path) -> set[tuple[str, str, str, int]]:
+    """Read batch failure records (planner exceptions) from runs/*/summary.json.
+
+    A planner exception writes no episode row; the batch runner records
+    ``{scenario_id, seed, error}`` in the run summary ``failures`` list.
+
+    Returns:
+        Failure identities as (planner, kinematics, scenario_id, seed).
+
+    Raises:
+        ValueError: If a run summary exists but its failures cannot be read.
+    """
+    found: set[tuple[str, str, str, int]] = set()
+    for path in sorted(root.glob("runs/*/summary.json")):
+        try:
+            failures = json.loads(path.read_text(encoding="utf-8")).get("failures") or []
+        except (OSError, ValueError, AttributeError) as exc:
+            raise ValueError(f"unreadable run summary {path}: {exc}") from exc
+        if not isinstance(failures, list):
+            raise ValueError(f"run summary failures is not a list: {path}")
+        planner, kinematics = _run_identity(path.parent.name)
+        for item in failures:
+            if isinstance(item, dict) and isinstance(item.get("scenario_id"), str):
+                if type(item.get("seed")) is int:
+                    found.add((planner, kinematics, item["scenario_id"], item["seed"]))
+    return found
+
+
+def _probe_gate(
+    new: dict[tuple[str, str, str, int, str], dict[str, Any]],
+    expected_slots: set[tuple[str, str, str, int, str]],
+    duplicates: Any = (),
+    failure_slots: Any = (),
+) -> dict[str, Any] | None:
+    """Compute the doorway safe-failure metric or refuse to report probe rows.
+
+    Blocking gate for issue #9974: the observed probe slots must equal the
+    expected probe slots exactly (arm and seed, exact probe scenario id), with
+    no duplicate and no extra probe slot. Only the ``new`` rows of those slots
+    are classified. A missing slot with a batch failure record is a crash.
+
+    Returns:
+        The metric summary, or None when the successor has no probe slots or rows.
+
+    Raises:
+        ValueError: If probe slots are inexact or the metric cannot be computed.
+    """
+    probe_slots = {slot for slot in expected_slots if slot[2] in PROBE_SCENARIO_IDS}
+    observed = {slot for slot in new if slot[2] in PROBE_SCENARIO_IDS}
+    if not probe_slots and not observed:
+        return None
+    extra = observed - probe_slots
+    duplicated = {slot for slot in duplicates if slot[2] in PROBE_SCENARIO_IDS}
+    if len(probe_slots) != DECLARED_PROBE_EPISODES or extra or duplicated:
+        raise ValueError(
+            "infeasible probe safe_failure_metric not computed: "
+            f"{len(probe_slots)} expected probe slots (declared {DECLARED_PROBE_EPISODES}), "
+            f"{len(extra)} extra, {len(duplicated)} duplicated"
+        )
+    summary = classify_probe_slots(
+        probe_slots, {slot: new[slot] for slot in observed & probe_slots}, failure_slots
+    )
+    if summary["status"] == "fail_admission":
+        raise ValueError(
+            "infeasible probe safe_failure_metric not computed: "
+            f"{len(observed)} rows of {len(probe_slots)} slots, classes {summary['class_counts']}"
+        )
+    return summary
+
+
 def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
     baseline_bundle: Path | None,
     successor_root: Path,
@@ -880,6 +957,9 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
             verified_successor["runtime_rows"],
             successor_identity["source_commit"],
         )
+    probe_summary = _probe_gate(
+        new, expected_slots, duplicates, _root_failure_slots(successor_root)
+    )
     rules = _read_rules(classification_file)
     broad_rules = []
     for rule in rules:
@@ -1082,6 +1162,7 @@ def compare(  # noqa: C901, PLR0912, PLR0913, PLR0915
         "only_0_0_8": len(set(new) - set(old)),
         "unexplained_count": unexplained,
         "status": "classified" if unexplained == 0 else "unexplained",
+        "infeasible_probe_safe_failure": probe_summary,
         "findings": findings,
         "rules": rule_coverage,
         "broad_rule_bound_threshold": broad_rule_bound_threshold,
@@ -1113,6 +1194,16 @@ def write_report(report: Mapping[str, Any], output_dir: Path) -> None:
         f"- Release-only rows: 0.0.7 `{report['only_0_0_7']}`, 0.0.8 `{report['only_0_0_8']}`.",
         f"- Findings: `{len(report['findings'])}`; unexplained: `{report['unexplained_count']}`.",
         f"- Verified successor manifest SHA-256: `{report['successor']['verified_manifest_sha256']}`.",
+        *(
+            [
+                "- Doorway probe safe-failure rate: "
+                f"`{report['infeasible_probe_safe_failure']['safe_failure_rate']}` "
+                f"({report['infeasible_probe_safe_failure']['class_counts']}); "
+                f"status `{report['infeasible_probe_safe_failure']['status']}`."
+            ]
+            if report["infeasible_probe_safe_failure"]
+            else []
+        ),
         "- Classification rules are analyst claims; this audit does not prove causality or admit a release.",
         "",
         "## Broad rules",
@@ -1163,6 +1254,10 @@ def main() -> int:
         write_report(report, args.output_dir)
     except (OSError, ValueError, json.JSONDecodeError, tarfile.TarError) as exc:
         parser.exit(2, f"comparison failed: {exc}\n")
+    probe = report.get("infeasible_probe_safe_failure")
+    if probe is not None and probe["status"] == "defect":
+        print("infeasible probe defect: a probe episode succeeded", file=sys.stderr)
+        return 1
     return 0 if report["unexplained_count"] == 0 else 1
 
 

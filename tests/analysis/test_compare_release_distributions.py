@@ -92,6 +92,7 @@ def test_definition_changed_never_differenced_and_success_support():
     assert jerk["name_0_0_7"] == "jerk_mean@v1"
     assert jerk["name_0_0_8"] == "jerk_mean@v2"
     assert cell(report, "snqi_v2")["release_0_0_7"]["estimate"] is None
+    assert cell(report, "snqi_v2")["sufficient"]
     insufficient = cmp.compare_samples(rows(successes=4), rows(release="0.0.8"))
     assert not cell(insufficient, "path_efficiency")["release_0_0_7"]["sufficient"]
     assert cell(insufficient, "path_efficiency")["release_0_0_7"]["estimate"] is None

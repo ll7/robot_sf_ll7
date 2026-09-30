@@ -324,7 +324,9 @@ def _cell(
         "metric": metric,
         "definition_status": status,
         "definition_changed": status == "changed",
-        "sufficient": all(s["sufficient"] and s["n_defined"] > 0 for s in summaries),
+        "sufficient": (b["sufficient"] and b["n_defined"] > 0)
+        if status == "0.0.8-only"
+        else all(s["sufficient"] and s["n_defined"] > 0 for s in summaries),
         "name_0_0_7": f"{metric}@v1" if status == "changed" else metric,
         "name_0_0_8": f"{metric}@v2" if status != "same" else metric,
         "release_0_0_7": a,

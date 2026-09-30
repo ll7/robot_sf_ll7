@@ -6,6 +6,7 @@ import json
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from robot_sf.benchmark.map_runner.map_runner_episode import (
     _build_reset_provenance,
@@ -13,6 +14,7 @@ from robot_sf.benchmark.map_runner.map_runner_episode import (
     _read_sampler_capture,
     _read_simulator_ped_headings,
     _step_build_simulation_trace,
+    _step_hybrid_and_planner_stats,
     _StepLoopState,
     _surface_clearances_m,
     _trace_surface_radii_m,
@@ -525,3 +527,23 @@ def test_read_sampler_capture_returns_mapping_only_for_well_formed_records() -> 
         simulator=SimpleNamespace(sampler_capture=SimpleNamespace(to_mapping=_boom))
     )
     assert _read_sampler_capture(raising) is None
+
+
+@pytest.mark.parametrize("rejected", [False, True])
+def test_simulation_trace_records_no_admissible_command_without_decision_trace(rejected) -> None:
+    """Simulation trace alone samples live fallback diagnostics, including false values."""
+    state, slc, sim = _step_harness()
+    slc.record_planner_decision_trace = False
+    slc.policy_fn = lambda obs: (0.0, 0.0)
+    slc.planner_native_action = False
+    decision = {"no_admissible_command": rejected, "no_admissible_command_count": int(rejected)}
+    _native, sampled = _step_hybrid_and_planner_stats(
+        state,
+        slc,
+        planner_stats=lambda: {"last_decision": decision},
+    )
+    sim.planner_step_decision = sampled
+    _step_build_simulation_trace(state, slc, step_idx=0, sim=sim)
+    block = state.simulation_step_trace[0]["planner"]
+    assert block.get("no_admissible_command") is rejected
+    assert block.get("no_admissible_command_count") == int(rejected)

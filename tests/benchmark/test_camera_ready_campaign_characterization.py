@@ -372,7 +372,9 @@ def test_resume_partial_plan_is_deterministic_and_context_mismatch_is_fail_close
         json.dumps({"campaign_id": "campaign", "config_hash": "config"}) + "\n",
         encoding="utf-8",
     )
-    (arm_dir / "episodes.jsonl").write_text('{"episode_id": "fixture-1"}\n', encoding="utf-8")
+    (arm_dir / "episodes.jsonl").write_text(
+        '{"episode_id": "fixture-1", "scenario_id": "unknown", "seed": 0}\n', encoding="utf-8"
+    )
     cfg = SimpleNamespace(
         resume=True,
         planners=(SimpleNamespace(key="goal", enabled=True),),

@@ -66,20 +66,84 @@ def _count_jsonl_episodes(episodes_path: Path) -> int:
     return count
 
 
-def _expected_jobs(scenarios: list[dict[str, Any]]) -> int:
-    """Return the number of jobs ``run_batch`` would expand from *scenarios*.
+def _expected_job_identities(
+    scenarios: list[dict[str, Any]], *, scenario_path: Path | None = None
+) -> set[tuple[str, int]]:
+    """Return the logical jobs produced by the campaign's actual batch expansion.
 
-    Mirrors the logic in ``runner._expand_jobs``: each scenario has a
-    ``repeats`` field (default 1) since the campaign orchestrator never sets
-    ``repeats_override``.
+    Map jobs use effective per-scenario seeds (already patched by the campaign
+    seed policy), with the runner's suite fallback. Synthetic repeats use seed
+    offsets; map execution does not expand a separate repeat dimension.
     """
-    total = 0
-    for sc in scenarios:
-        repeats = sc.get("repeats", 1)
-        if isinstance(repeats, bool) or not isinstance(repeats, int) or repeats < 0:
-            raise ValueError(f"scenario repeats must be a non-negative integer, got {repeats!r}")
-        total += repeats
-    return total
+    is_map = any("map_file" in sc or "simulation_config" in sc for sc in scenarios)
+    if is_map:
+        from robot_sf.benchmark.map_runner.map_runner_batch_plan import (  # noqa: PLC0415
+            build_seed_jobs,
+        )
+        from robot_sf.benchmark.map_runner.map_runner_identity import (  # noqa: PLC0415
+            _resolve_seed_list,
+            _suite_key,
+        )
+        from robot_sf.common.artifact_paths import get_repository_root  # noqa: PLC0415
+
+        repo = get_repository_root()
+        jobs = build_seed_jobs(
+            scenarios,
+            suite_seeds=_resolve_seed_list(repo / "configs/benchmarks/seed_list_v1.yaml"),
+            suite_key=_suite_key(scenario_path or repo / "scoped_scenarios.json"),
+        )
+    else:
+        from robot_sf.benchmark.runner import _expand_jobs  # noqa: PLC0415
+
+        for sc in scenarios:
+            repeats = sc.get("repeats", 1)
+            if isinstance(repeats, bool) or not isinstance(repeats, int) or repeats < 0:
+                raise ValueError(
+                    f"scenario repeats must be a non-negative integer, got {repeats!r}"
+                )
+        jobs = _expand_jobs(scenarios)
+    identities = [
+        (
+            str(sc.get("name") or sc.get("scenario_id") or sc.get("id") or "unknown")
+            if is_map
+            else str(sc.get("id", "unknown")),
+            seed,
+        )
+        for sc, seed in jobs
+    ]
+    if len(set(identities)) != len(identities):
+        raise ValueError("campaign plan contains duplicate job identities")
+    return set(identities)
+
+
+def _expected_jobs(scenarios: list[dict[str, Any]]) -> int:
+    """Return the number of distinct jobs the campaign's batch runner would execute."""
+    return len(_expected_job_identities(scenarios))
+
+
+def _validate_resume_job_identities(episodes_path: Path, expected: set[tuple[str, int]]) -> None:
+    """Refuse duplicate, unknown, or malformed logical rows before reusing an arm."""
+    seen: set[tuple[str, int]] = set()
+    with episodes_path.open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            try:
+                identity = (str(record["scenario_id"]), int(record["seed"]))
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ResumeMismatchError(
+                    f"malformed resume job identity on line {line_number} in {episodes_path}"
+                ) from exc
+            if identity in seen:
+                raise ResumeMismatchError(
+                    f"duplicate resume job identity {identity} in {episodes_path}"
+                )
+            if identity not in expected:
+                raise ResumeMismatchError(
+                    f"unexpected resume job identity {identity} in {episodes_path}"
+                )
+            seen.add(identity)
 
 
 def _prior_config_hash(campaign_root: Path) -> str | None:
@@ -172,6 +236,7 @@ def build_resume_plan(
     kinematics_matrix: list[str],
     scenarios: list[dict[str, Any]],
     expected_jobs: int | None = None,
+    scenario_path: Path | None = None,
 ) -> list[ArmResumeVerdict]:
     """Build a resume plan by inspecting existing arm directories.
 
@@ -182,15 +247,20 @@ def build_resume_plan(
         kinematics_matrix: List of kinematics variants to run.
         scenarios: Scenario list that would be passed to ``run_batch``.
         expected_jobs: Optional precomputed expected job count. If not given,
-            computed from scenario ``repeats`` fields.
+            computed from the actual batch job identities.
+        scenario_path: Campaign matrix path used for map-runner seed-suite fallbacks.
 
     Returns:
         List of ``ArmResumeVerdict`` objects describing the plan for each arm.
     """
+    identities = _expected_job_identities(scenarios, scenario_path=scenario_path)
     if expected_jobs is None:
-        expected_jobs = _expected_jobs(scenarios)
+        expected_jobs = len(identities)
     elif isinstance(expected_jobs, bool) or not isinstance(expected_jobs, int) or expected_jobs < 0:
         raise ValueError(f"expected_jobs must be a non-negative integer, got {expected_jobs!r}")
+
+    if expected_jobs != len(identities):
+        raise ValueError("expected_jobs disagrees with the campaign job identities")
 
     enabled_planners = [p for p in planners if isinstance(p, dict) and p.get("enabled", True)]
 
@@ -212,6 +282,9 @@ def build_resume_plan(
             summary_path = arm_dir / "summary.json" if arm_dir.exists() else None
             if summary_path is not None and summary_path.exists():
                 prior_summary = load_optional_json(str(summary_path))
+
+            if episodes_path is not None and episodes_path.is_file():
+                _validate_resume_job_identities(episodes_path, identities)
 
             episodes_remaining = max(0, expected_jobs - episodes_found)
             verdict = _build_verdict_str(episodes_found, expected_jobs)

@@ -52,6 +52,7 @@ def _write_episodes_jsonl(path: Path, count: int) -> None:
         for i in range(count):
             record: dict[str, Any] = {
                 "success": True,
+                "scenario_id": "s1",
                 "episode": i,
                 "seed": i,
                 "scenario_params": {"algo": "test"},
@@ -108,11 +109,11 @@ class TestExpectedJobs:
     """Tests for _expected_jobs."""
 
     def test_no_repeats_defaults_to_one(self) -> None:
-        scenarios = [{"name": "s1"}, {"name": "s2"}]
+        scenarios = [{"id": "s1"}, {"id": "s2"}]
         assert _expected_jobs(scenarios) == 2
 
     def test_respects_repeats_field(self) -> None:
-        scenarios = [{"name": "s1", "repeats": 3}, {"name": "s2", "repeats": 2}]
+        scenarios = [{"id": "s1", "repeats": 3}, {"id": "s2", "repeats": 2}]
         assert _expected_jobs(scenarios) == 5
 
     def test_empty_scenarios(self) -> None:
@@ -120,11 +121,11 @@ class TestExpectedJobs:
 
     def test_rejects_negative_repeats(self) -> None:
         with pytest.raises(ValueError, match="non-negative"):
-            _expected_jobs([{"name": "s1", "repeats": -1}])
+            _expected_jobs([{"id": "s1", "repeats": -1}])
 
     def test_rejects_non_integer_repeats(self) -> None:
         with pytest.raises(ValueError, match="non-negative"):
-            _expected_jobs([{"name": "s1", "repeats": "3"}])
+            _expected_jobs([{"id": "s1", "repeats": "3"}])
 
 
 # --- _build_verdict_str ---
@@ -210,7 +211,7 @@ class TestBuildResumePlan:
         runs_dir = tmp_path / "runs"
         runs_dir.mkdir()
         planners = [{"key": "sf", "enabled": True}]
-        scenarios = [{"name": "s1", "repeats": 3}]
+        scenarios = [{"id": "s1", "repeats": 3}]
         verdicts = build_resume_plan(
             runs_dir,
             planners=planners,
@@ -230,7 +231,7 @@ class TestBuildResumePlan:
         arm_name = "sf__differential_drive"
         _write_arm(runs_dir, arm_name, episodes=3)
         planners = [{"key": "sf", "enabled": True}]
-        scenarios = [{"name": "s1", "repeats": 3}]
+        scenarios = [{"id": "s1", "repeats": 3}]
         verdicts = build_resume_plan(
             runs_dir,
             planners=planners,
@@ -248,7 +249,7 @@ class TestBuildResumePlan:
         arm_name = "sf__differential_drive"
         _write_arm(runs_dir, arm_name, episodes=2)
         planners = [{"key": "sf", "enabled": True}]
-        scenarios = [{"name": "s1", "repeats": 5}]
+        scenarios = [{"id": "s1", "repeats": 5}]
         verdicts = build_resume_plan(
             runs_dir,
             planners=planners,
@@ -267,7 +268,7 @@ class TestBuildResumePlan:
             {"key": "sf", "enabled": True},
             {"key": "rl", "enabled": False},
         ]
-        scenarios = [{"name": "s1"}]
+        scenarios = [{"id": "s1"}]
         verdicts = build_resume_plan(
             runs_dir,
             planners=planners,
@@ -281,7 +282,7 @@ class TestBuildResumePlan:
         runs_dir = tmp_path / "runs"
         runs_dir.mkdir()
         planners = [{"key": "sf", "enabled": True}]
-        scenarios = [{"name": "s1"}]
+        scenarios = [{"id": "s1"}]
 
         # Pre-populate one arm with 1 episode, leave other empty
         _write_arm(runs_dir, "sf__differential_drive", episodes=1)
@@ -303,9 +304,9 @@ class TestBuildResumePlan:
         runs_dir = tmp_path / "runs"
         runs_dir.mkdir()
         planners = [{"key": "sf", "enabled": True}]
-        scenarios = [{"name": "s1", "repeats": 10}]
+        scenarios = [{"id": "s1", "repeats": 5}]
 
-        # Override expected_jobs to 5
+        # Supply the precomputed count for the same five identities
         verdicts = build_resume_plan(
             runs_dir,
             planners=planners,
@@ -325,7 +326,7 @@ class TestBuildResumePlan:
                 runs_dir,
                 planners=[{"key": "sf", "enabled": True}],
                 kinematics_matrix=["differential_drive"],
-                scenarios=[{"name": "s1"}],
+                scenarios=[{"id": "s1"}],
             )
 
 
@@ -347,7 +348,7 @@ class TestResumePlanSummary:
             {"key": "rl", "enabled": True},
             {"key": "ho", "enabled": True},
         ]
-        scenarios = [{"name": "s1", "repeats": 10}]
+        scenarios = [{"id": "s1", "repeats": 10}]
         verdicts = build_resume_plan(
             runs_dir,
             planners=planners,
@@ -377,7 +378,7 @@ class TestWriteResumePlan:
         runs_dir.mkdir()
 
         planners = [{"key": "sf", "enabled": True}]
-        scenarios = [{"name": "s1", "repeats": 5}]
+        scenarios = [{"id": "s1", "repeats": 5}]
         _write_arm(runs_dir, "sf__differential_drive", episodes=3)
 
         verdicts = build_resume_plan(
@@ -419,7 +420,7 @@ class TestWriteResumePlan:
         _write_arm(runs_dir, "arm5__differential_drive", episodes=562)
 
         planners = [{"key": f"arm{i}", "enabled": True} for i in range(6)]
-        scenarios = [{"name": "s1", "repeats": 1000}]
+        scenarios = [{"id": "s1", "repeats": 1000}]
         verdicts = build_resume_plan(
             runs_dir,
             planners=planners,
@@ -449,7 +450,7 @@ class TestEmitResumePlanLog:
         runs_dir = tmp_path / "runs"
         runs_dir.mkdir()
         planners = [{"key": "sf", "enabled": True}]
-        scenarios = [{"name": "s1"}]
+        scenarios = [{"id": "s1"}]
         verdicts = build_resume_plan(
             runs_dir,
             planners=planners,
@@ -480,7 +481,7 @@ class TestFullResumePlanFlow:
             {"key": "sf", "enabled": True},
             {"key": "rl", "enabled": True},
         ]
-        scenarios = [{"name": "s1", "repeats": 5}]
+        scenarios = [{"id": "s1", "repeats": 5}]
 
         # Verify should pass
         verify_resume_context(campaign_root, campaign_id="resume-test", config_hash="chk-001")

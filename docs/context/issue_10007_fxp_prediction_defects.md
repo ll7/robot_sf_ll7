@@ -1,8 +1,10 @@
 # Issue #10007: prediction planner defects, lane FXP
 
 Base: PR #9926 branch `codex/issue-9750-physical-radius-fix-20260929`,
-`d41cceb7f9422337bd34b602ae49f3dddbddb2a5`. The hunt report was treated as leads;
-A1–A4 were confirmed against those checkout bytes before edits. No retraining,
+`b3fa204dc4eda5004d67e4fcf518f3370fcd0966`. The hunt report was treated as leads;
+A1–A4 were first confirmed at `d41cceb7f` and reconfirmed at this latest base after
+#9926 advanced; its relevant planner, collector and release-config bytes were unchanged.
+No retraining,
 held-out evaluation, frozen YAML changes, 0.0.2/0.0.7 artifact changes, release,
 or merge was performed. This is implementation and scorer diagnostic evidence,
 not a planner ranking, navigation-success improvement, or release admission.
@@ -15,8 +17,10 @@ and actual environment observations from `classic_doorway_low` and
 `classic_bottleneck_medium`, seeds **1001, 1002, 1003 only**. It advances the
 collector's deterministic goal policy for at most 160 steps per episode,
 stopping on environment termination: 157 doorway and 269 bottleneck observations,
-426 total per revision. The two captures have exactly equal scenario/seed/tick,
-heading, pedestrian count, and nearest-wall distance. At most two serial probe
+426 total per revision. The corrected scorer replays the base capture, preserving
+every observation array
+with its original dtype/shape. Per-observation SHA-256 digests are identical,
+alongside scenario/seed/tick, heading, count, and wall-distance equality. At most two serial probe
 processes ran concurrently; each owned one environment.
 
 For A2, it compares costs on the actual map grid against the same grid with only
@@ -26,14 +30,16 @@ nearest occupied cell, keeping the original grid-pose metadata and actual sample
 robot position; it scores a legal 1.6 m/s straight command, masking pedestrians
 from both comparisons. This is a diagnostic counterfactual, not an executed
 navigation rollout. Unmodified candidate scoring is also retained in the raw
-captures. Most ordinary candidates did not reach wall cells within 0.8 s; two
+captures. Most ordinary candidates did not reach wall cells within 0.8 s; four
 ordinary doorway sequence scores gained 0.03125. Do not infer fewer collisions.
 
 The [summary](evidence/issue_10007_fxp/summary.json) preserves aggregates and
 concrete counterexamples. The [manifest](evidence/issue_10007_fxp/manifest.json)
-pins source files, probe, checkpoint, and raw-capture digests. Raw JSON/logs remain
-in the lane's external evidence directory; the summary and reproducible probe
-are committed. Existing model assets remain portable through the registry's
+pins source files, probe, checkpoint, and raw-capture digests. The gzip JSON [observation snapshot](evidence/issue_10007_fxp/observations.jsonl.gz),
+[base failures](evidence/issue_10007_fxp/regression_base.txt),
+[validation log](evidence/issue_10007_fxp/validation.txt), summary, and probe are
+committed. Complete scorer JSON and additional raw logs remain in the lane's
+external evidence directory. Existing model assets remain portable through the registry's
 `artifact/models-2026-05-registry-v1` release. No new model was produced.
 
 ## A1 — confirmed collector defect; historical model exposure needs retraining
@@ -54,7 +60,7 @@ remain separate. Existing model bytes and registry entries are unchanged.
 | Dev map | Mean collector/serving velocity error, before | After |
 | --- | ---: | ---: |
 | Bottleneck medium | 0.728898 m/s | 0.000000 m/s |
-| Doorway low | 1.099137 m/s | 0.000000 m/s |
+| Doorway low | 1.196829 m/s | 0.000000 m/s |
 
 Both collectors have the same errors and both reach zero. These are feature
 errors, not model ADE/FDE improvements. Regression:
@@ -245,8 +251,9 @@ counts rather than forcing a nominal number by duplicating more rows. Float32
 state/target/mask/target-mask payload is about **32.3 MiB at 12,163 samples** or
 **127.4 MiB at 47,980**, before compression; reserve 5 GiB for datasets, manifests,
 logs, checkpoints, and proxy traces. Hold out complete collection episodes for
-validation in a successor recipe; overlapping windows from one episode otherwise
-make the historical random window split optimistic. This is a separately declared
+validation in a successor recipe, using separate collection manifests or retained
+episode IDs; the current trainer's random window split does not provide this by
+itself. Overlapping windows from one episode otherwise make that split optimistic. This is a separately declared
 recipe difference, not bitwise reproduction of the old model.
 
 Resource/time plan, explicitly **reservation estimates rather than measured training
@@ -320,7 +327,11 @@ python -m pytest -n0 tests/planner/test_prediction_fxp_regressions.py \
 gh release download artifact/models-2026-05-registry-v1 --repo ll7/robot_sf_ll7 \
   --pattern 'predictive_proxy_selected_v1-predictive_model.pt' \
   --pattern 'predictive_proxy_selected_v2_full-predictive_model.pt' --dir /tmp/fxp-models
-python docs/context/evidence/issue_10007_fxp/probe.py /tmp/fxp-after.json /tmp/fxp-models
+# Capture base observations in the base checkout, then replay them after fixing.
+python docs/context/evidence/issue_10007_fxp/probe.py /tmp/fxp-before.json /tmp/fxp-models
+# Run this command from the fixed checkout, with the same probe source.
+python docs/context/evidence/issue_10007_fxp/probe.py /tmp/fxp-after.json /tmp/fxp-models \
+  docs/context/evidence/issue_10007_fxp/observations.jsonl.gz
 ```
 
 For the base comparator, create a detached worktree at the pinned base, copy only

@@ -23,6 +23,7 @@ def _assert_pinned_modules(checkout: Path) -> None:
         "robot_sf.benchmark.utils",
         "robot_sf.benchmark.algorithm_metadata",
         "robot_sf.benchmark.observation_noise",
+        "robot_sf.benchmark.release_candidate",
         "robot_sf.benchmark.release_parameter_freeze",
         "pysocialforce",
     ):
@@ -69,6 +70,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
     from robot_sf.benchmark.observation_noise import (
         normalize_observation_noise_spec,
         observation_noise_hash,
+    )
+    from robot_sf.benchmark.release_candidate import (
+        _APPROVED_008_HYBRID_ALGO_OVERRIDES as APPROVED_008_HYBRID_ALGO_OVERRIDES,
     )
     from robot_sf.benchmark.release_parameter_freeze import (
         ARM_SLOTS_0_0_7_TO_0_0_8,
@@ -265,9 +269,29 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
         )
         effective = _apply_scenario_uncertainty_envelope_config(algo, effective, scoped_scenario)
         if slot[0] in versioned_keys:
-            if algo != planner["algo"]:
+            overrides = planner["config"].get("scenario_algo_overrides") or {}
+            override = overrides.get(slot[2]) if isinstance(overrides, dict) else None
+            approved = APPROVED_008_HYBRID_ALGO_OVERRIDES.get(slot[0], {}).get(slot[2])
+            # Exempt only the reviewed planner/scenario/algorithm/base tuple.
+            # Checking the effective algorithm alone would admit arbitrary ORCA
+            # bases, and checking the declaration alone would trust wrong resolution.
+            approved_handoff = (
+                approved is not None
+                and isinstance(override, dict)
+                and (override.get("algo"), override.get("base_config_path")) == approved
+                and algo == approved[0]
+                and _resolve_config_path(
+                    Path(planner["absolute_path"]).parent, override["base_config_path"]
+                )
+                == (checkout / approved[1]).resolve()
+            )
+            if algo != planner["algo"] and not approved_handoff:
                 raise ValueError(f"successor v4 slot resolves wrong algorithm: {slot}")
-            if effective.get("planner_variant") != V4_HYBRID_VARIANT:
+            if override is not None and not approved_handoff:
+                raise ValueError(
+                    f"successor v4 slot has unapproved algorithm/base override: {slot}"
+                )
+            if not approved_handoff and effective.get("planner_variant") != V4_HYBRID_VARIANT:
                 raise ValueError(f"successor planner row resolves non-v4 config: {slot}")
         spec = planner["spec"]
         effective_dt = spec.dt_override if spec.dt_override is not None else cfg.dt

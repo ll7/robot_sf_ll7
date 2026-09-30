@@ -5,7 +5,9 @@ Linear clipping fractions use the shared release interval [0,2], also for V3
 (counterfactual release clipping). Mean consecutive command differences are
 componentwise absolute differences in m/s and rad/s, never across episodes.
 Time to goal averages successful episodes only; no-pedestrian clearance is null.
-Fallback/degraded rows remain explicit and are excluded from navigation means.
+All diagnostic rows remain in the measured outcomes and motion summaries.
+Fallback/degraded and guard best-effort counts remain explicit; these aggregates
+are never successful benchmark evidence.
 """
 
 from __future__ import annotations
@@ -73,7 +75,6 @@ def summarize(rows):  # noqa: C901
         )
         if bad:
             excluded += 1
-            continue
         eligible.append(row)
         trace = meta.get("simulation_step_trace", {})
         steps = trace.get("steps")
@@ -98,6 +99,9 @@ def summarize(rows):  # noqa: C901
             for prev, now in pairwise(src):
                 for i in range(2):
                     dst[i].append(abs(now[i] - prev[i]))
+        clearance.extend(
+            p.get("surface_clearance_m") for p in trace["reset"].get("pedestrians", [])
+        )
         clearance.extend(p.get("surface_clearance_m") for s in steps for p in s["pedestrians"])
     n = len(eligible)
     negative = sum(c[0] < 0 for c in commands)
@@ -112,7 +116,8 @@ def summarize(rows):  # noqa: C901
         "raw_success": sum(r["outcome"]["route_complete"] for r in rows),
         "raw_collision": sum(r["outcome"]["collision_event"] for r in rows),
         "raw_timeout": sum(r["outcome"]["timeout_event"] for r in rows),
-        "eligible_episodes": n,
+        "eligible_episodes": n - excluded,
+        "metric_population": "all recorded diagnostic episodes, including guard best-effort",
         "excluded_fallback_degraded": excluded,
         "success": sum(r["outcome"]["route_complete"] for r in eligible),
         "collision": sum(r["outcome"]["collision_event"] for r in eligible),

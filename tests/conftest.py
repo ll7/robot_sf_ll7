@@ -413,6 +413,8 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Train coverage repair: deterministic SA-CADRL checkpoint capacity (#10008).
+    "test_socnav_sacadrl_module.py",
     # Train coverage repair: deterministic physical PPO drive contracts (#9995).
     "test_runner_ppo_drive_observation.py",
     # Train coverage repair: deterministic explicit bootstrap defaults (#10019).

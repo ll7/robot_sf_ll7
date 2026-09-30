@@ -200,7 +200,7 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
         lambda: social_force.step(object()),
     )
 
-    ppo = PPOPlanner.__new__(PPOPlanner)
+    ppo = PPOPlanner({}, defer_model_loading=True)
     ppo._ensure_model_loaded = lambda: None
     ppo._uses_dict_observation = lambda: False
     expect(

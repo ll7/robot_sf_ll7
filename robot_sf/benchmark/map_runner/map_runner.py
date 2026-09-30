@@ -1701,6 +1701,7 @@ def _build_guarded_ppo_policy(  # noqa: C901, PLR0915
         if callable(guard_close):
             guard_close()
 
+    _policy._ppoeval_proposal = lambda: dict(getattr(ppo_planner, "_ppoeval_proposal", {}))
     _policy._planner_close = _close_guarded_ppo
     _attach_checkpoint_runtime_stats(_policy, ppo_planner, ppo_config)
     _attach_guard_decision_stats(_policy, meta)

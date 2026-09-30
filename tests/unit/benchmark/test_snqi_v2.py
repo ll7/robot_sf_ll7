@@ -2027,7 +2027,13 @@ def test_calibration_acquisition_yaml_is_strict_and_hash_bound(tmp_path):
     source = ASSETS / "calibration.dev101_102.yaml"
     assert config.source_config_path == source
     assert config.source_config_sha256 == hashlib.sha256(source.read_bytes()).hexdigest()
-    assert config.horizon == 600
+    assert config.horizon is None
+    assert config.scenario_horizons_path == (
+        ROOT / "configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml"
+    )
+    assert config.scenario_horizons_sha256 == (
+        "3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650"
+    )
     assert config.seed_policy.seeds == (101, 102)
     path = tmp_path / "changed.yaml"
     path.write_bytes(source.read_bytes() + b"\n# bytes changed after canonical load\n")

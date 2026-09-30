@@ -1444,6 +1444,14 @@ def _resolve_episode_run_context(  # noqa: PLR0913
         horizon_val = 200
     if dt is not None and dt > 0:
         config.sim_config.time_per_step_in_secs = float(dt)
+    if (
+        scenario.get("metadata", {}).get("campaign_horizon", {}).get("mode") == "fixed"
+        or scenario.get("metadata", {}).get("scenario_horizon") is not None
+    ):
+        # Carry the integer campaign budget directly to RobotState. The duration
+        # remains useful metadata, but ceil((budget * dt) / dt) can add one step.
+        config.sim_config.episode_step_limit = horizon_val
+        config.sim_config.sim_time_in_secs = horizon_val * config.sim_config.time_per_step_in_secs
 
     robot_kinematics = _robot_kinematics_label(config)
     actuation_profile = _load_synthetic_actuation_profile(synthetic_actuation_profile)
@@ -3359,6 +3367,7 @@ def _step_collision_and_termination(
     *,
     step_idx: int,
     sim: _StepSimResult,
+    reached_max_steps: bool = False,
 ) -> bool:
     """Update collision/termination state and return whether the loop should break.
 
@@ -3417,6 +3426,8 @@ def _step_collision_and_termination(
             truncated=bool(sim.truncated),
             success=step_success,
             collision=step_collision,
+            timeout=step_timeout,
+            reached_max_steps=reached_max_steps,
         )
         return True
     return False
@@ -3648,7 +3659,13 @@ def _execute_step_loop(
         _step_build_simulation_trace(state, slc, step_idx=step_idx, sim=sim)
         _step_build_actuation_trace(state, step_idx=step_idx, sim=sim)
         _step_build_planner_decision_entry(state, slc, step_idx=step_idx, sim=sim)
-        if _step_collision_and_termination(state, slc, step_idx=step_idx, sim=sim):
+        if _step_collision_and_termination(
+            state,
+            slc,
+            step_idx=step_idx,
+            sim=sim,
+            reached_max_steps=step_idx + 1 >= horizon_val,
+        ):
             break
 
 
@@ -4878,6 +4895,9 @@ def _finalize_record_provenance(  # noqa: PLR0913
     track_schema_version: str | None,
 ) -> None:
     """Attach provenance, evidence, event ledger, and track fields to the record."""
+    record["effective_budget_steps"] = min(horizon_val, int(config.sim_config.max_sim_steps))
+    if scenario.get("metadata", {}).get("scenario_horizon") is not None:
+        scenario_params["run_horizon"] = record["effective_budget_steps"]
     pedestrian_model_provenance = build_pedestrian_model_provenance(
         sim_config=config.sim_config,
         policy_cfg=policy_cfg,

@@ -45,7 +45,9 @@ snqi_contract:
   calibration_seed: 123
   calibration_trials: 6000
 workers: 16
-horizon: 600
+# Match the candidate's authored per-scenario budgets, including H650/H700.
+scenario_horizons: configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml
+scenario_horizons_sha256: 3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650
 dt: 0.1
 record_forces: true
 checkpoint_provenance_enforcement: error

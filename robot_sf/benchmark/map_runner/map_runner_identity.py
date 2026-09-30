@@ -169,6 +169,10 @@ def _scenario_identity_payload(  # noqa: C901,PLR0913
     payload["record_simulation_step_trace"] = bool(record_simulation_step_trace)
     if horizon is not None and int(horizon) > 0:
         payload["run_horizon"] = int(horizon)
+    elif scenario.get("metadata", {}).get("scenario_horizon") is not None:
+        # Scheduled callers have no fixed horizon. Use the resolved integer budget
+        # at both write-time and resume-time so existing consumers see the same field.
+        payload["run_horizon"] = int(scenario["simulation_config"]["max_episode_steps"])
     if dt is not None and float(dt) > 0.0:
         payload["run_dt"] = float(dt)
     return payload

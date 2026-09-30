@@ -147,6 +147,8 @@ def _root(
             row.get("benchmark_track") or "",
         )
         if slot in runtime_rows:
+            # Carry the legitimate producer binding before applying episode controls.
+            row["scenario_params"].update(copy.deepcopy(runtime_rows[slot]["scenario"]))
             row["scenario_params"].update(runtime_rows[slot]["controls"])
             row["scenario_params"]["robot_config"] = {
                 "type": slot[1],
@@ -1227,7 +1229,9 @@ def test_recorded_episode_controls_must_match_pinned_h600_campaign(
     changed["scenario_params"][field] = wrong
     changed["config_hash"] = _config_hash(changed["scenario_params"])
     path.write_text(json.dumps(changed) + "\n")
-    with pytest.raises(ValueError, match="pinned (episode controls|slot)"):
+    with pytest.raises(
+        ValueError, match=rf"row {field} differs from pinned (episode controls|slot)"
+    ):
         _compare(bundle, root, digest)
     if field == "run_horizon":
         _assert_cli_exit_two(tmp_path, bundle, root, digest, monkeypatch)
@@ -1541,3 +1545,168 @@ def test_changed_definitions_suppress_paired_metric_delta(tmp_path, mixed_succes
     finding = next(x for x in report["findings"] if x["field"] == "metrics.path_length")
     assert finding["classification"] == "metric_definition_change"
     assert finding["delta_0_0_8_minus_0_0_7"] is None
+
+
+@pytest.mark.parametrize("budget", [None, 500, 700])
+def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
+    tmp_path: Path, budget: int | None
+) -> None:
+    """Compare producer binding and hashes for scheduled and fixed arms.
+
+    On base, H500 isolates a budget mismatch; scheduled/H700 cases fail on missing
+    provenance fields. Those metadata failures do not independently prove budget bugs.
+    """
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    import yaml
+
+    from robot_sf.benchmark.camera_ready import _util
+    from robot_sf.benchmark.camera_ready._config import (
+        _load_campaign_scenarios,
+        load_campaign_config,
+    )
+    from robot_sf.benchmark.camera_ready.campaign import _prepare_campaign_planner_variant_run
+    from robot_sf.benchmark.runner import _apply_track_metadata_to_scenarios
+
+    _, _, source, source_commit = _successor_contract(tmp_path)
+    # The minimal-row helper replaces this SVG; restore the real matrix input.
+    map_relative = "maps/svg_maps/classic_crossing.svg"
+    (source / map_relative).write_bytes((Path(__file__).parents[2] / map_relative).read_bytes())
+    template_path = (
+        source
+        / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+    )
+    payload = yaml.safe_load(template_path.read_text())
+    payload["planners"] = [p for p in payload["planners"] if p["key"] == "goal"]
+    if budget is not None:
+        payload["planners"][0]["horizon"] = budget
+    if budget is not None:
+        # A fixed-budget arm may shorten a declared scenario, but may not silently extend it.
+        # Keep real bottleneck geometry; this explicit fixture authors a 700-step limit.
+        from robot_sf.training.scenario_loader import load_scenarios
+
+        authored = [dict(s) for s in load_scenarios(source / payload["scenario_matrix"])]
+        for item in authored:
+            item["simulation_config"]["max_episode_steps"] = 700
+        fixture_matrix = source / "configs/scenarios/arm_budgets.yaml"
+        fixture_matrix.write_text(yaml.safe_dump(authored))
+        payload["scenario_matrix"] = "configs/scenarios/arm_budgets.yaml"
+        payload.pop("scenario_horizons", None)
+        payload.pop("scenario_horizons_sha256", None)
+        payload["horizon"] = 600
+    config_path = source / "configs/benchmarks/override.yaml"
+    config_path.write_text(yaml.safe_dump(payload))
+    with patch.object(_util, "get_repository_root", return_value=source):
+        cfg = load_campaign_config(config_path, repository_root=source)
+        scenarios = _load_campaign_scenarios(cfg, repository_root=source)
+        arm = _prepare_campaign_planner_variant_run(
+            SimpleNamespace(cfg=cfg, runs_dir=tmp_path / "runs", scenarios=scenarios),
+            planner=replace(
+                next(p for p in cfg.planners if p.key == "goal"), horizon_override=budget
+            ),
+            kinematics="differential_drive",
+            active_observation_mode="socnav_state",
+            log_run=False,
+        )
+        runner_scenarios = _apply_track_metadata_to_scenarios(
+            arm.scoped_scenarios,
+            observation_mode=None,
+            observation_level=None,
+            benchmark_track=None,
+            track_schema_version=None,
+            telemetry=cfg.telemetry,
+        )
+    scenario = next(s for s in runner_scenarios if s["name"] == "classic_bottleneck_low")
+    slot = (
+        "goal",
+        "differential_drive",
+        "classic_bottleneck_low",
+        111,
+        "",
+    )  # Static join key only.
+    worker = Path(comparator.__file__).with_name("_pinned_successor_runtime.py")
+    result = subprocess.run(
+        [sys.executable, "-I", str(worker)],
+        cwd=source,
+        input=json.dumps(
+            {
+                "config_path": "configs/benchmarks/override.yaml",
+                "versioned_keys": sorted(V4_SLOT_REPLACEMENTS.values()),
+                "rows": [{"slot": slot, "scenario_params": {}}],
+            }
+        ),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    resolved = json.loads(result.stdout)
+    expected = resolved["rows"][0]
+    assert expected["scenario"]["simulation_config"]["max_episode_steps"] == (budget or 500)
+    if budget is None:
+        assert (
+            expected["scenario"]["metadata"]["scenario_horizon"]["recommended_horizon_steps"] == 500
+        )
+        assert (
+            expected["scenario"]["metadata"]["scenario_horizon"]["sha256"]
+            == payload["scenario_horizons_sha256"]
+        )
+    else:
+        assert expected["scenario"]["metadata"]["campaign_horizon"] == {
+            "mode": "fixed",
+            "horizon_steps": budget,
+            "authored_max_episode_steps": 700,
+        }
+    scoped_hash = next(
+        item["hash"] for item in resolved["scoped_hashes"] if item["planner"] == "goal"
+    )
+    assert scoped_hash == _config_hash(runner_scenarios)
+    # Static recorded-row reconstruction only; the worker does not step a planner.
+    params = {
+        **scenario,
+        **expected["controls"],
+        "seed": 111,  # seed-holdout: setup-only
+        "algo": "goal",
+    }
+    # The resolver hashes the recorded row as well as reconstructing its controls.
+    result = subprocess.run(
+        [sys.executable, "-I", str(worker)],
+        cwd=source,
+        input=json.dumps(
+            {
+                "config_path": "configs/benchmarks/override.yaml",
+                "versioned_keys": sorted(V4_SLOT_REPLACEMENTS.values()),
+                "rows": [{"slot": slot, "scenario_params": params}],
+            }
+        ),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    expected = json.loads(result.stdout)["rows"][0]
+    recorded = {
+        "algo": "goal",
+        "planner_key": "goal",
+        "kinematics": "differential_drive",
+        "observation_mode": None,
+        "observation_level": None,
+        "observation_noise": None,
+        "observation_noise_hash": None,
+        "scenario_params": params,
+        "config_hash": _config_hash(params),
+        "algorithm_metadata": {
+            "algorithm": "goal",
+            "config": expected["config"],
+            "config_hash": expected["config_hash"],
+        },
+        "provenance": {
+            "commit_hash": source_commit,
+            "config_identity": {"algo": "goal", "algo_config_path": None},
+        },
+    }
+    comparator._validate_successor_row(
+        slot, {"_provenance": recorded}, {slot: expected}, source_commit
+    )

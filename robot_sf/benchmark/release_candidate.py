@@ -97,9 +97,9 @@ _APPROVED_008_HYBRID_CONFIGS = {
     ),
 }
 _APPROVED_008_ACTIVE_WAYPOINT_CONFIGS = {
-    "risk_dwa": "configs/algos/risk_dwa_camera_ready_goal_v2.yaml",
-    "predictive_mppi": "configs/algos/predictive_mppi_camera_ready_goal_v2.yaml",
-    "guarded_ppo": "configs/algos/guarded_ppo_camera_ready_cpu_goal_v2.yaml",
+    "risk_dwa": "configs/algos/risk_dwa_release_v0_0_8.yaml",
+    "predictive_mppi": "configs/algos/predictive_mppi_release_v0_0_8.yaml",
+    "guarded_ppo": "configs/algos/guarded_ppo_release_v0_0_8.yaml",
 }
 # Single reviewed override table for every slot. Non-hybrid additions require approval.
 _APPROVED_008_HYBRID_ALGO_OVERRIDES = {

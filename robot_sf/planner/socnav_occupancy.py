@@ -6,6 +6,7 @@ import numpy as np
 
 from robot_sf.nav.occupancy_grid import OBSERVATION_CHANNEL_ORDER
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
+from robot_sf.planner.clearance_geometry import StaticObstacleClearance
 
 
 class OccupancyAwarePlannerMixin:
@@ -24,6 +25,49 @@ class OccupancyAwarePlannerMixin:
         if pad is not None and arr.size < pad:
             arr = np.pad(arr, (0, pad - arr.size), constant_values=default)
         return arr
+
+    def _bind_static_obstacles(self, env: Any) -> None:
+        """Bind only static geometry from the same source as the live occupancy grid.
+
+        Binding occurs after each episode reset. No pedestrian state, route, or
+        future information is accessed; PPO's observation schema stays intact.
+        Unbound standalone observations retain the conservative cell evaluator.
+        """
+        geometry_source = getattr(env, "_get_static_grid_obstacles", None)
+        self._static_clearance = None
+        if callable(geometry_source):
+            segments, polygons = geometry_source()
+            self._static_clearance = StaticObstacleClearance(segments, polygons)
+
+    def _static_recovery_available(self) -> bool:
+        """Require continuous, bound static geometry for below-margin recovery.
+
+        Returns:
+            bool: Whether the static recovery exception can be evaluated.
+        """
+        return (
+            self.config.clearance_model == "surface_v2"
+            and getattr(self, "_static_clearance", None) is not None
+        )
+
+    def _exact_obstacle_clearance(self, point: np.ndarray, *, previous=None) -> float | None:
+        """Return bound static surface clearance or None for the raster fallback."""
+        geometry = getattr(self, "_static_clearance", None)
+        if geometry is None or self.config.clearance_model != "surface_v2":
+            return None
+        radius = getattr(self.config, "robot_radius_m", None)
+        if radius is None:
+            radius = self.config.socnav.predictive_robot_radius
+        return geometry.clearance(point, float(radius), previous)
+
+    def _obstacle_motion_clearance(self, point, previous, observation, grid_payload) -> float:
+        """Return continuous swept clearance when bound, else conservative grid clearance."""
+        exact = self._exact_obstacle_clearance(point, previous=previous)
+        if exact is not None:
+            return exact
+        return self._min_obstacle_clearance(
+            point, observation=observation, grid_payload=grid_payload
+        )
 
     def _extract_grid_payload(self, observation: dict) -> tuple[np.ndarray, dict[str, Any]] | None:
         """Extract occupancy grid tensor and metadata from observation.
@@ -96,6 +140,9 @@ class OccupancyAwarePlannerMixin:
                 "position": pos_arr,
                 "heading": self._as_1d_float(observation.get("robot_heading", [0.0]), pad=1),
                 "speed": self._as_1d_float(observation.get("robot_speed", [0.0]), pad=1),
+                "angular_velocity": self._as_1d_float(
+                    observation.get("robot_angular_velocity", [0.0]), pad=1
+                ),
                 "radius": self._as_1d_float(observation.get("robot_radius", [0.0]), pad=1),
             }
             goal_state = {
@@ -150,6 +197,12 @@ class OccupancyAwarePlannerMixin:
     ) -> tuple[int, int] | None:
         """Convert world coordinates to grid row/col using metadata.
 
+        The closed upper edge (origin + size) clamps to the last cell. Points
+        strictly outside return None: occupancy callers treat them as occupied,
+        while surface-clearance callers return minus the robot radius. An empty
+        grid at the exact edge still has infinite clearance; no virtual boundary
+        obstacle is added for a body extending beyond the grid.
+
         Returns:
             tuple[int, int] | None: Grid indices or None when point is out of bounds/invalid.
         """
@@ -181,6 +234,29 @@ class OccupancyAwarePlannerMixin:
         row = min(max(row, 0), grid_shape[0] - 1)
         col = min(max(col, 0), grid_shape[1] - 1)
         return row, col
+
+    def _point_offset_in_grid_cell(
+        self, point: np.ndarray, meta: dict[str, Any], row: int, col: int
+    ) -> tuple[float, float]:
+        """Return the continuous point offset from its indexed cell centre in metres."""
+        if "origin" not in meta or "size" not in meta:
+            return 0.0, 0.0  # Legacy synthetic metadata identifies only cell centres.
+        resolution = float(self._as_1d_float(meta["resolution"], pad=1)[0])
+        local_point = np.asarray(point, dtype=float)
+        if self._as_1d_float(meta.get("use_ego_frame", [0.0]), pad=1)[0] > 0.5:
+            pose = self._as_1d_float(meta.get("robot_pose", [0.0, 0.0, 0.0]), pad=3)
+            local_point = np.asarray(
+                world_to_ego(
+                    float(point[0]),
+                    float(point[1]),
+                    ((float(pose[0]), float(pose[1])), float(pose[2])),
+                ),
+                dtype=float,
+            )
+        origin = self._as_1d_float(meta["origin"], pad=2)
+        cell_center = origin[:2] + np.asarray([col + 0.5, row + 0.5]) * resolution
+        offset = local_point - cell_center
+        return float(offset[0]), float(offset[1])
 
     def _grid_value(
         self,

@@ -13,6 +13,7 @@ import yaml
 from loguru import logger
 
 from robot_sf.benchmark.map_runner.map_runner import build_map_policy
+from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
 from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
 from robot_sf.training.scenario_loader import load_scenarios
 
@@ -20,6 +21,11 @@ logger.remove()
 p = Path("configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml")
 a = argparse.ArgumentParser()
 a.add_argument("--mode", choices=["roster", "gate"], required=True)
+a.add_argument(
+    "--affected-suite",
+    action="store_true",
+    help="Gate every release scenario with a sampled pedestrian population.",
+)
 args = a.parse_args()
 sc = {s["name"]: s for s in load_scenarios(p)}
 roster = yaml.safe_load(
@@ -38,6 +44,17 @@ names = (
         "classic_group_crossing_high",
     ]
 )
+if args.affected_suite:
+    if args.mode != "gate":
+        a.error("--affected-suite requires --mode gate")
+    names = []
+    for name, scenario in sc.items():
+        config = build_env_config(dict(scenario), scenario_path=p)
+        maps = config.map_pool.map_defs.values()
+        if config.sim_config.peds_per_area_m2 > 0 and any(
+            m.ped_routes or m.ped_crowded_zones for m in maps
+        ):
+            names.append(name)
 sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
 errors = 0
 for planner in roster:

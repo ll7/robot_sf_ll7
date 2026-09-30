@@ -123,3 +123,36 @@ def test_guard_infeasible_fallback_ignores_vetoed_ppo_rank():
     assert label == "fallback_best_effort"
     assert guard.diagnostics()["no_admissible_command"] is True
     assert guard.diagnostics()["recovery_kind"] == "least_bad_clearance"
+
+
+def test_admissible_recorded_observations_match_base_commands_byte_for_byte():
+    """Replay actual base observations and compare IEEE-754 command bytes."""
+    import json
+    import struct
+
+    payload = json.loads(
+        (ROOT / "tests/fixtures/planner/no_admissible_admissible_observations.json").read_text()
+    )
+    assert payload["source_sha"] == "93ba0d75fbecc69ddeb62bbf77a435de385caa3b"
+    assert set(payload["episode_seeds"]) <= set(range(1001, 1031))
+
+    def restore(value):
+        if isinstance(value, dict):
+            if "__array__" in value:
+                return np.asarray(value["__array__"], dtype=value["dtype"]).reshape(value["shape"])
+            if "__sparse_array__" in value:
+                item = value["__sparse_array__"]
+                array = np.zeros(item["shape"], dtype=item["dtype"])
+                array.reshape(-1)[item["indices"]] = item["values"]
+                return array
+            return {key: restore(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [restore(item) for item in value]
+        return value
+
+    assert len(payload["records"]) == 59
+    for row in payload["records"]:
+        planner = RiskDWAPlannerAdapter(build_risk_dwa_config(row["config"]))
+        command = planner.plan(restore(row["observation"]))
+        assert planner.diagnostics()["no_admissible_command"] is False
+        assert struct.pack("!dd", *command) == struct.pack("!dd", *row["command"])

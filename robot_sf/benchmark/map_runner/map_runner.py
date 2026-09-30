@@ -1296,6 +1296,8 @@ def _attach_guard_decision_stats(
                         "recovery_command_count",
                     ):
                         runtime["last_decision"][key] = runtime[key]
+                    if "recovery_kind" in runtime:
+                        runtime["last_decision"]["recovery_kind"] = runtime["recovery_kind"]
         fallback_target = getattr(guard_adapter, "last_fallback_target_xy", None)
         if fallback_target is not None:
             runtime["planner_target_xy"] = [float(fallback_target[0]), float(fallback_target[1])]

@@ -2891,6 +2891,7 @@ def _step_build_simulation_trace(
     decision = getattr(sim, "planner_step_decision", None)
     if isinstance(decision, dict):
         for key in (
+            "recovery_kind",
             "no_admissible_command",
             "no_admissible_command_count",
             "recovery_command",
@@ -3195,6 +3196,7 @@ def _step_planner_decision_dwa_keys(
     planners' traces are unchanged.
     """
     for dwa_key in (
+        "recovery_kind",
         "no_admissible_command",
         "no_admissible_command_count",
         "recovery_command",

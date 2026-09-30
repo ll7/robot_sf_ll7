@@ -1209,6 +1209,7 @@ def _spawn_zoned_background_population(
     prepared_obstacles: list[PreparedGeometry],
     *,
     spawn_obstacles: list[PreparedGeometry] | None = None,
+    crowd_robot_exclusions: list[PreparedGeometry] | None = None,
     capture: SpawnSamplerCapture | None = None,
 ) -> _BackgroundPopulation:
     """Spawn background pedestrians from map-defined crowded zones and routes.
@@ -1223,11 +1224,13 @@ def _spawn_zoned_background_population(
     """
     if spawn_obstacles is None:
         spawn_obstacles = prepared_obstacles
+    crowd_spawn_obstacles = [*spawn_obstacles, *(crowd_robot_exclusions or [])]
+    crowd_goal_obstacles = [*prepared_obstacles, *(crowd_robot_exclusions or [])]
     crowd_ped_states_np, crowd_groups, zone_assignments = populate_crowded_zones(
         crowd_spawn_config,
         ped_crowded_zones,
-        obstacle_polygons=spawn_obstacles,
-        goal_obstacle_polygons=prepared_obstacles,
+        obstacle_polygons=crowd_spawn_obstacles,
+        goal_obstacle_polygons=crowd_goal_obstacles,
     )
     route_ped_states_np, route_groups, route_assignments, initial_sections = populate_ped_routes(
         route_spawn_config,
@@ -1244,7 +1247,7 @@ def _spawn_zoned_background_population(
         route_assignments=route_assignments,
         initial_sections=initial_sections,
         behavior_zones=ped_crowded_zones,
-        scatter_exclusions=list(prepared_obstacles),
+        scatter_exclusions=crowd_goal_obstacles,
         scatter_rng=None,
         synthesized=False,
     )
@@ -1404,6 +1407,7 @@ def populate_simulation(  # noqa: PLR0913
     ped_radius: float = 0.4,
     reserved_zone_radius: float = 0.0,
     sampler_capture: SpawnSamplerCapture | None = None,
+    robot_reaction_buffer: float = 0.0,
 ) -> tuple[PedestrianStates, PedestrianGroupings, list[PedestrianBehavior]]:
     """Orchestrate complete pedestrian population initialization for simulation.
 
@@ -1426,6 +1430,8 @@ def populate_simulation(  # noqa: PLR0913
         reserved_zone_radius: Additional agent radius applied around reserved zones.
         sampler_capture: Optional per-episode sampler-decision record; sampler
             hooks and route-assignment recording run only when provided.
+        robot_reaction_buffer: Extra surface buffer around reserved robot zones for
+            zoned crowd spawns and goals. Routes use actual-pose reset/respawn guards.
 
     Returns:
         Tuple (pysf_state, groups, ped_behaviors) with the merged state view,
@@ -1450,9 +1456,14 @@ def populate_simulation(  # noqa: PLR0913
             capture=sampler_capture,
         )
     else:
+        crowd_robot_exclusions = _scatter_exclusions(
+            [], reserved_zones or [], [], ped_radius,
+            reserved_zone_radius + robot_reaction_buffer,
+        )
         background = _spawn_zoned_background_population(
             crowd_spawn_config, route_spawn_config, ped_crowded_zones, ped_routes,
             prepared_obstacles, spawn_obstacles=spawn_obstacles, capture=sampler_capture,
+            crowd_robot_exclusions=crowd_robot_exclusions,
         )
     ped_states, route_offset, single_offset = _merge_pedestrian_states(
         background, single_pedestrians, spawn_config, tau,

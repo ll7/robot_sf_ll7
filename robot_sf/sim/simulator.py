@@ -486,6 +486,9 @@ def _build_pysf_simulation(  # noqa: PLR0913
             default=0.0,
         ),
         sampler_capture=sampler_capture,
+        # Nominal one-second walking cap (0.5 * peds_speed_mult) plus the 0.1 m margin.
+        robot_reaction_buffer=SPAWN_CLEARANCE_MARGIN_M
+        + spawn_config.initial_speed * config.peds_speed_mult,
     )
     max_robot_radius = max((float(robot.config.radius) for robot in robots), default=0.0)
     for behavior in peds_behaviors:
@@ -495,7 +498,10 @@ def _build_pysf_simulation(  # noqa: PLR0913
             # Route-end respawns must not teleport a group onto the robot (issue #9725).
             behavior.set_robot_exclusion(
                 robot_pose_provider,
-                max_robot_radius + float(config.ped_radius) + SPAWN_CLEARANCE_MARGIN_M,
+                max_robot_radius
+                + float(config.ped_radius)
+                + SPAWN_CLEARANCE_MARGIN_M
+                + spawn_config.initial_speed * config.peds_speed_mult,
             )
 
     if include_response_law_multipliers:
@@ -1759,12 +1765,13 @@ class Simulator:
         self._enforce_reset_spawn_clearance()
 
     def _enforce_reset_spawn_clearance(self) -> None:
-        """Move pedestrians that overlap a robot footprint after the robot start is known.
+        """Keep pedestrians a reaction buffer from the actual sampled robot start.
 
         Pedestrians are placed at construction, before any robot start is sampled, so a
         route or crowd pedestrian can start inside the robot footprint (issue #9725).
         Overlapping rows are moved deterministically to the nearest clear point on the
-        exclusion circle (robot radius + pedestrian radius + margin); no random numbers
+        exclusion circle (robot radius + pedestrian radius + 0.1 m + one second at
+        the population walking speed cap); no random numbers
         are drawn, so every other spawn of the seed stays unchanged. The next reset
         restores the construction-time layout and checks it again.
         """
@@ -1784,12 +1791,18 @@ class Simulator:
             ((float(r.pose[0][0]), float(r.pose[0][1])), float(r.config.radius))
             for r in self.robots
         ]
-        # The footprint validator (issue #9403) names the rows inside robot radius plus
-        # margin; only those rows are candidates for relocation.
+        reaction_buffer = SPAWN_CLEARANCE_MARGIN_M + max(
+            float(np.max(self.pysf_sim.peds.max_speeds)),
+            float(np.linalg.norm(self.ped_vel, axis=1).max()),
+        )
+        self._set_route_reaction_clearance(
+            max(radius for _, radius in robots) + ped_radius + reaction_buffer
+        )
+        # Include near misses, not just existing footprint overlaps.
         overlapping_rows: set[int] = set()
         for robot_xy, robot_radius in robots:
             footprint = validate_spawn_footprints(
-                robot_xy, robot_radius + SPAWN_CLEARANCE_MARGIN_M, ped_xy, ped_radius
+                robot_xy, robot_radius + reaction_buffer, ped_xy, ped_radius
             )
             overlapping_rows.update(footprint.overlapping_rows)
         if not overlapping_rows:
@@ -1801,6 +1814,7 @@ class Simulator:
             robots,
             self.map_def,
             rows=sorted(overlapping_rows),
+            robot_margin=reaction_buffer,
         )
         self.last_spawn_relocation = report
         if not report.relocated and not report.unresolved:
@@ -1820,6 +1834,12 @@ class Simulator:
                 "point was found (issue #9725).",
                 rows=report.unresolved,
             )
+
+    def _set_route_reaction_clearance(self, exclusion_radius: float) -> None:
+        """Keep route respawns off the current robot pose by the reset reaction buffer."""
+        for behavior in self.peds_behaviors:
+            if isinstance(behavior, FollowRouteBehavior):
+                behavior.set_robot_exclusion(lambda: self.robot_poses, exclusion_radius)
 
     def _capture_robot_ped_forces(self) -> None:
         """Copy already evaluated robot components and their pre-integration inputs."""

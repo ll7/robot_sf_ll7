@@ -3108,7 +3108,7 @@ def _route_zone_from_map(
             (
                 (waypoints[0][0], waypoints[0][1]),
                 (waypoints[0][0] + 0.1, waypoints[0][1]),
-                (waypoints[0][0], waypoints[0][1] + 0.1),
+                (waypoints[0][0] + 0.1, waypoints[0][1] + 0.1),
             ),
         )
     if 0 <= goal_id < len(goal_zones):
@@ -3119,7 +3119,7 @@ def _route_zone_from_map(
             (
                 (waypoints[-1][0], waypoints[-1][1]),
                 (waypoints[-1][0] + 0.1, waypoints[-1][1]),
-                (waypoints[-1][0], waypoints[-1][1] + 0.1),
+                (waypoints[-1][0] + 0.1, waypoints[-1][1] + 0.1),
             ),
         )
     return spawn_zone, goal_zone

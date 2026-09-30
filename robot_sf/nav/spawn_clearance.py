@@ -164,6 +164,7 @@ def relocate_overlapping_pedestrians(
     margin: float = SPAWN_CLEARANCE_MARGIN_M,
     *,
     rows: Sequence[int] | None = None,
+    robot_margin: float | None = None,
 ) -> PedestrianRelocationReport:
     """Find clear positions for pedestrians that overlap a robot footprint.
 
@@ -182,6 +183,8 @@ def relocate_overlapping_pedestrians(
         map_def: Map providing walls and bounds.
         margin: Extra surface clearance to keep.
         rows: Optional subset of rows that may be moved (defaults to all rows).
+        robot_margin: Robot surface buffer; defaults to margin. Pedestrian-to-pedestrian
+            spacing still uses margin, so a reaction buffer does not inflate crowd spacing.
 
     Returns:
         Report with ``row -> (old, new)`` moves and the rows left unresolved.
@@ -191,8 +194,9 @@ def relocate_overlapping_pedestrians(
     movable = set(range(len(positions)) if rows is None else rows)
     blocked = _pedestrian_blocked_geometry(map_def, ped_radius)
     walls = _wall_geometry(map_def)
+    robot_margin = margin if robot_margin is None else robot_margin
     for row in range(len(positions)):
-        hit = _overlapping_robot(positions[row], robots, ped_radius, margin)
+        hit = _overlapping_robot(positions[row], robots, ped_radius, robot_margin)
         if hit is None:
             continue
         if row not in movable:
@@ -201,7 +205,9 @@ def relocate_overlapping_pedestrians(
         new_xy = next(
             (
                 candidate
-                for candidate in _relocation_candidates(positions[row], hit, ped_radius, margin)
+                for candidate in _relocation_candidates(
+                    positions[row], hit, ped_radius, robot_margin
+                )
                 if _is_clear(
                     candidate,
                     row,
@@ -210,6 +216,7 @@ def relocate_overlapping_pedestrians(
                     ped_radius,
                     margin,
                     (blocked, walls),
+                    robot_margin=robot_margin,
                 )
             ),
             None,
@@ -268,6 +275,8 @@ def _is_clear(
     ped_radius: float,
     margin: float,
     geometry: tuple[PreparedGeometry, PreparedGeometry],
+    *,
+    robot_margin: float | None = None,
 ) -> bool:
     """Return whether a relocation candidate is a clear, reachable position.
 
@@ -277,7 +286,12 @@ def _is_clear(
     crossing a wall (so a pedestrian is never moved through a wall).
     """
     blocked, walls = geometry
-    if _overlapping_robot(candidate, robots, ped_radius, margin) is not None:
+    if (
+        _overlapping_robot(
+            candidate, robots, ped_radius, margin if robot_margin is None else robot_margin
+        )
+        is not None
+    ):
         return False
     if blocked.intersects(Point(candidate)):
         return False

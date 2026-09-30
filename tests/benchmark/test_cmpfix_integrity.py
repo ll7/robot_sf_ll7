@@ -168,13 +168,33 @@ def test_cmpfix_skip_complete_rechecks_runtime_identity(tmp_path):
         )
 
 
-def test_cmpfix_runtime_config_identity_is_independent_of_cwd(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("planner", "scenario", "expected"),
+    [
+        (
+            {
+                "algo": "guarded_ppo",
+                "algo_config_path": "configs/algos/guarded_ppo_camera_ready_cpu.yaml",
+            },
+            {"name": "dev", "seeds": [1001]},
+            ("guarded_ppo", "44a39b76607347cc"),
+        ),
+        (
+            {
+                "algo": "hybrid_rule_local_planner",
+                "algo_config_path": "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml",
+            },
+            {"name": "francis2023_leave_group", "seeds": [1001]},
+            ("orca", "384a28dd063d0e76"),
+        ),
+    ],
+    ids=["flat-config", "nested-orca-handoff"],
+)
+def test_cmpfix_runtime_config_identity_is_independent_of_cwd(
+    tmp_path, monkeypatch, planner, scenario, expected
+):
+    """Pinned published config digests survive relocation, including candidate base paths."""
     from robot_sf.benchmark.camera_ready._runtime_identity import expected_runtime_identity
 
-    planner = {
-        "algo": "guarded_ppo",
-        "algo_config_path": "configs/algos/guarded_ppo_camera_ready_cpu.yaml",
-    }
-    scenario = {"name": "dev", "seeds": [1001]}
     monkeypatch.chdir(tmp_path)
-    assert expected_runtime_identity(planner, scenario, 1001) == ("guarded_ppo", "44a39b76607347cc")
+    assert expected_runtime_identity(planner, scenario, 1001) == expected

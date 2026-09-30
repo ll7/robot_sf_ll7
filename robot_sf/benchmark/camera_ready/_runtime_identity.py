@@ -21,20 +21,26 @@ def expected_runtime_identity(
     *,
     config_root: Path | None = None,
 ) -> tuple[str, str]:
-    """Return the effective algorithm/config hash using the execution resolver."""
+    """Resolve the episode identity using repo-relative or explicit bundle config paths.
+
+    ``config_root`` anchors both the planner path and repository-relative candidate
+    references. It defaults to the checkout containing this module, never the cwd.
+    """
     algo = planner.get("algo")
     if not isinstance(algo, str) or not algo.strip():
         raise ValueError("planner is missing its expected algorithm")
+    root = (config_root or get_repository_root()).resolve()
     path = planner.get("algo_config_path") or planner.get("algo_config")
     if path:
         path = Path(str(path))
         if not path.is_absolute():
-            path = (config_root or get_repository_root()) / path
+            path = root / path
     algo, config = resolve_episode_policy_runtime(
         default_algo=algo,
         algo_config_path=str(path) if path else None,
         scenario=_scenario_with_episode_seed_defaults(dict(scenario), seed=seed),
         seed=seed,
+        config_root=root,
     )
     return algo, _config_hash(config)
 

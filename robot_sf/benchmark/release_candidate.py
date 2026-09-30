@@ -59,6 +59,25 @@ _APPROVED_008_PLANNER_KEYS = (
     "predictive_mppi",
     "risk_dwa",
 )
+# Reviewed bindings from paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml.
+# Keep these independent of candidate bytes: a jointly re-pinned campaign must
+# not substitute a different algorithm under an approved arm key.
+_APPROVED_008_PLANNER_ALGOS = {
+    "prediction_planner": "prediction_planner",
+    "goal": "goal",
+    "social_force": "social_force",
+    "orca": "orca",
+    "ppo": "ppo",
+    "socnav_sampling": "socnav_sampling",
+    "sacadrl": "sacadrl",
+    "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": "hybrid_rule_local_planner",
+    "scenario_adaptive_hybrid_orca_v2_collision_guard_v4": "hybrid_rule_local_planner",
+    "hybrid_rule_v4_fast_progress_static_escape": "hybrid_rule_local_planner",
+    "hybrid_rule_v4_fast_progress_static_escape_continuous": "hybrid_rule_local_planner",
+    "guarded_ppo": "guarded_ppo",
+    "predictive_mppi": "predictive_mppi",
+    "risk_dwa": "risk_dwa",
+}
 _APPROVED_008_HYBRID_CONFIGS = {
     "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": (
         "configs/policy_search/candidates/"
@@ -183,6 +202,7 @@ def _planner_config_paths(root: Path, config_path: Path) -> set[Path]:
 
 def _validate_v4_hybrid_runtime(
     planner_key: str,
+    planner_algo: str,
     manifest: dict[str, Any],
     config_path: Path,
     root: Path,
@@ -201,7 +221,7 @@ def _validate_v4_hybrid_runtime(
 
     for scenario in scenarios:
         algo, effective = resolve_candidate_manifest_runtime(
-            default_algo="hybrid_rule_local_planner",
+            default_algo=planner_algo,
             manifest=manifest,
             scenario=scenario,
             load_config=load_config,
@@ -215,7 +235,11 @@ def _validate_v4_hybrid_runtime(
 
 
 def _validate_v4_hybrid_manifest(
-    planner_key: str, config_path: Path, root: Path, scenarios: list[dict[str, Any]]
+    planner_key: str,
+    planner_algo: str,
+    config_path: Path,
+    root: Path,
+    scenarios: list[dict[str, Any]],
 ) -> None:
     """Reject a v4 slot that would execute an unreviewed algorithm/base pair."""
     if planner_key not in _APPROVED_008_HYBRID_CONFIGS:
@@ -246,7 +270,7 @@ def _validate_v4_hybrid_manifest(
         raise ValueError(
             f"v4 hybrid slot {planner_key} has an unapproved scenario algorithm override"
         )
-    _validate_v4_hybrid_runtime(planner_key, manifest, config_path, root, scenarios)
+    _validate_v4_hybrid_runtime(planner_key, planner_algo, manifest, config_path, root, scenarios)
 
 
 def _expected_input_paths(
@@ -279,7 +303,9 @@ def _expected_input_paths(
     for planner in planners:
         if planner.get("algo_config"):
             planner_config_path = _root_file(root, planner["algo_config"], "planner.algo_config")
-            _validate_v4_hybrid_manifest(planner["key"], planner_config_path, root, scenarios)
+            _validate_v4_hybrid_manifest(
+                planner["key"], planner["algo"], planner_config_path, root, scenarios
+            )
             paths.update(_planner_config_paths(root, planner_config_path))
     for scenario in scenarios:
         if scenario.get("map_id"):
@@ -365,6 +391,9 @@ def _candidate_planners(
     if observed_keys != _APPROVED_008_PLANNER_KEYS:
         raise ValueError("campaign planner keys differ from the approved 0.0.8 14-slot roster")
     for row in enabled:
+        expected_algo = _APPROVED_008_PLANNER_ALGOS[row["key"]]
+        if row.get("algo") != expected_algo:
+            raise ValueError(f"{row['key']} must bind its approved algorithm {expected_algo}")
         expected_config = _APPROVED_008_HYBRID_CONFIGS.get(row["key"])
         if expected_config is not None and row.get("algo_config") != expected_config:
             raise ValueError(f"v4 hybrid slot {row['key']} must bind its v4 config path")

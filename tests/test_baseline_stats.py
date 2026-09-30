@@ -73,7 +73,7 @@ def test_run_and_compute_baseline(tmp_path: Path):
         out_json=out_json,
         out_jsonl=out_jsonl,
         schema_path=SCHEMA_PATH,
-        base_seed=123,
+        base_seed=1013,
         horizon=8,
         dt=0.1,
         record_forces=False,

@@ -24,7 +24,7 @@ def test_dummy_factory_exposes_robot_env_contract(test_map: MapDefinition) -> No
     """Verify the factory returns the simulator fields RobotEnv accesses during smoke runs."""
     config = RobotSimulationConfig()
     config.backend = "dummy"
-    config.seed = 123
+    config.seed = 1013
 
     simulator = dummy_factory(config, test_map, False)
 

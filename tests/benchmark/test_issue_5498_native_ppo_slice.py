@@ -13,6 +13,8 @@ import json
 from pathlib import Path
 
 import robot_sf.benchmark.exact_repeat_campaign as erc
+import scripts.benchmark.run_issue_5498_native_ppo_slice as slice_runner
+from robot_sf.evidence.writers import write_json
 from scripts.benchmark.run_issue_5498_native_ppo_slice import (
     TOTAL_PPO_TARGETS,
     _ppo_only_bundle,
@@ -52,9 +54,25 @@ def test_ppo_only_bundle_smoke_cap() -> None:
     assert all(t["planner"] == "ppo" for t in slim["targets"])
 
 
-def test_ppo_only_manifest_slice_verifies_against_subset(tmp_path: Path) -> None:
+def test_ppo_only_manifest_slice_verifies_against_subset(tmp_path: Path, monkeypatch) -> None:
     _require_existing(BUNDLE_PATH)
     _require_existing(MANIFEST_PATH)
+    # Feed the real slicing helpers development copies of the retained inputs.
+    # Only target seeds and their hashes change; original evidence bytes stay intact.
+    for attribute, source, hash_key in (
+        ("BUNDLE_PATH", BUNDLE_PATH, "bundle_sha256"),
+        ("MANIFEST_PATH", MANIFEST_PATH, "manifest_sha256"),
+    ):
+        development = json.loads(source.read_text(encoding="utf-8"))
+        for target in development["targets"]:
+            if 111 <= int(target["seed"]) <= 140:
+                target["seed"] = int(target["seed"]) + 890
+        development.pop(hash_key)
+        development["review_marker"] = "AI-GENERATED NEEDS-REVIEW"
+        development[hash_key] = erc.canonical_sha256(development)
+        path = tmp_path / source.name
+        write_json(path, development)
+        monkeypatch.setattr(slice_runner, attribute, path)
     slim = _ppo_only_bundle(2)
 
     # Execute the tiny PPO subset and verify against the re-hashed manifest slice.

@@ -86,7 +86,7 @@ def test_runner_single_episode_tmp(tmp_path: Path):
         "robot_context": "embedded",
         "repeats": 1,
     }
-    record = run_episode(scenario, seed=123, horizon=15, dt=0.1, record_forces=False)
+    record = run_episode(scenario, seed=1013, horizon=15, dt=0.1, record_forces=False)
     # Basic field presence
     assert record["scenario_id"] == scenario["id"]
     assert record["dt_s"] == 0.1
@@ -142,7 +142,7 @@ def test_runner_surfaces_child_planner_fallback_diagnostics(monkeypatch):
     }
 
     record = run_episode(
-        scenario, seed=123, horizon=1, dt=0.1, record_forces=False, algo="social_force"
+        scenario, seed=1013, horizon=1, dt=0.1, record_forces=False, algo="social_force"
     )
 
     assert record["algorithm_metadata"]["status"] == "fallback"
@@ -170,7 +170,7 @@ def test_run_batch_analysis_trace_telemetry_is_provenance_bound(tmp_path: Path) 
         [scenario],
         out_path=output,
         schema_path=SCHEMA_PATH,
-        base_seed=123,
+        base_seed=1013,
         horizon=5,
         dt=0.1,
         record_forces=False,
@@ -217,7 +217,7 @@ def test_run_episode_analysis_trace_reuses_episode_commit_lookup(
 
     record = run_episode(
         scenario,
-        seed=123,
+        seed=1013,
         horizon=5,
         dt=0.1,
         record_forces=False,
@@ -304,7 +304,7 @@ def test_run_batch_repeated_runs_produce_stable_metrics(tmp_path: Path) -> None:
         [scenario],
         out_path=out1,
         schema_path=SCHEMA_PATH,
-        base_seed=123,
+        base_seed=1013,
         horizon=5,
         dt=0.1,
         record_forces=False,
@@ -316,7 +316,7 @@ def test_run_batch_repeated_runs_produce_stable_metrics(tmp_path: Path) -> None:
         [scenario],
         out_path=out2,
         schema_path=SCHEMA_PATH,
-        base_seed=123,
+        base_seed=1013,
         horizon=5,
         dt=0.1,
         record_forces=False,
@@ -366,7 +366,7 @@ def test_run_batch_provenance_fields_present(
         [scenario],
         out_path=out,
         schema_path=SCHEMA_PATH,
-        base_seed=123,
+        base_seed=1013,
         horizon=5,
         dt=0.1,
         record_forces=False,
@@ -381,7 +381,7 @@ def test_run_batch_provenance_fields_present(
     prov = rec["provenance"]
     assert "protocol_version" in prov
     assert "commit_hash" in prov
-    assert prov["base_seed"] == 123
+    assert prov["base_seed"] == 1013
     assert "run_id" in prov
     assert len(prov["run_id"]) > 0
     assert "python_version" in prov

@@ -5756,7 +5756,7 @@ def test_run_map_episode_skips_force_buffer_reads_when_not_recording(
 
     record = _run_map_episode(
         {"name": "no_force_recording", "simulation_config": {"max_episode_steps": 1}},
-        123,
+        1013,
         horizon=1,
         dt=0.1,
         record_forces=False,

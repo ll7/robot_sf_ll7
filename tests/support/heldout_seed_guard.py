@@ -55,3 +55,22 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     from tests.support.seedguard_boundaries import install
 
     install()
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_protocol(item):
+    """Restore standalone RNG policy checks and validate dynamic marker use."""
+    from tests.support.seedguard_boundaries import (
+        restore_static_rngs,
+        restore_unused_legacy_seeds,
+        set_current_item,
+    )
+
+    set_current_item(item)
+    try:
+        yield
+    finally:
+        restore_static_rngs()
+        restore_unused_legacy_seeds()
+        set_current_item(None)
+        pytest_collection_modifyitems([item])

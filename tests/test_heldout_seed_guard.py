@@ -190,6 +190,43 @@ def test_isolated_child_rejects_before_any_user_step(flag, tmp_path):
     assert not stepped.exists()
 
 
+def test_session_guard_survives_environment_flag_mutation(monkeypatch):
+    """An environment-isolation fixture must not disable the active session."""
+    monkeypatch.delenv("ROBOT_SF_PYTEST_SEED_GUARD")
+    reached = []
+    with pytest.raises(HeldoutSeedError):
+        check_simulation_seed(50036, boundary="environment mutation sentinel")
+        reached.append("first step")
+    assert reached == []
+
+
+@pytest.mark.heldout_seed_ok(
+    reason="Standalone legacy RNG seed-policy check; no simulation body runs"
+)
+def test_static_seed_policy_marker_allows_rng_but_blocks_simulation():
+    """The marker permits seed-policy references while forbidding real episodes."""
+    import numpy as np
+
+    from robot_sf.gym_env.robot_env import RobotEnv
+
+    np.random.seed(111)
+    assert np.random.get_state()[1][0] == 111
+    with pytest.raises(HeldoutSeedError, match="heldout_seed_ok cannot execute"):
+        object.__new__(RobotEnv).reset(seed=1001)
+
+
+def test_standalone_static_rng_only_rejects_at_simulation_boundary():
+    """Static arithmetic is allowed; the held-out stream cannot seed physics."""
+    import numpy as np
+
+    from robot_sf.sim.simulator import init_simulators
+
+    np.random.seed(50036)
+    assert np.random.get_state()[1][0] == 50036
+    with pytest.raises(HeldoutSeedError, match="legacy.numpy.random"):
+        init_simulators(None, None)
+
+
 # seed-holdout: synthetic-fixture end
 
 

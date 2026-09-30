@@ -7,8 +7,10 @@ import importlib.machinery
 import inspect
 import json
 import os
+import pickle
 import sys
 from functools import wraps
+from hashlib import sha256
 from numbers import Integral
 from pathlib import Path
 
@@ -48,6 +50,12 @@ FALLBACK_HELD_OUT_SEEDS = frozenset(range(111, 141)) | frozenset(
 )
 HELD_OUT_SEEDS = FALLBACK_HELD_OUT_SEEDS
 _POLICY_RESOLVED = False
+_ACTIVE = False
+_CURRENT_ITEM = None
+_STATIC_RNG_STATES = {}
+_LEGACY_SEEDS = {}
+_LEGACY_RESTORE_STATES = {}
+_RNG_STATE_SEEDS = {}
 
 
 def resolve_held_out_seeds():
@@ -79,7 +87,7 @@ class HeldoutSeedError(BaseException):
 
 def check_simulation_seed(seed, *, boundary):
     """Reject before invoking the original simulation function."""
-    if os.environ.get("ROBOT_SF_PYTEST_SEED_GUARD") != "1" or seed is None:
+    if (not _ACTIVE and os.environ.get("ROBOT_SF_PYTEST_SEED_GUARD") != "1") or seed is None:
         return
     try:
         value = int(seed)
@@ -126,12 +134,21 @@ BOUNDARIES = {
         ("_setup_and_run_step_loop", None, "args", ("seed",)),
     ],
     "robot_sf.sim.simulator": [
+        ("init_simulators", None, None, ()),
+        (
+            "Simulator.__init__",
+            None,
+            "config",
+            ("route_spawn_seed", "desired_speed_seed", "archetype_seed", "response_law_seed"),
+        ),
+        ("Simulator.reset_state", None, None, ()),
+        ("Simulator.step_once", None, None, ()),
         (
             "_build_pysf_simulation",
             "response_law_seed",
             "config",
             ("route_spawn_seed", "desired_speed_seed", "archetype_seed", "response_law_seed"),
-        )
+        ),
     ],
     "robot_sf.ped_npc.ped_population": [
         (
@@ -146,6 +163,29 @@ BOUNDARIES = {
     "random": [("seed", "a", None, ())],
     "numpy.random": [("seed", "seed", None, ())],
 }
+
+
+def set_current_item(item):
+    """Keep dynamic pytest markers visible without importing pytest in children."""
+    global _CURRENT_ITEM
+    _CURRENT_ITEM = item
+
+
+def _static_seed_test():
+    """Only explicitly reasoned static tests may inspect standalone seed RNGs."""
+    if _CURRENT_ITEM is not None:
+        return any(_CURRENT_ITEM.iter_markers("heldout_seed_ok"))
+    return os.environ.get("ROBOT_SF_PYTEST_STATIC_SEED_TEST") == "1"
+
+
+def restore_static_rngs():
+    """Keep allowed static policy RNGs from leaking into subsequent episodes."""
+    for owner, state in _STATIC_RNG_STATES.values():
+        if owner.__name__ == "random":
+            owner.setstate(state)
+        else:
+            owner.set_state(state)
+    _STATIC_RNG_STATES.clear()
 
 
 def patch_module(module):  # noqa: C901 - explicit boundary registry dispatch
@@ -175,31 +215,14 @@ def patch_module(module):  # noqa: C901 - explicit boundary registry dispatch
         def make_wrapper(original, signature, seed_arg, config_arg, fields, boundary, qualified):
             @wraps(original)
             def guarded(*args, **kwargs):
-                if signature is None:
-                    values = {"seed": args[0] if args else kwargs.get("seed")}
-                else:
-                    bound = signature.bind_partial(*args, **kwargs)
-                    bound.apply_defaults()
-                    values = bound.arguments
-                if seed_arg:
-                    seed = values.get(seed_arg)
-                    if seed is None and qualified.endswith(".reset"):
-                        seed = getattr(values.get("self"), "applied_seed", None)
-                    # Legacy seed also accepts non-scalar RNG state arrays.
-                    if module.__name__ not in {"random", "numpy.random"} or isinstance(
-                        seed, (Integral, float)
-                    ):
-                        check_simulation_seed(seed, boundary=boundary)
-                config = values.get(config_arg)
-                if boundary == "pysocialforce.pedestrian_seed" and (
-                    getattr(config, "desired_speed_mean", None) is None or not len(values["state"])
-                ):
+                if _allow_static_rng(module, boundary):
                     return original(*args, **kwargs)
-                for field in fields:
-                    check_simulation_seed(
-                        getattr(config, field, None),
-                        boundary=f"{boundary}.{field}" if boundary == "simulator" else boundary,
-                    )
+                values = _call_values(signature, args, kwargs)
+                if module.__name__ in {"random", "numpy.random"}:
+                    return _record_legacy_seed(module, original, values.get(seed_arg), args, kwargs)
+                _check_boundary_seeds(
+                    module.__name__, qualified, values, seed_arg, config_arg, fields, boundary
+                )
                 return original(*args, **kwargs)
 
             guarded._seedguard_boundary = boundary
@@ -210,6 +233,121 @@ def patch_module(module):  # noqa: C901 - explicit boundary registry dispatch
         )
         setattr(owner, parts[-1], wrapper)
         _PATCHES.append((owner, parts[-1], original, wrapper))
+    if module.__name__ in {"random", "numpy.random"}:
+        _patch_rng_state_module(module)
+
+
+def _allow_static_rng(module, boundary):
+    """Static exceptions never admit an actual simulation boundary."""
+    if not _static_seed_test():
+        return False
+    if module.__name__ not in {"random", "numpy.random"}:
+        raise HeldoutSeedError(f"heldout_seed_ok cannot execute simulation boundary {boundary}")
+    if module.__name__ not in _STATIC_RNG_STATES:
+        state = module.getstate() if module.__name__ == "random" else module.get_state()
+        _STATIC_RNG_STATES[module.__name__] = (module, state)
+    return True
+
+
+def _call_values(signature, args, kwargs):
+    """Bind positional and keyword seeds, including NumPy's C seed function."""
+    if signature is None:
+        return {"seed": args[0] if args else kwargs.get("seed")}
+    bound = signature.bind_partial(*args, **kwargs)
+    bound.apply_defaults()
+    return bound.arguments
+
+
+def _record_legacy_seed(module, original, seed, args, kwargs):
+    """Record standalone RNG state; reject only when a simulation consumes it.
+
+    Static optimizers, seed-policy checks, and data bootstrap tests may seed
+    their own arithmetic. A following simulation boundary must still reject an
+    effective held-out global stream before population or stepping.
+    """
+    value = (
+        int(seed)
+        if isinstance(seed, Integral) or (isinstance(seed, float) and seed.is_integer())
+        else None
+    )
+    saved = None
+    if value in FALLBACK_HELD_OUT_SEEDS and module.__name__ not in _LEGACY_RESTORE_STATES:
+        saved = module.getstate() if module.__name__ == "random" else module.get_state()
+    result = original(*args, **kwargs)
+    if saved is not None:
+        _LEGACY_RESTORE_STATES[module.__name__] = (module, saved)
+    _LEGACY_SEEDS[module.__name__] = value
+    return result
+
+
+def _check_boundary_seeds(module_name, qualified, values, seed_arg, config_arg, fields, boundary):
+    """Check explicit episode/config seeds and global streams at physics entry."""
+    if seed_arg:
+        seed = values.get(seed_arg)
+        if seed is None and qualified.endswith(".reset"):
+            seed = getattr(values.get("self"), "applied_seed", None)
+        check_simulation_seed(seed, boundary=boundary)
+    config = values.get(config_arg)
+    if boundary == "pysocialforce.pedestrian_seed" and (
+        getattr(config, "desired_speed_mean", None) is None or not len(values["state"])
+    ):
+        return
+    for field in fields:
+        check_simulation_seed(
+            getattr(config, field, None),
+            boundary=f"{boundary}.{field}" if boundary == "simulator" else boundary,
+        )
+    if module_name in {"robot_sf.sim.simulator", "robot_sf.ped_npc.ped_population"}:
+        for owner, seed in _LEGACY_SEEDS.items():
+            check_simulation_seed(seed, boundary=f"{qualified}.legacy.{owner}")
+
+
+def _patch_rng_state_module(owner):
+    """Track state restoration only after the RNG module itself is imported."""
+    getter, setter = (
+        ("getstate", "setstate") if owner.__name__ == "random" else ("get_state", "set_state")
+    )
+    get_original, set_original = getattr(owner, getter), getattr(owner, setter)
+    if getattr(get_original, "_seedguard_boundary", None):
+        return
+
+    def make_pair(owner, get_original, set_original):
+        @wraps(get_original)
+        def get_state(*args, **kwargs):
+            state = get_original(*args, **kwargs)
+            key = sha256(pickle.dumps(state, protocol=5)).digest()
+            _RNG_STATE_SEEDS[(owner.__name__, key)] = _LEGACY_SEEDS.get(owner.__name__)
+            return state
+
+        @wraps(set_original)
+        def set_state(state, *args, **kwargs):
+            result = set_original(state, *args, **kwargs)
+            key = sha256(pickle.dumps(state, protocol=5)).digest()
+            _LEGACY_SEEDS[owner.__name__] = _RNG_STATE_SEEDS.get((owner.__name__, key))
+            return result
+
+        get_state._seedguard_boundary = setter
+        return get_state, set_state
+
+    get_wrapper, set_wrapper = make_pair(owner, get_original, set_original)
+    for name, original, wrapper in (
+        (getter, get_original, get_wrapper),
+        (setter, set_original, set_wrapper),
+    ):
+        setattr(owner, name, wrapper)
+        _PATCHES.append((owner, name, original, wrapper))
+
+
+def restore_unused_legacy_seeds():
+    """Keep static held-out RNG arithmetic from contaminating later episodes."""
+    for name, (owner, state) in _LEGACY_RESTORE_STATES.items():
+        if _LEGACY_SEEDS.get(name) in FALLBACK_HELD_OUT_SEEDS:
+            if name == "random":
+                owner.setstate(state)
+            else:
+                owner.set_state(state)
+    _LEGACY_RESTORE_STATES.clear()
+    _RNG_STATE_SEEDS.clear()
 
 
 class GuardLoader:
@@ -245,8 +383,10 @@ class GuardFinder(importlib.abc.MetaPathFinder):
 
 def install():
     """Install once per pytest worker or guarded child interpreter."""
+    global _ACTIVE
     if os.environ.get("ROBOT_SF_PYTEST_SEED_GUARD") != "1":
         return
+    _ACTIVE = True
     if not any(isinstance(finder, GuardFinder) for finder in sys.meta_path):
         sys.meta_path.insert(0, GuardFinder())
     for name in BOUNDARIES:
@@ -340,6 +480,10 @@ def _patch_child_processes():
         supplied = bound.arguments.get("env")
         env = dict(os.environ if supplied is None else supplied)
         env["ROBOT_SF_PYTEST_SEED_GUARD"] = "1"
+        if _static_seed_test():
+            env["ROBOT_SF_PYTEST_STATIC_SEED_TEST"] = "1"
+        else:
+            env.pop("ROBOT_SF_PYTEST_STATIC_SEED_TEST", None)
         paths = [str(support / "seedguard_bootstrap"), str(support), env.get("PYTHONPATH", "")]
         env["PYTHONPATH"] = os.pathsep.join(path for path in paths if path)
         for key in ("ROBOT_SF_PYTEST_SEED_AUDIT", "PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER"):
@@ -358,6 +502,11 @@ def _patch_child_processes():
 
 def uninstall():
     """Restore original callables when an embedded pytest session ends."""
+    global _ACTIVE
+    _ACTIVE = False
+    restore_static_rngs()
+    restore_unused_legacy_seeds()
+    set_current_item(None)
     for owner, name, original, wrapper in reversed(_PATCHES):
         if getattr(owner, name) is wrapper:
             setattr(owner, name, original)

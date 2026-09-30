@@ -46,7 +46,7 @@ explicitly does not claim geometrical impossibility. In particular, a nearby
 wall, force response, or observed limit cycle is diagnostic context rather
 than a reachability proof.
 
-## Scalar and systematic sensitivity (engine v1.3)
+## Scalar and systematic sensitivity (engine v1.5)
 
 Physical scalar measurements cannot be nested objects, booleans, strings or
 non-finite numbers. `extreme_measurements` reports
@@ -69,6 +69,18 @@ subtrees remain metadata, never measurements. Force quantiles admit only `q50`,
 `q90`, and `q95`, must be nondecreasing across recorded values, and use the force
 magnitude ceiling. `finite_samples` cannot exceed `raw_samples`. Negative force
 magnitudes are flagged without absolute-value normalization.
+Known scalar bounds come from `benchmark.metrics.METRIC_NAMES`,
+`compute_all_metrics` / `post_process_metrics`, and the map runner's tracking
+projection. Normalized goal time, path efficiency, validity flags and fractions
+are in [0, 1]; lengths, durations, event counts and energy are nonnegative.
+`avg_speed` and the compatibility alias `speed_m_s` are in [0, physical maximum]:
+the default maximum is 2 m/s, matching the differential and holonomic robot
+defaults; an explicitly recorded robot maximum takes precedence, or callers can
+declare `speed_max_m_s`. Multiple recorded caps use their minimum. Negative SNQI,
+MOTA and rollover margins remain legitimate signed values. Unknown numeric names,
+including names merely containing `force`, `distance` or `collision`, are disclosed
+in `unbounded_metric_names` and return `unavailable / bounds_not_declared` unless
+another measured violation already flags. They never yield a bounds-confirmed clear.
 Named terminal-outcome and validity booleans are accepted; a
 boolean physical measurement is malformed. The source-admission layer still
 rejects unexpected non-finite raw rows; documented sentinel normalization is
@@ -80,12 +92,19 @@ admitted cohorts. Any target or control admission loss returns
 `unavailable / cohort_admission_incomplete`, with `cohort_dropped_rows`,
 `cohort_dropped_counts` per planner, `planner_admitted_sizes`, and
 `planner_recorded_sizes`. Duplicate observations are counted individually.
-A rejected observation with a missing or corrupt compatibility key is unassignable.
+A readable or rejected observation with a missing, null or corrupt required
+compatibility key is unassignable.
 An unassignable rejected observation appears under `unassigned` and conservatively
 gates every cell because its relevance cannot be ruled out. Assigned losses in
 other compatibility cells do not contaminate complete cells. Direct detector calls
 also check raw cohort admission; the scan supplies its authoritative counts through
 the optional `detect(..., cohort_dropped_counts=...)` argument.
+Planner/scenario incidence and shift channels also require one row per seed per
+planner and identical seed sets across planners, even without a manifest. Repeated,
+absent, missing or different seeds return `unavailable / cohort_seed_coverage_incomplete`
+with `planner_seed_counts` (rows, valid seed rows, unique seeds, repeated seed rows)
+and `seed_integrity_signatures`. This prevents a 4-row target from clearing against
+30-row controls and prevents 30 duplicated observations from replacing 30 seeds.
 
 Within-outcome outliers are accompanied by independent default channels:
 
@@ -98,8 +117,8 @@ Within-outcome outliers are accompanied by independent default channels:
   This intentionally preserves every recorded failure subgroup. An excess above
   0.1 flags the planner's cell, including its successes. These are descriptive
   triage signals, not significance tests or proof that a failure is unexpected.
-- `planner_cohort_shift` compares unconditioned per-planner scalar-feature medians
-  against other planners' medians in the same scenario. It needs at least four
+- `planner_cohort_shift` compares unconditioned planner features using paired
+  episode differences at the same seeds. It needs at least four
   valid episodes per planner/feature and one external planner control. Each
   feature requires **100% finite numeric scalar coverage** within its planner's
   recorded cell. `feature_sample_sizes` and `feature_missing_counts` disclose
@@ -109,12 +128,30 @@ Within-outcome outliers are accompanied by independent default channels:
   is unavailable; a complete feature needs an admitted external control.
   With no admitted feature comparisons the signal is unavailable, never clear.
   Other complete features may still produce a signal with partial missingness.
-  It catches
-  uniform per-planner shifts without requiring unavailable initial-state digests
+  Each pair uses a two-sided Student t test with the standard error from its
+  episode differences, with numerical noise floors. Bonferroni correction covers
+  all planned planner pairs and scalar features in the scenario, including excluded
+  comparisons. The default `family_alpha` is 0.05 (larger values are rejected).
+  A feature shifts only if the target differs in the same direction from every
+  eligible external control, with each corrected p value significant and absolute
+  t statistic at least `metric_z_threshold` (default 3.5). This avoids contaminating
+  unshifted controls when one planner shifts. `feature_pairwise_tests` retains
+  differences, standard errors, sample sizes, t statistics and p values;
+  `shifted_features` identifies the actual flags. Historical `feature_z_scores`
+  now holds the minimum paired t statistic across controls, not a peer-median MAD.
+  The nominal scenario family false-positive rate is at most 5% **under independent
+  seed pairs and approximately normal mean differences**. Small/non-normal samples
+  remain diagnostic; this is not a distribution-free guarantee. Synthetic null
+  calibration is a regression test, not evidence that intended planner differences
+  are defects. It catches uniform per-planner shifts without requiring initial-state digests
   or equating planner-specific config hashes. Outcomes, intended planner behavior
   and different configurations can explain the differences; no causal inference
   follows. With no external control it stays unavailable.
-- `horizon_consistency` compares `steps` (or `episode_steps`) with recorded
+- `horizon_consistency` validates every recorded `steps` / `episode_steps` alias
+  at row, metrics and operational-metrics paths; conflicting counts flag with
+  `conflicting_recorded_step_counts`. More than one independently recorded terminal
+  outcome flags with `multiple_terminal_outcomes`, whatever the reason says.
+  It compares steps with recorded
   `run_horizon` (or `horizon_steps` or top-level `horizon`), the simulator's
   `max_episode_steps`, and
   `effective_budget_steps` when recorded, for **every outcome**, including

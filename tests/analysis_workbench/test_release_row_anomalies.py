@@ -138,9 +138,9 @@ def test_updated_legacy_report_keeps_collision_gate_opt_in() -> None:
         source=_source("goal", "social_force"),
     )
 
-    # Golden includes detector engine v1.4 provenance; collision opt-in is unchanged.
+    # Golden includes detector engine v1.5 provenance; collision opt-in is unchanged.
     assert hashlib.sha256(canonical_json(report).encode()).hexdigest() == (
-        "054ef581e07498d9021583cee2f8639b8a9e0e2cdc5ac4b68c9f2e21aaa21dc6"
+        "84ae978a189d83df11bd31167bc59aa88c9f936031ab2bc943930d67fd6db5bf"
     )
     assert "collision_metric_contract" not in report["config"]
     assert "collision_metric_inconsistent" not in {

@@ -49,7 +49,7 @@ FALLBACK_HELD_OUT_SEEDS = frozenset(range(111, 141)) | frozenset(
 try:
     from robot_sf.benchmark.seed_bands import HELD_OUT_SEEDS
 except ModuleNotFoundError as error:
-    if error.name != "robot_sf.benchmark.seed_bands":
+    if error.name not in {"robot_sf", "robot_sf.benchmark", "robot_sf.benchmark.seed_bands"}:
         raise
     HELD_OUT_SEEDS = FALLBACK_HELD_OUT_SEEDS
 HELD_OUT_SEEDS = frozenset(HELD_OUT_SEEDS)
@@ -87,6 +87,8 @@ def check_simulation_seed(seed, *, boundary):
 
 
 # Qualified name, direct seed argument, config argument, config seed fields.
+_PATCHES = []
+
 BOUNDARIES = {
     "robot_sf.gym_env.environment_factory": [("_apply_global_seed", "seed", None, ())],
     "robot_sf.gym_env.env_util": [("global_reset_seed", "seed", None, ())],
@@ -185,11 +187,11 @@ def patch_module(module):  # noqa: C901 - explicit boundary registry dispatch
             guarded._seedguard_boundary = boundary
             return guarded
 
-        setattr(
-            owner,
-            parts[-1],
-            make_wrapper(original, signature, seed_arg, config_arg, fields, boundary, qualified),
+        wrapper = make_wrapper(
+            original, signature, seed_arg, config_arg, fields, boundary, qualified
         )
+        setattr(owner, parts[-1], wrapper)
+        _PATCHES.append((owner, parts[-1], original, wrapper))
 
 
 class GuardLoader:
@@ -232,3 +234,114 @@ def install():
     for name in BOUNDARIES:
         if name in sys.modules:
             patch_module(sys.modules[name])
+    _patch_child_processes()
+
+
+def _isolated_python_command(command, boundary_path):
+    """Bootstrap isolated interpreters while retaining flags and original argv."""
+    if (
+        not isinstance(command, (list, tuple))
+        or not command
+        or "python" not in Path(os.fsdecode(command[0])).name
+    ):
+        return command
+    index = 1
+    isolated = False
+    while index < len(command):
+        option = os.fsdecode(command[index])
+        if option in {"-c", "-m", "-", "--"} or not option.startswith("-"):
+            break
+        if option in {"-h", "--help", "-V", "--version"}:
+            return command
+        isolated |= (
+            option.startswith("-")
+            and not option.startswith("--")
+            and any(flag in option[1:] for flag in "ISE")
+        )
+        index += 2 if option in {"-W", "-X", "--check-hash-based-pycs"} else 1
+    if not isolated or index >= len(command):
+        return command
+    target = os.fsdecode(command[index])
+    tail = [os.fsdecode(arg) for arg in command[index + 1 :]]
+    if target == "--":
+        if not tail:
+            return command
+        target, tail = tail[0], tail[1:]
+    if target in {"-c", "-m"}:
+        if not tail:
+            return command
+        payload, extra = tail[0], tail[1:]
+    else:
+        payload, extra = target, tail
+    bootstrap = _isolated_bootstrap(target, payload, extra, boundary_path)
+    return [*command[:index], "-c", bootstrap]
+
+
+def _isolated_bootstrap(target, payload, extra, boundary_path):
+    """Build a fail-closed bootstrap for script, module, command, or stdin mode."""
+    # Restore the original script path before loading support; never add a
+    # checkout root or site-packages to an isolated interpreter's search path.
+    setup = ""
+    if target not in {"-c", "-m", "-"}:
+        setup = f"if not sys.flags.safe_path: sys.path[0] = os.path.dirname(os.path.abspath({payload!r}))\n"
+    bootstrap = (
+        "import sys, os, importlib.util, runpy\n"
+        + setup
+        + f"spec = importlib.util.spec_from_file_location('tests.support.seedguard_boundaries', {str(boundary_path)!r})\n"
+        "guard = importlib.util.module_from_spec(spec)\n"
+        "sys.modules[spec.name] = guard\n"
+        "spec.loader.exec_module(guard)\n"
+        "guard.install()\n"
+    )
+    if target == "-c":
+        bootstrap += f"sys.argv = {['-c', *extra]!r}\nexec(compile({payload!r}, '<string>', 'exec'), {{'__name__': '__main__', '__builtins__': __builtins__}})\n"
+    elif target == "-m":
+        bootstrap += f"sys.argv = {[payload, *extra]!r}\nrunpy.run_module({payload!r}, run_name='__main__', alter_sys=True)\n"
+    elif target == "-":
+        bootstrap += f"sys.argv = {['-', *extra]!r}\nexec(compile(sys.stdin.read(), '<stdin>', 'exec'), {{'__name__': '__main__', '__builtins__': __builtins__}})\n"
+    else:
+        bootstrap += (
+            f"sys.argv = {[payload, *extra]!r}\nrunpy.run_path({payload!r}, run_name='__main__')\n"
+        )
+    return bootstrap
+
+
+def _patch_child_processes():
+    """Protect explicit child environments and grandchildren, including -I/-S."""
+    import subprocess
+
+    original = subprocess.Popen.__init__
+    if getattr(original, "_seedguard_boundary", None):
+        return
+    signature = inspect.signature(original)
+    support = Path(__file__).resolve().parent
+
+    @wraps(original)
+    def guarded(self, *args, **kwargs):
+        bound = signature.bind_partial(self, *args, **kwargs)
+        supplied = bound.arguments.get("env")
+        env = dict(os.environ if supplied is None else supplied)
+        env["ROBOT_SF_PYTEST_SEED_GUARD"] = "1"
+        paths = [str(support / "seedguard_bootstrap"), str(support), env.get("PYTHONPATH", "")]
+        env["PYTHONPATH"] = os.pathsep.join(path for path in paths if path)
+        for key in ("ROBOT_SF_PYTEST_SEED_AUDIT", "PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER"):
+            if key in os.environ:
+                env[key] = os.environ[key]
+        bound.arguments["env"] = env
+        bound.arguments["args"] = _isolated_python_command(
+            bound.arguments["args"], support / "seedguard_boundaries.py"
+        )
+        return original(*bound.args, **bound.kwargs)
+
+    guarded._seedguard_boundary = "subprocess.Popen"
+    subprocess.Popen.__init__ = guarded
+    _PATCHES.append((subprocess.Popen, "__init__", original, guarded))
+
+
+def uninstall():
+    """Restore original callables when an embedded pytest session ends."""
+    for owner, name, original, wrapper in reversed(_PATCHES):
+        if getattr(owner, name) is wrapper:
+            setattr(owner, name, original)
+    _PATCHES.clear()
+    sys.meta_path[:] = [finder for finder in sys.meta_path if not isinstance(finder, GuardFinder)]

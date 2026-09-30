@@ -167,6 +167,28 @@ def test_child_custom_environment_cannot_drop_guard():
     assert "child sentinel" in result.stderr
 
 
+@pytest.mark.parametrize("flag", ["-I", "-S", "-E", "-IS"])
+def test_isolated_child_rejects_before_any_user_step(flag, tmp_path):
+    """Isolation flags cannot remove the guard from a Python simulation child."""
+    import subprocess
+    import sys
+
+    stepped = tmp_path / "stepped"
+    code = (
+        "import sys\n"
+        "guard = sys.modules['tests.support.seedguard_boundaries']\n"
+        "guard.check_simulation_seed(50036, boundary='isolated child')\n"
+        f"open({str(stepped)!r}, 'w').write('first step reached')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, flag, "-c", code], env={}, capture_output=True, text=True, check=False
+    )
+    assert result.returncode != 0
+    assert "HeldoutSeedError" in result.stderr
+    assert "isolated child" in result.stderr
+    assert not stepped.exists()
+
+
 # seed-holdout: synthetic-fixture end
 
 

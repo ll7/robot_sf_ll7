@@ -168,6 +168,9 @@ input_provenance:
       # registry metadata; the powered-search contract fields are unchanged.
       # Refreshed for issue #7603: additive experimental anisotropic Gaussian
       # human-cost planner registry metadata; the powered-search contract fields are unchanged.
+      # Refreshed for PR #9996: guarded_ppo default algorithm identity is now ppo;
+      # hybrid_rule_local_planner and orca enrichment, including
+      # default_execution_mode, are unchanged.
       sha256: bea0ba751ed1092d12b23d7cc23dcdeac5b1767c4e30cdafbc20378114f521d7
     - id: powered_search_space
       path: configs/adversarial/issue_5303_search_promotion_space_v2.yaml

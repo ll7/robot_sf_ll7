@@ -23,8 +23,8 @@ def test_current_main_residuals_are_complete_and_internal() -> None:
     assert payload["counts"]["assertion_count"] == 51
     assert payload["counts"]["classification"] == {"genuine_internal_invariant": 51}
     assert payload["counts"]["ownership"] == {
-        "completed_historical_review": 25,
-        "unowned_residual": 26,
+        "completed_historical_review": 14,
+        "unowned_residual": 37,
     }
     assert {
         (row["path"], row["scope"], row["expression"])

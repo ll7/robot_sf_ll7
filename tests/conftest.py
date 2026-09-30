@@ -417,6 +417,7 @@ _FAST_FILES = {
     # PR shards when planner code or shared provenance inputs change.
     "test_diagnostics_conformance.py",
     "test_optimized_assert_guards.py",
+    "test_issue_5303_search_promotion_contract_v2.py",
     "test_issue_7330_assert_inventory.py",
     "test_issue_7331_benchmark_namespace_inventory.py",
     "test_self_hosted_routing.py",

@@ -93,8 +93,8 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         "isinstance(clearance, np.ndarray)",
     ): _review(
         "The nonempty masked norm vector is passed to pedestrian_clearance, which preserves positive array dimensionality; this assertion narrows the private helper result before reduction.",
-        ownership_status="completed_historical_review",
-        ownership_references=("PR #9926", "#7330", "#6479"),
+        ownership_status="unowned_residual",
+        ownership_references=("#9750", "PR #9926"),
     ),
     (
         "robot_sf/planner/predictive_mppi.py",
@@ -102,8 +102,8 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         "isinstance(clearance, np.ndarray)",
     ): _review(
         "The sample-by-pedestrian norm matrix is passed to pedestrian_clearance, which preserves its positive dimensionality; this assertion narrows the private helper result before per-sample reduction.",
-        ownership_status="completed_historical_review",
-        ownership_references=("PR #9926", "#7330", "#6479"),
+        ownership_status="unowned_residual",
+        ownership_references=("#9750", "PR #9926"),
     ),
     (
         "robot_sf/planner/risk_dwa.py",
@@ -111,8 +111,8 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         "isinstance(ped_dist, np.ndarray)",
     ): _review(
         "The forecast-by-pedestrian norm matrix is passed to pedestrian_clearance, which preserves positive dimensionality; this assertion narrows the private helper result before reduction.",
-        ownership_status="completed_historical_review",
-        ownership_references=("PR #9926", "#7330", "#6479"),
+        ownership_status="unowned_residual",
+        ownership_references=("#9750", "PR #9926"),
     ),
     (
         "robot_sf/planner/socnav_prediction.py",
@@ -120,8 +120,8 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         "isinstance(dist, np.ndarray)",
     ): _review(
         "The norm vector over predicted pedestrian positions remains an array after pedestrian_clearance; this is private helper return-type narrowing before reduction.",
-        ownership_status="completed_historical_review",
-        ownership_references=("PR #9926", "#7330", "#6479"),
+        ownership_status="unowned_residual",
+        ownership_references=("#9750", "PR #9926"),
     ),
     (
         "robot_sf/planner/socnav_prediction.py",
@@ -129,8 +129,8 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         "isinstance(distances, np.ndarray)",
     ): _review(
         "Both the precomputed distance slice and the rollout norm matrix have positive dimensionality preserved by pedestrian_clearance; these assertions narrow private helper results before collision-cost reductions.",
-        ownership_status="completed_historical_review",
-        ownership_references=("PR #9926", "#7330", "#6479"),
+        ownership_status="unowned_residual",
+        ownership_references=("#9750", "PR #9926"),
     ),
     (
         "robot_sf/planner/socnav_prediction.py",
@@ -138,8 +138,8 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         "isinstance(dist, np.ndarray)",
     ): _review(
         "Both the precomputed distance slice and the rollout norm matrix have positive dimensionality preserved by pedestrian_clearance; these assertions narrow private helper results before collision-cost reductions.",
-        ownership_status="completed_historical_review",
-        ownership_references=("PR #9926", "#7330", "#6479"),
+        ownership_status="unowned_residual",
+        ownership_references=("#9750", "PR #9926"),
     ),
     (
         "robot_sf/planner/socnav_prediction.py",
@@ -147,8 +147,8 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         "isinstance(distances, np.ndarray)",
     ): _review(
         "Both the precomputed distance slice and the rollout norm matrix have positive dimensionality preserved by pedestrian_clearance; these assertions narrow private helper results before minimum-clearance reductions.",
-        ownership_status="completed_historical_review",
-        ownership_references=("PR #9926", "#7330", "#6479"),
+        ownership_status="unowned_residual",
+        ownership_references=("#9750", "PR #9926"),
     ),
     (
         "robot_sf/planner/socnav_prediction.py",
@@ -156,8 +156,8 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         "isinstance(dist, np.ndarray)",
     ): _review(
         "Both the precomputed distance slice and the rollout norm matrix have positive dimensionality preserved by pedestrian_clearance; these assertions narrow private helper results before minimum-clearance reductions.",
-        ownership_status="completed_historical_review",
-        ownership_references=("PR #9926", "#7330", "#6479"),
+        ownership_status="unowned_residual",
+        ownership_references=("#9750", "PR #9926"),
     ),
     (
         "robot_sf/planner/socnav_prediction.py",
@@ -165,8 +165,8 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         "isinstance(valid_slice, np.ndarray)",
     ): _review(
         "Both the precomputed distance slice and the rollout norm matrix have positive dimensionality preserved by pedestrian_clearance; these assertions narrow private helper results before TTC-penalty reductions.",
-        ownership_status="completed_historical_review",
-        ownership_references=("PR #9926", "#7330", "#6479"),
+        ownership_status="unowned_residual",
+        ownership_references=("#9750", "PR #9926"),
     ),
     (
         "robot_sf/planner/socnav_prediction.py",
@@ -174,8 +174,8 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         "isinstance(dist, np.ndarray)",
     ): _review(
         "Both the precomputed distance slice and the rollout norm matrix have positive dimensionality preserved by pedestrian_clearance; these assertions narrow private helper results before TTC-penalty reductions.",
-        ownership_status="completed_historical_review",
-        ownership_references=("PR #9926", "#7330", "#6479"),
+        ownership_status="unowned_residual",
+        ownership_references=("#9750", "PR #9926"),
     ),
     (
         "robot_sf/planner/socnav_prediction.py",
@@ -183,8 +183,8 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         "isinstance(dist, np.ndarray)",
     ): _review(
         "The pedestrian-by-horizon norm matrix remains an array after pedestrian_clearance; this is private helper return-type narrowing before action-score reductions.",
-        ownership_status="completed_historical_review",
-        ownership_references=("PR #9926", "#7330", "#6479"),
+        ownership_status="unowned_residual",
+        ownership_references=("#9750", "PR #9926"),
     ),
     (
         "robot_sf/baselines/social_force.py",

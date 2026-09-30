@@ -42,20 +42,25 @@ The parser still scans its nested dictionaries and lists for forbidden statuses,
 flags, and positive or malformed fallback counters. A non-dictionary value for
 this field is invalid. Other fallback-named counter fields retain strict numeric
 validation. Declared `mixed` command mode remains separate from fallback status.
-Guarded PPO's safe Risk-DWA command is a declared component of that composite
-planner. Release acceptance permits its exact `fallback_safe` counters only for
-verified guarded identity; its exact `fallback_safe` decision label remains
-admitted under that same identity-bound exception. The exact `stop_best_effort`
-decision label is forbidden, and its counters admit only zero; positive or
-malformed values fail closed. Other best-effort and uncertainty fallback
-counters remain forbidden. This narrow label rule does not redefine safe shield
-interventions as degraded execution.
-Batch summaries retain the producer's `guard_stats` and
-`shield_stats.decision_counts` across episodes. Valid identity-bound
-`fallback_safe` counters are summed numerically; malformed counters remain
-fail-closed. Any `stop_best_effort` counter or label is sticky across the
-aggregate. Per-episode typed `last_decision` state is not merged; an aggregate
-retains only the minimal stop label when needed to preserve failure evidence.
+Guarded PPO's shield is a declared component of that composite planner. For
+verified guarded identity, its exact `fallback_safe`, `fallback_best_effort`,
+`stop_safe` and `stop_best_effort` decision labels and counters in `guard_stats`
+and `shield_stats.decision_counts` are method telemetry, recorded and reported
+without triggering the forbidden-marker gate. Native counters must still be
+nonnegative integers (booleans, floats and malformed values reject). Every other
+planner, unbound identity or wrong expected arm retains the existing forbidden
+marker rules; uncertainty/checkpoint fallback, nested failures and unknown
+fallback counters remain forbidden.
+
+Static summary enrichment uses the underlying `algorithm: ppo`, matching the
+per-episode producer, while `canonical_algorithm` and `planner_contract.planner_id`
+remain `guarded_ppo`. Runtime aggregation carries these identity fields and
+preserves conflicting or incomplete shield identity as rejection evidence.
+Batch summaries sum valid producer counters numerically and retain malformed
+counters. Per-episode typed `last_decision` state is not merged; the aggregate
+retains its existing sticky minimal `stop_best_effort` label for reporting. That
+label is telemetry only under the same verified identity. These rules classify
+method telemetry, not safety quality or retrospective release admission.
 
 - `robot_sf_bench run` must return non-zero for:
   - `fallback`

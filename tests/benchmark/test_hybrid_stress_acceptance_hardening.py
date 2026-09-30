@@ -712,20 +712,33 @@ def test_guarded_ppo_declared_safe_shield_intervention_is_native(
     assert report["status"] == "valid", report["blockers"]
 
 
-def test_guarded_ppo_best_effort_fallback_still_fails_closed(
+@pytest.mark.parametrize("identity", ["verified", "missing", "wrong_arm", "wrong_base"])
+def test_guarded_ppo_best_effort_fallback_requires_verified_identity(
     stress_fixture: tuple[Path, Any, Any],
+    identity: str,
 ) -> None:
+    """Native telemetry requires the complete reviewed composite identity."""
     root, manifest, campaign_config = stress_fixture
     episodes_path = _first_row_path(root, "guarded_ppo")
     rows = [json.loads(line) for line in episodes_path.read_text().splitlines()]
-    rows[0]["algorithm_metadata"]["guard_stats"] = {"fallback_best_effort": 1}
+    metadata = rows[0]["algorithm_metadata"]
+    metadata["guard_stats"] = {"fallback_best_effort": 1}
+    if identity == "missing":
+        metadata.pop("canonical_algorithm")
+    elif identity == "wrong_arm":
+        metadata["planner_contract"]["planner_id"] = "goal"
+    elif identity == "wrong_base":
+        metadata["algorithm"] = "guarded_ppo"
     episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
     _refresh_sidecar_raw_hash(episodes_path)
 
     report = _acceptance(root, manifest, campaign_config)
 
-    assert report["status"] == "invalid"
-    assert any("fallback_best_effort" in blocker for blocker in report["blockers"])
+    if identity == "verified":
+        assert report["status"] == "valid", report["blockers"]
+    else:
+        assert report["status"] == "invalid"
+        assert any("fallback_best_effort" in blocker for blocker in report["blockers"])
 
 
 def test_guarded_ppo_safe_label_requires_exact_composite_identity(

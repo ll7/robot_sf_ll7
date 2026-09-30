@@ -18,7 +18,7 @@ state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/robot-sf-ci-runners"
 
 usage() {
   cat <<'USAGE'
-Usage: setup.sh build | network | start SLOT | stop SLOT | status SLOT
+Usage: setup.sh build | network | limits | start SLOT | stop SLOT | status SLOT
 
 Build the pinned container image locally, then start one supervisor per slot.
 Slots 1-2 are allowed on imech036 and imech039; slots 1-3 on imech156-u.
@@ -38,6 +38,18 @@ require_slot() {
     echo "SLOT must be in 1..$limit on $host" >&2
     exit 2
   fi
+}
+
+# Per-slot container size: CPUs, memory (also the swap cap) and pytest workers.
+# Measured 2026-09-30: a 2-worker shard peaks near 6 GiB, so memory, not CPU,
+# bounds workers; tmpfs mounts (up to 3 GiB) count against the same limit.
+# imech156-u (32 cores, 62 GiB, 3 slots) runs larger slots;
+# imech036/imech039 (20 cores, 31 GiB, 2 slots) keep the original size.
+slot_limits() {
+  case "$host" in
+    imech156-u) printf '8 16g 4\n' ;;
+    *) printf '4 8g 2\n' ;;
+  esac
 }
 
 slot_name() { printf 'robot-sf-ci-%s-%s' "$host" "$1"; }
@@ -128,8 +140,9 @@ run_container() {
 }
 
 supervise() {
-  local name
+  local name cpus memory workers
   name="$(slot_name "$1")"
+  read -r cpus memory workers < <(slot_limits)
   while true; do
     if ! ensure_network || ! probe_network; then
       echo "Runner $name network isolation check failed; retrying after 60 seconds" >&2
@@ -157,14 +170,14 @@ supervise() {
         --tmpfs /home/runner/_work/_temp:rw,exec,nosuid,nodev,uid=1001,gid=1001,size=512m,mode=700 \
         --tmpfs /tmp:rw,exec,nosuid,nodev,uid=1001,gid=1001,size=512m \
         --cap-drop ALL --security-opt no-new-privileges \
-        --pids-limit 512 --cpus 4 --memory 8g --memory-swap 8g \
+        --pids-limit 512 --cpus "$cpus" --memory "$memory" --memory-swap "$memory" \
         --env HOME=/home/runner \
         --env RUNNER_TEMP=/home/runner/_work/_temp \
         --env RUNNER_TOOL_CACHE=/home/runner/_tool \
         --env UV_CACHE_DIR=/home/runner/_work/_uv_cache \
         --env TMPDIR=/home/runner/_work/_tmp \
         --env PIP_CACHE_DIR=/home/runner/_work/_pip_cache \
-        --env PYTEST_NUM_WORKERS=2 --env OPENBLAS_NUM_THREADS=1 \
+        --env PYTEST_NUM_WORKERS="$workers" --env OPENBLAS_NUM_THREADS=1 \
         --env OMP_NUM_THREADS=1 \
         "$image" "$name" >/dev/null; then
       unlock_disk_admission
@@ -281,6 +294,7 @@ stop_slot() {
 case "${1:-}" in
   build) [[ $# -eq 1 ]] || { usage; exit 2; }; build_image ;;
   network) [[ $# -eq 1 ]] || { usage; exit 2; }; ensure_network ;;
+  limits) [[ $# -eq 1 ]] || { usage; exit 2; }; require_slot 1; slot_limits ;;
   supervise) [[ $# -eq 2 ]] || { usage; exit 2; }; require_slot "$2"; supervise "$2" ;;
   start|stop|status)
     [[ $# -eq 2 ]] || { usage; exit 2; }

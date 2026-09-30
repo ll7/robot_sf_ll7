@@ -592,6 +592,40 @@ jobs:
           --fail-on-violation
           --waiver-file configs/scenarios/archetype_validation_waivers.yaml
 
+  new-tests-fail-on-base:
+    # Advisory (issue 9986): new or changed tests should fail on the merge base.
+    # Never blocks; findings go to the job summary.
+    needs: dispatch-ownership
+    if: github.event_name == 'pull_request' && needs.dispatch-ownership.outputs.run_full_ci == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - name: Checkout exact evaluated head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Run new tests against the base commit (advisory)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # base.sha is the base branch tip; compare against the merge base so a
+          # moved main cannot make tests fail for unrelated reasons.
+          MERGE_BASE="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
+          uv run python scripts/validation/check_new_tests_fail_on_base.py \
+            --base "$MERGE_BASE" --head "$HEAD_SHA" \
+            --summary-out "$RUNNER_TEMP/new_tests_fail_on_base.md" \
+            --json-out "$RUNNER_TEMP/new_tests_fail_on_base.json" || true
+          cat "$RUNNER_TEMP/new_tests_fail_on_base.md" >> "$GITHUB_STEP_SUMMARY" || true
+
   reproducibility-check:
     # Run on pull requests so hosted reproducibility evidence is green rather
     # than skipped; retain manual dispatch for standalone diagnostics.

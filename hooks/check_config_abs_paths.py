@@ -20,6 +20,7 @@ handed (staged files at commit time), plus the whole tracked tree under ``--all`
 import argparse
 import hashlib
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -60,10 +61,9 @@ LEGACY_EVIDENCE_ALLOWLIST = frozenset(
     }
 )
 
-# A few verbatim recovered campaign artifacts are byte-exact copies of the original campaign
-# summaries/manifests. Their embedded absolute paths are historical execution provenance and cannot
-# be rewritten without breaking the recovery checksums. Keep this exception byte-exact: any change to
-# any pinned file stops matching here and restores the normal absolute-path scan.
+# Verbatim evidence sources may retain absolute paths only when the exact producer bytes are
+# separately bound and a portable normalized copy is retained. These exceptions are file- and
+# digest-specific: any change to a pinned file restores the normal absolute-path scan.
 PINNED_VERBATIM_EVIDENCE_SHA256 = {
     (
         "docs/context/evidence/issue_3810_h600_interpretation_2026-07/"
@@ -116,16 +116,46 @@ def _is_grandfathered_evidence(path: Path) -> bool:
     return False
 
 
+def _repo_relative_path(path: Path) -> str | None:
+    """Normalize a lexical path relative to its repository root, or the test cwd.
+
+    Git supplies repo-relative paths to ``--all``; tests and direct callers may supply
+    absolute paths. Normalize ``.`` and ``..`` without resolving symlinks, so an alias to
+    a pinned source remains a different path. Looking for the nearest ``.git`` marker
+    keeps both forms tied to the actual repository/worktree root. Temporary test roots
+    without Git metadata use their current working directory.
+    """
+    try:
+        lexical_absolute = Path(os.path.abspath(path.expanduser()))
+    except (OSError, RuntimeError, TypeError):
+        return None
+
+    for parent in (lexical_absolute.parent, *lexical_absolute.parent.parents):
+        if (parent / ".git").exists():
+            try:
+                return lexical_absolute.relative_to(parent).as_posix()
+            except ValueError:
+                return None
+
+    try:
+        cwd = Path(os.path.abspath(Path.cwd()))
+        return lexical_absolute.relative_to(cwd).as_posix()
+    except (OSError, ValueError, RuntimeError):
+        return None
+
+
 def _is_pinned_verbatim_evidence(path: Path) -> bool:
     """Return whether ``path`` is an exact pinned recovery artifact.
 
-    The path match accepts repository-relative and absolute caller paths. The digest match makes
-    the exception fail closed if a recovered artifact is edited or replaced.
+    The lexical path must match the exact repository-relative key. The digest match makes the
+    exception fail closed if a recovered artifact is edited or replaced.
     """
 
-    normalized = path.as_posix()
+    normalized = _repo_relative_path(path)
+    if normalized is None:
+        return False
     for repo_path, expected_sha256 in PINNED_VERBATIM_EVIDENCE_SHA256.items():
-        if normalized != repo_path and not normalized.endswith(f"/{repo_path}"):
+        if normalized != repo_path:
             continue
         try:
             hasher = hashlib.sha256()

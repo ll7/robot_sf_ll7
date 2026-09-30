@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/smoke/corrected_success_smoke/scenario.yaml",
+  "artifact_sha256": "8a1dc0727d05ee5d283b03e870c757e28751083be296b8963ed12dd4d88c512f",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

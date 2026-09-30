@@ -1,0 +1,10 @@
+# Release successor uses the already selected resolution-independent force
+# law and wrapped angular kernel, bounded by the physical differential drive.
+social_force_planner_version: resolution_independent_v2
+social_force_kernel_version: wrapped_v2
+social_force_ped_version: surface_v3
+social_force_ped_v3_strength: 6.0
+social_force_ped_v3_length: 0.5
+social_force_ped_v3_default_ped_radius: 0.4
+max_linear_speed: 2.0
+max_angular_speed: 1.0

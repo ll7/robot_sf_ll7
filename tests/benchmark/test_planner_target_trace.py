@@ -172,13 +172,20 @@ def test_guard_stats_publish_live_fallback_target_and_preserve_checkpoint() -> N
     policy = SimpleNamespace(
         _planner_stats=lambda: {"checkpoint_provenance": {"load_status": "loaded"}}
     )
-    adapter = SimpleNamespace(last_fallback_target_xy=(8.0, 5.0))
+    recovery_stats = {
+        "no_admissible_command": False,
+        "no_admissible_command_count": 0,
+        "recovery_command_count": 0,
+    }
+    adapter = SimpleNamespace(
+        last_fallback_target_xy=(8.0, 5.0), diagnostics=lambda: dict(recovery_stats)
+    )
     decision = {"decision_label": "fallback_safe"}
     _attach_guard_decision_stats(policy, {"shield_stats": {"last_decision": decision}}, adapter)
 
     first = policy._planner_stats()
     assert first["checkpoint_provenance"] == {"load_status": "loaded"}
-    assert first["last_decision"] == decision
+    assert first["last_decision"] == {**decision, **recovery_stats}
     assert _planner_target_xy_from_stats(first) == [8.0, 5.0]
 
     adapter.last_fallback_target_xy = (9.0, 6.0)

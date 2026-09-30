@@ -1,5 +1,7 @@
 # Release 0.0.8: decision ledger
 
+New decisions are added here when they are made, each with its enforcing test or "no test yet".
+
 This file records the decisions taken while preparing benchmark release 0.0.8
 (mainly 2026-09-29 and 2026-09-30). For each decision it states the question,
 the choice, the reason, who decided, what was rejected, where it is
@@ -306,7 +308,12 @@ repository).
   whole drop.
 - **Reason:** Model-based planners take the drive limits as parameters; a
   learned policy has to see them in training.
-- **Decided by:** delegated (unverified whether the author ruled separately).
+- **Decided by:** author. On 2026-09-30 the author approved retraining PPO on
+  the benchmark motion model ("that is good"), and approved the three-part PPO
+  sensitivity study (the one-factor ablation, the retraining, and a thesis
+  section framed as a defect found by the checks followed by a designed
+  study) with "yes, do all three". The thesis section is planned in
+  ll7/diss#3023.
 - **Rejected alternatives:** evaluate only the old checkpoints; replace the
   release PPO arm with the retrained one.
 - **Implemented in:** #10003 (open, approved); private-ops #408, #409, #411,
@@ -369,9 +376,9 @@ repository).
 - **Reason:** Projecting onto the forward axis is the usual heuristic for a
   forward-only robot. It is a faithful adaptation, not a guarantee-preserving
   one, and the docs say so.
-- **Decided by:** delegated (unverified: no separate decision comment was
-  found; the rule was implemented by the fix lane and accepted in the #10009
-  verdict).
+- **Decided by:** delegated. Decision record: the #10009 verdict comment
+  (https://github.com/ll7/robot_sf_ll7/pull/10009#issuecomment-5907593590),
+  which accepted the rule implemented by the fix lane.
 - **Rejected alternatives:** keep the old cap-only slowdown; a
   guarantee-preserving nonholonomic ORCA variant (a new method).
 - **Implemented in:** #10009 (open, approved).

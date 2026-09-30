@@ -21,7 +21,8 @@ Severity follows the source: P1 changes results, P2 could change results, P3
 hygiene. "(open)" means the fixing pull request is not merged yet. Decision
 IDs (D-0NN) refer to [decisions.md](decisions.md). Full reports are in the
 private review archive (`docs/reviews/0.0.8/` in the private operations
-repository). State as of 2026-09-30, 12:30 UTC.
+repository). State as of 2026-09-30, 12:30 UTC; dispositions marked "proposed" were
+added later the same day after re-checking main and the open PRs.
 
 ## Planner integration
 
@@ -31,15 +32,15 @@ repository). State as of 2026-09-30, 12:30 UTC.
 | A2 | internal audit | prediction_planner discards the wall part of its occupancy cost | P2 | confirmed | disclosed as a method limit (decision D-021, [#10011](https://github.com/ll7/robot_sf_ll7/pull/10011)); wall term in 0.0.9 [#10018](https://github.com/ll7/robot_sf_ll7/issues/10018) | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
 | A3 | internal audit | predictive_mppi silently caps the horizon at the model's 8 steps | P2 | confirmed | fixed in [#10011](https://github.com/ll7/robot_sf_ll7/pull/10011) (open): fails fast, configs state 8 x 0.1 s | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
 | A4 | internal audit | prediction heading lattice collapses to three turn rates | P3 | confirmed | fixed in [#10011](https://github.com/ll7/robot_sf_ll7/pull/10011) (open) | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
-| A5 | internal audit | predictive_mppi v1 model may have been trained on targets that switch pedestrians | P2 | plausible (code confirmed, dataset attribution conditional) | no disposition recorded | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
+| A5 | internal audit | predictive_mppi v1 model may have been trained on targets that switch pedestrians | P2 | plausible (code confirmed, dataset attribution conditional) | disclose as a model limitation; retrain in 0.0.9 [#10033](https://github.com/ll7/robot_sf_ll7/issues/10033) (proposed, orchestrator to confirm) | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
 | B1 | internal audit | SA-CADRL never drives faster than 1.0 m/s | P2 | confirmed | kept on purpose and disclosed (decision D-018, [#10008](https://github.com/ll7/robot_sf_ll7/pull/10008)) | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
 | B2 | internal audit | SA-CADRL observes only the 3 nearest pedestrians | P2 | confirmed | fixed in [#10008](https://github.com/ll7/robot_sf_ll7/pull/10008) (open): 19 agents | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
 | B3 | internal audit | SA-CADRL discrete turns all saturate at the turn-rate limit | P2 | confirmed (mechanism) | kept and documented as a method note ([#10008](https://github.com/ll7/robot_sf_ll7/pull/10008)) | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
 | B4 | internal audit | sampling planner rollout ignores angular acceleration and current turn rate | P2 | confirmed by the fix lane | fixed in [#10008](https://github.com/ll7/robot_sf_ll7/pull/10008) (open): forecasts through the native drive | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
-| B5 / D-F6 | internal audit | occupancy grid draws pedestrians with 0.35 m instead of 0.4 m radius | P3 | confirmed | no disposition recorded | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
+| B5 / D-F6 | internal audit | occupancy grid draws pedestrians with 0.35 m instead of 0.4 m radius | P3 | confirmed (still on main and open PRs) | 0.0.9 [#10034](https://github.com/ll7/robot_sf_ll7/issues/10034); fix changes PPO inputs (proposed, orchestrator to confirm) | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
 | B6 | internal audit | SA-CADRL and sampling silently fall back to dt 0.1 | P3 | confirmed | fixed in [#10009](https://github.com/ll7/robot_sf_ll7/pull/10009) (open) | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
-| B7 | internal audit | guarded PPO goal selection can target the [0,0] placeholder on the final leg | P3 | confirmed (unreachable in practice) | no disposition recorded | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
-| B8 | internal audit | PPO observation alignment fills missing keys with zeros without a record | P3 | confirmed (no key missing today) | no disposition recorded | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
+| B7 | internal audit | guarded PPO goal selection can target the [0,0] placeholder on the final leg | P3 | confirmed (unreachable in practice; still on main) | not exposed; 0.0.9 [#10034](https://github.com/ll7/robot_sf_ll7/issues/10034) (proposed, orchestrator to confirm) | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
+| B8 | internal audit | PPO observation alignment fills missing keys with zeros without a record | P3 | confirmed (no key missing today) | not exposed; 0.0.9 [#10034](https://github.com/ll7/robot_sf_ll7/issues/10034) (proposed, orchestrator to confirm) | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
 | C-F1 | internal audit | hybrid v4 static-escape and corridor-transit keys never act | P2 | confirmed | disclosed (decision D-010); fail-closed key check in 0.0.9 [#10006](https://github.com/ll7/robot_sf_ll7/issues/10006) | [#10006](https://github.com/ll7/robot_sf_ll7/issues/10006) |
 | C-F2 | internal audit | all four hybrids use parameter overrides keyed on scenario names | P2 | confirmed | disclosed (decision D-010, [#10006](https://github.com/ll7/robot_sf_ll7/issues/10006)) | [#10006](https://github.com/ll7/robot_sf_ll7/issues/10006) |
 | C-F3 | internal audit | v4 tuning ran without the perpendicular_traffic override used at release | P3 | confirmed | disclosed ([#10006](https://github.com/ll7/robot_sf_ll7/issues/10006), [#10002](https://github.com/ll7/robot_sf_ll7/issues/10002)) | [#10006](https://github.com/ll7/robot_sf_ll7/issues/10006) |
@@ -63,8 +64,8 @@ repository). State as of 2026-09-30, 12:30 UTC.
 | D-F5 | internal audit | deadlock detector flags any slow episode and counts collisions | P2 | confirmed | fixed in [#10014](https://github.com/ll7/robot_sf_ll7/pull/10014) (open), decision D-027 | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
 | D-F7 | internal audit | jerk_mean is not divided by dt | P3 | confirmed | fixed in [#10014](https://github.com/ll7/robot_sf_ll7/pull/10014) (open) | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
 | D-F8 | internal audit | step-index conventions one step off (time to goal, first path segment) | P3 | confirmed | fixed in [#10014](https://github.com/ll7/robot_sf_ll7/pull/10014) (open) | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
-| D-P2 | internal audit | recorded pedestrian forces lag positions by one step | P3 | plausible | no disposition recorded | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
-| D-N1 | internal audit | shortest-path reference uses no inflation, so it hugs walls | P3 | confirmed | no disposition recorded (related notes in [#10022](https://github.com/ll7/robot_sf_ll7/issues/10022)) | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
+| D-P2 | internal audit | recorded pedestrian forces lag positions by one step | P3 | plausible (code path still on main) | 0.0.9 [#10035](https://github.com/ll7/robot_sf_ll7/issues/10035) (proposed, orchestrator to confirm) | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
+| D-N1 | internal audit | shortest-path reference uses no inflation, so it hugs walls | P3 | confirmed (kept in #10014) | disclose as a metric definition note (optimistic for every planner); 0.0.9 [#10035](https://github.com/ll7/robot_sf_ll7/issues/10035) (proposed, orchestrator to confirm) | [#10007](https://github.com/ll7/robot_sf_ll7/issues/10007) |
 | X-STAT-1 | external review | table means bypass the foresight eligibility filter | P1 | confirmed | fixed in [#10019](https://github.com/ll7/robot_sf_ll7/pull/10019) (open, review FIX) | [#10015](https://github.com/ll7/robot_sf_ll7/issues/10015) |
 | X-STAT-2 | external review | Spearman over a key intersection keeps absolute ranks | P1 | confirmed | fixed in [#10019](https://github.com/ll7/robot_sf_ll7/pull/10019) (open) | [#10015](https://github.com/ll7/robot_sf_ll7/issues/10015) |
 | X-STAT-3 | external review | paired differences keep the last duplicate row | P2 | confirmed | fixed in [#10019](https://github.com/ll7/robot_sf_ll7/pull/10019) (open) | [#10015](https://github.com/ll7/robot_sf_ll7/issues/10015) |
@@ -90,7 +91,7 @@ repository). State as of 2026-09-30, 12:30 UTC.
 | PED-P3-4 | internal audit | relaxation time is effectively 0.448 s and configured twice | P3 | confirmed | 0.0.9 [#10017](https://github.com/ll7/robot_sf_ll7/issues/10017) | [#10017](https://github.com/ll7/robot_sf_ll7/issues/10017) |
 | PED-P3-5 | internal audit | respawned groups keep their end-of-route velocity | P3 | confirmed (code) | 0.0.9 [#10017](https://github.com/ll7/robot_sf_ll7/issues/10017) | [#10017](https://github.com/ll7/robot_sf_ll7/issues/10017) |
 | PED-P3-6 | internal audit | legacy wall force drops to zero at contact | P3 | plausible | covered by the wall-law fix, 0.0.9 [#10017](https://github.com/ll7/robot_sf_ll7/issues/10017) | [#10017](https://github.com/ll7/robot_sf_ll7/issues/10017) |
-| PED-P3-7 | internal audit | route completion ignores the waypoint index | P3 | plausible | no disposition recorded | [#10017](https://github.com/ll7/robot_sf_ll7/issues/10017) |
+| PED-P3-7 | internal audit | route completion ignores the waypoint index | P3 | plausible; static scan found 0 of 29 release routes exposed | not exposed; 0.0.9 [#10036](https://github.com/ll7/robot_sf_ll7/issues/10036) (proposed, orchestrator to confirm) | [#10017](https://github.com/ll7/robot_sf_ll7/issues/10017) |
 | PED-V1 | internal audit | join_group and leave_group never contain a group | P2 | confirmed | disclosed (decision D-041); fix in 0.0.9 [#10028](https://github.com/ll7/robot_sf_ll7/issues/10028) | [#10028](https://github.com/ll7/robot_sf_ll7/issues/10028) |
 | X-PED-1 | external review | group gaze scales with 1/goal distance, can push forward, ignores field of view | P1 | confirmed by execution | disclosed (decision D-040); fix in 0.0.9 [#10027](https://github.com/ll7/robot_sf_ll7/issues/10027) | [#10027](https://github.com/ll7/robot_sf_ll7/issues/10027) |
 | X-PED-2 | external review | intra-group repulsion weakens as members get closer | P1 | confirmed by execution | disclosed (decision D-040); fix in 0.0.9 [#10027](https://github.com/ll7/robot_sf_ll7/issues/10027) | [#10027](https://github.com/ll7/robot_sf_ll7/issues/10027) |
@@ -152,13 +153,13 @@ its row).
 | Disposition | Findings |
 |---|---|
 | fixed in a pull request (merged or open) | 40 |
-| disclosed in 0.0.8 (most also have a 0.0.9 issue) | 13 |
-| 0.0.9 issue only | 9 |
-| not exposed in the 0.0.8 release | 9 |
+| disclosed in 0.0.8 (most also have a 0.0.9 issue) | 15 |
+| 0.0.9 issue only | 11 |
+| not exposed in the 0.0.8 release | 12 |
 | refuted | 1 |
 | to be corrected in the thesis text | 1 |
 | triage pending (adapter review) | 6 |
-| no disposition recorded | 7 |
+| no disposition recorded | 0 |
 | **total** | **86** |
 
 Of the 40 fixed findings, 5 are fixed in merged pull requests and 35 in pull requests that are still open.

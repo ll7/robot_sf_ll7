@@ -98,7 +98,7 @@ def test_full_release_roster_resolution_helpers_fail_closed(
     assert any("has unexpected ['unexpected']" in blocker for blocker in roster_blockers)
 
 
-def _write_full_campaign(tmp_path: Path) -> Path:
+def _write_full_campaign(tmp_path: Path, *, budgets: dict[str, int] | None = None) -> Path:
     """Write a complete 14-arm fixture with 48 scenarios and 30 seeds."""
     campaign_root = tmp_path / "campaign"
     runs: list[dict[str, Any]] = []
@@ -118,7 +118,11 @@ def _write_full_campaign(tmp_path: Path) -> Path:
                             "episode_id": f"{planner_key}-{scenario_id}-{seed}",
                             "scenario_id": scenario_id,
                             "seed": seed,
-                            "horizon": 600,
+                            "horizon": budgets[scenario_id] if budgets else 600,
+                            "effective_budget_steps": budgets[scenario_id] if budgets else 600,
+                            "scenario_params": {
+                                "run_horizon": budgets[scenario_id] if budgets else 600
+                            },
                             "status": "success",
                             "algo": expected_algo,
                             "git_hash": _SOURCE_SHA,
@@ -127,7 +131,9 @@ def _write_full_campaign(tmp_path: Path) -> Path:
                                 "config_hash": f"{scenario_index:016x}",
                                 "scenario_id": scenario_id,
                                 "seed": seed,
-                                "simulator_settings": {"horizon": 600},
+                                "simulator_settings": {
+                                    "horizon": budgets[scenario_id] if budgets else 600
+                                },
                             },
                             "algorithm_metadata": {
                                 "algorithm": metadata_algorithm,
@@ -144,7 +150,7 @@ def _write_full_campaign(tmp_path: Path) -> Path:
                 "planner": {
                     "key": planner_key,
                     "kinematics": "differential_drive",
-                    "horizon": 600,
+                    "horizon": None if budgets else 600,
                 },
                 "status": "ok",
                 "episodes_path": relative_path.as_posix(),
@@ -198,9 +204,10 @@ def _write_provenance_bound_full_campaign(
     *,
     shared_first_algorithm: bool = False,
     telemetry: dict[str, str] | None = None,
+    budgets: dict[str, int] | None = None,
 ) -> tuple[Path, SimpleNamespace]:
     """Write a full fixture with the same sidecars and arm paths as production."""
-    campaign_root = _write_full_campaign(tmp_path)
+    campaign_root = _write_full_campaign(tmp_path, budgets=budgets)
     summary_path = campaign_root / "reports" / "campaign_summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     source_repository_root = tmp_path / "frozen-source"
@@ -215,6 +222,35 @@ def _write_provenance_bound_full_campaign(
     scenario_path.parent.mkdir(parents=True, exist_ok=True)
     scenario_path.write_text("scenarios: []\n", encoding="utf-8")
     resolved_scenarios = [{"id": scenario_id} for scenario_id in _SCENARIO_IDS]
+    schedule_path = None
+    schedule_digest = None
+    if budgets:
+        from hashlib import sha256
+
+        import yaml
+
+        resolved_scenarios = [
+            {"id": sid, "simulation_config": {"max_episode_steps": budget}}
+            for sid, budget in budgets.items()
+        ]
+        scenario_path.write_text(
+            yaml.safe_dump({"scenarios": resolved_scenarios}), encoding="utf-8"
+        )
+        schedule_path = source_repository_root / "configs/benchmarks/horizons.yaml"
+        schedule_path.parent.mkdir(parents=True, exist_ok=True)
+        schedule_path.write_text(
+            yaml.safe_dump(
+                {
+                    "schema_version": 1,
+                    "scenarios": {
+                        sid: {"recommended_horizon_steps": budget}
+                        for sid, budget in budgets.items()
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        schedule_digest = sha256(schedule_path.read_bytes()).hexdigest()
     monkeypatch.setattr(
         release_acceptance, "_load_campaign_scenarios", lambda _cfg: resolved_scenarios
     )
@@ -285,7 +321,7 @@ def _write_provenance_bound_full_campaign(
             suite_key="classic_interactions",
             total_jobs=len(rows),
             written=len(rows),
-            horizon=600,
+            horizon=None if budgets else 600,
             dt=0.1,
             record_forces=False,
             active_observation_mode=None,
@@ -303,6 +339,10 @@ def _write_provenance_bound_full_campaign(
         holonomic_command_mode="vx_vy",
         telemetry=telemetry,
         source_repository_root=source_repository_root,
+        scenario_horizons_path=schedule_path,
+        scenario_horizons_sha256=schedule_digest,
+        protocol_version="0.0.8" if budgets else None,
+        horizon=None if budgets else 600,
     )
     return campaign_root, config
 
@@ -1656,3 +1696,78 @@ def test_campaign_summary_reader_reports_invalid_json_without_private_path(
     assert payload is None
     assert error == "campaign summary contains invalid JSON"
     assert str(tmp_path) not in error
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        None,
+        "row_horizon",
+        "run_horizon",
+        "provenance_horizon",
+        "legacy_policy",
+        "schedule_pin",
+        "authored_budget",
+    ],
+)
+def test_full_release_acceptance_checks_independent_mixed_authored_budgets(
+    tmp_path, monkeypatch, mutation
+):
+    """The full 20,160-row gate accepts mixed authored budgets and rejects drift.
+
+    Synthetic JSONL rows use the old held-out band as identity data only; this
+    test never constructs an environment or calls a planner.
+    """
+    from collections import Counter
+
+    budgets = dict(
+        zip(_SCENARIO_IDS, [400] * 25 + [500] * 13 + [600] * 8 + [650, 700], strict=True)
+    )
+    assert Counter(budgets.values()) == {400: 25, 500: 13, 600: 8, 650: 1, 700: 1}
+    campaign_root, config = _write_provenance_bound_full_campaign(
+        tmp_path, monkeypatch, budgets=budgets
+    )
+    manifest = _full_manifest()
+    manifest.expected_horizon_steps = None
+    manifest.release_tag = "0.0.8"
+    manifest.scenario_horizons_path = config.scenario_horizons_path
+    manifest.scenario_horizons_sha256 = config.scenario_horizons_sha256
+    expected = None
+    if mutation == "schedule_pin":
+        manifest.scenario_horizons_sha256 = "0" * 64
+        expected = "manifest and campaign scenario horizon digests differ"
+    elif mutation == "authored_budget":
+        import yaml
+
+        raw = yaml.safe_load(config.scenario_matrix_path.read_text())
+        raw["scenarios"][0]["simulation_config"]["max_episode_steps"] = 600
+        config.scenario_matrix_path.write_text(yaml.safe_dump(raw))
+        expected = "schedule does not match unique authored budget"
+    elif mutation is not None:
+        path = campaign_root / "runs/planner_00__differential_drive/episodes.jsonl"
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        if mutation == "row_horizon":
+            rows[0]["horizon"] = 600
+            expected = "horizon differs from scenario budget 400"
+        elif mutation == "run_horizon":
+            rows[0]["scenario_params"]["run_horizon"] = 600
+            expected = "run_horizon differs from scenario budget 400"
+        elif mutation == "provenance_horizon":
+            rows[0]["result_provenance"]["simulator_settings"]["horizon"] = 600
+            expected = "result provenance horizon differs from scenario budget 400"
+        else:
+            rows[0]["metadata"] = {"scenario_horizon": {"policy": "legacy_runner_cap"}}
+            expected = "legacy horizon policy is forbidden in 0.0.8+"
+        path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+    report = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=manifest,
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+    if mutation is None:
+        assert report["status"] == "valid", report["blockers"]
+        assert report["observed_episode_rows"] == report["unique_episode_identities"] == 20160
+    else:
+        assert report["status"] == "invalid"
+        assert any(expected in blocker for blocker in report["blockers"]), report["blockers"]

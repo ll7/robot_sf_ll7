@@ -30,8 +30,6 @@ from robot_sf.benchmark.release_protocol import (
     validate_stress_smoke_runtime_identity,
 )
 
-pytestmark = pytest.mark.usefixtures("historical_horizon_policy")
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = REPO_ROOT / (
     "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_hybrid_stress_smoke_v0_1.yaml"
@@ -92,7 +90,7 @@ def test_historical_stress_h600_admits_only_explicit_legacy_budgets() -> None:
 
     assert report["status"] == "valid", report["problems"]
     resolved = _load_campaign_scenarios(campaign_config)
-    assert {s["simulation_config"]["max_episode_steps"] for s in resolved} == {600}
+    assert {s["simulation_config"]["max_episode_steps"] for s in resolved} == {400, 500, 600}
     assert [s["metadata"]["scenario_horizon"]["authored_max_episode_steps"] for s in resolved] == [
         600,
         600,
@@ -100,10 +98,7 @@ def test_historical_stress_h600_admits_only_explicit_legacy_budgets() -> None:
         400,
         400,
     ]
-    assert all(
-        s["metadata"]["scenario_horizon"]["policy"] == "legacy_fixed_extends_authored"
-        for s in resolved
-    )
+    assert all(s["metadata"]["scenario_horizon"]["policy"] == "legacy_runner_cap" for s in resolved)
     from dataclasses import replace
 
     with pytest.raises(ValueError, match="authored limit 500 is below fixed horizon 600"):

@@ -18,7 +18,10 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
+from robot_sf.benchmark.camera_ready._config import (
+    _load_campaign_scenarios,
+    _load_scenario_horizon_schedule,
+)
 from robot_sf.benchmark.camera_ready._preflight import _resolved_seed_inventory
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, load_campaign_config
 from robot_sf.benchmark.effective_algorithm_branches import WITNESS_KINDS
@@ -30,6 +33,7 @@ from robot_sf.benchmark.release_tag_identity import (
 )
 from robot_sf.benchmark.zenodo_publisher import ZenodoPublisherError, load_dataset_metadata
 from robot_sf.common.artifact_paths import get_repository_root
+from robot_sf.training.scenario_loader import load_scenarios
 
 RELEASE_MANIFEST_SCHEMA_VERSION = "benchmark-release-manifest.v0.1"
 RELEASE_MANIFEST_SCHEMA_VERSION_V0_2 = "benchmark-release-manifest.v0.2"
@@ -450,6 +454,8 @@ class BenchmarkReleaseManifest:
     latest_main_base_commit: str | None = None
     expected_episode_cells: int | None = None
     expected_horizon_steps: int | None = None
+    scenario_horizons_path: Path | None = None
+    scenario_horizons_sha256: str | None = None
     publication_channel: str | None = None
     suite_policy_path: Path | None = None
     suite_policy_sha256: str | None = None
@@ -1223,7 +1229,7 @@ def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
     }
 
 
-def _load_v02_contract(  # noqa: C901, PLR0912
+def _load_v02_contract(  # noqa: C901, PLR0912, PLR0915
     manifest_path: Path,
     payload: dict[str, Any],
     *,
@@ -1240,6 +1246,8 @@ def _load_v02_contract(  # noqa: C901, PLR0912
         "planning_base_sha": None,
         "expected_episode_cells": None,
         "expected_horizon_steps": None,
+        "scenario_horizons_path": None,
+        "scenario_horizons_sha256": None,
         "publication_channel": None,
         "suite_policy_path": None,
         "suite_policy_sha256": None,
@@ -1281,7 +1289,26 @@ def _load_v02_contract(  # noqa: C901, PLR0912
     if not isinstance(matrix, dict) or not isinstance(matrix.get("expected_episode_cells"), int):
         raise ValueError("matrix.expected_episode_cells must be an integer")
     horizon_steps = matrix.get("horizon_steps")
-    if not isinstance(horizon_steps, int) or isinstance(horizon_steps, bool) or horizon_steps <= 0:
+    schedule_path = None
+    schedule_sha256 = matrix.get("scenario_horizons_sha256")
+    if matrix.get("scenario_horizons") is not None:
+        if horizon_steps is not None:
+            raise ValueError("matrix.scenario_horizons cannot be combined with horizon_steps")
+        schedule_path = _resolve_required_file(
+            manifest_path,
+            matrix["scenario_horizons"],
+            "matrix.scenario_horizons",
+            repository_root=repository_root,
+        )
+        if not isinstance(schedule_sha256, str) or _SHA256_RE.fullmatch(schedule_sha256) is None:
+            raise ValueError("matrix.scenario_horizons_sha256 must be an exact SHA-256")
+        if _sha256_file(schedule_path) != schedule_sha256:
+            raise ValueError("matrix.scenario_horizons_sha256 differs from schedule bytes")
+    elif schedule_sha256 is not None:
+        raise ValueError("matrix.scenario_horizons_sha256 requires scenario_horizons")
+    elif (
+        not isinstance(horizon_steps, int) or isinstance(horizon_steps, bool) or horizon_steps <= 0
+    ):
         raise ValueError("matrix.horizon_steps must be a positive integer")
     publication = payload.get("publication")
     if not isinstance(publication, dict):
@@ -1343,6 +1370,8 @@ def _load_v02_contract(  # noqa: C901, PLR0912
         "planning_base_sha": planning_base_sha,
         "expected_episode_cells": int(matrix["expected_episode_cells"]),
         "expected_horizon_steps": horizon_steps,
+        "scenario_horizons_path": schedule_path,
+        "scenario_horizons_sha256": schedule_sha256,
         "publication_channel": str(publication["channel"]),
         "suite_policy_path": _resolve_required_file(
             manifest_path,
@@ -2095,7 +2124,12 @@ def _validate_v02_contract(  # noqa: C901, PLR0912
     cells = len(scenarios) * len(resolved_seeds) * enabled_planners
     if cells != manifest.expected_episode_cells:
         problems.append("matrix.expected_episode_cells does not match resolved matrix")
-    if manifest.expected_horizon_steps is None:
+    if manifest.scenario_horizons_path is not None or cfg.scenario_horizons_path is not None:
+        try:
+            resolve_release_horizon_budgets(manifest, cfg)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            problems.append(f"matrix scenario horizon contract invalid: {exc}")
+    elif manifest.expected_horizon_steps is None:
         problems.append("matrix.horizon_steps is missing")
     elif cfg.horizon != manifest.expected_horizon_steps:
         problems.append("matrix.horizon_steps does not match campaign config")
@@ -2120,6 +2154,65 @@ def _validate_v02_contract(  # noqa: C901, PLR0912
         problems.append("publication.version_doi must name a fresh Zenodo version")
     if manifest.concept_doi == manifest.version_doi:
         problems.append("publication concept and version DOI must be distinct")
+
+
+def resolve_release_horizon_budgets(manifest: Any, cfg: Any) -> dict[str, int]:
+    """Validate independent manifest/campaign pins against authored scenario budgets.
+
+    Returns:
+        Per producer scenario identifier budget; no environment is constructed.
+    """
+    schedule_path = getattr(manifest, "scenario_horizons_path", None)
+    digest = getattr(manifest, "scenario_horizons_sha256", None)
+    config_path = getattr(cfg, "scenario_horizons_path", None)
+    if schedule_path is None or config_path is None or not digest:
+        raise ValueError("independent manifest scenario horizon schedule and digest required")
+    if (
+        getattr(manifest, "expected_horizon_steps", None) is not None
+        or getattr(cfg, "horizon", None) is not None
+    ):
+        raise ValueError("scheduled release cannot carry a fixed horizon")
+    if getattr(cfg, "horizon_policy", None) is not None:
+        raise ValueError("scheduled release cannot carry legacy horizon policy")
+    if getattr(cfg, "scenario_horizons_sha256", None) != digest:
+        raise ValueError("manifest and campaign scenario horizon digests differ")
+    if _sha256_file(Path(schedule_path)) != digest or _sha256_file(Path(config_path)) != digest:
+        raise ValueError("scenario horizon digest differs from independently bound bytes")
+    if any(
+        getattr(p, "horizon_override", None) is not None
+        for p in cfg.planners
+        if getattr(p, "enabled", True)
+    ):
+        raise ValueError("scheduled release cannot carry planner horizon overrides")
+    schedule = _load_scenario_horizon_schedule(Path(schedule_path))
+    authored = load_scenarios(cfg.scenario_matrix_path, base_dir=cfg.scenario_matrix_path.parent)
+    return _validate_authored_release_budgets(authored, schedule)
+
+
+def _validate_authored_release_budgets(
+    authored: list[Mapping[str, Any]], schedule: dict[str, dict[str, Any]]
+) -> dict[str, int]:
+    """Compare independently loaded source budgets with the bound schedule.
+
+    Returns:
+        Exact scenario-to-budget map after authored parity checks.
+    """
+    budgets = {}
+    for scenario in authored:
+        sid = str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "")
+        budget = scenario.get("simulation_config", {}).get("max_episode_steps")
+        if not isinstance(budget, int) or isinstance(budget, bool) or budget <= 0:
+            raise ValueError(f"missing positive authored budget for {sid}")
+        if (
+            sid in budgets
+            or sid not in schedule
+            or schedule[sid]["recommended_horizon_steps"] != budget
+        ):
+            raise ValueError(f"schedule does not match unique authored budget for {sid}")
+        budgets[sid] = budget
+    if set(budgets) != set(schedule):
+        raise ValueError("scenario horizon schedule must match authored matrix exactly")
+    return budgets
 
 
 def _validate_release_metadata_contract(
@@ -2491,6 +2584,10 @@ def build_resolved_release_manifest(
         "matrix": {
             "expected_episode_cells": manifest.expected_episode_cells,
             "horizon_steps": manifest.expected_horizon_steps,
+            "scenario_horizons": _repo_relative(manifest.scenario_horizons_path)
+            if manifest.scenario_horizons_path
+            else None,
+            "scenario_horizons_sha256": manifest.scenario_horizons_sha256,
         },
         "release_contract": {
             "suite_policy_path": (
@@ -2744,6 +2841,7 @@ def _materialize_release_template_payload(  # noqa: PLR0913
         "scenario": ("matrix_path", "suite_policy_path", "route_certification_path"),
         "seed_policy": ("seed_sets_path",),
         "metrics": ("snqi_weights_path", "snqi_baseline_path"),
+        "matrix": ("scenario_horizons",),
     }
     for section_name, fields in path_fields.items():
         raw_section = template_payload.get(section_name)

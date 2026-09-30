@@ -10,8 +10,6 @@ import yaml
 
 from robot_sf.benchmark import release_protocol
 
-pytestmark = pytest.mark.usefixtures("historical_horizon_policy")
-
 
 def _v02_payload() -> dict[str, Any]:
     """Build a complete v0.2 payload from the pinned predecessor fixture."""

@@ -398,57 +398,114 @@ def test_duration_only_simulators_keep_ceiling_semantics(duration):
     assert settings.max_sim_steps == state.max_sim_steps == ceil(duration / 0.1)
 
 
-@pytest.mark.parametrize("version", ["0.0.2", "0.0.7"])
-def test_explicit_historical_horizon_extends_and_records_episode_provenance(tmp_path, version):
-    """Real YAML admission and episode output retain authored and applied budgets."""
-    import yaml
-
+@pytest.mark.parametrize(
+    ("config_name", "name", "algo", "seed", "steps", "reason", "avg_speed", "failure_to_progress"),
+    [
+        (
+            "benchmark_data_2026_08",
+            "francis2023_narrow_doorway",
+            "orca",
+            1001,
+            400,
+            "terminated",
+            0.24086784179045043,
+            230.0,
+        ),
+        (
+            "benchmark_data_2026_08",
+            "francis2023_narrow_doorway",
+            "orca",
+            1002,
+            400,
+            "terminated",
+            0.23080397754459608,
+            262.0,
+        ),
+        (
+            "runtime_smoke_v0_3",
+            "francis2023_blind_corner",
+            "goal",
+            1001,
+            263,
+            "collision",
+            0.94991463368817,
+            0.0,
+        ),
+        (
+            "runtime_smoke_v0_3",
+            "francis2023_blind_corner",
+            "goal",
+            1002,
+            262,
+            "collision",
+            0.9490333775512672,
+            0.0,
+        ),
+        (
+            "benchmark_data_2026_08",
+            "classic_realworld_double_bottleneck_high",
+            "social_force",
+            1001,
+            600,
+            "max_steps",
+            1.452342043961671,
+            253.0,
+        ),
+    ],
+)
+def test_historical_runner_cap_matches_main_oracle(
+    config_name, name, algo, seed, steps, reason, avg_speed, failure_to_progress
+):
+    """Literal oracle captured from main 93ba0d75 with native planners on dev seeds."""
     from robot_sf.benchmark.map_runner.map_runner import _build_policy
     from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
 
-    raw = yaml.safe_load(TEMPLATE.read_text())
-    raw.pop("scenario_horizons")
-    raw.pop("scenario_horizons_sha256")
-    for field in (
-        "scenario_matrix",
-        "comparability_mapping",
-        "route_clearance_certifications",
-        "snqi_weights",
-        "snqi_baseline",
-    ):
-        if field in raw:
-            raw[field] = str(ROOT / raw[field])
-    raw.update(
-        protocol_version=version, horizon_policy="legacy_fixed_extends_authored", horizon=600
+    cfg = load_campaign_config(
+        ROOT / "configs/benchmarks" / f"paper_experiment_matrix_v2_h600_s30_{config_name}.yaml"
     )
-    raw["scenario_candidates"] = ["classic_doorway_medium"]
-    raw["seed_policy"] = {"mode": "fixed-list", "seeds": [1001]}
-    raw["planners"] = [{"key": "goal", "algo": "goal", "planner_group": "core"}]
-    path = tmp_path / "historical.yaml"
-    path.write_text(yaml.safe_dump(raw))
-    cfg = load_campaign_config(path, repository_root=ROOT)
-    scenario = _load_campaign_scenarios(cfg, repository_root=ROOT)[0]
-    assert scenario["simulation_config"]["max_episode_steps"] == 600
-    expected = {
-        "policy": "legacy_fixed_extends_authored",
-        "authored_max_episode_steps": 500,
-        "applied_max_episode_steps": 600,
-    }
-    assert scenario["metadata"]["scenario_horizon"] == expected
+    scenario = next(
+        s for s in _load_campaign_scenarios(cfg, repository_root=ROOT) if s["name"] == name
+    )
+    scenario["seeds"] = [seed]
+    planner = next(p for p in cfg.planners if p.algo == algo)
     row = run_map_episode(
         scenario,
-        1001,
+        seed,
         horizon=600,
         dt=0.1,
-        record_forces=False,
+        record_forces=True,
         snqi_weights=None,
         snqi_baseline=None,
-        algo="goal",
+        algo=algo,
+        algo_config_path=planner.algo_config_path,
         scenario_path=ROOT / "scoped_scenarios.json",
         policy_builder=_build_policy,
     )
-    assert row["metadata"]["scenario_horizon"] == expected
-    assert row["horizon"] == row["effective_budget_steps"] == 600
+    main_episode_ids = {
+        ("francis2023_narrow_doorway", 1001): "francis2023_narrow_doorway--1001--dd063c0bd8131283",
+        ("francis2023_narrow_doorway", 1002): "francis2023_narrow_doorway--1002--ec38a96935d88b5e",
+        ("francis2023_blind_corner", 1001): "francis2023_blind_corner--1001--553660886afe757a",
+        ("francis2023_blind_corner", 1002): "francis2023_blind_corner--1002--1e9a60737c43cf9b",
+        (
+            "classic_realworld_double_bottleneck_high",
+            1001,
+        ): "classic_realworld_double_bottleneck_high--1001--6df9b00227cecdfe",
+    }
+    assert row["episode_id"] == main_episode_ids[(name, seed)]
+    assert row["config_hash"] == main_episode_ids[(name, seed)].rsplit("--", 1)[1]
+    assert row["steps"] == steps
+    assert row["termination_reason"] == reason
+    assert row["metrics"]["avg_speed"] == pytest.approx(avg_speed, rel=1e-12)
+    assert row["metrics"]["failure_to_progress"] == failure_to_progress
+    assert row["horizon"] == row["scenario_params"]["run_horizon"] == 600
+    authored = scenario["simulation_config"]["max_episode_steps"]
+    assert row["effective_budget_steps"] == min(authored, 600)
+    assert row["metadata"]["scenario_horizon"] == {
+        "policy": "legacy_runner_cap",
+        "authored_max_episode_steps": authored,
+        "runner_horizon": 600,
+        "applied_max_episode_steps": min(authored, 600),
+    }
 
 
 @pytest.mark.parametrize("version", [None, "0.0.8", "0.0.9", "0.1.0", "bad"])
@@ -468,14 +525,14 @@ def test_legacy_horizon_policy_requires_historical_version(tmp_path, version):
     ):
         if field in raw:
             raw[field] = str(ROOT / raw[field])
-    raw.update(horizon_policy="legacy_fixed_extends_authored", horizon=600)
+    raw.update(horizon_policy="legacy_runner_cap", horizon=600)
     raw["seed_policy"] = {"mode": "fixed-list", "seeds": [1001]}
     raw["planners"] = [{"key": "goal", "algo": "goal", "planner_group": "core"}]
     if version is not None:
         raw["protocol_version"] = version
     path = tmp_path / "campaign.yaml"
     path.write_text(yaml.safe_dump(raw))
-    with pytest.raises(ValueError, match="legacy_fixed_extends_authored.*0.0.7"):
+    with pytest.raises(ValueError, match="legacy_runner_cap.*0.0.7"):
         load_campaign_config(path, repository_root=ROOT)
 
 
@@ -493,7 +550,7 @@ def test_legacy_provenance_preserves_historical_episode_identity():
     resolved = _apply_fixed_campaign_horizon(
         [authored],
         horizon=600,
-        horizon_policy="legacy_fixed_extends_authored",
+        horizon_policy="legacy_runner_cap",
         protocol_version="0.0.7",
     )[0]
     options = {"algo": "goal", "algo_config": {}, "horizon": 600, "dt": 0.1, "record_forces": False}
@@ -504,12 +561,14 @@ def test_legacy_provenance_preserves_historical_episode_identity():
 
 def test_legacy_mode_is_fenced_again_at_planner_preparation(tmp_path):
     """A caller replacing the parsed config cannot bypass the current-version fence."""
-    cfg = load_campaign_config(TEMPLATE)
+    cfg = load_campaign_config(
+        ROOT / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml"
+    )
     scenarios = _load_campaign_scenarios(cfg, repository_root=ROOT)
     changed = replace(
-        cfg, horizon_policy="legacy_fixed_extends_authored", protocol_version="0.0.8", horizon=600
+        cfg, horizon_policy="legacy_runner_cap", protocol_version="0.0.8", horizon=600
     )
-    with pytest.raises(ValueError, match="legacy_fixed_extends_authored.*0.0.7"):
+    with pytest.raises(ValueError, match="legacy_runner_cap.*0.0.7"):
         _prepare_campaign_planner_variant_run(
             SimpleNamespace(cfg=changed, runs_dir=tmp_path, scenarios=scenarios),
             planner=cfg.planners[0],
@@ -517,3 +576,84 @@ def test_legacy_mode_is_fenced_again_at_planner_preparation(tmp_path):
             active_observation_mode="socnav_state",
             log_run=False,
         )
+
+
+@pytest.mark.parametrize("reserved", ["campaign_horizon", "scenario_horizon"])
+def test_matrix_override_cannot_plant_reserved_horizon_metadata(tmp_path, reserved):
+    """An input override cannot masquerade as trusted admission provenance."""
+    import yaml
+
+    matrix = tmp_path / "matrix.yaml"
+    matrix.write_text(
+        yaml.safe_dump(
+            {
+                "include": [
+                    str(
+                        ROOT
+                        / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+                    )
+                ],
+                "scenario_overrides": {"metadata": {reserved: {"authored_max_episode_steps": 600}}},
+            }
+        )
+    )
+    cfg = replace(load_campaign_config(TEMPLATE), scenario_matrix_path=matrix)
+    with pytest.raises(ValueError, match="reserved admission keys"):
+        _load_campaign_scenarios(cfg, repository_root=ROOT)
+
+
+def test_passed_horizon_cannot_override_scheduled_400(monkeypatch):
+    """A passed H600 cannot extend a schedule-bound H400 scenario."""
+    import robot_sf.benchmark.map_runner.map_runner_episode as episode
+
+    cfg = load_campaign_config(TEMPLATE)
+    scenario = next(
+        s
+        for s in _load_campaign_scenarios(cfg, repository_root=ROOT)
+        if s["name"] == "francis2023_blind_corner"
+    )
+    original = episode._resolve_episode_run_context
+
+    def conflicting_horizon(**kwargs):
+        return original(**{**kwargs, "horizon": 600})
+
+    monkeypatch.setattr(episode, "_resolve_episode_run_context", conflicting_horizon)
+    with pytest.raises(ValueError, match="passed horizon differs from bound scenario budget"):
+        _scheduled_context(scenario, 0.1)
+
+
+def test_registry_admission_depends_on_exact_bytes(tmp_path):
+    """Renaming preserves admission; modifying identical-name YAML does not."""
+    source = (
+        ROOT / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml"
+    )
+    (tmp_path / "configs").symlink_to(ROOT / "configs", target_is_directory=True)
+    path = tmp_path / source.name
+    path.write_bytes(source.read_bytes())
+    cfg = load_campaign_config(path, repository_root=ROOT)
+    assert cfg.protocol_version == "0.0.7"
+    assert cfg.horizon_policy == "legacy_runner_cap"
+    path.write_bytes(source.read_bytes() + b"\n# changed content\n")
+    cfg = load_campaign_config(path, repository_root=ROOT)
+    with pytest.raises(ValueError, match="authored limit.*below fixed horizon"):
+        _load_campaign_scenarios(cfg, repository_root=ROOT)
+
+
+def test_published_2026_08_manifest_is_valid_in_production():
+    """Published immutable pins work through production admission, without injection."""
+    from robot_sf.benchmark.release_protocol import load_release_manifest, validate_release_manifest
+
+    manifest = load_release_manifest(
+        ROOT / "configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml"
+    )
+    result = validate_release_manifest(manifest)
+    assert result["status"] == "valid", result["problems"]
+    assert result["problems"] == []
+
+
+def test_retired_legacy_extension_policy_has_no_alias():
+    """The extension policy cannot remain available under its former name."""
+    from robot_sf.benchmark.camera_ready._config import _validate_horizon_policy
+
+    with pytest.raises(ValueError, match="Unknown horizon_policy"):
+        _validate_horizon_policy("legacy_fixed_extends_authored", "0.0.7")

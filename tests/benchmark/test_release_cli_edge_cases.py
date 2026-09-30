@@ -11,9 +11,6 @@ import pytest
 
 from robot_sf import release_cli
 
-pytestmark = pytest.mark.usefixtures("historical_horizon_policy")
-
-
 SOURCE_SHA = "5" * 40
 PREDECESSOR_TAG = f"paper-matrix-v2-h600-s30-2026-09-{SOURCE_SHA}"
 SUCCESSOR_TAG = f"{PREDECESSOR_TAG}-erratum.1"

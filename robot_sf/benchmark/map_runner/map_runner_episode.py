@@ -1354,6 +1354,40 @@ def _accepts_runtime_input_records(builder: Callable[..., Any]) -> bool:
     )
 
 
+def _bind_episode_horizon(
+    scenario: dict[str, Any],
+    config: RobotSimulationConfig,
+    horizon: int | None,
+    horizon_val: int,
+    max_steps: int,
+) -> int:
+    """Enforce the admitted runner budget and preserve historical simulator limits.
+
+    Returns:
+        Runner horizon after enforcing the scenario binding.
+    """
+    horizon_binding = scenario.get("metadata", {}).get("scenario_horizon", {})
+    legacy = horizon_binding.get("policy") == "legacy_runner_cap"
+    bound = scenario.get("metadata", {}).get("campaign_horizon", {}).get("mode") == "fixed" or bool(
+        horizon_binding
+    )
+    if bound:
+        expected_runner_horizon = (
+            horizon_binding.get("runner_horizon", max_steps) if legacy else max_steps
+        )
+        if horizon is not None and horizon > 0 and int(horizon) != expected_runner_horizon:
+            raise ValueError("passed horizon differs from bound scenario budget")
+        if legacy:
+            horizon_val = int(expected_runner_horizon)
+    if bound and not legacy:
+        # Carry the integer campaign budget directly to RobotState. The duration
+        # remains useful metadata, but ceil((budget * dt) / dt) can add one step.
+        config.sim_config.episode_step_limit = horizon_val
+        config.sim_config.sim_time_in_secs = horizon_val * config.sim_config.time_per_step_in_secs
+
+    return horizon_val
+
+
 def _resolve_episode_run_context(  # noqa: PLR0913
     *,
     scenario: dict[str, Any],
@@ -1440,14 +1474,7 @@ def _resolve_episode_run_context(  # noqa: PLR0913
         horizon_val = 200
     if dt is not None and dt > 0:
         config.sim_config.time_per_step_in_secs = float(dt)
-    if (
-        scenario.get("metadata", {}).get("campaign_horizon", {}).get("mode") == "fixed"
-        or scenario.get("metadata", {}).get("scenario_horizon") is not None
-    ):
-        # Carry the integer campaign budget directly to RobotState. The duration
-        # remains useful metadata, but ceil((budget * dt) / dt) can add one step.
-        config.sim_config.episode_step_limit = horizon_val
-        config.sim_config.sim_time_in_secs = horizon_val * config.sim_config.time_per_step_in_secs
+    horizon_val = _bind_episode_horizon(scenario, config, horizon, horizon_val, max_steps)
 
     robot_kinematics = _robot_kinematics_label(config)
     actuation_profile = _load_synthetic_actuation_profile(synthetic_actuation_profile)
@@ -3537,6 +3564,7 @@ def _execute_step_loop(
     env: Any,
     planner_stats: Any,
     horizon_val: int,
+    normalize_budget_timeout: bool = True,
 ) -> None:
     """Run the per-step episode loop, mutating ``state`` in place."""
     for step_idx in range(horizon_val):
@@ -3614,7 +3642,7 @@ def _execute_step_loop(
             slc,
             step_idx=step_idx,
             sim=sim,
-            reached_max_steps=step_idx + 1 >= horizon_val,
+            reached_max_steps=normalize_budget_timeout and step_idx + 1 >= horizon_val,
         ):
             break
 
@@ -4847,12 +4875,12 @@ def _finalize_record_provenance(  # noqa: PLR0913
     """Attach provenance, evidence, event ledger, and track fields to the record."""
     record["effective_budget_steps"] = min(horizon_val, int(config.sim_config.max_sim_steps))
     horizon_metadata = scenario.get("metadata", {}).get("scenario_horizon", {})
-    if horizon_metadata.get("policy") == "legacy_fixed_extends_authored":
+    if horizon_metadata.get("policy") == "legacy_runner_cap":
         record.setdefault("metadata", {})["scenario_horizon"] = {
             **horizon_metadata,
             "applied_max_episode_steps": record["effective_budget_steps"],
         }
-    if scenario.get("metadata", {}).get("scenario_horizon") is not None:
+    if horizon_metadata and horizon_metadata.get("policy") != "legacy_runner_cap":
         scenario_params["run_horizon"] = record["effective_budget_steps"]
     pedestrian_model_provenance = build_pedestrian_model_provenance(
         sim_config=config.sim_config,

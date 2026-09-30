@@ -24,9 +24,6 @@ from robot_sf.benchmark.release_protocol import load_release_manifest, validate_
 from robot_sf.benchmark.runtime_smoke_admission import RUNTIME_SMOKE_PLANNER_KEYS
 from robot_sf.benchmark.spawn_preflight import _release_manifest_inputs, run_manifest_preflight
 
-pytestmark = pytest.mark.usefixtures("historical_horizon_policy")
-
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_CONFIG_PATH = (
     REPO_ROOT / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml"
@@ -400,7 +397,9 @@ def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
     template = _load_yaml(CAMPAIGN_TEMPLATE_PATH)
     smoke = _load_yaml(RUNTIME_SMOKE_V04_CONFIG_PATH)
     cfg = load_campaign_config(RUNTIME_SMOKE_V04_CONFIG_PATH)
-    scenarios = _load_campaign_scenarios(cfg)
+    assert cfg.horizon_policy is None
+    with pytest.raises(ValueError, match="authored limit 400 is below fixed horizon 600"):
+        _load_campaign_scenarios(cfg)
 
     assert _sha256(RUNTIME_SMOKE_V04_CONFIG_PATH) == PINNED_V04_CONFIG_SHA256
     assert _sha256(RUNTIME_SMOKE_V04_MANIFEST_PATH) == PINNED_V04_MANIFEST_SHA256
@@ -489,9 +488,11 @@ def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
     assert cfg.kinematics_matrix == ("differential_drive",)
     assert cfg.resume is False
     assert cfg.stop_on_failure is True
-    assert len(scenarios) == 1
-    assert scenarios[0]["name"] == "francis2023_blind_corner"
-    assert list(scenarios[0]["seeds"]) == [111]
+    assert (
+        smoke["scenario_matrix"]
+        == "configs/scenarios/single/francis2023_blind_corner_goal_zone_entry_v1.yaml"
+    )
+    assert smoke["seed_policy"]["seeds"] == [111]
 
     assert _sha256(RUNTIME_SMOKE_V03_CONFIG_PATH) == PINNED_V03_CONFIG_SHA256
     assert _sha256(RUNTIME_SMOKE_V03_MANIFEST_PATH) == PINNED_V03_MANIFEST_SHA256

@@ -1,48 +1,37 @@
 # Historical campaign horizon compatibility
 
 Fixed campaign and planner horizons refuse shorter authored scenario budgets by
-default. Current 0.0.8 and later protocols must use the authored schedule or a
-fixed horizon that every scenario admits.
+default. The 0.0.8+ protocol uses a hash-pinned authored schedule, or a fixed
+horizon that every scenario admits.
 
-A historical protocol may explicitly reproduce its original extension behavior:
+Corrected D-050 preserves main's historical behavior. `horizon: 600` capped the
+runner loop; it never extended a shorter authored simulator limit. Historical
+configs use `legacy_runner_cap`: the simulator retains its authored limit, the
+runner cap is 600, and the effective budget is `min(authored, 600)`. A timeout
+at an authored limit below 600 remains `terminated`, exactly as on main.
 
-```yaml
-protocol_version: 0.0.7
-horizon_policy: legacy_fixed_extends_authored
-horizon: 600
-```
+Production admission uses the exact source-byte SHA-256 registry in
+`robot_sf/benchmark/camera_ready/_historical_horizons.py`. Each entry records
+its true protocol version and `legacy_runner_cap`. Source filenames are only
+documentation: changing any byte removes admission. Historical YAML and its
+manifest pins remain unchanged. There is no test-only injection and no alias
+for the former policy name. The 0.0.8-cycle `runtime_smoke_v0_4` is excluded.
 
-The policy is accepted only for an explicit `protocol_version` from 0.0.2 through
-0.0.7. Unknown policies, missing/malformed versions, and 0.0.8+ versions fail
-closed. Omitting the policy retains the default refusal even for old protocols.
-Schedule mode and the legacy policy cannot be combined.
+Scenario and planner preparation independently enforce the historical version
+fence. Input `metadata.campaign_horizon` and `metadata.scenario_horizon` are
+reserved and refused, including keys planted through matrix overrides. A
+passed runner horizon must match its admitted bound. Row provenance records
+`policy`, `authored_max_episode_steps`, `runner_horizon`, and
+`applied_max_episode_steps` (the effective minimum). New annotations are excluded
+from historical identity; all previously emitted stable row fields retain main's
+values, including `scenario_params.run_horizon: 600`.
 
-Do not rewrite a frozen historical campaign or its manifest pins. Its fixture
-or reproduction caller can supply the override after reading the immutable input:
+For 0.0.8+, full-release acceptance independently pins the authored schedule in
+the manifest and compares every row horizon, provenance horizon, run_horizon,
+and effective budget with its scenario. Legacy-policy rows are refused.
 
-```python
-from dataclasses import replace
-
-cfg = replace(
-    load_campaign_config(frozen_path),
-    protocol_version="0.0.7",
-    horizon_policy="legacy_fixed_extends_authored",
-)
-scenarios = _load_campaign_scenarios(cfg)
-```
-
-Scenario preparation and planner preparation independently enforce the version
-fence. The episode row records `metadata.scenario_horizon` with `policy`,
-`authored_max_episode_steps`, and `applied_max_episode_steps`. The applied value
-is the actual simulator budget. Historical episode identity remains based on
-the authored input and requested `run_horizon`; the new accounting annotation
-does not rename historical rows.
-
-The immutable release/stress fixture overrides are explicit in
-`tests/benchmark/conftest.py` and are enabled only by fixtures that request
-`historical_horizon_policy`. Source YAML and manifest checksums remain active.
-They authorize no held-out execution during development.
-
-Issue #9748 uses a new v2 development config and pinned authored schedule for
-future execution. The original v1 H600 tuning inputs, log, and frozen v4
-parameters remain unchanged. That H600 log is not tuning evidence for v2.
+Issue #9748's v1 config declared 600 but its simulator budgets were already
+500/500/400/400 for doorway medium, group crossing medium, perpendicular
+traffic and crowd navigation. These equal the v2 schedule and 0.0.8 authored
+budgets: no tuning mismatch exists. Original v1 inputs, log and frozen v4
+parameters remain unchanged; a future v2 run has its own input closure and log.

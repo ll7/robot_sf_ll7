@@ -107,7 +107,7 @@ def _historical_authored_identity(payload: dict[str, Any]) -> dict[str, Any]:
         Authored scenario payload used by the historical episode identity contract.
     """
     horizon_metadata = payload.get("metadata", {}).get("scenario_horizon", {})
-    if horizon_metadata.get("policy") == "legacy_fixed_extends_authored":
+    if horizon_metadata.get("policy") == "legacy_runner_cap":
         # Historical IDs describe the authored input plus run_horizon. Keep the
         # new accounting annotation in row provenance without changing that ID.
         metadata = dict(payload.get("metadata", {}))

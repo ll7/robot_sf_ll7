@@ -46,13 +46,31 @@ FALLBACK_HELD_OUT_SEEDS = frozenset(range(111, 141)) | frozenset(
         59019,
     }
 )
-try:
-    from robot_sf.benchmark.seed_bands import HELD_OUT_SEEDS
-except ModuleNotFoundError as error:
-    if error.name not in {"robot_sf", "robot_sf.benchmark", "robot_sf.benchmark.seed_bands"}:
-        raise
-    HELD_OUT_SEEDS = FALLBACK_HELD_OUT_SEEDS
-HELD_OUT_SEEDS = frozenset(HELD_OUT_SEEDS)
+HELD_OUT_SEEDS = FALLBACK_HELD_OUT_SEEDS
+_POLICY_RESOLVED = False
+
+
+def resolve_held_out_seeds():
+    """Load policy only after the child establishes its intended source path.
+
+    Eager project imports would bind isolated lineage checks to the editable
+    install before their target script inserts the pinned checkout path.
+    """
+    global HELD_OUT_SEEDS, _POLICY_RESOLVED
+    if not _POLICY_RESOLVED:
+        try:
+            from robot_sf.benchmark.seed_bands import HELD_OUT_SEEDS as canonical
+        except ModuleNotFoundError as error:
+            if error.name not in {
+                "robot_sf",
+                "robot_sf.benchmark",
+                "robot_sf.benchmark.seed_bands",
+            }:
+                raise
+        else:
+            HELD_OUT_SEEDS = frozenset(canonical)
+            _POLICY_RESOLVED = True
+    return HELD_OUT_SEEDS
 
 
 class HeldoutSeedError(BaseException):
@@ -67,7 +85,7 @@ def check_simulation_seed(seed, *, boundary):
         value = int(seed)
     except (TypeError, ValueError, OverflowError):
         return
-    if value not in HELD_OUT_SEEDS:
+    if value not in resolve_held_out_seeds():
         return
     audit = os.environ.get("ROBOT_SF_PYTEST_SEED_AUDIT")
     if audit:

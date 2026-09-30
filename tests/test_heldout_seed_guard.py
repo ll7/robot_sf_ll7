@@ -176,6 +176,7 @@ def test_isolated_child_rejects_before_any_user_step(flag, tmp_path):
     stepped = tmp_path / "stepped"
     code = (
         "import sys\n"
+        "assert 'robot_sf' not in sys.modules, 'project imported before pinned source setup'\n"
         "guard = sys.modules['tests.support.seedguard_boundaries']\n"
         "guard.check_simulation_seed(50036, boundary='isolated child')\n"
         f"open({str(stepped)!r}, 'w').write('first step reached')\n"
@@ -193,10 +194,11 @@ def test_isolated_child_rejects_before_any_user_step(flag, tmp_path):
 
 
 def test_seed_bands_matches_canonical_policy_when_available():
-    from tests.support.seedguard_boundaries import HELD_OUT_SEEDS
+    from tests.support import seedguard_boundaries
 
     policy = pytest.importorskip("robot_sf.benchmark.seed_bands")
-    assert HELD_OUT_SEEDS == frozenset(policy.HELD_OUT_SEEDS)
+    assert seedguard_boundaries.resolve_held_out_seeds() == frozenset(policy.HELD_OUT_SEEDS)
+    assert seedguard_boundaries.HELD_OUT_SEEDS == frozenset(policy.HELD_OUT_SEEDS)
 
 
 def test_worker_guard_active(tmp_path):

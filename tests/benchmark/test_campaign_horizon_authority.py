@@ -657,3 +657,43 @@ def test_retired_legacy_extension_policy_has_no_alias():
 
     with pytest.raises(ValueError, match="Unknown horizon_policy"):
         _validate_horizon_policy("legacy_fixed_extends_authored", "0.0.7")
+
+
+def test_historical_authored_600_timeout_keeps_main_terminated_label():
+    """Main labels the simulator's authored H600 stop terminated, even at the runner cap."""
+    import numpy as np
+
+    from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
+
+    cfg = load_campaign_config(
+        ROOT / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml"
+    )
+    scenario = next(
+        s
+        for s in _load_campaign_scenarios(cfg, repository_root=ROOT)
+        if s["name"] == "classic_cross_trap_low"
+    )
+    scenario["seeds"] = [1001]
+
+    def stationary(algo, config, **kwargs):
+        return (lambda obs: np.zeros(2)), {"algorithm": algo, "config": config}
+
+    row = run_map_episode(
+        scenario,
+        1001,
+        horizon=600,
+        dt=0.1,
+        record_forces=True,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        scenario_path=ROOT / "scoped_scenarios.json",
+        policy_builder=stationary,
+    )
+    assert row["steps"] == 600
+    assert row["outcome"] == {
+        "route_complete": False,
+        "collision_event": False,
+        "timeout_event": True,
+    }
+    assert row["termination_reason"] == "terminated"

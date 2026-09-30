@@ -413,6 +413,8 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Step-trace invariant contracts inspect synthetic rows without simulation steps.
+    "test_step_trace_invariants.py",
     # Scenario-admissibility tests exercise deterministic candidate, manifest,
     # materialization, and provenance contracts used by the adversarial search.
     "test_scenario_admissibility.py",

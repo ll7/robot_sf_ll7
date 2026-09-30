@@ -1,5 +1,7 @@
 """Tests for the step-trace invariant checker (#9979): one violating and one clean trace each."""
 
+# robot-sf-test-lane: fast-contract
+
 from __future__ import annotations
 
 import json

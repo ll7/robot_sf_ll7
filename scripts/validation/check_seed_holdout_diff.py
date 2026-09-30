@@ -41,9 +41,12 @@ SEALED_REFERENCE_ALLOWLIST = frozenset(
     [
         "robot_sf/benchmark/seed_bands.py",
         "robot_sf/benchmark/release_protocol.py",
+        "robot_sf/benchmark/spawn_preflight.py",
         "robot_sf/benchmark/release_acceptance.py",
         "robot_sf/benchmark/release_candidate.py",
         "scripts/validation/check_seed_holdout_diff.py",
+        "scripts/validation/check_issue_9748_dev_split.py",
+        "scripts/benchmark/run_issue_9748_v4_tuning.py",
         "configs/benchmarks/seed_sets_0_0_8.yaml",
         "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
         "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml",
@@ -59,7 +62,10 @@ SEALED_REFERENCE_ALLOWLIST = frozenset(
         "tests/benchmark/test_s30_h600_runtime_smoke_contract.py",
     ]
 )
-SEALED_REFERENCE = re.compile(r"\b(?:release_eval_0_0_8|seed_sets_0_0_8\.yaml|EVAL_SEEDS_0_0_8)\b")
+SEALED_REFERENCE = re.compile(
+    r"\b(?:release_eval_0_0_8|seed_sets_0_0_8\.yaml|EVAL_SEEDS_0_0_8|"
+    r"EVAL_SEED_SET_0_0_8|HELD_OUT_SEEDS|RETIRED_EVAL_SEEDS_0_0_7|paper_eval_s30)\b"
+)
 
 MARKER_KINDS = "setup-only|synthetic-fixture|release-evaluation"
 MARKER = re.compile(rf"#\s*seed-holdout:\s*(?P<kind>{MARKER_KINDS})\b")
@@ -331,6 +337,10 @@ def _yaml_seed_range_bound(path: str, text: str, before: list[str]) -> bool:
 def _seed_context(path: str, text: str, before: list[str], after: list[str]) -> bool:
     if CLI_SEED.search(text):
         return True
+    # Every value in a seed inventory is a seed, irrespective of the set name
+    # or whether YAML uses a flow list or a block list.
+    if path.startswith("configs/") and re.fullmatch(r"seed_(?:set|list).*\.ya?ml", Path(path).name):
+        return True
     if path.startswith("docs/") or _non_episode_seed(path, text, before, after):
         return False
     if (
@@ -350,8 +360,6 @@ def _seed_context(path: str, text: str, before: list[str], after: list[str]) -> 
         rf"^\s*(?:-\s*)?\[?\s*{SEALED_SEED_PATTERN}(?:\s*,\s*\d+)*\s*\]?,?\s*(?:#.*)?$",
         text,
     ):
-        if path == "configs/benchmarks/seed_list_v1.yaml":
-            return True
         if any("parametrize" in line for line in before[-12:]) and any(
             re.search(r"['\"]seed['\"]", line) for line in before[-12:]
         ):

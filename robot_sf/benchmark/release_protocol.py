@@ -1967,6 +1967,60 @@ HISTORICAL_RELEASE_CONFIG_PINS = frozenset(
 )
 
 
+def sealed_seed_execution_problem(
+    manifest: Any,
+    seeds: tuple[int, ...],
+    *,
+    source_commit: str | None = None,
+    repository_root: Path | None = None,
+) -> str | None:
+    """Return the D-049 refusal for a sealed release outside its frozen identity.
+
+    The runner supplies its checked-out source; static callers resolve HEAD.
+    A source argument never supplies a missing manifest freeze binding.
+    """
+    if not set(seeds).intersection(EVAL_SEEDS_0_0_8):
+        return None
+    config_name = Path(manifest.canonical_campaign_config_path).name
+    matrix_name = Path(manifest.scenario_matrix_path).name
+    main_campaign = (
+        manifest.release_kind == "benchmark-data"
+        and config_name
+        in {
+            "paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
+            "paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml",
+        }
+        and matrix_name == "classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    )
+    doorway_slice = (
+        manifest.release_kind == "benchmark-width-slice"
+        and manifest.release_id == "three_width_doorway_0_0_8_v1"
+        and config_name == "paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml"
+        and matrix_name == "francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml"
+    )
+    if seeds != EVAL_SEEDS_0_0_8 or not (main_campaign or doorway_slice):
+        return "sealed evaluation seeds require the main 0.0.8 campaign or its three-width slice (D-049)"
+    declared = getattr(manifest, "source_sha", None)
+    if declared is None:
+        return (
+            "sealed evaluation seeds require source_sha equal to HEAD at the freeze commit (D-049)"
+        )
+    root = (repository_root or get_repository_root()).resolve()
+    try:
+        current = (
+            _git_stdout(root, "rev-parse", "HEAD", label="sealed source HEAD").decode().strip()
+        )
+        if source_commit is not None and source_commit != current:
+            return "sealed evaluation source_sha and runtime source_commit must equal HEAD (D-049)"
+    except ValueError as exc:
+        return f"sealed evaluation source_sha cannot be verified: {exc}"
+    if declared != current:
+        return (
+            "sealed evaluation seeds require source_sha equal to HEAD at the freeze commit (D-049)"
+        )
+    return None
+
+
 def _validate_release_seed_policy(
     manifest: BenchmarkReleaseManifest,
     cfg: CampaignConfig,
@@ -2017,6 +2071,11 @@ def _validate_release_seed_policy(
         and resolved != EVAL_SEEDS_0_0_8
     ):
         problems.append("0.0.8 requires the exact sealed evaluation seeds (D-049)")
+    sealed_problem = sealed_seed_execution_problem(
+        manifest, resolved, repository_root=repository_root
+    )
+    if sealed_problem is not None:
+        problems.append(sealed_problem)
     if cfg_seed_policy != normalized_manifest_seed_policy:
         problems.append("seed_policy does not match campaign config")
 
@@ -2482,6 +2541,7 @@ def build_resolved_release_manifest(
             raise ValueError("campaign config identity does not match resolved release identity")
         return copy.deepcopy(manifest.resolved_manifest_payload)
     cfg = campaign_config or load_release_campaign_config(manifest, repository_root=root)
+    scenarios = _load_campaign_scenarios(cfg, repository_root=root)
     payload = {
         "schema_version": manifest.schema_version,
         "benchmark_protocol_version": manifest.benchmark_protocol_version,
@@ -2551,8 +2611,17 @@ def build_resolved_release_manifest(
             "metadata_sha256": manifest.metadata_sha256,
         },
         "matrix": {
-            "expected_episode_cells": manifest.expected_episode_cells,
-            "horizon_steps": manifest.expected_horizon_steps,
+            "planner_arms": sum(planner.enabled for planner in cfg.planners),
+            "scenarios": len(scenarios),
+            "seeds": len(_resolved_seed_inventory(scenarios)),
+            "expected_episode_cells": manifest.expected_episode_cells
+            if manifest.expected_episode_cells is not None
+            else sum(planner.enabled for planner in cfg.planners)
+            * sum(len(row.get("seeds", ())) for row in scenarios),
+            "horizon_steps": manifest.expected_horizon_steps
+            if manifest.expected_horizon_steps is not None
+            else cfg.horizon,
+            "dt": cfg.dt,
         },
         "release_contract": {
             "suite_policy_path": (

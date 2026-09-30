@@ -665,3 +665,24 @@ def test_yaml_bounds_do_not_cross_sibling_keys(tmp_path):
 
 
 # seed-holdout: synthetic-fixture end
+
+
+@pytest.mark.parametrize(
+    ("path", "added", "context"),
+    [
+        ("configs/benchmarks/seed_sets_v1.yaml", "my_pilot: [50036, 116]", ""),
+        ("configs/benchmarks/seed_sets_v1.yaml", "  - 50036", "dev:\n  - 1001"),
+        ("configs/benchmarks/seed_sets_pilot.yaml", "my_pilot:\n  - 50036\n  - 116", ""),
+        ("configs/benchmarks/seed_list_pilot.yaml", "my_pilot: [116]", ""),
+    ],
+)
+def test_every_seed_file_value_is_seed_context(tmp_path, path, added, context):
+    assert check_diff(_diff(path, added, context=context), tmp_path)
+
+
+@pytest.mark.parametrize(
+    "name", ["EVAL_SEED_SET_0_0_8", "HELD_OUT_SEEDS", "RETIRED_EVAL_SEEDS_0_0_7", "paper_eval_s30"]
+)
+def test_all_holdout_names_need_allowlist(tmp_path, name):
+    assert check_diff(_diff("scripts/benchmark/pilot.py", f"seeds = {name}"), tmp_path)
+    assert not check_diff(_diff("tests/benchmark/test_newseeds.py", f"seeds = {name}"), tmp_path)

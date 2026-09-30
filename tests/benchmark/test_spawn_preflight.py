@@ -956,7 +956,7 @@ def test_manifest_runner_returns_complete_diagnostic_for_small_valid_matrix(
     monkeypatch.setattr(
         spawn_preflight,
         "_release_manifest_inputs",
-        lambda _manifest: (identity, [{"name": "fixture"}], (111,)),
+        lambda _manifest: (identity, [{"name": "fixture"}], (1001,)),
     )
     monkeypatch.setattr(
         spawn_preflight,
@@ -1005,7 +1005,7 @@ def test_probe_manifest_is_labelled_diagnostic_and_never_passes_release_gate(
     monkeypatch.setattr(
         spawn_preflight,
         "_release_manifest_inputs",
-        lambda _manifest: (identity, [{"name": "doorway"}], (111,)),
+        lambda _manifest: (identity, [{"name": "doorway"}], (1001,)),
     )
 
     def check_probe_job(job):
@@ -1016,7 +1016,7 @@ def test_probe_manifest_is_labelled_diagnostic_and_never_passes_release_gate(
             "rows": [
                 {
                     "scenario": "doorway",
-                    "seed": 111,
+                    "seed": 1001,
                     "overall_status": "infeasibility_probe",
                     "footprint_reachability": {"status": "exempt_expected_outcome"},
                     "passage_width": {"status": "exempt_expected_outcome"},
@@ -1038,7 +1038,7 @@ def test_probe_manifest_is_labelled_diagnostic_and_never_passes_release_gate(
         lambda job: {
             "scenario": job[0]["name"],
             "map_warnings": [],
-            "rows": [{"scenario": "doorway", "seed": 111, "overall_status": "valid"}],
+            "rows": [{"scenario": "doorway", "seed": 1001, "overall_status": "valid"}],
         },
     )
     feasible_probe = spawn_preflight.run_manifest_preflight(manifest)
@@ -1060,7 +1060,7 @@ def test_manifest_runner_preserves_cells_when_worker_fails(tmp_path: Path, monke
     monkeypatch.setattr(
         spawn_preflight,
         "_release_manifest_inputs",
-        lambda _manifest: (identity, [{"scenario_id": "broken"}], (111, 112)),
+        lambda _manifest: (identity, [{"scenario_id": "broken"}], (1001, 1002)),
     )
     monkeypatch.setattr(
         spawn_preflight,
@@ -1093,7 +1093,7 @@ def test_manifest_runner_marks_changed_inputs_and_invalid_options(
     monkeypatch.setattr(
         spawn_preflight,
         "_release_manifest_inputs",
-        lambda _manifest: (identity, [{"name": "fixture"}], (111,)),
+        lambda _manifest: (identity, [{"name": "fixture"}], (1001,)),
     )
     monkeypatch.setattr(
         spawn_preflight,
@@ -1101,7 +1101,7 @@ def test_manifest_runner_marks_changed_inputs_and_invalid_options(
         lambda _job: {
             "scenario": "fixture",
             "map_warnings": [],
-            "rows": [{"scenario": "fixture", "seed": 111, "overall_status": "valid"}],
+            "rows": [{"scenario": "fixture", "seed": 1001, "overall_status": "valid"}],
         },
     )
     with pytest.raises(ValueError, match="workers"):

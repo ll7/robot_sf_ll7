@@ -676,59 +676,50 @@ def test_post_preflight_readback_rejects_candidate_digest_drift(candidate_repo) 
         )
 
 
-@pytest.mark.parametrize("change_during_run", [False, True])
-def test_preflight_cli_accepts_candidate_and_rejects_mid_run_drift(
+def test_preflight_cli_refuses_sealed_candidate_before_workers(
     candidate_repo,
     monkeypatch: pytest.MonkeyPatch,
-    change_during_run: bool,
 ) -> None:
-    root, path, payload = candidate_repo
-    original_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    root, path, _payload = candidate_repo
     monkeypatch.setattr(release_candidate, "get_repository_root", lambda: root)
     monkeypatch.setattr(spawn_preflight, "get_repository_root", lambda: root)
-    observed: dict[str, object] = {"changed": False}
+    reached = []
 
-    def diagnostic_scenario(job):
+    def record(job):
         scenario, _matrix, seeds, *_checks = job
-        if change_during_run and not observed["changed"]:
-            payload["candidate_id"] = "changed-during-preflight"
-            path.write_text(json.dumps(payload), encoding="utf-8")
-            observed["changed"] = True
-        name = scenario["name"]
+        reached.append(job)
         return {
-            "scenario": name,
+            "scenario": scenario["name"],
+            "map_warnings": [],
             "rows": [
-                {
-                    "scenario": name,
-                    "seed": seed,
-                    "overall_status": "valid",
-                }
+                {"scenario": scenario["name"], "seed": seed, "overall_status": "valid"}
                 for seed in seeds
             ],
-            "map_warnings": [],
         }
 
-    monkeypatch.setattr(spawn_preflight, "_check_release_scenario", diagnostic_scenario)
+    monkeypatch.setattr(spawn_preflight, "_check_release_scenario", record)
+
+    def abort(*_a, **_kw):
+        pytest.fail("candidate witness attempted environment creation")
+
+    monkeypatch.setattr(spawn_preflight, "make_robot_env", abort)
+    monkeypatch.setattr("robot_sf.gym_env.environment_factory.make_robot_env", abort)
     json_output = root / "report.json"
-    result = spawn_preflight.main(
-        [
-            "--manifest",
-            str(path),
-            "--json-output",
-            str(json_output),
-            "--markdown-output",
-            str(root / "report.md"),
-        ]
+    assert (
+        spawn_preflight.main(
+            [
+                "--manifest",
+                str(path),
+                "--workers",
+                "1",
+                "--json-output",
+                str(json_output),
+                "--markdown-output",
+                str(root / "report.md"),
+            ]
+        )
+        == 2
     )
-    report = json.loads(json_output.read_text(encoding="utf-8"))
-    assert result == (2 if change_during_run else 0)
-    assert report["source_commit"] == payload["source_commit"]
-    assert report["release_inputs"]["manifest_sha256"] == original_digest
-    assert report["expected_cell_count"] == report["cell_count"] == 1440
-    if change_during_run:
-        assert report["status"] == "invalid"
-        assert "candidate_input_drift" in report["input_error"]
-        assert "release manifest changed" in report["input_error"]
-    else:
-        assert report["status"] == "valid"
-        assert report["input_error"] is None
+    report = json.loads(json_output.read_text())
+    assert "sealed evaluation seeds require" in report["input_error"]
+    assert reached == []

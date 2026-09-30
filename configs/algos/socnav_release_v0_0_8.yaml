@@ -2,6 +2,9 @@
 # Robot and pedestrian geometry are read from each environment observation.
 max_linear_speed: 2.0
 max_angular_speed: 1.0
-# SA-CADRL: release drive preference and upstream FullTestSuite observation capacity.
-sacadrl_pref_speed: 2.0
+# SA-CADRL: both 1.0 and 2.0 m/s are inside the checkpoint's training range.
+# Keep 1.0: the benchmark brakes at 1 m/s², while upstream changes speed instantly;
+# at 2.0 the policy's stop action does not stop in time (issue #10007 split B/A, D/C).
+sacadrl_pref_speed: 1.0
+# Upstream FullTestSuite observation capacity.
 sacadrl_max_other_agents: 19

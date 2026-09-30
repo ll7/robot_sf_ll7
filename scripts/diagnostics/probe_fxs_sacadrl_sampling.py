@@ -2,6 +2,9 @@
 
 Run separately on the base and changed checkout with --output outside the checkout.
 No fallback or held-out seeds; the three release scenarios and ten seeds are fixed.
+The native candidate reference mirrors the new rollout, so post-fix agreement is
+by construction. It diagnoses the old model's discrepancy, not execution-match:
+executed commands also apply penalty scaling, braking limits and stepwise replanning.
 """
 
 from __future__ import annotations
@@ -37,7 +40,7 @@ CONFIGS = {
 
 
 def native_candidate(start, heading, speed0, target, speed, seconds, dt, limits, settings, omega):  # noqa: PLR0913
-    """Independent oracle: command the actual robot, including wheel odometry."""
+    """Native-drive model matching the new rollout; agreement is by construction."""
     gain, rate, _, _ = limits
     drive = DifferentialDriveRobot(settings)
     drive.state.pose = (tuple(start), heading)

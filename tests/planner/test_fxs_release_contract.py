@@ -10,7 +10,7 @@ import yaml
 
 from robot_sf.benchmark.map_runner.map_runner import _build_socnav_config
 from robot_sf.planner.socnav_base import SamplingPlannerAdapter, SocNavPlannerConfig
-from robot_sf.planner.socnav_sacadrl import SACADRLPlannerAdapter
+from robot_sf.planner.socnav_sacadrl import SACADRLPlannerAdapter, _SACADRLModel
 from robot_sf.planner.socnav_sampling_v2 import _rollout
 from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveSettings
 
@@ -22,9 +22,9 @@ def release_adapter():
 
 
 def crowd_observation():
-    """Twenty ordered pedestrians with real count, padding and release geometry."""
+    """Twenty shuffled pedestrians with real count, padding and release geometry."""
     positions = np.zeros((64, 2))
-    positions[:20, 0] = np.arange(2, 22)
+    positions[:20, 0] = [12, 3, 21, 7, 15, 2, 18, 5, 10, 20, 4, 16, 8, 19, 6, 14, 9, 17, 11, 13]
     return {
         "robot_position": [0.0, 0.0],
         "robot_heading": [0.0],
@@ -42,10 +42,13 @@ def crowd_observation():
 
 
 def test_release_preferred_speed_reaches_checkpoint_host_input():
-    """A 2 m/s drive must not feed the checkpoint a 1 m/s preferred speed."""
+    """Pin 1 m/s: at 2 m/s the 1 m/s² braking lag defeats the checkpoint's stop action."""
     vec, preferred, _ = release_adapter()._build_network_input(crowd_observation())
-    assert preferred == 2.0, "release preferred speed must match the 2 m/s robot"
-    assert vec[0, 3] == 2.0
+    reason = (
+        "release must prefer 1 m/s: 1 m/s² braking cannot execute the checkpoint's instant stop"
+    )
+    assert preferred == 1.0, reason
+    assert vec[0, 3] == 1.0, reason
 
 
 def test_release_observes_nineteen_nearest_agents_without_padding_in_sequence():
@@ -60,6 +63,23 @@ def test_release_observes_nineteen_nearest_agents_without_padding_in_sequence():
     vec, _, _ = adapter._build_network_input(obs)
     assert vec[0, 0] == 5
     assert not np.any(vec[0, 5 + 5 * 7 :])
+
+
+def test_checkpoint_rejects_configured_agent_count_above_nineteen():
+    """An oversized sequence must fail before inference instead of truncating agent slots."""
+    adapter = release_adapter()
+    adapter.config.sacadrl_max_other_agents = 20
+    vec, _, _ = adapter._build_network_input(crowd_observation())
+    assert vec[0, 0] == 20
+    model = _SACADRLModel.__new__(_SACADRLModel)
+    model._input_dim = 138  # Bundled checkpoint: five host/count features + 19 * 7.
+    model._x = "X:0"
+    model._softmax = "Softmax:0"
+    calls = []
+    model._sess = SimpleNamespace(run=lambda *args, **kwargs: calls.append((args, kwargs)))
+    with pytest.raises(ValueError, match="checkpoint capacity.*19 agent slots"):
+        model.predict(vec)
+    assert not calls, "oversized observations must be rejected before TensorFlow inference"
 
 
 def test_rollout_first_step_matches_trapezoidal_drive_ramp():

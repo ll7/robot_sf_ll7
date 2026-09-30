@@ -225,16 +225,16 @@ source or admitted claim was edited.
   publication assets. No test-only production seam, skip, xfail or timeout was added.
 
 All pytest runs used **-n 0**, OMP_NUM_THREADS=1 and OPENBLAS_NUM_THREADS=1.
-Focused metric/SNQI/helper/calibration suite: 658 passed, 1 existing platform skip.
+Focused metric/SNQI/helper/calibration suite: 658 passed, 1 existing selector-adapter skip.
 Final compatibility/native-command/hierarchical/scalarization suite: 152 passed.
 Updated metric/SNQI/helper/native/classic-caller suite: 674 passed, 1 existing skip.
 Release comparator equal-value and mixed-successor-schema cases: 2 passed.
 After main integration, FXM/helper/native/classic/target-trace suite: 115 passed,
-1 existing platform skip; all 12 real probes rerun with identical corrected
+1 existing selector-adapter skip; all 12 real probes rerun with identical corrected
 metrics and trajectories, and their recorded source hashes match final code bytes.
 These simulation receipts record the pre-amend source commit plus checkout dirty
 state and byte hashes; the final amendment changes documentation/evidence only.
-Final goal-wiring/helper suite: 66 passed, 1 existing platform skip.
+Final goal-wiring/helper suite: 66 passed, 1 existing selector-adapter skip.
 Caller compatibility/FXM/helper/classic metadata suite: 86 passed, 1 existing skip.
 Complete release-comparator/golden/hierarchical run:89 passed, 1 test-fixture filename
 failure; that fixture was corrected and its regression passed separately. The
@@ -347,7 +347,7 @@ The probe is the reviewer-provided script, with additive raw-efficiency capture.
 
 Validation: `uv sync --frozen --all-extras`; every pytest invocation uses
 `OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 uv run pytest -n0`. Final metric/producer/
-projection/trace-reader/consumer suite: **692 passed, 1 existing platform skip**.
+projection/trace-reader/consumer suite: **692 passed, 1 existing selector-adapter skip**.
 The broader reviewer suite initially had 722 passed, 1 skipped and one newly exposed
 consumer failure; that consumer was repaired, and all 20 analyzer/native tests plus
 the final suite pass. Release-comparison and hierarchical lanes passed in that run.

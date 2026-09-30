@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_9952_auditor/hand_sample.csv",
+  "artifact_sha256": "223fc3010bcc41c8ca674226875dc197c7e91368697b2b4cbb519bd148302cf1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

@@ -179,3 +179,14 @@ def test_overflowing_duration_fails_closed() -> None:
     huge_step = _make_episode()
     huge_step.cooperative_goal_steps = {0: 10**400}
     assert np.isnan(aggregated_time(huge_step, cooperative_agents=[0]))
+
+
+def test_reset_inclusive_cooperative_time_matches_single_robot() -> None:
+    """Reset sample indices measure completed steps without adding another dt."""
+    episode = _make_episode(dt=0.25)
+    episode.robot_pos_includes_reset = True
+    episode.cooperative_goal_steps = {0: 0, 1: 4}
+    episode.reached_goal_step = 4
+    assert aggregated_time(episode, cooperative_agents=[0]) == 0.0
+    assert aggregated_time(episode, cooperative_agents=[0, 1]) == 1.0
+    assert aggregated_time(episode) == 1.0

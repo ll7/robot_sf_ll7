@@ -19,6 +19,7 @@ from robot_sf.benchmark.hierarchical_paired_release_analysis import (
 from robot_sf.benchmark.hierarchical_paired_release_inputs import (
     load_hierarchical_paired_release_input_manifest,
 )
+from robot_sf.evidence.writers import write_text
 from scripts.analysis.run_hierarchical_paired_release_analysis_issue_5351 import (
     EXPECTED_PUBLICATION_COMMIT,
     EXPECTED_RELEASE_TAG,
@@ -109,7 +110,7 @@ def test_manifest_contract_version_and_sha256() -> None:
 def test_pipeline_fails_on_archive_digest_mismatch(tmp_path: Path) -> None:
     """An archive whose SHA-256 does not match EXPECTED_BUNDLE_SHA256 must fail closed."""
     fake_tar = tmp_path / "invalid_sha256.tar.gz"
-    fake_tar.write_bytes(b"invalid_tar_bytes_data")
+    write_text(fake_tar, "invalid_tar_bytes_data", issue_ref="robot_sf#10007")
 
     with pytest.raises(ReleaseAnalysisPipelineError, match="SHA-256 digest mismatch"):
         find_or_download_bundle(fake_tar, repo_root=tmp_path)
@@ -480,15 +481,15 @@ def test_find_or_download_bundle_repairs_a_partial_implicit_cache(
     import scripts.analysis.run_hierarchical_paired_release_analysis_issue_5351 as script
 
     target = tmp_path / script.BUNDLE_ASSET_NAME
-    target.write_bytes(b"partial")
+    write_text(target, "partial", issue_ref="robot_sf#10007")
     download_calls: list[Path] = []
 
     def fake_download(download_target: Path) -> None:
         download_calls.append(download_target)
-        download_target.write_bytes(b"verified")
+        write_text(download_target, "verified", issue_ref="robot_sf#10007")
 
     def fake_sha256(path: Path) -> str:
-        if path.read_bytes() == b"verified":
+        if path.read_bytes() == b"<!-- AI-GENERATED (robot_sf#10007) - NEEDS-REVIEW -->\nverified":
             return script.EXPECTED_BUNDLE_SHA256
         return "partial-cache-digest"
 

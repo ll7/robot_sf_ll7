@@ -165,12 +165,15 @@ class PedSpawnConfig:
     response_law_composition: dict[str, float] | None = None
     response_law_seed: int | None = None
     force_population_size: int | None = None
+    rng: np.random.Generator | None = field(default=None, repr=False)
 
     def __post_init__(self):
         """
         Ensures that `group_member_probs` has exactly `max_group_members`
         elements by creating a power-law distributed list if needed.
         """
+        if self.rng is None:
+            self.rng = np.random.default_rng(self.route_spawn_seed)
         if len(self.group_member_probs) != self.max_group_members:
             # initialize group size probabilities decaying by power law
             power_dist = [self.group_size_decay**i for i in range(self.max_group_members)]
@@ -211,7 +214,7 @@ def sample_route(
         sidewalk_width: The width of the sidewalk for constraining sample spread.
         obstacle_polygons: Optional prepared or raw obstacle polygons to avoid spawning inside.
         offset: Optional fixed offset along the route length to anchor sampling.
-        rng: Optional RNG for deterministic sampling; defaults to NumPy global RNG.
+        rng: Optional RNG for deterministic sampling; defaults to a fresh private generator.
         capture: Optional sampler-decision record; anchor retries are counted when provided.
 
     Returns:
@@ -228,7 +231,7 @@ def sample_route(
         raise ValueError("Number of samples must be positive.")
 
     # Randomly choose a starting offset along the total length of the route
-    rng_local = rng if rng is not None else np.random
+    rng_local = rng if rng is not None else np.random.default_rng()
     if offset is None:
         sampled_offset = float(rng_local.uniform(0, route.total_length))
     else:
@@ -296,6 +299,7 @@ class ZonePointsGenerator:
 
     zones: list[Zone]
     obstacle_polygons: list[list[Vec2D]] | None = None
+    rng: np.random.Generator = field(default_factory=np.random.default_rng, repr=False)
     zone_areas: list[float] = field(init=False)
     _zone_probs: list[float] = field(init=False)
 
@@ -329,7 +333,7 @@ class ZonePointsGenerator:
         """
 
         # Randomly select a zone based on the calculated probabilities
-        zone_id = np.random.choice(len(self.zones), size=1, p=self._zone_probs)[0]
+        zone_id = self.rng.choice(len(self.zones), size=1, p=self._zone_probs)[0]
 
         # Generate sample points using a function `sample_zone`
         return (
@@ -337,6 +341,7 @@ class ZonePointsGenerator:
                 self.zones[zone_id],
                 num_samples,
                 obstacle_polygons=self.obstacle_polygons,
+                rng=self.rng,
             ),
             zone_id,
         )
@@ -412,7 +417,7 @@ class RoutePointsGenerator:
 
         Args:
             num_samples: The number of sample points to generate.
-            rng: Optional RNG for deterministic sampling; defaults to NumPy global RNG.
+            rng: Optional RNG for deterministic sampling; defaults to a fresh private generator.
             offset: Optional fixed offset along the route length to anchor sampling.
             capture: Optional sampler-decision record; anchor retries are counted when provided.
 
@@ -423,7 +428,7 @@ class RoutePointsGenerator:
                 - The section id of the route where the points were generated (sec_id).
         """
         # Randomly select a route based on the calculated probabilities
-        rng_local = rng if rng is not None else np.random
+        rng_local = rng if rng is not None else np.random.default_rng()
         route_id = rng_local.choice(len(self.routes), size=1, p=self._route_probs)[0]
 
         # Generate sample points using a function `sample_route`
@@ -485,8 +490,8 @@ def populate_ped_routes(  # noqa: C901,PLR0915
     # List to track the initial sections for each group
     initial_sections = []
 
+    rng = config.rng
     if config.route_spawn_distribution == "spread" and total_num_peds > 0:
-        rng = np.random.default_rng(config.route_spawn_seed)
         probs = config.group_member_probs
         group_sizes: list[int] = []
         while num_unassigned_peds > 0:
@@ -545,7 +550,7 @@ def populate_ped_routes(  # noqa: C901,PLR0915
         while num_unassigned_peds > 0:
             # Determine number of members in next group based on configured probabilities
             probs = config.group_member_probs
-            num_peds_in_group = np.random.choice(len(probs), p=probs) + 1
+            num_peds_in_group = config.rng.choice(len(probs), p=probs) + 1
             num_peds_in_group = min(num_peds_in_group, num_unassigned_peds)
             # Calculate range of IDs for newly assigned pedestrians
             num_assigned_peds = total_num_peds - num_unassigned_peds
@@ -556,7 +561,7 @@ def populate_ped_routes(  # noqa: C901,PLR0915
             # spawn all group members along a uniformly sampled route with respect to the route's length
             # Generate spawn points for current group, route ID, and section ID
             spawn_points, route_id, sec_id = proportional_spawn_gen.generate(
-                num_peds_in_group, capture=capture
+                num_peds_in_group, rng=config.rng, capture=capture
             )
             # Determine group's goal point from the selected route and section
             group_goal = routes[route_id].sections[sec_id][1]
@@ -617,7 +622,9 @@ def populate_crowded_zones(
     """
     if not crowded_zones:
         return np.zeros((0, 6)), [], {}
-    proportional_spawn_gen = ZonePointsGenerator(crowded_zones, obstacle_polygons=obstacle_polygons)
+    proportional_spawn_gen = ZonePointsGenerator(
+        crowded_zones, obstacle_polygons=obstacle_polygons, rng=config.rng
+    )
     if config.force_population_size is not None:
         total_num_peds = config.force_population_size
     else:
@@ -628,7 +635,7 @@ def populate_crowded_zones(
 
     while num_unassigned_peds > 0:
         probs = config.group_member_probs
-        num_peds_in_group = np.random.choice(len(probs), p=probs) + 1
+        num_peds_in_group = config.rng.choice(len(probs), p=probs) + 1
         num_peds_in_group = min(num_peds_in_group, num_unassigned_peds)
         num_assigned_peds = total_num_peds - num_unassigned_peds
         ped_ids = list(range(num_assigned_peds, total_num_peds))[:num_peds_in_group]
@@ -637,7 +644,9 @@ def populate_crowded_zones(
         # spawn all group members in the same randomly sampled zone and also
         # keep them within that zone by picking the group's goal accordingly
         spawn_points, zone_id = proportional_spawn_gen.generate(num_peds_in_group)
-        group_goal = sample_zone(crowded_zones[zone_id], 1, obstacle_polygons=obstacle_polygons)[0]
+        group_goal = sample_zone(
+            crowded_zones[zone_id], 1, obstacle_polygons=obstacle_polygons, rng=config.rng
+        )[0]
 
         centroid = np.mean(spawn_points, axis=0)
         rot = atan2(group_goal[1] - centroid[1], group_goal[0] - centroid[0])
@@ -976,12 +985,7 @@ def _populate_scattered_background(
         Pedestrian states, group memberships, zone assignments, synthetic zones, and RNG.
     """
     zones = _synthetic_crowd_zones(map_bounds, ped_radius)
-    scatter_seed = config.route_spawn_seed
-    if scatter_seed is None:
-        scatter_seed = config.archetype_seed
-    if scatter_seed is None:
-        scatter_seed = config.response_law_seed
-    rng = np.random.default_rng(0 if scatter_seed is None else scatter_seed)
+    rng = config.rng
     ped_states = np.zeros((num_pedestrians, 6))
     groups: list[PedGrouping] = []
     zone_assignments: ZoneAssignments = {}
@@ -1187,7 +1191,7 @@ def _spawn_zoned_background_population(
         initial_sections=initial_sections,
         behavior_zones=ped_crowded_zones,
         scatter_exclusions=None,
-        scatter_rng=None,
+        scatter_rng=crowd_spawn_config.rng,
         synthesized=False,
     )
 
@@ -1297,6 +1301,8 @@ def _create_groups_and_behaviors(
         obstacle_polygons=prepared_obstacles,
         reset_at_start=spawn_config.reset_follow_route_at_start,
         global_ped_offset=route_offset,
+        rng=spawn_config.rng,
+        guard_rng=spawn_config.rng.spawn(1)[0],
     )
     return groups, [crowd_behavior, route_behavior]
 

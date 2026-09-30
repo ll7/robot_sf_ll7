@@ -21,13 +21,16 @@ Rect = tuple[Vec2D, Vec2D, Vec2D]
 Zone = tuple[Vec2D, Vec2D, Vec2D]  # rect ABC with sides |A B|, |B C| and diagonal |A C|
 
 
-def sample_zone(zone: Zone, num_samples: int) -> list[Vec2D]:
+def sample_zone(
+    zone: Zone, num_samples: int, *, rng: np.random.Generator | None = None
+) -> list[Vec2D]:
     """
     Sample points within a given zone.
 
     Args:
         zone (Zone): The zone defined by three points.
         num_samples (int): The number of points to sample.
+        rng: Private generator; a fresh one is created when omitted.
 
     Returns:
         List[Vec2D]: A list of sampled points within the zone.
@@ -35,26 +38,31 @@ def sample_zone(zone: Zone, num_samples: int) -> list[Vec2D]:
     a, b, c = zone
     a, b, c = np.array(a), np.array(b), np.array(c)
     vec_ba, vec_bc = a - b, c - b
-    rel_width = np.random.uniform(0, 1, (num_samples, 1))
-    rel_height = np.random.uniform(0, 1, (num_samples, 1))
+    rng = np.random.default_rng() if rng is None else rng
+    rel_width = rng.uniform(0, 1, (num_samples, 1))
+    rel_height = rng.uniform(0, 1, (num_samples, 1))
     points = b + rel_width * vec_ba + rel_height * vec_bc
     return [(x, y) for x, y in points]
 
 
-def sample_circle(circle: Circle, num_samples: int) -> list[Vec2D]:
+def sample_circle(
+    circle: Circle, num_samples: int, *, rng: np.random.Generator | None = None
+) -> list[Vec2D]:
     """
     Sample points within a given circle.
 
     Args:
         circle (Circle): The circle defined by center point and radius.
         num_samples (int): The number of points to sample.
+        rng: Private generator; a fresh one is created when omitted.
 
     Returns:
         List[Vec2D]: A list of sampled points within the zone.
     """
     center, radius = circle
-    rot = np.random.uniform(0, np.pi * 2, (num_samples, 1))
-    radius = np.random.uniform(0, radius, (num_samples, 1))
+    rng = np.random.default_rng() if rng is None else rng
+    rot = rng.uniform(0, np.pi * 2, (num_samples, 1))
+    radius = rng.uniform(0, radius, (num_samples, 1))
     rel_x, rel_y = np.cos(rot) * radius, np.sin(rot) * radius
     points = np.concatenate((rel_x, rel_y), axis=1) + np.array([center])
     return [(x, y) for x, y in points]

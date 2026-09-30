@@ -205,6 +205,7 @@ class EnvironmentFactory:
         jsonl_recording_options: JsonlRecordingOptions | None = None,
         telemetry_options: TelemetryOptions | None = None,
         asymmetric_critic: bool = False,
+        seed: int | None = None,
     ) -> SingleAgentEnv:
         """Construct a robot environment with specified observation and recording configuration.
 
@@ -214,6 +215,7 @@ class EnvironmentFactory:
 
         Args:
             config: RobotSimulationConfig instance defining physics, maps, and sensors.
+            seed: Episode seed for the private pedestrian generator.
             use_image_obs: If True, select image-capable environment; else standard lidar-only.
             peds_have_obstacle_forces: (Deprecated) Controls static obstacle forces for pedestrians.
             reward_func: Custom reward function; falls back to internal default if None.
@@ -235,6 +237,7 @@ class EnvironmentFactory:
         """
         if config is None:
             config = ImageRobotConfig() if use_image_obs else RobotSimulationConfig()
+        config.sim_config.pedestrian_seed = seed
         config.use_image_obs = use_image_obs
         legacy_override = None if peds_have_obstacle_forces is True else peds_have_obstacle_forces
         sync_pedestrian_obstacle_force_alias(config, legacy_override)
@@ -662,6 +665,7 @@ def make_robot_env(  # noqa: PLR0913
         jsonl_recording_options=jsonl_recording_options,
         telemetry_options=telemetry_options,
         asymmetric_critic=asymmetric_critic,
+        seed=seed,
     )
     env.applied_seed = seed
     return env
@@ -757,6 +761,7 @@ def make_image_robot_env(  # noqa: PLR0913
         video_fps=eff_video_fps,
         jsonl_recording_options=jsonl_recording_options,
         asymmetric_critic=asymmetric_critic,
+        seed=seed,
     )
     env.applied_seed = seed
     return env

@@ -311,6 +311,12 @@ class SimulationSettings:
     difficulty: int = 0
     """Difficulty level"""
 
+    pedestrian_seed: int | None = None
+    """Episode seed for private pedestrian random streams; set by env reset/factory."""
+
+    groups: float | None = None
+    """Probability of a multi-person group; None retains the default size law."""
+
     max_peds_per_group: int = 3
     """Maximum number of pedestrians per group"""
 

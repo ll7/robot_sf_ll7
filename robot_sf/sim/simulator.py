@@ -363,6 +363,25 @@ def _compute_pedestrian_response_multipliers(
     return multipliers
 
 
+def _group_member_probabilities(config: SimulationSettings) -> list[float]:
+    """Map groups to P(size>1), keeping the default decay among sizes 2..N.
+
+    Returns:
+        Group-size probabilities, or an empty list to retain the default law.
+    """
+    if config.groups is None:
+        return []
+    fraction = float(config.groups)
+    if not np.isfinite(fraction) or not 0.0 <= fraction <= 1.0:
+        raise ValueError("simulation_config.groups must be finite and in [0, 1]")
+    if config.max_peds_per_group == 1:
+        if fraction > 0:
+            raise ValueError("groups > 0 requires max_peds_per_group >= 2")
+        return [1.0]
+    weights = np.power(0.3, np.arange(config.max_peds_per_group - 1))
+    return [1.0 - fraction, *(fraction * weights / weights.sum()).tolist()]
+
+
 def _build_pysf_simulation(  # noqa: PLR0913
     *,
     config: SimulationSettings,
@@ -439,6 +458,24 @@ def _build_pysf_simulation(  # noqa: PLR0913
         Tuple of ``(pysf_sim, pysf_state, groups, peds_behaviors,
         pedestrian_response_multipliers)`` for the caller to assign to its instance.
     """
+    # Independent streams never inspect or mutate NumPy's process-global RNG.
+    streams = np.random.SeedSequence(config.pedestrian_seed).spawn(4)
+    config = replace(
+        config,
+        route_spawn_seed=config.route_spawn_seed
+        if config.route_spawn_seed is not None
+        else int(streams[0].generate_state(1)[0]),
+        archetype_seed=config.archetype_seed
+        if config.archetype_seed is not None
+        else int(streams[1].generate_state(1)[0]),
+        response_law_seed=response_law_seed
+        if response_law_seed is not None
+        else int(streams[2].generate_state(1)[0]),
+        desired_speed_seed=config.desired_speed_seed
+        if config.desired_speed_seed is not None
+        else int(streams[3].generate_state(1)[0]),
+    )
+    response_law_seed = config.response_law_seed
     pysf_config = PySFSimConfig()
     pysf_config.scene_config.dt_secs = config.time_per_step_in_secs
     pysf_config.scene_config.integration_scheme = config.pedestrian_integration_scheme
@@ -457,6 +494,8 @@ def _build_pysf_simulation(  # noqa: PLR0913
     spawn_config = PedSpawnConfig(
         config.peds_per_area_m2,
         config.max_peds_per_group,
+        group_member_probs=_group_member_probabilities(config),
+        rng=np.random.default_rng(config.route_spawn_seed),
         route_spawn_distribution=config.route_spawn_distribution,
         route_spawn_jitter_frac=config.route_spawn_jitter_frac,
         route_spawn_seed=config.route_spawn_seed,
@@ -708,13 +747,13 @@ class Simulator:
         enabled = bool(getattr(self.config, "sampler_capture_enabled", False))
         return SpawnSamplerCapture() if enabled else None
 
-    def repopulate_crowd(self) -> None:
+    def repopulate_crowd(self, seed: int | None = None) -> None:
         """Re-sample the pedestrian crowd by replaying construction-time population.
 
         Re-runs :func:`_build_pysf_simulation` with the exact arguments stored at
         construction (issue #9760), so a directly-constructed simulator whose crowd
-        was sampled from an unseeded RNG can establish a deterministic crowd under
-        a caller-held seeded RNG context (e.g. ``global_reset_seed``). The
+        was sampled from an unseeded RNG can establish a deterministic crowd from
+        an explicit episode ``seed``. The
         per-class population divergence (issue #4618 R2) is preserved because the
         replayed arguments are the class-specific ones stored at construction.
 
@@ -726,6 +765,8 @@ class Simulator:
         """
         if not self._pysf_build_kwargs:
             raise RuntimeError("repopulate_crowd() requires construction-time build args")
+        if seed is not None:
+            self.config.pedestrian_seed = int(seed)
         self.sampler_capture = self._new_sampler_capture()
         build_kwargs = dict(self._pysf_build_kwargs)
         build_kwargs["robot_pose_provider"] = lambda: self.robot_poses
@@ -1764,7 +1805,9 @@ class Simulator:
         Pedestrians are placed at construction, before any robot start is sampled, so a
         route or crowd pedestrian can start inside the robot footprint (issue #9725).
         Overlapping rows are moved deterministically to the nearest clear point on the
-        exclusion circle (robot radius + pedestrian radius + margin); no random numbers
+        exclusion circle (robot radius + pedestrian radius + 0.1 m + one second
+        at the pedestrian speed cap). The new velocity points toward the current
+        route goal and is non-closing on every robot; no random numbers
         are drawn, so every other spawn of the seed stays unchanged. The next reset
         restores the construction-time layout and checks it again.
         """
@@ -1795,19 +1838,32 @@ class Simulator:
         if not overlapping_rows:
             self.last_spawn_relocation = None
             return
+        states = self.pysf_state.pysf_states()
+        # One second at the walking speed cap, plus the existing 0.1 m margin.
+        reaction_clearance = np.maximum(
+            np.linalg.norm(states[:, 2:4], axis=1), self.pysf_sim.peds.max_speeds
+        )
         report = relocate_overlapping_pedestrians(
             ped_xy,
             ped_radius,
             robots,
             self.map_def,
             rows=sorted(overlapping_rows),
+            reaction_clearance_m=reaction_clearance,
+            route_goals=states[:, 4:6],
         )
         self.last_spawn_relocation = report
         if not report.relocated and not report.unresolved:
             return
         states = self.pysf_state.pysf_states()
         for row, (_old, new_xy) in report.relocated.items():
+            speed = float(np.linalg.norm(states[row, 2:4]))
             states[row, PYSF_POSITION_SLICE] = new_xy
+            direction = states[row, 4:6] - states[row, 0:2]
+            length = float(np.linalg.norm(direction))
+            states[row, 2:4] = direction * speed / length if length > 1e-9 else 0.0
+            if hasattr(self, "ped_headings"):
+                self.ped_headings[row] = np.arctan2(states[row, 3], states[row, 2])
         if report.relocated:
             logger.debug(
                 "Moved {count} pedestrian(s) off the robot start footprint at reset: {rows}",

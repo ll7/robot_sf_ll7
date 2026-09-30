@@ -164,6 +164,8 @@ def relocate_overlapping_pedestrians(
     margin: float = SPAWN_CLEARANCE_MARGIN_M,
     *,
     rows: Sequence[int] | None = None,
+    reaction_clearance_m: Sequence[float] | None = None,
+    route_goals: Sequence[Vec2D] | None = None,
 ) -> PedestrianRelocationReport:
     """Find clear positions for pedestrians that overlap a robot footprint.
 
@@ -182,6 +184,9 @@ def relocate_overlapping_pedestrians(
         map_def: Map providing walls and bounds.
         margin: Extra surface clearance to keep.
         rows: Optional subset of rows that may be moved (defaults to all rows).
+        reaction_clearance_m: Extra robot surface clearance per row, beyond margin.
+        route_goals: When set, choose a point whose heading toward its goal is
+            not closing on any robot.
 
     Returns:
         Report with ``row -> (old, new)`` moves and the rows left unresolved.
@@ -198,10 +203,15 @@ def relocate_overlapping_pedestrians(
         if row not in movable:
             report.unresolved.append(row)
             continue
+        robot_margin = margin + (
+            reaction_clearance_m[row] if reaction_clearance_m is not None else 0.0
+        )
         new_xy = next(
             (
                 candidate
-                for candidate in _relocation_candidates(positions[row], hit, ped_radius, margin)
+                for candidate in _relocation_candidates(
+                    positions[row], hit, ped_radius, robot_margin
+                )
                 if _is_clear(
                     candidate,
                     row,
@@ -210,6 +220,11 @@ def relocate_overlapping_pedestrians(
                     ped_radius,
                     margin,
                     (blocked, walls),
+                    robot_margin=robot_margin,
+                )
+                and (
+                    route_goals is None
+                    or _route_heading_clears_robots(candidate, route_goals[row], robots)
                 )
             ),
             None,
@@ -268,6 +283,8 @@ def _is_clear(
     ped_radius: float,
     margin: float,
     geometry: tuple[PreparedGeometry, PreparedGeometry],
+    *,
+    robot_margin: float | None = None,
 ) -> bool:
     """Return whether a relocation candidate is a clear, reachable position.
 
@@ -277,7 +294,12 @@ def _is_clear(
     crossing a wall (so a pedestrian is never moved through a wall).
     """
     blocked, walls = geometry
-    if _overlapping_robot(candidate, robots, ped_radius, margin) is not None:
+    if (
+        _overlapping_robot(
+            candidate, robots, ped_radius, margin if robot_margin is None else robot_margin
+        )
+        is not None
+    ):
         return False
     if blocked.intersects(Point(candidate)):
         return False
@@ -288,6 +310,20 @@ def _is_clear(
         other == row or dist(candidate, other_xy) >= spacing
         for other, other_xy in enumerate(positions)
     )
+
+
+def _route_heading_clears_robots(
+    point: Vec2D,
+    goal: Vec2D,
+    robots: Sequence[tuple[Vec2D, float]],
+) -> bool:
+    """Check the route heading at relocation.
+
+    Returns:
+        Whether a velocity toward the goal is non-closing on every robot.
+    """
+    vx, vy = goal[0] - point[0], goal[1] - point[1]
+    return all(vx * (point[0] - xy[0]) + vy * (point[1] - xy[1]) >= -1e-9 for xy, _ in robots)
 
 
 __all__ = [

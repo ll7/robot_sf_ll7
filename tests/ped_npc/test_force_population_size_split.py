@@ -285,20 +285,17 @@ def test_force_population_scatter_spawn_is_seed_deterministic(
         )
 
 
-def test_native_crowded_zone_goal_sampling_keeps_legacy_call(monkeypatch) -> None:
-    """Native crowd zones keep the pre-existing unconstrained sampler invocation."""
+def test_native_crowded_zone_goal_sampling_leaves_global_numpy_untouched() -> None:
+    """Even a default crowd behavior must sample goals through its own generator."""
     zone = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)]
-    calls = []
-
-    def _record_sample(sampled_zone, num_samples):
-        calls.append((sampled_zone, num_samples))
-        return [(0.25, 0.75)]
-
-    monkeypatch.setattr(ped_behavior, "sample_zone", _record_sample)
     behavior = CrowdedZoneBehavior(groups=None, zone_assignments={}, crowded_zones=[])
-
-    assert behavior._sample_goal(zone) == (0.25, 0.75)
-    assert calls == [(zone, 1)]
+    np.random.seed(1001)
+    before = np.random.get_state()
+    x, y = behavior._sample_goal(zone)
+    after = np.random.get_state()
+    assert 0.0 <= y <= x <= 1.0
+    np.testing.assert_array_equal(before[1], after[1])
+    assert before[2:] == after[2:]
 
 
 def test_force_population_scatter_spawn_has_radius_clearance(

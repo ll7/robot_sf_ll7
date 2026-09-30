@@ -82,6 +82,11 @@ def _write_arm(
         (arm_dir / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
 
 
+def _with_synthetic_ids(scenarios: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Give synthetic fixtures the explicit id used by the synthetic runner's rows."""
+    return [dict(sc, id=sc["name"]) for sc in scenarios]
+
+
 # --- _count_jsonl_episodes ---
 
 
@@ -213,12 +218,12 @@ class TestBuildResumePlan:
         runs_dir = tmp_path / "runs"
         runs_dir.mkdir()
         planners = [{"key": "sf", "algo": "test", "enabled": True}]
-        scenarios = [{"id": "s1", "repeats": 3}]
+        scenarios = [{"name": "s1", "repeats": 3}]
         verdicts = build_resume_plan(
             runs_dir,
             planners=planners,
             kinematics_matrix=["differential_drive"],
-            scenarios=scenarios,
+            scenarios=_with_synthetic_ids(scenarios),
         )
         assert len(verdicts) == 1
         v = verdicts[0]
@@ -233,12 +238,12 @@ class TestBuildResumePlan:
         arm_name = "sf__differential_drive"
         _write_arm(runs_dir, arm_name, episodes=3)
         planners = [{"key": "sf", "algo": "test", "enabled": True}]
-        scenarios = [{"id": "s1", "repeats": 3}]
+        scenarios = [{"name": "s1", "repeats": 3}]
         verdicts = build_resume_plan(
             runs_dir,
             planners=planners,
             kinematics_matrix=["differential_drive"],
-            scenarios=scenarios,
+            scenarios=_with_synthetic_ids(scenarios),
         )
         v = verdicts[0]
         assert v.verdict == "skip-complete"
@@ -251,12 +256,12 @@ class TestBuildResumePlan:
         arm_name = "sf__differential_drive"
         _write_arm(runs_dir, arm_name, episodes=2)
         planners = [{"key": "sf", "algo": "test", "enabled": True}]
-        scenarios = [{"id": "s1", "repeats": 5}]
+        scenarios = [{"name": "s1", "repeats": 5}]
         verdicts = build_resume_plan(
             runs_dir,
             planners=planners,
             kinematics_matrix=["differential_drive"],
-            scenarios=scenarios,
+            scenarios=_with_synthetic_ids(scenarios),
         )
         v = verdicts[0]
         assert v.verdict == "continue-from-2"
@@ -270,12 +275,12 @@ class TestBuildResumePlan:
             {"key": "sf", "algo": "test", "enabled": True},
             {"key": "rl", "algo": "test", "enabled": False},
         ]
-        scenarios = [{"id": "s1"}]
+        scenarios = [{"name": "s1"}]
         verdicts = build_resume_plan(
             runs_dir,
             planners=planners,
             kinematics_matrix=["differential_drive"],
-            scenarios=scenarios,
+            scenarios=_with_synthetic_ids(scenarios),
         )
         keys = [v.planner_key for v in verdicts]
         assert keys == ["sf"]
@@ -284,7 +289,7 @@ class TestBuildResumePlan:
         runs_dir = tmp_path / "runs"
         runs_dir.mkdir()
         planners = [{"key": "sf", "algo": "test", "enabled": True}]
-        scenarios = [{"id": "s1"}]
+        scenarios = [{"name": "s1"}]
 
         # Pre-populate one arm with 1 episode, leave other empty
         _write_arm(runs_dir, "sf__differential_drive", episodes=1)
@@ -294,7 +299,7 @@ class TestBuildResumePlan:
             runs_dir,
             planners=planners,
             kinematics_matrix=["differential_drive", "holonomic"],
-            scenarios=scenarios,
+            scenarios=_with_synthetic_ids(scenarios),
         )
         assert len(verdicts) == 2
         dd = next(v for v in verdicts if v.kinematics == "differential_drive")
@@ -306,18 +311,18 @@ class TestBuildResumePlan:
         runs_dir = tmp_path / "runs"
         runs_dir.mkdir()
         planners = [{"key": "sf", "algo": "test", "enabled": True}]
-        scenarios = [{"id": "s1", "repeats": 5}]
+        scenarios = [{"name": "s1", "repeats": 10}]
 
-        # Supply the precomputed count for the same five identities
+        # Supply a precomputed count matching all ten job identities
         verdicts = build_resume_plan(
             runs_dir,
             planners=planners,
             kinematics_matrix=["differential_drive"],
-            scenarios=scenarios,
-            expected_jobs=5,
+            scenarios=_with_synthetic_ids(scenarios),
+            expected_jobs=10,
         )
         v = verdicts[0]
-        assert v.expected_total == 5
+        assert v.expected_total == 10
 
     def test_rejects_file_at_arm_directory_path(self, tmp_path: Path) -> None:
         runs_dir = tmp_path / "runs"
@@ -328,7 +333,7 @@ class TestBuildResumePlan:
                 runs_dir,
                 planners=[{"key": "sf", "algo": "test", "enabled": True}],
                 kinematics_matrix=["differential_drive"],
-                scenarios=[{"id": "s1"}],
+                scenarios=[{"name": "s1"}],
             )
 
 
@@ -350,12 +355,12 @@ class TestResumePlanSummary:
             {"key": "rl", "algo": "test", "enabled": True},
             {"key": "ho", "enabled": True},
         ]
-        scenarios = [{"id": "s1", "repeats": 10}]
+        scenarios = [{"name": "s1", "repeats": 10}]
         verdicts = build_resume_plan(
             runs_dir,
             planners=planners,
             kinematics_matrix=["differential_drive"],
-            scenarios=scenarios,
+            scenarios=_with_synthetic_ids(scenarios),
         )
         summary = resume_plan_summary(verdicts)
         assert summary["total_arms"] == 3
@@ -380,14 +385,14 @@ class TestWriteResumePlan:
         runs_dir.mkdir()
 
         planners = [{"key": "sf", "algo": "test", "enabled": True}]
-        scenarios = [{"id": "s1", "repeats": 5}]
+        scenarios = [{"name": "s1", "repeats": 5}]
         _write_arm(runs_dir, "sf__differential_drive", episodes=3)
 
         verdicts = build_resume_plan(
             runs_dir,
             planners=planners,
             kinematics_matrix=["differential_drive"],
-            scenarios=scenarios,
+            scenarios=_with_synthetic_ids(scenarios),
         )
         plan_path = write_resume_plan(
             campaign_root,
@@ -422,12 +427,12 @@ class TestWriteResumePlan:
         _write_arm(runs_dir, "arm5__differential_drive", episodes=562)
 
         planners = [{"key": f"arm{i}", "algo": "test", "enabled": True} for i in range(6)]
-        scenarios = [{"id": "s1", "repeats": 1000}]
+        scenarios = [{"name": "s1", "repeats": 1000}]
         verdicts = build_resume_plan(
             runs_dir,
             planners=planners,
             kinematics_matrix=["differential_drive"],
-            scenarios=scenarios,
+            scenarios=_with_synthetic_ids(scenarios),
         )
 
         summary = resume_plan_summary(verdicts)
@@ -452,12 +457,12 @@ class TestEmitResumePlanLog:
         runs_dir = tmp_path / "runs"
         runs_dir.mkdir()
         planners = [{"key": "sf", "algo": "test", "enabled": True}]
-        scenarios = [{"id": "s1"}]
+        scenarios = [{"name": "s1"}]
         verdicts = build_resume_plan(
             runs_dir,
             planners=planners,
             kinematics_matrix=["differential_drive"],
-            scenarios=scenarios,
+            scenarios=_with_synthetic_ids(scenarios),
         )
         # Should not raise
         emit_resume_plan_log(verdicts)
@@ -483,7 +488,7 @@ class TestFullResumePlanFlow:
             {"key": "sf", "algo": "test", "enabled": True},
             {"key": "rl", "algo": "test", "enabled": True},
         ]
-        scenarios = [{"id": "s1", "repeats": 5}]
+        scenarios = [{"name": "s1", "repeats": 5}]
 
         # Verify should pass
         verify_resume_context(campaign_root, campaign_id="resume-test", config_hash="chk-001")
@@ -492,7 +497,7 @@ class TestFullResumePlanFlow:
             runs_dir,
             planners=planners,
             kinematics_matrix=["differential_drive"],
-            scenarios=scenarios,
+            scenarios=_with_synthetic_ids(scenarios),
         )
         plan_path = write_resume_plan(
             campaign_root,

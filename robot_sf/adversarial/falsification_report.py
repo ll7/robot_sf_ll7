@@ -19,7 +19,7 @@ from typing import Any
 
 COMPARISON_SCHEMA = "adversarial-sampler-comparison.v3"
 SEARCH_SCHEMA = "adversarial-search-manifest.v1"
-REPORT_SCHEMA = "adversarial-search-convergence-report.v2"
+REPORT_SCHEMA = "adversarial-search-convergence-report.v3"
 CRITICAL_FAILURES = frozenset(
     {
         "collision",
@@ -267,9 +267,199 @@ def _sampler_label(value: str) -> str:
 def _candidate_failure(item: dict[str, Any]) -> str | None:
     attribution = item.get("failure_attribution")
     if isinstance(attribution, dict):
+        status = attribution.get("status")
+        if not isinstance(status, str) or status.strip().lower() != "attributed":
+            return None
         value = attribution.get("primary_failure")
         if isinstance(value, str) and value.strip():
-            return value.strip()
+            return value.strip().lower()
+    return None
+
+
+def _safety_evidence_containers(item: dict[str, Any]) -> list[dict[str, Any]]:
+    attribution = item.get("failure_attribution")
+    details = attribution.get("details") if isinstance(attribution, dict) else None
+    return [item, details] if isinstance(details, dict) else [item]
+
+
+def _outcome_safety_observations(
+    containers: list[dict[str, Any]], aliases: tuple[str, ...]
+) -> tuple[list[bool], bool]:
+    observed: list[bool] = []
+    malformed = False
+    for container in containers:
+        outcome = container.get("outcome")
+        if not isinstance(outcome, dict):
+            continue
+        for name in aliases:
+            if name not in outcome:
+                continue
+            value = outcome[name]
+            if isinstance(value, bool):
+                observed.append(value)
+            else:
+                malformed = True
+    return observed, malformed
+
+
+def _metric_safety_observations(
+    containers: list[dict[str, Any]], metric_name: str
+) -> tuple[list[bool], bool]:
+    observed: list[bool] = []
+    malformed = False
+    for container in containers:
+        metrics = container.get("metrics")
+        if not isinstance(metrics, dict) or metric_name not in metrics:
+            continue
+        value = metrics[metric_name]
+        if value is None:
+            continue
+        numeric_metric = _finite_number(value)
+        if metric_name == "collisions" and numeric_metric is not None and numeric_metric >= 0.0:
+            observed.append(numeric_metric > 0.0)
+        elif metric_name != "collisions" and isinstance(value, bool):
+            observed.append(value)
+        else:
+            malformed = True
+    return observed, malformed
+
+
+def _safety_component_status(
+    item: dict[str, Any], *, aliases: tuple[str, ...], metric_name: str
+) -> tuple[bool | None, list[str]]:
+    """Read one collision/intrusion component without treating absence as a negative."""
+    containers = _safety_evidence_containers(item)
+    observed, malformed = _outcome_safety_observations(containers, aliases)
+    metric_observations, metric_malformed = _metric_safety_observations(containers, metric_name)
+    observed.extend(metric_observations)
+    malformed = malformed or metric_malformed
+
+    if malformed:
+        return None, [f"{metric_name}_evidence_malformed"]
+    if not observed:
+        return None, [f"{metric_name}_evidence_missing"]
+    if any(value != observed[0] for value in observed[1:]):
+        return None, [f"{metric_name}_evidence_conflict"]
+    return observed[0], []
+
+
+def _two_scope_status_counts(
+    observed: list[dict[str, Any]],
+    budgeted: list[dict[str, Any]],
+    field: str,
+    nested_field: str | None = None,
+) -> tuple[dict[str, int], dict[str, int]]:
+    statuses = ("critical", "not_critical", "unknown")
+
+    def value_for(item: dict[str, Any]) -> Any:
+        value = item[field]
+        return value[nested_field] if nested_field is not None else value
+
+    return tuple(
+        {status: sum(value_for(item) == status for item in items) for status in statuses}
+        for items in (budgeted, observed)
+    )
+
+
+def _collision_intrusion_tier(item: Any) -> dict[str, Any]:
+    """Return an explicit tri-state collision/severe-intrusion evidence summary."""
+    if not isinstance(item, dict):
+        return {
+            "status": "unknown",
+            "collision": None,
+            "severe_intrusion": None,
+            "reason_codes": ["candidate_record_malformed"],
+        }
+    collision, collision_reasons = _safety_component_status(
+        item,
+        aliases=("collision", "collision_event"),
+        metric_name="collisions",
+    )
+    intrusion, intrusion_reasons = _safety_component_status(
+        item,
+        aliases=("severe_intrusion", "severe_intrusion_event"),
+        metric_name="severe_intrusion",
+    )
+    if collision is True or intrusion is True:
+        status = "critical"
+    elif collision is False and intrusion is False:
+        status = "not_critical"
+    else:
+        status = "unknown"
+    return {
+        "status": status,
+        "collision": collision,
+        "severe_intrusion": intrusion,
+        "reason_codes": sorted(set(collision_reasons + intrusion_reasons)),
+    }
+
+
+def _candidate_criticality_status(
+    candidate_status: str, failure: str | None, safety_tier: dict[str, Any], item: dict[str, Any]
+) -> str:
+    """Combine explicit safety evidence with only corroborated attributed failures."""
+    if candidate_status in {"invalid", "failed"}:
+        return "unknown"
+    if safety_tier["status"] == "critical":
+        return "critical"
+    if failure in CRITICAL_FAILURES and _failure_has_positive_evidence(item, failure):
+        return "critical"
+    if failure == "success" and safety_tier["status"] == "not_critical":
+        return "not_critical"
+    return "unknown"
+
+
+def _consistent_outcome_boolean(item: dict[str, Any], *aliases: str) -> bool | None:
+    """Return a consistent outcome boolean from candidate and attribution details."""
+    values, malformed = _outcome_safety_observations(_safety_evidence_containers(item), aliases)
+    if malformed or not values or any(value != values[0] for value in values[1:]):
+        return None
+    return values[0]
+
+
+def _failure_has_positive_evidence(item: dict[str, Any], failure: str) -> bool:
+    """Require candidate details to support a non-safety primary failure label."""
+    if failure == "timeout":
+        return _consistent_outcome_boolean(item, "timeout", "timeout_event") is True
+    if failure == "incomplete":
+        return _consistent_outcome_boolean(item, "route_complete") is False
+    if failure == "near_miss":
+        containers = _safety_evidence_containers(item)
+        events, malformed = _outcome_safety_observations(
+            containers, ("near_miss", "near_miss_event")
+        )
+        if malformed or any(value is False for value in events):
+            return False
+        positive_metric = False
+        for container in containers:
+            metrics = container.get("metrics")
+            if not isinstance(metrics, dict) or metrics.get("near_misses") is None:
+                continue
+            value = _finite_number(metrics["near_misses"])
+            if value is None or value <= 0.0:
+                return False
+            positive_metric = True
+        return positive_metric or bool(events and events[0])
+    if failure == "comfort_violation":
+        return (
+            _consistent_outcome_boolean(item, "comfort_violation", "comfort_violation_event")
+            is True
+        )
+    return False
+
+
+def _criticality_failure_type(
+    status: str, failure: str | None, safety_tier: dict[str, Any], item: dict[str, Any]
+) -> str | None:
+    """Name a critical failure only when its type is supported by observed evidence."""
+    if status != "critical":
+        return None
+    if failure in {"collision", "severe_intrusion"}:
+        return failure if safety_tier.get(failure) is True else "collision_or_severe_intrusion"
+    if failure in CRITICAL_FAILURES and _failure_has_positive_evidence(item, failure):
+        return failure
+    if safety_tier.get("status") == "critical":
+        return "collision_or_severe_intrusion"
     return None
 
 
@@ -394,8 +584,15 @@ def _missing_evaluation(index: int, *, within_budget: bool) -> dict[str, Any]:
         "status": "missing",
         "failure_type": None,
         "objective_value": None,
-        "critical": False,
-        "observed_critical": False,
+        "critical": None,
+        "observed_critical": None,
+        "criticality_status": "unknown",
+        "collision_intrusion_tier": {
+            "status": "unknown",
+            "collision": None,
+            "severe_intrusion": None,
+            "reason_codes": ["candidate_evaluation_missing"],
+        },
         "candidate": None,
         "candidate_sha256": None,
         "effective_scenario_hash": None,
@@ -845,8 +1042,21 @@ def _derive_evaluations(
     seen_candidates: dict[str, int] = {}
     seen_effective: dict[str, int] = {}
     for index, item in enumerate(candidates, start=1):
-        status, failure, score, critical = _candidate_status(item)
+        status, failure, score, _ = _candidate_status(item)
         is_mapping = isinstance(item, dict)
+        collision_intrusion_tier = _collision_intrusion_tier(item)
+        criticality_status = _candidate_criticality_status(
+            status,
+            failure,
+            collision_intrusion_tier,
+            item if is_mapping else {},
+        )
+        criticality_failure_type = _criticality_failure_type(
+            criticality_status,
+            failure,
+            collision_intrusion_tier,
+            item if is_mapping else {},
+        )
         candidate = item.get("candidate") if is_mapping else None
         candidate_hash, effective_hash = _candidate_identity(item) if is_mapping else (None, None)
         duplicate_basis: list[str] = []
@@ -897,8 +1107,19 @@ def _derive_evaluations(
             "status": status,
             "failure_type": failure,
             "objective_value": score,
-            "critical": critical and analysis_evidence_eligible and within_budget,
-            "observed_critical": critical,
+            "critical": (
+                None
+                if criticality_status == "unknown"
+                else criticality_status == "critical"
+                and analysis_evidence_eligible
+                and within_budget
+            ),
+            "observed_critical": (
+                None if criticality_status == "unknown" else criticality_status == "critical"
+            ),
+            "criticality_status": criticality_status,
+            "criticality_failure_type": criticality_failure_type,
+            "collision_intrusion_tier": collision_intrusion_tier,
             "candidate": candidate,
             "candidate_sha256": candidate_hash,
             "effective_scenario_hash": effective_hash,
@@ -936,22 +1157,39 @@ def _derive_evaluations(
     observed = evaluations[:actual_count]
     budgeted = [item for item in observed if item["within_budget"]]
     over_budget = [item for item in observed if not item["within_budget"]]
+    criticality_status_counts, observed_criticality_status_counts = _two_scope_status_counts(
+        observed, budgeted, "criticality_status"
+    )
+    collision_intrusion_tier_status_counts, observed_collision_intrusion_tier_status_counts = (
+        _two_scope_status_counts(observed, budgeted, "collision_intrusion_tier", "status")
+    )
+    analysis_eligibility_receipt_counts = {
+        "eligible": sum(item["analysis_eligible"] is True for item in budgeted),
+        "ineligible": sum(item["analysis_eligible"] is False for item in budgeted),
+        "unknown": sum(item["analysis_eligible"] is None for item in budgeted),
+    }
+    analysis_evidence_eligibility_counts = {
+        "eligible": sum(item["analysis_evidence_eligible"] for item in budgeted),
+        "ineligible": sum(not item["analysis_evidence_eligible"] for item in budgeted),
+    }
     invalid = sum(item["status"] == "invalid" for item in observed)
     failed = sum(item["status"] == "failed" for item in observed)
     budgeted_invalid = sum(item["status"] == "invalid" for item in budgeted)
     budgeted_failed = sum(item["status"] == "failed" for item in budgeted)
     critical_types = Counter(
-        str(item["failure_type"]) for item in budgeted if item["critical"] and item["failure_type"]
+        str(item["criticality_failure_type"])
+        for item in budgeted
+        if item["critical"] is True and item["criticality_failure_type"]
     )
     observed_critical_types = Counter(
-        str(item["failure_type"])
+        str(item["criticality_failure_type"])
         for item in observed
-        if item["observed_critical"] and item["failure_type"]
+        if item["observed_critical"] is True and item["criticality_failure_type"]
     )
     budgeted_observed_critical_types = Counter(
-        str(item["failure_type"])
+        str(item["criticality_failure_type"])
         for item in budgeted
-        if item["observed_critical"] and item["failure_type"]
+        if item["observed_critical"] is True and item["criticality_failure_type"]
     )
     return {
         "evaluations": evaluations,
@@ -959,7 +1197,7 @@ def _derive_evaluations(
         "num_budgeted_candidates": len(budgeted),
         "num_over_budget_candidates": len(over_budget),
         "num_over_budget_critical_candidates": sum(
-            item["observed_critical"] for item in over_budget
+            item["observed_critical"] is True for item in over_budget
         ),
         "num_missing_evaluations": sum(item["status"] == "missing" for item in evaluations),
         "num_missing_budgeted_evaluations": sum(
@@ -973,10 +1211,30 @@ def _derive_evaluations(
         "num_observed_failed_evaluations": failed,
         "num_scored_valid_candidates": sum(item["status"] == "scored" for item in budgeted),
         "num_scoreless_valid_candidates": sum(item["status"] == "scoreless" for item in budgeted),
-        "num_critical_candidates": sum(item["critical"] for item in budgeted),
-        "num_observed_critical_candidates": sum(item["observed_critical"] for item in observed),
+        "num_critical_candidates": sum(item["critical"] is True for item in budgeted),
+        "num_criticality_unknown_candidates": sum(
+            item["criticality_status"] == "unknown" for item in budgeted
+        ),
+        "num_collision_intrusion_tier_unknown_candidates": sum(
+            item["collision_intrusion_tier"]["status"] == "unknown" for item in budgeted
+        ),
+        "num_observed_critical_candidates": sum(
+            item["observed_critical"] is True for item in observed
+        ),
+        "num_observed_criticality_unknown_candidates": sum(
+            item["criticality_status"] == "unknown" for item in observed
+        ),
+        "num_observed_collision_intrusion_tier_unknown_candidates": sum(
+            item["collision_intrusion_tier"]["status"] == "unknown" for item in observed
+        ),
+        "criticality_status_counts": criticality_status_counts,
+        "observed_criticality_status_counts": observed_criticality_status_counts,
+        "collision_intrusion_tier_status_counts": collision_intrusion_tier_status_counts,
+        "observed_collision_intrusion_tier_status_counts": (
+            observed_collision_intrusion_tier_status_counts
+        ),
         "num_budgeted_observed_critical_candidates": sum(
-            item["observed_critical"] for item in budgeted
+            item["observed_critical"] is True for item in budgeted
         ),
         "first_critical_evaluation": next(
             (item["evaluation_index"] for item in budgeted if item["critical"]), None
@@ -1001,11 +1259,8 @@ def _derive_evaluations(
         if budgeted
         else None,
         "invalid_rate_observed": budgeted_invalid / len(budgeted) if budgeted else None,
-        "analysis_eligible_count": sum(item["analysis_evidence_eligible"] for item in budgeted),
-        "analysis_ineligible_count": sum(item["analysis_eligible"] is False for item in budgeted),
-        "analysis_eligibility_unknown_count": sum(
-            item["analysis_eligible"] is None for item in budgeted
-        ),
+        "analysis_eligibility_receipt_counts": analysis_eligibility_receipt_counts,
+        "analysis_evidence_eligibility_counts": analysis_evidence_eligibility_counts,
         "execution_mode_counts": _observed_status_counts(budgeted, "execution_mode"),
         "readiness_status_counts": _observed_status_counts(budgeted, "readiness_status"),
         "availability_status_counts": _observed_status_counts(budgeted, "availability_status"),
@@ -1473,6 +1728,18 @@ def _aggregate_group(
             "invalid": invalid,
             "failed": failed,
             "critical": critical,
+            "criticality_unknown": sum(
+                run["num_criticality_unknown_candidates"] for run in group_runs
+            ),
+            "analysis_evidence_eligible": sum(
+                run["analysis_evidence_eligibility_counts"]["eligible"] for run in group_runs
+            ),
+            "analysis_evidence_ineligible": sum(
+                run["analysis_evidence_eligibility_counts"]["ineligible"] for run in group_runs
+            ),
+            "collision_intrusion_tier_unknown": sum(
+                run["num_collision_intrusion_tier_unknown_candidates"] for run in group_runs
+            ),
             "observed_critical": observed_critical,
             "duplicate": duplicate,
             "missing_within_budget": sum(
@@ -1718,6 +1985,15 @@ def build_convergence_report(
     return {
         "schema_version": REPORT_SCHEMA,
         "claim_scope": "diagnostic_only_finite_search_budget",
+        "criticality_contract": {
+            "criticality_status_values": ["critical", "not_critical", "unknown"],
+            "unknown_policy": "unknown evidence is not counted as non-critical",
+            "collision_intrusion_tier": (
+                "not_critical requires explicit, consistent negative evidence for both collision "
+                "and severe intrusion; any missing, malformed, or conflicting component is unknown"
+            ),
+            "analysis_eligibility_is_safety_evidence": False,
+        },
         "comparison": {
             "path": _portable_path(input_path, repo_root=root),
             "schema_version": COMPARISON_SCHEMA,
@@ -1758,6 +2034,7 @@ def build_convergence_report(
             "No inferential test is performed, and small pilot seed counts do not support broad claims.",
             "Search-level runtime is reported only when a finite nonnegative runtime_seconds field is recorded in the search manifest or its summary; comparison-row fields are ignored.",
             "The current runner's legacy num_valid_candidates summary omits evaluator failures; this report derives valid as candidate rows minus invalid minus failed and retains the legacy field for audit.",
+            "A recorded successful outcome or zero historical v1 score does not establish a negative collision/severe-intrusion tier when either component is absent or contradictory; the report preserves that tier as unknown.",
             "Fixture tests verify report accounting; finite-budget reports do not establish planner safety, search-space coverage, or absence of counterexamples.",
         ],
     }
@@ -1804,8 +2081,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "## Per-run accounting",
         "",
-        "| Objective | Method | Seed | Budget | Search runtime (s) | Best observed ≤B | Best eligible ≤B | Observed critical (all rows) | Eligible critical ≤B | First eligible critical eval | Over-budget rows | Valid / invalid / failed / scoreless / missing ≤B / all expected | Duplicates ≤B | Execution modes | Availability | Run input status | Artifact |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|",
+        "| Objective | Method | Seed | Budget | Search runtime (s) | Best observed ≤B | Best eligible ≤B | Analysis evidence: eligible / ineligible (≤B) | Criticality: critical / not-critical / unknown (≤B) | Collision/intrusion tier: critical / not-critical / unknown (≤B) | Known critical (all rows) | Eligible critical ≤B | First eligible critical eval | Over-budget rows | Valid / invalid / failed / scoreless / missing ≤B / all expected | Duplicates ≤B | Execution modes | Availability | Run input status | Artifact |",
+        "|---|---:|---:|---:|---:|---:|---:|---|---|---|---:|---:|---:|---:|---:|---:|---|---|---|---|",
     ]
     for run in report["runs"]:
         accounting = (
@@ -1830,6 +2107,14 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"{_display_number(run['runtime_seconds'])} | "
             f"{_display_number(run['best_objective_value'])} | "
             f"{_display_number(run['best_analysis_eligible_objective_value'])} | "
+            f"{run['analysis_evidence_eligibility_counts']['eligible']} / "
+            f"{run['analysis_evidence_eligibility_counts']['ineligible']} | "
+            f"{run['criticality_status_counts']['critical']} / "
+            f"{run['criticality_status_counts']['not_critical']} / "
+            f"{run['criticality_status_counts']['unknown']} | "
+            f"{run['collision_intrusion_tier_status_counts']['critical']} / "
+            f"{run['collision_intrusion_tier_status_counts']['not_critical']} / "
+            f"{run['collision_intrusion_tier_status_counts']['unknown']} | "
             f"{run['num_observed_critical_candidates']} | {run['num_critical_candidates']} | "
             f"{run['first_critical_evaluation'] if run['first_critical_evaluation'] is not None else 'None recorded'} | "
             f"{run['num_over_budget_candidates']} | {accounting} | {duplicate} | "
@@ -1837,14 +2122,16 @@ def render_markdown(report: dict[str, Any]) -> str:
         )
     if not report["runs"]:
         lines.append(
-            "| — | — | — | — | Not recorded | Not recorded | Not recorded | — | — | — | — | — | — | — | — | — | no runs |"
+            "| — | — | — | — | Not recorded | Not recorded | Not recorded | — | — | — | — | — | — | — | — | — | — | — | — | no runs |"
         )
     lines.extend(
         [
             "",
             "Budget-limited summaries use only the first B comparison-indexed candidate rows. Extra rows remain in JSON audit history and cannot alter best-so-far values or paired deltas.",
             "",
-            "Observed best and critical counts retain raw candidate evidence. Eligible best/critical summaries require a scored objective, `execution_mode=native`, `readiness_status=native`, `availability_status=available`, a parseable episode-record artifact, an effective-scenario hash, and an explicit `analysis_eligibility.eligible=true` receipt; contradictory or incomplete evidence stays ineligible. Per-evaluation reason codes identify failed checks.",
+            "Analysis-evidence counts apply the report's canonical eligibility checks to each parseable, byte-verified episode-record artifact and retain the producer's `analysis_eligibility` receipt separately in JSON. These counts do not indicate detailed simulation-step or planner-decision traces, and they do not establish safety-tier completeness. Criticality columns report known critical, known non-critical, and unknown candidate counts separately. Collision/severe-intrusion tier counts require explicit evidence for both components to report `not_critical`; a missing, malformed, or contradictory component remains `unknown`.",
+            "",
+            "Eligible best/critical summaries require a scored objective, `execution_mode=native`, `readiness_status=native`, `availability_status=available`, a parseable episode-record artifact, an effective-scenario hash, and an explicit `analysis_eligibility.eligible=true` receipt; contradictory or incomplete evidence stays ineligible. Per-evaluation reason codes identify failed checks.",
             "",
             "Valid candidates within B are derived as `candidate rows within B - invalid - failed`; scoreless valid evaluations remain in that count. Missing and over-budget attempts remain explicit.",
             "",
@@ -2065,7 +2352,8 @@ def render_figures(report: dict[str, Any], output_dir: Path) -> list[Path]:
             axis.set_visible(False)
         fig.suptitle(
             f"{objective}: recorded best-so-far by evaluation budget\n"
-            "Solid=analysis-eligible; dashed=all observed scores; curves are capped at the row budget",
+            "Solid=analysis-eligible; dashed=all observed scores; curves are capped at the row budget\n"
+            f"Collision/intrusion tier unknown for {sum(run['num_collision_intrusion_tier_unknown_candidates'] for run in objective_runs)} budgeted candidates",
             fontsize=10,
         )
         fig.tight_layout(rect=(0, 0, 1, 0.92))

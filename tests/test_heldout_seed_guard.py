@@ -262,6 +262,64 @@ def test_standalone_static_rng_only_rejects_at_simulation_boundary():
 # seed-holdout: synthetic-fixture end
 
 
+def _multiprocessing_boundary_probe(connection):
+    """Report missing protection before ever requesting a held-out reset."""
+    import os
+
+    from robot_sf.gym_env.robot_env import RobotEnv
+
+    active = (
+        os.environ.get("ROBOT_SF_PYTEST_SEED_GUARD") == "1"
+        and getattr(RobotEnv.reset, "_seedguard_boundary", None) == "RobotEnv.reset"
+    )
+    result = {"active": active, "blocked": False, "steps": 0}
+    if active:
+        from tests.support.seedguard_boundaries import HeldoutSeedError
+
+        def record_step(*args):
+            result["steps"] += 1
+
+        RobotEnv.step = record_step
+        env = object.__new__(RobotEnv)
+        try:
+            env.reset(seed=50036)
+            env.step(None)
+        except HeldoutSeedError:
+            result["blocked"] = True
+    result["test"] = os.environ.get("PYTEST_CURRENT_TEST")
+    connection.send(result)
+    connection.close()
+
+
+@pytest.mark.parametrize("method", ["spawn", "forkserver"])
+def test_multiprocessing_child_protected_before_reset(method):
+    """Actual launcher children reject a sealed seed before reaching reset body."""
+    import multiprocessing
+    import os
+
+    context = multiprocessing.get_context(method)
+    parent, child = context.Pipe(duplex=False)
+    process = context.Process(target=_multiprocessing_boundary_probe, args=(child,))
+    process.start()
+    child.close()
+    try:
+        assert parent.poll(60), "child did not return its boundary proof"
+        result = parent.recv()
+        assert result == {
+            "active": True,
+            "blocked": True,
+            "steps": 0,
+            "test": os.environ.get("PYTEST_CURRENT_TEST"),
+        }
+    finally:
+        process.join(10)
+        if process.is_alive():
+            process.terminate()
+            process.join()
+        parent.close()
+    assert process.exitcode == 0
+
+
 def test_seed_bands_matches_canonical_policy_when_available():
     from tests.support import seedguard_boundaries
 
@@ -272,10 +330,10 @@ def test_seed_bands_matches_canonical_policy_when_available():
 
 def test_worker_guard_active(tmp_path):
     """Run with --dist=each to prove the boundary in every xdist worker."""
-    import json
     import os
     from pathlib import Path
 
+    from robot_sf.evidence.writers import write_json
     from robot_sf.gym_env.robot_env import RobotEnv
 
     assert os.environ.get("ROBOT_SF_PYTEST_SEED_GUARD") == "1"
@@ -285,4 +343,4 @@ def test_worker_guard_active(tmp_path):
     proof = os.environ.get("SEEDGUARD_WORKER_PROOF")
     if proof:
         worker = os.environ.get("PYTEST_XDIST_WORKER", "main")
-        Path(proof, f"{worker}.json").write_text(json.dumps({"worker": worker, "active": True}))
+        write_json(Path(proof, f"{worker}.json"), {"worker": worker, "active": True})

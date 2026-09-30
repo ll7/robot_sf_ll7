@@ -393,6 +393,7 @@ def install():
         if name in sys.modules:
             patch_module(sys.modules[name])
     _patch_child_processes()
+    _patch_multiprocessing()
 
 
 def _isolated_python_command(command, boundary_path):
@@ -464,6 +465,36 @@ def _isolated_bootstrap(target, payload, extra, boundary_path):
     return bootstrap
 
 
+_CHILD_CONTEXT_KEYS = (
+    "ROBOT_SF_PYTEST_SEED_AUDIT",
+    "PYTEST_CURRENT_TEST",
+    "PYTEST_XDIST_WORKER",
+    "ROBOT_SF_PYTEST_STATIC_SEED_TEST",
+)
+
+
+def _child_context():
+    """Snapshot test identity, including absent keys for persistent forkservers."""
+    context = {key: os.environ.get(key) for key in _CHILD_CONTEXT_KEYS}
+    context["ROBOT_SF_PYTEST_STATIC_SEED_TEST"] = "1" if _static_seed_test() else None
+    context["ROBOT_SF_PYTEST_SEED_GUARD"] = "1"
+    return context
+
+
+def _child_environment(supplied=None):
+    """Supply protection without changing the parent's interpreter search path."""
+    env = dict(os.environ if supplied is None else supplied)
+    for key, value in _child_context().items():
+        if value is None:
+            env.pop(key, None)
+        else:
+            env[key] = value
+    support = Path(__file__).resolve().parent
+    paths = [str(support / "seedguard_bootstrap"), str(support), env.get("PYTHONPATH", "")]
+    env["PYTHONPATH"] = os.pathsep.join(path for path in paths if path)
+    return env
+
+
 def _patch_child_processes():
     """Protect explicit child environments and grandchildren, including -I/-S."""
     import subprocess
@@ -478,18 +509,7 @@ def _patch_child_processes():
     def guarded(self, *args, **kwargs):
         bound = signature.bind_partial(self, *args, **kwargs)
         supplied = bound.arguments.get("env")
-        env = dict(os.environ if supplied is None else supplied)
-        env["ROBOT_SF_PYTEST_SEED_GUARD"] = "1"
-        if _static_seed_test():
-            env["ROBOT_SF_PYTEST_STATIC_SEED_TEST"] = "1"
-        else:
-            env.pop("ROBOT_SF_PYTEST_STATIC_SEED_TEST", None)
-        paths = [str(support / "seedguard_bootstrap"), str(support), env.get("PYTHONPATH", "")]
-        env["PYTHONPATH"] = os.pathsep.join(path for path in paths if path)
-        for key in ("ROBOT_SF_PYTEST_SEED_AUDIT", "PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER"):
-            if key in os.environ:
-                env[key] = os.environ[key]
-        bound.arguments["env"] = env
+        bound.arguments["env"] = _child_environment(supplied)
         bound.arguments["args"] = _isolated_python_command(
             bound.arguments["args"], support / "seedguard_boundaries.py"
         )
@@ -498,6 +518,68 @@ def _patch_child_processes():
     guarded._seedguard_boundary = "subprocess.Popen"
     subprocess.Popen.__init__ = guarded
     _PATCHES.append((subprocess.Popen, "__init__", original, guarded))
+
+
+def _patch_multiprocessing():
+    """Protect spawn/forkserver, which bypass Popen, and refresh each child identity."""
+    from multiprocessing import spawn
+
+    # subprocess has already cached its C entry point. multiprocessing imports
+    # this attribute on every launch, including resource tracker/forkserver.
+    if os.name == "posix":
+        import _posixsubprocess
+
+        original_exec = _posixsubprocess.fork_exec
+        if not getattr(original_exec, "_seedguard_boundary", None):
+
+            @wraps(original_exec)
+            def guarded_exec(*args, **kwargs):
+                arguments = list(args)
+                encoded_env = arguments[5]
+                supplied = (
+                    None
+                    if encoded_env is None
+                    else dict(os.fsdecode(row).split("=", 1) for row in encoded_env)
+                )
+                arguments[5] = [
+                    os.fsencode(f"{key}={value}")
+                    for key, value in _child_environment(supplied).items()
+                ]
+                arguments[0] = _isolated_python_command(arguments[0], Path(__file__).resolve())
+                return original_exec(*arguments, **kwargs)
+
+            guarded_exec._seedguard_boundary = "multiprocessing.fork_exec"
+            _posixsubprocess.fork_exec = guarded_exec
+            _PATCHES.append((_posixsubprocess, "fork_exec", original_exec, guarded_exec))
+
+    original_data = spawn.get_preparation_data
+    if getattr(original_data, "_seedguard_boundary", None):
+        return
+    original_prepare = spawn.prepare
+
+    @wraps(original_data)
+    def guarded_data(*args, **kwargs):
+        data = original_data(*args, **kwargs)
+        data["_seedguard_context"] = _child_context()
+        return data
+
+    @wraps(original_prepare)
+    def guarded_prepare(data):
+        for key, value in data.get("_seedguard_context", {}).items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        set_current_item(None)
+        return original_prepare(data)
+
+    for name, original, wrapper in (
+        ("get_preparation_data", original_data, guarded_data),
+        ("prepare", original_prepare, guarded_prepare),
+    ):
+        wrapper._seedguard_boundary = f"multiprocessing.{name}"
+        setattr(spawn, name, wrapper)
+        _PATCHES.append((spawn, name, original, wrapper))
 
 
 def uninstall():

@@ -1485,6 +1485,44 @@ def test_broad_rules_are_reported_first_without_rejection(tmp_path: Path) -> Non
     assert summary.index("## Broad rules") < summary.index("## Rule coverage")
 
 
+@pytest.mark.parametrize(
+    "declared", ["goal", "hybrid_rule_v3_fast_progress_static_escape_continuous"]
+)
+def test_pinned_v4_lineage_rejects_contradictory_config_declaration(tmp_path: Path, declared: str):
+    """Optional lineage declarations cannot contradict the source-pinned arm map."""
+    _, _, source, _ = _successor_contract(tmp_path, enable_all_v4=True)
+    key = "hybrid_rule_v4_fast_progress_static_escape"
+    path = source / f"configs/algos/{key}.yaml"
+    text = path.read_text()
+    assert "replaces_0_0_7_slot: hybrid_rule_v3_fast_progress_static_escape\n" in text
+    path.write_text(
+        text.replace(
+            "replaces_0_0_7_slot: hybrid_rule_v3_fast_progress_static_escape\n",
+            f"replaces_0_0_7_slot: {declared}\n",
+        )
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            str(Path(comparator.__file__).with_name("_pinned_successor_runtime.py")),
+        ],
+        cwd=source,
+        input=json.dumps(
+            {
+                "config_path": "configs/benchmarks/synthetic.yaml",
+                "versioned_keys": sorted(V4_SLOT_REPLACEMENTS.values()),
+                "rows": [],
+            }
+        ),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert f"successor planner binding lacks reviewed v4 lineage: {key}" in result.stderr
+
+
 @pytest.mark.parametrize("mixed_successor_definitions", [False, True])
 def test_changed_definitions_suppress_paired_metric_delta(tmp_path, mixed_successor_definitions):
     """Read actual JSONL bytes and fence metrics even when numerical values agree."""

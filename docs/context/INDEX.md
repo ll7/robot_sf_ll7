@@ -1,5 +1,11 @@
 # Context Retrieval Index
 
+Issue #9750 per-arm physical-faithfulness audit against the actual 0.0.7 roster:
+release-bundle identity, resolved configuration inheritance, cited method, correctness or
+enhancement classification, and deterministic oracle-test anchors. Unit tests only; no campaign
+or safety claim:
+[issue_9750_baseline_physical_faithfulness.md](issue_9750_baseline_physical_faithfulness.md).
+
 Issue #9667 Social Navigation Quality Index version 2 (SNQI-v2): declared weights,
 safety strata, development-only calibration, mandatory weight-family diagnostics,
 and the boundary against human-comfort or deployment claims:

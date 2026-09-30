@@ -1638,7 +1638,9 @@ def _load_snqi_v2_config(raw: Any, config_path: Path) -> SnqiV2Spec | None:
             local = config_path.parent / path
             path = local if local.exists() else get_repository_root() / path
         paths.append(path)
-    return load_snqi_v2_spec(*paths)
+    from robot_sf.benchmark.metric_definitions import METRIC_SCHEMA_VERSION  # noqa: PLC0415
+
+    return load_snqi_v2_spec(*paths, expected_metric_schema_version=METRIC_SCHEMA_VERSION)
 
 
 def _assemble_campaign_config(

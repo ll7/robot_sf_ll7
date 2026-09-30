@@ -86,10 +86,10 @@ def test_development_calibration_matches_candidate_and_preserves_frozen_007():
     assert len(calibration["planners"]) == 14
     assert calibration["seed_policy"] == {
         "mode": "fixed-list",
-        "seeds": [101, 102],
+        "seeds": [1001, 1002],
         "seed_sets_path": template["seed_policy"]["seed_sets_path"],
     }
-    assert calibration["name"] == "snqi_v2_calibration_dev101_102"
+    assert calibration["name"] == "snqi_v2_calibration_dev1001_1002"
     assert calibration["paper_facing"] is False
     assert calibration["workers"] == 16
     assert calibration["export_publication_bundle"] is False
@@ -2034,7 +2034,7 @@ def test_calibration_acquisition_yaml_is_strict_and_hash_bound(tmp_path):
     assert config.scenario_horizons_sha256 == (
         "3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650"
     )
-    assert config.seed_policy.seeds == (101, 102)
+    assert config.seed_policy.seeds == (1001, 1002)
     path = tmp_path / "changed.yaml"
     path.write_bytes(source.read_bytes() + b"\n# bytes changed after canonical load\n")
     with pytest.raises(ValueError, match="config source changed"):
@@ -2182,6 +2182,9 @@ def test_load_snqi_v2_config_resolves_explicit_asset_paths(spec_files, tmp_path,
     """Load versioned assets from config-local and repository-root paths."""
     from robot_sf.benchmark.camera_ready import _config as config_module
 
+    document = json.loads(spec_files[1].read_text())
+    document["metric_schema_version"] = "robot-sf-metrics.v2"
+    spec_files[1].write_text(json.dumps(document))
     local_paths = {
         "weights_path": spec_files[0].name,
         "anchors_path": spec_files[1].name,
@@ -2738,3 +2741,114 @@ def test_historical_v2_anchors_reject_corrected_physical_metrics():
     values = metrics(metric_schema_version="robot-sf-metrics.v2")
     with pytest.raises(ValueError, match="incompatible metric definitions"):
         normalize_snqi_v2_terms(values, fixture_spec())
+
+
+def test_snqifix_candidate_drops_legacy_snqi():
+    """Real candidate and calibration bytes must not send v1 anchors to v2 rows."""
+    for path in (
+        ROOT
+        / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
+        ASSETS / "calibration.dev101_102.yaml",
+    ):
+        config = yaml.safe_load(path.read_bytes())
+        assert config.get("snqi_weights") is None
+        assert config.get("snqi_baseline") is None
+        assert config["snqi_contract"]["enabled"] is False
+
+
+@pytest.mark.parametrize(
+    "budget,scenario",
+    [
+        (400, "francis2023_pedestrian_overtaking"),
+        (650, "classic_station_platform_medium"),
+        (700, "classic_realworld_double_bottleneck_high"),
+    ],
+)
+def test_snqifix_scheduled_rows_and_schema_survive_compaction(budget, scenario):
+    """Mixed authored budgets remain valid and retain their physical metric meaning."""
+    from robot_sf.benchmark.snqi.v2_calibration import _compact_calibration_record
+
+    rows, _ = calibration_records()
+    row = rows[0]
+    row.update(
+        seed=1001, scenario_id=scenario, horizon=budget, metric_schema_version="robot-sf-metrics.v2"
+    )
+    row["scenario_params"]["run_horizon"] = budget
+    row["metrics"]["metric_schema_version"] = "robot-sf-metrics.v2"
+    compact = _compact_calibration_record(row, "arm0")
+    assert compact["horizon"] == budget
+    assert compact["metrics"]["metric_schema_version"] == "robot-sf-metrics.v2"
+
+
+def test_snqifix_compaction_preserves_v2_at_h600():
+    from robot_sf.benchmark.snqi.v2_calibration import _compact_calibration_record
+
+    rows, _ = calibration_records()
+    row = rows[0]
+    row.update(seed=1001, metric_schema_version="robot-sf-metrics.v2")
+    row["metrics"]["metric_schema_version"] = "robot-sf-metrics.v2"
+    assert (
+        _compact_calibration_record(row, "arm0")["metrics"]["metric_schema_version"]
+        == "robot-sf-metrics.v2"
+    )
+
+
+def test_snqifix_campaign_loader_refuses_historical_anchors(spec_files, tmp_path):
+    """Valid frozen v1 anchors cannot be loaded into the current v2 campaign."""
+    from robot_sf.benchmark.camera_ready._config import _load_snqi_v2_config
+
+    weights, anchors, family = spec_files
+    with pytest.raises(ValueError, match="incompatible metric definitions"):
+        _load_snqi_v2_config(
+            {
+                "weights_path": str(weights),
+                "anchors_path": str(anchors),
+                "family_path": str(family),
+            },
+            tmp_path / "campaign.yaml",
+        )
+
+
+def test_snqifix_complete_mixed_budget_dev_grid():
+    """End-to-end derivation binds 1,344 dev rows to an independent schedule."""
+    from robot_sf.benchmark.snqi.v2_calibration import (
+        CalibrationGrid,
+        _candidate_calibration_horizons,
+        derive_calibration_anchors,
+    )
+
+    rows, kwargs = calibration_records()
+    budgets = _candidate_calibration_horizons()
+    names = sorted(budgets)
+    for row in rows:
+        row["scenario_id"] = names[int(row["scenario_id"].removeprefix("scenario"))]
+        row["seed"] += 900
+        row["horizon"] = budgets[row["scenario_id"]]
+        row["scenario_params"]["run_horizon"] = row["horizon"]
+        row["metric_schema_version"] = "robot-sf-metrics.v2"
+        row["metrics"]["metric_schema_version"] = "robot-sf-metrics.v2"
+    kwargs["scenarios"] = names
+    result = derive_calibration_anchors(rows, **kwargs, grid=CalibrationGrid(budgets, (1001, 1002)))
+    assert result["calibration"]["seeds"] == [1001, 1002]
+    assert result["calibration"]["episode_count"] == 1344
+    assert result["status"] == "derived_pending_custody"
+    assert result["metric_schema_version"] == "robot-sf-metrics.v2"
+    assert result["anchors"]["J"]["upper"] == 2
+    assert result["anchors"]["K"]["upper"] == 4
+    # A matching pair of row claims cannot override the independent budget.
+    rows[0]["horizon"] = rows[0]["scenario_params"]["run_horizon"] = 600
+    with pytest.raises(ValueError, match="scheduled budget"):
+        derive_calibration_anchors(rows, **kwargs, grid=CalibrationGrid(budgets, (1001, 1002)))
+
+
+def test_snqifix_scalar_mismatch_remains_refused():
+    """The existing scorer's schema fence remains closed after campaign changes."""
+    values = metrics(metric_schema_version="robot-sf-metrics.v2")
+    with pytest.raises(ValueError, match="incompatible metric definitions"):
+        compute_snqi(
+            values,
+            {},
+            json.loads(
+                (ROOT / "configs/benchmarks/snqi_baseline_camera_ready_v3.json").read_bytes()
+            ),
+        )

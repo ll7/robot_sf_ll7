@@ -170,6 +170,7 @@ class SnqiV2Spec:
     paths: Mapping[str, str]
     hashes: Mapping[str, str]
     metric_schema_version: str = LEGACY_METRIC_SCHEMA_VERSION
+    diagnostic: bool = False
 
     def __post_init__(self) -> None:
         """Enforce the complete score contract even for direct construction."""
@@ -201,7 +202,14 @@ class SnqiV2Spec:
         expected = PP_EQUIV_FORCE if abs(self.calibration_rho) >= 0.90 else SIMULATED_FORCE
         if self.force_source != expected:
             raise ValueError("SNQI-v2 F source violates preregistered |rho| >= 0.90 decision")
-        if self.calibration_seeds != (101, 102) or not self.calibration_split_id:
+        diagnostic_seeds = (
+            self.diagnostic
+            and bool(self.calibration_seeds)
+            and all(type(seed) is int and 1001 <= seed <= 1030 for seed in self.calibration_seeds)
+        )
+        if (
+            self.calibration_seeds not in ((101, 102), (1001, 1002)) and not diagnostic_seeds
+        ) or not self.calibration_split_id:
             raise ValueError("SNQI-v2 requires identified calibration seeds 101,102")
         for name, value in (
             ("weights", weights),
@@ -235,7 +243,13 @@ class SnqiV2Spec:
             raise ValueError("SNQI-v2 evaluation seeds overlap calibration split")
 
 
-def load_snqi_v2_spec(weights_path: Path, anchors_path: Path, family_path: Path) -> SnqiV2Spec:
+def load_snqi_v2_spec(
+    weights_path: Path,
+    anchors_path: Path,
+    family_path: Path,
+    *,
+    expected_metric_schema_version: str | None = None,
+) -> SnqiV2Spec:
     """Load versioned assets; reject unfrozen calibration and malformed provenance.
 
     Returns:
@@ -266,6 +280,12 @@ def load_snqi_v2_spec(weights_path: Path, anchors_path: Path, family_path: Path)
         raise ValueError("SNQI-v2.0 requires the exact declared weight values")
     if anchors_doc.get("version") != "SNQI-v2.0" or anchors_doc.get("status") != "frozen":
         raise ValueError("SNQI-v2 calibration anchors are not frozen")
+    if expected_metric_schema_version is not None:
+        from robot_sf.benchmark.metric_definitions import require_anchor_compatibility  # noqa: PLC0415
+
+        require_anchor_compatibility(
+            {"metric_schema_version": expected_metric_schema_version}, anchors_doc
+        )
     anchors = anchors_doc["anchors"]
     if set(anchors) != set(QUALITY_TERMS):
         raise ValueError("SNQI-v2 anchors must contain exactly T,N,F,J,K")
@@ -317,7 +337,7 @@ def _validate_calibration_grid(calibration: dict[str, Any]) -> None:
         or len(scenarios) != 48
         or any(not isinstance(scenario, str) or not scenario for scenario in scenarios)
         or len(set(scenarios)) != 48
-        or seeds != [101, 102]
+        or seeds not in ([101, 102], [1001, 1002])
         or calibration.get("episode_count") != 1344
         or calibration.get("benchmark_execution") != "nonfallback"
     ):
@@ -326,7 +346,7 @@ def _validate_calibration_grid(calibration: dict[str, Any]) -> None:
     grid_sha256 = hashlib.sha256(json.dumps(grid, separators=(",", ":")).encode()).hexdigest()
     if calibration.get("grid_sha256") != grid_sha256:
         raise ValueError("SNQI-v2 calibration grid_sha256 does not match its declared split")
-    if calibration.get("split_id") != f"snqi-v2-dev101-102-{grid_sha256[:12]}":
+    if calibration.get("split_id") != f"snqi-v2-dev{'-'.join(map(str, seeds))}-{grid_sha256[:12]}":
         raise ValueError("SNQI-v2 calibration split_id does not match its declared grid")
 
 

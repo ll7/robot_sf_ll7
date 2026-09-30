@@ -14,7 +14,7 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.aggregate import read_jsonl
+from robot_sf.benchmark.aggregate import filter_evidence_eligible_records, read_jsonl
 from robot_sf.benchmark.algorithm_metadata import (
     _KINEMATICS_PROFILE_BY_CANONICAL,
     canonical_algorithm_name,
@@ -37,7 +37,6 @@ from robot_sf.benchmark.fallback_policy import (
     classify_planner_row_status,
     summarize_benchmark_availability,
 )
-from robot_sf.benchmark.spawn_validity import record_has_invalid_spawn
 from robot_sf.benchmark.synthetic_actuation import (
     SyntheticActuationProfile,
     not_available_saturation_metrics,
@@ -413,8 +412,8 @@ def _resolve_planner_metrics(
         "min_clearance_m": float("nan"),
         "proxemic_intrusion_rate": _metric_mean(metric_block, "social_proxemic_intrusion_frac"),
     }
-    # Issues #9725/#9861: invalid spawn rows stay in JSONL but not planner rates.
-    records = [record for record in records or [] if not record_has_invalid_spawn(record)]
+    # Recomputed table fields must use the same evidence cohort as aggregation.
+    records, _excluded = filter_evidence_eligible_records(records or [])
     if not records:
         return resolved_metrics, success_ci, collision_ci, snqi_ci
 

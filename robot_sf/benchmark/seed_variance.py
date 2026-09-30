@@ -357,6 +357,20 @@ def _metric_alias(metric: str) -> str:
     return _PAPER_METRIC_ALIASES.get(metric, metric)
 
 
+def _resolve_confidence_settings(confidence_settings: dict[str, Any] | None) -> dict[str, Any]:
+    """Resolve missing numeric settings while preserving zero and effective provenance.
+
+    Returns:
+        Copied settings with effective defaults for absent or null numeric values.
+    """
+    confidence_settings = dict(confidence_settings or {})
+    confidence_settings.setdefault("method", _BOOTSTRAP_METHOD)
+    for key, default in (("confidence", 0.95), ("bootstrap_samples", 0), ("bootstrap_seed", 123)):
+        if confidence_settings.get(key) is None:
+            confidence_settings[key] = default
+    return confidence_settings
+
+
 def build_seed_variability_rows(
     records: list[dict[str, Any]] | Sequence[dict[str, Any]],
     *,
@@ -372,15 +386,11 @@ def build_seed_variability_rows(
     Returns:
         Aggregate rows grouped by scenario and planner across seeds.
     """
-    confidence_settings = dict(confidence_settings or {})
+    confidence_settings = _resolve_confidence_settings(confidence_settings)
     seed_policy = dict(seed_policy or {})
-    confidence_settings.setdefault("method", _BOOTSTRAP_METHOD)
-    confidence_settings.setdefault("confidence", 0.95)
-    confidence_settings.setdefault("bootstrap_samples", 0)
-    confidence_settings.setdefault("bootstrap_seed", 123)
-    bootstrap_samples = int(confidence_settings.get("bootstrap_samples", 0) or 0)
-    bootstrap_confidence = float(confidence_settings.get("confidence", 0.95) or 0.95)
-    bootstrap_seed = int(confidence_settings.get("bootstrap_seed", 123) or 123)
+    bootstrap_samples = int(confidence_settings["bootstrap_samples"])
+    bootstrap_confidence = float(confidence_settings["confidence"])
+    bootstrap_seed = int(confidence_settings["bootstrap_seed"])
     grouped: dict[
         tuple[str, str, str, str, str, str],
         dict[int, list[dict[str, Any]]],

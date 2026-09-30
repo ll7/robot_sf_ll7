@@ -448,7 +448,9 @@ Unit or source-channel metadata that the registry does not own remains explicitl
 When bootstrap sampling is enabled, aggregate output also includes an additive
 `pairwise_contrasts` block when at least two planner groups share paired episode identities. The
 contrast pairing key is `(scenario_id, seed)` with `seed_index` as a fallback, the reported delta is
-`right_minus_left`, and each
+`right_minus_left`. Duplicate keys within either comparison group are rejected;
+repeated episodes must first be reduced under an explicitly declared repeat policy.
+Each
 metric contrast includes the paired mean delta, percentile bootstrap interval, two-sided bootstrap
 sign p-value, Holm-adjusted p-value, and paired Cohen's dz effect size. Holm correction is applied
 within the current aggregate family (`family="all"`) separately for each metric; run aggregation on

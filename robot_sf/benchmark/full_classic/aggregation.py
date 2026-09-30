@@ -365,10 +365,12 @@ def _bootstrap_params(cfg) -> tuple[int, float, int, str, str]:
         ``"hierarchical"``; ``cluster_field`` is the record key used as the
         cluster identifier in hierarchical mode.
     """
-    samples = int(getattr(cfg, "bootstrap_samples", 1000) or 1000)
+    configured_samples = getattr(cfg, "bootstrap_samples", None)
+    samples = int(1000 if configured_samples is None else configured_samples)
     if getattr(cfg, "smoke", False):
         samples = min(samples, 300)
-    conf = float(getattr(cfg, "bootstrap_confidence", 0.95) or 0.95)
+    configured_confidence = getattr(cfg, "bootstrap_confidence", None)
+    conf = float(0.95 if configured_confidence is None else configured_confidence)
     seed = int(getattr(cfg, "master_seed", 0) or 0)
     mode = str(getattr(cfg, "bootstrap_mode", "flat") or "flat").lower()
     if mode not in {"flat", "hierarchical"}:

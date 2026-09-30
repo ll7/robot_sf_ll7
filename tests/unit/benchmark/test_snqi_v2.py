@@ -676,6 +676,27 @@ def records():
     ]
 
 
+def test_f4_family_rejects_reviewers_uneven_77_cell_seed_grid():
+    """Complete arm pairing alone cannot align episode means with seed-mean CIs."""
+    rows = [
+        {
+            "algo": f"planner_{arm:02d}",
+            "scenario_id": f"s{scenario}",
+            "seed": seed,
+            "steps": 100,
+            "metrics": metrics(success=int(seed == 111)),
+        }
+        for arm in range(14)
+        for scenario, seed in (
+            [(i, 111) for i in range(48)] + [(0, seed) for seed in range(112, 141)]
+        )
+    ]
+    # All inputs traverse real validation and scoring. No scored-input mock.
+    assert sum(row["metrics"]["success"] for row in rows) / len(rows) == pytest.approx(48 / 77)
+    with pytest.raises(ValueError, match="equal.*coverage.*seed"):
+        build_family_report(rows, fixture_spec(), bootstrap_samples=2000)
+
+
 def test_legacy_values_preserved_and_legacy_functions_unmodified():
     ep = records()[0]
     before = json.dumps(ep["metrics"], sort_keys=True)

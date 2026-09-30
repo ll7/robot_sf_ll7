@@ -961,6 +961,13 @@ _FAST_FILES = {
     "test_metric_layers.py",
     "test_metrics.py",
     "test_aggregated_time_cooperative.py",
+    # Offline metric/schema and shortest-path contracts measured below 3s per file;
+    # they never step an environment or simulator (PR #10014 routing audit).
+    "test_critical_intervals.py",
+    "test_cross_benchmark_metrics.py",
+    "test_control_action_latency_snqi.py",
+    "test_path_utils.py",
+    "test_snqi_scalarization_sensitivity.py",
     # Classic planner adapter tests are deterministic planner-contract tests for
     # the changed classic_planner_adapter.py producer; keep in fast shards for
     # the exact-head changed-coverage gate.

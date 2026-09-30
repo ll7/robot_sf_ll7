@@ -327,3 +327,69 @@ def test_setup_accepts_auxme_hostname_prefix(tmp_path: Path, reported: str) -> N
 
     assert result.returncode == 2
     assert "SLOT must be in 1..2 on imech039" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("reported", "cpus", "memory", "workers"),
+    [
+        ("auxme-imech036", "4", "8g", "2"),
+        ("auxme-imech039", "4", "8g", "2"),
+        ("imech156-u", "8", "14g", "4"),
+    ],
+)
+def test_runner_container_uses_host_slot_size(
+    tmp_path: Path, reported: str, cpus: str, memory: str, workers: str
+) -> None:
+    """Each host starts runner containers with its own CPU, memory and pytest-worker size."""
+    commands = tmp_path / "commands"
+    commands.mkdir()
+    _mock_command(commands, "hostname", f"printf '{reported}\\n'\n")
+    _mock_command(
+        commands,
+        "docker",
+        """
+case "$1:$2" in
+  network:inspect) printf '{}\\n' ;;
+  info:-f) printf '/var/lib/docker\\n' ;;
+  ps:--format) ;;
+  run:*)
+    case " $* " in
+      *' --entrypoint '*) ;;
+      *) printf '%s\\n' "$@" >"$RUN_ARGS"; exit 1 ;;
+    esac
+    ;;
+  *) exit 2 ;;
+esac
+""",
+    )
+    _mock_command(commands, "jq", "true\n")
+    _mock_command(
+        commands,
+        "df",
+        "printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\\n'\n"
+        "printf 'fixture 100000000 0 209715200 0%% /var/lib/docker\\n'\n",
+    )
+    _mock_command(commands, "sleep", "exit 99\n")
+    environment = os.environ.copy()
+    environment.update(
+        PATH=f"{commands}:{environment['PATH']}",
+        RUN_ARGS=str(tmp_path / "run-args"),
+        XDG_STATE_HOME=str(tmp_path / "state"),
+    )
+
+    result = subprocess.run(
+        ["bash", str(SETUP), "supervise", "1"],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+
+    assert result.returncode == 99, result.stderr
+    args = (tmp_path / "run-args").read_text(encoding="utf-8").splitlines()
+    assert args[args.index("--cpus") + 1] == cpus
+    assert args[args.index("--memory") + 1] == memory
+    assert args[args.index("--memory-swap") + 1] == memory
+    assert f"PYTEST_NUM_WORKERS={workers}" in args
+    assert "OMP_NUM_THREADS=1" in args

@@ -1547,6 +1547,7 @@ def test_changed_definitions_suppress_paired_metric_delta(tmp_path, mixed_succes
     assert finding["classification"] == "metric_definition_change"
     assert finding["delta_0_0_8_minus_0_0_7"] is None
 
+
 @pytest.mark.parametrize("budget", [None, 500, 700])
 def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
     tmp_path: Path, budget: int | None

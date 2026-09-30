@@ -3135,6 +3135,7 @@ def test_run_map_episode_excludes_live_foresight_fallback_from_evidence(
             record,
             {
                 "episode_id": "healthy-foresight",
+                "metric_schema_version": record["metric_schema_version"],
                 "scenario_id": "foresight-fallback",
                 "algo": "prediction_planner",
                 "metrics": {"success": 1.0},

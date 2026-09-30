@@ -255,11 +255,17 @@ def anchor_document():
 
 
 @pytest.fixture
-def spec_files(tmp_path):
+def spec_files(tmp_path, monkeypatch):
     """Write versioned test assets with synthetic anchors."""
     paths = [tmp_path / name for name in ("weights.json", "anchors.json", "family.yaml")]
     paths[0].write_bytes((ASSETS / "weights.v2.0.json").read_bytes())
-    paths[1].write_text(json.dumps(anchor_document()))
+    document = anchor_document()
+    paths[1].write_text(json.dumps(document))
+    # The synthetic evaluation schedule is independent of the mutated anchor file.
+    from robot_sf.benchmark.snqi import v2_calibration
+
+    horizons = dict(document["calibration"]["scenario_horizons"])
+    monkeypatch.setattr(v2_calibration, "_candidate_calibration_horizons", lambda: horizons)
     paths[2].write_bytes((ASSETS / "family.v2.0.yaml").read_bytes())
     return paths
 
@@ -2996,6 +3002,10 @@ def test_snqifix2_diagnostics_report_per_arm_saturation(tmp_path):
     diagnostics = json.loads(Path(result["snqi_v2_diagnostics_json"]).read_text())
     assert "per_arm_clipped_at_one_fraction" in diagnostics
     assert set(diagnostics["per_arm_clipped_at_one_fraction"]) == {r["algo"] for r in records()}
+    family = json.loads(Path(result["snqi_v2_family_json"]).read_text())
+    assert (
+        family["per_arm_clipped_at_one_fraction"] == diagnostics["per_arm_clipped_at_one_fraction"]
+    )
 
 
 def test_snqifix2_anchor_sensitivity_flags_single_arm_tail():
@@ -3131,6 +3141,9 @@ def test_snqifix2_release_receipt_binds_sealed_seed_list(tmp_path):
         + str(ROOT / "maps/svg_maps/classic_crossing.svg")
         + "\n"
     )
+    from robot_sf.evidence.writers import write_review_sidecar
+
+    write_review_sidecar(matrix)
     cfg = CampaignConfig(
         "static-seed-receipt",
         matrix,
@@ -3149,3 +3162,14 @@ def test_snqifix2_release_receipt_binds_sealed_seed_list(tmp_path):
         _snqi_v2_evaluation_seed_receipt(
             replace(cfg, seed_policy=SeedPolicy(mode="fixed-list", seeds=(1003,)))
         )
+
+
+def test_snqifix2_default_loader_refuses_changed_recorded_budget(spec_files):
+    """A self-declared changed fit budget cannot override the evaluation schedule."""
+    from robot_sf.evidence.writers import write_json
+
+    document = anchor_document()
+    document["calibration"]["scenario_horizons"]["synthetic-0"] = 400
+    write_json(spec_files[1], document)
+    with pytest.raises(ValueError, match="budget|schedule"):
+        load_snqi_v2_spec(*spec_files)

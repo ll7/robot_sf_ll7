@@ -350,10 +350,7 @@ def _bind_evaluation_schedule(
     spec: SnqiV2Spec, evaluation_scenario_horizons: Mapping[str, int] | None
 ) -> None:
     """Compare a frozen calibration schedule with the current evaluation schedule."""
-    if (
-        evaluation_scenario_horizons is None
-        and spec.metric_schema_version != LEGACY_METRIC_SCHEMA_VERSION
-    ):
+    if evaluation_scenario_horizons is None:
         from robot_sf.benchmark.snqi.v2_calibration import _candidate_calibration_horizons  # noqa: PLC0415
 
         evaluation_scenario_horizons = _candidate_calibration_horizons()

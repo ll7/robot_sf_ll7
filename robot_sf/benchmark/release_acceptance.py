@@ -2351,7 +2351,7 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
     if tuple(scenario_ids) != STRESS_SMOKE_EXPECTED_SCENARIO_IDS:
         _append_blocker(blockers, "diagnostic stress smoke must resolve the fixed five scenarios")
     if tuple(seeds) != (STRESS_SMOKE_EXPECTED_SEED,):
-        _append_blocker(blockers, "diagnostic stress smoke must resolve exactly seed 116")
+        _append_blocker(blockers, "diagnostic stress smoke must resolve exactly seed 1001")
     if expected_cells != STRESS_SMOKE_EXPECTED_EPISODE_CELLS:
         _append_blocker(blockers, "diagnostic stress smoke must resolve exactly 70 episode cells")
     if (

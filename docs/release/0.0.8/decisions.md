@@ -22,7 +22,12 @@ resolves the real release grid (48 x 30 identities per arm), rejects the retired
 candidate band, and checks fresh-seed literal-range refusals. The holdout diff
 checker, #9748 validator and tuning runner protect both bands. The private mint
 pins the fresh list by value and independently cross-checks the derivation hash.
-All proofs are static; no planner/environment steps on either band are permitted.
+No planner or environment step on either band is permitted in development,
+tests, diagnostics, reviews, rehearsals or admission gates. The ONLY exception
+is the sealed 0.0.8 evaluation campaign itself, which steps `EVAL_SEEDS_0_0_8`
+at the freeze commit. The retired 111..140 band has no exception. The full-release
+stress gate is a mechanical check before the run and uses dev seed 1001.
+All proofs in this change are static.
 SEEDGUARD (#10010) must import `HELD_OUT_SEEDS` from this module.
 
 Reopen only with new material evidence or an explicit author decision; never

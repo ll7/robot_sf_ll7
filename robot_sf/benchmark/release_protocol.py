@@ -28,7 +28,7 @@ from robot_sf.benchmark.release_tag_identity import (
     HISTORICAL_RELEASE_TAG,
     check_canonical_source_tag,
 )
-from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
+from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8, RETIRED_EVAL_SEEDS_0_0_7
 from robot_sf.benchmark.zenodo_publisher import ZenodoPublisherError, load_dataset_metadata
 from robot_sf.common.artifact_paths import get_repository_root
 
@@ -66,7 +66,7 @@ STRESS_SMOKE_CONTRACT_SCHEMA_VERSION = "hybrid-release-stress-smoke.v1"
 STRESS_SMOKE_SOURCE_POLICY = "exact-immutable-worktree-sha-required"
 STRESS_SMOKE_EXPECTED_PLANNER_ARMS = 14
 STRESS_SMOKE_EXPECTED_SCENARIO_COUNT = 5
-STRESS_SMOKE_EXPECTED_SEED = 116
+STRESS_SMOKE_EXPECTED_SEED = 1001
 STRESS_SMOKE_EXPECTED_EPISODE_CELLS = 70
 STRESS_SMOKE_EXPECTED_HORIZON_STEPS = 600
 STRESS_SMOKE_EXPECTED_DT = 0.1
@@ -1586,7 +1586,7 @@ def validate_release_manifest(
         for blocker in branch_coverage["blockers"]:
             problems.append(f"effective algorithm branches: {blocker}")
     _validate_release_campaign_contract(manifest, cfg, problems)
-    _validate_release_seed_policy(manifest, cfg, problems)
+    _validate_release_seed_policy(manifest, cfg, problems, repository_root=repository_root)
     _validate_release_planners(manifest, cfg, problems)
     _validate_v02_contract(manifest, cfg, problems, repository_root=repository_root)
     _validate_release_metadata_contract(manifest, problems)
@@ -1716,7 +1716,7 @@ def _validate_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
             )
         resolved_seeds = tuple(_resolved_seed_inventory(scenarios))
         if resolved_seeds != (STRESS_SMOKE_EXPECTED_SEED,):
-            problems.append("stress smoke campaign must resolve exactly seed 116")
+            problems.append("stress smoke campaign must resolve exactly seed 1001")
     except (OSError, TypeError, ValueError, KeyError, yaml.YAMLError) as exc:
         problems.append(f"stress smoke campaign axes cannot be resolved: {exc}")
 
@@ -1932,10 +1932,47 @@ def _validate_release_campaign_contract(  # noqa: C901
             problems.append("campaign config doi does not match release manifest")
 
 
+# Immutable historical release identities; names/version heuristics never grant an exception.
+HISTORICAL_RELEASE_CONFIG_PINS = frozenset(
+    [
+        (
+            "paper_experiment_matrix_v1_smoke_v0_1_0",
+            "60620b8f28ceb65b6468b343ab1988f87b1187c86ad534bdf2513d48d008ba5e",
+        ),
+        (
+            "paper_experiment_matrix_v1_v0_1_0",
+            "0ad4d441edf57a93c02cfad5e49e466c943a55d34a48b1eb9682920d724454ee",
+        ),
+        (
+            "paper_matrix_v2_h600_s30_2026_08_cd831d7582c1",
+            "aa3057faeeefbd2ced41e3e093da32d1705270330cb1c124bc0b3558f8f88afd",
+        ),
+        (
+            "paper_experiment_matrix_v2_h600_s30_v0_0_3",
+            "143ab63a235f40326c93c93044fba95e808388751f04d8ca979b89d1142ca465",
+        ),
+        (
+            "paper_experiment_matrix_v2_h600_s30_v0_0_3_post1",
+            "c43d7bc24a182dcc56082f4da11d76e09a66d8b1cc0d0dc84b29536726022701",
+        ),
+        (
+            "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2",
+            "c3671790d0beb12511223efa86e2cf26245692566b2c849dba956b6e36bdf64a",
+        ),
+        (
+            "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_3",
+            "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4",
+        ),
+    ]
+)
+
+
 def _validate_release_seed_policy(
     manifest: BenchmarkReleaseManifest,
     cfg: CampaignConfig,
     problems: list[str],
+    *,
+    repository_root: Path | None = None,
 ) -> None:
     """Validate the configured and manifest seed-policy payloads."""
     cfg_seed_policy = {
@@ -1956,14 +1993,30 @@ def _validate_release_seed_policy(
             else None
         ),
     }
-    if cfg.seed_policy.mode == "seed-set" and (
-        "0.0.8" in manifest.release_tag
-        or "0_0_8" in manifest.scenario_matrix_path.name
-        or "0_0_8" in manifest.canonical_campaign_config_path.name
+    try:
+        scenarios = _load_campaign_scenarios(cfg, repository_root=repository_root)
+        resolved = tuple(_resolved_seed_inventory(scenarios))
+    except (OSError, ValueError) as exc:
+        problems.append(f"release seeds cannot be resolved: {exc}")
+        resolved = ()
+    historical = (
+        manifest.release_id,
+        manifest.campaign_config_sha256,
+    ) in HISTORICAL_RELEASE_CONFIG_PINS
+    if not historical and set(resolved).intersection(RETIRED_EVAL_SEEDS_0_0_7):
+        problems.append(
+            "retired evaluation seeds are forbidden for non-historical releases (D-049)"
+        )
+    if (
+        manifest.expected_paper_interpretation_profile != "runtime-smoke-advisory-no-ranking"
+        and (
+            "0.0.8" in manifest.release_tag
+            or "0_0_8" in manifest.scenario_matrix_path.name
+            or "0_0_8" in manifest.canonical_campaign_config_path.name
+        )
+        and resolved != EVAL_SEEDS_0_0_8
     ):
-        seeds = _load_mapping(cfg.seed_policy.seed_sets_path).get(cfg.seed_policy.seed_set)
-        if seeds != list(EVAL_SEEDS_0_0_8):
-            problems.append("0.0.8 requires the exact sealed evaluation seeds (D-049)")
+        problems.append("0.0.8 requires the exact sealed evaluation seeds (D-049)")
     if cfg_seed_policy != normalized_manifest_seed_policy:
         problems.append("seed_policy does not match campaign config")
 

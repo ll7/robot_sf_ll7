@@ -589,3 +589,79 @@ def test_existing_markers_still_work_outside_release_manifests(tmp_path: Path, k
 
 
 # seed-holdout: synthetic-fixture end
+
+# seed-holdout: synthetic-fixture begin
+
+
+@pytest.mark.parametrize(
+    "reference",
+    [
+        "seed_set: release_eval_0_0_8",
+        "seed_sets_path: configs/benchmarks/seed_sets_0_0_8.yaml",
+        "from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8",
+    ],
+)
+@pytest.mark.parametrize(
+    "path",
+    [
+        "configs/adversarial/new_pilot.yaml",
+        "scripts/benchmark/new_pilot.py",
+        "robot_sf/new_pilot.py",
+    ],
+)
+def test_new_sealed_names_require_explicit_allowlist(tmp_path, reference, path):
+    assert len(check_diff(_diff(path, reference), tmp_path)) == 1
+
+
+@pytest.mark.parametrize(
+    "added",
+    [
+        "seeds: [50_036]",
+        "env.reset(seed=0xC374)",
+        "seeds:\n  - 50_036",
+        "seeds:\n  - 0xC374",
+        "scenario_seed: {min: 50030, max: 50040}",
+        "scenario_seed:\n  min: 50030\n  max: 50040",
+        "scenario_seed:\n  low: 0xC36E\n  high: 50_040",
+    ],
+)
+def test_literal_spellings_and_enclosing_yaml_bounds_fail(tmp_path, added):
+    path = "configs/adversarial/new_pilot.yaml"
+    target = tmp_path / path
+    target.parent.mkdir(parents=True)
+    target.write_text(added + "\n")
+    assert check_diff(_diff(path, added), tmp_path)
+
+
+def test_added_yaml_bound_uses_unchanged_sibling(tmp_path):
+    path = "configs/adversarial/new_pilot.yaml"
+    target = tmp_path / path
+    target.parent.mkdir(parents=True)
+    target.write_text("scenario_seed:\n  min: 50030\n  max: 50040\n")
+    diff = f"+++ b/{path}\n@@ -3 +3 @@\n-  max: 50035\n+  max: 50040\n"
+    assert len(check_diff(diff, tmp_path)) == 1
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "robot_sf/benchmark/seed_bands.py",
+        "robot_sf/benchmark/release_protocol.py",
+        "docs/release/0.0.8/decisions.md",
+        "configs/benchmarks/seed_sets_0_0_8.yaml",
+    ],
+)
+def test_legitimate_sealed_names_are_allowlisted(tmp_path, path):
+    assert check_diff(_diff(path, "EVAL_SEEDS_0_0_8"), tmp_path) == []
+
+
+def test_yaml_bounds_do_not_cross_sibling_keys(tmp_path):
+    added = "scenario_seed:\n  min: 50030\nstart_x:\n  max: 50040"
+    path = "configs/adversarial/new_pilot.yaml"
+    target = tmp_path / path
+    target.parent.mkdir(parents=True)
+    target.write_text(added + "\n")
+    assert check_diff(_diff(path, added), tmp_path) == []
+
+
+# seed-holdout: synthetic-fixture end

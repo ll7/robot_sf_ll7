@@ -614,12 +614,17 @@ def test_runtime_smoke_v0_4_manifest_is_source_bound_and_refused_until_v4_freeze
     validation = validate_release_manifest(manifest)
 
     # Issue #9751: the four v4 slots bind unfrozen placeholders until #9748, so the
-    # smoke manifest is refused with exactly those four blockers and nothing else.
+    # smoke manifest is refused for those four slots and the retired seed (D-049).
     assert validation["manifest_path"] == (
         "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_4.yaml"
     )
     assert validation["status"] == "invalid"
-    assert validation["problem_count"] == len(REPLACED_V4_KEYS) == 4
+    assert len(REPLACED_V4_KEYS) == 4
+    assert validation["problem_count"] == 5
+    assert (
+        "retired evaluation seeds are forbidden for non-historical releases (D-049)"
+        in validation["problems"]
+    )
     for key in REPLACED_V4_KEYS:
         assert any(
             problem.startswith(f"planner {key}: release parameters are not frozen")

@@ -189,7 +189,7 @@ def stress_fixture(tmp_path: Path) -> tuple[Path, Any, Any]:
             "mode": seed_policy.mode,
             "seed_set": seed_policy.seed_set,
             "seeds": list(seed_policy.seeds),
-            "resolved_seeds": [116],
+            "resolved_seeds": [1001],
             "seed_sets_path": _repo_relative(seed_policy.seed_sets_path),
         },
         "route_clearance_certifications_path": _repo_relative(
@@ -222,7 +222,7 @@ def stress_fixture(tmp_path: Path) -> tuple[Path, Any, Any]:
         episodes_path = root / "runs" / arm / "episodes.jsonl"
         summary_path = root / "runs" / arm / "summary.json"
         rows = [
-            _row(algo=planner.algo, scenario_id=scenario_id, seed=116)
+            _row(algo=planner.algo, scenario_id=scenario_id, seed=1001)
             for scenario_id in scenario_ids
         ]
         episodes_path.parent.mkdir(parents=True, exist_ok=True)
@@ -286,7 +286,7 @@ def stress_fixture(tmp_path: Path) -> tuple[Path, Any, Any]:
     integrity = validate_campaign_integrity(
         runs,
         scenarios=scenarios,
-        resolved_seeds=[116],
+        resolved_seeds=[1001],
         campaign_root=root,
         campaign_manifest=campaign_manifest,
     )

@@ -48,21 +48,22 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.mark.parametrize(
-    "config_name",
+    ("config_name", "scenario_count"),
     [
-        "paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
-        "paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml",
+        ("paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml", 48),
+        ("paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml", 48),
+        ("paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml", 3),
     ],
 )
-def test_release_template_resolves_fresh_sealed_grid(config_name):
+def test_release_template_resolves_fresh_sealed_grid(config_name, scenario_count):
     cfg = load_campaign_config(ROOT / "configs/benchmarks" / config_name)
     scenarios = _load_campaign_scenarios(cfg, repository_root=ROOT)
     identities = {(row["name"], seed) for row in scenarios for seed in row["seeds"]}
     assert sorted({seed for _, seed in identities}) == list(SEALED)
-    assert len({scenario for scenario, _ in identities}) == 48
-    assert len(identities) == 1440
+    assert len({scenario for scenario, _ in identities}) == scenario_count
+    assert len(identities) == scenario_count * 30
     assert sum(arm.enabled for arm in cfg.planners) == 14
-    assert 14 * len(identities) == 20160
+    assert 14 * len(identities) == 14 * scenario_count * 30
 
 
 @pytest.mark.parametrize("seed", SEALED)
@@ -155,4 +156,92 @@ def test_release_protocol_rejects_jointly_repinned_retired_band():
     )
     problems = []
     _validate_release_seed_policy(manifest, cfg, problems)
-    assert problems == ["0.0.8 requires the exact sealed evaluation seeds (D-049)"]
+    assert problems == [
+        "retired evaluation seeds are forbidden for non-historical releases (D-049)",
+        "0.0.8 requires the exact sealed evaluation seeds (D-049)",
+    ]
+
+
+@pytest.mark.parametrize("mode", ["fixed-list", "seed-set", "scenario-default"])
+@pytest.mark.parametrize("anonymous", [False, True])
+def test_protocol_rejects_resolved_retired_seeds_in_every_mode(mode, anonymous, tmp_path):
+    """Validate real scenario resolution, including ranges and anonymous input names."""
+    from dataclasses import replace
+
+    import yaml
+
+    from robot_sf.benchmark.release_protocol import (
+        load_release_manifest,
+        validate_release_manifest,
+    )
+
+    cfg = load_campaign_config(
+        ROOT / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml"
+    )
+    manifest = load_release_manifest(
+        ROOT / "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.yaml"
+    )
+    # seed-holdout: synthetic-fixture begin
+    retired = list(range(111, 141))
+    seed_file = tmp_path / "seeds.yaml"
+    seed_file.write_text(yaml.safe_dump({"anonymous": [116]}))
+    scenario_file = tmp_path / "matrix.yaml"
+    scenarios = _load_campaign_scenarios(cfg, repository_root=ROOT)
+    for scenario in scenarios:
+        scenario["seeds"] = retired
+    scenario_file.write_text(yaml.safe_dump(scenarios))
+    # seed-holdout: synthetic-fixture end
+    config_path = tmp_path / ("campaign.yaml" if anonymous else "campaign_0_0_8.yaml")
+    config_payload = yaml.safe_load(
+        (
+            ROOT
+            / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml"
+        ).read_text()
+    )
+    policy = {
+        "mode": mode,
+        "seed_set": "anonymous" if mode == "seed-set" else None,
+        "seeds": retired if mode == "fixed-list" else [],
+        "seed_sets_path": str(seed_file),
+    }
+    config_payload.update(scenario_matrix=str(scenario_file), seed_policy=policy)
+    config_path.write_text(yaml.safe_dump(config_payload))
+    cfg = replace(
+        cfg,
+        scenario_matrix_path=scenario_file,
+        seed_policy=replace(
+            cfg.seed_policy,
+            mode=mode,
+            seed_set=policy["seed_set"],
+            seeds=tuple(policy["seeds"]),
+            seed_sets_path=seed_file,
+        ),
+    )
+    manifest = replace(
+        manifest,
+        seed_policy=policy,
+        canonical_campaign_config_path=config_path,
+        campaign_config_sha256=hashlib.sha256(config_path.read_bytes()).hexdigest(),
+        scenario_matrix_path=scenario_file,
+        scenario_matrix_sha256=hashlib.sha256(scenario_file.read_bytes()).hexdigest(),
+        seed_sets_sha256=hashlib.sha256(seed_file.read_bytes()).hexdigest(),
+        resolved_seeds=tuple(
+            [116] if mode == "seed-set" else retired
+        ),  # seed-holdout: synthetic-fixture
+    )
+    if anonymous:
+        manifest = replace(manifest, release_tag="future-release", release_id="future-release")
+    report = validate_release_manifest(manifest, campaign_config=cfg, repository_root=ROOT)
+    expected = ["retired evaluation seeds are forbidden for non-historical releases (D-049)"]
+    if not anonymous:
+        expected.append("0.0.8 requires the exact sealed evaluation seeds (D-049)")
+    assert report["problems"] == expected
+
+
+def test_stress_gate_resolves_only_dev_seed():
+    cfg = load_campaign_config(
+        ROOT / "configs/benchmarks/paper_experiment_matrix_v2_h600_hybrid_stress_smoke.yaml"
+    )
+    scenarios = _load_campaign_scenarios(cfg, repository_root=ROOT)
+    assert {seed for row in scenarios for seed in row["seeds"]} == {1001}
+    assert len(scenarios) * sum(arm.enabled for arm in cfg.planners) == 70

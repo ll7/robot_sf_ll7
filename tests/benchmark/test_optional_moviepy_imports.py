@@ -5,11 +5,16 @@ from __future__ import annotations
 import builtins
 import importlib
 import importlib.util
+import os
+import subprocess
 import sys
+import textwrap
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+
+from robot_sf.evidence.writers import write_text
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -71,3 +76,60 @@ def test_unexpected_moviepy_import_failure_propagates(
     with pytest.raises(RuntimeError, match="unexpected encoder initialization failure") as caught:
         _load_with_moviepy_error(module_name, error, monkeypatch)
     assert caught.value is error
+
+
+@pytest.mark.parametrize(("module_name", "availability"), [case[:2] for case in _ENCODERS])
+def test_real_moviepy_import_tolerates_unreadable_ancestor_dotenv(
+    module_name: str, availability: str, tmp_path: Path
+) -> None:
+    """Real MoviePy dotenv discovery raises PermissionError at each guarded import."""
+    ancestor = tmp_path / "dotenv-parent"
+    cwd = ancestor / "nested" / "work"
+    cwd.mkdir(parents=True)
+    env_path = ancestor / ".env"
+    write_text(env_path, "# AI-GENERATED NEEDS-REVIEW: unreadable dotenv fixture\n")
+    env_path.chmod(0)
+    script = textwrap.dedent(
+        """
+        import importlib
+        from pathlib import Path
+        import sys
+        import dotenv
+        import dotenv.main
+
+        module_name, availability, env_path = sys.argv[1], sys.argv[2], Path(sys.argv[3])
+        assert env_path.is_file() and env_path.stat().st_mode & 0o444 == 0
+        assert Path(dotenv.find_dotenv()).resolve() == env_path.resolve()
+        assert "moviepy" not in sys.modules
+        attempts = []
+        original_open = open
+
+        def denied_open(path, *args, **kwargs):
+            if Path(path).resolve() == env_path.resolve():
+                attempts.append(str(path))
+                raise PermissionError(13, "Permission denied", str(path))
+            return original_open(path, *args, **kwargs)
+
+        dotenv.main.open = denied_open
+        module = importlib.import_module(module_name)
+        assert attempts, "real MoviePy dotenv read must be exercised"
+        expected = False if availability == "MOVIEPY_AVAILABLE" else None
+        assert getattr(module, availability) is expected
+        print("PASS real dotenv permission guard")
+        """
+    )
+    root = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [sys.executable, "-c", script, module_name, availability, str(env_path)],
+        cwd=cwd,
+        env={
+            **os.environ,
+            "PYTHONPATH": os.pathsep.join((str(root), os.environ.get("PYTHONPATH", ""))),
+        },
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "PASS real dotenv permission guard" in result.stdout

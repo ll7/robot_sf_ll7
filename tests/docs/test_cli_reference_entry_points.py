@@ -16,6 +16,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from robot_sf.evidence.writers import write_text
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 META_PATH = REPO_ROOT / "docs" / "cli_reference_meta.yaml"
@@ -187,53 +189,53 @@ def isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.parametrize("module", ("robot_sf.cli", "robot_sf.benchmark.cli"))
-def test_cli_help_tolerates_unreadable_dotenv(module: str) -> None:
-    """Optional MoviePy configuration must not prevent production CLI help."""
+def test_cli_help_tolerates_unreadable_dotenv(module: str, tmp_path: Path) -> None:
+    """Help remains usable with unreadable configuration above the working directory."""
+    ancestor = tmp_path / "dotenv-parent"
+    cwd = ancestor / "nested" / "work"
+    cwd.mkdir(parents=True)
+    env_path = ancestor / ".env"
+    write_text(env_path, "# AI-GENERATED NEEDS-REVIEW: unreadable dotenv fixture\n")
+    env_path.chmod(0)
     script = textwrap.dedent(
         """
         import importlib
-        import os
         from pathlib import Path
         import sys
         import dotenv
         import dotenv.main
 
-        env_path = str(Path.home() / ".env")
-        Path(env_path).touch()
-        dotenv.find_dotenv = lambda: env_path
-        attempts = []
+        module, env_path = sys.argv[1], Path(sys.argv[2])
+        assert env_path.is_file() and env_path.stat().st_mode & 0o444 == 0
+        assert Path(dotenv.find_dotenv()).resolve() == env_path.resolve()
         original_open = open
 
         def denied_open(path, *args, **kwargs):
-            if os.fspath(path) == env_path:
-                attempts.append(path)
-                raise PermissionError(13, "Permission denied", path)
+            if Path(path).resolve() == env_path.resolve():
+                raise PermissionError(13, "Permission denied", str(path))
             return original_open(path, *args, **kwargs)
 
+        # Make permission denial deterministic even on privileged test hosts.
         dotenv.main.open = denied_open
-        module = sys.argv[1]
         sys.argv = [module, "--help"]
-        try:
-            importlib.import_module(module).main()
-        except SystemExit as exc:
-            if exc.code != 0:
-                raise
-        if not attempts:
-            raise RuntimeError("unreadable dotenv path was not exercised")
-        print("PASS unreadable dotenv")
+        importlib.import_module(module).main()
         """
     )
     result = subprocess.run(
-        [sys.executable, "-c", script, module],
-        cwd=REPO_ROOT,
-        env=dict(os.environ),
+        [sys.executable, "-c", script, module, str(env_path)],
+        cwd=cwd,
+        env={
+            **os.environ,
+            "PYTHONPATH": os.pathsep.join((str(REPO_ROOT), os.environ.get("PYTHONPATH", ""))),
+        },
         capture_output=True,
         text=True,
         timeout=60,
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "PASS unreadable dotenv" in result.stdout
+    assert "usage:" in result.stdout
+    assert "--help" in result.stdout
 
 
 def test_entry_point_help_smoke_and_byte_stable_render() -> None:

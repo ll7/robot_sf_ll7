@@ -65,7 +65,34 @@ _RUNTIME_STATUS_FIELDS = frozenset(
     {"status", "row_status", "readiness_status", "availability_status", "execution_mode"}
 )
 _RUNTIME_BOOLEAN_MARKERS = frozenset(
-    {"fallback", "degraded", "fallback_triggered", "fallback_or_degraded", "fallback_used"}
+    {
+        "fallback",
+        "degraded",
+        "fallback_triggered",
+        "fallback_or_degraded",
+        "fallback_used",
+        "fallback_applied",
+        "fallback_to_another_checkpoint",
+        "fallback_to_goal_seeking",
+    }
+)
+# Declared runtime counters. Diagnostic containers are recursively inspected.
+_RUNTIME_COUNTER_FIELDS = frozenset(
+    {
+        "fallback_count",
+        "fallback_steps",
+        "fallback_actions",
+        "fallback_step_count",
+        "fallback_stop_count",
+        "fallback_row_count",
+        "inference_fallback_count",
+        "fallback_safe",
+        "fallback_best_effort",
+        "fallback_rate",
+        "uncertainty_fallback_configured",
+        "uncertainty_fallback_stop",
+        "uncertainty_fallback_slow_down",
+    }
 )
 _RUNTIME_FORBIDDEN_STATUSES = frozenset({"degraded", "fallback", "not_available", "unavailable"})
 _RUNTIME_FORBIDDEN_STATUS_PREFIXES = ("predictive_foresight_model_fallback",)
@@ -200,7 +227,7 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
                     counter_marker = _counter_marker(item, item_path)
                     if counter_marker is not None:
                         return counter_marker
-                elif "fallback" in key:
+                elif key in _RUNTIME_COUNTER_FIELDS:
                     counter_marker = _counter_marker(item, item_path)
                     if counter_marker is not None:
                         return counter_marker

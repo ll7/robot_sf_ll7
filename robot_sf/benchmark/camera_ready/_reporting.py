@@ -1283,7 +1283,8 @@ def _build_breakdown_rows(  # noqa: C901, PLR0912, PLR0915
             values = finalized.pop(metric, [])
             if not isinstance(values, list):
                 values = []
-            finalized[f"{metric}_mean"] = _mean(values)
+            column = "jerk_mean" if metric == "jerk_mean" else f"{metric}_mean"
+            finalized[column] = _mean(values)
         return finalized
 
     scenario_rows = sorted(

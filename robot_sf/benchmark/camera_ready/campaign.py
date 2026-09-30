@@ -117,7 +117,9 @@ from robot_sf.benchmark.snqi.campaign_contract import (
 )
 from robot_sf.benchmark.snqi.v2_reports import enrich_campaign_v2
 from robot_sf.benchmark.utils import load_optional_json
-from robot_sf.common.artifact_paths import get_artifact_category_path, get_repository_root
+
+# get_artifact_category_path remains part of the legacy facade export contract.
+from robot_sf.common.artifact_paths import get_artifact_category_path, get_repository_root  # noqa: F401
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -3139,7 +3141,7 @@ def _export_publication_bundle_section(  # noqa: PLR0913
         and not snqi_hard_fail
         and benchmark_success
     ):
-        publication_dir = get_artifact_category_path("benchmarks") / "publication"
+        publication_dir = campaign_root.parent / "publication"
         bundle_name = f"{campaign_id}_publication_bundle"
         try:
             bundle = dependencies.export_publication_bundle(

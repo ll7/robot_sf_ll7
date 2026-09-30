@@ -350,10 +350,10 @@ def test_shield_dictionary_still_exposes_nested_failures(
     )
 
 
-def test_unknown_fallback_dictionary_is_still_invalid() -> None:
-    """Only the documented typed field is a container; other counters stay strict."""
-    assert runtime_fallback_or_degraded_marker({"unknown_fallback_counter": {}}) == (
-        "unknown_fallback_counter",
+def test_declared_fallback_counter_dictionary_is_still_invalid() -> None:
+    """Declared numeric counters stay strict even when a dictionary is supplied."""
+    assert runtime_fallback_or_degraded_marker({"fallback_count": {}}) == (
+        "fallback_count",
         "invalid",
     )
 

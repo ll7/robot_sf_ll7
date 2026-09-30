@@ -225,9 +225,33 @@ def _lookup_planner_row(
     return None
 
 
+def _relocated_campaign_path(
+    campaign_root: Path, candidate_path: Path, *, label: str
+) -> Path | None:
+    """Prefer campaign-owned bytes while retaining recorded paths as provenance."""
+    # Campaign-owned bytes take precedence over paths from the producing host.
+    # Relocate only self-contained subtrees, without rewriting provenance fields.
+    for index, part in enumerate(candidate_path.parts):
+        if part not in {"preflight", "reports", "runs"}:
+            continue
+        relocated = (campaign_root / Path(*candidate_path.parts[index:])).resolve()
+        if not relocated.is_relative_to(campaign_root.resolve()):
+            raise ValueError(f"Unsafe {label}: {candidate_path}")
+        if relocated.is_file():
+            return relocated
+    return None
+
+
 def _resolve_safe_campaign_path(campaign_root: Path, raw_path: str, *, label: str) -> Path:
     """Resolve campaign paths while preventing traversal outside trusted roots."""
     candidate_path = Path(raw_path)
+    if ".." in candidate_path.parts:
+        raise ValueError(
+            f"Unsafe {'absolute' if candidate_path.is_absolute() else 'relative'} {label}: {raw_path}"
+        )
+    relocated = _relocated_campaign_path(campaign_root, candidate_path, label=label)
+    if relocated is not None:
+        return relocated
     repo_root = _get_repository_root()
     campaign_repo_root = _infer_campaign_repository_root(campaign_root)
     trusted_roots = tuple(
@@ -254,15 +278,6 @@ def _resolve_safe_campaign_path(campaign_root: Path, raw_path: str, *, label: st
             continue
         if resolved.exists():
             return resolved
-    # Retrieved campaign bundles are self-contained, but their summaries retain
-    # repository-relative paths from the producing checkout. Resolve the stable
-    # campaign subtrees after relocation without trusting arbitrary suffixes.
-    for index, part in enumerate(candidate_path.parts):
-        if part not in {"preflight", "reports", "runs"}:
-            continue
-        relocated = (campaign_root / Path(*candidate_path.parts[index:])).resolve()
-        if relocated.is_relative_to(campaign_root.resolve()) and relocated.exists():
-            return relocated
     # Keep deterministic fallback for diagnostics while still rejecting traversal.
     fallback = (trusted_roots[0] / candidate_path).resolve()
     if fallback.is_relative_to(trusted_roots[0]):

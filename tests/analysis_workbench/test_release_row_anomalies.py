@@ -127,8 +127,8 @@ def _findings(report: Mapping[str, Any], detector_id: str) -> list[Mapping[str, 
     return [finding for finding in report["findings"] if finding["detector_id"] == detector_id]
 
 
-def test_legacy_default_report_serialization_is_byte_identical() -> None:
-    """Absent 0.0.8 fields retain the pre-gate report and registry bytes."""
+def test_legacy_explicit_config_report_serialization_is_byte_identical() -> None:
+    """An explicit historical config preserves the pre-gate report and registry bytes."""
 
     report = analyze_release_rows(
         [
@@ -136,6 +136,7 @@ def test_legacy_default_report_serialization_is_byte_identical() -> None:
             _row("legacy-v1", 1, "social_force", steps=100, collision=True, timeout=False),
         ],
         source=_source("goal", "social_force"),
+        config=release_row_anomalies.DEFAULT_CONFIG,
     )
 
     # Golden canonical bytes captured from base 9a578901421826c873845952d9418f146d7d3695.

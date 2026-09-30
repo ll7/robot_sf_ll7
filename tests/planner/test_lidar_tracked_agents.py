@@ -8,10 +8,23 @@ import pytest
 from robot_sf.planner.lidar_tracked_agents import (
     LidarTrackedAgentsConfig,
     LidarTrackedSocialForceAdapter,
+    build_lidar_tracked_social_force_config,
     lidar_ray_angles,
     lidar_rays_to_tracked_agents,
     sensor_fusion_to_social_force_observation,
 )
+
+
+@pytest.mark.parametrize("nested", [False, True], ids=["flat", "nested"])
+def test_lidar_builder_preserves_surface_clearance_and_sampling_selectors(nested: bool) -> None:
+    """Non-dataclass geometry and sampling selectors survive SocialForce config filtering."""
+    selectors = {"predictive_clearance_model": "surface_v2", "sampling_repulsion_weight": 0.0}
+    payload = {"social_force": selectors} if nested else selectors
+
+    parsed = build_lidar_tracked_social_force_config(payload)
+
+    assert parsed.social_force.predictive_clearance_model == "surface_v2"
+    assert parsed.social_force.sampling_repulsion_weight == 0.0
 
 
 def test_lidar_ray_angles_match_range_sensor_endpoint_convention() -> None:

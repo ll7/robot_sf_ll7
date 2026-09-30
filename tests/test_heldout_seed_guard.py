@@ -103,7 +103,8 @@ def test_child_process_inherits_guard_before_first_step(tmp_path):
 
     stepped = tmp_path / "stepped"
     code = (
-        "from robot_sf.gym_env.environment_factory import make_robot_env\n"
+        "from robot_sf.gym_env.environment_factory import make_robot_env, _apply_global_seed\n"
+        "assert getattr(_apply_global_seed, '_seedguard_boundary', None) == 'environment_factory'\n"
         "env = make_robot_env(seed=111)\n"
         f"open({str(stepped)!r}, 'w').write('step reached')\n"
         "env.step(None)\n"

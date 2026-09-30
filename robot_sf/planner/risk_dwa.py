@@ -558,7 +558,7 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return best unicycle command `(v, omega)` for the current observation."""
         self._no_admissible_command = False
-        self._fallback_kind = None
+        self._recovery_kind = None
         self._recovery_command = False
         robot_pos, heading, goal, ped_pos, ped_vel = self._extract_robot_goal_ped(observation)
         self._last_target_xy = (float(goal[0]), float(goal[1]))
@@ -645,7 +645,7 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         if best_score == float("-inf"):
             self._no_admissible_command = True
             self._no_admissible_command_count += 1
-            best_cmd, self._fallback_kind = max(
+            best_cmd, self._recovery_kind = max(
                 recovery_candidates,
                 key=lambda item: self._infeasible_command_rank(
                     item[0],
@@ -672,7 +672,7 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""
         decision = {
-            "fallback_kind": getattr(self, "_fallback_kind", None),
+            "recovery_kind": getattr(self, "_recovery_kind", None),
             "recovery_command": self._recovery_command,
             "recovery_command_count": self._recovery_command_count,
             "no_admissible_command": getattr(self, "_no_admissible_command", False),

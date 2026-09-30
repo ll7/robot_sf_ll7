@@ -752,7 +752,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             ShieldDecision: Proposed action, selected action, and shield decision metadata.
         """
         self._no_admissible_command = False
-        self._fallback_kind = None
+        self._recovery_kind = None
         self.last_fallback_target_xy = None
         self._init_action_adaptation(ppo_command)
         cached_state = self._extract_state(observation)
@@ -1142,7 +1142,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             clearance_rank(fallback_eval) > clearance_rank(stop_eval) or recovery_turn
         )
         self._recovery_command_count += int(recovery_turn)
-        self._fallback_kind = "least_bad_clearance" if use_fallback else "brake"
+        self._recovery_kind = "least_bad_clearance" if use_fallback else "brake"
         return self._shield_decision(
             ppo_command=ppo_command,
             filtered_command=tuple(map(float, fallback_command)) if use_fallback else (0.0, 0.0),
@@ -1267,7 +1267,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         fallback_diagnostics = getattr(self.fallback_adapter, "diagnostics", lambda: {})()
         return {
             "planner_type": "GuardedPPOAdapter",
-            "fallback_kind": getattr(self, "_fallback_kind", None),
+            "recovery_kind": getattr(self, "_recovery_kind", None),
             "no_admissible_command": self._no_admissible_command,
             "no_admissible_command_count": self._no_admissible_command_count,
             "recovery_command_count": self._recovery_command_count,

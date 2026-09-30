@@ -57,7 +57,7 @@ def test_all_rejected_rear_or_lateral_commands_move_and_improve_clearance(ped, v
 
     assert minimum(command) > minimum((0.0, 0.0)) + 0.01
     assert planner.diagnostics()["no_admissible_command"] is True
-    assert planner.diagnostics()["fallback_kind"] == "least_bad_clearance"
+    assert planner.diagnostics()["recovery_kind"] == "least_bad_clearance"
 
 
 def test_infeasible_progress_escape_is_selectable():
@@ -78,7 +78,7 @@ def test_infeasible_progress_escape_is_selectable():
     )
     assert command == pytest.approx((0.55, 0.0))
     assert planner.diagnostics()["no_admissible_command"] is True
-    assert planner.diagnostics()["fallback_kind"] == "progress_escape"
+    assert planner.diagnostics()["recovery_kind"] == "progress_escape"
 
 
 def test_mppi_infeasible_escape_beats_zero_with_real_clearance_costs():
@@ -106,7 +106,7 @@ def test_mppi_infeasible_escape_beats_zero_with_real_clearance_costs():
     command = planner.plan(obs)
     assert command[0] > 0.0
     assert planner.diagnostics()["no_admissible_command"] is True
-    assert planner.diagnostics()["fallback_kind"] == "progress_escape"
+    assert planner.diagnostics()["recovery_kind"] == "progress_escape"
 
 
 def test_guard_infeasible_fallback_ignores_vetoed_ppo_rank():
@@ -122,4 +122,4 @@ def test_guard_infeasible_fallback_ignores_vetoed_ppo_rank():
     assert command[0] > 0.0
     assert label == "fallback_best_effort"
     assert guard.diagnostics()["no_admissible_command"] is True
-    assert guard.diagnostics()["fallback_kind"] == "least_bad_clearance"
+    assert guard.diagnostics()["recovery_kind"] == "least_bad_clearance"

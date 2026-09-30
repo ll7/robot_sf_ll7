@@ -806,7 +806,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
     def plan(self, observation: dict[str, object]) -> tuple[float, float]:  # noqa: PLR0915
         """Return the first action from the best sampled control sequence."""
         self._no_admissible_command = False
-        self._fallback_kind = None
+        self._recovery_kind = None
         self._recovery_command = False
         # Recovery rollouts consume observed speed and yaw rate, including
         # sampled/anchor/stop sequences, rather than assuming the body is at rest.
@@ -998,7 +998,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                     selected_cost = forced_cost
         self._record_admissibility(current_obs, selected_cost)
         if self._no_admissible_command:
-            action, self._fallback_kind = max(
+            action, self._recovery_kind = max(
                 recovery_candidates,
                 key=lambda item: self._infeasible_command_rank(
                     item[0],
@@ -1026,7 +1026,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""
         decision = {
-            "fallback_kind": getattr(self, "_fallback_kind", None),
+            "recovery_kind": getattr(self, "_recovery_kind", None),
             "no_admissible_command": self._no_admissible_command,
             "no_admissible_command_count": self._no_admissible_command_count,
             "recovery_command": self._recovery_command,

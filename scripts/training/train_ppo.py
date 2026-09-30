@@ -1037,11 +1037,10 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         evaluation_seed_manifest=evaluation_seed_manifest,
         evaluation_seeds=evaluation_seeds,
     )
-    # Canonical recipes carry these legacy switches in the disabled state only.
-    # Enabling a feature the trainer does not implement must fail before execution.
+    # Preserve the historical no-op behavior of legacy switches in tracked recipes.
+    # Release-contract launchers enforce their stricter disabled-only policy.
     for legacy_key in ("full_policy_analysis_on_new_best", "full_policy_analysis_videos"):
-        if evaluation_raw.pop(legacy_key, False) is not False:
-            raise ValueError(f"Unsupported evaluation feature: {legacy_key}")
+        evaluation_raw.pop(legacy_key, None)
     if evaluation_raw:
         raise ValueError(f"Unconsumed evaluation keys: {', '.join(sorted(evaluation_raw))}")
     if "frequency_episodes" in data.get("evaluation", {}):

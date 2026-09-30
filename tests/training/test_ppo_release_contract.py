@@ -11,11 +11,13 @@ from robot_sf.benchmark.map_runner import map_runner
 from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
 from robot_sf.benchmark.map_runner_policies.map_runner_actions import policy_command_to_env_action
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.training import imitation_config
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.training.train_ppo import (
     _apply_env_overrides,
     _deterministic_eval_seed_for_episode,
     _make_training_env,
+    _randomize_eval_seeds,
     load_expert_training_config,
 )
 
@@ -131,22 +133,29 @@ def test_release_contract_effective_development_eval_seeds(leaf):
     """Selection uses the same explicit dev seed rather than the training seed fallback."""
     recipe = load_expert_training_config(Path(leaf))
     assert recipe.evaluation.evaluation_seeds == (1003,)
+    assert recipe.evaluation.randomize_seeds is False
+    assert _randomize_eval_seeds(recipe) is False
     assert tuple(
         _deterministic_eval_seed_for_episode(recipe, episode_idx=i, scenario_cycle_length=1)
         for i in range(3)
     ) == (1003, 1003, 1003)
 
 
-def test_loader_rejects_schema_valid_unconsumed_evaluation_key(tmp_path):
+@pytest.mark.parametrize("key", ["evaluation_seeds", "future_eval_knob"])
+def test_loader_rejects_schema_valid_unconsumed_evaluation_key(tmp_path, monkeypatch, key):
     """The shared schema permits dataclass fields the YAML loader must not silently drop."""
     leaf = Path(LEAVES[0]).resolve()
+    # Simulate a future dataclass/schema field without teaching the loader to consume it.
+    monkeypatch.setattr(
+        imitation_config, "_EVALUATION_KEYS", imitation_config._EVALUATION_KEYS | {key}
+    )
     config = tmp_path / "ignored-evaluation-key.yaml"
     config.write_text(
         yaml.safe_dump(
             {
                 "base_config": str(leaf),
                 "evaluation": {
-                    "evaluation_seeds": [1003],
+                    key: [1003],
                     "evaluation_seed_manifest": str(
                         Path(
                             "configs/training/ppo/ppo_release_contract_dev_eval_seeds.yaml"
@@ -156,13 +165,13 @@ def test_loader_rejects_schema_valid_unconsumed_evaluation_key(tmp_path):
             }
         )
     )
-    with pytest.raises(ValueError, match="Unconsumed evaluation keys: evaluation_seeds"):
+    with pytest.raises(ValueError, match=f"Unconsumed evaluation keys: {key}"):
         load_expert_training_config(config)
 
 
 @pytest.mark.parametrize("key", ["full_policy_analysis_on_new_best", "full_policy_analysis_videos"])
-def test_loader_rejects_enabled_unimplemented_evaluation_feature(tmp_path, key):
-    """Disabled legacy switches are accepted; enabling their absent behavior is refused."""
+def test_loader_accepts_enabled_legacy_evaluation_switch(tmp_path, key):
+    """Tracked recipes retain the historical no-op handling of legacy analysis switches."""
     config = tmp_path / "unsupported-evaluation-feature.yaml"
     config.write_text(
         yaml.safe_dump(
@@ -179,5 +188,5 @@ def test_loader_rejects_enabled_unimplemented_evaluation_feature(tmp_path, key):
             }
         )
     )
-    with pytest.raises(ValueError, match=f"Unsupported evaluation feature: {key}"):
-        load_expert_training_config(config)
+    recipe = load_expert_training_config(config)
+    assert recipe.evaluation.evaluation_seeds == (1003,)

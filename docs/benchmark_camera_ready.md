@@ -42,6 +42,12 @@ With no positive fixed horizon, scenario limits retain authority. An explicit
 combined with a fixed campaign or planner horizon. The separate 0.0.8 H400 doorway
 slice retains its declared H400 budget.
 
+A pure simulator timeout on the last runner step is recorded as `max_steps`.
+Collision and route completion retain precedence at that boundary; simulator
+timeouts before the runner budget and other intentional terminal events retain
+their existing labels. The source-pinned successor comparator reconstructs the
+same per-arm simulator binding and scoped hash as campaign execution.
+
 This corrects the earlier split between the runner loop budget and simulator
 termination. Published 0.0.7 rows remain immutable: their recorded `horizon: 600`
 does not imply every simulator ran with a 600-step limit. See the

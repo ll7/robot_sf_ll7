@@ -110,3 +110,78 @@ def test_campaign_budget_survives_runner_timestep_override(dt):
     assert ctx.config.sim_config.max_sim_steps == 600
     assert ctx.config.sim_config.sim_time_in_secs == pytest.approx(600 * dt)
     assert ctx.scenario["simulation_config"]["max_episode_steps"] == 600
+
+
+@pytest.mark.parametrize(
+    ("signal", "terminal_step", "expected"),
+    [
+        ("timeout", 600, "max_steps"),
+        ("collision", 600, "collision"),
+        ("success", 600, "success"),
+        ("collision_and_success", 600, "collision"),
+        ("early_timeout", 20, "terminated"),
+        ("intentional", 20, "terminated"),
+        ("intentional", 600, "terminated"),
+    ],
+)
+def test_real_simulator_budget_timeout_and_terminal_controls(
+    monkeypatch, signal, terminal_step, expected
+):
+    """Observe a real H600 RobotEnv timeout; injected info controls preserve terminal precedence."""
+    import numpy as np
+
+    import robot_sf.benchmark.map_runner.map_runner_episode as episode
+
+    cfg = load_campaign_config(TEMPLATE)
+    scenario = next(
+        s
+        for s in _load_campaign_scenarios(cfg, repository_root=ROOT)
+        if s["name"] == "classic_bottleneck_low"
+    )
+    original = episode._step_collision_and_termination
+    observed = []
+
+    def observe_terminal(state, slc, *, step_idx, sim, **kwargs):
+        if step_idx + 1 == terminal_step:
+            if terminal_step == 600:
+                # Require RobotEnv itself to terminate on timeout before changing any control.
+                assert sim.terminated and not sim.truncated
+                assert sim.info["meta"]["is_timesteps_exceeded"]
+                assert not sim.info["meta"]["is_route_complete"]
+                assert not episode.collision_event(sim.info)
+            observed.append(step_idx + 1)
+            if signal != "timeout":
+                info = deepcopy(sim.info)
+                info["meta"]["is_timesteps_exceeded"] = signal != "intentional"
+                info["collision"] = signal in ("collision", "collision_and_success")
+                info["meta"]["is_route_complete"] = signal in ("success", "collision_and_success")
+                sim = replace(sim, info=info, terminated=True)
+        return original(state, slc, step_idx=step_idx, sim=sim, **kwargs)
+
+    def stationary_builder(algo, config, **kwargs):
+        return lambda obs: np.zeros(2), {
+            "algorithm": algo,
+            "config": config,
+            "diagnostic_policy": "stationary injected policy; not planner evidence",
+        }
+
+    monkeypatch.setattr(episode, "_step_collision_and_termination", observe_terminal)
+    row = episode.run_map_episode(
+        deepcopy(scenario),
+        1001,
+        horizon=600,
+        dt=0.1,
+        record_forces=False,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="goal",
+        scenario_path=ROOT / "scoped_scenarios.json",
+        policy_builder=stationary_builder,
+        record_simulation_step_trace=True,
+    )
+    assert observed == [terminal_step]
+    trace = row["algorithm_metadata"]["simulation_step_trace"]
+    assert len(trace["steps"]) == terminal_step
+    assert row["scenario_params"]["simulation_config"]["max_episode_steps"] == 600
+    assert row["termination_reason"] == expected
+    assert row["outcome"]["timeout_event"] == (signal in ("timeout", "early_timeout"))

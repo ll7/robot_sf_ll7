@@ -47,6 +47,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
     )
     from robot_sf.benchmark.camera_ready import _util
     from robot_sf.benchmark.camera_ready._config import (
+        _apply_fixed_campaign_horizon,
         _load_campaign_scenarios,
         _scenario_with_kinematics,
         load_campaign_config,
@@ -209,8 +210,12 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
             for scenario in scoped:
                 scenario["telemetry"] = dict(cfg.telemetry)
         for key, planner in planners.items():
+            spec = planner["spec"]
+            arm_horizon = (
+                spec.horizon_override if spec.horizon_override is not None else cfg.horizon
+            )
             runner_scenarios = _apply_track_metadata_to_scenarios(
-                scoped,
+                _apply_fixed_campaign_horizon(scoped, horizon=arm_horizon),
                 observation_mode=planner["observation_mode"],
                 observation_level=None,
                 benchmark_track=None,

@@ -3266,6 +3266,7 @@ def _step_collision_and_termination(
     *,
     step_idx: int,
     sim: _StepSimResult,
+    reached_max_steps: bool = False,
 ) -> bool:
     """Update collision/termination state and return whether the loop should break.
 
@@ -3324,6 +3325,8 @@ def _step_collision_and_termination(
             truncated=bool(sim.truncated),
             success=step_success,
             collision=step_collision,
+            timeout=step_timeout,
+            reached_max_steps=reached_max_steps,
         )
         return True
     return False
@@ -3552,7 +3555,13 @@ def _execute_step_loop(
         _step_build_simulation_trace(state, slc, step_idx=step_idx, sim=sim)
         _step_build_actuation_trace(state, step_idx=step_idx, sim=sim)
         _step_build_planner_decision_entry(state, slc, step_idx=step_idx, sim=sim)
-        if _step_collision_and_termination(state, slc, step_idx=step_idx, sim=sim):
+        if _step_collision_and_termination(
+            state,
+            slc,
+            step_idx=step_idx,
+            sim=sim,
+            reached_max_steps=step_idx + 1 >= horizon_val,
+        ):
             break
 
 

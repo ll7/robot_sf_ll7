@@ -1646,6 +1646,33 @@ def calibration_archive(tmp_path, guarded_episode, request):
     from robot_sf.benchmark.utils import _config_hash
 
     rows, kwargs = calibration_records()
+    options = dict(getattr(request, "param", {}))
+    scheduled = options.pop("scheduled", False)
+    budgets = dict(
+        zip(kwargs["scenarios"], [400] * 25 + [500] * 13 + [600] * 8 + [650, 700], strict=True)
+    )
+    if scheduled:
+        for row in rows:
+            row["seed"] += 900
+            row["horizon"] = budgets[row["scenario_id"]]
+            row["metric_schema_version"] = "robot-sf-metrics.v2"
+            row["metrics"]["metric_schema_version"] = "robot-sf-metrics.v2"
+        schedule = tmp_path / "budgets.yaml"
+        schedule.write_text(
+            yaml.safe_dump(
+                {
+                    "schema_version": 1,
+                    "scenarios": {
+                        name: {"recommended_horizon_steps": budget, "status": "authored"}
+                        for name, budget in budgets.items()
+                    },
+                }
+            )
+        )
+        options.update(
+            scenario_horizons_path=schedule,
+            scenario_horizons_sha256=hashlib.sha256(schedule.read_bytes()).hexdigest(),
+        )
     kwargs["expected_algorithms"] = {
         arm: "guarded_ppo" if i == 0 else "goal" for i, arm in enumerate(kwargs["arms"])
     }
@@ -1653,7 +1680,15 @@ def calibration_archive(tmp_path, guarded_episode, request):
     scenario_path.write_text(
         yaml.safe_dump(
             [
-                {"name": name, "map_file": str(ROOT / "maps/svg_maps/classic_crossing.svg")}
+                {
+                    "name": name,
+                    "map_file": str(ROOT / "maps/svg_maps/classic_crossing.svg"),
+                    **(
+                        {"simulation_config": {"max_episode_steps": budgets[name]}}
+                        if scheduled
+                        else {}
+                    ),
+                }
                 for name in kwargs["scenarios"]
             ]
         )
@@ -1664,10 +1699,10 @@ def calibration_archive(tmp_path, guarded_episode, request):
         planners=tuple(
             PlannerSpec(key=arm, algo=kwargs["expected_algorithms"][arm]) for arm in kwargs["arms"]
         ),
-        seed_policy=SeedPolicy(mode="fixed-list", seeds=(101, 102)),
-        horizon=600,
+        seed_policy=SeedPolicy(mode="fixed-list", seeds=(1001, 1002) if scheduled else (101, 102)),
+        horizon=None if scheduled else 600,
         dt=0.1,
-        **getattr(request, "param", {}),
+        **options,
     )
     resolved = _load_campaign_scenarios(cfg)
     effective = _result_provenance_scenarios(cfg, resolved, kinematics="differential_drive")
@@ -1680,7 +1715,7 @@ def calibration_archive(tmp_path, guarded_episode, request):
         "config_hash": _config_hash(_config_hash_payload(cfg)),
         "scenario_matrix_hash": _scenario_matrix_hash(resolved),
         "kinematics_matrix": ["differential_drive"],
-        "seed_policy": {"resolved_seeds": [101, 102]},
+        "seed_policy": {"resolved_seeds": list(cfg.seed_policy.seeds)},
         "planners": [
             {"key": arm, "algo": kwargs["expected_algorithms"][arm], "enabled": True}
             for arm in kwargs["arms"]
@@ -1708,7 +1743,7 @@ def calibration_archive(tmp_path, guarded_episode, request):
                 scenario_with_episode_seed_defaults(by_name[row["scenario_id"]], seed=row["seed"]),
                 algo=algo,
                 algo_config={},
-                horizon=600,
+                horizon=row["horizon"],
                 dt=0.1,
                 record_forces=True,
                 observation_mode=mode,
@@ -1736,7 +1771,7 @@ def calibration_archive(tmp_path, guarded_episode, request):
                 "config_hash": row["config_hash"],
                 "repo_commit": row["git_hash"],
                 "simulator_settings": build_simulator_settings_provenance(
-                    horizon=600,
+                    horizon=row["horizon"],
                     dt=0.1,
                     record_forces=True,
                     active_observation_mode=mode,
@@ -1756,7 +1791,7 @@ def calibration_archive(tmp_path, guarded_episode, request):
             suite_key="fixture",
             total_jobs=96,
             written=96,
-            horizon=600,
+            horizon=cfg.horizon,
             dt=0.1,
             record_forces=True,
             active_observation_mode=mode,
@@ -2852,3 +2887,34 @@ def test_snqifix_scalar_mismatch_remains_refused():
                 (ROOT / "configs/benchmarks/snqi_baseline_camera_ready_v3.json").read_bytes()
             ),
         )
+
+
+@pytest.mark.parametrize("calibration_archive", [{"scheduled": True}], indirect=True)
+def test_snqifix_freeze_mixed_budgets_and_dev_split(
+    tmp_path, monkeypatch, calibration_archive, spec_files
+):
+    """Exercise the actual row/sidecar budget binding and frozen schema loader."""
+    from robot_sf.benchmark.result_provenance import manifest_path_for_result_jsonl
+    from robot_sf.benchmark.snqi import v2_calibration
+
+    config, _, kwargs = calibration_archive
+    # Programmatic archive fixture; YAML/source-byte admission has separate coverage.
+    monkeypatch.setattr(v2_calibration, "_validated_calibration_config", lambda cfg: cfg)
+    output = tmp_path / "mixed-anchors.json"
+    result = v2_calibration.freeze_campaign_anchors(tmp_path, output, campaign_config=config)
+    assert result["calibration"]["seeds"] == [1001, 1002]
+    assert result["calibration"]["episode_count"] == 1344
+    assert set(result["calibration"]["scenario_horizons"].values()) == {400, 500, 600, 650, 700}
+    assert result["metric_schema_version"] == "robot-sf-metrics.v2"
+    spec = load_snqi_v2_spec(
+        spec_files[0], output, spec_files[2], expected_metric_schema_version="robot-sf-metrics.v2"
+    )
+    assert spec.calibration_seeds == (1001, 1002)
+    assert spec.upper_anchors["J"] == 2
+    path = tmp_path / "runs" / f"{kwargs['arms'][0]}__differential_drive" / "episodes.jsonl"
+    sidecar = manifest_path_for_result_jsonl(path)
+    document = json.loads(sidecar.read_bytes())
+    document["rows"][0]["simulator_settings"]["horizon"] = 600
+    sidecar.write_text(json.dumps(document))
+    with pytest.raises(ValueError, match="sidecar row binding mismatch"):
+        v2_calibration.freeze_campaign_anchors(tmp_path, output, campaign_config=config)

@@ -1,0 +1,383 @@
+{
+  "anchors": {
+    "anchors": {
+      "F": {
+        "lower": 0,
+        "type": "calibration_p95",
+        "upper": 80.56302718724424
+      },
+      "J": {
+        "lower": 0,
+        "type": "calibration_p95",
+        "upper": 2.068711759770056
+      },
+      "K": {
+        "lower": 0,
+        "type": "calibration_p95",
+        "upper": 2.8926866448200923
+      },
+      "N": {
+        "lower": 0,
+        "type": "normative",
+        "upper": 0.25
+      },
+      "T": {
+        "lower": 0,
+        "type": "normative",
+        "upper": 3
+      }
+    },
+    "calibration": {
+      "arms": [
+        "goal",
+        "guarded_ppo",
+        "hybrid_rule_v4_fast_progress_static_escape",
+        "hybrid_rule_v4_fast_progress_static_escape_continuous",
+        "orca",
+        "ppo",
+        "prediction_planner",
+        "predictive_mppi",
+        "risk_dwa",
+        "sacadrl",
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+        "social_force",
+        "socnav_sampling"
+      ],
+      "benchmark_execution": "nonfallback",
+      "command_mode_counts": {
+        "goal": {
+          "native": 144
+        },
+        "guarded_ppo": {
+          "mixed": 144
+        },
+        "hybrid_rule_v4_fast_progress_static_escape": {
+          "adapter": 144
+        },
+        "hybrid_rule_v4_fast_progress_static_escape_continuous": {
+          "adapter": 144
+        },
+        "orca": {
+          "adapter": 144
+        },
+        "ppo": {
+          "native": 144
+        },
+        "prediction_planner": {
+          "adapter": 144
+        },
+        "predictive_mppi": {
+          "adapter": 144
+        },
+        "risk_dwa": {
+          "adapter": 144
+        },
+        "sacadrl": {
+          "adapter": 144
+        },
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": {
+          "adapter": 144
+        },
+        "scenario_adaptive_hybrid_orca_v2_collision_guard_v4": {
+          "adapter": 144
+        },
+        "social_force": {
+          "adapter": 144
+        },
+        "socnav_sampling": {
+          "adapter": 144
+        }
+      },
+      "episode_count": 2016,
+      "episode_files_sha256": {
+        "runs/goal__differential_drive/episodes.jsonl": "74ac622b4b13963849550c07ec801bd1fe38894a0fc05c5765d1544f379132a2",
+        "runs/guarded_ppo__differential_drive/episodes.jsonl": "dc688de09bdb450152f27f7c0f6e1f79be8c37d555093d41a0006a5a55d79720",
+        "runs/hybrid_rule_v4_fast_progress_static_escape__differential_drive/episodes.jsonl": "52f927ddfc9bb171a68eca34415cb6c983dac09a9d7a0670fb1918da8efb9b47",
+        "runs/hybrid_rule_v4_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl": "2b4fce61807a861d5ccd8d2df94feebfd71db19593145f21374fd45b480cd227",
+        "runs/orca__differential_drive/episodes.jsonl": "81a0945209299a485f7db3d3034314ffd0b46b24e63e2a22031f2db3badbf029",
+        "runs/ppo__differential_drive/episodes.jsonl": "772576e817d16fda440554688ae0a650b2f1ab6841dd2bb9e27d79b27cfd309b",
+        "runs/prediction_planner__differential_drive/episodes.jsonl": "be4c76d4795848565417fc5885dd7b7f52770b551d3ae788c469ff08a93648dc",
+        "runs/predictive_mppi__differential_drive/episodes.jsonl": "eaffa0fb6df10131add4974fe18ec9503ff93141e823c7210aebcff6aec558e4",
+        "runs/risk_dwa__differential_drive/episodes.jsonl": "747ce716baee6d6c0e492efebe377a829e0627849da3841157a7bd52f6e190cf",
+        "runs/sacadrl__differential_drive/episodes.jsonl": "4a6e3713f3c045212bb16de819ae3d125f73f9ebd2bbf2bec563fe0b219b29bd",
+        "runs/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4__differential_drive/episodes.jsonl": "6d1e179b65df90e5bcf33b7ce95d4e2ac4ae84327629b0cf31c7ebb8de45f156",
+        "runs/scenario_adaptive_hybrid_orca_v2_collision_guard_v4__differential_drive/episodes.jsonl": "0e9a6e4a621b740f1cf5246ad2e34eb7d70a4636ecedc6ebe33f5a2b7e1e7d40",
+        "runs/social_force__differential_drive/episodes.jsonl": "3ddc7d5c8c5bbe0d37ba9c2b8782bbf2fb4fadd6921213c6d5f5a5ff2ffc6cb0",
+        "runs/socnav_sampling__differential_drive/episodes.jsonl": "06ce4ac62bdf15f2b023b5c7f635a4c0f00d79e7508952fe2bd3d4c9be559238"
+      },
+      "episodes_sha256": "93746395f16cb1eb8f2f88ca0990ed90ab2e7da92df75fd73dbb21af1940e0f7",
+      "grid_sha256": "863f5d598e67e525d784f2e5be22d9fdc9ff620341df1c9195b1827302a34be0",
+      "quantile_method": "linear",
+      "run_id": "reh_main_v2",
+      "scenario_horizons": {
+        "classic_bottleneck_high": 500,
+        "classic_bottleneck_low": 500,
+        "classic_bottleneck_medium": 500,
+        "classic_cross_trap_high": 600,
+        "classic_cross_trap_low": 600,
+        "classic_cross_trap_medium": 600,
+        "classic_doorway_high": 500,
+        "classic_doorway_low": 500,
+        "classic_doorway_medium": 500,
+        "classic_group_crossing_high": 500,
+        "classic_group_crossing_low": 500,
+        "classic_group_crossing_medium": 500,
+        "classic_head_on_corridor_low": 500,
+        "classic_head_on_corridor_medium": 500,
+        "classic_merging_low": 600,
+        "classic_merging_medium": 600,
+        "classic_overtaking_low": 600,
+        "classic_overtaking_medium": 600,
+        "classic_realworld_double_bottleneck_high": 700,
+        "classic_station_platform_medium": 650,
+        "classic_t_intersection_low": 500,
+        "classic_t_intersection_medium": 500,
+        "classic_urban_crossing_medium": 600,
+        "francis2023_accompanying_peer": 400,
+        "francis2023_blind_corner": 400,
+        "francis2023_circular_crossing": 400,
+        "francis2023_crowd_navigation": 400,
+        "francis2023_down_path": 400,
+        "francis2023_entering_elevator": 400,
+        "francis2023_entering_room": 400,
+        "francis2023_exiting_elevator": 400,
+        "francis2023_exiting_room": 400,
+        "francis2023_following_human": 400,
+        "francis2023_frontal_approach": 400,
+        "francis2023_intersection_no_gesture": 400,
+        "francis2023_intersection_proceed": 400,
+        "francis2023_intersection_wait": 400,
+        "francis2023_join_group": 400,
+        "francis2023_leading_human": 400,
+        "francis2023_leave_group": 400,
+        "francis2023_narrow_doorway": 400,
+        "francis2023_narrow_hallway": 400,
+        "francis2023_parallel_traffic": 400,
+        "francis2023_pedestrian_obstruction": 400,
+        "francis2023_pedestrian_overtaking": 400,
+        "francis2023_perpendicular_traffic": 400,
+        "francis2023_robot_crowding": 400,
+        "francis2023_robot_overtaking": 400
+      },
+      "scenarios": [
+        "classic_bottleneck_high",
+        "classic_bottleneck_low",
+        "classic_bottleneck_medium",
+        "classic_cross_trap_high",
+        "classic_cross_trap_low",
+        "classic_cross_trap_medium",
+        "classic_doorway_high",
+        "classic_doorway_low",
+        "classic_doorway_medium",
+        "classic_group_crossing_high",
+        "classic_group_crossing_low",
+        "classic_group_crossing_medium",
+        "classic_head_on_corridor_low",
+        "classic_head_on_corridor_medium",
+        "classic_merging_low",
+        "classic_merging_medium",
+        "classic_overtaking_low",
+        "classic_overtaking_medium",
+        "classic_realworld_double_bottleneck_high",
+        "classic_station_platform_medium",
+        "classic_t_intersection_low",
+        "classic_t_intersection_medium",
+        "classic_urban_crossing_medium",
+        "francis2023_accompanying_peer",
+        "francis2023_blind_corner",
+        "francis2023_circular_crossing",
+        "francis2023_crowd_navigation",
+        "francis2023_down_path",
+        "francis2023_entering_elevator",
+        "francis2023_entering_room",
+        "francis2023_exiting_elevator",
+        "francis2023_exiting_room",
+        "francis2023_following_human",
+        "francis2023_frontal_approach",
+        "francis2023_intersection_no_gesture",
+        "francis2023_intersection_proceed",
+        "francis2023_intersection_wait",
+        "francis2023_join_group",
+        "francis2023_leading_human",
+        "francis2023_leave_group",
+        "francis2023_narrow_doorway",
+        "francis2023_narrow_hallway",
+        "francis2023_parallel_traffic",
+        "francis2023_pedestrian_obstruction",
+        "francis2023_pedestrian_overtaking",
+        "francis2023_perpendicular_traffic",
+        "francis2023_robot_crowding",
+        "francis2023_robot_overtaking"
+      ],
+      "seeds": [
+        1001,
+        1002,
+        1003
+      ],
+      "source_commit": "ea414933e61ce267389bd3bcbe97fb669a825c6e",
+      "split_id": "snqi-v2-diagnostic-863f5d598e67"
+    },
+    "force_decision": {
+      "N": "clip(near_misses/steps/0.25)",
+      "selected_source_contract": {
+        "quantity": "model acceleration, not measured human discomfort",
+        "reference_rule": "social_force_head_on_contact_relative_speed_1m_s_v1",
+        "reference_value_rule": "robot_force_reference(social_force_config, prf_ped_radius_m)",
+        "sample_timing": "pre_integration",
+        "source": "recorded_robot_pedestrian_social_force"
+      },
+      "selected_source_coverage": 2016,
+      "source": "robot_force_impulse_total",
+      "spearman_rho_F_N": 0.6201982779730981,
+      "spearman_rho_F_exposure_fraction": 0.6226368342177245,
+      "threshold_absolute_rho": 0.9
+    },
+    "metric_schema_version": "robot-sf-metrics.v2",
+    "status": "diagnostic_only",
+    "version": "SNQI-v2.0"
+  },
+  "budget_counts": {
+    "400": 1050,
+    "500": 546,
+    "600": 336,
+    "650": 42,
+    "700": 42
+  },
+  "claim_boundary": "Same-dev-data calibration and ranking; nothing pinned; not held-out or release evidence.",
+  "manifest_sha256": "d594bd89d263fb3426a3721600562271a02f39c8e3c499ac66cb19915f62a2fb",
+  "rank_alignment_spearman": {
+    "legacy_target_quality": -0.8109890109890111,
+    "success_minus_collision": 0.9856991663244494,
+    "success_rate": 0.9416947392563936
+  },
+  "ranking": [
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape_continuous",
+      "collision_rate": 0.006944444444444444,
+      "episodes": 144,
+      "legacy_target_quality": -8.105423268545993,
+      "rank": 1,
+      "snqi_v2_mean": 0.5812076507177906,
+      "success_rate": 0.8958333333333334
+    },
+    {
+      "arm": "socnav_sampling",
+      "collision_rate": 0.041666666666666664,
+      "episodes": 144,
+      "legacy_target_quality": -5.85490718541345,
+      "rank": 2,
+      "snqi_v2_mean": 0.5648978805709717,
+      "success_rate": 0.8888888888888888
+    },
+    {
+      "arm": "risk_dwa",
+      "collision_rate": 0.006944444444444444,
+      "episodes": 144,
+      "legacy_target_quality": -7.473668800257155,
+      "rank": 3,
+      "snqi_v2_mean": 0.5604657015516837,
+      "success_rate": 0.8263888888888888
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+      "collision_rate": 0.006944444444444444,
+      "episodes": 144,
+      "legacy_target_quality": -9.402418023701502,
+      "rank": 4,
+      "snqi_v2_mean": 0.5315894228216811,
+      "success_rate": 0.8333333333333334
+    },
+    {
+      "arm": "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+      "collision_rate": 0.006944444444444444,
+      "episodes": 144,
+      "legacy_target_quality": -9.272209690368168,
+      "rank": 5,
+      "snqi_v2_mean": 0.5305216556867163,
+      "success_rate": 0.8333333333333334
+    },
+    {
+      "arm": "hybrid_rule_v4_fast_progress_static_escape",
+      "collision_rate": 0.006944444444444444,
+      "episodes": 144,
+      "legacy_target_quality": -11.344196869974894,
+      "rank": 6,
+      "snqi_v2_mean": 0.5155175162936929,
+      "success_rate": 0.8194444444444444
+    },
+    {
+      "arm": "orca",
+      "collision_rate": 0.10416666666666667,
+      "episodes": 144,
+      "legacy_target_quality": -4.286300546434797,
+      "rank": 7,
+      "snqi_v2_mean": 0.45028030922414725,
+      "success_rate": 0.875
+    },
+    {
+      "arm": "guarded_ppo",
+      "collision_rate": 0.013888888888888888,
+      "episodes": 144,
+      "legacy_target_quality": -3.7666738365339034,
+      "rank": 8,
+      "snqi_v2_mean": 0.37820008056742666,
+      "success_rate": 0.6736111111111112
+    },
+    {
+      "arm": "social_force",
+      "collision_rate": 0.006944444444444444,
+      "episodes": 144,
+      "legacy_target_quality": -4.668031172897376,
+      "rank": 9,
+      "snqi_v2_mean": 0.36435822409915974,
+      "success_rate": 0.6527777777777778
+    },
+    {
+      "arm": "predictive_mppi",
+      "collision_rate": 0.006944444444444444,
+      "episodes": 144,
+      "legacy_target_quality": -4.954520808586633,
+      "rank": 10,
+      "snqi_v2_mean": 0.2201319859132873,
+      "success_rate": 0.4027777777777778
+    },
+    {
+      "arm": "prediction_planner",
+      "collision_rate": 0.2569444444444444,
+      "episodes": 144,
+      "legacy_target_quality": -4.085827092007191,
+      "rank": 11,
+      "snqi_v2_mean": -0.2828590183912577,
+      "success_rate": 0.3958333333333333
+    },
+    {
+      "arm": "goal",
+      "collision_rate": 0.6111111111111112,
+      "episodes": 144,
+      "legacy_target_quality": -2.4138979967899306,
+      "rank": 12,
+      "snqi_v2_mean": -0.9863804218747667,
+      "success_rate": 0.375
+    },
+    {
+      "arm": "sacadrl",
+      "collision_rate": 0.6944444444444444,
+      "episodes": 144,
+      "legacy_target_quality": -1.817664231167952,
+      "rank": 13,
+      "snqi_v2_mean": -1.2345585760653026,
+      "success_rate": 0.3055555555555556
+    },
+    {
+      "arm": "ppo",
+      "collision_rate": 0.8194444444444444,
+      "episodes": 144,
+      "legacy_target_quality": -1.2681265636690762,
+      "rank": 14,
+      "snqi_v2_mean": -1.6182373590002572,
+      "success_rate": 0.18055555555555555
+    }
+  ],
+  "status": "diagnostic_only"
+}

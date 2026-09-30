@@ -285,7 +285,14 @@ def freeze_campaign_anchors(
     )
     document["calibration"]["episode_files_sha256"] = hashes
     document["calibration"]["producer_sidecars_sha256"] = sidecar_hashes
-    document["calibration"]["campaign_config_hash"] = manifest["config_hash"]
+    from robot_sf.benchmark.camera_ready._util import _config_hash_payload  # noqa: PLC0415
+
+    # The manifest's config identity is truncated to 16 characters. Custody assets
+    # require the full digest, not a truncated identity relabelled as SHA-256.
+    document["calibration"]["campaign_config_identity"] = manifest["config_hash"]
+    document["calibration"]["campaign_config_hash"] = hashlib.sha256(
+        json.dumps(_config_hash_payload(config), sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
     document["calibration"]["episodes_hash_rule"] = (
         "sha256(sorted compact JSON relative-path-to-file-sha256 map)"
     )

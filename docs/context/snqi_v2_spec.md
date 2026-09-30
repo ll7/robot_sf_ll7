@@ -60,7 +60,8 @@ but now declares development seeds **1001/1002**. It covers the 14 arm slots and
 all 48 scenarios at dt .1 with the SHA-pinned authored #9999 schedule:
 25×H400, 13×H500, 8×H600, 1×H650 and 1×H700. The freeze path checks each row
 and producer-sidecar budget against its independently resolved scenario, and
-snapshots the schedule with the other acquisition inputs. A row's own
+snapshots the schedule with the other acquisition inputs. The producer sidecar
+records each episode's horizon rather than the global scheduled-mode `None`. A row's own
 `run_horizon` is not authority for its scheduled budget.
 
 The 0.0.8 template and calibration acquisition exclude legacy SNQI weights,
@@ -132,6 +133,8 @@ Direct derivation marks results `derived_pending_custody`. Only the archive free
 path marks anchors `frozen`, after binding the complete grid, all 14 episode files,
 their producer sidecars, campaign config and campaign manifest. The loader verifies
 the hash maps and force-switch threshold/coverage before accepting frozen anchors.
+The freeze writer retains the manifest's 16-character config identity separately
+and records the full canonical-config SHA-256 required by the anchor loader.
 
 In particular, undefined pedestrian–pedestrian-equivalent force on one-step
 traces is never replaced with zero. The 384-row four-arm diagnostic is not this

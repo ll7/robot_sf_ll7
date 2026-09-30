@@ -1526,6 +1526,7 @@ def test_pinned_v4_lineage_rejects_contradictory_config_declaration(tmp_path: Pa
     assert result.returncode != 0
     assert f"successor planner binding lacks reviewed v4 lineage: {key}" in result.stderr
 
+
 @pytest.mark.parametrize("mixed_successor_definitions", [False, True])
 def test_changed_definitions_suppress_paired_metric_delta(tmp_path, mixed_successor_definitions):
     """Read actual JSONL bytes and fence metrics even when numerical values agree."""
@@ -1545,7 +1546,6 @@ def test_changed_definitions_suppress_paired_metric_delta(tmp_path, mixed_succes
     finding = next(x for x in report["findings"] if x["field"] == "metrics.path_length")
     assert finding["classification"] == "metric_definition_change"
     assert finding["delta_0_0_8_minus_0_0_7"] is None
-
 
 @pytest.mark.parametrize("budget", [None, 500, 700])
 def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(

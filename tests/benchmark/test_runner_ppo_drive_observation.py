@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from robot_sf.baselines.ppo import PPOPlannerConfig
 from robot_sf.baselines.social_force import Observation
@@ -55,3 +56,27 @@ def test_delta_ppo_observation_tracks_current_drive_speed_after_steps() -> None:
     # A turn and reverse motion must survive; neither can be recovered from |velocity_xy|.
     np.testing.assert_array_equal(observations[3].robot["speed"], np.array([-0.3, 0.2], np.float32))
     np.testing.assert_array_equal(observations[4].robot["speed"], np.array([2.0, 1.0], np.float32))
+
+
+def test_delta_drive_worker_fallback_is_physical_stop() -> None:
+    """Worker timeout fallback stops a moving, turning drive without stale velocity."""
+    state = RobotDynamicsState(x=2.0, y=3.0, heading=0.4, linear_speed=0.8, angular_speed=0.6)
+    updated, velocity = runner._advance_delta_ppo_drive(
+        UnicycleDynamics(), state, {"vx": 0.0, "vy": 0.0}, 0.1
+    )
+    assert (updated.x, updated.y, updated.heading) == pytest.approx((2.0, 3.0, 0.4))
+    assert (updated.linear_speed, updated.angular_speed) == (0.0, 0.0)
+    assert velocity == (0.0, 0.0)
+
+
+@pytest.mark.parametrize(
+    ("state", "action", "error", "message"),
+    [
+        (None, {"v": 0.2, "omega": 0.1}, RuntimeError, "not initialized"),
+        (RobotDynamicsState(), {"vx": 0.2, "vy": 0.0}, ValueError, "unicycle velocity command"),
+    ],
+)
+def test_delta_drive_rejects_uninitialized_or_cartesian_command(state, action, error, message):
+    """A delta policy cannot use an absent physical state or a non-stop Cartesian command."""
+    with pytest.raises(error, match=message):
+        runner._advance_delta_ppo_drive(UnicycleDynamics(), state, action, 0.1)

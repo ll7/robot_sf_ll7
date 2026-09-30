@@ -968,6 +968,10 @@ _FAST_FILES = {
     "test_control_action_latency_snqi.py",
     "test_path_utils.py",
     "test_snqi_scalarization_sensitivity.py",
+    # Maintainer-approved fast-lane exceptions for PR #10014: two 8-step
+    # episodes on dev seeds 1001/1002, and offline trace packaging (~14s).
+    "test_baseline_stats.py",
+    "test_trace_reexport_packaging.py",
     # Classic planner adapter tests are deterministic planner-contract tests for
     # the changed classic_planner_adapter.py producer; keep in fast shards for
     # the exact-head changed-coverage gate.

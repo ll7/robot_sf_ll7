@@ -114,7 +114,8 @@ def test_child_process_inherits_guard_before_first_step(tmp_path):
         "from robot_sf.gym_env.environment_factory import make_robot_env, _apply_global_seed\n"
         "assert getattr(_apply_global_seed, '_seedguard_boundary', None) == 'environment_factory'\n"
         "env = make_robot_env(seed=111)\n"
-        f"open({str(stepped)!r}, 'w').write('step reached')\n"
+        "from pathlib import Path\nfrom robot_sf.evidence.writers import write_text\n"
+        f"write_text(Path({str(stepped)!r}), '# AI-GENERATED NEEDS-REVIEW\\nstep reached')\n"
         "env.step(None)\n"
     )
     result = subprocess.run(
@@ -179,7 +180,8 @@ def test_isolated_child_rejects_before_any_user_step(flag, tmp_path):
         "assert 'robot_sf' not in sys.modules, 'project imported before pinned source setup'\n"
         "guard = sys.modules['tests.support.seedguard_boundaries']\n"
         "guard.check_simulation_seed(50036, boundary='isolated child')\n"
-        f"open({str(stepped)!r}, 'w').write('first step reached')\n"
+        "from pathlib import Path\nfrom robot_sf.evidence.writers import write_text\n"
+        f"write_text(Path({str(stepped)!r}), '# AI-GENERATED NEEDS-REVIEW\\nfirst step reached')\n"
     )
     result = subprocess.run(
         [sys.executable, flag, "-c", code], env={}, capture_output=True, text=True, check=False

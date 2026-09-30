@@ -45,7 +45,8 @@ workers: 32
 horizon: 600
 dt: 0.1
 record_forces: true
-# Dev-seed rehearsal: 0.893 MB/episode; full 20,160-episode trace JSON projects to 18 GB.
+# Dev-seed rehearsal: 0.893 MB trace JSON/episode; total JSONL projects to
+# 23.9 GB for 20,160 episodes, below the 30 GB recording budget.
 record_simulation_step_trace: true
 checkpoint_provenance_enforcement: error
 resume: true

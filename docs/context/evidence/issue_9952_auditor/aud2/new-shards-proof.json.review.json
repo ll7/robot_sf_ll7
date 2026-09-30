@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_9952_auditor/aud2/new-shards-proof.json",
+  "artifact_sha256": "3f19f05c00b15ad1a328863c8a1adebd3605433c99c6dd56f5b938a406b55581",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

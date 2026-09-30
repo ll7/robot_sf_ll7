@@ -654,8 +654,9 @@ def _assert_prediction_and_social_force_configs(
     assert predictor["predictive_robot_radius"] == pytest.approx(DRIVE.radius)
     assert predictor["predictive_pedestrian_radius"] == pytest.approx(SIM.ped_radius)
     assert predictor["predictive_clearance_model"] == "surface_v2"
-    # Restore the historical checkpoint inference grid, separate from command dt.
-    assert predictor["predictive_rollout_dt"] == pytest.approx(0.2)
+    # Consecutive training frames at cef93136 are 0.1 s apart.
+    assert predictor["predictive_rollout_dt"] == pytest.approx(0.1)
+    assert predictor["predictive_horizon_steps"] == 8
     assert predictor["max_linear_speed"] <= DRIVE.max_linear_speed
     assert predictor["max_angular_speed"] <= DRIVE.max_angular_speed
 
@@ -708,8 +709,8 @@ def _assert_guard_mppi_and_dwa_configs(resolved: dict[str, tuple[str, dict[str, 
     assert mppi["predictive_robot_radius"] == pytest.approx(DRIVE.radius)
     assert mppi["predictive_pedestrian_radius"] == pytest.approx(SIM.ped_radius)
     assert mppi["max_angular_speed"] == pytest.approx(DRIVE.max_angular_speed)
-    assert mppi["rollout_dt"] == pytest.approx(0.2)
-    assert mppi["predictive_rollout_dt"] == pytest.approx(0.2)
+    assert mppi["rollout_dt"] == pytest.approx(0.1)
+    assert mppi["predictive_rollout_dt"] == pytest.approx(0.1)
     assert mppi["goal_target_version"] == "active_waypoint_v2"
 
     dwa = resolved["risk_dwa"][1]

@@ -1045,7 +1045,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 fallback_policy="stop",
             )
 
-        def clearance_rank(evaluation):
+        def clearance_rank(evaluation) -> tuple[float, ...]:
             if self.config.clearance_model != "surface_v2":
                 return (float(evaluation["min_ped_clear"]),)
             return tuple(

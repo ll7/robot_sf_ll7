@@ -1171,7 +1171,9 @@ def _build_predictive_mppi_policy(
 
     _attach_planner_reset(_policy, adapter)
     _policy._planner_adapter = adapter
-    _policy._planner_bind_env = adapter.bind_env
+    planner_bind_env = getattr(adapter, "bind_env", None)
+    if callable(planner_bind_env):
+        _policy._planner_bind_env = planner_bind_env
 
     def _planner_stats() -> dict[str, Any]:
         """Expose predictive-checkpoint runtime provenance for release admission.

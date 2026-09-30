@@ -295,7 +295,9 @@ def test_native_crowded_zone_goal_sampling_leaves_global_numpy_untouched() -> No
     before = np.random.get_state()
     x, y = behavior._sample_goal(zone)
     after = np.random.get_state()
-    assert 0.0 <= y <= x <= 1.0
+    # Three B-corner points encode a full rectangle, not a folded triangle.
+    assert 0.0 <= x <= 1.0
+    assert 0.0 <= y <= 1.0
     np.testing.assert_array_equal(before[1], after[1])
     assert before[2:] == after[2:]
 

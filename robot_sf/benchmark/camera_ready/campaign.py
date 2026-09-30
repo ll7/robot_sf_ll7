@@ -2887,6 +2887,17 @@ def _build_release_artifact_urls(
     return expected_archive_name, release_url, release_asset_url, doi_url
 
 
+def _legacy_snqi_artifacts(snqi: _SnqiSectionResult | None) -> dict[str, str]:
+    """Declare legacy artifact paths only when the legacy section exists."""
+    if snqi is None:
+        return {}
+    return {
+        "snqi_diagnostics_json": _repo_relative(snqi.snqi_diagnostics_json_path),
+        "snqi_diagnostics_md": _repo_relative(snqi.snqi_diagnostics_md_path),
+        "snqi_sensitivity_csv": _repo_relative(snqi.snqi_sensitivity_csv_path),
+    }
+
+
 def _build_campaign_artifacts_section(
     paths: _CampaignPreflightPaths,
     snqi: _SnqiSectionResult | None,
@@ -2958,15 +2969,7 @@ def _build_campaign_artifacts_section(
         "release_url": release_url,
         "release_asset_url": release_asset_url,
         "doi_url": doi_url,
-        "snqi_diagnostics_json": (
-            _repo_relative(snqi.snqi_diagnostics_json_path) if snqi is not None else None
-        ),
-        "snqi_diagnostics_md": (
-            _repo_relative(snqi.snqi_diagnostics_md_path) if snqi is not None else None
-        ),
-        "snqi_sensitivity_csv": (
-            _repo_relative(snqi.snqi_sensitivity_csv_path) if snqi is not None else None
-        ),
+        **_legacy_snqi_artifacts(snqi),
         "assurance_fragment_json": _repo_relative(reports_dir / "assurance_fragment.json"),
         "assurance_fragment_md": _repo_relative(reports_dir / "assurance_fragment.md"),
         "assurance_fragment_svg": _repo_relative(reports_dir / "assurance_fragment.svg"),

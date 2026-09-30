@@ -270,7 +270,10 @@ class SnqiV2Spec:
     def validate_evaluation_commitment(self, seeds: Sequence[int]) -> None:
         """Bind the complete release seed list to the author-approved sealed commitment."""
         self.validate_evaluation_seeds(seeds)
-        if evaluation_seeds_sha256(seeds) != self.evaluation_seeds_sha256:
+        if (
+            self.evaluation_seeds_sha256 != SEALED_EVALUATION_SEEDS_SHA256
+            or evaluation_seeds_sha256(seeds) != SEALED_EVALUATION_SEEDS_SHA256
+        ):
             raise ValueError("SNQI-v2 evaluation seeds differ from the sealed commitment")
 
 

@@ -3173,3 +3173,13 @@ def test_snqifix2_default_loader_refuses_changed_recorded_budget(spec_files):
     write_json(spec_files[1], document)
     with pytest.raises(ValueError, match="budget|schedule"):
         load_snqi_v2_spec(*spec_files)
+
+
+def test_snqifix2_release_seed_commitment_cannot_be_overridden():
+    """Even programmatic release specs cannot replace the author-approved seal."""
+    from robot_sf.benchmark.snqi.evaluation_seeds import evaluation_seeds_sha256
+
+    substituted = (201, 202)
+    spec = replace(fixture_spec(), evaluation_seeds_sha256=evaluation_seeds_sha256(substituted))
+    with pytest.raises(ValueError, match="sealed commitment"):
+        spec.validate_evaluation_commitment(substituted)

@@ -38,6 +38,7 @@ from typing import Any, BinaryIO
 from robot_sf.benchmark import artifact_publication as artifact_publication_module
 from robot_sf.benchmark import release_acceptance as release_acceptance_module
 from robot_sf.benchmark import release_protocol as release_protocol_module
+from robot_sf.benchmark.aggregate import filter_evidence_eligible_records
 from robot_sf.benchmark.artifact_publication import (
     PublicationPreflightError,
     export_publication_bundle,
@@ -1504,7 +1505,8 @@ def _stored_snqi_ordering(campaign_root: Path) -> list[dict[str, Any]]:
                 or not math.isfinite(float(raw_snqi))
             ):
                 raise DerivedReleaseError("publication row lacks a finite stored SNQI value")
-            grouped[(planner_key, kinematics)].append(float(raw_snqi))
+            if filter_evidence_eligible_records([record])[0]:
+                grouped[(planner_key, kinematics)].append(float(raw_snqi))
     ordering = [
         {
             "planner_key": planner_key,

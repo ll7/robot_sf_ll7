@@ -66,7 +66,12 @@ def _fixture_checkpoint_provenance(planner: str, index: int) -> dict[str, object
     }
 
 
-def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, tuple[str, ...]]:
+def _fixture(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    seed: int = 111,  # seed-holdout: synthetic-fixture
+) -> tuple[Path, tuple[str, ...]]:
     planners = RUNTIME_SMOKE_PLANNER_KEYS
     manifest = tmp_path / RUNTIME_SMOKE_MANIFEST
     config = tmp_path / RUNTIME_SMOKE_CONFIG
@@ -82,7 +87,7 @@ def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, tup
     config_payload = {
         "horizon": 600,
         "kinematics_matrix": ["differential_drive"],
-        "seed_policy": {"mode": "fixed-list", "seeds": [111]},
+        "seed_policy": {"mode": "fixed-list", "seeds": [seed]},
         "planners": [
             {
                 "key": key,
@@ -118,14 +123,14 @@ def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, tup
             "algo": f"algo-{index}",
             "episode_id": f"runtime-smoke-scenario--111--{index}",
             "scenario_id": "runtime-smoke-scenario",
-            "seed": 111,
+            "seed": seed,
             "horizon": 600,
             "config_hash": f"config-{index}",
             "git_hash": "a" * 40,
             "result_provenance": {
                 "repo_commit": "a" * 40,
                 "scenario_id": "runtime-smoke-scenario",
-                "seed": 111,
+                "seed": seed,
                 "config_hash": f"config-{index}",
             },
             "algorithm_metadata": {
@@ -144,7 +149,7 @@ def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, tup
             scenarios=[
                 {
                     "name": "runtime-smoke-scenario",
-                    "seeds": [111],
+                    "seeds": [seed],
                     "robot_config": {"type": "differential_drive"},
                 }
             ],
@@ -243,7 +248,7 @@ def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, tup
             "campaign_id": "smoke",
             "git": {"commit": "a" * 40},
             "scenario_matrix": "configs/scenarios/single/francis2023_blind_corner.yaml",
-            "seed_policy": {"resolved_seeds": [111]},
+            "seed_policy": {"resolved_seeds": [seed]},
             "planners": [
                 {
                     "key": planner,
@@ -1249,3 +1254,47 @@ def test_runtime_smoke_rejects_checkpoint_receipt_hash_mismatch(
 
     with pytest.raises(RuntimeSmokeAdmissionError, match="checkpoint staging receipt hash"):
         _admit(result, planners, tmp_path)
+
+
+@pytest.mark.parametrize("case", ["eligible", "foresight", "spawn", "missing"])
+def test_runtime_planned_counts_and_exclusions(tmp_path, monkeypatch, case):
+    """Runtime admission keeps planned counts distinct from eligible evidence N."""
+    result, planners = _fixture(tmp_path, monkeypatch, seed=1001)
+    planner = "guarded_ppo"
+    path = result.parent.parent / "runs" / f"{planner}__differential_drive/episodes.jsonl"
+    row = json.loads(path.read_text())
+    if case == "foresight":
+        row["algorithm_metadata"]["foresight_prediction"] = {"evidence_eligible": False}
+    elif case == "spawn":
+        row["spawn_validity"] = {"invalid_run": True, "invalid_reason": "spawn_overlap"}
+    path.write_text("" if case == "missing" else json.dumps(row) + "\n")
+    sidecar_path = path.with_name(path.name + ".provenance.json")
+    sidecar = json.loads(sidecar_path.read_text())
+    next(item for item in sidecar["raw_artifacts"] if item.get("kind") == "episodes_jsonl")[
+        "sha256"
+    ] = sha256_file(path)
+    _write_json(sidecar_path, sidecar)
+    summary_path = result.parent.parent / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text())
+    planner_row = next(item for item in summary["planner_rows"] if item["planner_key"] == planner)
+    planner_row.update(
+        episodes=int(case == "eligible"),
+        episodes_total=int(case != "missing"),
+        episodes_excluded=int(case in {"spawn", "foresight"}),
+    )
+    _write_json(summary_path, summary)
+    if case in {"eligible", "foresight"}:
+        report = _admit(result, planners, tmp_path)
+        assert report["status"] == "admitted"
+        assert report["exclusion_reasons"] == (
+            {"foresight_ineligible": 1} if case == "foresight" else {}
+        )
+        assert report["episodes_excluded"] == int(case == "foresight")
+    else:
+        message = (
+            "spawn_exclusion_defect: K=1 invalid_or_unmeasured_spawn"
+            if case == "spawn"
+            else "total episode count"
+        )
+        with pytest.raises(RuntimeSmokeAdmissionError, match=message):
+            _admit(result, planners, tmp_path)

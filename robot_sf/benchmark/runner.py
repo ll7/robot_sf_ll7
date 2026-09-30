@@ -44,7 +44,9 @@ from loguru import logger
 
 try:
     from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
-except ImportError:  # pragma: no cover - optional dependency
+except (ImportError, PermissionError):  # pragma: no cover - optional dependency
+    # MoviePy reads a discovered .env during import; unavailable optional
+    # configuration must not prevent CLI help or non-video benchmark use.
     ImageSequenceClip = None  # type: ignore[assignment]
 
 try:

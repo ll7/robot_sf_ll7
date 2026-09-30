@@ -413,6 +413,8 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Runner isolation and resource contracts must run before a PR changes CI.
+    "test_self_hosted_routing.py",
     # Scenario-admissibility tests exercise deterministic candidate, manifest,
     # materialization, and provenance contracts used by the adversarial search.
     "test_scenario_admissibility.py",

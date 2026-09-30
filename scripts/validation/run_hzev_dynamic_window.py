@@ -189,6 +189,11 @@ def acquire(job):  # noqa: C901, PLR0915 - one process-local instrumentation bou
         moving_policy.__dict__.update(policy.__dict__)
         return moving_policy, meta
 
+    # The campaign loader emits repo-relative paths; the direct episode builder
+    # resolves relative to the scenario manifest. Bind its map explicitly here.
+    scenario = json.loads(json.dumps(scenario))
+    if scenario.get("map_file"):
+        scenario["map_file"] = str((ROOT / scenario["map_file"]).resolve())
     planner = next(p for p in cfg.planners if p.key == arm)
     with ExitStack() as stack:
         stack.enter_context(patch.object(episode, "_init_step_loop_state", initial_capture))

@@ -1440,6 +1440,10 @@ def _resolve_episode_run_context(  # noqa: PLR0913
         horizon_val = 200
     if dt is not None and dt > 0:
         config.sim_config.time_per_step_in_secs = float(dt)
+    if scenario.get("metadata", {}).get("campaign_horizon", {}).get("mode") == "fixed":
+        # The scenario loader converts steps to seconds before the runner applies dt.
+        # Rebind the campaign budget using the actual episode timestep.
+        config.sim_config.sim_time_in_secs = horizon_val * config.sim_config.time_per_step_in_secs
 
     robot_kinematics = _robot_kinematics_label(config)
     actuation_profile = _load_synthetic_actuation_profile(synthetic_actuation_profile)

@@ -505,6 +505,37 @@ def _load_scenario_horizon_schedule(path: Path) -> dict[str, dict[str, Any]]:
     return schedule
 
 
+def _apply_fixed_campaign_horizon(
+    scenarios: list[dict[str, Any]],
+    *,
+    horizon: int | None,
+) -> list[dict[str, Any]]:
+    """Bind a positive fixed campaign budget to simulator limits, retaining authored provenance.
+
+    Returns:
+        Copied scenarios with the fixed episode budget, or the original list in scenario mode.
+    """
+    if horizon is None or horizon <= 0:
+        return scenarios
+    patched_scenarios = []
+    for scenario in scenarios:
+        patched = deepcopy(scenario)
+        simulation_config = patched.setdefault("simulation_config", {})
+        metadata = patched.setdefault("metadata", {})
+        prior_binding = metadata.get("campaign_horizon", {})
+        authored_limit = prior_binding.get(
+            "authored_max_episode_steps", simulation_config.get("max_episode_steps")
+        )
+        simulation_config["max_episode_steps"] = int(horizon)
+        metadata["campaign_horizon"] = {
+            "mode": "fixed",
+            "horizon_steps": int(horizon),
+            "authored_max_episode_steps": authored_limit,
+        }
+        patched_scenarios.append(patched)
+    return patched_scenarios
+
+
 def _apply_scenario_horizon_schedule(
     scenarios: list[dict[str, Any]],
     *,
@@ -787,6 +818,7 @@ def _load_campaign_scenarios(
         scenario_dicts,
         schedule_path=cfg.scenario_horizons_path,
     )
+    scenario_dicts = _apply_fixed_campaign_horizon(scenario_dicts, horizon=cfg.horizon)
     seeds_override = _resolve_seed_override(cfg.seed_policy)
     if seeds_override is not None:
         seeded: list[dict[str, Any]] = []

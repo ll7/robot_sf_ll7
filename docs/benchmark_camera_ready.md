@@ -25,6 +25,30 @@ Canonical benchmark fallback policy:
 * [Planner-Family Coverage Matrix](./benchmark_planner_family_coverage.md)
 * [Francis Guideline Mapping For Robot SF](./context/issue_759_francis_guideline_mapping.md)
 
+## Effective Episode Horizon
+
+A positive camera-ready campaign `horizon` is the fixed episode budget. Campaign
+preparation copies each selected scenario and sets its simulator
+`simulation_config.max_episode_steps` to that budget, including limits above the
+campaign budget. A planner's explicit `horizon` overrides the campaign value for
+that arm. Both in-process and subprocess execution receive these prepared scenarios.
+The runner binds simulator duration using the effective timestep, so a `dt`
+override does not shorten the step budget.
+
+`metadata.campaign_horizon` records the effective fixed budget and the authored
+scenario limit (`null` when absent). Source YAML files retain their authored values.
+With no positive fixed horizon, scenario limits retain authority. An explicit
+`scenario_horizons` schedule continues to set each scenario's limit; it cannot be
+combined with a fixed campaign or planner horizon. The separate 0.0.8 H400 doorway
+slice retains its declared H400 budget.
+
+This corrects the earlier split between the runner loop budget and simulator
+termination. Published 0.0.7 rows remain immutable: their recorded `horizon: 600`
+does not imply every simulator ran with a 600-step limit. See the
+[HZN audit](context/issue_9668_campaign_horizon_authority.md) for the measured impact
+and missing trajectory evidence. The correction changes future timeout exposure;
+it is implementation evidence and does not predict recovered successes.
+
 ## Entry Point
 
 Run the campaign CLI:

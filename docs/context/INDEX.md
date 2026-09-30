@@ -1,5 +1,9 @@
 # Context Retrieval Index
 
+Issue #9668/#9952 campaign horizon authority: 0.0.7 all-outcome budget exposure,
+real 0.0.8 template limits, explicit fixed/scheduled modes, and missing trajectory evidence:
+[issue_9668_campaign_horizon_authority.md](issue_9668_campaign_horizon_authority.md).
+
 Issue #9667 Social Navigation Quality Index version 2 (SNQI-v2): declared weights,
 safety strata, development-only calibration, mandatory weight-family diagnostics,
 and the boundary against human-comfort or deployment claims:
@@ -64,7 +68,7 @@ note only; it does not establish physical, safety, benchmark, or paper-facing ev
 
 Issue #9764 social-force pair-kernel versioning: preserve the unwrapped historical default, expose
 the wrapped successor explicitly, and keep the bounded paired-run results diagnostic-only until the
-#9668 release-row equivalence gate passes. Raw run files remain in private host custody under a
+Issue #9668 release-row equivalence gate passes. Raw run files remain in private host custody under a
 logical bundle key; they are not a published evidence bundle:
 [issue_9764_social_force_kernel_versioning.md](issue_9764_social_force_kernel_versioning.md).
 

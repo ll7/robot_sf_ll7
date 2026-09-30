@@ -1,0 +1,94 @@
+# Run ONLY with scripts/validation/run_hzev_dynamic_window.py. Stationary and continuation are diagnostic harness behavior.
+name: hzev_dynamic_window_dev5_h800
+paper_facing: false
+paper_profile_version: paper-matrix-v1
+scenario_matrix: configs/scenarios/hzev_dynamic_window.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v2.yaml
+route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
+amv_profile:
+  name: amv-paper-v1
+  contract_version: '1'
+  coverage_enforcement: warn
+  required_dimensions:
+    use_case:
+    - delivery_robot
+    - shared_space_micromobility
+    context:
+    - sidewalk
+    - shared_space
+    speed_regime:
+    - walking_speed
+    - scooter_speed
+    maneuver_type:
+    - overtake
+    - crossing
+    - bottleneck
+seed_policy:
+  mode: fixed-list
+  seeds:
+  - 1001
+  - 1002
+  - 1003
+  - 1004
+  - 1005
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_contract:
+  enabled: true
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 123
+  calibration_trials: 6000
+workers: 1
+horizon: null
+dt: 0.1
+record_forces: true
+checkpoint_provenance_enforcement: error
+resume: false
+stop_on_failure: true
+bootstrap_samples: 300
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+kinematics_matrix:
+- differential_drive
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: true
+repository_url: https://github.com/ll7/robot_sf_ll7
+paper_interpretation_profile: baseline-ready-core
+planners:
+- key: stationary
+  algo: goal
+  planner_group: experimental
+  benchmark_profile: baseline-safe
+- key: goal
+  algo: goal
+  planner_group: core
+  benchmark_profile: baseline-safe
+- key: orca
+  algo: orca
+  planner_group: core
+  benchmark_profile: baseline-safe
+  socnav_missing_prereq_policy: fail-fast
+scenario_horizons: configs/benchmarks/hzev_dynamic_window_h800.yaml
+record_simulation_step_trace: true
+hzev:
+  evidence_status: diagnostic-only
+  source_template: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
+  source_template_sha256: 7ec9112d999e84e73675d7df4501aea0850ba072ab2ffc74943d22ea7d270223
+  diagnostic_horizon_steps: 800
+  stationary_command:
+  - 0.0
+  - 0.0
+  continue_after_terminal: true
+  park_after_goal: true
+  corridor_half_width_m: 1.5
+  corridor_clearance_m: 3.0
+  interaction_radius_m: 2.5
+  wait_speed_m_s: 2.0
+  turning_margin_s: 2.0

@@ -13,6 +13,11 @@ from typing import Any
 import numpy as np
 
 from robot_sf.common.math_utils import wrap_angle_pi_array
+from robot_sf.planner.goal_target import (
+    LEGACY_NEXT_GOAL_V1,
+    select_goal_target,
+    validate_goal_target_version,
+)
 from robot_sf.planner.risk_dwa import _wrap_angle
 from robot_sf.planner.socnav import (
     OccupancyAwarePlannerMixin,
@@ -51,6 +56,7 @@ class PredictiveMPPIConfig:
     min_linear_std: float = 0.05
     min_angular_std: float = 0.08
     goal_tolerance: float = 0.25
+    goal_target_version: str = LEGACY_NEXT_GOAL_V1
     max_linear_speed: float = 1.4
     max_angular_speed: float = 1.3
     near_distance: float = 0.7
@@ -74,9 +80,16 @@ class PredictiveMPPIConfig:
     progress_escape_speed: float = 0.55
     progress_escape_heading_gain: float = 1.5
 
+    def __post_init__(self) -> None:
+        """Validate the selected route contract before planner execution."""
+        validate_goal_target_version(self.goal_target_version)
+
 
 class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
     """Short-horizon sequence optimizer over learned pedestrian forecasts."""
+
+    # Observational only: the target chosen by the last ``plan`` call (world x, y).
+    _last_target_xy: tuple[float, float] | None = None
 
     def __init__(self, config: PredictiveMPPIConfig, *, allow_fallback: bool = False) -> None:
         """Initialize predictive optimizer and deterministic RNG state."""
@@ -104,7 +117,9 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         goal_current = self._predictor._as_1d_float(goal_state.get("current", [0.0, 0.0]), pad=2)[
             :2
         ]
-        goal = goal_next if np.linalg.norm(goal_next - robot_pos) > 1e-6 else goal_current
+        goal = select_goal_target(
+            robot_pos, goal_current, goal_next, version=self.config.goal_target_version
+        )
         return robot_pos, heading, speed, goal
 
     def _predict_future(self, observation: dict[str, object]) -> tuple[np.ndarray, np.ndarray, int]:
@@ -505,6 +520,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
     def plan(self, observation: dict[str, object]) -> tuple[float, float]:
         """Return the first action from the best sampled control sequence."""
         robot_pos, heading, _speed, goal = self._extract_state(observation)
+        self._last_target_xy = (float(goal[0]), float(goal[1]))
         if float(np.linalg.norm(goal - robot_pos)) <= float(self.config.goal_tolerance):
             return 0.0, 0.0
 
@@ -659,7 +675,10 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""
-        return {"planner_type": "PredictiveMPPIAdapter"}
+        return {
+            "planner_type": "PredictiveMPPIAdapter",
+            "planner_target_xy": list(self._last_target_xy) if self._last_target_xy else None,
+        }
 
     def foresight_diagnostics(self) -> dict[str, Any]:
         """Expose the nested predictor's checkpoint-load and fallback provenance.
@@ -699,6 +718,7 @@ def build_predictive_mppi_config(cfg: dict[str, object] | None) -> PredictiveMPP
         min_linear_std=float(cfg.get("min_linear_std", 0.05)),
         min_angular_std=float(cfg.get("min_angular_std", 0.08)),
         goal_tolerance=float(cfg.get("goal_tolerance", 0.25)),
+        goal_target_version=str(cfg.get("goal_target_version", LEGACY_NEXT_GOAL_V1)),
         max_linear_speed=float(cfg.get("max_linear_speed", 1.4)),
         max_angular_speed=float(cfg.get("max_angular_speed", 1.3)),
         near_distance=float(cfg.get("near_distance", 0.7)),

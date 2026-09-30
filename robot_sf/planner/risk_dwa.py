@@ -13,6 +13,11 @@ from typing import Any
 import numpy as np
 
 from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
+from robot_sf.planner.goal_target import (
+    LEGACY_NEXT_GOAL_V1,
+    select_goal_target,
+    validate_goal_target_version,
+)
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
 _DEFAULT_GOAL_PROGRESS_WEIGHT = 4.0
@@ -54,6 +59,7 @@ class RiskDWAPlannerConfig:
     rollout_dt: float = 0.2
     rollout_steps: int = 8
     goal_tolerance: float = 0.25
+    goal_target_version: str = LEGACY_NEXT_GOAL_V1
 
     linear_candidates: tuple[float, ...] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2)
     angular_candidates: tuple[float, ...] = (-1.2, -0.8, -0.4, 0.0, 0.4, 0.8, 1.2)
@@ -79,9 +85,16 @@ class RiskDWAPlannerConfig:
     progress_escape_speed: float = 0.45
     progress_escape_heading_gain: float = 1.4
 
+    def __post_init__(self) -> None:
+        """Validate the selected route contract before planner execution."""
+        validate_goal_target_version(self.goal_target_version)
+
 
 class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
     """Deterministic, non-learning dynamic-window style planner."""
+
+    # Observational only: the target chosen by the last ``plan`` call (world x, y).
+    _last_target_xy: tuple[float, float] | None = None
 
     def __init__(self, config: RiskDWAPlannerConfig | None = None) -> None:
         """Initialize adapter with an optional config override."""
@@ -103,7 +116,9 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
 
         goal_next = self._as_1d_float(goal_state.get("next", [0.0, 0.0]), pad=2)[:2]
         goal_current = self._as_1d_float(goal_state.get("current", [0.0, 0.0]), pad=2)[:2]
-        goal = goal_next if np.linalg.norm(goal_next - robot_pos) > 1e-6 else goal_current
+        goal = select_goal_target(
+            robot_pos, goal_current, goal_next, version=self.config.goal_target_version
+        )
 
         ped_positions_raw = ped_state.get("positions")
         ped_velocities_raw = ped_state.get("velocities")
@@ -372,6 +387,7 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return best unicycle command `(v, omega)` for the current observation."""
         robot_pos, heading, goal, ped_pos, ped_vel = self._extract_robot_goal_ped(observation)
+        self._last_target_xy = (float(goal[0]), float(goal[1]))
         grid_payload = self._cache_grid_payload(observation)
         to_goal = float(np.linalg.norm(goal - robot_pos))
         if to_goal <= float(self.config.goal_tolerance):
@@ -443,7 +459,15 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""
-        return {"planner_type": "RiskDWAPlannerAdapter"}
+        return {
+            "planner_type": "RiskDWAPlannerAdapter",
+            "planner_target_xy": list(self._last_target_xy) if self._last_target_xy else None,
+        }
+
+    @property
+    def last_target_xy(self) -> tuple[float, float] | None:
+        """Return the navigation target selected by the last ``plan`` call."""
+        return self._last_target_xy
 
 
 def build_risk_dwa_config(cfg: dict[str, Any] | None) -> RiskDWAPlannerConfig:
@@ -474,6 +498,7 @@ def build_risk_dwa_config(cfg: dict[str, Any] | None) -> RiskDWAPlannerConfig:
         rollout_dt=float(cfg.get("rollout_dt", 0.2)),
         rollout_steps=int(cfg.get("rollout_steps", 8)),
         goal_tolerance=float(cfg.get("goal_tolerance", 0.25)),
+        goal_target_version=str(cfg.get("goal_target_version", LEGACY_NEXT_GOAL_V1)),
         linear_candidates=linear_candidates,
         angular_candidates=angular_candidates,
         goal_progress_weight=float(cfg.get("goal_progress_weight", _DEFAULT_GOAL_PROGRESS_WEIGHT)),

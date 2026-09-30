@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
+import yaml
 
 from robot_sf.planner.predictive_mppi import (
     PredictiveMPPIAdapter,
@@ -181,6 +184,75 @@ def test_predictive_mppi_stops_at_goal() -> None:
     planner = PredictiveMPPIAdapter(cfg, allow_fallback=True)
     planner._predictor = _StubPredictor(np.zeros((0, 8, 2), dtype=np.float32))
     assert planner.plan(_obs(goal=(0.1, 0.0))) == (0.0, 0.0)
+
+
+def test_predictive_mppi_goal_target_versions_follow_route_contract() -> None:
+    """MPPI's optimizer tracks the current stage, including a final zero sentinel."""
+    legacy = PredictiveMPPIAdapter(
+        build_predictive_mppi_config({"sample_count": 8, "iterations": 1}), allow_fallback=True
+    )
+    corrected = PredictiveMPPIAdapter(
+        build_predictive_mppi_config(
+            {"goal_target_version": "active_waypoint_v2", "sample_count": 8, "iterations": 1}
+        ),
+        allow_fallback=True,
+    )
+    for planner in (legacy, corrected):
+        planner._predictor = _StubPredictor(np.zeros((0, 4, 2), dtype=np.float32))
+
+    first_stage = _obs(robot=(5.0, 5.0), goal=(8.0, 5.0))
+    first_stage["goal"]["next"] = np.asarray([8.0, 8.0])
+    final_stage = _obs(robot=(5.0, 5.0), goal=(8.0, 5.0))
+    final_stage["goal"]["next"] = np.zeros(2)
+
+    np.testing.assert_array_equal(legacy._extract_state(first_stage)[3], [8.0, 8.0])
+    np.testing.assert_array_equal(corrected._extract_state(first_stage)[3], [8.0, 5.0])
+    np.testing.assert_array_equal(legacy._extract_state(final_stage)[3], [0.0, 0.0])
+    np.testing.assert_array_equal(corrected._extract_state(final_stage)[3], [8.0, 5.0])
+
+    first_stage["goal"]["current"] = np.asarray([8.0, 8.0])
+    first_stage["goal"]["next"] = np.zeros(2)
+    np.testing.assert_array_equal(corrected._extract_state(first_stage)[3], [8.0, 8.0])
+
+    flat_final = {
+        "robot_position": np.asarray([5.0, 5.0]),
+        "robot_heading": np.asarray([0.0]),
+        "robot_speed": np.asarray([0.0]),
+        "goal_current": np.asarray([8.0, 5.0]),
+        "goal_next": np.zeros(2),
+        "pedestrians_positions": np.zeros((0, 2)),
+        "pedestrians_velocities": np.zeros((0, 2)),
+        "pedestrians_count": np.asarray([0]),
+    }
+    flat_legacy = PredictiveMPPIAdapter(build_predictive_mppi_config({}), allow_fallback=True)
+    flat_corrected = PredictiveMPPIAdapter(
+        build_predictive_mppi_config({"goal_target_version": "active_waypoint_v2"}),
+        allow_fallback=True,
+    )
+    np.testing.assert_array_equal(flat_legacy._extract_state(flat_final)[3], [0.0, 0.0])
+    np.testing.assert_array_equal(flat_corrected._extract_state(flat_final)[3], [8.0, 5.0])
+
+    at_stage = _obs(robot=(8.0, 5.0), goal=(8.0, 5.0))
+    at_stage["goal"]["next"] = np.asarray([8.0, 8.0])
+    assert corrected.plan(at_stage) == (0.0, 0.0)
+    assert legacy.plan(at_stage)[0] > 0.0
+
+
+def test_predictive_mppi_v2_config_changes_only_route_selector() -> None:
+    """The new YAML binds the correction without mutating historical settings."""
+    legacy_path = Path("configs/algos/predictive_mppi_camera_ready.yaml")
+    corrected_path = Path("configs/algos/predictive_mppi_camera_ready_goal_v2.yaml")
+    legacy = yaml.safe_load(legacy_path.read_text())
+    corrected = yaml.safe_load(corrected_path.read_text())
+    assert corrected.pop("goal_target_version") == "active_waypoint_v2"
+    assert corrected == legacy
+    assert build_predictive_mppi_config(legacy).goal_target_version == "legacy_next_goal_v1"
+
+
+def test_predictive_mppi_goal_target_version_fails_closed() -> None:
+    """An unknown release selector cannot silently fall back to historical behavior."""
+    with pytest.raises(ValueError, match="Unsupported goal_target_version"):
+        build_predictive_mppi_config({"goal_target_version": "unknown"})
 
 
 def test_predictive_mppi_falls_back_to_stop_for_immediate_conflict() -> None:

@@ -7,11 +7,18 @@ within an explicitly documented tolerance on a fixed seed/observation set.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
+import yaml
 
 from robot_sf.common.math_utils import wrap_angle_pi
-from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, RiskDWAPlannerConfig
+from robot_sf.planner.risk_dwa import (
+    RiskDWAPlannerAdapter,
+    RiskDWAPlannerConfig,
+    build_risk_dwa_config,
+)
 
 
 def _observation(
@@ -63,6 +70,63 @@ def _flat_observation(
         "pedestrians_velocities": np.asarray(pedestrian_velocities, dtype=float),
         "pedestrians_count": np.asarray([count], dtype=float),
     }
+
+
+def test_risk_dwa_goal_target_versions_follow_route_contract() -> None:
+    """V2 tracks the active stage and ignores the absent-next zero sentinel."""
+    legacy = RiskDWAPlannerAdapter(build_risk_dwa_config({}))
+    corrected = RiskDWAPlannerAdapter(
+        build_risk_dwa_config({"goal_target_version": "active_waypoint_v2"})
+    )
+    first_stage = _observation(robot=(5.0, 5.0), goal=(8.0, 5.0))
+    first_stage["goal"]["next"] = np.asarray([8.0, 8.0])
+    final_stage = _observation(robot=(5.0, 5.0), goal=(8.0, 5.0))
+    final_stage["goal"]["next"] = np.zeros(2)
+
+    np.testing.assert_array_equal(legacy._extract_robot_goal_ped(first_stage)[2], [8.0, 8.0])
+    np.testing.assert_array_equal(corrected._extract_robot_goal_ped(first_stage)[2], [8.0, 5.0])
+    np.testing.assert_array_equal(legacy._extract_robot_goal_ped(final_stage)[2], [0.0, 0.0])
+    np.testing.assert_array_equal(corrected._extract_robot_goal_ped(final_stage)[2], [8.0, 5.0])
+
+    first_stage["goal"]["current"] = np.asarray([8.0, 8.0])
+    first_stage["goal"]["next"] = np.zeros(2)
+    np.testing.assert_array_equal(corrected._extract_robot_goal_ped(first_stage)[2], [8.0, 8.0])
+
+    flat_final = {
+        "robot_position": np.asarray([5.0, 5.0]),
+        "robot_heading": np.asarray([0.0]),
+        "robot_speed": np.asarray([0.0]),
+        "goal_current": np.asarray([8.0, 5.0]),
+        "goal_next": np.zeros(2),
+        "pedestrians_positions": np.zeros((0, 2)),
+        "pedestrians_velocities": np.zeros((0, 2)),
+        "pedestrians_count": np.asarray([0]),
+    }
+    np.testing.assert_array_equal(legacy._extract_robot_goal_ped(flat_final)[2], [0.0, 0.0])
+    np.testing.assert_array_equal(corrected._extract_robot_goal_ped(flat_final)[2], [8.0, 5.0])
+
+    # At the active stage, only v2 stops; v1 still drives toward the later waypoint.
+    at_stage = _observation(robot=(8.0, 5.0), goal=(8.0, 5.0))
+    at_stage["goal"]["next"] = np.asarray([8.0, 8.0])
+    assert corrected.plan(at_stage) == (0.0, 0.0)
+    assert legacy.plan(at_stage)[0] > 0.0
+
+
+def test_risk_dwa_v2_config_changes_only_route_selector() -> None:
+    """The new YAML binds the correction without mutating historical settings."""
+    legacy_path = Path("configs/algos/risk_dwa_camera_ready.yaml")
+    corrected_path = Path("configs/algos/risk_dwa_camera_ready_goal_v2.yaml")
+    legacy = yaml.safe_load(legacy_path.read_text())
+    corrected = yaml.safe_load(corrected_path.read_text())
+    assert corrected.pop("goal_target_version") == "active_waypoint_v2"
+    assert corrected == legacy
+    assert build_risk_dwa_config(legacy).goal_target_version == "legacy_next_goal_v1"
+
+
+def test_risk_dwa_goal_target_version_fails_closed() -> None:
+    """An unknown release selector cannot silently fall back to historical behavior."""
+    with pytest.raises(ValueError, match="Unsupported goal_target_version"):
+        build_risk_dwa_config({"goal_target_version": "unknown"})
 
 
 def _scalar_rollout_score(  # noqa: PLR0913

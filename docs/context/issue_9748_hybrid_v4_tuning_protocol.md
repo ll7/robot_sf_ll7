@@ -3,14 +3,16 @@
 
 Current execution uses `issue_9748_hybrid_v4_dev_split_v2.yaml` and its
 hash-pinned authored schedule: doorway/group crossing H500, perpendicular
-traffic/crowd navigation H400. The original v1 inputs and recorded H600 tuning
-log are retained unchanged. That log and the frozen v4 parameters selected from
-it do **not** establish tuning under the v2 horizons. No retuning is performed
-by this migration. The details below describe the historical v1 protocol; use
+traffic/crowd navigation H400. The original v1 config declared H600, but its
+simulator already used those same authored budgets: 500/500/400/400. Main's
+runner cap did not extend them. There is no effective tuning-budget mismatch
+with 0.0.8 (corrected D-054). The original v1 inputs, recorded log and frozen v4
+parameters stay byte-identical; no retuning is performed by this migration.
+The details below describe the historical v1 declared protocol; use
 `--config configs/benchmarks/issue_9748_hybrid_v4_dev_split_v2.yaml` for current
-preflight/validation. The tuning runner now selects v2 and still requires native,
-complete, nondegraded development cells. Any future run needs a new frozen input
-closure and a new log; the v1 log must not be rebound to v2.
+preflight/validation. Any future run needs a new frozen input closure and log;
+the v1 log must not be rebound to v2. Native, complete, nondegraded development
+cells remain required.
 
 This note defines the development split for hybrid v4 and records the boundary
 between a tuning protocol and benchmark evidence. It does not report tuning

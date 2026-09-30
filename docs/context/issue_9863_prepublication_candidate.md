@@ -45,4 +45,4 @@ The 0.0.8 template now replaces H600 with the hash-pinned authored schedule. The
 candidate matrix declares `horizon_mode: scenario_horizons`, the schedule path and
 SHA-256; the schedule is included in `sha256_files` and must preserve every authored
 limit. This diagnostic contract does not waive the separate publication protocol's
-fixed-H600 gates or authorize promotion, release execution or claim admission.
+independently pinned schedule gates or authorize promotion, release execution or claim admission.

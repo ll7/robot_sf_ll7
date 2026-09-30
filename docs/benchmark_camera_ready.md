@@ -64,8 +64,9 @@ scripts/dev/run_worktree_shared_venv.sh -- python scripts/tools/generate_authore
 
 Omit `--check` to regenerate, then explicitly update the template's SHA-256 and
 review the budgets. Candidate manifests pin the schedule and declare its mode.
-Publication-manifest admission remains a separate contract; existing fixed-H600
-publication gates are not waived by diagnostic candidate acceptance.
+Publication-manifest admission independently binds the authored schedule.
+Full publication still requires complete evidence; diagnostic candidate
+acceptance alone does not authorize it.
 Published 0.0.7 rows remain immutable and require their old source for reproduction.
 See the [HZN audit](context/issue_9668_campaign_horizon_authority.md) for recorded
 budget exposure and the 2026-09-30 author ruling. No recovered-success claim follows.

@@ -13,8 +13,6 @@ import yaml
 
 from robot_sf.benchmark import release_doctor
 
-pytestmark = pytest.mark.usefixtures("historical_horizon_policy")
-
 
 def _result(
     command: list[str],

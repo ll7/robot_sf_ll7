@@ -39,6 +39,7 @@ from robot_sf.benchmark.camera_ready._config_types import (
     SnqiContractConfig,
     TuningSpec,
 )
+from robot_sf.benchmark.camera_ready._historical_horizons import HISTORICAL_CAMPAIGN_REGISTRY
 from robot_sf.benchmark.camera_ready._util import _repo_relative
 from robot_sf.benchmark.latency.latency_stress import (
     load_latency_stress_profile,
@@ -506,15 +507,15 @@ def _load_scenario_horizon_schedule(path: Path) -> dict[str, dict[str, Any]]:
 
 
 def _validate_horizon_policy(policy: str | None, protocol_version: str | None) -> None:
-    """Fence authored-budget extension to explicitly identified historical protocols."""
+    """Fence historical runner caps to identified historical protocols."""
     if policy is None:
         return
-    if policy != "legacy_fixed_extends_authored":
+    if policy != "legacy_runner_cap":
         raise ValueError(f"Unknown horizon_policy: {policy!r}")
-    match = re.fullmatch(r"0\.0\.([2-7])", str(protocol_version))
+    match = re.fullmatch(r"(?:0\.0\.[2-7]|0\.0\.3\.post1)", str(protocol_version))
     if match is None:
         raise ValueError(
-            "legacy_fixed_extends_authored requires historical protocol_version 0.0.2–0.0.7; "
+            "legacy_runner_cap requires historical protocol_version 0.0.2–0.0.7; "
             "0.0.8+ and unidentified configs are refused"
         )
 
@@ -526,13 +527,13 @@ def _apply_fixed_campaign_horizon(
     horizon_policy: str | None = None,
     protocol_version: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Bind a fixed budget, extending authored limits only for explicit historical protocols.
+    """Bind a fixed budget; historical runner caps keep the authored simulator limit.
 
     Returns:
         Copied scenarios with the fixed episode budget, or the original list in scenario mode.
     """
     _validate_horizon_policy(horizon_policy, protocol_version)
-    legacy = horizon_policy == "legacy_fixed_extends_authored"
+    legacy = horizon_policy == "legacy_runner_cap"
     if horizon is None or horizon <= 0:
         return scenarios
     patched_scenarios = []
@@ -554,7 +555,8 @@ def _apply_fixed_campaign_horizon(
                 f"Scenario '{_campaign_scenario_id(scenario)}' authored limit {authored_limit} "
                 f"is below fixed horizon {horizon}; declare scenario_horizons explicitly"
             )
-        simulation_config["max_episode_steps"] = int(horizon)
+        if not legacy:
+            simulation_config["max_episode_steps"] = int(horizon)
         metadata["campaign_horizon"] = {
             "mode": "fixed",
             "horizon_steps": int(horizon),
@@ -564,7 +566,10 @@ def _apply_fixed_campaign_horizon(
             metadata["scenario_horizon"] = {
                 "policy": horizon_policy,
                 "authored_max_episode_steps": authored_limit,
-                "applied_max_episode_steps": int(horizon),
+                "runner_horizon": int(horizon),
+                "applied_max_episode_steps": min(int(authored_limit), int(horizon))
+                if authored_limit is not None
+                else int(horizon),
             }
         patched_scenarios.append(patched)
     return patched_scenarios
@@ -809,6 +814,17 @@ def _apply_radius_sweep_binding(
     return patched_scenarios
 
 
+def _refuse_reserved_horizon_metadata(scenario: Mapping[str, Any]) -> None:
+    """Input scenarios cannot supply trusted horizon admission provenance."""
+    metadata = scenario.get("metadata", {})
+    if isinstance(metadata, Mapping) and any(
+        key in metadata for key in ("campaign_horizon", "scenario_horizon")
+    ):
+        raise ValueError(
+            "Input scenario metadata.campaign_horizon and metadata.scenario_horizon are reserved admission keys"
+        )
+
+
 def _load_campaign_scenarios(
     cfg: CampaignConfig, repository_root: Path | None = None
 ) -> list[dict[str, Any]]:
@@ -826,6 +842,7 @@ def _load_campaign_scenarios(
     normalized: list[dict[str, Any]] = []
     repo_root = (repository_root or get_repository_root()).resolve()
     for scenario in scenarios:
+        _refuse_reserved_horizon_metadata(scenario)
         patched = dict(scenario)
         map_file = patched.get("map_file")
         if isinstance(map_file, str):
@@ -931,7 +948,7 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
         )
     _validate_horizon_policy(cfg.horizon_policy, cfg.protocol_version)
     if cfg.horizon_policy is not None and cfg.scenario_horizons_path is not None:
-        raise ValueError("legacy_fixed_extends_authored cannot be combined with scenario_horizons")
+        raise ValueError("legacy_runner_cap cannot be combined with scenario_horizons")
     if cfg.scenario_horizons_path is not None:
         if cfg.scenario_horizons_sha256 is not None:
             observed = hashlib.sha256(cfg.scenario_horizons_path.read_bytes()).hexdigest()
@@ -1791,6 +1808,13 @@ def load_campaign_config(path: Path, *, repository_root: Path | None = None) -> 
     payload = yaml.safe_load(source_config_bytes.decode("utf-8")) or {}
     if not isinstance(payload, dict):
         raise ValueError(f"Campaign config must be a mapping: {config_path}")
+
+    historical = HISTORICAL_CAMPAIGN_REGISTRY.get(hashlib.sha256(source_config_bytes).hexdigest())
+    if historical is not None:
+        payload = {**payload, "protocol_version": historical[0], "horizon_policy": historical[1]}
+    elif payload.get("horizon_policy") is not None:
+        _validate_horizon_policy(payload["horizon_policy"], payload.get("protocol_version"))
+        raise ValueError("legacy_runner_cap requires exact historical content registry admission")
 
     base_dir = config_path.parent
     name = str(payload.get("name") or config_path.stem)

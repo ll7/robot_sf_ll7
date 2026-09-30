@@ -176,9 +176,11 @@ the real-template schedule control keeps the authored bottleneck H500.
 The complete 0.0.7 comparator fixture file is part of validation.
 
 DOI-free candidate admission now declares and pins the schedule rather than H600.
-This does not change publication-manifest admission or admit release/claim evidence.
-The old fixed-H600 publication gates require a separate source-bound protocol update
-before a scheduled candidate can be promoted; they remain fail-closed.
+Publication-manifest admission independently binds the authored schedule and
+full-release acceptance checks each row against that schedule. Historical
+configs enter through an exact content registry with `legacy_runner_cap`: the
+authored simulator limit and runner cap 600 reproduce main without extension.
+These protocol checks alone do not admit release/claim evidence.
 
 Validation and exact-head delivery receipts are recorded in the HZN3 lane report.
 Only development-seed simulator diagnostics and static reconstruction run here.

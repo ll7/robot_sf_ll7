@@ -28,9 +28,6 @@ from robot_sf.benchmark.zenodo_publisher import (
     write_state,
 )
 
-pytestmark = pytest.mark.usefixtures("historical_horizon_policy")
-
-
 _MANIFEST_PATH = Path("configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml")
 
 

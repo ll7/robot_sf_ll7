@@ -20,8 +20,6 @@ from robot_sf.benchmark.camera_ready import _run_state as camera_ready_run_state
 from robot_sf.benchmark.release_doctor import ReleaseDoctorCheck
 from robot_sf.cli import main as robot_sf_main
 
-pytestmark = pytest.mark.usefixtures("historical_horizon_policy")
-
 
 def _scheduler_closeout_fixture(*, state: str = "COMPLETED") -> dict[str, Any]:
     """Return a small receipt fixture for the final scheduler gate."""
@@ -114,7 +112,7 @@ def test_scheduler_closeout_check_requires_explicit_final_identity(tmp_path: Pat
 
 
 def test_manifest_doctor_admits_explicit_historical_h600() -> None:
-    """Historical cardinality cannot authorize extending an authored H500 limit."""
+    """The real historical manifest retains its 20160-cell doctor contract."""
     check, manifest, cfg = release_doctor._manifest_check(
         Path(
             "configs/benchmarks/releases/"
@@ -123,8 +121,9 @@ def test_manifest_doctor_admits_explicit_historical_h600() -> None:
         20160,
     )
     assert check.status == "pass", check.summary
+    assert "20160-cell" in check.summary
     assert manifest is not None
-    assert cfg.horizon_policy == "legacy_fixed_extends_authored"
+    assert cfg.horizon_policy == "legacy_runner_cap"
     assert len(release_doctor._load_campaign_scenarios(cfg)) == 48
     from dataclasses import replace
 

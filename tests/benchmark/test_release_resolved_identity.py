@@ -135,7 +135,9 @@ def test_checked_in_future_benchmark_templates_pin_contract_without_historical_i
         "scenarios": 48,
         "seeds": 30,
         "expected_episode_cells": 20160,
-        "horizon_steps": 600,
+        "horizon_steps": None,
+        "scenario_horizons": "../horizon_schedules/release_0_0_8_authored_v1.yaml",
+        "scenario_horizons_sha256": "3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650",
         "dt": 0.1,
     }
     scenario_matrix = (
@@ -981,3 +983,78 @@ def test_acceptance_resolves_axes_and_planners_from_resolved_manifest(
     assert legacy_scenario_ids == scenario_ids
     assert legacy_seeds == seeds
     assert len(release_acceptance._full_release_planner_items(legacy_planners)) == 14
+
+
+@pytest.mark.parametrize("mutation", [None, "missing_manifest_pin", "fixed_horizon"])
+def test_resolved_mixed_budget_manifest_uses_independent_schedule_pins(tmp_path, mutation):
+    """Real manifest bytes resolve mixed budgets; held-out seeds are identity data only."""
+    from collections import Counter
+
+    repo, template, _source = _release_template_repository(tmp_path)
+    budgets = [400] * 25 + [500] * 13 + [600] * 8 + [650, 700]
+    scenarios = [
+        {"name": f"scenario_{index:02d}", "simulation_config": {"max_episode_steps": budget}}
+        for index, budget in enumerate(budgets)
+    ]
+    _write_yaml(repo / "scenarios.yaml", scenarios)
+    schedule = repo / "horizons.yaml"
+    _write_yaml(
+        schedule,
+        {
+            "schema_version": 1,
+            "scenarios": {
+                row["name"]: {
+                    "recommended_horizon_steps": row["simulation_config"]["max_episode_steps"]
+                }
+                for row in scenarios
+            },
+        },
+    )
+    campaign_path = repo / "campaign.yaml"
+    campaign = yaml.safe_load(campaign_path.read_text())
+    campaign.update(
+        protocol_version="0.0.8",
+        horizon=None,
+        scenario_horizons=schedule.name,
+        scenario_horizons_sha256=_sha256(schedule),
+    )
+    _write_yaml(campaign_path, campaign)
+    payload = yaml.safe_load(template.read_text())
+    payload["campaign_config_sha256"] = _sha256(campaign_path)
+    payload["scenario"]["matrix_sha256"] = _sha256(repo / "scenarios.yaml")
+    payload["matrix"].update(
+        horizon_steps=None,
+        scenario_horizons=schedule.name,
+        scenario_horizons_sha256=_sha256(schedule),
+    )
+    if mutation == "missing_manifest_pin":
+        payload["matrix"].pop("scenario_horizons_sha256")
+    elif mutation == "fixed_horizon":
+        payload["matrix"]["horizon_steps"] = 600
+    _write_yaml(template, payload)
+    _git(repo, "add", "scenarios.yaml", "horizons.yaml", "campaign.yaml", "release.template.yaml")
+    _git(repo, "commit", "-qm", "fixture: freeze independent authored schedule")
+    source = _git(repo, "rev-parse", "HEAD")
+    output = repo / "output/mixed/release_identity.resolved.json"
+    if mutation is not None:
+        expected = (
+            "scenario_horizons_sha256"
+            if mutation == "missing_manifest_pin"
+            else "cannot be combined"
+        )
+        with pytest.raises(ValueError, match=expected):
+            write_resolved_release_identity(
+                output_path=output, **_identity_inputs(repo, template, source)
+            )
+        return
+    write_resolved_release_identity(output_path=output, **_identity_inputs(repo, template, source))
+    manifest = load_release_manifest(output, repository_root=repo)
+    cfg = load_release_campaign_config(manifest, repository_root=repo)
+    report = release_protocol.validate_release_manifest(
+        manifest, campaign_config=cfg, repository_root=repo
+    )
+    assert report["status"] == "valid", report["problems"]
+    resolved = release_protocol.resolve_release_horizon_budgets(manifest, cfg)
+    assert Counter(resolved.values()) == {400: 25, 500: 13, 600: 8, 650: 1, 700: 1}
+    assert manifest.expected_horizon_steps is None
+    assert manifest.scenario_horizons_sha256 == _sha256(schedule)

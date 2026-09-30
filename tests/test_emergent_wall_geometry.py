@@ -6,6 +6,7 @@ import pytest
 from robot_sf.research.emergent_phenomena import (
     RELEASED_DEFAULT_CALIBRATION,
     ScenarioConfig,
+    build_bidirectional_corridor,
     build_high_density_exit,
     build_narrow_doorway,
 )
@@ -14,6 +15,7 @@ from robot_sf.research.emergent_phenomena import (
 @pytest.mark.parametrize(
     "builder,expected",
     [
+        (build_bidirectional_corridor, [(-1, 13, 2, 2), (-1, 13, -2, -2)]),
         (
             build_narrow_doorway,
             [(-1, 13, 2, 2), (-1, 13, -2, -2), (5.25, 5.25, 0.7, 3), (5.25, 5.25, -0.7, -3)],
@@ -29,9 +31,9 @@ from robot_sf.research.emergent_phenomena import (
             ],
         ),
     ],
-    ids=["offset_doorway", "custom_exit_width"],
+    ids=["custom_corridor", "offset_doorway", "custom_exit_width"],
 )
-def test_custom_jambs_use_pysf_axis_order(builder, expected):
+def test_custom_walls_use_pysf_axis_order(builder, expected):
     """Hand-written (x1,x2,y1,y2) walls catch endpoint-order regressions."""
     config = ScenarioConfig(
         name="construction_only",

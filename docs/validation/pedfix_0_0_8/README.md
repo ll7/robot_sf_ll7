@@ -4,6 +4,38 @@ Implementation verification and development-seed diagnostics only. This is not r
 
 Base: `32b58d273f3dbdec72a385844cb8c100f8581136`. Final runtime source: `e8af63df613529517472671a891e4e684540ac5c`. Later commits add evidence only. Release input: `configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml`; roster: `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml`.
 
+## PEDFIX2 review corrections
+
+The archived measurements below retain their original source pins and concern the
+pre-review group law. They are historical diagnostics, not measurements of the
+corrected fraction law. The refute review attributed outcome shifts to crowd
+re-realization noise, apart from the intended groups effect; it accepted the
+private streams and relocation contract.
+
+With the corrected pedestrian-fraction law, actual reset populations over seeds
+1001–1030 give:
+
+| Group-crossing scenario | Target | Reviewed law | Corrected law | Grouped / total pedestrians |
+| --- | ---: | ---: | ---: | ---: |
+| low | 0.5 | 0.4000 | 0.4000 | 24 / 60 |
+| medium | 0.5 | 0.6000 | 0.4778 | 43 / 90 |
+| high | 0.5 | 0.5417 | 0.4667 | 56 / 120 |
+
+These scenarios instantiate only 2, 3, and 4 pedestrians per reset. Last-group
+truncation and the 30-seed sample affect realised fractions; the distribution's
+size-weighted expectation is exactly 0.5 before finite-population truncation.
+The two stationary-contact checks have been removed: their audit realizations
+needed no relocation. Forced-overlap tests protect reaction clearance, route
+velocity, and a waypoint inside the robot instead.
+
+Known consumed simulation overrides include route-reset placement and the canonical
+`time_per_step_in_secs`, applied before converting episode steps to duration.
+Misplaced scaffold `robot_config` and speed-limit `single_pedestrians` now live at
+their top-level consumers. Unsupported crossing-time offsets stay in rare-event
+parameter metadata; measured and declared counts live in population-realization
+metadata. Rebuilding runtime-written scenario dictionaries is tested. Unknown
+simulation keys still fail closed.
+
 ## Changed contracts
 
 Pedestrian placement, group-size draws, zone goals, route-end respawns, archetypes, response-law assignments, desired-speed sampling and the controlled ego pedestrian use private NumPy generators. `SeedSequence(episode_seed).spawn(4)` derives placement, archetype, response-law and desired-speed streams; explicit per-feature seed overrides remain supported. Robot-exclusion retries use a separate child stream, so extra retries do not consume the unguarded respawn stream. Robot route sampling retains its existing seeded global context; the pedestrian zone helper retains a global fallback only for compatibility. Seeded resets rebuild pedestrian population and behavior streams, including navigators. Unseeded construction uses private entropy only when no pedestrian episode seed was supplied. Shared-world creation/reset, map-runner episodes, direct seeded diagnostic callers, and counterfactual fixtures thread that seed explicitly. Unseeded ego resets advance their stream; explicit seeded resets rebuild it. Episode pedestrian seeds are excluded from the environment configuration hash; absent groups retain the historical hash.

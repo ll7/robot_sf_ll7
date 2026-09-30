@@ -260,3 +260,14 @@ def test_feature_seed_without_episode_seed_avoids_entropy():
         return sim.pysf_sim.peds.max_speeds.copy()
 
     np.testing.assert_array_equal(speeds(), speeds())
+
+
+def test_timestep_override_is_normalized_before_episode_horizon():
+    """A canonical timestep sets physical duration and stays numeric in the config."""
+    scenario = next(
+        s for s in load_scenarios(SCENARIOS) if s["name"] == "classic_group_crossing_high"
+    )
+    scenario["simulation_config"].update(time_per_step_in_secs="0.2", max_episode_steps=5)
+    config = build_env_config(scenario, scenario_path=SCENARIOS)
+    assert config.sim_config.time_per_step_in_secs == 0.2
+    assert config.sim_config.sim_time_in_secs == 1.0

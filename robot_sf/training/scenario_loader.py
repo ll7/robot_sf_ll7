@@ -2920,7 +2920,6 @@ def _apply_residual_adversary_override(
 _SIMULATION_OVERRIDE_ATTRS = (
     "peds_speed_mult",
     "peds_reset_follow_route_at_start",
-    "time_per_step_in_secs",
     "action_latency_steps",
     "action_latency_ms",
     "pedestrian_integration_scheme",
@@ -2962,6 +2961,7 @@ def _apply_simulation_overrides(  # noqa: C901
     if not isinstance(overrides, Mapping):
         raise ValueError("simulation_config must be a mapping")
     supported = set(_SIMULATION_OVERRIDE_ATTRS) | {
+        "time_per_step_in_secs",
         "max_episode_steps",
         "difficulty",
         "ped_density",

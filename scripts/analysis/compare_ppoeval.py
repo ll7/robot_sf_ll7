@@ -157,7 +157,7 @@ def compare(inputs):
                 if "scenario_id" not in r or "metrics" not in r:
                     continue
                 name = r["scenario_id"]
-                arm = r["algorithm_metadata"].get("algorithm")
+                arm = r.get("algo")
                 if (
                     arm not in {"ppo", "guarded_ppo"}
                     or name not in FAMILIES
@@ -194,8 +194,8 @@ def main():
     inputs = {}
     for item in args.run:
         variant, path = item.split("=", 1)
-        if variant in inputs or variant not in {"v1", "v2", "v3"}:
-            raise ValueError("Unique v1/v2/v3 run names required")
+        if variant in inputs or variant not in {"v1", "v2", "v3", "a1", "a2", "a3", "a4", "a5"}:
+            raise ValueError("Unique v1/v2/v3/a1/a2/a3/a4/a5 run names required")
         inputs[variant] = Path(path)
     report = compare(inputs)
     args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -67,6 +67,8 @@ def test_ppo_only_manifest_slice_verifies_against_subset(tmp_path: Path, monkeyp
         ("MANIFEST_PATH", MANIFEST_PATH, "manifest_sha256"),
     ):
         development = json.loads(source.read_text(encoding="utf-8"))
+        if "source_git_hashes" in development["source"]:
+            development["source"]["source_git_hashes"] = [source_revision]
         for target in development["targets"]:
             if 111 <= int(target["seed"]) <= 140:
                 target["seed"] = int(target["seed"]) + 890

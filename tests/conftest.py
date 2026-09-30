@@ -413,6 +413,8 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Train coverage repair: deterministic resume job identity contracts (#10029).
+    "test_resume_plan.py",
     # Train coverage repair: deterministic PPO action contracts (#9995).
     "test_ppo_action_semantics.py",
     # TRAIN1 deterministic benchmark contracts from PR #10019.

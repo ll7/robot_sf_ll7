@@ -10,7 +10,8 @@ Verifies that the resume plan:
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -26,9 +27,6 @@ from robot_sf.benchmark.camera_ready._resume_plan import (
     write_resume_plan,
 )
 from robot_sf.benchmark.utils import _config_hash
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _write_manifest(
@@ -516,3 +514,50 @@ class TestFullResumePlanFlow:
         _write_manifest(campaign_root, campaign_id="other", config_hash="old")
         with pytest.raises(ResumeMismatchError, match="campaign-id mismatch"):
             verify_resume_context(campaign_root, campaign_id="this", config_hash="current")
+
+
+@pytest.mark.parametrize("case", ["valid", "duplicate", "unexpected", "malformed"])
+def test_map_resume_matches_saved_rows_to_declared_jobs(case):
+    """Resume uses three distinct declared map jobs and fails closed on corrupt identities."""
+    runs = (
+        Path(__file__).resolve().parents[1] / "fixtures" / "train_resume_identities" / case / "runs"
+    )
+    scenarios = [
+        {"name": "a", "map_file": "a.svg", "seeds": [1001, 1002], "repeats": 4},
+        {"scenario_id": "b", "simulation_config": {}, "seeds": [1003]},
+    ]
+    kwargs = {
+        "planners": [{"key": "sf"}],
+        "kinematics_matrix": ["differential_drive"],
+        "scenarios": scenarios,
+    }
+    if case != "valid":
+        with pytest.raises(ResumeMismatchError, match=case + " resume job identity"):
+            build_resume_plan(runs, **kwargs)
+    else:
+        verdict = build_resume_plan(runs, **kwargs)[0]
+        assert (verdict.expected_total, verdict.episodes_found, verdict.episodes_remaining) == (
+            3,
+            2,
+            1,
+        )
+        assert verdict.verdict == "continue-from-2"
+
+
+@pytest.mark.parametrize("bad_plan", ["duplicate", "stale_count"])
+def test_map_resume_rejects_ambiguous_plan_or_stale_denominator(tmp_path, bad_plan):
+    """A duplicate logical job or obsolete repeat-based count cannot authorize resume."""
+    scenarios = [{"name": "a", "map_file": "a.svg", "seeds": [1001, 1002]}]
+    kwargs = {}
+    if bad_plan == "duplicate":
+        scenarios += [{"name": "a", "map_file": "a.svg", "seeds": [1002]}]
+    else:
+        kwargs["expected_jobs"] = 1
+    with pytest.raises(ValueError, match="duplicate job identities|expected_jobs disagrees"):
+        build_resume_plan(
+            tmp_path,
+            planners=[{"key": "sf"}],
+            kinematics_matrix=["differential_drive"],
+            scenarios=scenarios,
+            **kwargs,
+        )

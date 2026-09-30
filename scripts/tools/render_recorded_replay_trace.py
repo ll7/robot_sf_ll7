@@ -47,7 +47,7 @@ def _validate_trace_payload(
 ) -> None:
     """Check the extracted sample schema and its byte-level digest binding."""
     if trace.get("schema_version") not in {"simulation-step-trace.v1", "simulation-step-trace.v2"}:
-        raise ValueError("trace must use simulation-step-trace.v1")
+        raise ValueError("trace must use simulation-step-trace.v1 or simulation-step-trace.v2")
     if provenance.get("schema_version") != "issue_9647_recorded_trace_provenance.v1":
         raise ValueError("provenance must use issue_9647_recorded_trace_provenance.v1")
     trace_binding = provenance.get("trace")

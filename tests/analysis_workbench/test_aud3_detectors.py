@@ -30,7 +30,8 @@ def test_named_force_record_validates_each_physical_quantile(field, value):
     # Explicit missingness and valid zero magnitude remain admitted.
     row["metrics"]["force_quantiles"][field] = None
     assert signal([row], "extreme_measurements", "named").status == "clear"
-    row["metrics"]["force_quantiles"][field] = 0
+    # The zero control must also obey the ordered-quantile contract.
+    row["metrics"]["force_quantiles"] = {"q50": 0, "q90": 0, "q95": 0}
     assert signal([row], "extreme_measurements", "named").status == "clear"
     for invalid in (float("nan"), float("inf"), -float("inf")):
         row["metrics"]["force_quantiles"][field] = invalid
@@ -174,7 +175,11 @@ def test_every_recorded_maximum_is_checked_independently(limit, outcome, other_l
             item.startswith("episode_steps_exceed_") for item in control.measured["signatures"]
         )
         if outcome in {"success", "collision", "failure"}:
-            assert control.status == "clear"
+            # All three-limit fixtures intentionally have an inconsistent budget;
+            # early termination does not repair that configuration contract.
+            assert control.status == ("flagged" if other_limits_present else "clear")
+            if other_limits_present:
+                assert "effective_budget_not_minimum_limit" in control.measured["signatures"]
     row["scenario_params"] = {}
     assert signal([row], "horizon_consistency", "limit").status == "unavailable"
     for invalid in (True, "400", -1, 1.5, {}, []):

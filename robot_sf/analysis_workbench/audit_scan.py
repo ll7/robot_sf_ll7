@@ -38,6 +38,7 @@ from robot_sf.analysis_workbench.audit_detectors import (
     DETECTOR_ENGINE_VERSION,
     DetectorRegistry,
     DetectorSpec,
+    cohort_drop_counts,
     cohort_shards,
     default_registry,
     detect,
@@ -2386,6 +2387,29 @@ def scan_campaign(  # noqa: C901, PLR0912, PLR0915
         detector_id: cohort_shards(readable_rows, active_registry.get(detector_id))
         for detector_id in selected_ids
     }
+    # Retain admission-loss accounting independently of the admitted peer rows.
+    # Raw corrupt values never enter detector calculations.
+    dropped_rows: list[Mapping[str, Any] | None] = []
+    for item in inventory:
+        if item.readable:
+            continue
+        matches = rows_by_id.get(item.episode_id, [])
+        if not matches:
+            dropped_rows.append(None)
+        for raw, _line, _status, _reason in matches:
+            if isinstance(raw, Mapping):
+                rejected = dict(raw)
+                rejected.setdefault("campaign_digest", audit.campaign_digest)
+                rejected.setdefault("campaign_id", expected_campaign_identity)
+                dropped_rows.append(rejected)
+            else:
+                dropped_rows.append(None)
+    dropped_counts = {
+        detector_id: cohort_drop_counts(
+            readable_rows, dropped_rows, active_registry.get(detector_id)
+        )
+        for detector_id in selected_ids
+    }
     signals: list[Signal] = []
     # A non-readable expected row still receives an explicit attempt result so
     # unavailable/error accounting cannot disappear into an omitted denominator.
@@ -2406,6 +2430,7 @@ def scan_campaign(  # noqa: C901, PLR0912, PLR0915
                     detector_id,
                     row,
                     cohort=shards[detector_id].get(item.episode_id, ()),
+                    cohort_dropped_counts=dropped_counts[detector_id].get(item.episode_id, {}),
                     config=config_mapping,
                     registry=active_registry,
                 )

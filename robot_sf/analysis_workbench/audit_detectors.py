@@ -29,7 +29,7 @@ from robot_sf.analysis_workbench.audit_contracts import (
 )
 
 DETECTOR_REGISTRY_SCHEMA_VERSION = "audit-detector-registry.v1"
-DETECTOR_ENGINE_VERSION = "audit-detectors.v1.3"
+DETECTOR_ENGINE_VERSION = "audit-detectors.v1.4"
 DETECTOR_REGISTRY_VERSION = DETECTOR_REGISTRY_SCHEMA_VERSION
 GOAL_ADJACENT_TIMEOUT_VERSION = "goal_adjacent_timeout.v1"
 
@@ -105,7 +105,7 @@ STRUCTURED_DIAGNOSTIC_METRICS = frozenset(
 # '[]' traverses a list; metadata/extension subtrees are never inferred to be
 # measurements. Rules are (minimum, maximum, integral). Missing/null is explicit
 # missingness. Owners: benchmark.metrics, social_compliance, signal_metrics and
-# paired_effect_metric_contract (metric_values is a scalar-valued dictionary).
+# paired_effect_metric_contract (metric_values has eight fixed scalar names).
 STRUCTURED_DIAGNOSTIC_SCALARS = {
     "force_quantiles": dict.fromkeys(("q50", "q90", "q95"), (0, None, False)),
     "force_sample_stats": {
@@ -135,7 +135,7 @@ STRUCTURED_DIAGNOSTIC_SCALARS = {
         "missing_data.*.minimum_support": (0, None, True),
     },
     "metric_values": {
-        "*": (None, None, False),
+        "min_predicted_separation_m": (None, None, False),
         **dict.fromkeys(
             (
                 "exact_collision_probability",
@@ -654,7 +654,7 @@ def default_registry(*, include_advisory: bool = True) -> DetectorRegistry:
                 "collision_max": 1.0,
             },
             units={"clearance": "m", "force": "N", "ttc": "s", "collision": "count"},
-            version="1.3.0",
+            version="1.4.0",
         ),
         _spec(
             "goal_adjacent_timeout",
@@ -672,7 +672,7 @@ def default_registry(*, include_advisory: bool = True) -> DetectorRegistry:
             "Compare recorded episode steps, runner horizon, simulator limit and termination.",
             optional=("outcome", "config"),
             units={"steps": "count", "horizon": "count"},
-            version="1.1.0",
+            version="1.2.0",
         ),
         _spec(
             "outcome_incidence",
@@ -704,7 +704,7 @@ def default_registry(*, include_advisory: bool = True) -> DetectorRegistry:
                 "mad_relative_floor": 1e-6,
             },
             units={"robust_z": "dimensionless"},
-            version="1.1.0",
+            version="1.2.0",
         ),
         _spec(
             "initial_reset_anomaly",
@@ -901,11 +901,14 @@ def _metrics(row: Mapping[str, Any]) -> Mapping[str, Any]:
     # level.  Preserve the nested block as authoritative while accepting the
     # documented scalar aliases as a read-only compatibility projection.
     for key in (
+        *sorted(STRUCTURED_DIAGNOSTIC_METRICS),
         "clearance_m",
         "min_clearance_m",
         "wall_clearance_m",
         "force_N",
         "force_max_N",
+        "max_force_N",
+        "force_mean_N",
         "ttc_s",
         "pet_s",
         "collision_count",
@@ -2798,7 +2801,70 @@ def _structured_scalar_errors(  # noqa: C901
 
     for scalar_path, rule in STRUCTURED_DIAGNOSTIC_SCALARS[name].items():
         visit(record, scalar_path.split("."), name, rule)
+    if name in {"metric_values", "signal_metrics_evidence", "force_quantiles"}:
+        allowed = set(STRUCTURED_DIAGNOSTIC_SCALARS[name])
+        if name == "signal_metrics_evidence":
+            allowed = {"state", "exclusion_reason"}
+        for key, value in record.items():
+            metadata = {"extension", "metadata", "interpretation"}
+            if (
+                name in {"metric_values", "signal_metrics_evidence"}
+                and key not in allowed | metadata
+            ):
+                invalid.add(f"{name}.{key}")
+            if (
+                key not in allowed
+                and key not in metadata
+                and isinstance(value, (int, float, bool, Mapping, list))
+            ):
+                invalid.add(f"{name}.{key}")
+            if (
+                name == "signal_metrics_evidence"
+                and key in allowed
+                and value is not None
+                and not isinstance(value, str)
+            ):
+                invalid.add(f"{name}.{key}")
+            if name == "force_quantiles" and key not in allowed and str(key).startswith("q"):
+                invalid.add(f"{name}.{key}")
+        if name == "force_quantiles":
+            quantiles = [(key, _finite_or_none(record.get(key))) for key in ("q50", "q90", "q95")]
+            present = [(key, value) for key, value in quantiles if value is not None]
+            for (_, earlier), (key, later) in pairwise(present):
+                if earlier > later:
+                    invalid.add(f"{name}.{key}")
+    if name == "force_sample_stats":
+        raw = _finite_or_none(record.get("raw_samples"))
+        finite = _finite_or_none(record.get("finite_samples"))
+        if raw is not None and finite is not None and finite > raw:
+            invalid.add(f"{name}.finite_samples")
     return sorted(invalid)
+
+
+def _named_record_errors(row: Mapping[str, Any]) -> list[str]:
+    """Validate every recorded named-record alias, including shadowed copies.
+
+    Returns:
+        Exact raw field paths that violate the named-record schema.
+    """
+    errors = set()
+    containers = [
+        ("", row),
+        ("metrics.", row.get("metrics")),
+        ("operational_metrics.", row.get("operational_metrics")),
+    ]
+    for prefix, container in containers:
+        if not isinstance(container, Mapping):
+            continue
+        for name in STRUCTURED_DIAGNOSTIC_METRICS:
+            value = container.get(name)
+            if value is None:
+                continue
+            if not isinstance(value, Mapping):
+                errors.add(f"{prefix}{name}")
+            else:
+                errors.update(f"{prefix}{path}" for path in _structured_scalar_errors(name, value))
+    return sorted(errors)
 
 
 def _extreme(  # noqa: C901, PLR0912
@@ -2807,6 +2873,11 @@ def _extreme(  # noqa: C901, PLR0912
     cohort: Sequence[Mapping[str, Any]],
     config: Mapping[str, Any],
 ) -> Signal:
+    named_errors = _named_record_errors(row)
+    if named_errors:
+        return _detector_error(
+            spec, row, "nonfinite_or_malformed_measurement", missing=named_errors, config=config
+        )
     metrics = _metrics(row)
     values: dict[str, float] = {}
     invalid: list[str] = []
@@ -2815,8 +2886,10 @@ def _extreme(  # noqa: C901, PLR0912
             continue
         if value is None:
             continue
-        if isinstance(value, Mapping) and name in STRUCTURED_DIAGNOSTIC_METRICS:
-            invalid.extend(_structured_scalar_errors(name, value))
+        if name in STRUCTURED_DIAGNOSTIC_METRICS:
+            if not isinstance(value, Mapping):
+                invalid.append(name)
+                continue
             if name == "force_quantiles":
                 for quantile in ("q50", "q90", "q95"):
                     numeric = _finite_or_none(value.get(quantile))
@@ -2835,6 +2908,25 @@ def _extreme(  # noqa: C901, PLR0912
             invalid.append(name)
             continue
         values[name] = float(value)
+    # Flattened and operational force aliases are still recorded measurements,
+    # even when a compact metrics record shadows them.
+    for prefix, source in (("row", row), ("operational_metrics", row.get("operational_metrics"))):
+        if not isinstance(source, Mapping):
+            continue
+        for name in ("force_N", "force_max_N", "max_force_N", "force_mean_N"):
+            value = source.get(name)
+            if value is None:
+                continue
+            numeric = _finite_or_none(value)
+            if numeric is None:
+                return _detector_error(
+                    spec,
+                    row,
+                    "nonfinite_or_malformed_measurement",
+                    missing=(f"{prefix}.{name}",),
+                    config=config,
+                )
+            values[f"{prefix}.{name}"] = numeric
     if _contains_nonfinite(metrics):
         invalid.extend(name for name, value in metrics.items() if _contains_nonfinite(value))
     if not values and not invalid:
@@ -2864,7 +2956,7 @@ def _extreme(  # noqa: C901, PLR0912
             if value < clearance_min:
                 extreme[name] = value
         elif "force" in lowered:
-            if abs(value) > force_max:
+            if value < 0 or value > force_max:
                 extreme[name] = value
         elif lowered in {"ttc", "ttc_s", "time_to_collision_s", "time_to_collision_min", "pet_s"}:
             # Explicitly undefined TTC/PET is represented by a missing key or
@@ -3635,6 +3727,105 @@ def _trajectory(
     )
 
 
+def cohort_drop_counts(
+    rows: Sequence[Mapping[str, Any]],
+    dropped: Sequence[Mapping[str, Any] | None],
+    spec: DetectorSpec,
+) -> dict[str, Mapping[str, int]]:
+    """Index rejected observations by compatibility cell and planner in one pass.
+
+    Unassignable rejected observations gate every cell: their absence cannot be
+    proved irrelevant. Counts include duplicate observations, not just IDs.
+
+    Returns:
+        Per-episode dropped counts for the declared detector cohort.
+    """
+    definition = spec.cohort_definition
+    if definition.get("kind") == "episode":
+        return {}
+    keys = definition.get("key", [])
+    required = definition.get("require_present", keys)
+    groups: dict[tuple[Any, ...], Counter[str]] = {}
+    unassigned = 0
+    for item in dropped:
+        if (
+            item is None
+            or any(not _cohort_field_present(item, key) for key in required)
+            or any(_contains_nonfinite(item.get(key)) for key in keys)
+            or (
+                "seed" in keys
+                and (
+                    isinstance(item.get("seed"), bool)
+                    or not isinstance(item.get("seed"), (int, str))
+                )
+            )
+        ):
+            unassigned += 1
+            continue
+        groups.setdefault(_cohort_key(item, keys), Counter())[_identity(item, "planner_id")] += 1
+    result = {}
+    for item in rows:
+        counts = dict(groups.get(_cohort_key(item, keys), {}))
+        if unassigned:
+            counts["unassigned"] = counts.get("unassigned", 0) + unassigned
+        if counts:
+            result[str(item.get("episode_id", ""))] = counts
+    return result
+
+
+def _cohort_admission_signal(
+    spec: DetectorSpec,
+    row: Mapping[str, Any],
+    cohort: Sequence[Mapping[str, Any]],
+    dropped_counts: Mapping[str, int],
+    config: Mapping[str, Any],
+) -> Signal | None:
+    """Refuse cohort conclusions when either target or control lost observations.
+
+    Returns:
+        An unavailable signal with admission accounting, or None for no loss.
+    """
+    if spec.cohort_definition.get("kind") == "episode":
+        return None
+    counts = Counter({key: value for key, value in dropped_counts.items() if value})
+    admitted_rows = []
+    rejected_rows = []
+    for item in cohort:
+        normalized = normalize_recorded_undefined(item)
+        if execution_admission_failure(normalized) is not None:
+            rejected_rows.append(normalized)
+        else:
+            admitted_rows.append(normalized)
+    counts.update(
+        cohort_drop_counts([row], rejected_rows, spec).get(str(row.get("episode_id", "")), {})
+    )
+    admitted = Counter(
+        _identity(item, "planner_id") for item in _group_cohort(row, admitted_rows, spec)
+    )
+    if not counts:
+        return None
+    return _make_signal(
+        spec,
+        row,
+        "unavailable",
+        reason="cohort_admission_incomplete",
+        measured={
+            "cohort_dropped_rows": sum(counts.values()),
+            "cohort_dropped_counts": dict(sorted(counts.items())),
+            "planner_admitted_sizes": dict(sorted(admitted.items())),
+            "planner_recorded_sizes": dict(sorted((admitted + counts).items())),
+        },
+        missingness=("cohort.admission",),
+        evidence=(
+            {
+                "cohort": dict(spec.cohort_definition),
+                "admission_rule": "all recorded target and control observations must be admitted; any rejected observation in the cell makes the detector unavailable; unassignable rejections conservatively gate every cell",
+            },
+        ),
+        config=config,
+    )
+
+
 def _planner_scenario_cells(
     spec: DetectorSpec, row: Mapping[str, Any], cohort: Sequence[Mapping[str, Any]]
 ) -> dict[str, list[Mapping[str, Any]]]:
@@ -3848,6 +4039,47 @@ def _planner_cohort_shift(
     )
 
 
+def _recorded_horizon_limits(  # noqa: C901
+    row: Mapping[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Read and validate every limit declaration without alias shadowing.
+
+    Returns:
+        Values grouped by semantic limit, retaining their original paths.
+    """
+    containers = [("row", row)]
+    for name in ("metrics", "operational_metrics", "scenario_params", "geometry"):
+        container = row.get(name)
+        if isinstance(container, Mapping):
+            containers.append((name, container))
+    recorded: dict[str, dict[str, Any]] = {
+        "run_horizon": {},
+        "simulator_max_episode_steps": {},
+        "effective_budget_steps": {},
+    }
+    for path, container in containers:
+        for alias in ("run_horizon", "horizon_steps", "horizon"):
+            if container.get(alias) is not None:
+                recorded["run_horizon"][f"{path}.{alias}"] = container[alias]
+        if container.get("effective_budget_steps") is not None:
+            recorded["effective_budget_steps"][f"{path}.effective_budget_steps"] = container[
+                "effective_budget_steps"
+            ]
+        simulation = container.get("simulation_config")
+        if simulation is not None and not isinstance(simulation, Mapping):
+            raise DetectorError("malformed_horizon_contract:simulation_config")
+        if isinstance(simulation, Mapping) and simulation.get("max_episode_steps") is not None:
+            recorded["simulator_max_episode_steps"][
+                f"{path}.simulation_config.max_episode_steps"
+            ] = simulation["max_episode_steps"]
+    for name, values in recorded.items():
+        for value in values.values():
+            numeric = _finite_or_none(value)
+            if numeric is None or not numeric.is_integer() or numeric < 1:
+                raise DetectorError(f"malformed_horizon_contract:{name}")
+    return recorded
+
+
 def _horizon_consistency(  # noqa: C901
     spec: DetectorSpec,
     row: Mapping[str, Any],
@@ -3855,29 +4087,34 @@ def _horizon_consistency(  # noqa: C901
     config: Mapping[str, Any],
 ) -> Signal:
     steps = row.get("steps", row.get("episode_steps"))
-    horizon = _lookup(row, "run_horizon", "horizon_steps")
-    simulation = _lookup(row, "simulation_config")
-    simulator = simulation.get("max_episode_steps") if isinstance(simulation, Mapping) else None
-    budget = _lookup(row, "effective_budget_steps")
-    limits = {
-        "run_horizon": horizon,
-        "simulator_max_episode_steps": simulator,
-        "effective_budget_steps": budget,
-    }
+    recorded = _recorded_horizon_limits(row)
+    # A conflict still compares steps with the smallest declared maximum.
+    limits = {name: min(values.values()) if values else None for name, values in recorded.items()}
+    horizon = limits["run_horizon"]
+    simulator = limits["simulator_max_episode_steps"]
+    budget = limits["effective_budget_steps"]
     reason = row.get("termination_reason")
     timeout, success, collision = _timeout(row), _success(row), _collision(row)
-    for name, value, minimum in (
-        ("steps", steps, 0),
-        *((name, value, 1) for name, value in limits.items()),
-    ):
-        if value is None:
-            continue
-        numeric = _finite_or_none(value)
-        if numeric is None or not numeric.is_integer() or numeric < minimum:
-            return _detector_error(spec, row, f"malformed_horizon_contract:{name}", config=config)
+    if steps is not None:
+        numeric = _finite_or_none(steps)
+        if numeric is None or not numeric.is_integer() or numeric < 0:
+            return _detector_error(spec, row, "malformed_horizon_contract:steps", config=config)
     if reason is not None and (not isinstance(reason, str) or not reason.strip()):
         return _detector_error(spec, row, "termination_reason_malformed", config=config)
     signatures = []
+    if any(len(set(values.values())) > 1 for values in recorded.values()):
+        signatures.append("conflicting_recorded_horizon_limits")
+    recorded_maxima = [value for value in (horizon, simulator) if value is not None]
+    if (
+        budget is not None
+        and recorded_maxima
+        and (
+            budget > min(recorded_maxima)
+            or (len(recorded_maxima) == 2 and budget != min(recorded_maxima))
+        )
+    ):
+        signatures.append("effective_budget_not_minimum_limit")
+    timeout_budget = budget if budget is not None else min(recorded_maxima, default=None)
     comparisons = {}
     missing = [name for name, value in limits.items() if value is None]
     if steps is None:
@@ -3912,8 +4149,15 @@ def _horizon_consistency(  # noqa: C901
         ):
             signatures.append("termination_reason_outcome_mismatch")
     if timeout is True:
-        if steps is not None and horizon is not None and steps < horizon:
-            signatures.append("timeout_before_run_horizon")
+        if steps is not None and timeout_budget is not None and steps < timeout_budget:
+            # Preserve the old runner signature when the runner is the binding limit.
+            signatures.append(
+                "timeout_before_run_horizon"
+                if timeout_budget == horizon
+                else "timeout_before_effective_budget"
+            )
+        if steps is not None and timeout_budget is not None and steps != timeout_budget:
+            signatures.append("timeout_steps_do_not_equal_budget")
         if simulator is not None and horizon is not None and simulator < horizon:
             signatures.append("runner_simulator_horizon_mismatch")
     measured = {
@@ -3922,6 +4166,8 @@ def _horizon_consistency(  # noqa: C901
         "simulator_max_episode_steps": simulator,
         "effective_budget_steps": budget,
         "limit_comparisons": comparisons,
+        "recorded_limit_values": recorded,
+        "timeout_budget_steps": timeout_budget,
         "termination_reason": reason,
         "timeout": timeout,
         "success": success,
@@ -3938,11 +4184,12 @@ def _horizon_consistency(  # noqa: C901
     if not termination_available:
         missing.extend(("outcome", "termination_reason"))
     limits_available = any(item["status"] != "unavailable" for item in comparisons.values())
+    timeout_check_unavailable = timeout is True and (steps is None or timeout_budget is None)
     status = (
         "flagged"
         if signatures
         else "clear"
-        if limits_available and termination_available
+        if limits_available and termination_available and not timeout_check_unavailable
         else "unavailable"
     )
     return _make_signal(
@@ -3955,12 +4202,14 @@ def _horizon_consistency(  # noqa: C901
         if status == "clear"
         else "horizon_contract_not_recorded"
         if not limits_available
+        else "timeout_budget_not_recorded"
+        if timeout_check_unavailable
         else "termination_not_recorded",
         measured=measured,
         missingness=missing,
         evidence=(
             {
-                "interpretation": "steps are independently compared to every available runner, simulator and effective-budget maximum for every outcome; unavailable comparisons cannot hide recorded overruns; an explained early timeout still exposes the configured horizon mismatch; no trace or goal-zone diagnosis"
+                "interpretation": "every recorded limit alias is validated; conflicting declarations and budgets inconsistent with min(runner, simulator) are flagged; steps are compared with every maximum; a timeout must equal the effective budget, or the smallest available maximum when no budget is recorded; an explained runner/simulator mismatch remains visible; no trace or goal-zone diagnosis"
             },
         ),
         config=config,
@@ -3999,6 +4248,7 @@ def detect(  # noqa: C901
     *,
     cohort: Sequence[Mapping[str, Any]] = (),
     config: Mapping[str, Any] | None = None,
+    cohort_dropped_counts: Mapping[str, int] | None = None,
     registry: DetectorRegistry | None = None,
 ) -> Signal:
     """Evaluate one detector against one recorded episode.
@@ -4025,6 +4275,15 @@ def detect(  # noqa: C901
         spec = detector if isinstance(detector, DetectorSpec) else active_registry.get(detector)
     except (KeyError, TypeError) as exc:
         raise DetectorError(f"unknown detector: {detector!r}") from exc
+    dropped_counts = {} if cohort_dropped_counts is None else cohort_dropped_counts
+    if not isinstance(dropped_counts, Mapping) or any(
+        not isinstance(key, str)
+        or not isinstance(value, int)
+        or isinstance(value, bool)
+        or value < 0
+        for key, value in dropped_counts.items()
+    ):
+        raise DetectorError("cohort dropped counts must map planner names to nonnegative integers")
     config_mapping = _closed(config or {}, name="detector config")
     episode_id = row.get("episode_id")
     if not isinstance(episode_id, str) or not episode_id.strip():
@@ -4045,17 +4304,26 @@ def detect(  # noqa: C901
                 config=config_mapping,
             )
         return _detector_error(spec, row, failure_reason, config=config_mapping)
-    capabilities = _capabilities(row)
-    missing = sorted(set(spec.required_capabilities) - capabilities)
-    if missing:
-        return _unavailable(
-            spec,
-            row,
-            "required_capability_unavailable",
-            missing=tuple(missing),
-            config=config_mapping,
-        )
     try:
+        # scan_campaign has already checked every admitted peer. Direct callers
+        # without inventory accounting must validate their raw cohort themselves.
+        admission_signal = (
+            _cohort_admission_signal(spec, row, cohort, dropped_counts, config_mapping)
+            if cohort_dropped_counts is None or any(dropped_counts.values())
+            else None
+        )
+        if admission_signal is not None:
+            return admission_signal
+        capabilities = _capabilities(row)
+        missing = sorted(set(spec.required_capabilities) - capabilities)
+        if missing:
+            return _unavailable(
+                spec,
+                row,
+                "required_capability_unavailable",
+                missing=tuple(missing),
+                config=config_mapping,
+            )
         return _DETECTORS[spec.detector_id](spec, row, tuple(cohort), config_mapping)
     except DetectorError as error:
         return _detector_error(spec, row, str(error), config=config_mapping)
@@ -4172,6 +4440,7 @@ __all__ = [
     "DetectorRegistry",
     "DetectorSpec",
     "build_detector_registry",
+    "cohort_drop_counts",
     "default_registry",
     "detect",
     "detector_registry",

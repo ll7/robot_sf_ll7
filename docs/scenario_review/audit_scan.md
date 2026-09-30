@@ -60,11 +60,32 @@ strings, lists, Mappings, non-finite values, and impossible negative magnitudes
 (including every force quantile). Count fields must be nonnegative integers;
 fraction fields respect their documented bounds. Null/missing fields remain
 missing. Status strings and arbitrary extension metadata are not inferred to be
-measurements. Force quantiles also use the declared force magnitude ceiling.
+measurements. Every named record must be a mapping or null, including flattened
+row aliases. Shadowed named copies are also validated at their original paths.
+`metric_values` accepts only the eight scalar names in
+`paired_effect_metric_contract.REQUIRED_METRIC_NAMES`; unknown measurement keys are errors. `signal_metrics_evidence` declares only the string fields
+`state` and `exclusion_reason`. Explicit `extension`, `metadata`, and `interpretation`
+subtrees remain metadata, never measurements. Force quantiles admit only `q50`,
+`q90`, and `q95`, must be nondecreasing across recorded values, and use the force
+magnitude ceiling. `finite_samples` cannot exceed `raw_samples`. Negative force
+magnitudes are flagged without absolute-value normalization.
 Named terminal-outcome and validity booleans are accepted; a
 boolean physical measurement is malformed. The source-admission layer still
 rejects unexpected non-finite raw rows; documented sentinel normalization is
 unchanged.
+
+All cohort detectors require complete row admission. The scan separately indexes
+rejected observations (invalid, unsupported, duplicate, or missing) before forming
+admitted cohorts. Any target or control admission loss returns
+`unavailable / cohort_admission_incomplete`, with `cohort_dropped_rows`,
+`cohort_dropped_counts` per planner, `planner_admitted_sizes`, and
+`planner_recorded_sizes`. Duplicate observations are counted individually.
+A rejected observation with a missing or corrupt compatibility key is unassignable.
+An unassignable rejected observation appears under `unassigned` and conservatively
+gates every cell because its relevance cannot be ruled out. Assigned losses in
+other compatibility cells do not contaminate complete cells. Direct detector calls
+also check raw cohort admission; the scan supplies its authoritative counts through
+the optional `detect(..., cohort_dropped_counts=...)` argument.
 
 Within-outcome outliers are accompanied by independent default channels:
 
@@ -94,14 +115,23 @@ Within-outcome outliers are accompanied by independent default channels:
   and different configurations can explain the differences; no causal inference
   follows. With no external control it stays unavailable.
 - `horizon_consistency` compares `steps` (or `episode_steps`) with recorded
-  `run_horizon` (or `horizon_steps`), the simulator's `max_episode_steps`, and
+  `run_horizon` (or `horizon_steps` or top-level `horizon`), the simulator's
+  `max_episode_steps`, and
   `effective_budget_steps` when recorded, for **every outcome**, including
   unrecorded outcomes. Each `limit_comparisons` entry reports clear, flagged, or
   unavailable; missing fields appear in signal missingness without suppressing
   checks against available maxima. Termination reason and terminal outcome are
   also checked when available.
-  A timeout before the runner horizon, steps beyond it, or an explicit reason
-  contradicting the outcome flags. The simulator's
+  A timeout must have steps exactly equal to recorded `effective_budget_steps`,
+  or to the smallest available runner/simulator maximum when no budget is recorded.
+  `timeout_budget_steps` discloses that comparison. The budget must equal
+  `min(runner, simulator)` when both are present and cannot exceed either available
+  maximum. Every limit declaration is validated; conflicting top-level and
+  `scenario_params` aliases flag rather than silently selecting one. All original
+  paths and values appear in `recorded_limit_values`. Steps beyond a maximum or
+  an explicit reason contradicting the outcome also flag. A #9999 scheduled row
+  with `horizon = scenario_params.run_horizon = effective_budget_steps = steps`
+  and an equal or larger simulator maximum remains clear. The simulator's
   `scenario_params.simulation_config.max_episode_steps` remains separate: a
   smaller simulator limit flags the timeout's runner/simulator mismatch and is
   retained as an explanation when steps equal that limit. Early successes and

@@ -840,6 +840,11 @@ class PPOPlanner:
         Returns:
             Action dict in either velocity or unicycle format.
         """
+        raw_output = [float(x) for x in np.asarray(act).reshape(-1)[:2]]
+        self._ppoeval_proposal = {
+            "raw_policy_output": raw_output,
+            "requested_command": [float(x) for x in np.asarray(act).reshape(-1)[:2]],
+        }
         if self.config.action_space == "unicycle":
             # Expect [v, omega]
             v = float(act[0]) if act.size >= 1 else 0.0

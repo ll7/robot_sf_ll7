@@ -1,0 +1,549 @@
+Shared-venv scratch preflight passed: path=/tmp available=109976572KiB required=1048576KiB
+Shared-venv project package freshness preflight passed: package=pysocialforce venv=/home/luttkule/aud-work/.venv
+Shared-venv tool freshness preflight skipped: tool=pytest reason=interpreter-or-shell elapsed_ms=321 venv=/home/luttkule/aud-work/.venv
+FFFFFFFFFFFFFFF                                                          [100%]
+=================================== FAILURES ===================================
+________________ test_published_positive_ttc_uses_seconds_bound ________________
+
+    def test_published_positive_ttc_uses_seconds_bound():
+        recorded = release_row("ttc_positive")
+        ttc = recorded["metrics"]["time_to_collision_min"]
+        assert 1 < ttc < 17  # Published success with positive TTC, not a collision count.
+        row = {"episode_id": recorded["episode_id"], "metrics": {"time_to_collision_min": ttc}}
+        signal = detect("extreme_measurements", row)
+>       assert signal.status == "clear", signal.measured
+E       AssertionError: {'values': {'time_to_collision_min': 1.0078322058425249}, 'extreme': {'time_to_collision_min': 1.0078322058425249}, 'missing_undefined_values': ['ttc_s', 'pet_s']}
+E       assert 'flagged' == 'clear'
+E         
+E         - clear
+E         + flagged
+
+../aud-work/tests/analysis_workbench/test_aud_9952.py:28: AssertionError
+__________ test_orbit_uses_recorded_stall_windows_not_failure_boolean __________
+
+    def test_orbit_uses_recorded_stall_windows_not_failure_boolean():
+        from robot_sf.analysis_workbench.release_row_anomalies import analyze_release_rows
+    
+        row = release_row("timeout")
+        assert row["metrics"]["deadlock"] is True
+        # Counterfactual on a real timeout: isolate the stall channel from geometry.
+        row["metrics"]["deadlock_stall"]["stall_window_count"] = 0
+        config = {
+            "min_orbit_curvature": 1e9,
+            "min_orbit_path_length_m": 1e9,
+            "require_preflight": False,
+            "pedestrian_aware_planners": [],
+        }
+        report = analyze_release_rows([row], config=config)
+>       assert not [f for f in report["findings"] if f["detector_id"] == "orbit_zero_progress"]
+E       AssertionError: assert not [{'finding_id': 'rr-e04a8455f2225f96180d', 'detector_id': 'orbit_zero_progress', 'detector_version': '1.0.1', 'reason_code': 'orbit_or_zero_progress_signature', ...}]
+
+../aud-work/tests/analysis_workbench/test_aud_9952.py:49: AssertionError
+_________ test_outlier_mad_floor_rejects_numerical_noise[seed_outlier] _________
+
+detector = 'seed_outlier'
+
+    @pytest.mark.parametrize("detector", ["seed_outlier", "cohort_multivariate_outlier"])
+    def test_outlier_mad_floor_rejects_numerical_noise(detector):
+        peers = [cohort_row(str(i), 0.0) for i in range(4)]
+        target = cohort_row("target", 1e-6)
+        signal = detect(detector, target, cohort=[*peers, target])
+>       assert signal.status == "clear", signal.measured
+E       AssertionError: {'seed': 1001, 'feature_z_scores': {'time_to_goal_norm': 1000000000.0}, 'cohort_size': 5, 'seed_values_are_keys_only': True, ...}
+E       assert 'flagged' == 'clear'
+E         
+E         - clear
+E         + flagged
+
+../aud-work/tests/analysis_workbench/test_aud_9952.py:81: AssertionError
+_ test_outlier_mad_floor_rejects_numerical_noise[cohort_multivariate_outlier] __
+
+detector = 'cohort_multivariate_outlier'
+
+    @pytest.mark.parametrize("detector", ["seed_outlier", "cohort_multivariate_outlier"])
+    def test_outlier_mad_floor_rejects_numerical_noise(detector):
+        peers = [cohort_row(str(i), 0.0) for i in range(4)]
+        target = cohort_row("target", 1e-6)
+        signal = detect(detector, target, cohort=[*peers, target])
+>       assert signal.status == "clear", signal.measured
+E       AssertionError: {'features': {'time_to_goal_norm': 1e-06}, 'robust_z_scores': {'time_to_goal_norm': 1000000000.0}, 'priority_score_uncalibrated': 1000000000.0, 'feature_missingness': [], ...}
+E       assert 'flagged' == 'clear'
+E         
+E         - clear
+E         + flagged
+
+../aud-work/tests/analysis_workbench/test_aud_9952.py:81: AssertionError
+__________ test_outlier_cohorts_match_terminal_outcome[seed_outlier] ___________
+
+detector = 'seed_outlier'
+
+    @pytest.mark.parametrize("detector", ["seed_outlier", "cohort_multivariate_outlier"])
+    def test_outlier_cohorts_match_terminal_outcome(detector):
+        target = cohort_row("target", 0.2)
+        successes = [cohort_row(str(i), 0.2) for i in range(3)]
+        timeouts = [cohort_row("timeout-" + str(i), 1.0, "timeout") for i in range(12)]
+        signal = detect(detector, target, cohort=[target, *successes, *timeouts])
+>       assert signal.status == "clear", signal.measured
+E       AssertionError: {'seed': 1001, 'feature_z_scores': {'time_to_goal_norm': 1000000000.0}, 'cohort_size': 16, 'seed_values_are_keys_only': True, ...}
+E       assert 'flagged' == 'clear'
+E         
+E         - clear
+E         + flagged
+
+../aud-work/tests/analysis_workbench/test_aud_9952.py:92: AssertionError
+___ test_outlier_cohorts_match_terminal_outcome[cohort_multivariate_outlier] ___
+
+detector = 'cohort_multivariate_outlier'
+
+    @pytest.mark.parametrize("detector", ["seed_outlier", "cohort_multivariate_outlier"])
+    def test_outlier_cohorts_match_terminal_outcome(detector):
+        target = cohort_row("target", 0.2)
+        successes = [cohort_row(str(i), 0.2) for i in range(3)]
+        timeouts = [cohort_row("timeout-" + str(i), 1.0, "timeout") for i in range(12)]
+        signal = detect(detector, target, cohort=[target, *successes, *timeouts])
+>       assert signal.status == "clear", signal.measured
+E       AssertionError: {'features': {'time_to_goal_norm': 0.2}, 'robust_z_scores': {'time_to_goal_norm': 1000000000.0}, 'priority_score_uncalibrated': 1000000000.0, 'feature_missingness': [], ...}
+E       assert 'flagged' == 'clear'
+E         
+E         - clear
+E         + flagged
+
+../aud-work/tests/analysis_workbench/test_aud_9952.py:92: AssertionError
+____ test_release_failure_timeout_is_admitted_but_execution_failure_is_not _____
+
+    def test_release_failure_timeout_is_admitted_but_execution_failure_is_not():
+        from robot_sf.analysis_workbench.audit_scan import scan_campaign
+    
+        recorded = release_row("timeout")
+        row = {
+            "episode_id": recorded["episode_id"],
+            "status": recorded["status"],
+            "outcome": recorded["outcome"],
+            "metrics": {"clearance_m": 1.0},
+        }
+>       assert detect("extreme_measurements", row).status == "clear"
+E       AssertionError: assert 'unavailable' == 'clear'
+E         
+E         - clear
+E         + unavailable
+
+../aud-work/tests/analysis_workbench/test_aud_9952.py:106: AssertionError
+________ test_disabled_tracking_infinity_is_missing_not_row_corruption _________
+
+    def test_disabled_tracking_infinity_is_missing_not_row_corruption():
+        from robot_sf.analysis_workbench.audit_scan import scan_campaign
+    
+        recorded = release_row("success")
+        row = {
+            "episode_id": recorded["episode_id"],
+            "outcome": recorded["outcome"],
+            "integrity": recorded["integrity"],
+            "metric_values": recorded["metric_values"],
+            "algorithm_metadata": {
+                "tracking_precision": recorded["algorithm_metadata"]["tracking_precision"]
+            },
+            "metrics": {
+                "clearance_m": 1.0,
+                "min_separation_corrupted_m": math.inf,
+                "metric_values": recorded["metrics"]["metric_values"],
+            },
+        }
+        report = scan_campaign([row], detector_ids=["extreme_measurements"])
+>       assert report.inventory[0].readable, report.inventory[0].reason
+E       AssertionError: row contains a non-finite value
+E       assert False
+E        +  where False = EpisodeInventory(episode_id='classic_bottleneck_low--111--14b5cd02c60488e0', status='invalid', expected=True, source_artifact_id='in-memory-campaign', line_number=1, reason='row contains a non-finite value', row=None).readable
+
+../aud-work/tests/analysis_workbench/test_aud_9952.py:138: AssertionError
+______ test_verified_release_arm_keeps_config_scopes_and_episode_identity ______
+
+    def test_verified_release_arm_keeps_config_scopes_and_episode_identity():
+        from robot_sf.analysis_workbench.audit_scan import scan_campaign
+    
+        row = release_row("success")
+        row["_release_arm"] = "goal"
+        row["_source_member"] = "payload/runs/goal__differential_drive/episodes.jsonl"
+>       report = scan_campaign([row], detector_ids=["extreme_measurements"])
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+../aud-work/tests/analysis_workbench/test_aud_9952.py:161: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+robot_sf/analysis_workbench/audit_scan.py:2082: in scan_campaign
+    loaded = _load_source(source, root=root, source_ref=source_ref)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+robot_sf/analysis_workbench/audit_scan.py:1381: in _load_source
+    ref = _source_ref_from_value(
+robot_sf/analysis_workbench/audit_scan.py:592: in _source_ref_from_value
+    _identity_aliases(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+payload = {'schema_version': 'episode-jsonl.v1', 'episodes': [{'algo': 'goal', 'algorithm_metadata': {'algorithm': 'goal', 'ammv...anonical_algorithm': 'goal', ...}, 'config_hash': '14b5cd02c60488e0', 'development_pedestrian_model': 'unknown', ...}]}
+names = ('config_identity', 'config_hash'), label = 'config_identity'
+include_episode_rows = True
+
+    def _identity_aliases(  # noqa: C901
+        payload: Mapping[str, Any],
+        *,
+        names: Sequence[str],
+        label: str,
+        include_episode_rows: bool = False,
+    ) -> str | None:
+        """Collect one identity value and reject conflicting aliases.
+    
+        Returns:
+            One normalized identity, or ``None`` when no declaration is present.
+        """
+    
+        values: list[tuple[str, str]] = []
+    
+        def collect(container: Any, prefix: str) -> None:
+            if not isinstance(container, Mapping):
+                return
+            for name in names:
+                if name not in container or container[name] in (None, ""):
+                    continue
+                value = container[name]
+                if not isinstance(value, str) or not value.strip():
+                    raise AuditScanError(f"{prefix}.{name} is malformed")
+                values.append((f"{prefix}.{name}", value.strip()))
+    
+        def collect_record(record: Mapping[str, Any], prefix: str) -> None:
+            collect(record, prefix)
+            for nested_name in ("provenance", "result_provenance", "cell_context", "config"):
+                collect(record.get(nested_name), f"{prefix}.{nested_name}")
+            metadata = record.get("algorithm_metadata")
+            if isinstance(metadata, Mapping):
+                collect(metadata, f"{prefix}.algorithm_metadata")
+                collect(metadata.get("analysis_trace"), f"{prefix}.algorithm_metadata.analysis_trace")
+    
+        collect_record(payload, label)
+        if include_episode_rows:
+            entries = payload.get("episodes")
+            if isinstance(entries, list):
+                for index, entry in enumerate(entries):
+                    if isinstance(entry, Mapping):
+                        collect_record(entry, f"{label}.episodes[{index}]")
+        unique = {value for _name, value in values}
+        if len(unique) > 1:
+            names_text = ", ".join(name for name, _value in values)
+>           raise AuditScanError(f"conflicting {label} aliases: {names_text}")
+E           robot_sf.analysis_workbench.audit_scan.AuditScanError: conflicting config_identity aliases: config_identity.episodes[0].config_hash, config_identity.episodes[0].provenance.config_hash, config_identity.episodes[0].result_provenance.config_hash, config_identity.episodes[0].algorithm_metadata.config_hash
+
+robot_sf/analysis_workbench/audit_scan.py:846: AuditScanError
+______________ test_scan_shards_cohorts_without_changing_signals _______________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x73bf4eba3ce0>
+
+    def test_scan_shards_cohorts_without_changing_signals(monkeypatch):
+        from robot_sf.analysis_workbench import audit_scan
+        from robot_sf.analysis_workbench.audit_contracts import record_to_dict
+    
+        rows = []
+        for scenario in range(8):
+            for i in range(4):
+                row = cohort_row(f"{scenario}-{i}", i / 10)
+                row["scenario_id"] = str(scenario)
+                rows.append(row)
+        seen_sizes = []
+        original = audit_scan.detect
+    
+        def observe(*args, **kwargs):
+            seen_sizes.append(len(kwargs["cohort"]))
+            return original(*args, **kwargs)
+    
+        monkeypatch.setattr(audit_scan, "detect", observe)
+        report = audit_scan.scan_campaign(rows, detector_ids=["seed_outlier"])
+>       assert max(seen_sizes) == 4  # A linear partition, not every row in every call.
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       assert 32 == 4
+E        +  where 32 = max([32, 32, 32, 32, 32, 32, ...])
+
+../aud-work/tests/analysis_workbench/test_aud_9952.py:193: AssertionError
+______________ test_scan_accepts_20160_rows_above_old_source_cap _______________
+
+tmp_path = PosixPath('/tmp/pytest-of-luttkule/wt-39c14eeeb5/proc-2320347/pytest-of-luttkule/pytest-0/test_scan_accepts_20160_rows_a0')
+
+    def test_scan_accepts_20160_rows_above_old_source_cap(tmp_path):
+        from robot_sf.analysis_workbench.audit_scan import scan_campaign
+    
+        source = tmp_path / "episodes.jsonl"
+        with source.open("w") as stream:
+            for i in range(20160):
+                stream.write(
+                    json.dumps(
+                        {
+                            "episode_id": str(i),
+                            "metrics": {"clearance_m": 1.0},
+                            "retained_note": "x" * 3350,
+                        }
+                    )
+                    + "\n"
+                )
+        assert source.stat().st_size > 64 * 1024**2
+>       report = scan_campaign(source, root=tmp_path, detector_ids=["extreme_measurements"])
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+../aud-work/tests/analysis_workbench/test_aud_9952.py:216: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+robot_sf/analysis_workbench/audit_scan.py:2082: in scan_campaign
+    loaded = _load_source(source, root=root, source_ref=source_ref)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+robot_sf/analysis_workbench/audit_scan.py:1162: in _load_source
+    source_path = _safe_path(source, root=root_path)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = PosixPath('/tmp/pytest-of-luttkule/wt-39c14eeeb5/proc-2320347/pytest-of-luttkule/pytest-0/test_scan_accepts_20160_rows_a0/episodes.jsonl')
+root = PosixPath('/tmp/pytest-of-luttkule/wt-39c14eeeb5/proc-2320347/pytest-of-luttkule/pytest-0/test_scan_accepts_20160_rows_a0')
+
+    def _safe_path(value: str | Path, *, root: Path) -> Path:  # noqa: C901
+        """Resolve one local path under ``root`` without following symlink escapes.
+    
+        Returns:
+            A resolved regular file or campaign-store directory.
+        """
+    
+        raw = str(value)
+        split = urlsplit(raw)
+        if (
+            split.scheme
+            or split.query
+            or split.fragment
+            or "\\" in raw
+            or "\x00" in raw
+            or any(ord(character) < 32 or ord(character) == 127 for character in raw)
+        ):
+            raise AuditScanError("source URI must be a local path without a scheme")
+        path = Path(raw)
+        if ".." in path.parts:
+            raise AuditScanError("source path traversal is rejected")
+        try:
+            root_resolved = root.resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise AuditScanError("admitted root is unavailable") from exc
+        if not root_resolved.is_dir():
+            raise AuditScanError("admitted root must be a directory")
+        if path.is_absolute():
+            candidate = path
+        else:
+            candidate = root_resolved / path
+        try:
+            lexical_relative = candidate.relative_to(root_resolved)
+        except ValueError as exc:
+            raise AuditScanError("source path escapes admitted root") from exc
+        current = root_resolved
+        for part in lexical_relative.parts:
+            current = current / part
+            if current.is_symlink():
+                raise AuditScanError("source path contains a symlink component")
+        try:
+            resolved = candidate.resolve(strict=False)
+            resolved.relative_to(root_resolved)
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise AuditScanError("source path escapes admitted root") from exc
+        try:
+            mode = resolved.stat().st_mode
+        except OSError as exc:
+            raise AuditScanError("source is unavailable") from exc
+        if not stat.S_ISREG(mode) and not stat.S_ISDIR(mode):
+            raise AuditScanError("source is missing or is not a regular file/directory")
+        if stat.S_ISREG(mode) and resolved.stat().st_size > MAX_SOURCE_BYTES:
+>           raise AuditScanError(f"source exceeds {MAX_SOURCE_BYTES} bytes")
+E           robot_sf.analysis_workbench.audit_scan.AuditScanError: source exceeds 67108864 bytes
+
+robot_sf/analysis_workbench/audit_scan.py:441: AuditScanError
+____________ test_common_mode_failure_has_benchmark_defect_priority ____________
+
+    def test_common_mode_failure_has_benchmark_defect_priority():
+        from robot_sf.analysis_workbench.audit_queue import PRIORITY_BENCHMARK_CONFIG, AuditQueue
+    
+        ranked = AuditQueue([queue_candidate("common")]).rank_candidates()
+>       assert ranked[0].priority_band == PRIORITY_BENCHMARK_CONFIG
+E       AssertionError: assert 'safety_severity' == 'benchmark_config_defect'
+E         
+E         - benchmark_config_defect
+E         + safety_severity
+
+../aud-work/tests/analysis_workbench/test_aud_9952.py:250: AssertionError
+________ test_top_100_represent_distinct_cells_and_retain_all_episodes _________
+
+    def test_top_100_represent_distinct_cells_and_retain_all_episodes():
+        from robot_sf.analysis_workbench.audit_queue import AuditQueue
+    
+        candidates = [
+            queue_candidate(f"{seed}-{planner}", planner, seed)
+            for seed in range(1001, 1111)
+            for planner in ("goal", "orca")
+        ]
+        ranked = AuditQueue(candidates).rank_candidates()
+>       assert len({(r.candidate.scenario_id, r.candidate.episode.seed) for r in ranked[:100]}) == 100
+E       AssertionError: assert 77 == 100
+E        +  where 77 = len({('doorway', 1001), ('doorway', 1002), ('doorway', 1003), ('doorway', 1004), ('doorway', 1005), ('doorway', 1007), ...})
+
+../aud-work/tests/analysis_workbench/test_aud_9952.py:262: AssertionError
+________ test_queue_loads_20160_candidates_above_old_byte_and_node_caps ________
+
+tmp_path = PosixPath('/tmp/pytest-of-luttkule/wt-39c14eeeb5/proc-2320347/pytest-of-luttkule/pytest-0/test_queue_loads_20160_candida0')
+
+    def test_queue_loads_20160_candidates_above_old_byte_and_node_caps(tmp_path):
+        from robot_sf.analysis_workbench.audit_queue import load_queue_input
+    
+        candidate = queue_candidate("template").to_dict()
+        candidate["signals"] = []
+        candidate["episode"].pop("episode_id")
+        candidate["metadata"] = {"retained_note": "x" * 500}
+        candidates = []
+        for i in range(20160):
+            candidates.append(
+                {**candidate, "episode": {**candidate["episode"], "execution_id": str(i)}}
+            )
+        source = tmp_path / "queue.json"
+        source.write_text(
+            json.dumps({"schema_version": "audit-queue-input.v1", "candidates": candidates})
+        )
+        assert source.stat().st_size > 8 * 1024**2
+>       loaded = load_queue_input(source)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^
+
+../aud-work/tests/analysis_workbench/test_aud_9952.py:283: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+robot_sf/analysis_workbench/audit_queue.py:4961: in load_queue_input
+    value = _read_json(path)
+            ^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+path = PosixPath('/tmp/pytest-of-luttkule/wt-39c14eeeb5/proc-2320347/pytest-of-luttkule/pytest-0/test_queue_loads_20160_candida0/queue.json')
+
+    def _read_json(path: str | Path) -> Any:
+        """Read one bounded JSON document without following executable content."""
+    
+        source = Path(path)
+        if not source.is_file():
+            raise QueueInputError(f"input is not a regular file: {source}")
+        if source.stat().st_size > _MAX_INPUT_BYTES:
+>           raise QueueInputError(f"input exceeds {_MAX_INPUT_BYTES} bytes")
+E           robot_sf.analysis_workbench.audit_queue.QueueInputError: input exceeds 8388608 bytes
+
+robot_sf/analysis_workbench/audit_queue.py:539: QueueInputError
+_____ test_release_seed_cohorts_use_planner_config_not_seeded_episode_hash _____
+
+    def test_release_seed_cohorts_use_planner_config_not_seeded_episode_hash():
+        from robot_sf.analysis_workbench.audit_scan import scan_campaign
+    
+        rows = []
+        for i in range(4):
+            row = release_row("success")
+            row["_release_arm"] = "goal"
+            row["_source_member"] = "payload/runs/goal__differential_drive/episodes.jsonl"
+            row["episode_id"] = "dev-control-" + str(i)
+            row["seed"] = 1001 + i
+            row["config_hash"] = "seeded-config-" + str(i)
+            row["provenance"]["config_hash"] = row["config_hash"]
+            row["result_provenance"]["config_hash"] = row["config_hash"]
+            rows.append(row)
+>       report = scan_campaign(rows, detector_ids=["seed_outlier"])
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+../aud-work/tests/analysis_workbench/test_aud_9952.py:301: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+robot_sf/analysis_workbench/audit_scan.py:2082: in scan_campaign
+    loaded = _load_source(source, root=root, source_ref=source_ref)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+robot_sf/analysis_workbench/audit_scan.py:1381: in _load_source
+    ref = _source_ref_from_value(
+robot_sf/analysis_workbench/audit_scan.py:592: in _source_ref_from_value
+    _identity_aliases(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+payload = {'schema_version': 'episode-jsonl.v1', 'episodes': [{'algo': 'goal', 'algorithm_metadata': {'algorithm': 'goal', 'ammv...canonical_algorithm': 'goal', ...}, 'config_hash': 'seeded-config-3', 'development_pedestrian_model': 'unknown', ...}]}
+names = ('config_identity', 'config_hash'), label = 'config_identity'
+include_episode_rows = True
+
+    def _identity_aliases(  # noqa: C901
+        payload: Mapping[str, Any],
+        *,
+        names: Sequence[str],
+        label: str,
+        include_episode_rows: bool = False,
+    ) -> str | None:
+        """Collect one identity value and reject conflicting aliases.
+    
+        Returns:
+            One normalized identity, or ``None`` when no declaration is present.
+        """
+    
+        values: list[tuple[str, str]] = []
+    
+        def collect(container: Any, prefix: str) -> None:
+            if not isinstance(container, Mapping):
+                return
+            for name in names:
+                if name not in container or container[name] in (None, ""):
+                    continue
+                value = container[name]
+                if not isinstance(value, str) or not value.strip():
+                    raise AuditScanError(f"{prefix}.{name} is malformed")
+                values.append((f"{prefix}.{name}", value.strip()))
+    
+        def collect_record(record: Mapping[str, Any], prefix: str) -> None:
+            collect(record, prefix)
+            for nested_name in ("provenance", "result_provenance", "cell_context", "config"):
+                collect(record.get(nested_name), f"{prefix}.{nested_name}")
+            metadata = record.get("algorithm_metadata")
+            if isinstance(metadata, Mapping):
+                collect(metadata, f"{prefix}.algorithm_metadata")
+                collect(metadata.get("analysis_trace"), f"{prefix}.algorithm_metadata.analysis_trace")
+    
+        collect_record(payload, label)
+        if include_episode_rows:
+            entries = payload.get("episodes")
+            if isinstance(entries, list):
+                for index, entry in enumerate(entries):
+                    if isinstance(entry, Mapping):
+                        collect_record(entry, f"{label}.episodes[{index}]")
+        unique = {value for _name, value in values}
+        if len(unique) > 1:
+            names_text = ", ".join(name for name, _value in values)
+>           raise AuditScanError(f"conflicting {label} aliases: {names_text}")
+E           robot_sf.analysis_workbench.audit_scan.AuditScanError: conflicting config_identity aliases: config_identity.episodes[0].config_hash, config_identity.episodes[0].provenance.config_hash, config_identity.episodes[0].result_provenance.config_hash, config_identity.episodes[0].algorithm_metadata.config_hash, config_identity.episodes[1].config_hash, config_identity.episodes[1].provenance.config_hash, config_identity.episodes[1].result_provenance.config_hash, config_identity.episodes[1].algorithm_metadata.config_hash, config_identity.episodes[2].config_hash, config_identity.episodes[2].provenance.config_hash, config_identity.episodes[2].result_provenance.config_hash, config_identity.episodes[2].algorithm_metadata.config_hash, config_identity.episodes[3].config_hash, config_identity.episodes[3].provenance.config_hash, config_identity.episodes[3].result_provenance.config_hash, config_identity.episodes[3].algorithm_metadata.config_hash
+
+robot_sf/analysis_workbench/audit_scan.py:846: AuditScanError
+============================= slowest 10 durations =============================
+0.13s call     tests/analysis_workbench/test_aud_9952.py::test_scan_accepts_20160_rows_above_old_source_cap
+0.09s call     tests/analysis_workbench/test_aud_9952.py::test_queue_loads_20160_candidates_above_old_byte_and_node_caps
+0.08s call     tests/analysis_workbench/test_aud_9952.py::test_top_100_represent_distinct_cells_and_retain_all_episodes
+0.01s call     tests/analysis_workbench/test_aud_9952.py::test_common_mode_failure_has_benchmark_defect_priority
+0.01s call     tests/analysis_workbench/test_aud_9952.py::test_scan_shards_cohorts_without_changing_signals
+0.01s call     tests/analysis_workbench/test_aud_9952.py::test_orbit_uses_recorded_stall_windows_not_failure_boolean
+
+(4 durations < 0.005s hidden.  Use -vv to show these durations.)
+
+Slow Test Report (soft<20s hard=60s, top 10)
+1) tests/analysis_workbench/test_aud_9952.py::test_scan_accepts_20160_rows_above_old_source_cap  0.13s
+2) tests/analysis_workbench/test_aud_9952.py::test_queue_loads_20160_candidates_above_old_byte_and_node_caps  0.09s
+3) tests/analysis_workbench/test_aud_9952.py::test_top_100_represent_distinct_cells_and_retain_all_episodes  0.08s
+4) tests/analysis_workbench/test_aud_9952.py::test_common_mode_failure_has_benchmark_defect_priority  0.01s
+5) tests/analysis_workbench/test_aud_9952.py::test_scan_shards_cohorts_without_changing_signals  0.01s
+6) tests/analysis_workbench/test_aud_9952.py::test_orbit_uses_recorded_stall_windows_not_failure_boolean  0.01s
+7) tests/analysis_workbench/test_aud_9952.py::test_release_seed_cohorts_use_planner_config_not_seeded_episode_hash  0.00s
+8) tests/analysis_workbench/test_aud_9952.py::test_disabled_tracking_infinity_is_missing_not_row_corruption  0.00s
+9) tests/analysis_workbench/test_aud_9952.py::test_published_positive_ttc_uses_seconds_bound  0.00s
+10) tests/analysis_workbench/test_aud_9952.py::test_release_failure_timeout_is_admitted_but_execution_failure_is_not  0.00s
+
+=========================== short test summary info ============================
+FAILED ../aud-work/tests/analysis_workbench/test_aud_9952.py::test_published_positive_ttc_uses_seconds_bound
+FAILED ../aud-work/tests/analysis_workbench/test_aud_9952.py::test_orbit_uses_recorded_stall_windows_not_failure_boolean
+FAILED ../aud-work/tests/analysis_workbench/test_aud_9952.py::test_outlier_mad_floor_rejects_numerical_noise[seed_outlier]
+FAILED ../aud-work/tests/analysis_workbench/test_aud_9952.py::test_outlier_mad_floor_rejects_numerical_noise[cohort_multivariate_outlier]
+FAILED ../aud-work/tests/analysis_workbench/test_aud_9952.py::test_outlier_cohorts_match_terminal_outcome[seed_outlier]
+FAILED ../aud-work/tests/analysis_workbench/test_aud_9952.py::test_outlier_cohorts_match_terminal_outcome[cohort_multivariate_outlier]
+FAILED ../aud-work/tests/analysis_workbench/test_aud_9952.py::test_release_failure_timeout_is_admitted_but_execution_failure_is_not
+FAILED ../aud-work/tests/analysis_workbench/test_aud_9952.py::test_disabled_tracking_infinity_is_missing_not_row_corruption
+FAILED ../aud-work/tests/analysis_workbench/test_aud_9952.py::test_verified_release_arm_keeps_config_scopes_and_episode_identity
+FAILED ../aud-work/tests/analysis_workbench/test_aud_9952.py::test_scan_shards_cohorts_without_changing_signals
+FAILED ../aud-work/tests/analysis_workbench/test_aud_9952.py::test_scan_accepts_20160_rows_above_old_source_cap
+FAILED ../aud-work/tests/analysis_workbench/test_aud_9952.py::test_common_mode_failure_has_benchmark_defect_priority
+FAILED ../aud-work/tests/analysis_workbench/test_aud_9952.py::test_top_100_represent_distinct_cells_and_retain_all_episodes
+FAILED ../aud-work/tests/analysis_workbench/test_aud_9952.py::test_queue_loads_20160_candidates_above_old_byte_and_node_caps
+FAILED ../aud-work/tests/analysis_workbench/test_aud_9952.py::test_release_seed_cohorts_use_planner_config_not_seeded_episode_hash
+15 failed in 1.38s

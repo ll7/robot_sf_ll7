@@ -59,10 +59,8 @@ def project_release_row(row: Mapping[str, Any]) -> Mapping[str, Any]:
                     raise ValueError("release episode config hashes conflict")
                 value["episode_config_hash"] = value.pop("config_hash")
             projected[key] = value
-    metadata = row.get("algorithm_metadata")
-    if isinstance(metadata, Mapping):
-        metadata = dict(metadata)
-        if "config_hash" in metadata:
-            metadata["planner_config_hash"] = metadata.pop("config_hash")
-        projected["algorithm_metadata"] = metadata
+    # Planner-hash validation above already established this mapping and key.
+    metadata = dict(metadata)
+    metadata["planner_config_hash"] = metadata.pop("config_hash")
+    projected["algorithm_metadata"] = metadata
     return projected

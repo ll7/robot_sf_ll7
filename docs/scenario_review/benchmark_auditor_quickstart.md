@@ -205,13 +205,16 @@ predicted separation become null, with source tokens and reasons retained in
 failures still fail admission. A top-level `failure` is a terminal outcome only
 when explicit booleans identify a non-collision timeout.
 
-`orbit_zero_progress` uses `deadlock_stall` window counts. The TTC seconds bound
+`orbit_zero_progress` uses `deadlock_stall` window counts and excludes completed
+episodes from the stall signature, matching the recorded metric contract. The TTC seconds bound
 includes `time_to_collision_min`; collision counts keep their own bound. Outlier
 methods disclose a MAD absolute floor of 0.01 feature units and a relative floor
 of 5% of the cohort median magnitude; both are configurable. Outliers compare
 matched outcomes, and planner disagreement compares metrics only among peers
 with the same outcome. These are review heuristics, not calibrated defect
-probabilities. Engine/method revisions invalidate earlier scan cache keys.
+probabilities. Engine/method revisions invalidate earlier scan cache keys. Queue policy versions
+are now `audit-queue.active.v1.1` and `audit-queue.fixed.v1.1`; saved state from
+the prior policy must not silently reuse the old ranking contract.
 
 The scan source limit is 1 GiB; queue input is bounded at 2 GiB and 50 million
 JSON nodes. Queue ranking promotes `common_mode_failure` to suspected benchmark

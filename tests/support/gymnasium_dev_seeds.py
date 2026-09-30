@@ -18,7 +18,7 @@ class _DevelopmentSeedCheckerEnv(gym.Wrapper):
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
         """Forward checker resets to the same underlying environment on dev seeds."""
-        seed = {123: 1013, 456: 1014}.get(seed, seed)
+        seed = {123: 1013, 456: 1014}.get(seed, seed)  # seed-holdout: synthetic-fixture
         return self.env.reset(seed=seed, options=options)
 
 

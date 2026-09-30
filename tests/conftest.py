@@ -413,6 +413,7 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    "test_heldout_seed_guard.py",
     # Clearance and LiDAR tracking contracts use fixed arrays without environment steps.
     "test_clearance_geometry.py",
     "test_lidar_tracked_agents.py",

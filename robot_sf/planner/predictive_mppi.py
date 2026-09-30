@@ -34,6 +34,7 @@ from robot_sf.planner.socnav import (
     SocNavPlannerConfig,
 )
 from robot_sf.planner.socnav_base import _SOCNAV_CONFIG_INIT_KEYS
+from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveSettings
 
 _DEFAULT_ITERATIONS = 4
 _DEFAULT_GOAL_PROGRESS_WEIGHT = 6.0
@@ -109,6 +110,9 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
     def __init__(self, config: PredictiveMPPIConfig, *, allow_fallback: bool = False) -> None:
         """Initialize predictive optimizer and deterministic RNG state."""
         self.config = config
+        self._drive_settings = DifferentialDriveSettings(
+            radius=config.socnav.predictive_robot_radius
+        )
         self._rng = np.random.default_rng(int(config.random_seed))
         self._no_admissible_command = False
         self._no_admissible_command_count = 0
@@ -122,6 +126,80 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
     def bind_env(self, env: Any) -> None:
         """Bind the episode's original static grid geometry."""
         self._bind_static_obstacles(env)
+        self._drive_settings = DifferentialDriveSettings(
+            radius=self.config.socnav.predictive_robot_radius
+        )
+        robots = getattr(getattr(env, "simulator", None), "robots", None)
+        if robots:
+            settings = getattr(robots[0], "config", None)
+            # Unsupported drives must retain the full margin. Standalone callers
+            # without a drive use the production differential-drive defaults.
+            self._drive_settings = (
+                settings if isinstance(settings, DifferentialDriveSettings) else None
+            )
+
+    def _static_recovery_available(self) -> bool:
+        """Require both exact static geometry and a supported drive model.
+
+        Returns:
+            bool: Whether recovery can be evaluated with native drive motion.
+        """
+        return super()._static_recovery_available() and self._drive_settings is not None
+
+    def _in_static_recovery(self, current_obs: float) -> bool:
+        """Identify the below-margin exception, never enabled for unbound grids.
+
+        Returns:
+            bool: Whether the initial clearance is in the recovery interval.
+        """
+        return self._static_recovery_available() and (
+            0.0 < current_obs < float(self.config.hard_obstacle_clearance)
+        )
+
+    def _recovery_drive_rollout(
+        self,
+        sequence: np.ndarray,
+        observation: dict[str, object],
+        robot_pos: np.ndarray,
+        heading: float,
+    ) -> tuple[np.ndarray, np.ndarray, float]:
+        """Integrate recovery from observed velocity through the native drive.
+
+        The velocity command is converted to acceleration just as in the map
+        runner. Native motion clips acceleration/deceleration and uses wheel
+        odometry. Check a terminal braking coast too: the prediction horizon
+        must not turn a still-moving body into an instantaneous stop.
+
+        Returns:
+            tuple: Local positions, headings, and swept terminal-coast clearance.
+        """
+        robot_state, _, _ = self._predictor._socnav_fields(observation)
+        _, _, speed, _ = self._extract_state(observation)
+        angular = float(self._as_1d_float(robot_state.get("angular_velocity", [0.0]), pad=1)[0])
+        drive = DifferentialDriveRobot(self._drive_settings)
+        drive.state.velocity = (speed, angular)
+        drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds((speed, angular))
+        dt = float(self.config.rollout_dt)
+        positions, headings = [], []
+        for action in sequence:
+            velocity = np.asarray(drive.current_speed)
+            drive.apply_action(tuple((np.asarray(action) - velocity) / dt), dt)
+            positions.append(drive.pos)
+            headings.append(drive.pose[1])
+
+        cos_h, sin_h = np.cos(heading), np.sin(heading)
+        rotation = np.array([[cos_h, -sin_h], [sin_h, cos_h]])
+        previous = robot_pos + rotation @ np.asarray(drive.pos)
+        coast_clearance = float("inf")
+        while abs(drive.current_speed[0]) > 1e-9:
+            velocity = np.asarray(drive.current_speed)
+            drive.apply_action(tuple(-velocity / dt), dt)
+            point = robot_pos + rotation @ np.asarray(drive.pos)
+            coast_clearance = min(
+                coast_clearance, self._exact_obstacle_clearance(point, previous=previous)
+            )
+            previous = point
+        return np.asarray(positions), np.asarray(headings), coast_clearance
 
     def _extract_state(
         self, observation: dict[str, object]
@@ -262,7 +340,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
             pedestrian_radius=self.config.socnav.predictive_pedestrian_radius,
         )
 
-    def _sequence_rollout(  # noqa: PLR0913
+    def _sequence_rollout(  # noqa: PLR0913, PLR0915
         self,
         sequence: np.ndarray,
         *,
@@ -294,15 +372,27 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         future_steps = int(future.shape[1])
         valid_idx = np.where(mask > 0.5)[0]
 
+        current_obs = self._min_obstacle_clearance(
+            robot_pos, observation=observation, grid_payload=grid_payload
+        )
+        drive_rollout = None
+        if self._in_static_recovery(current_obs):
+            drive_rollout = self._recovery_drive_rollout(sequence, observation, robot_pos, heading)
+            min_obs = min(min_obs, drive_rollout[2])
+
         previous_world = robot_pos
         for step, action in enumerate(sequence):
             v = float(action[0])
             w = float(action[1])
-            local_pos = local_pos + np.array(
-                [v * np.cos(local_heading) * dt, v * np.sin(local_heading) * dt],
-                dtype=float,
-            )
-            local_heading = _wrap_angle(local_heading + w * dt)
+            if drive_rollout is None:
+                local_pos = local_pos + np.array(
+                    [v * np.cos(local_heading) * dt, v * np.sin(local_heading) * dt],
+                    dtype=float,
+                )
+                local_heading = _wrap_angle(local_heading + w * dt)
+            else:
+                local_pos = drive_rollout[0][step]
+                local_heading = drive_rollout[1][step]
 
             ped_idx = min(step, future_steps - 1)
             ped_t = future[:, ped_idx, :]
@@ -345,9 +435,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
             min_obs=min_obs,
             first_clear=first_clear,
             first_obs=first_obs,
-            current_obs=self._min_obstacle_clearance(
-                robot_pos, observation=observation, grid_payload=grid_payload
-            ),
+            current_obs=current_obs,
         )
         if hard_constraint_cost is not None:
             return hard_constraint_cost
@@ -390,7 +478,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         )
         return -reward
 
-    def _batch_sequence_rollout(  # noqa: PLR0913, C901, PLR0915
+    def _batch_sequence_rollout(  # noqa: PLR0913, C901, PLR0915, PLR0912
         self,
         batch: np.ndarray,
         *,
@@ -435,15 +523,30 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         anchor_pen = np.zeros(samples, dtype=float)
         prev_action = np.zeros((samples, 2), dtype=float)
 
+        current_obs = self._min_obstacle_clearance(
+            robot_pos, observation=observation, grid_payload=grid_payload
+        )
+        drive_rollouts = None
+        if self._in_static_recovery(current_obs):
+            drive_rollouts = [
+                self._recovery_drive_rollout(sequence, observation, robot_pos, heading)
+                for sequence in batch
+            ]
+            min_obs = np.minimum(min_obs, [rollout[2] for rollout in drive_rollouts])
+
         previous_world = np.tile(robot_pos, (samples, 1))
         for step in range(horizon):
             v = batch[:, step, 0]  # (samples,)
             w = batch[:, step, 1]  # (samples,)
 
-            local_pos = local_pos + np.column_stack(
-                [v * np.cos(local_heading) * dt, v * np.sin(local_heading) * dt]
-            )
-            local_heading = _wrap_angle_batch(local_heading + w * dt)
+            if drive_rollouts is None:
+                local_pos = local_pos + np.column_stack(
+                    [v * np.cos(local_heading) * dt, v * np.sin(local_heading) * dt]
+                )
+                local_heading = _wrap_angle_batch(local_heading + w * dt)
+            else:
+                local_pos = np.asarray([rollout[0][step] for rollout in drive_rollouts])
+                local_heading = np.asarray([rollout[1][step] for rollout in drive_rollouts])
 
             ped_idx = min(step, future_steps - 1)
             ped_t = future[:, ped_idx, :]  # (peds, 2)
@@ -490,9 +593,6 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         # Hard constraint rejection per sample
         costs = np.full(samples, float(self.config.invalid_sequence_cost), dtype=float)
         alive = np.ones(samples, dtype=bool)
-        current_obs = self._min_obstacle_clearance(
-            robot_pos, observation=observation, grid_payload=grid_payload
-        )
         for s in range(samples):
             hc = self._hard_constraint_cost(
                 min_clear=float(min_clear[s]),
@@ -579,12 +679,12 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                 float(self.config.invalid_sequence_cost)
                 + (float(self.config.hard_ped_clearance) - min_clear) * 1e3
             )
-        recovery = self.config.clearance_model == "surface_v2" and 0.0 < current_obs < float(
-            self.config.hard_obstacle_clearance
-        )
+        recovery = self._in_static_recovery(current_obs)
         if (
             not obstacle_rollout_admissible(
-                current_obs, min_obs, float(self.config.hard_obstacle_clearance)
+                current_obs if self._static_recovery_available() else float("inf"),
+                min_obs,
+                float(self.config.hard_obstacle_clearance),
             )
             if self.config.clearance_model == "surface_v2"
             else min_obs < float(self.config.hard_obstacle_clearance)
@@ -618,10 +718,12 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         anchor_action,
         grid_payload,
     ):
-        """Return a scored at-rest recovery rotation, or None outside recovery."""
-        if self.config.clearance_model != "surface_v2" or not (
-            0.0 < current_obs < float(self.config.hard_obstacle_clearance)
-        ):
+        """Score a recovery turn including actual drive-limited braking coast.
+
+        Returns:
+            tuple | None: Command and cost, or None outside static recovery.
+        """
+        if not self._in_static_recovery(current_obs):
             return None
         target_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
         turn = float(
@@ -649,7 +751,9 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         """Return the first action from the best sampled control sequence."""
         self._no_admissible_command = False
         self._recovery_command = False
-        robot_pos, heading, _speed, goal = self._extract_state(observation)
+        # Recovery rollouts consume observed speed and yaw rate, including
+        # sampled/anchor/stop sequences, rather than assuming the body is at rest.
+        robot_pos, heading, _, goal = self._extract_state(observation)
         if float(np.linalg.norm(goal - robot_pos)) <= float(self.config.goal_tolerance):
             return 0.0, 0.0
 
@@ -791,9 +895,8 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
             and action[1] == 0.0
             and recovery_rotation[1] < float(self.config.invalid_sequence_cost)
         ):
-            # A stationary score winner is safe but cannot leave the recovery
-            # trap. The explicit feasible rotation changes heading while keeping
-            # the circular body's clearance unchanged.
+            # Prefer a feasible turn over stasis. Its score already includes
+            # constrained braking from the actual observed drive velocity.
             action, selected_cost = recovery_rotation
         if bool(self.config.progress_escape_enabled):
             goal_dist = float(np.linalg.norm(goal - robot_pos))
@@ -839,9 +942,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         self._no_admissible_command = selected_cost >= float(self.config.invalid_sequence_cost)
         self._no_admissible_command_count += int(self._no_admissible_command)
         self._recovery_command = bool(
-            self.config.clearance_model == "surface_v2"
-            and 0.0 < current_obs < float(self.config.hard_obstacle_clearance)
-            and not self._no_admissible_command
+            self._in_static_recovery(current_obs) and not self._no_admissible_command
         )
         self._recovery_command_count += int(self._recovery_command)
 

@@ -404,7 +404,9 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         if self.config.clearance_model == "surface_v2" and (
             min_ped_clear < float(self.config.safe_distance)
             or not obstacle_rollout_admissible(
-                current_clearance, min_obs_clear, float(self.config.hard_obstacle_clearance)
+                current_clearance if self._static_recovery_available() else float("inf"),
+                min_obs_clear,
+                float(self.config.hard_obstacle_clearance),
             )
         ):
             return float("-inf")

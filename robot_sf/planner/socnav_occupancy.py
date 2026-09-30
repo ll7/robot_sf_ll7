@@ -39,6 +39,17 @@ class OccupancyAwarePlannerMixin:
             segments, polygons = geometry_source()
             self._static_clearance = StaticObstacleClearance(segments, polygons)
 
+    def _static_recovery_available(self) -> bool:
+        """Require continuous, bound static geometry for below-margin recovery.
+
+        Returns:
+            bool: Whether the static recovery exception can be evaluated.
+        """
+        return (
+            self.config.clearance_model == "surface_v2"
+            and getattr(self, "_static_clearance", None) is not None
+        )
+
     def _exact_obstacle_clearance(self, point: np.ndarray, *, previous=None) -> float | None:
         """Return bound static surface clearance or None for the raster fallback."""
         geometry = getattr(self, "_static_clearance", None)

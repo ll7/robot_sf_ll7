@@ -1045,8 +1045,10 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 fallback_policy="stop",
             )
 
+        empty_pedestrians = cached_state[3].size == 0
+
         def clearance_rank(evaluation) -> tuple[float, ...]:
-            if self.config.clearance_model != "surface_v2":
+            if self.config.clearance_model != "surface_v2" or not empty_pedestrians:
                 return (float(evaluation["min_ped_clear"]),)
             return tuple(
                 float(evaluation.get(key, float("-inf")))
@@ -1057,7 +1059,8 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             cached_state[0], observation=observation, grid_payload=cached_grid
         )
         recovery = (
-            self.config.clearance_model == "surface_v2"
+            self._static_recovery_available()
+            and empty_pedestrians
             and 0.0 < current_obs < float(self.config.hard_obstacle_clearance)
             and float(fallback_eval["min_obs_clear"]) > 0.0
             and float(fallback_eval["min_obs_clear"]) >= current_obs
@@ -1078,6 +1081,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         )
         if (fallback_rank > best_rank or prefer_recovery_turn) and (
             self.config.clearance_model != "surface_v2"
+            or not empty_pedestrians
             or float(fallback_eval["min_obs_clear"]) > 0.0
         ):
             self._recovery_command_count += int(recovery)

@@ -227,6 +227,46 @@ def _merge_guard_telemetry(
             base_contract[key] = deepcopy(source)
 
 
+def _merge_runtime_algorithm_identity(
+    base_contract: dict[str, Any], runtime_algorithm_metadata: dict[str, Any]
+) -> None:
+    """Bind summary telemetry to every contributing producer's complete identity."""
+    # Carry producer identity through both worker aggregation and the final
+    # static-contract merge. Conflicting or incomplete shield identities are
+    # sticky: a later valid episode must not grant their telemetry an exemption.
+    planner_runtime = runtime_algorithm_metadata.get("planner_runtime")
+    requires_identity = (
+        base_contract.get("canonical_algorithm") == "guarded_ppo"
+        or runtime_algorithm_metadata.get("canonical_algorithm") == "guarded_ppo"
+        or any(key in runtime_algorithm_metadata for key in ("guard_stats", "shield_stats"))
+        or (isinstance(planner_runtime, dict) and "last_decision" in planner_runtime)
+    )
+    for key in ("algorithm", "canonical_algorithm"):
+        if key not in runtime_algorithm_metadata and not requires_identity:
+            continue
+        value = runtime_algorithm_metadata.get(key, "mixed")
+        if key not in base_contract:
+            base_contract[key] = deepcopy(value)
+        elif base_contract[key] != value:
+            base_contract[key] = "mixed"
+    runtime_contract = runtime_algorithm_metadata.get("planner_contract")
+    if isinstance(runtime_contract, dict) or requires_identity:
+        planner_id = (
+            runtime_contract.get("planner_id", "mixed")
+            if isinstance(runtime_contract, dict)
+            else "mixed"
+        )
+        if "planner_contract" not in base_contract:
+            base_contract["planner_contract"] = (
+                deepcopy(runtime_contract) if isinstance(runtime_contract, dict) else {}
+            )
+            base_contract["planner_contract"]["planner_id"] = planner_id
+        else:
+            contract = base_contract["planner_contract"]
+            if isinstance(contract, dict) and contract.get("planner_id") != planner_id:
+                contract["planner_id"] = "mixed"
+
+
 def merge_runtime_algorithm_contract(  # noqa: C901, PLR0915
     base_contract: dict[str, Any],
     runtime_algorithm_metadata: Any,
@@ -238,6 +278,8 @@ def merge_runtime_algorithm_contract(  # noqa: C901, PLR0915
     """
     if not isinstance(base_contract, dict) or not isinstance(runtime_algorithm_metadata, dict):
         return base_contract
+
+    _merge_runtime_algorithm_identity(base_contract, runtime_algorithm_metadata)
 
     _merge_guard_telemetry(base_contract, runtime_algorithm_metadata)
 

@@ -147,11 +147,11 @@ def test_declared_guarded_safe_command_remains_available(guarded_metadata) -> No
 
 @pytest.mark.parametrize(
     "guarded_runtime",
-    ["fallback_best_effort", "uncertainty_fallback_configured"],
+    ["uncertainty_fallback_configured"],
     indirect=True,
 )
 def test_guarded_genuine_fallback_counters_remain_forbidden(guarded_metadata) -> None:
-    """Positive producer counters keep best-effort/uncertainty execution inadmissible."""
+    """Unknown fallback counters remain inadmissible even for guarded PPO."""
     from robot_sf.benchmark.release_acceptance import _status_markers
 
     label = guarded_metadata["planner_runtime"]["last_decision"]["decision_label"]
@@ -162,10 +162,10 @@ def test_guarded_genuine_fallback_counters_remain_forbidden(guarded_metadata) ->
 
 @pytest.mark.parametrize("guarded_runtime", ["stop_best_effort"], indirect=True)
 @pytest.mark.parametrize("counter_container", ["guard_stats", "shield_stats"])
-def test_stop_best_effort_counter_reaches_metadata_acceptance_scan(
+def test_unbound_stop_best_effort_counter_reaches_metadata_acceptance_scan(
     guarded_metadata, counter_container: str
 ) -> None:
-    """The acceptance adapter rejects producer stop-best-effort counters."""
+    """Wrong-arm binding keeps producer stop-best-effort counters forbidden."""
     from robot_sf.benchmark.release_acceptance import _algorithm_metadata_runtime_marker
 
     metadata = deepcopy(guarded_metadata)
@@ -174,7 +174,7 @@ def test_stop_best_effort_counter_reaches_metadata_acceptance_scan(
         metadata.pop("shield_stats")
     else:
         metadata.pop("guard_stats")
-    assert _algorithm_metadata_runtime_marker(metadata, expected_algorithm="guarded_ppo") == (
+    assert _algorithm_metadata_runtime_marker(metadata, expected_algorithm="goal") == (
         f"{counter_container}.{'decision_counts.' if counter_container == 'shield_stats' else ''}stop_best_effort",
         "1",
     )
@@ -210,6 +210,7 @@ def test_stop_best_effort_decision_label_is_forbidden() -> None:
 def test_availability_rejects_aggregate_stop_best_effort_stats(guarded_metadata) -> None:
     """Availability must scan preserved aggregate shield counters."""
     metadata = deepcopy(guarded_metadata)
+    metadata.pop("planner_runtime")
     metadata["guard_stats"] = {"stop_best_effort": 1, "fallback_safe": 3}
     metadata["shield_stats"] = {"decision_counts": {"stop_best_effort": 1, "fallback_safe": 3}}
     summary = {
@@ -217,7 +218,7 @@ def test_availability_rejects_aggregate_stop_best_effort_stats(guarded_metadata)
         "written": 2,
         "total_jobs": 2,
         "failed_jobs": 0,
-        "algorithm_readiness": {"name": "guarded_ppo"},
+        "algorithm_readiness": {"name": "goal"},
         "algorithm_metadata_contract": metadata,
     }
 
@@ -811,4 +812,104 @@ def test_summarize_benchmark_availability_rejects_runtime_fallback_marker() -> N
     assert availability.benchmark_success is False
     assert availability.availability_reason == (
         "planner runtime reported forbidden marker fallback_triggered=true"
+    )
+
+
+@pytest.mark.parametrize(
+    "guarded_runtime",
+    ["fallback_safe", "fallback_best_effort", "stop_safe", "stop_best_effort"],
+    indirect=True,
+)
+def test_verified_guarded_native_decisions_remain_available(guarded_metadata) -> None:
+    """Native decisions survive serializer, runner hook, availability and release scans."""
+    from robot_sf.benchmark.fallback_policy import algorithm_metadata_runtime_marker
+    from robot_sf.benchmark.release_acceptance import _status_markers
+
+    summary = {
+        "status": "ok",
+        "written": 1,
+        "total_jobs": 1,
+        "failed_jobs": 0,
+        "algorithm_readiness": {"name": "guarded_ppo"},
+        "algorithm_metadata_contract": guarded_metadata,
+    }
+    assert (
+        algorithm_metadata_runtime_marker(guarded_metadata, expected_algorithm="guarded_ppo")
+        is None
+    )
+    assert benchmark_run_exit_code(summary) == 0
+    assert (
+        _status_markers(
+            {"status": "ok", "algorithm_metadata": guarded_metadata},
+            "row",
+            expected_algorithm="guarded_ppo",
+        )
+        == []
+    )
+
+
+@pytest.mark.parametrize("label", ["fallback_safe", "fallback_best_effort", "stop_best_effort"])
+@pytest.mark.parametrize("binding", ["verified", "unbound", "wrong_arm", "forged", "wrong_base"])
+@pytest.mark.parametrize("container", ["guard_stats", "shield_stats"])
+def test_native_shield_counters_require_verified_identity(label, binding, container) -> None:
+    """Only the complete declared guarded identity can admit native positive counters."""
+    from robot_sf.benchmark.fallback_policy import algorithm_metadata_runtime_marker
+
+    metadata = {
+        "algorithm": "ppo",
+        "canonical_algorithm": "guarded_ppo",
+        "planner_contract": {"planner_id": "guarded_ppo"},
+    }
+    metadata[container] = (
+        {label: 2} if container == "guard_stats" else {"decision_counts": {label: 2}}
+    )
+    expected = "guarded_ppo"
+    if binding == "unbound":
+        expected = None
+    elif binding == "wrong_arm":
+        expected = "ppo"
+    elif binding == "forged":
+        metadata["planner_contract"] = {"planner_id": "goal"}
+    elif binding == "wrong_base":
+        metadata["algorithm"] = "guarded_ppo"
+    marker = algorithm_metadata_runtime_marker(metadata, expected_algorithm=expected)
+    if binding == "verified":
+        assert marker is None
+    else:
+        path = f"{container}.{'decision_counts.' if container == 'shield_stats' else ''}{label}"
+        assert marker == (path, "2")
+
+
+@pytest.mark.parametrize(
+    "label", ["fallback_safe", "fallback_best_effort", "stop_safe", "stop_best_effort"]
+)
+@pytest.mark.parametrize("value", [-1, True, "1", 1.0, None, float("nan"), float("inf"), {}])
+@pytest.mark.parametrize("container", ["guard_stats", "shield_stats"])
+def test_verified_native_shield_counters_reject_malformed(label, value, container) -> None:
+    """Telemetry admission still requires a native nonnegative integer counter."""
+    from robot_sf.benchmark.fallback_policy import algorithm_metadata_runtime_marker
+
+    metadata = {
+        "algorithm": "ppo",
+        "canonical_algorithm": "guarded_ppo",
+        "planner_contract": {"planner_id": "guarded_ppo"},
+    }
+    metadata[container] = (
+        {label: value} if container == "guard_stats" else {"decision_counts": {label: value}}
+    )
+    path = f"{container}.{'decision_counts.' if container == 'shield_stats' else ''}{label}"
+    assert algorithm_metadata_runtime_marker(metadata, expected_algorithm="guarded_ppo") == (
+        path,
+        "invalid",
+    )
+
+
+@pytest.mark.parametrize("label", ["fallback_best_effort", "stop_best_effort"])
+@pytest.mark.parametrize("binding", [None, "goal", "guarded_ppo"])
+def test_unverified_best_effort_decision_retains_rejection(label, binding) -> None:
+    """Caller labels without verified producer identity cannot admit shield decisions."""
+    payload = {"guard_stats": {label: 1}, "last_decision": {"decision_label": label}}
+    assert runtime_fallback_or_degraded_marker(payload, expected_algorithm=binding) == (
+        f"guard_stats.{label}",
+        "1",
     )

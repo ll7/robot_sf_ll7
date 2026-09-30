@@ -12,7 +12,7 @@ predictive_foresight_device: cpu
 deterministic: true
 obs_mode: dict
 action_space: unicycle
-v_max: 3.0
+v_max: 2.0
 omega_max: 1.0
 fallback_to_goal: true
 
@@ -39,6 +39,8 @@ fallback_risk_dwa:
   ttc_weight: 0.35
   progress_escape_enabled: false
 
-# DIAGNOSTIC ONLY; never promote or use for release.
-diagnostic_training_plant: true
-allow_backwards: true
+# DIAGNOSTIC ONLY. A5 preserves V2 policy bounds and release plant, except speed cap 3.
+diagnostic_training_plant: false
+
+# PPOABL diagnostic-only plant selector.
+diagnostic_plant_variant: a5

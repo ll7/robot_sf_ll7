@@ -21,7 +21,7 @@ From the requested source checkout with project dependencies installed:
 ```bash
 OMP_NUM_THREADS=1 PYTHONPATH=.:fast-pysf uv run python scripts/validation/measure_pedfix_stationary.py
 OMP_NUM_THREADS=1 PYTHONPATH=.:fast-pysf uv run python scripts/validation/measure_pedfix_planners.py --mode roster
-OMP_NUM_THREADS=1 PYTHONPATH=.:fast-pysf uv run python scripts/validation/measure_pedfix_planners.py --mode gate
+OMP_NUM_THREADS=1 PYTHONPATH=.:fast-pysf uv run python scripts/validation/measure_pedfix_planners.py --mode gate --affected-suite
 OMP_NUM_THREADS=1 PYTHONPATH=.:fast-pysf uv run pytest -n0 tests/ped_npc/test_pedfix_episode_contract.py tests/ped_npc/test_force_population_size_split.py
 ```
 
@@ -50,7 +50,48 @@ Two scenarios (head-on corridor medium and circular crossing) × seeds 1001/1002
 
 Observed consumers: none (0 of 9029 policy calls; no construction changed global state). SICNav is outside this roster. The code defect is real, but this measurement does not establish historical 0.0.7 crowd differences: it covers the current 0.0.8 roster/configs and finite observed paths, not old planner revisions or all possible episodes. Different robot actions can still legitimately change pedestrian motion through physical interaction.
 
-## Behavior change gate
+## Full sampled-population behavior gate
+
+All 24 release scenarios with positive pedestrian density and route/crowded-zone sampling × seeds 1001/1002 × goal, ORCA and hybrid_rule_v4_fast_progress_static_escape: **144 paired episodes per version**. The other 24 scenarios have no sampled population (marker-only or zero density); circular crossing is included. Scenario selection reads configuration without stepping an environment. Both versions use the same planner configs, harness maximum horizon 600, dt 0.1 and normal termination (including an earlier declared scenario timeout). Success/collision/timeout categories use the mutually exclusive outcome event flags; raw `terminated`/`max_steps` reasons and step counts are preserved in the pair data. Every row has native planner status `ok`, no degraded execution, no integrity contradiction and no invalid spawn. The full pair data are [paired_outcomes_affected.csv](paired_outcomes_affected.csv) and [paired_outcomes_affected.json](paired_outcomes_affected.json). The earlier five-scenario subset below exactly matches these runs.
+
+| Planner | Before success/collision/timeout | After success/collision/timeout |
+|---|---|---|
+| goal | 12/34/2 | 7/40/1 |
+| orca | 43/4/1 | 39/7/2 |
+| hybrid_rule_v4_fast_progress_static_escape | 43/1/4 | 43/0/5 |
+
+22 of 144 pairs change terminal outcome. Crowd layouts and group distributions change intentionally; this gate exposes the behavior change and does not establish a planner performance ranking. Maintainer acceptance of the crowd calibration remains pending before the freeze.
+
+| Scenario | Goal before → after (1001; 1002) | ORCA before → after (1001; 1002) | Hybrid before → after (1001; 1002) |
+|---|---|---|---|
+| classic_station_platform_medium | collision → collision; collision → collision | success → success; success → success | timeout → timeout; timeout → timeout |
+| classic_cross_trap_low | collision → collision; collision → collision | success → success; success → success | success → success; success → success |
+| classic_cross_trap_medium | collision → collision; collision → collision | success → success; collision → success | success → success; success → success |
+| classic_cross_trap_high | collision → collision; collision → collision | success → collision; success → success | success → success; success → success |
+| classic_doorway_low | collision → collision; collision → collision | collision → collision; success → success | success → success; success → success |
+| classic_doorway_medium | collision → collision; collision → collision | success → collision; success → success | success → success; success → success |
+| classic_doorway_high | collision → collision; collision → collision | success → success; timeout → timeout | success → success; success → success |
+| classic_group_crossing_low | success → success; success → success | success → success; success → success | success → success; success → success |
+| classic_group_crossing_medium | success → collision; success → collision | success → success; success → success | success → success; success → success |
+| classic_group_crossing_high | success → collision; success → collision | success → success; success → success | success → success; success → success |
+| classic_head_on_corridor_low | collision → collision; success → success | success → collision; success → success | success → success; success → success |
+| classic_head_on_corridor_medium | collision → collision; collision → success | success → success; success → success | success → success; success → success |
+| classic_merging_low | collision → collision; timeout → timeout | success → success; success → collision | success → success; success → success |
+| classic_merging_medium | timeout → collision; collision → collision | success → success; success → timeout | timeout → timeout; timeout → success |
+| classic_overtaking_low | collision → collision; collision → collision | collision → collision; success → collision | success → success; success → success |
+| classic_overtaking_medium | collision → collision; collision → collision | success → success; success → success | success → success; success → success |
+| classic_t_intersection_low | collision → collision; collision → collision | success → success; success → success | success → success; success → success |
+| classic_t_intersection_medium | collision → collision; collision → collision | success → success; success → success | success → success; success → success |
+| classic_urban_crossing_medium | success → collision; success → collision | success → success; success → success | success → success; success → success |
+| francis2023_crowd_navigation | collision → collision; collision → collision | success → success; success → success | success → success; success → success |
+| francis2023_parallel_traffic | success → collision; collision → collision | success → success; success → success | success → timeout; success → success |
+| francis2023_perpendicular_traffic | collision → collision; collision → success | success → success; success → success | success → success; success → success |
+| francis2023_circular_crossing | success → success; success → success | success → success; success → success | collision → success; success → success |
+| francis2023_robot_crowding | collision → collision; collision → collision | collision → success; success → success | success → timeout; success → success |
+
+Measured fixed checkout: `bc85705d4f89c5f91a499c77362e30a8f68bdd8f`; its runtime code is identical to `e8af63df613529517472671a891e4e684540ac5c`. Later changes add diagnostic artifacts only.
+
+## Initial five-scenario behavior subset
 
 Five affected scenarios × seeds 1001/1002 × goal, ORCA, and frozen hybrid_rule_v4_fast_progress_static_escape. Same scenario/seed and planner config, different pedestrian sampling contract. Seeds match; initial crowds are intentionally not byte-identical across versions. No unchanged-outcome promise or statistical performance claim is made.
 

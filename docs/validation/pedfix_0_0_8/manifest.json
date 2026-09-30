@@ -9,7 +9,7 @@
   "roster_episodes": 56,
   "roster_calls": 9029,
   "roster_changed_calls": 0,
-  "paired_episodes_per_version": 30,
+  "paired_episodes_per_version": 144,
   "heldout_environment_steps": 0,
   "seed_band": [
     1001,
@@ -23,20 +23,25 @@
     "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml": "8b16cb1ba6155567f31855ec453d596e17e4ed859caf60b6e1092f49b4766ac8",
     "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml": "a5b339d1413b68d8acab4a122f441c559303cbcf8d03d0fb05400a14ad4febf9",
     "uv.lock": "def82098b23281e7c49f1f05e052e412c2de54ae2da53f1708bc0ddc2a30d023",
-    "scripts/validation/measure_pedfix_planners.py": "dc181267009a2a7fd4e7f010d98a2b7b4c2d120116e8690121bc5e1c37b96493",
+    "scripts/validation/measure_pedfix_planners.py": "cb80907e82d4ded8173cec5168abc8965952bd365667742cc75ac7544f5a857b",
     "scripts/validation/measure_pedfix_stationary.py": "e87b9795f72456d6a4ff3daba59ee883b35fde98145b9774bd86a495d21fc682"
   },
   "artifact_sha256": {
-    "early_contacts_clearance_only.jsonl": "166d8c5c37c38978fe72f1208f6b1be43b59ed22011690ab09bbccea7826028a",
-    "README.md": "e316daa7471c6a2fae9fafc2e16aa46546ba07b40221ebe1c7be501bb788c91a",
-    "roster_rng.json": "f35dc877f7cc1c50d4569e51001b58bec7a37a3827923a200cb8e52863bb7a65",
-    "test_value.md": "5910ef5a31770362500c29187d4078858360b2f013323eb29218dac78779cf0a",
+    "README.md": "014a5b1918a67b1da6a383ef16e1f7a6d3b6e8e5fe99e63025361095686c89d9",
     "clearance_only.patch": "bb0a7e9d739b8ba66c842d20fb8434f9e4302508794b1c9631ed4b2437a63c11",
-    "wall_stalls.csv": "b194d5fbab9a0972cde4cdc53c2d13a316350cbf1ace6b8065c3c0aaa787b2d8",
-    "environment.json": "7567eb52931be9859c5f81bead275f01555424530a751e7e1d8e322e21ee6400",
+    "early_contacts_clearance_only.jsonl": "166d8c5c37c38978fe72f1208f6b1be43b59ed22011690ab09bbccea7826028a",
     "early_contacts_fixed.jsonl": "c00bd67dd4d46cb74d19705131598339df36531958f6b28166060d0b86b783b8",
-    "stationary_fixed.jsonl": "e61ece5a57c02d322a81fcca3676c96e4f59feef6a1fc349cb8fd415d716d9bf",
+    "environment.json": "7567eb52931be9859c5f81bead275f01555424530a751e7e1d8e322e21ee6400",
     "paired_outcomes.json": "ce87930b663cb02be7c6c1b9f2ef09a28f8d271c695c8450d111896c8fcf6235",
-    "stationary_base.jsonl": "cb230a816172b583cd3fe0141f2bfbe516fa6cf58925fbae4dbb5360e727efa8"
-  }
+    "paired_outcomes_affected.csv": "c3517de4686516248013bf3d290d6c7dcf0798d6fc702a85b3842a8e13d875f6",
+    "paired_outcomes_affected.json": "63d4940942a1f87181719f30bb2534209568d9c348e6a74fa306011328ca9831",
+    "roster_rng.json": "f35dc877f7cc1c50d4569e51001b58bec7a37a3827923a200cb8e52863bb7a65",
+    "stationary_base.jsonl": "cb230a816172b583cd3fe0141f2bfbe516fa6cf58925fbae4dbb5360e727efa8",
+    "stationary_fixed.jsonl": "e61ece5a57c02d322a81fcca3676c96e4f59feef6a1fc349cb8fd415d716d9bf",
+    "test_value.md": "864deac682a3f8b7e69a5ebd7ead738914cffda88059fcf92e1854e4570a63b2",
+    "wall_stalls.csv": "b194d5fbab9a0972cde4cdc53c2d13a316350cbf1ace6b8065c3c0aaa787b2d8"
+  },
+  "paired_affected_scenarios": 24,
+  "paired_initial_subset_episodes_per_version": 30,
+  "paired_measured_fixed_checkout": "bc85705d4f89c5f91a499c77362e30a8f68bdd8f"
 }

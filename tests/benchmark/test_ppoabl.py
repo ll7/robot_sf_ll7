@@ -134,7 +134,8 @@ def test_branch_selected_plant(campaign):
         policy = yaml.safe_load(planner.algo_config_path.read_text())
         variant = policy["diagnostic_plant_variant"]
         variants.add(variant)
-        assert policy["v_max"] == 3.0 and policy["omega_max"] == 1.0
+        assert policy["v_max"] == (2.0 if variant == "a5" else 3.0)
+        assert policy["omega_max"] == 1.0
         assert policy["diagnostic_training_plant"] == (variant != "a5")
         assert_transitions(
             context(cfg, scenarios[0], planner.key, policy).config.robot_config, FACTORS[variant]
@@ -207,7 +208,7 @@ def test_branch_keeps_policy_bounds_and_delta_semantics(campaign, arm):
     reverse = policy["diagnostic_plant_variant"] != "a5"
     for raw, current, expected in [
         ([-1.0, 0.5], [0.5, 0.2], [-0.5 if reverse else 0.0, 0.7]),
-        ([2.0, 1.0], [2.0, 0.5], [3.0, 1.0]),
+        ([2.0, 1.0], [2.0, 0.5], [3.0 if reverse else 2.0, 1.0]),
     ]:
         command = planner._action_vec_to_dict_from_array(np.array(raw), np.array(current))
         assert [command["v"], command["omega"]] == pytest.approx(expected)

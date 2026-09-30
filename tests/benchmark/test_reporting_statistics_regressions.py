@@ -115,8 +115,8 @@ def test_f2_spearman_reranks_common_cohort_and_handles_ties(left, right, expecte
 @pytest.mark.parametrize("reverse", [False, True])
 def test_f3_duplicate_paired_keys_are_rejected_independently_of_order(reverse):
     """Repeated cells require an explicit upstream reduction policy, never last-wins."""
-    left = [{"scenario_id": "s", "seed": 111, "success": v} for v in (0, 1)]
-    right = [{"scenario_id": "s", "seed": 111, "success": v} for v in (1, 0)]
+    left = [{"scenario_id": "s", "seed": 1001, "success": v} for v in (0, 1)]
+    right = [{"scenario_id": "s", "seed": 1001, "success": v} for v in (1, 0)]
     if reverse:
         left.reverse()
         right.reverse()
@@ -126,7 +126,7 @@ def test_f3_duplicate_paired_keys_are_rejected_independently_of_order(reverse):
 
 def _seed_report(**settings):
     rows = [
-        {"scenario_id": "s", "algo": "A", "seed": 111 + i, "metrics": {"near_misses": i}}
+        {"scenario_id": "s", "algo": "A", "seed": 1001 + i, "metrics": {"near_misses": i}}
         for i in range(30)
     ]
     return build_seed_variability_rows(
@@ -173,20 +173,20 @@ def test_full_classic_zero_bootstrap_samples_disable_resampling():
 
 @pytest.mark.parametrize(
     ("group_by", "expected"),
-    [("seed", {"111", "112"}), ("scenario_params.ped_density", {"0.05", "0.2"})],
+    [("seed", {"1001", "1002"}), ("scenario_params.ped_density", {"0.05", "0.2"})],
 )
 def test_f6_numeric_group_fields_do_not_fall_back_to_algorithm(group_by, expected):
     """Present numeric fields are distinct groups even when algo is also present."""
     rows = [
         {
             "algo": "A",
-            "seed": 111,
+            "seed": 1001,
             "scenario_params": {"ped_density": 0.05},
             "metrics": {"success": 0},
         },
         {
             "algo": "A",
-            "seed": 112,
+            "seed": 1002,
             "scenario_params": {"ped_density": 0.2},
             "metrics": {"success": 1},
         },

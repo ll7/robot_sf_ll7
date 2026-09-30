@@ -521,3 +521,25 @@ difference (floored at zero for overlap). Velocity uses backward differences, wi
 first sample. At least two samples are required. It is a counterfactual, never applied to dynamics
 or included automatically in the Social Navigation Quality Index. Its reductions use the same
 reference and units. Validation campaign evidence remains separate from release evaluation.
+
+### Campaign reporting cohort counts
+
+New campaign tables use `episodes` for the evidence-eligible N that contributes to
+metric means. `episodes_total` counts all object episode rows run, and
+`episodes_excluded = episodes_total - episodes`. These columns appear in the main,
+core/experimental, parity and scenario/family tables, campaign summary JSON and
+publication payload. The count schema is
+[`campaign-table-row.v2.json`](../robot_sf/benchmark/schemas/campaign-table-row.v2.json)
+and is exported as `reports/campaign_table.schema.json` alongside the tables.
+Historical reports with absent eligibility markers retain their previous N and
+means; readers of old tables default total to `episodes` and excluded to zero.
+
+Legacy SNQI diagnostics filter at the campaign episode collector before baseline
+construction, contract evaluation, calibration, ordering and sensitivity. Their
+`evidence_cohort` block records total, eligible and excluded counts plus exclusion
+reason counts. Invalid or unmeasured spawn takes precedence over foresight
+ineligibility when both apply, so reasons sum to the excluded N.
+
+Scenario/family breakdowns and seed variability retain all-excluded arms with N=0,
+no metric samples, and explicit total/excluded counts. Seed lists/counts describe
+eligible seeds; per-seed rows also retain excluded-only seeds with zero eligible N.

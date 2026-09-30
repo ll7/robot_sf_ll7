@@ -226,6 +226,7 @@ def stress_fixture(tmp_path: Path) -> tuple[Path, Any, Any]:
         episodes_path = root / "runs" / arm / "episodes.jsonl"
         summary_path = root / "runs" / arm / "summary.json"
         rows = []
+        fixture_seed = campaign_manifest["seed_policy"]["resolved_seeds"][0]
         for scenario in effective_scenarios:
             algo, algo_config = resolve_episode_policy_runtime(
                 default_algo=planner.algo,
@@ -233,13 +234,16 @@ def stress_fixture(tmp_path: Path) -> tuple[Path, Any, Any]:
                 if planner.algo_config_path
                 else None,
                 scenario=scenario,
-                seed=116,  # seed-holdout: synthetic-fixture
+                seed=fixture_seed,
             )
             rows.append(
                 _row(
-                    algo=algo, algo_config=algo_config, scenario_id=str(scenario["name"]), seed=116
+                    algo=algo,
+                    algo_config=algo_config,
+                    scenario_id=str(scenario["name"]),
+                    seed=fixture_seed,
                 )
-            )  # seed-holdout: synthetic-fixture
+            )
         episodes_path.parent.mkdir(parents=True, exist_ok=True)
         episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
         provenance = build_result_provenance_manifest(

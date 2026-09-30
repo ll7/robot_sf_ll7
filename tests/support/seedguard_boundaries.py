@@ -102,7 +102,8 @@ BOUNDARIES = {
     ],
     "robot_sf.benchmark.runner": [("run_episode", "seed", None, ())],
     "robot_sf.benchmark.map_runner.map_runner_episode": [
-        ("_setup_and_run_step_loop", None, "args", ("seed",))
+        ("run_map_episode", "seed", None, ()),
+        ("_setup_and_run_step_loop", None, "args", ("seed",)),
     ],
     "robot_sf.sim.simulator": [
         (

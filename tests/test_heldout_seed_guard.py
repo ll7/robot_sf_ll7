@@ -72,6 +72,14 @@ def test_map_runner_rejects_before_environment_factory():
         _setup_and_run_step_loop(SimpleNamespace(seed=120))
 
 
+def test_map_runner_rejects_before_policy_or_noise_setup():
+    """The outer episode entry must reject before any episode-dependent setup."""
+    from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
+
+    with pytest.raises(HeldoutSeedError, match="map_runner.episode"):
+        run_map_episode({}, 50036)
+
+
 @pytest.mark.parametrize("seed", [None, 110, 141, 1001, 1030])
 def test_other_seeds_are_allowed(seed):
     check_simulation_seed(seed, boundary="probe")

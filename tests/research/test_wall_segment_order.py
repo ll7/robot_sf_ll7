@@ -1,5 +1,9 @@
 """Read back real simulator walls against independent endpoint geometry (#10056)."""
 
+import importlib.util
+import sys
+from pathlib import Path
+
 import numpy as np
 import pysocialforce as pysf
 import pytest
@@ -71,3 +75,22 @@ def test_generated_simulator_has_intended_walls(layout, expected):
     np.testing.assert_allclose(
         scenario.simulator.env.obstacles_raw[:, :4], expected, rtol=0, atol=1e-9
     )
+
+
+def test_force_microbenchmark_preserves_sampled_endpoints(monkeypatch):
+    """The benchmark's generated walls must retain the sampled start/end points."""
+    path = Path(__file__).resolve().parents[2] / "fast-pysf/benchmarks/forces_benchmark.py"
+    spec = importlib.util.spec_from_file_location("wallfix_force_benchmark", path)
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, module)
+    spec.loader.exec_module(module)
+    coordinates = iter([[(1, 1)], [(8, 1)], [(2, 3)], [(5, 7)]])
+    monkeypatch.setattr(module.SimSettings, "rand_2d_coords", lambda *_: next(coordinates))
+    # Global dynamics sampling is seeded without changing randomness in other tests.
+    rng = np.random.default_rng(1001)
+    monkeypatch.setattr(np.random, "normal", rng.normal)
+    monkeypatch.setattr(np.random, "multivariate_normal", rng.multivariate_normal)
+    settings = module.SimSettings(10, 10, 1, 1, 1, [[0.1, 0], [0, 0.1]], 1)
+    config = settings.sample()
+    sim = pysf.Simulator(config.initial_state, config.groups, config.obstacles)
+    np.testing.assert_allclose(sim.env.obstacles_raw[:, :4], [(2, 3, 5, 7)], rtol=0, atol=1e-9)

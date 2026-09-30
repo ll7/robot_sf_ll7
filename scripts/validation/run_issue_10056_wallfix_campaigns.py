@@ -41,7 +41,8 @@ CAMPAIGNS = (
             "--steps",
             "200,400",
             "--calibrations",
-            "released_default,literature_typical",
+            "released_default",
+            "literature_typical",
             "--lane-segregation-thresholds",
             "0.15,0.3,0.5",
             "--lane-purity-thresholds",
@@ -54,9 +55,11 @@ CAMPAIGNS = (
         (5149, 5150, 5151),
         (
             "--conditions",
-            "mixed_sustained_flow,separated_lane_control",
+            "mixed_sustained_flow",
+            "separated_lane_control",
             "--calibrations",
-            "released_default,literature_typical",
+            "released_default",
+            "literature_typical",
         ),
     ),
     (
@@ -133,13 +136,23 @@ def main() -> int:
     """Run the unreduced original matrices and preserve commands and provenance."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--campaigns",
+        nargs="+",
+        choices=[c[0] for c in CAMPAIGNS],
+        default=[c[0] for c in CAMPAIGNS],
+    )
     args = parser.parse_args()
     if not os.environ.get("SLURM_JOB_ID"):
         parser.error("Campaign execution requires a Slurm allocation")
     root = Path(__file__).resolve().parents[2]
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    commands = []
+    receipt_path = args.output_dir / "receipt.json"
+    previous = json.loads(receipt_path.read_text()) if receipt_path.exists() else {}
+    commands = [c for c in previous.get("commands", []) if c["campaign"] not in args.campaigns]
     for name, script, seeds, flags in CAMPAIGNS:
+        if name not in args.campaigns:
+            continue
         check_seeds(name, seeds)
         if name == "stage_a":
             check_seeds("profile sampling (no environment steps)", (6969,))
@@ -174,6 +187,8 @@ def main() -> int:
             subprocess.run(command, cwd=root, stdout=log, stderr=subprocess.STDOUT, check=True)
         print(f"COMPLETE {name}", flush=True)
     receipt = json.loads((args.output_dir / "receipt.json").read_text())
+    if not all((args.output_dir / name / "summary.json").is_file() for name, *_ in CAMPAIGNS):
+        raise ValueError("Full campaign collection is incomplete")
     receipt["status"] = "complete"
     write_json(args.output_dir / "receipt.json", receipt)
     write_sha256sums(args.output_dir)

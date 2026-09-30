@@ -22,6 +22,7 @@ from robot_sf.benchmark.release_parameter_freeze import (
 )
 from robot_sf.benchmark.release_protocol import load_release_manifest, validate_release_manifest
 from robot_sf.benchmark.runtime_smoke_admission import RUNTIME_SMOKE_PLANNER_KEYS
+from robot_sf.benchmark.spawn_preflight import _release_manifest_inputs, run_manifest_preflight
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_CONFIG_PATH = (
@@ -61,7 +62,7 @@ PINNED_V04_MANIFEST_SHA256 = "aded0ca71e40bdc8f7193282bb8d28420a9b627f93d47a4303
 PINNED_V03_CONFIG_SHA256 = "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4"
 PINNED_V03_MANIFEST_SHA256 = "d6f3047adaacfb8cad2cc12430ee5ce7331f11b0777ac522209fd1e5af019241"
 HISTORICAL_V04_TEMPLATE_SHA256 = "f453b7c824fdd47298cbc66dae3afc1fffcd7eedf57ee4bb87cd1c67b4feb1d7"
-CAMPAIGN_TEMPLATE_SHA256 = "2e37aa31cb6714b156f961bada10523e04e6b79fd4f38c51ccb5b50672a9dae1"
+CAMPAIGN_TEMPLATE_SHA256 = "7ec9112d999e84e73675d7df4501aea0850ba072ab2ffc74943d22ea7d270223"
 
 EXPECTED_PLANNER_KEYS = [
     "prediction_planner",
@@ -443,6 +444,7 @@ def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
         "artifact_provenance",
         "bootstrap_samples",
         "claim_boundary",
+        "comparability_mapping",
         "derived_from",
         "doi",
         "export_publication_bundle",
@@ -657,6 +659,7 @@ def test_runtime_smoke_v0_5_advances_wrapped_kernel_and_preserves_v0_4() -> None
     predecessor = _load_yaml(RUNTIME_SMOKE_V04_CONFIG_PATH)
     successor = _load_yaml(RUNTIME_SMOKE_V05_CONFIG_PATH)
     assert _diff_paths(predecessor, successor) == {
+        "comparability_mapping",
         "derived_from.config_sha256",
         "name",
         "planners",
@@ -701,3 +704,15 @@ def test_runtime_smoke_v0_5_advances_wrapped_kernel_and_preserves_v0_4() -> None
     )
     assert validation["status"] == "valid"
     assert validation["problem_count"] == 0
+
+
+def test_runtime_smoke_v0_5_spawn_preflight_resolves_only_seed_103() -> None:
+    """The release preflight must admit the fixed-list smoke seed before execution."""
+    manifest = load_release_manifest(RUNTIME_SMOKE_V05_MANIFEST_PATH)
+    _, scenarios, seeds = _release_manifest_inputs(manifest)
+    assert len(scenarios) == 1
+    assert seeds == (103,)
+    report = run_manifest_preflight(manifest, workers=1)
+    assert report["status"] == "valid", report.get("input_error")
+    assert report["seed_count"] == 1
+    assert report["blocked_cell_count"] == 0

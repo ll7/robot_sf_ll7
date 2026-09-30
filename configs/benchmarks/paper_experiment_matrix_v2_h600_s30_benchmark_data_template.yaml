@@ -8,8 +8,8 @@
 name: paper_experiment_matrix_v2_h600_s30_benchmark_data
 paper_facing: true
 paper_profile_version: paper-matrix-v1
-scenario_matrix: configs/scenarios/classic_interactions_francis2023_goal_zone_entry_kernel_wrapped_v2.yaml
-comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
+scenario_matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v2.yaml
 route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
 
 amv_profile:

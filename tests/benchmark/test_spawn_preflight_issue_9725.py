@@ -25,7 +25,7 @@ def test_reset_only_diagnostic_reports_clear_cell_and_map_warnings() -> None:
         Namespace(
             matrix=MATRIX,
             scenario=["classic_cross_trap_high"],
-            seeds="1001",
+            seeds="1020",
             workers=1,
             step_zero=True,
             dump_spawns=True,

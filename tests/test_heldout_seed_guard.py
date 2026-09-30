@@ -200,6 +200,38 @@ def test_session_guard_survives_environment_flag_mutation(monkeypatch):
     assert reached == []
 
 
+def test_isolated_script_preserves_argv_without_python311_safe_path(tmp_path):
+    """Python 3.10 script children retain their argv and execute with the guard."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    from robot_sf.evidence.writers import write_text
+    from tests.support import seedguard_boundaries
+
+    script = tmp_path / "script.py"
+    write_text(
+        script,
+        "# AI-GENERATED NEEDS-REVIEW\nimport sys\n"
+        "assert sys.argv[1:] == ['kept']\nprint('script body reached')\n",
+    )
+    bootstrap = seedguard_boundaries._isolated_bootstrap(
+        str(script), str(script), ["kept"], Path(seedguard_boundaries.__file__)
+    )
+    code = (
+        "import sys\nfrom types import SimpleNamespace\n"
+        "flags = {k: getattr(sys.flags, k) for k in dir(sys.flags) "
+        "if not k.startswith('_') and isinstance(getattr(sys.flags, k), int)}\n"
+        "flags.pop('safe_path', None)\nsys.flags = SimpleNamespace(**flags)\n"
+        f"exec({bootstrap!r})\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "script body reached"
+
+
 @pytest.mark.heldout_seed_ok(
     reason="Standalone legacy RNG seed-policy check; no simulation body runs"
 )

@@ -441,7 +441,7 @@ def _isolated_bootstrap(target, payload, extra, boundary_path):
     # checkout root or site-packages to an isolated interpreter's search path.
     setup = ""
     if target not in {"-c", "-m", "-"}:
-        setup = f"if not sys.flags.safe_path: sys.path[0] = os.path.dirname(os.path.abspath({payload!r}))\n"
+        setup = f"if not getattr(sys.flags, 'safe_path', sys.flags.isolated): sys.path[0] = os.path.dirname(os.path.abspath({payload!r}))\n"
     bootstrap = (
         "import sys, os, importlib.util, runpy\n"
         + setup

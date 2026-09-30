@@ -3,6 +3,8 @@
 Rows are synthetic; no planner steps run for seeds 111-140.
 """
 
+# robot-sf-test-lane: fast-contract
+
 from __future__ import annotations
 
 import pytest

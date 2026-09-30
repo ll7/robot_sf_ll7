@@ -419,6 +419,8 @@ _FAST_FILES = {
     # FX3 uses real release checkpoints and static SVG pose checks without episodes.
     "test_fx3_static_recovery.py",
     "test_release_horizons.py",
+    # Step-trace invariant contracts inspect synthetic rows without simulation steps.
+    "test_step_trace_invariants.py",
     # Doorway safe-failure contracts classify synthetic rows without planner steps.
     "test_infeasible_probe_safe_failure.py",
     # Scenario-admissibility tests exercise deterministic candidate, manifest,

@@ -14,8 +14,10 @@ import json
 import math
 import os
 import subprocess
+import time
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import ExitStack
+from copy import copy, deepcopy
 from pathlib import Path
 from unittest.mock import patch
 
@@ -26,6 +28,85 @@ ROOT = Path(__file__).resolve().parents[2]
 CONFIG = ROOT / "configs/benchmarks/hzev_dynamic_window_dev5_h800.yaml"
 DEV_SEEDS = (1001, 1002, 1003, 1004, 1005)
 ARMS = ("stationary", "orca", "goal")
+
+
+def worker_limit():
+    """Respect the Slurm task allocation when present, otherwise host CPU count."""
+    allocation = os.environ.get("SLURM_CPUS_PER_TASK")
+    limit = int(allocation) if allocation is not None else (os.cpu_count() or 1)
+    if limit < 1:
+        raise ValueError("CPU allocation must be positive")
+    return limit
+
+
+class DiagnosticWindow:
+    """Keep continued simulation state out of ordinary outcome/metric calculation."""
+
+    def __init__(self, episode, receipt, dt):
+        """Bind process-local ordinary helpers before acquisition patches them."""
+        self.episode = episode
+        self.receipt = receipt
+        self.dt = float(dt)
+        self.terminal = episode._step_collision_and_termination
+        self.build_result = episode._build_step_loop_result
+        self.ordinary_result = None
+        self.parked = False
+        self.env = None
+        self.policy = None
+
+    def snapshot_terminal(self, state):
+        """Capture the runtime context normally refreshed after loop termination."""
+        import numpy as np
+
+        terminal_state = copy(state)
+        simulator = self.env.simulator
+        terminal_state.map_def = simulator.map_def
+        terminal_state.goal_vec = np.asarray(simulator.goal_pos[0], dtype=float)
+        terminal_state.respawn_overlap_events = self.episode._read_respawn_overlap_events(simulator)
+        terminal_state.simulator_obstacle_force_law_metadata = (
+            self.episode._read_obstacle_force_law_metadata(self.env)
+        )
+        terminal_state.planner_obstacle_force_law_metadata = (
+            self.episode._read_policy_obstacle_force_law_metadata(self.policy)
+        )
+        stats = getattr(self.policy, "_planner_stats", None)
+        if callable(stats):
+            try:
+                payload = stats()
+            except (RuntimeError, ValueError, TypeError):
+                payload = None
+            if isinstance(payload, dict):
+                terminal_state.planner_runtime_snapshot = dict(payload)
+        return deepcopy(self.build_result(terminal_state))
+
+    def continue_terminal(self, state, slc, *, step_idx, sim):
+        """Snapshot the complete terminal prefix before any continuation mutates it."""
+        collision = self.episode.collision_event(sim.info)
+        goal = self.episode.route_complete_success(sim.info)
+        event = {"step": step_idx, "time_s": (step_idx + 1) * self.dt}
+        if collision and self.receipt.get("first_collision") is None:
+            self.receipt["first_collision"] = dict(event)
+        if goal and not collision and self.receipt.get("first_goal") is None:
+            self.receipt["first_goal"] = dict(event)
+            self.parked = True
+        should_stop = self.terminal(state, slc, step_idx=step_idx, sim=sim)
+        if should_stop and self.ordinary_result is None:
+            self.receipt["first_terminal"] = {**event, "reason": state.termination_reason}
+            # Copy every trajectory, event ledger and flag, not just outcome bits:
+            # production metrics must see exactly the ordinary terminal prefix.
+            self.ordinary_result = self.snapshot_terminal(state)
+        return False
+
+    def finish(self, state):
+        """Export the full diagnostic trace and return only the ordinary result."""
+        self.receipt["diagnostic_trace"] = {
+            "schema_version": "hzev-diagnostic-trace.v1",
+            "evidence_status": "diagnostic-only",
+            "steps": state.simulation_step_trace,
+        }
+        return (
+            self.ordinary_result if self.ordinary_result is not None else self.build_result(state)
+        )
 
 
 def digest(path):
@@ -104,6 +185,7 @@ def acquire(job):  # noqa: C901, PLR0915 - one process-local instrumentation bou
     from robot_sf.ped_npc.ped_behavior import CrowdedZoneBehavior, FollowRouteBehavior
 
     scenario, seed, arm, steps, cfg_path, identity, output = job
+    started = time.perf_counter()
     if seed not in DEV_SEEDS or arm not in ARMS or not 1 <= steps <= 800:
         raise ValueError("unauthorized seed, arm or horizon")
     logger.remove()
@@ -117,15 +199,17 @@ def acquire(job):  # noqa: C901, PLR0915 - one process-local instrumentation bou
         "scenario_id": scenario["name"],
         "respawns": [],
         "first_terminal": None,
+        "first_collision": None,
+        "first_goal": None,
         "park_after_goal": True,
         "continue_after_terminal": True,
     }
-    parked = False
     original_init = episode._init_step_loop_state
-    original_terminal = episode._step_collision_and_termination
+    window = DiagnosticWindow(episode, receipt, cfg.dt)
 
     def initial_capture(**kwargs):
         state = original_init(**kwargs)
+        window.env = kwargs["env"]
         sim = kwargs["env"].simulator
         nav = sim.robot_navs[0]
         receipt["start"] = state.initial_robot_pos.tolist()
@@ -170,32 +254,21 @@ def acquire(job):  # noqa: C901, PLR0915 - one process-local instrumentation bou
                 behavior.respawn_group_at_start = capture_respawn
         return state
 
-    def continue_terminal(state, slc, *, step_idx, sim):
-        nonlocal parked
-        should_stop = original_terminal(state, slc, step_idx=step_idx, sim=sim)
-        if should_stop and receipt["first_terminal"] is None:
-            receipt["first_terminal"] = {
-                "step": step_idx,
-                "time_s": (step_idx + 1) * float(cfg.dt),
-                "reason": state.termination_reason,
-            }
-        if state.reached_goal_step is not None:
-            parked = True
-        return False
-
     def policy_builder(algo, algo_config, **kwargs):
         if arm == "stationary":
 
             def policy(_obs):
                 return (0.0, 0.0)
 
+            window.policy = policy
             return policy, {"algorithm": "hzev_stationary", "diagnostic_only": True}
         policy, meta = runner._build_policy(algo, algo_config, **kwargs)
 
         def moving_policy(obs):
-            return (0.0, 0.0) if parked else policy(obs)
+            return (0.0, 0.0) if window.parked else policy(obs)
 
         moving_policy.__dict__.update(policy.__dict__)
+        window.policy = moving_policy
         return moving_policy, meta
 
     scenario = episode_scenario(scenario)
@@ -203,8 +276,9 @@ def acquire(job):  # noqa: C901, PLR0915 - one process-local instrumentation bou
     with ExitStack() as stack:
         stack.enter_context(patch.object(episode, "_init_step_loop_state", initial_capture))
         stack.enter_context(
-            patch.object(episode, "_step_collision_and_termination", continue_terminal)
+            patch.object(episode, "_step_collision_and_termination", window.continue_terminal)
         )
+        stack.enter_context(patch.object(episode, "_build_step_loop_result", window.finish))
         record = episode.run_map_episode(
             scenario=scenario,
             seed=seed,
@@ -219,7 +293,7 @@ def acquire(job):  # noqa: C901, PLR0915 - one process-local instrumentation bou
             record_simulation_step_trace=True,
             policy_builder=policy_builder,
         )
-    trace = record["algorithm_metadata"]["simulation_step_trace"]["steps"]
+    trace = receipt["diagnostic_trace"]["steps"]
     if len(trace) != steps:
         raise ValueError(f"early stop: {len(trace)} != {steps}")
     receipt.update(
@@ -233,12 +307,16 @@ def acquire(job):  # noqa: C901, PLR0915 - one process-local instrumentation bou
         if any(math.dist(f["robot"]["position"], receipt["start"]) > 1e-8 for f in trace):
             raise ValueError("stationary robot moved")
     record["hzev"] = receipt
-    from scripts.validation.analyze_hzev_dynamic_window import validated_frames
+    from scripts.validation.analyze_hzev_dynamic_window import (
+        validate_ordinary_episode,
+        validated_frames,
+    )
 
     # Geometry/time must be finite. Some auxiliary benchmark fields use infinity
     # as a sentinel (e.g. no predicted TTC); retain their paths and original values
     # explicitly while writing standards-compliant diagnostic JSON.
     validated_frames(record)
+    validate_ordinary_episode(record)
     nonfinite_fields = []
 
     def json_safe(value, path="$"):
@@ -263,6 +341,7 @@ def acquire(job):  # noqa: C901, PLR0915 - one process-local instrumentation bou
         "trace_steps": len(trace),
         "first_terminal": receipt["first_terminal"],
         "respawn_count": len(receipt["respawns"]),
+        "wall_time_s": time.perf_counter() - started,
     }
 
 
@@ -272,13 +351,19 @@ def main():  # noqa: C901, PLR0912, PLR0915 - bounded diagnostic CLI and custody
     parser.add_argument("--config", type=Path, default=CONFIG)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--head-sha", required=True)
-    parser.add_argument("--workers", type=int, choices=(1, 2, 3), default=1)
+    parser.add_argument("--workers", type=int, default=3)
     parser.add_argument("--check-only", action="store_true")
-    parser.add_argument("--scenario")
+    parser.add_argument("--scenario", nargs="+")
     parser.add_argument("--seeds", type=int, nargs="+", default=list(DEV_SEEDS))
     parser.add_argument("--arms", choices=ARMS, nargs="+", default=list(ARMS))
     parser.add_argument("--smoke-steps", type=int)
     args = parser.parse_args()
+    try:
+        limit = worker_limit()
+    except ValueError as exc:
+        parser.error(str(exc))
+    if not 1 <= args.workers <= limit:
+        parser.error(f"--workers must be in 1..{limit}")
     os.chdir(ROOT)
     logger.remove()
     logger.add(os.sys.stderr, level="ERROR")
@@ -293,15 +378,14 @@ def main():  # noqa: C901, PLR0912, PLR0915 - bounded diagnostic CLI and custody
         1 <= args.smoke_steps <= 100
         and args.scenario
         and len(args.seeds) == 1
-        and len(args.arms) == 1
-        and args.workers == 1
+        and len(args.scenario) == 1
     ):
-        parser.error("local smoke requires <=100 steps, one scenario/seed/arm, workers=1")
+        parser.error("short smoke requires <=100 steps, one scenario and one dev seed")
     cfg, raw, scenarios = load_packet(args.config.resolve())
     if args.scenario:
-        scenarios = [s for s in scenarios if s["name"] == args.scenario]
-        if not scenarios:
+        if not set(args.scenario) <= {s["name"] for s in scenarios}:
             parser.error("unknown scenario")
+        scenarios = [s for s in scenarios if s["name"] in args.scenario]
     steps = args.smoke_steps or 800
     files = [
         args.config.resolve(),
@@ -354,9 +438,16 @@ def main():  # noqa: C901, PLR0912, PLR0915 - bounded diagnostic CLI and custody
                 output = args.output_dir / f"{s['name']}__{seed}__{arm}.json"
                 if output.exists():
                     row = json.loads(output.read_text())
+                    from scripts.validation.analyze_hzev_dynamic_window import (
+                        validate_ordinary_episode,
+                        validated_frames,
+                    )
+
+                    validated_frames(row)
+                    validate_ordinary_episode(row)
                     if (
                         row["hzev"]["identity"] != identity
-                        or len(row["algorithm_metadata"]["simulation_step_trace"]["steps"]) != steps
+                        or len(row["hzev"]["diagnostic_trace"]["steps"]) != steps
                     ):
                         raise ValueError(f"invalid resume row: {output}")
                     rows.append(
@@ -389,7 +480,7 @@ def main():  # noqa: C901, PLR0912, PLR0915 - bounded diagnostic CLI and custody
             write_json(manifest_path, manifest)
             print(json.dumps({"completed": len(rows), "expected": count}), flush=True)
     else:
-        # Parent + at most 3 workers = at most 4 acquisition processes.
+        # Independent, seeded jobs; patches never cross process boundaries.
         with ProcessPoolExecutor(max_workers=args.workers) as pool:
             for result in pool.map(acquire, jobs, chunksize=1):
                 rows.append(result)

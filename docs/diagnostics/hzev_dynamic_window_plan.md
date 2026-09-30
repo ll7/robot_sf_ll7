@@ -25,3 +25,24 @@ Local smoke is infrastructure proof only; cluster acquisition and interpretation
 remain the orchestrator's responsibility. Partial traces cannot settle a scenario.
 Artifacts are atomically written with checksums; incomplete manifests or missing
 rows block full analysis. Resume requires the same source/config identity.
+
+## Repair after Slurm job 15805
+
+Freeze the ordinary loop result at its first terminal event, before computing
+production metrics. Store all 800 frames separately as diagnostic trace data;
+never weaken the production integrity validator. Preserve all analysis definitions.
+Owned repair paths: the two diagnostic Python scripts, sbatch, this plan, the
+diagnostic guide, and tests/benchmark/test_hzev_dynamic_window.py.
+
+Prove collision-then-goal and goal-then-collision isolation with controlled
+800-step events, plus real full-length classic_bottleneck_low/1002/all-arm
+acquisition and real mover witnesses. Stationary zero motion may make a real
+goal witness impossible; report that boundary rather than changing its policy.
+Compare two short seeded episodes at one versus three workers. Run six real
+scenarios × one dev seed × three arms at H800, measuring episode and batch wall
+time. Local acquisition uses at most three workers and seeds 1001–1005 only.
+Allow 1..allocated CPUs in the CLI (default three); sbatch reserves one CPU for
+the parent. Set its time from the sample with 50% margin for 720 episodes.
+Keep raw rows, manifests, logs and measurement summaries outside the checkout.
+Commit explicit paths and push only diag/scenario-dynamic-window without force;
+verify remote SHA and write ~/hzevfix_report.md. No Slurm submission in this lane.

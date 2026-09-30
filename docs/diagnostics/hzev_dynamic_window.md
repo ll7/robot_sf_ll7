@@ -23,6 +23,17 @@ last-interaction times include the parked tail and post-contact continuation;
 the last interaction up to the first terminal event is also exported. These
 extensions are diagnostic and cannot be interpreted as benchmark scores.
 
+The ordinary episode record ends at the **first ordinary terminal event**.
+Every trajectory, event ledger, outcome flag and metric input is frozen there,
+then passed through the unchanged production metric calculation and integrity
+validator. `algorithm_metadata.simulation_step_trace` contains only that prefix.
+The complete 800-step window lives at `hzev.diagnostic_trace.steps`; analysis
+reads that separate trace. `hzev.first_collision` and `hzev.first_goal` record
+the observed event order independently of the ordinary outcome. A later goal
+after collision never converts the ordinary collision into success; contact
+after an early success never converts the ordinary success into collision.
+Both new and resumed rows validate the ordinary prefix and diagnostic geometry.
+
 ## Acquisition and recovery
 
 From a checkout of the pushed diagnostic branch, the orchestrator submits:
@@ -32,8 +43,15 @@ sbatch scripts/validation/hzev_dynamic_window.sbatch <full-diagnostic-sha>
 ```
 
 The script checks out that exact SHA in `$HOME/hzev` (override `HZEV_WORK` for
-a dedicated clean clone). It uses partition `a30`, QoS `a30-cpu`, 40 allocated
+a dedicated clean clone). It uses partition `a30`, QoS `a30-cpu`, four allocated
 CPUs, single-threaded math libraries, and three workers plus their parent.
+Workers are `SLURM_CPUS_PER_TASK - 1`; requesting 16 CPUs gives 15 workers.
+The CLI accepts 1..`SLURM_CPUS_PER_TASK` (or `os.cpu_count()` outside Slurm),
+with default three. The local repair lane uses at most three simulation workers.
+The default time is 55 minutes: the six-scenario H800 sample maximum was
+8.738 seconds per episode; `720/3 * 8.738 * 1.5` is 52 minutes 26 seconds,
+rounded up. This is a local CPU estimate with 50% margin, not measured cluster
+throughput; installation and preservation also consume allocation time.
 It writes outside the checkout to `$HOME/hzev_data/at_<sha>_<jobid>`; override
 `HZEV_OUT` if desired. Keep the directory and generated tarball/checksum, and
 copy the tarball to durable external storage before cluster access ends.
@@ -109,6 +127,15 @@ must fail the re-entry test. Existing camera-ready tests cover horizon binding
 and trace emission, but not these new dynamic-window quantities. The tests need
 no production-only seam; values follow hand calculations.
 
-The local real smoke uses one scenario, one dev seed, one stationary arm, at
-most 100 steps, one Python process, and analysis with `--allow-partial`. It proves
-trace acquisition and analysis compatibility; the full campaign remains unrun.
+The repair runs classic_bottleneck_low/1002 in all arms at 800 steps, real mover
+collision-then-goal and early-goal witnesses, and six scenarios × one dev seed
+× three arms at 800 steps. Controlled 800-step tests cover collision then goal,
+goal then collision, simultaneous contact/goal and timeout in all three arms.
+A real stationary goal witness is generally impossible under its zero-command
+contract; the stationary event-order regression is explicitly controlled.
+Two real short seeded episodes compare one versus three workers; all result
+fields match except timestamps, wall time and measured steps per second.
+Short CLI smoke permits <=100 steps, one scenario and one dev seed, with any
+selected arms and allocated worker count. Full local samples still use
+`--allow-partial` analysis because they do not contain the complete 720-row
+roster. They prove acquisition compatibility, not full-matrix conclusions.

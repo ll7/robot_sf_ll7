@@ -53,7 +53,7 @@ def validated_frames(record):
     dt = finite(h["dt_s"])
     if dt <= 0:
         raise ValueError("dt must be positive")
-    frames = record["algorithm_metadata"]["simulation_step_trace"]["steps"]
+    frames = h["diagnostic_trace"]["steps"]
     if not frames or len(frames) != h["steps"]:
         raise ValueError("missing or short trace")
     initial = h["initial_frame"]
@@ -72,6 +72,29 @@ def validated_frames(record):
         for ped in frame["pedestrians"]:
             point(ped["position"])
     return all_frames
+
+
+def validate_ordinary_episode(record):
+    """Recheck the unchanged production outcome rules and ordinary trace boundary."""
+    from robot_sf.benchmark.termination_reason import outcome_contradictions
+
+    contradictions = outcome_contradictions(
+        termination_reason=record["termination_reason"],
+        outcome=record["outcome"],
+        metrics=record["metrics"],
+    )
+    if contradictions:
+        raise ValueError("Episode integrity contradictions: " + "; ".join(contradictions))
+    h = record["hzev"]
+    terminal = h["first_terminal"]
+    ordinary_steps = terminal["step"] + 1 if terminal is not None else h["steps"]
+    ordinary = record["algorithm_metadata"]["simulation_step_trace"]["steps"]
+    if record["steps"] != ordinary_steps or len(ordinary) != ordinary_steps:
+        raise ValueError("ordinary episode includes post-terminal continuation")
+    if terminal is not None and record["termination_reason"] != terminal["reason"]:
+        raise ValueError("ordinary termination reason differs from first terminal")
+    if ordinary != h["diagnostic_trace"]["steps"][:ordinary_steps]:
+        raise ValueError("ordinary trace differs from diagnostic prefix")
 
 
 def clearance(frames, start, goal, threshold):
@@ -288,6 +311,7 @@ def main():  # noqa: C901 - fail-closed roster and checksum validation
         if hashlib.sha256(path.read_bytes()).hexdigest() != member["sha256"]:
             raise ValueError(f"checksum mismatch: {name}")
         record = json.loads(path.read_text())
+        validate_ordinary_episode(record)
         h = record["hzev"]
         key = (h["scenario_id"], h["seed"], h["arm"])
         if key in seen or key not in expected or h["identity"] != identity:

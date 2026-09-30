@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -18,7 +19,11 @@ from robot_sf.benchmark.checkpoint_staging_receipt import (
     validate_checkpoint_staging_receipt,
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
-from robot_sf.benchmark.release_acceptance import _status_markers
+from robot_sf.benchmark.release_acceptance import (
+    _append_exclusion_blocker,
+    _evidence_exclusion_counts,
+    _status_markers,
+)
 from robot_sf.benchmark.release_protocol import BENCHMARK_PROTOCOL_VERSION
 from robot_sf.benchmark.result_provenance import validate_result_provenance_manifest
 from robot_sf.benchmark.utils import _config_hash
@@ -1191,6 +1196,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
     )
 
     problems: list[str] = []
+    exclusion_counts: Counter[str] = Counter()
     release = result.get("benchmark_release")
     release = release if isinstance(release, dict) else {}
     _require_equal(problems, release.get("release_id"), RUNTIME_SMOKE_RELEASE_ID, "release_id")
@@ -1566,6 +1572,9 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
                 )
             except RuntimeSmokeAdmissionError as exc:
                 problems.append(str(exc))
+        run_exclusions = _evidence_exclusion_counts(rows)
+        exclusion_counts.update(run_exclusions)
+        _append_exclusion_blocker(problems, run_exclusions, label=f"runs[{index}]")
         integrity_entry = dict(entry)
         integrity_entry["episodes_path"] = str(episodes_path)
         integrity_entries.append(integrity_entry)
@@ -1786,7 +1795,10 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
         if planner_success is not True and planner_success != "true":
             problems.append(f"planner row {index} benchmark success mismatch")
         _require_equal(
-            problems, _strict_int(row.get("episodes")), 1, f"planner row {index} episodes"
+            problems,
+            _strict_int(row.get("episodes_total", row.get("episodes"))),
+            1,
+            f"planner row {index} total episode count",
         )
         if _forbidden_status_markers(row, f"planner_rows[{index}]"):
             problems.append(f"planner row {index} contains fallback or degraded marker")
@@ -1836,6 +1848,8 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
         "planner_arms": expected_rows,
         "episode_cells": len(observed_episode_identities),
         "fallback_or_degraded_rows": 0,
+        "episodes_excluded": sum(exclusion_counts.values()),
+        "exclusion_reasons": dict(sorted(exclusion_counts.items())),
     }
 
 

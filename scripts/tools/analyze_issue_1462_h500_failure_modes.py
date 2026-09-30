@@ -183,6 +183,8 @@ def _scenario_rows(  # noqa: C901
     """Build scenario difficulty and candidate-vs-core rows."""
     grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
     for row in scenario_breakdown:
+        if int(row["episodes"]) == 0:
+            continue
         grouped[row["scenario_id"]].append(row)
 
     difficulty_rows: list[dict[str, Any]] = []

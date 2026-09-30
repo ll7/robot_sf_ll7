@@ -543,3 +543,5 @@ ineligibility when both apply, so reasons sum to the excluded N.
 Scenario/family breakdowns and seed variability retain all-excluded arms with N=0,
 no metric samples, and explicit total/excluded counts. Seed lists/counts describe
 eligible seeds; per-seed rows also retain excluded-only seeds with zero eligible N.
+
+Release acceptance checks planned counts against `episodes_total` (legacy fallback: `episodes`); `invalid_or_unmeasured_spawn` exclusions are named campaign-defect blockers with K, while `foresight_ineligible` exclusions are reported counts and do not themselves block acceptance.

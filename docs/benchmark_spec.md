@@ -513,7 +513,8 @@ the full pedestrian-pair force magnitude at contact
 3.7030154332523164 m/s² for radius 0.35 m; the approximate 2.6 in issue #9666 omitted the kernel's
 lateral contribution. This reference is a model comparison, not an empirical discomfort threshold.
 
-`record_simulation_step_trace: true` explicitly enables persistence of `robot_force_samples`,
+`record_simulation_step_trace: true` explicitly enables persistence of
+`algorithm_metadata.robot_force_samples` (outside scalar `metrics`),
 including per-step vectors and pre-integration force inputs. Ordinary episode rows retain only
 reductions and metadata; samples remain in memory for all force reductions. Existing
 post-integration trajectories are unchanged. `recompute_robot_ped_forces(data, cfg)` accepts aligned

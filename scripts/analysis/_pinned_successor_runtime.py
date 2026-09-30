@@ -18,6 +18,8 @@ def _assert_pinned_modules(checkout: Path) -> None:
         "robot_sf.benchmark.camera_ready._config",
         "robot_sf.benchmark.camera_ready._preflight",
         "robot_sf.benchmark.runner",
+        "robot_sf.baselines.ppo",
+        "robot_sf.benchmark.map_runner.map_runner",
         "robot_sf.benchmark.map_runner.map_runner_identity",
         "robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution",
         "robot_sf.benchmark.utils",
@@ -42,6 +44,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
 
     import pysocialforce  # noqa: F401 - assert its origin with the project modules below
 
+    from robot_sf.baselines.ppo import PPOPlanner
     from robot_sf.benchmark.algorithm_metadata import (
         enrich_algorithm_metadata,
         resolve_learned_checkpoint_observation_contract,
@@ -53,6 +56,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
         load_campaign_config,
     )
     from robot_sf.benchmark.camera_ready._preflight import _scenario_matrix_hash
+    from robot_sf.benchmark.map_runner.map_runner import _ppo_planner_config
     from robot_sf.benchmark.map_runner.map_runner_identity import (
         _resolve_seed_list,
         _scenario_identity_payload,
@@ -361,9 +365,6 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
             # Reproduce the producer's typed PPO metadata without loading a model
             # or stepping a policy/environment. The full guard/adapter config
             # remains bound separately by scenario.algo_config_hash.
-            from robot_sf.baselines.ppo import PPOPlanner
-            from robot_sf.benchmark.map_runner.map_runner import _ppo_planner_config
-
             deferred = PPOPlanner(_ppo_planner_config(effective), defer_model_loading=True)
             metadata_config = deferred.get_metadata()["config"]
         runtime_rows.append(
@@ -375,7 +376,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
                 "metadata_algorithm": metadata["algorithm"],
                 "metadata_config": metadata_config,
                 "metadata_config_hash": _config_hash(metadata_config),
-                "scenario_config_hash": _config_hash(scenario),
+                "scenario_config_hash": _config_hash(controls),
                 "scenario": seeded_scenario,
                 "path": planner["path"],
                 "controls": {key: controls[key] for key in control_fields if key in controls},

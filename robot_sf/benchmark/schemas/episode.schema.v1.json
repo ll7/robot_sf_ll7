@@ -138,6 +138,19 @@
             "type": "object",
             "description": "Metadata about the algorithm/policy used (name, config, status).",
             "properties": {
+                "robot_force_samples": {
+                    "type": "array",
+                    "description": "Pre-integration pedestrian positions, robot component configurations and acceleration vectors per step.",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "peds_pos",
+                            "components",
+                            "forces",
+                            "social_force_config"
+                        ]
+                    }
+                },
                 "algorithm": {
                     "type": "string"
                 },

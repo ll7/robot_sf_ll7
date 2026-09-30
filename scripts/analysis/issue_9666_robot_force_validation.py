@@ -97,7 +97,11 @@ def posthoc_discomfort(row: dict) -> float | None:
 
 def trace_evidence(row: dict) -> dict:
     """Summarize recorded inputs without inferring a causal interaction mechanism."""
-    samples = row["metrics"].get("robot_force_samples")
+    # New producers keep diagnostic arrays out of scalar metric reductions;
+    # immutable historical rehearsal rows retain the old location.
+    samples = row.get("algorithm_metadata", {}).get("robot_force_samples")
+    if samples is None:
+        samples = row["metrics"].get("robot_force_samples")
     dt = row.get("scenario_params", {}).get("run_dt")
     if not samples or dt is None:
         return {"status": "unavailable"}

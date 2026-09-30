@@ -159,3 +159,45 @@ def test_real_frozen_0_0_8_template_resolves_all_four_v4_lineages():
         assert row["algo"] == "hybrid_rule_local_planner"
         assert row["config"]["planner_variant"] == "hybrid_rule_v4_clearance_braking"
         assert row["path"].endswith("_release_0_0_8_frozen.yaml")
+
+
+@pytest.mark.parametrize(
+    "foreign_module", ["robot_sf.baselines.ppo", "robot_sf.benchmark.map_runner.map_runner"]
+)
+def test_pinned_module_guard_covers_ppo_and_map_runner(tmp_path, monkeypatch, foreign_module):
+    """An otherwise pinned resolver must reject either newly imported foreign module."""
+    from types import SimpleNamespace
+
+    from scripts.analysis._pinned_successor_runtime import _assert_pinned_modules
+
+    # The complete independently specified import boundary, including the two
+    # missing leaves. Fake origins isolate this guard without model/env setup.
+    names = (
+        "robot_sf.benchmark.camera_ready._util",
+        "robot_sf.benchmark.camera_ready._config",
+        "robot_sf.benchmark.camera_ready._preflight",
+        "robot_sf.benchmark.runner",
+        "robot_sf.benchmark.map_runner.map_runner_identity",
+        "robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution",
+        "robot_sf.benchmark.utils",
+        "robot_sf.benchmark.algorithm_metadata",
+        "robot_sf.benchmark.observation_noise",
+        "robot_sf.benchmark.release_candidate",
+        "robot_sf.benchmark.release_parameter_freeze",
+        "pysocialforce",
+        "robot_sf.baselines.ppo",
+        "robot_sf.benchmark.map_runner.map_runner",
+    )
+    checkout = tmp_path / "pinned"
+    for name in names:
+        monkeypatch.setitem(
+            sys.modules, name, SimpleNamespace(__file__=str(checkout / "module.py"))
+        )
+    _assert_pinned_modules(checkout)
+    monkeypatch.setitem(
+        sys.modules, foreign_module, SimpleNamespace(__file__=str(tmp_path / "foreign.py"))
+    )
+    with pytest.raises(
+        ValueError, match=f"runtime module {foreign_module} did not load from pinned"
+    ):
+        _assert_pinned_modules(checkout)

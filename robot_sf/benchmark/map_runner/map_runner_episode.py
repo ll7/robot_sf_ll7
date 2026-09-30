@@ -1557,7 +1557,6 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
     ped_positions: list[np.ndarray],
     ped_forces: list[np.ndarray],
     robot_force_samples: list[dict[str, Any]] | None = None,
-    persist_robot_force_samples: bool = False,
     visibility_trace: list[np.ndarray | None],
     track_confidence_trace: list[np.ndarray | None],
     visibility_evidence_statuses: list[str],
@@ -1715,8 +1714,6 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
             ped_impact_radius_m=ped_impact_radius_m,
             ped_impact_window_steps=ped_impact_window_steps,
         )
-    if persist_robot_force_samples and robot_force_samples:
-        metrics_raw["robot_force_samples"] = robot_force_samples
     _floor_collision_metrics_from_flags(
         metrics_raw,
         collision_seen=collision_seen,
@@ -5664,7 +5661,6 @@ def run_map_episode(  # noqa: PLR0913
         ped_positions=loop_result.ped_positions,
         ped_forces=loop_result.ped_forces,
         robot_force_samples=loop_result.robot_force_samples,
-        persist_robot_force_samples=record_simulation_step_trace,
         visibility_trace=loop_result.visibility_trace,
         track_confidence_trace=loop_result.track_confidence_trace,
         visibility_evidence_statuses=loop_result.visibility_evidence_statuses,
@@ -5706,6 +5702,10 @@ def run_map_episode(  # noqa: PLR0913
         record_simulation_step_trace=record_simulation_step_trace,
         paired_wrapper_off_record=paired_wrapper_off_record,
     )
+    if record_simulation_step_trace and loop_result.robot_force_samples:
+        episode_record["algorithm_metadata"]["robot_force_samples"] = (
+            loop_result.robot_force_samples
+        )
     realized_map_id = (
         resolve_map_id(ctx.config, loop_result.map_def) if loop_result.map_def is not None else None
     )

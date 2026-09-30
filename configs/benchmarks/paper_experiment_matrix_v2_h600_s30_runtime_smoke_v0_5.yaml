@@ -3,7 +3,7 @@
 name: paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5
 derived_from:
   config: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
-  config_sha256: fcb612892db16af523e9b4800828e452e216c1d503d5e9973252bf7e5fd46201
+  config_sha256: 9f55b7f78dd4300c7a5cd3247955285deb10c42ac2a89cb24a71da9eaf776115
 paper_facing: true
 paper_profile_version: paper-matrix-v1
 scenario_matrix: configs/scenarios/single/francis2023_blind_corner_release_0_0_8_v1.yaml

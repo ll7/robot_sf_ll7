@@ -1,0 +1,86 @@
+# DIAGNOSTIC ONLY. Derived from the real 0.0.8 template; never for release.
+# Tracked campaign template for future benchmark-data v0.2 releases.
+#
+# This file deliberately carries publication identity slots instead of a
+# concrete release tag or DOI. The release identity resolver overlays those
+# values in an ignored, source-bound manifest after the candidate SHA and fresh
+# Zenodo coordinates are selected. Keep the scientific contract and all input
+# bytes stable when resolving a release.
+name: ppoeval_action_semantics_diagnostic
+paper_facing: false
+paper_profile_version: paper-matrix-v1
+scenario_matrix: configs/scenarios/ppoeval_subset.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v2.yaml
+route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
+
+amv_profile:
+  name: amv-paper-v1
+  contract_version: "1"
+  coverage_enforcement: warn
+  required_dimensions:
+    use_case: [delivery_robot, shared_space_micromobility]
+    context: [sidewalk, shared_space]
+    speed_regime: [walking_speed, scooter_speed]
+    maneuver_type: [overtake, crossing, bottleneck]
+
+seed_policy:
+  mode: fixed-list
+  seeds: [1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010]
+
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_contract:
+  enabled: true
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 1001
+  calibration_trials: 6000
+
+workers: 1
+horizon: 600
+dt: 0.1
+record_forces: true
+checkpoint_provenance_enforcement: error
+resume: false
+# Release execution stops at the first broken arm. Same-ID resume is admitted only
+# after an infrastructure interruption with an immutable resume receipt; code,
+# config, dependency, or checkpoint defects require a corrected commit and fresh run.
+stop_on_failure: true
+bootstrap_samples: 300
+bootstrap_confidence: 0.95
+bootstrap_seed: 1001
+
+kinematics_matrix:
+  - differential_drive
+
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: true
+repository_url: https://github.com/ll7/robot_sf_ll7
+paper_interpretation_profile: baseline-ready-core
+
+planners:
+  - key: ppo
+    algo: ppo
+    planner_group: experimental
+    # CPU inference is the established parallel-matrix profile. GPU-backed
+    # model loading in forked workers failed closed on both imech192 and LiCCA.
+    algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
+    benchmark_profile: experimental
+    adapter_impact_eval: true
+
+  - key: guarded_ppo
+    algo: guarded_ppo
+    planner_group: experimental
+    algo_config: configs/algos/guarded_ppo_camera_ready_cpu.yaml
+    benchmark_profile: experimental
+
+
+record_simulation_step_trace: true
+record_planner_decision_trace: true
+arm_isolation: in_process

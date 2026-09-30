@@ -2852,6 +2852,8 @@ def _step_build_simulation_trace(
         "selected_action": sim.selected_action_payload,
         "applied_environment_action": sim.applied_environment_action_payload,
     }
+    if "ppoeval_proposal" in slc.algo_meta:
+        planner_payload["ppoeval_proposal"] = dict(slc.algo_meta["ppoeval_proposal"])
     if sim.action_conversion_payload:
         planner_payload["action_conversion"] = sim.action_conversion_payload
     if sim.actuation_step is not None:

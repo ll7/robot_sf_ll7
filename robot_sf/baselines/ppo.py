@@ -897,6 +897,7 @@ class PPOPlanner:
         Returns:
             Action dict in either velocity or unicycle format.
         """
+        raw_output = [float(x) for x in np.asarray(act).reshape(-1)[:2]]
         if self._action_semantics == "velocity_delta":
             if current_speed is None:
                 raise ValueError("velocity_delta requires current robot_speed")
@@ -905,6 +906,10 @@ class PPOPlanner:
             if act.size != 2 or not np.all(np.isfinite(act)):
                 raise ValueError("velocity_delta requires two finite policy outputs")
             act = current_speed + act
+        self._ppoeval_proposal = {
+            "raw_policy_output": raw_output,
+            "requested_command": [float(x) for x in np.asarray(act).reshape(-1)[:2]],
+        }
         if self.config.action_space == "unicycle":
             # Expect target [v, omega]
             v = float(act[0]) if act.size >= 1 else 0.0

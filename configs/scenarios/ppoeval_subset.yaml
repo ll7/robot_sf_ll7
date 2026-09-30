@@ -1,0 +1,72 @@
+# Diagnostic-only PPO action semantics; never release evidence.
+includes:
+- classic_interactions_francis2023_release_0_0_8_v1.yaml
+- archetypes/issue_596_frame_consistency.yaml
+select_scenarios:
+- classic_urban_crossing_medium
+- classic_cross_trap_medium
+- classic_overtaking_medium
+- francis2023_robot_overtaking
+- classic_head_on_corridor_medium
+- francis2023_frontal_approach
+- classic_group_crossing_medium
+- classic_doorway_medium
+- francis2023_crowd_navigation
+- classic_station_platform_medium
+- classic_t_intersection_medium
+- francis2023_following_human
+- empty_map_8_directions_east
+- empty_map_8_directions_north
+- empty_map_8_directions_west
+- empty_map_8_directions_south
+scenario_overrides:
+  seeds: [1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010]
+scenario_overrides_by_name:
+  classic_urban_crossing_medium:
+    metadata:
+      ppoeval_family: crossing
+  classic_cross_trap_medium:
+    metadata:
+      ppoeval_family: crossing
+  classic_overtaking_medium:
+    metadata:
+      ppoeval_family: overtaking
+  francis2023_robot_overtaking:
+    metadata:
+      ppoeval_family: overtaking
+  classic_head_on_corridor_medium:
+    metadata:
+      ppoeval_family: head-on
+  francis2023_frontal_approach:
+    metadata:
+      ppoeval_family: head-on
+  classic_group_crossing_medium:
+    metadata:
+      ppoeval_family: group
+  classic_doorway_medium:
+    metadata:
+      ppoeval_family: doorway
+  francis2023_crowd_navigation:
+    metadata:
+      ppoeval_family: crowd
+  classic_station_platform_medium:
+    metadata:
+      ppoeval_family: crowd
+  classic_t_intersection_medium:
+    metadata:
+      ppoeval_family: intersection
+  francis2023_following_human:
+    metadata:
+      ppoeval_family: following
+  empty_map_8_directions_east:
+    metadata:
+      ppoeval_family: empty-world
+  empty_map_8_directions_north:
+    metadata:
+      ppoeval_family: empty-world
+  empty_map_8_directions_west:
+    metadata:
+      ppoeval_family: empty-world
+  empty_map_8_directions_south:
+    metadata:
+      ppoeval_family: empty-world

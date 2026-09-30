@@ -78,8 +78,8 @@ Comparable benchmark releases must keep these surfaces stable:
 - SNQI assets
 - required artifact bundle contents
 
-For the current release, the frozen identity additionally includes 14 arms,
-48 scenarios, 30 seeds (`paper_eval_s30`), H600, and differential-drive
+For 0.0.8, the identity additionally includes 14 arms,
+48 scenarios, 30 fresh sealed seeds (`release_eval_0_0_8`; D-049), H600, and differential-drive
 kinematics. SNQI remains advisory/no-ranking even when its assets are present;
 report raw and component metrics separately if calibration does not support a
 composite interpretation.

@@ -24,6 +24,7 @@ import yaml
 
 from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios, load_campaign_config
 from robot_sf.benchmark.camera_ready.campaign import _resolve_arm_safety_wrapper
+from robot_sf.benchmark.seed_bands import DEV_SEEDS, HELD_OUT_SEEDS
 from robot_sf.training.scenario_loader import load_scenarios
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -57,8 +58,8 @@ SIMULATOR_CAMPAIGN_FIELDS = (
     "scenario_horizons_path",
     "radius_sweep",
 )
-EXPECTED_DEV_SEEDS = tuple(range(1001, 1031))
-RELEASE_SEEDS = frozenset(range(111, 141))
+EXPECTED_DEV_SEEDS = DEV_SEEDS
+RELEASE_SEEDS = HELD_OUT_SEEDS
 EXPECTED_PLANNER_ALGO = "hybrid_rule_local_planner"
 EXPECTED_VARIANTS = {
     "issue_9748_dev_classic_doorway_medium": {

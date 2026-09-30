@@ -53,7 +53,7 @@ Benchmark release versioning is independent from `pyproject.toml`.
 While the release process is still evolving, benchmark releases remain in the
 `0.x.y` line.
 
-## Current Canonical Release Unit
+## Historical 0.0.7 Canonical Release Unit
 
 The approved S30/H600 benchmark-data campaign is:
 
@@ -98,7 +98,7 @@ The publication-grade manifest uses
 `schema_version: benchmark-release-manifest.v0.2`. In addition to the fields
 above, it pins the exact latest-green base commit, expected 20,160 episode
 identities, suite policy and route-certification hashes, resolved seeds
-`111..140`, the `advisory_no_ranking` SNQI claim policy, direct Zenodo dataset
+`EVAL_SEEDS_0_0_8` for 0.0.8 (`release_eval_0_0_8`; D-049), the `advisory_no_ranking` SNQI claim policy, direct Zenodo dataset
 channel, and distinct fresh concept/version DOIs. `provenance.doi` must equal
 the reserved version DOI.
 
@@ -384,3 +384,7 @@ The campaign summary now carries benchmark-release provenance:
 - `docs/benchmark_artifact_publication.md`
 - `docs/benchmark_release_reproducibility.md`
 - `docs/RELEASE.md`
+
+Historical 0.0.7 manifests retain `paper_eval_s30` (111..140). Both that retired
+band and the fresh 0.0.8 list remain sealed for development and calibration.
+See the [0.0.8 runbook](release/0.0.8/runbook.md).

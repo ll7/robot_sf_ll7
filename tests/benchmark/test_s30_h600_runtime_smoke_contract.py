@@ -22,6 +22,7 @@ from robot_sf.benchmark.release_parameter_freeze import (
 )
 from robot_sf.benchmark.release_protocol import load_release_manifest, validate_release_manifest
 from robot_sf.benchmark.runtime_smoke_admission import RUNTIME_SMOKE_PLANNER_KEYS
+from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
 from robot_sf.benchmark.spawn_preflight import _release_manifest_inputs, run_manifest_preflight
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -62,7 +63,7 @@ PINNED_V04_MANIFEST_SHA256 = "aded0ca71e40bdc8f7193282bb8d28420a9b627f93d47a4303
 PINNED_V03_CONFIG_SHA256 = "fbd900243f5a004cc07f7d10c672126f46ec583eb6f108ec7a0e8fce9daa7ad4"
 PINNED_V03_MANIFEST_SHA256 = "d6f3047adaacfb8cad2cc12430ee5ce7331f11b0777ac522209fd1e5af019241"
 HISTORICAL_V04_TEMPLATE_SHA256 = "f453b7c824fdd47298cbc66dae3afc1fffcd7eedf57ee4bb87cd1c67b4feb1d7"
-CAMPAIGN_TEMPLATE_SHA256 = "fcb612892db16af523e9b4800828e452e216c1d503d5e9973252bf7e5fd46201"
+CAMPAIGN_TEMPLATE_SHA256 = "d0528b0bf4f84989910a6853bdd1d3f61d7d2fd39c78c82ec7b7a3271ec912b3"
 
 EXPECTED_PLANNER_KEYS = [
     "prediction_planner",
@@ -458,6 +459,7 @@ def test_runtime_smoke_v0_4_preserves_its_historical_binding_and_v0_3() -> None:
         "scenario_matrix",
         "seed_policy.mode",
         "seed_policy.seed_set",
+        "seed_policy.seed_sets_path",  # D-049 version-specific sealed schedule
         "seed_policy.seeds",
         "snqi_contract.calibration_trials",
         "zenodo",
@@ -532,6 +534,7 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
         "paper_facing",  # publication identity
         "seed_policy.mode",
         "seed_policy.seed_set",
+        "seed_policy.seed_sets_path",  # D-049 version-specific sealed schedule
         "seed_policy.seeds",
         "workers",  # execution resource policy
     }
@@ -553,6 +556,7 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
         "scenario_matrix",  # scenario subset
         "seed_policy.mode",
         "seed_policy.seed_set",
+        "seed_policy.seed_sets_path",  # D-049 version-specific sealed schedule
         "seed_policy.seeds",
         "snqi_contract.calibration_trials",  # bounded runtime resources
         "zenodo",  # publication identity
@@ -567,7 +571,7 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
     assert {103}.isdisjoint({101, 102} | set(range(111, 141)) | set(range(1001, 1031)))
     assert {seed for row in scenarios[0].values() for seed in row["seeds"]} == {101, 102}
     assert {seed for row in scenarios[1].values() for seed in row["seeds"]} == {103}
-    assert {seed for row in scenarios[2].values() for seed in row["seeds"]} == set(range(111, 141))
+    assert {seed for row in scenarios[2].values() for seed in row["seeds"]} == set(EVAL_SEEDS_0_0_8)
 
     mismatches: list[str] = []
     for index, label in ((0, "calibration"), (1, "smoke")):

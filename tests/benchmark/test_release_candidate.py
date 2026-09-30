@@ -23,6 +23,7 @@ from robot_sf.benchmark.release_candidate import (
     verify_prepublication_candidate_after_preflight,
 )
 from robot_sf.benchmark.release_protocol import load_release_manifest
+from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
 from robot_sf.training.scenario_loader import load_scenarios_for_validation
 
 SOURCE_ROOT = Path(__file__).parents[2]
@@ -51,9 +52,9 @@ def candidate_repo(tmp_path: Path) -> tuple[Path, Path, dict]:
     rows = [dict(row) for row in scenarios.scenarios]
     seed_policy = {
         "mode": "seed-set",
-        "seed_set": "paper_eval_s30",
-        "seed_sets_path": "configs/benchmarks/seed_sets_v1.yaml",
-        "resolved_seeds": list(range(111, 141)),
+        "seed_set": "release_eval_0_0_8",
+        "seed_sets_path": "configs/benchmarks/seed_sets_0_0_8.yaml",
+        "resolved_seeds": list(EVAL_SEEDS_0_0_8),
     }
     inputs = {
         "suite_policy_path": SUITE_POLICY,
@@ -119,7 +120,7 @@ def test_doi_free_candidate_loads_but_publication_loader_rejects(candidate_repo)
     assert candidate.release_id == payload["candidate_id"]
     assert len(candidate.planner_keys) == 14
     assert len(candidate.scenario_identities) == 48
-    assert candidate.resolved_seeds == tuple(range(111, 141))
+    assert candidate.resolved_seeds == EVAL_SEEDS_0_0_8
     assert candidate.expected_episode_cells == 20160
     with pytest.raises(ValueError, match="schema_version"):
         load_release_manifest(path, repository_root=root)

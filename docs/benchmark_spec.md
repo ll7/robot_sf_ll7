@@ -519,3 +519,14 @@ difference (floored at zero for overlap). Velocity uses backward differences, wi
 first sample. At least two samples are required. It is a counterfactual, never applied to dynamics
 or included automatically in the Social Navigation Quality Index. Its reductions use the same
 reference and units. Validation campaign evidence remains separate from release evaluation.
+
+## Sealed 0.0.8 evaluation schedule (D-049)
+
+0.0.8 uses `release_eval_0_0_8` from `configs/benchmarks/seed_sets_0_0_8.yaml`.
+The source of truth is `robot_sf.benchmark.seed_bands.EVAL_SEEDS_0_0_8`; static
+tests bind the YAML to the approved SHA-256 derivation. Both that set and retired
+0.0.7 seeds 111..140 remain forbidden for tuning, development and calibration.
+Development episodes use 1001..1030. Historical `paper_eval_s30` remains unchanged
+for 0.0.7 reproduction. The release grid has 48 x 30 = 1,440 identities per arm
+and 14 x 1,440 = 20,160 total; these counts are computed without running episodes.
+See [D-049](release/0.0.8/decisions.md) and the [runbook](release/0.0.8/runbook.md).

@@ -1656,3 +1656,18 @@ def test_campaign_summary_reader_reports_invalid_json_without_private_path(
     assert payload is None
     assert error == "campaign summary contains invalid JSON"
     assert str(tmp_path) not in error
+
+
+def test_full_release_008_rejects_complete_retired_seed_fixture(tmp_path, monkeypatch):
+    """Real acceptance rejects otherwise valid synthetic rows on the retired band."""
+    campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
+    manifest = _full_manifest()
+    manifest.release_tag = "paper-matrix-v2-h600-s30-2026-09-" + _SOURCE_SHA
+    manifest.scenario_matrix_path = Path("scenarios_release_0_0_8_v1.yaml")
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=manifest,
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+    assert "0.0.8 requires the exact sealed evaluation seeds (D-049)" in result["blockers"]

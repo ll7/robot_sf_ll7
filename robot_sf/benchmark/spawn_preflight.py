@@ -63,7 +63,7 @@ INFEASIBILITY_PROBE_RELEASE_KIND = "benchmark-infeasibility-probe"
 
 
 def _parse_seeds(text: str) -> list[int]:
-    """Parse ``111-140`` or ``111,115,118`` seed lists.
+    """Parse ``1001-1030`` or ``1001,1005,1008`` development seed lists.
 
     Returns:
         Sorted unique seeds.

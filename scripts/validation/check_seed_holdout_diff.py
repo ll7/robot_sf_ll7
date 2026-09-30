@@ -28,6 +28,8 @@ import tokenize
 from dataclasses import dataclass
 from pathlib import Path
 
+from robot_sf.benchmark.seed_bands import HELD_OUT_SEEDS
+
 RELEASE_CONFIGS = frozenset(
     {
         "configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml",
@@ -38,16 +40,15 @@ MARKER_KINDS = "setup-only|synthetic-fixture|release-evaluation"
 MARKER = re.compile(rf"#\s*seed-holdout:\s*(?P<kind>{MARKER_KINDS})\b")
 BLOCK_MARKER = re.compile(rf"\s*#\s*seed-holdout:\s*({MARKER_KINDS})\s+(begin|end)\s*")
 # The release-evaluation marker is valid only in release evaluation manifests,
-# where the held-out seeds 111-140 are the intended evaluation set. Anywhere
+# where sealed evaluation seeds are the intended release set. Anywhere
 # else it is an error, so it cannot become a blanket escape.
 RELEASE_EVALUATION_KIND = "release-evaluation"
 RELEASE_EVALUATION_PREFIXES = (
     "configs/benchmarks/releases/",
     "configs/benchmarks/paper_experiment_matrix_",
 )
-SEED = re.compile(
-    r"(?<![\w.])(?:11[1-9]|12\d|13\d|140)(?![\w.])"  # seed-holdout: synthetic-fixture
-)
+SEALED_SEED_PATTERN = "(?:" + "|".join(map(str, sorted(HELD_OUT_SEEDS))) + ")"
+SEED = re.compile(rf"(?<![\w.]){SEALED_SEED_PATTERN}(?![\w.])")
 SEED_FIELD = re.compile(
     r"(?i)(?:^|[\s,({])['\"]?(?:seed|seeds|seed_list|seed_set|resolved_seeds|"
     r"eval_seeds|evaluation_seeds|pilot_seeds|diagnostic_seeds|base_seed|"
@@ -218,15 +219,8 @@ def _range_overlaps_holdout(text: str) -> bool:
             start = first
         if step == 0:
             continue
-        if step > 0:
-            candidate = start + max(0, (111 - start + step - 1) // step) * step
-            if 111 <= candidate <= 140 and candidate < stop:
-                return True
-        else:
-            magnitude = -step
-            candidate = start - max(0, (start - 140 + magnitude - 1) // magnitude) * magnitude
-            if 111 <= candidate <= 140 and candidate > stop:
-                return True
+        if any(seed in range(start, stop, step) for seed in HELD_OUT_SEEDS):
+            return True
     return False
 
 
@@ -328,7 +322,7 @@ def _seed_context(path: str, text: str, before: list[str], after: list[str]) -> 
     # YAML block lists and multiline pytest parametrizations put the value on
     # a separate line from the seed key. Use the closest enclosing declaration.
     if re.match(
-        r"^\s*(?:-\s*)?\[?\s*(?:11[1-9]|12\d|13\d|140)(?:\s*,\s*\d+)*\s*\]?,?\s*(?:#.*)?$",
+        rf"^\s*(?:-\s*)?\[?\s*{SEALED_SEED_PATTERN}(?:\s*,\s*\d+)*\s*\]?,?\s*(?:#.*)?$",
         text,
     ):
         if path == "configs/benchmarks/seed_list_v1.yaml":

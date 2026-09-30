@@ -23,6 +23,7 @@ from robot_sf.benchmark.release_protocol import (
     write_resolved_release_identity,
 )
 from robot_sf.benchmark.release_tag_identity import derive_sha_tag
+from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
 from robot_sf.benchmark.zenodo_publisher import build_release_binding
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.tools import resolve_benchmark_release_identity as identity_cli
@@ -158,7 +159,7 @@ def test_checked_in_future_benchmark_templates_pin_contract_without_historical_i
     }
     assert "issue_9856_" in by_name["francis2023_entering_room"]["map_file"]
     assert "issue_9762_" in by_name["classic_station_platform_medium"]["map_file"]
-    assert manifest["seed_policy"]["resolved_seeds"] == list(range(111, 141))
+    assert manifest["seed_policy"]["resolved_seeds"] == list(EVAL_SEEDS_0_0_8)
     loaded_template, metadata_path, metadata_bytes = release_protocol._identity_template_payload(
         PUBLIC_RELEASE_TEMPLATE,
         repository_root=REPO_ROOT,
@@ -182,7 +183,7 @@ def test_three_width_doorway_slice_binds_full_roster_and_1260_rows() -> None:
     assert campaign["scenario_matrix"] == matrix_path.relative_to(REPO_ROOT).as_posix()
     assert [row["metadata"]["width_slice_m"] for row in scenarios] == [2.2, 2.8, 3.6]
     assert len(campaign["planners"]) == len(manifest["planners"]["keys"]) == 14
-    assert manifest["seed_policy"]["resolved_seeds"] == list(range(111, 141))
+    assert manifest["seed_policy"]["resolved_seeds"] == list(EVAL_SEEDS_0_0_8)
     assert manifest["width_slice_contract"]["expected_episode_rows"] == 1260
     assert all(row["simulation_config"]["max_episode_steps"] == 400 for row in scenarios)
 
@@ -200,7 +201,7 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
     scenarios = repo / "scenarios.yaml"
     _write_yaml(scenarios, [{"name": f"scenario_{index:02d}"} for index in range(48)])
     seed_sets = repo / "seed_sets.yaml"
-    _write_yaml(seed_sets, {"paper_eval_s30": list(range(111, 141))})
+    _write_yaml(seed_sets, {"release_eval_0_0_8": list(EVAL_SEEDS_0_0_8)})
     for name in ("suite.yaml", "route.yaml", "comparability.yaml"):
         _write_yaml(repo / name, {"schema_version": "fixture.v1"})
     (repo / "CITATION.cff").write_text("cff-version: 1.2.0\n", encoding="utf-8")
@@ -222,7 +223,7 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
             "route_clearance_certifications": "route.yaml",
             "seed_policy": {
                 "mode": "seed-set",
-                "seed_set": "paper_eval_s30",
+                "seed_set": "release_eval_0_0_8",
                 "seed_sets_path": "seed_sets.yaml",
             },
             "workers": 1,
@@ -319,11 +320,11 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
             },
             "seed_policy": {
                 "mode": "seed-set",
-                "seed_set": "paper_eval_s30",
+                "seed_set": "release_eval_0_0_8",
                 "seeds": [],
                 "seed_sets_path": seed_sets.name,
                 "seed_sets_sha256": _sha256(seed_sets),
-                "resolved_seeds": list(range(111, 141)),
+                "resolved_seeds": list(EVAL_SEEDS_0_0_8),
             },
             "metrics": {"snqi_claim_policy": "advisory_no_ranking"},
             "planners": {
@@ -924,7 +925,7 @@ def test_doctor_and_acceptance_resolve_the_same_identity_bound_campaign(
     assert blockers == []
     assert axis_blockers == []
     assert len(scenario_ids) == 48
-    assert seeds == tuple(range(111, 141))
+    assert seeds == EVAL_SEEDS_0_0_8
 
 
 def test_acceptance_resolves_axes_and_planners_from_resolved_manifest(
@@ -956,7 +957,7 @@ def test_acceptance_resolves_axes_and_planners_from_resolved_manifest(
     assert axis_blockers == []
     assert planner_blockers == []
     assert len(scenario_ids) == 48
-    assert seeds == tuple(range(111, 141))
+    assert seeds == EVAL_SEEDS_0_0_8
     assert len(release_acceptance._full_release_planner_items(planner_candidates)) == 14
 
     legacy_manifest = replace(manifest, resolved_identity_path=None)

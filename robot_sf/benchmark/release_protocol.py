@@ -28,6 +28,7 @@ from robot_sf.benchmark.release_tag_identity import (
     HISTORICAL_RELEASE_TAG,
     check_canonical_source_tag,
 )
+from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
 from robot_sf.benchmark.zenodo_publisher import ZenodoPublisherError, load_dataset_metadata
 from robot_sf.common.artifact_paths import get_repository_root
 
@@ -1955,6 +1956,14 @@ def _validate_release_seed_policy(
             else None
         ),
     }
+    if cfg.seed_policy.mode == "seed-set" and (
+        "0.0.8" in manifest.release_tag
+        or "0_0_8" in manifest.scenario_matrix_path.name
+        or "0_0_8" in manifest.canonical_campaign_config_path.name
+    ):
+        seeds = _load_mapping(cfg.seed_policy.seed_sets_path).get(cfg.seed_policy.seed_set)
+        if seeds != list(EVAL_SEEDS_0_0_8):
+            problems.append("0.0.8 requires the exact sealed evaluation seeds (D-049)")
     if cfg_seed_policy != normalized_manifest_seed_policy:
         problems.append("seed_policy does not match campaign config")
 

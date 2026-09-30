@@ -187,14 +187,11 @@ def relocate_overlapping_pedestrians(
     moved along the ray from the robot through its current position, to the
     nearest point on the exclusion circle; if that point is blocked (walls, other
     pedestrians with margin, other robots, or a wall between the old and new
-<<<<<<< HEAD
-    position), rotated rays and slightly larger radii are tried in a fixed order.
-    No random numbers are drawn, so the global RNG stream and
-=======
     position), paired rotated rays and slightly larger radii are tried. Clear
     candidates in each pair are ranked by geometric clearance, without preferring
-    a handed direction. No random numbers are drawn, so the global RNG stream and
->>>>>>> 03b7b3b829ffaea5264e96a45ebe6a887c1a5ba7
+    a handed direction. Route-following pedestrians prefer a clear candidate whose
+    route velocity does not close on a robot. No random numbers are drawn, so the
+    global RNG stream and every non-overlapping spawn stay unchanged.
     every non-overlapping spawn stay unchanged.
 
     Args:
@@ -233,16 +230,26 @@ def relocate_overlapping_pedestrians(
             continue
         clear_candidates = [
             candidate
-            for candidate in _relocation_candidates(positions[row], hit, ped_radius, robot_margin)
-            if _is_clear(
-                candidate,
-                row,
-                positions,
+            for pair in _relocation_candidates(positions[row], hit, ped_radius, robot_margin)
+            for candidate in _rank_relocation_pair(
+                [
+                    point
+                    for point in pair
+                    if _is_clear(
+                        point,
+                        row,
+                        positions,
+                        robots,
+                        ped_radius,
+                        margin,
+                        (blocked, walls),
+                        robot_margin=robot_margin,
+                    )
+                ],
+                blocked,
+                [point for other, point in enumerate(positions) if other != row],
                 robots,
                 ped_radius,
-                margin,
-                (blocked, walls),
-                robot_margin=robot_margin,
             )
         ]
         # Prefer a non-closing route heading. A goal inside a robot footprint
@@ -251,33 +258,9 @@ def relocate_overlapping_pedestrians(
         new_xy = next(
             (
                 candidate
-<<<<<<< HEAD
                 for candidate in clear_candidates
                 if route_goals is None
                 or _route_heading_clears_robots(candidate, route_goals[row], robots)
-=======
-                for pair in _relocation_candidates(positions[row], hit, ped_radius, robot_margin)
-                for candidate in _rank_relocation_pair(
-                    [
-                        point
-                        for point in pair
-                        if _is_clear(
-                            point,
-                            row,
-                            positions,
-                            robots,
-                            ped_radius,
-                            margin,
-                            (blocked, walls),
-                            robot_margin=robot_margin,
-                        )
-                    ],
-                    blocked,
-                    [point for other, point in enumerate(positions) if other != row],
-                    robots,
-                    ped_radius,
-                )
->>>>>>> 03b7b3b829ffaea5264e96a45ebe6a887c1a5ba7
             ),
             clear_candidates[0] if clear_candidates else None,
         )

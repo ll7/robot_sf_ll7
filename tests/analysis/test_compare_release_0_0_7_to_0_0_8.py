@@ -1525,7 +1525,7 @@ def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
         # Keep real bottleneck geometry; this explicit fixture authors a 700-step limit.
         from robot_sf.training.scenario_loader import load_scenarios
 
-        authored = load_scenarios(source / payload["scenario_matrix"])
+        authored = [dict(s) for s in load_scenarios(source / payload["scenario_matrix"])]
         for item in authored:
             item["simulation_config"]["max_episode_steps"] = 700
         fixture_matrix = source / "configs/scenarios/arm_budgets.yaml"

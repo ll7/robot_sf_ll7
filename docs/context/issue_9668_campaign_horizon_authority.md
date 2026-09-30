@@ -84,7 +84,7 @@ Flagged timeout counts by scenario and arm. Every listed scenario has 420 all-ou
 
 The remaining scenarios have no horizon-consistency flags and no below-600 exposure: `classic_realworld_double_bottleneck_high`, `classic_station_platform_medium`, `classic_cross_trap_low`, `classic_cross_trap_medium`, `classic_cross_trap_high`, `classic_merging_low`, `classic_merging_medium`, `classic_overtaking_low`, `classic_overtaking_medium`, `classic_urban_crossing_medium`.
 
-**Room to succeed:** the 1,057 H400 timeouts lost 200 declared runner steps (20 s); the 448 H500 timeouts lost 100 (10 s). This leaves a possible completion opportunity, not proof that any particular row would succeed at H600. Continued progress supports investigating budget censoring; extrapolation cannot account for later contacts, delays, route changes, or goal semantics. The example hybrid parallel-traffic row has positive terminal planner `progress_windows[5s]=1.5583861586771341 m` and route remaining distance about 5.4 m, consistent with such an opportunity, but not a measured H600 success.
+**Budget counterfactual:** the 1,057 H400 timeouts ended 200 steps (20 s) before the declared runner H600; the 448 H500 timeouts ended 100 steps (10 s) before it. This quantifies a budget difference, not proof that the authored stops were inappropriate or that any particular row would succeed at H600. Continued progress supports investigating budget censoring; extrapolation cannot account for later contacts, delays, route changes, or goal semantics. The example hybrid parallel-traffic row has positive terminal planner `progress_windows[5s]=1.5583861586771341 m` and route remaining distance about 5.4 m, consistent with such an opportunity, but not a measured H600 success.
 
 **Requested last-50-step fraction: unavailable.** All 1,505 flags have `record_simulation_step_trace=false` and `record_planner_decision_trace=false`; no bundle member is a trace/trajectory/step telemetry artifact, and no flagged row has a top-level distance trajectory. There are no distances at steps 350 and 400, so an exact fraction or zero fraction would be invented.
 
@@ -94,7 +94,7 @@ Proxy definition at release source: `robot_sf/planner/hybrid_rule_local_planner.
 
 ## 3. Actual 0.0.8 template exposure on main
 
-The requested template selects `configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml` at line 11 and H600 at line 45. The canonical campaign loader expands **48 scenarios, 38 below H600** before this correction. Limits and source scalar lines below were verified with the loader against current checkout bytes; inherited overrides do not replace these limits.
+On the inspected main revision, the template selected `configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml` at line 11 and H600 at line 45. The canonical campaign loader expands **48 scenarios, 38 below H600** before this correction. Limits and source scalar lines below were verified with the loader against current checkout bytes; inherited overrides do not replace these limits.
 
 | Scenario | Effective horizon on main | Limit source file:line |
 |---|---:|---|

@@ -1,0 +1,4 @@
+# Shared bounds for 0.0.8 SocNav-family release arms.
+# Robot and pedestrian geometry are read from each environment observation.
+max_linear_speed: 2.0
+max_angular_speed: 1.0

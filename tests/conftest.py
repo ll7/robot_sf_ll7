@@ -417,6 +417,12 @@ _FAST_FILES = {
     "test_optional_moviepy_imports.py",
     # Runner isolation and resource contracts must run before a PR changes CI.
     "test_self_hosted_routing.py",
+    # Clearance and LiDAR tracking contracts use fixed arrays without environment steps.
+    "test_clearance_geometry.py",
+    "test_lidar_tracked_agents.py",
+    # FX3 uses real release checkpoints and static SVG pose checks without episodes.
+    "test_fx3_static_recovery.py",
+    "test_release_horizons.py",
     # Doorway safe-failure contracts classify synthetic rows without planner steps.
     "test_infeasible_probe_safe_failure.py",
     # Scenario-admissibility tests exercise deterministic candidate, manifest,
@@ -1527,7 +1533,7 @@ def sample_baseline_data():
 
 
 # =====================================================================# Occupancy Grid Fixtures
-# =====================================================================
+# ==============================================================
 
 
 @pytest.fixture
@@ -1675,7 +1681,7 @@ def pre_generated_grid(occupancy_grid, simple_obstacles, simple_pedestrians, rob
 
 
 # =====================================================================# Shared Subprocess Mock Fixture
-# =====================================================================
+# ==============================================================
 
 
 def _build_matcher_predicate(

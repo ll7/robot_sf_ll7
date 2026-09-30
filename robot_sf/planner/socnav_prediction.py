@@ -11,6 +11,11 @@ from robot_sf.common.forecast_variants import FORECAST_VARIANT_CHOICES
 from robot_sf.common.math_utils import wrap_angle_pi
 from robot_sf.models import get_registry_entry
 from robot_sf.planner import socnav as _socnav
+from robot_sf.planner.clearance_geometry import (
+    CENTER_CLEARANCE_V1,
+    pedestrian_clearance,
+    validate_clearance_model,
+)
 from robot_sf.planner.obstacle_features import (
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
     LocalObstacleFeatureExtractor,
@@ -50,6 +55,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
     def __init__(self, config: SocNavPlannerConfig | None = None, *, allow_fallback: bool = False):
         """Initialize predictive planner adapter and deferred model loading."""
         self.config = config or SocNavPlannerConfig()
+        validate_clearance_model(self.config.predictive_clearance_model)
         self._allow_fallback = bool(allow_fallback)
         self._model: PredictiveTrajectoryModel | None = None
         self._load_error: Exception | None = None
@@ -787,6 +793,14 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             return float("inf")
         valid = future_peds[valid_idx, :t_max, :]
         dist = np.linalg.norm(valid, axis=2)
+        if self.config.predictive_clearance_model != CENTER_CLEARANCE_V1:
+            dist = pedestrian_clearance(
+                dist,
+                model=self.config.predictive_clearance_model,
+                robot_radius=self.config.predictive_robot_radius,
+                pedestrian_radius=self.config.predictive_pedestrian_radius,
+            )
+            assert isinstance(dist, np.ndarray)
         return float(np.min(dist)) if dist.size > 0 else float("inf")
 
     def _effective_rollout_steps(self, *, future_peds: np.ndarray, mask: np.ndarray) -> int:
@@ -1002,8 +1016,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         steps_val = max(
             1, int(steps if steps is not None else self.config.predictive_horizon_steps)
         )
-        radius_margin = float(self.config.predictive_robot_radius) + float(
-            self.config.predictive_pedestrian_radius
+        radius_margin = (
+            float(self.config.predictive_robot_radius)
+            + float(self.config.predictive_pedestrian_radius)
+            if self.config.predictive_clearance_model == CENTER_CLEARANCE_V1
+            else 0.0
         )
         speed_margin = float(self.config.predictive_speed_clearance_gain) * abs(float(v))
         safe_dist = float(self.config.predictive_safe_distance) + radius_margin + speed_margin
@@ -1015,8 +1032,17 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             limit = min(steps_val, future_peds.shape[1], valid_dists.shape[1])
             if limit <= 0 or valid_dists[:, :limit].size == 0:
                 return 0.0, 0.0
-            collisions = float(np.sum(np.maximum(0.0, safe_dist - valid_dists[:, :limit])))
-            near_misses = float(np.sum(np.maximum(0.0, near_dist - valid_dists[:, :limit])))
+            distances = valid_dists[:, :limit]
+            if self.config.predictive_clearance_model != CENTER_CLEARANCE_V1:
+                distances = pedestrian_clearance(
+                    distances,
+                    model=self.config.predictive_clearance_model,
+                    robot_radius=self.config.predictive_robot_radius,
+                    pedestrian_radius=self.config.predictive_pedestrian_radius,
+                )
+                assert isinstance(distances, np.ndarray)
+            collisions = float(np.sum(np.maximum(0.0, safe_dist - distances)))
+            near_misses = float(np.sum(np.maximum(0.0, near_dist - distances)))
             return collisions, near_misses
 
         dt = max(float(self.config.predictive_rollout_dt), 1e-3)
@@ -1035,6 +1061,14 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
 
         delta = ped - robot_traj[:horizon].reshape(1, horizon, 2)
         dist = np.linalg.norm(delta, axis=2)
+        if self.config.predictive_clearance_model != CENTER_CLEARANCE_V1:
+            dist = pedestrian_clearance(
+                dist,
+                model=self.config.predictive_clearance_model,
+                robot_radius=self.config.predictive_robot_radius,
+                pedestrian_radius=self.config.predictive_pedestrian_radius,
+            )
+            assert isinstance(dist, np.ndarray)
         collisions = float(np.sum(np.maximum(0.0, safe_dist - dist)))
         near_misses = float(np.sum(np.maximum(0.0, near_dist - dist)))
         return collisions, near_misses
@@ -1052,10 +1086,21 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         """Compute minimum predicted robot-pedestrian clearance for a candidate.
 
         Returns:
-            float: Minimum center-to-center clearance in meters.
+            float: Minimum clearance in meters, according to the configured model.
         """
         if valid_dists is not None:
-            return float(np.min(valid_dists)) if valid_dists.size > 0 else float("inf")
+            if valid_dists.size == 0:
+                return float("inf")
+            distances = valid_dists
+            if self.config.predictive_clearance_model != CENTER_CLEARANCE_V1:
+                distances = pedestrian_clearance(
+                    distances,
+                    model=self.config.predictive_clearance_model,
+                    robot_radius=self.config.predictive_robot_radius,
+                    pedestrian_radius=self.config.predictive_pedestrian_radius,
+                )
+                assert isinstance(distances, np.ndarray)
+            return float(np.min(distances))
 
         dt = max(float(self.config.predictive_rollout_dt), 1e-3)
         robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=max(1, int(steps)))
@@ -1067,6 +1112,14 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             return float("inf")
         delta = ped - robot_traj.reshape(1, robot_traj.shape[0], 2)
         dist = np.linalg.norm(delta, axis=2)
+        if self.config.predictive_clearance_model != CENTER_CLEARANCE_V1:
+            dist = pedestrian_clearance(
+                dist,
+                model=self.config.predictive_clearance_model,
+                robot_radius=self.config.predictive_robot_radius,
+                pedestrian_radius=self.config.predictive_pedestrian_radius,
+            )
+            assert isinstance(dist, np.ndarray)
         return float(np.min(dist)) if dist.size > 0 else float("inf")
 
     def _ttc_penalty(
@@ -1084,8 +1137,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             float: Penalty that increases for earlier/closer predicted encounters.
         """
-        radius_margin = float(self.config.predictive_robot_radius) + float(
-            self.config.predictive_pedestrian_radius
+        radius_margin = (
+            float(self.config.predictive_robot_radius)
+            + float(self.config.predictive_pedestrian_radius)
+            if self.config.predictive_clearance_model == CENTER_CLEARANCE_V1
+            else 0.0
         )
         speed_margin = float(self.config.predictive_speed_clearance_gain) * abs(float(v))
         threshold = float(self.config.predictive_ttc_distance) + radius_margin + speed_margin
@@ -1101,6 +1157,14 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             if limit <= 0 or valid_dists[:, :limit].size == 0:
                 return 0.0
             valid_slice = valid_dists[:, :limit]
+            if self.config.predictive_clearance_model != CENTER_CLEARANCE_V1:
+                valid_slice = pedestrian_clearance(
+                    valid_slice,
+                    model=self.config.predictive_clearance_model,
+                    robot_radius=self.config.predictive_robot_radius,
+                    pedestrian_radius=self.config.predictive_pedestrian_radius,
+                )
+                assert isinstance(valid_slice, np.ndarray)
             shortfall = np.maximum(0.0, threshold - valid_slice)
             time_indices = np.arange(1, limit + 1, dtype=float).reshape(1, limit)
             time_weights = 1.0 / (time_indices * dt + self._EPS)
@@ -1122,6 +1186,14 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
 
         delta = ped - robot_traj[:horizon].reshape(1, horizon, 2)
         dist = np.linalg.norm(delta, axis=2)
+        if self.config.predictive_clearance_model != CENTER_CLEARANCE_V1:
+            dist = pedestrian_clearance(
+                dist,
+                model=self.config.predictive_clearance_model,
+                robot_radius=self.config.predictive_robot_radius,
+                pedestrian_radius=self.config.predictive_pedestrian_radius,
+            )
+            assert isinstance(dist, np.ndarray)
         shortfall = np.maximum(0.0, threshold - dist)
         time_indices = np.arange(1, horizon + 1, dtype=float).reshape(1, horizon)
         time_weights = 1.0 / (time_indices * dt + self._EPS)
@@ -1277,8 +1349,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         local_traj = local_traj[:horizon]
         local_headings = local_headings[:horizon]
 
-        radius_margin = float(self.config.predictive_robot_radius) + float(
-            self.config.predictive_pedestrian_radius
+        radius_margin = (
+            float(self.config.predictive_robot_radius)
+            + float(self.config.predictive_pedestrian_radius)
+            if self.config.predictive_clearance_model == CENTER_CLEARANCE_V1
+            else 0.0
         )
         min_clearance = float("inf")
         collision_pen = 0.0
@@ -1294,6 +1369,14 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             if ped.size > 0:
                 delta = ped - local_traj.reshape(1, horizon, 2)
                 dist = np.linalg.norm(delta, axis=2)
+                if self.config.predictive_clearance_model != CENTER_CLEARANCE_V1:
+                    dist = pedestrian_clearance(
+                        dist,
+                        model=self.config.predictive_clearance_model,
+                        robot_radius=self.config.predictive_robot_radius,
+                        pedestrian_radius=self.config.predictive_pedestrian_radius,
+                    )
+                    assert isinstance(dist, np.ndarray)
                 min_clearance = float(np.min(dist)) if dist.size > 0 else float("inf")
                 collision_pen = float(np.sum(np.maximum(0.0, safe_dist - dist)))
                 near_pen = float(np.sum(np.maximum(0.0, near_dist - dist)))

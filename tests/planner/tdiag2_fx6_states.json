@@ -1,0 +1,426 @@
+[
+  {
+    "kind": "dead_band",
+    "scenario": "classic_overtaking_low",
+    "seed": 1001,
+    "map": "successor_svg_maps/issue_9762_classic_overtaking_goal_zone_entry_v2.svg",
+    "map_sha256": "d3724df310d603d8ec1ee8426f55615112f97a2d0446aec6ce30ffba8e999e18",
+    "position": [
+      33.29824447631836,
+      18.181673049926758
+    ],
+    "heading": -0.08798642456531525,
+    "goal": [
+      39.899761,
+      15.94626
+    ],
+    "clearance": 0.3217555236816383
+  },
+  {
+    "kind": "dead_band",
+    "scenario": "classic_overtaking_low",
+    "seed": 1002,
+    "map": "successor_svg_maps/issue_9762_classic_overtaking_goal_zone_entry_v2.svg",
+    "map_sha256": "d3724df310d603d8ec1ee8426f55615112f97a2d0446aec6ce30ffba8e999e18",
+    "position": [
+      33.2962646484375,
+      18.71903419494629
+    ],
+    "heading": -0.11798642575740814,
+    "goal": [
+      39.899761,
+      15.94626
+    ],
+    "clearance": 0.3237353515624972
+  },
+  {
+    "kind": "dead_band",
+    "scenario": "classic_overtaking_medium",
+    "seed": 1001,
+    "map": "successor_svg_maps/issue_9762_classic_overtaking_goal_zone_entry_v2.svg",
+    "map_sha256": "d3724df310d603d8ec1ee8426f55615112f97a2d0446aec6ce30ffba8e999e18",
+    "position": [
+      33.29824447631836,
+      18.181673049926758
+    ],
+    "heading": -0.08798642456531525,
+    "goal": [
+      39.899761,
+      15.94626
+    ],
+    "clearance": 0.3217555236816383
+  },
+  {
+    "kind": "dead_band",
+    "scenario": "classic_overtaking_medium",
+    "seed": 1002,
+    "map": "successor_svg_maps/issue_9762_classic_overtaking_goal_zone_entry_v2.svg",
+    "map_sha256": "d3724df310d603d8ec1ee8426f55615112f97a2d0446aec6ce30ffba8e999e18",
+    "position": [
+      33.2962646484375,
+      18.71903419494629
+    ],
+    "heading": -0.11798642575740814,
+    "goal": [
+      39.899761,
+      15.94626
+    ],
+    "clearance": 0.3237353515624972
+  },
+  {
+    "kind": "dead_band",
+    "scenario": "classic_t_intersection_low",
+    "seed": 1002,
+    "map": "successor_svg_maps/issue_9762_classic_t_intersection_goal_zone_entry_v2.svg",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "position": [
+      24.089975357055664,
+      32.575218200683594
+    ],
+    "heading": -1.560083031654358,
+    "goal": [
+      22.291822,
+      31.068344
+    ],
+    "clearance": 0.30121764294433695
+  },
+  {
+    "kind": "dead_band",
+    "scenario": "classic_t_intersection_medium",
+    "seed": 1002,
+    "map": "successor_svg_maps/issue_9762_classic_t_intersection_goal_zone_entry_v2.svg",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "position": [
+      24.089975357055664,
+      32.575218200683594
+    ],
+    "heading": -1.560083031654358,
+    "goal": [
+      22.291822,
+      31.068344
+    ],
+    "clearance": 0.30121764294433695
+  },
+  {
+    "kind": "dead_band",
+    "scenario": "francis2023_blind_corner",
+    "seed": 1001,
+    "map": "successor_svg_maps/issue_9762_francis2023_blind_corner_goal_zone_entry_v2.svg",
+    "map_sha256": "0eb4c229fbceb711bbe6747d84b6a2db315890fb817c68900da3ebb8a6217317",
+    "position": [
+      16.695659637451172,
+      27.663312911987305
+    ],
+    "heading": 0.01188614871352911,
+    "goal": [
+      24.5,
+      27.0
+    ],
+    "clearance": 0.3366870880126953
+  },
+  {
+    "kind": "contact",
+    "scenario": "classic_realworld_double_bottleneck_high",
+    "seed": 1002,
+    "map": "successor_svg_maps/issue_9762_classic_realworld_bottleneck_goal_zone_entry_v2.svg",
+    "map_sha256": "4de3404105d3cb5748992e0eeff2bf8478100db51eb47ee6938f0e1249fae6e4",
+    "position": [
+      16.97837257385254,
+      12.60452938079834
+    ],
+    "heading": -0.0032479583751410246,
+    "goal": [
+      17.0,
+      15.0
+    ],
+    "clearance": 0.021627426147460938,
+    "speed": 0.2999999999999994,
+    "angular": 0.0,
+    "post": [
+      17.003372398666613,
+      12.604447976130958
+    ]
+  },
+  {
+    "kind": "contact",
+    "scenario": "classic_cross_trap_low",
+    "seed": 1002,
+    "map": "successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "position": [
+      17.954025268554688,
+      28.311315536499023
+    ],
+    "heading": -0.313255250453949,
+    "goal": [
+      34.0,
+      34.0
+    ],
+    "clearance": 0.09132053132329943,
+    "speed": 1.0999999999999992,
+    "angular": 0.0,
+    "post": [
+      18.053915758440628,
+      28.278958792632174
+    ]
+  },
+  {
+    "kind": "contact",
+    "scenario": "classic_cross_trap_medium",
+    "seed": 1002,
+    "map": "successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "position": [
+      17.954025268554688,
+      28.311315536499023
+    ],
+    "heading": -0.313255250453949,
+    "goal": [
+      34.0,
+      34.0
+    ],
+    "clearance": 0.09132053132329943,
+    "speed": 1.0999999999999992,
+    "angular": 0.0,
+    "post": [
+      18.053915758440628,
+      28.278958792632174
+    ]
+  },
+  {
+    "kind": "contact",
+    "scenario": "classic_cross_trap_high",
+    "seed": 1002,
+    "map": "successor_svg_maps/issue_9762_classic_crossing_goal_zone_entry_v2.svg",
+    "map_sha256": "d3bc9ad6205108a480469338282611730410787cc897abd4d71f3f0fbd47d6a8",
+    "position": [
+      17.954025268554688,
+      28.311315536499023
+    ],
+    "heading": -0.313255250453949,
+    "goal": [
+      34.0,
+      34.0
+    ],
+    "clearance": 0.09132053132329943,
+    "speed": 1.0999999999999992,
+    "angular": 0.0,
+    "post": [
+      18.053915758440628,
+      28.278958792632174
+    ]
+  },
+  {
+    "kind": "arbitration",
+    "scenario": "classic_merging_low",
+    "seed": 1001,
+    "map": "successor_svg_maps/issue_9762_classic_merging_goal_zone_entry_v2.svg",
+    "map_sha256": "2e212026ff213b9a24663f0aa315be11e20f5f9cf8a68f6fc3acbfbf6ce7d070",
+    "position": [
+      19.454511642456055,
+      27.294130325317383
+    ],
+    "heading": -1.6054155826568604,
+    "goal": [
+      18.0,
+      22.8
+    ],
+    "clearance": 0.23189735754394647,
+    "proposal": [
+      2.0,
+      -1.0
+    ],
+    "fallback": [
+      0.1,
+      -0.1
+    ]
+  },
+  {
+    "kind": "contact",
+    "scenario": "classic_merging_low",
+    "seed": 1002,
+    "map": "successor_svg_maps/issue_9762_classic_merging_goal_zone_entry_v2.svg",
+    "map_sha256": "2e212026ff213b9a24663f0aa315be11e20f5f9cf8a68f6fc3acbfbf6ce7d070",
+    "position": [
+      12.972723960876465,
+      18.95633316040039
+    ],
+    "heading": 0.7733343839645386,
+    "goal": [
+      12.5,
+      22.8
+    ],
+    "clearance": 0.027276039123535156,
+    "speed": 0.9999999999999992,
+    "angular": 0.0,
+    "post": [
+      13.040704439271066,
+      19.022692811600507
+    ]
+  },
+  {
+    "kind": "arbitration",
+    "scenario": "classic_merging_medium",
+    "seed": 1001,
+    "map": "successor_svg_maps/issue_9762_classic_merging_goal_zone_entry_v2.svg",
+    "map_sha256": "2e212026ff213b9a24663f0aa315be11e20f5f9cf8a68f6fc3acbfbf6ce7d070",
+    "position": [
+      19.454511642456055,
+      27.294130325317383
+    ],
+    "heading": -1.6054155826568604,
+    "goal": [
+      18.0,
+      22.8
+    ],
+    "clearance": 0.23189735754394647,
+    "proposal": [
+      2.0,
+      -1.0
+    ],
+    "fallback": [
+      0.1,
+      -0.1
+    ]
+  },
+  {
+    "kind": "contact",
+    "scenario": "classic_merging_medium",
+    "seed": 1002,
+    "map": "successor_svg_maps/issue_9762_classic_merging_goal_zone_entry_v2.svg",
+    "map_sha256": "2e212026ff213b9a24663f0aa315be11e20f5f9cf8a68f6fc3acbfbf6ce7d070",
+    "position": [
+      12.972723960876465,
+      18.95633316040039
+    ],
+    "heading": 0.7733343839645386,
+    "goal": [
+      12.5,
+      22.8
+    ],
+    "clearance": 0.027276039123535156,
+    "speed": 0.9999999999999992,
+    "angular": 0.0,
+    "post": [
+      13.040704439271066,
+      19.022692811600507
+    ]
+  },
+  {
+    "kind": "contact",
+    "scenario": "classic_t_intersection_low",
+    "seed": 1002,
+    "map": "successor_svg_maps/issue_9762_classic_t_intersection_goal_zone_entry_v2.svg",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "position": [
+      24.34560203552246,
+      26.93619728088379
+    ],
+    "heading": -0.900083065032959,
+    "goal": [
+      22.402615,
+      20.727105
+    ],
+    "clearance": 0.0455909644775403,
+    "speed": 1.0117218017578118,
+    "angular": 0.0,
+    "post": [
+      24.405377901093516,
+      26.8608575648478
+    ]
+  },
+  {
+    "kind": "contact",
+    "scenario": "classic_t_intersection_medium",
+    "seed": 1002,
+    "map": "successor_svg_maps/issue_9762_classic_t_intersection_goal_zone_entry_v2.svg",
+    "map_sha256": "111f58b931f66647af201cab235e9c3285afb71f8b731cef40286b6c9cda8877",
+    "position": [
+      24.34560203552246,
+      26.93619728088379
+    ],
+    "heading": -0.900083065032959,
+    "goal": [
+      22.402615,
+      20.727105
+    ],
+    "clearance": 0.0455909644775403,
+    "speed": 1.0117218017578118,
+    "angular": 0.0,
+    "post": [
+      24.405377901093516,
+      26.8608575648478
+    ]
+  },
+  {
+    "kind": "contact",
+    "scenario": "francis2023_blind_corner",
+    "seed": 1002,
+    "map": "successor_svg_maps/issue_9762_francis2023_blind_corner_goal_zone_entry_v2.svg",
+    "map_sha256": "0eb4c229fbceb711bbe6747d84b6a2db315890fb817c68900da3ebb8a6217317",
+    "position": [
+      12.097410202026367,
+      25.019989013671875
+    ],
+    "heading": -0.3799999952316284,
+    "goal": [
+      24.5,
+      27.0
+    ],
+    "clearance": 0.019989013671875,
+    "speed": 1.1999999999999993,
+    "angular": 0.0,
+    "post": [
+      12.204206431554011,
+      24.977333004690827
+    ]
+  },
+  {
+    "kind": "arbitration",
+    "scenario": "francis2023_entering_room",
+    "seed": 1002,
+    "map": "successor_svg_maps/issue_9856_francis2023_entering_room_route_width_v1.svg",
+    "map_sha256": "1506b9ddbee141c7256c92802cb6513d3add4cf5a270a9bad3dd197ec7a69166",
+    "position": [
+      15.13917350769043,
+      9.77906322479248
+    ],
+    "heading": -0.04255152866244316,
+    "goal": [
+      21.0,
+      10.0
+    ],
+    "clearance": 0.22884330746315862,
+    "proposal": [
+      2.0,
+      1.0
+    ],
+    "fallback": [
+      0.1,
+      0.0
+    ]
+  },
+  {
+    "kind": "contact",
+    "scenario": "francis2023_exiting_room",
+    "seed": 1002,
+    "map": "successor_svg_maps/issue_9856_francis2023_exiting_room_route_width_v1.svg",
+    "map_sha256": "cfd25fa09fd2a315f84f39408e57c0ec59bff14ea86d6020a07b93d75a3e434c",
+    "position": [
+      15.20572280883789,
+      8.04340648651123
+    ],
+    "heading": -2.66329288482666,
+    "goal": [
+      3.0,
+      10.0
+    ],
+    "clearance": 0.06349375652603717,
+    "speed": 1.1999999999999993,
+    "angular": 0.0,
+    "post": [
+      15.103627819437628,
+      7.990474970394771
+    ]
+  }
+]

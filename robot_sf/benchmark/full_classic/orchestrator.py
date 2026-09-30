@@ -30,7 +30,7 @@ from robot_sf.benchmark.freeze_manifest import evaluate_freeze_manifest, safe_in
 from robot_sf.benchmark.map_runner.map_runner import _signal_state_for_metric_metadata
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
-from robot_sf.benchmark.path_utils import compute_shortest_path_length
+from robot_sf.benchmark.path_utils import compute_completion_reference_length
 from robot_sf.benchmark.termination_reason import (
     build_outcome_payload,
     metric_scalar,
@@ -578,6 +578,9 @@ def _compute_episode_metrics(  # noqa: PLR0913
     robot_radius: float,
     ped_radius: float,
     initial_robot_pos: np.ndarray | None = None,
+    route_waypoints: np.ndarray | None = None,
+    goal_zone: np.ndarray | None = None,
+    completion_policy: str = "waypoint_radius_v1",
 ) -> dict[str, float]:
     """Compute episode metrics for the classic benchmark pipeline.
 
@@ -592,8 +595,14 @@ def _compute_episode_metrics(  # noqa: PLR0913
         except (OSError, ValueError, KeyError):  # pragma: no cover - defensive fallback
             map_def = None
     shortest_path = (
-        compute_shortest_path_length(
-            map_def, robot_pos[0] if initial_robot_pos is None else initial_robot_pos, goal
+        compute_completion_reference_length(
+            map_def,
+            robot_pos[0] if initial_robot_pos is None else initial_robot_pos,
+            goal,
+            completion_policy=completion_policy,
+            goal_zone=goal_zone,
+            scenario_id=str(getattr(job, "scenario_id", "")),
+            seed=getattr(job, "seed", None),
         )
         if len(robot_pos)
         else float("nan")
@@ -624,6 +633,7 @@ def _compute_episode_metrics(  # noqa: PLR0913
         ped_radius=float(ped_radius),
         episode_metadata=_episode_metadata_for_metrics(scenario),
         initial_robot_pos=initial_robot_pos,
+        route_waypoints=route_waypoints,
     )
     metrics_raw = compute_all_metrics(ep, horizon=horizon, shortest_path_len=shortest_path)
     time_to_goal = (
@@ -907,9 +917,11 @@ def _sanitize_episode_metrics(metrics_raw: dict[str, float]) -> dict[str, float]
         dict[str, float]: Serializable metrics with non-finite values removed.
     """
     return {
-        key: value
+        key: None
+        if key == "path_efficiency" and isinstance(value, float) and not math.isfinite(value)
+        else value
         for key, value in metrics_raw.items()
-        if not isinstance(value, float) or math.isfinite(value)
+        if key == "path_efficiency" or not isinstance(value, float) or math.isfinite(value)
     }
 
 
@@ -1000,6 +1012,18 @@ def _orchestrate_real_episode(
             dtype=float,
             copy=True,
         )
+        route_waypoints = (
+            np.vstack([initial_robot_pos, np.array(navs[0].waypoints, dtype=float, copy=True)])
+            if navs
+            else None
+        )
+        zone = getattr(navs[0], "goal_zone", None) if navs else None
+        goal_zone = np.array(zone, dtype=float, copy=True) if zone is not None else None
+        completion_policy = (
+            getattr(navs[0], "completion_policy", "waypoint_radius_v1")
+            if navs
+            else "waypoint_radius_v1"
+        )
         robot_positions, ped_positions, ped_forces, reached_goal_step = _rollout_episode(
             env,
             horizon,
@@ -1036,6 +1060,9 @@ def _orchestrate_real_episode(
         reached_goal_step=reached_goal_step,
         goal=goal_vec,
         initial_robot_pos=initial_robot_pos,
+        route_waypoints=route_waypoints,
+        goal_zone=goal_zone,
+        completion_policy=completion_policy,
         horizon=horizon,
         robot_radius=float(getattr(robot_cfg, "radius", 1.0)),
         ped_radius=float(getattr(sim_cfg, "ped_radius", 0.4)),

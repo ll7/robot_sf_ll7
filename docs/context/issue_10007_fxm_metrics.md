@@ -1,5 +1,8 @@
 # Issue #10007 FXM shared metric correction
 
+Current semantics include the FXM2 refinements documented below. Original FXM tables
+remain historical diagnostic receipts; they do not serve as current-v2 anchors.
+
 Evidence: **diagnostic-only development episodes**, with no release, held-out,
 calibration campaign, ranking or dissertation admission. Base:
 `073f492abced5dcff749ddfed01c44dc9fd864b7`. All F4/F5/F7/F8 leads were confirmed
@@ -21,13 +24,17 @@ one real ORCA episode are checked into `tests/fixtures/benchmark/fxm_merging_orc
 
 ## F4: confirmed; final route goal and reset reference
 
+**Original FXM evidence below; the FXM2 refinement supersedes its point-reference and
+clipped-efficiency rules.**
+
 Root cause: reset used `simulator.goal_pos[0]` (the handoff waypoint), termination
 overwrote it with the active waypoint. Freeze a copy of `robot_navs[0].waypoints[-1]`
 at reset; use it for shortest path, path efficiency, ideal-time ratio, failure
 progress/distance, static-deadlock evidence and trace/paired-effect denominators.
-The shortest path begins at the reset pose. Success still uses the declared
-completion policy; a point reference to the sampled final target can therefore
-be longer than a path ending at the goal-zone boundary (efficiency clips at 1).
+The shortest path begins at reset and now follows the frozen completion policy:
+continuous shortest path to the goal polygon for zone entry; the existing point
+reference for waypoint-radius completion. Failed efficiency is NaN/JSON null;
+successful efficiency is unclipped, with a reference-violation flag above one.
 
 Merging low, seed 1001 (before → corrected; geometric fields include F8):
 
@@ -65,7 +72,7 @@ mutated navigator target. No simulator/planner test seam was introduced.
 Root cause: all per-step reductions were tested against 0.05 m, effectively a 0.5 m/s
 radial-speed cutoff at dt 0.1 s; episode collision status was ignored.
 Exact v2 rule: for **15 consecutive samples /14 intervals**, compare first minus
-last distance to the frozen route goal. A window stalls when reduction **<=0.05 m**;
+last remaining arclength on the frozen reset route (including reset-to-first-waypoint). A window stalls when reduction **<=0.05 m**;
 count overlapping windows only when their last sample is strictly before the
 terminal sample. Deadlock requires a stalled internal window and **neither
 success nor collision**. Window diagnostics remain available on success/collision
@@ -84,8 +91,8 @@ keep a false headline flag; this seed does not show a flag change for those arms
 The goal collision formerly counted as deadlock and now does not.
 The independent slow-approach regression uses 0.4 m/s: over 15 samples it gains 0.56 m,
 so it must not stall. Base fails `assert True is False`. A separate stationary
-collision regression fails the same assertion on base. Radial detours can still
-count as no-progress; this repair does not redefine the screen as route arclength.
+collision regression fails the same assertion on base. FXM2 now uses closest-polyline projection for this screen; a leg heading away from
+the final goal still reduces remaining route length. Historical counts above predate that refinement.
 
 ## F7: confirmed; jerk in m/s^3
 
@@ -261,3 +268,128 @@ Full local rows/logs remain in `output/fxm`; compact values, raw fixture, source
 identity and regression failure snippets are committed so review does not depend
 on ephemeral simulation output. No historical 0.0.2/0.0.7 artifacts or frozen YAML
 were modified. No held-out evaluation, release freeze, push to main or merge occurred.
+
+
+## FXM2 refinement (PR #10014 review follow-up)
+
+Comparator: reviewed head `977378cbdb0d587a65b11cd28bba4c4bab6c2aba` versus the FXM2
+implementation. The metric version stays v2: the correction is completed before
+merging this one-shot definition, with F7 jerk and F8 time/reset geometry retained.
+
+1. Deadlock/stall uses remaining arclength after projecting positions onto the route
+   frozen at reset, including the initial approach to its first waypoint. Closest
+   segment wins; earliest breaks ties; retreat stays measurable. The 15-sample/14-interval,
+   terminal exclusion and success/collision exclusion rules remain unchanged.
+2. Efficiency is defined only for successful episodes. Failures return NaN, serialized
+   as explicit JSON null. Success values remain unclipped; values >1 set
+   `path_efficiency_reference_violation` for investigation. Finite-value means therefore
+   include successful runs only. A reached sample with collision is still a failure.
+3. Zone-entry completion uses the exact continuous polygonal robot-centre shortest
+   path from reset to the goal set, avoiding obstacle interiors. A visibility graph
+   considers obstacle vertices, goal-boundary vertices/intersections and perpendicular
+   projections onto goal edges; Dijkstra takes the minimum. No boundary sampling,
+   grid rounding or extra footprint inflation is used. This lower reference is no
+   longer than a collision-free successful trajectory by construction. Cache keys
+   include scenario, seed, reset, polygon, full compound obstacle geometry and bounds.
+   Waypoint-radius completion retains the existing Theta* point reference. The same
+   scalar feeds efficiency and SNQI-v2 ideal time in map and classic producers.
+4. Exclusive-v2 diagnostics/fields without a metric marker are refused, including
+   falsely v1-marked payloads. Historical indistinguishable scalar-only mappings remain
+   v1; units are never guessed. Both SNQI projection helpers carry the marker,
+   including latency raw-input and CSV round trips; historical CSVs remain readable.
+5. `simulation-step-trace.v2` and `paired_effect_native_trace.v2` declare the frozen
+   final-goal meaning introduced by FXM. Readers retain support for v1/v2 separately,
+   with no mixed pairs, native/simulation references, pooled cohorts or reexport arms.
+   Trace adapters preserve source-schema identity. Trace progress remains radial;
+   the route-arclength change applies to the deadlock/stall detector.
+
+Nine paired episodes replayed the reviewer's exact release-scenario/planner matrix:
+merging low at dev 1003/1004, frontal approach at dev 1003, goal/native ORCA/hybrid v4,
+horizon 600, dt 0.1, force and trace recording. Positions, reset state, waypoints,
+steps, completion index, termination, status, outcomes, spawn validity, safety predicates,
+event ledger, failure mechanism and interaction exposure are identical in **9/9**.
+Retained paired-effect scalar values also match. The simulation/native trace payloads
+are identical apart from their version strings. Only declared metric keys change;
+five successes all have efficiency <=1, and four failures have raw NaN / JSON null.
+The shortest reference is identical across all arms on each paired scenario/seed.
+All nine records validate the episode schema; references recomputed from the final
+implementation match exactly (three cache misses, six hits).
+
+The continuous polygon references are lower than the review's sampled Theta*
+estimates: those used grid/inflation approximations. The analytic obstacle regression
+pins `sqrt(10)+4` m rather than the 9.16 m point reference; the actual producer regression
+pins the same 7 m open-map zone reference for efficiency and ideal time.
+
+| Episode | Deadlock before → after | Stall windows | Efficiency before → after | Reference m before → after |
+|---|---|---|---|---|
+| `classic_merging_low__goal__1003` | true → false | 114 → 0 | 0.987227 → NaN (JSON null) | 55.264411 → 51.964512 |
+| `classic_merging_low__goal__1004` | true → false | 113 → 0 | 0.968949 → NaN (JSON null) | 54.083919 → 49.757615 |
+| `classic_merging_low__hybrid_rule_local_planner__1003` | false → false | 166 → 0 | 0.804918 → 0.756856 | 55.264411 → 51.964512 |
+| `classic_merging_low__hybrid_rule_local_planner__1004` | false → false | 120 → 0 | 0.808819 → 0.744119 | 54.083919 → 49.757615 |
+| `classic_merging_low__orca__1003` | false → false | 142 → 3 | 1.000000 → NaN (JSON null) | 55.264411 → 51.964512 |
+| `classic_merging_low__orca__1004` | false → false | 125 → 0 | 0.758237 → 0.697584 | 54.083919 → 49.757615 |
+| `francis2023_frontal_approach__goal__1003` | false → false | 0 → 0 | 1.000000 → NaN (JSON null) | 32.000000 → 31.804388 |
+| `francis2023_frontal_approach__hybrid_rule_local_planner__1003` | false → false | 0 → 0 | 0.993216 → 0.987145 | 32.000000 → 31.804388 |
+| `francis2023_frontal_approach__orca__1003` | false → false | 0 → 0 | 0.996109 → 0.990020 | 32.000000 → 31.804388 |
+
+The steady 0.4 m/s approach still has zero stall windows. A 40-sample stop still
+has 27 windows and a true deadlock; the same stop with sampled pedestrian collision
+or an episode collision flag has a false headline. Cubic motion still gives jerk
+6 m/s³ at dt 0.1/0.05; first-step successful time is 0.1 s and reset-inclusive
+path geometry is retained.
+
+Compact receipt: [FXM2 paired metrics](evidence/issue_10007_fxm/fxm2_paired_metrics.json).
+The real merging goal trajectories are in
+`tests/fixtures/benchmark/fxm2_merging_goal_dev1003_1004.json`. Full private replay
+rows/logs, probe/analyzer, plan and final report are retained in the caller's home
+artifact namespace; no held-out, calibration, release or claim-admission evidence.
+The probe is the reviewer-provided script, with additive raw-efficiency capture.
+
+Validation: `uv sync --frozen --all-extras`; every pytest invocation uses
+`OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 uv run pytest -n0`. Final metric/producer/
+projection/trace-reader/consumer suite: **692 passed, 1 existing platform skip**.
+The broader reviewer suite initially had 722 passed, 1 skipped and one newly exposed
+consumer failure; that consumer was repaired, and all 20 analyzer/native tests plus
+the final suite pass. Release-comparison and hierarchical lanes passed in that run.
+The reader run's old v2-is-unknown assertion was migrated to v99; both v1/v2 support
+and the unknown-version negative control pass. Ruff and formatting pass. Broad PR
+readiness remains unrun because its simulator lanes include non-dev seeds.
+
+### FXM2 test-value gate
+
+All new bug assertions have pre-fix proof at the reviewed head: **18 fail at the
+intended values/contracts; two v1 controls pass**. The separately exposed #5416
+consumer regression also fails on the required finite-efficiency error before repair.
+See [compact regression receipt](evidence/issue_10007_fxm/fxm2_regression_failures.txt).
+Full failure logs remain in the private artifact namespace.
+
+| Protected behavior | Credible regression / red evidence | Coverage gap | Test-only seam |
+|---|---|---|---|
+| Actual merging goal timeouts remain moving along the route | Radial reference returns true deadlock on both recorded seeds | Existing steady-approach test has a straight route | None; real coordinate fixture |
+| Route/polygon copies remain frozen after navigator mutation | Missing route snapshot / mutable navigation data | Existing reset test freezes only the final goal | None |
+| Failed efficiency stays undefined; success >1 stays visible and flagged | Old 1.0 failure value / old clipping hides expected 2.0 | Existing efficiency checks use successful straight paths | None |
+| JSON preserves undefined efficiency; reached-with-collision is not efficient | Missing efficiency field / finite collided value | Existing sanitization drops NaN; no success-only collision check | None |
+| V2-only payloads require markers | Unmarked row accepted in flat/nested cases | Existing version tests compare marked v1/v2 only | None |
+| Both SNQI projections retain identity | Missing metric-schema keys | Existing tests use historical unmarked inputs | None |
+| Continuous zone distance and producer ideal time agree | Point distance differs from analytic shortest polygon distance / producer returns 9 instead of 7 m | Existing shortest-path coverage ends at a point | None; pre-fix signature filters only unsupported inputs |
+| Paired and pooled trace versions never mix; v1/v2 readers retain identity | Old v2 rejection / absent pair/cohort refusal | Existing fixtures contain only v1 | None |
+| Failed v2 rows remain analyzable while successful rows need efficiency | Old missing-or-invalid path-efficiency error | Existing analyzer fixtures give failures a finite legacy value | None |
+
+The historical latency packet test now verifies unchanged values and provenance,
+with only its generator hash replaced by an independent SHA-256 of current source
+bytes. Editing the source necessarily changes that hash; frozen evidence is not
+rewritten. The supported-trace test's old v2 negative control moves to v99. Fake
+fidelity rollouts now use dev seed 1001; held-out-looking values elsewhere are
+synthetic table keys/config labels, never real simulator steps.
+
+Dissertation-facing metric list for the complete v2 definition: success-only path
+efficiency and its denominator/aggregation, shortest-path reference and derived SPL
+where produced, normalized goal time (all/success-only), ideal-time ratio/SNQI-v2 T,
+aggregated completion time, jerk/SNQI-v2 J, deadlock flags/rates/stall diagnostics and
+constraints-first endpoints, failure-to-progress, SocNavBench length/ratio/irregularity,
+Social Mini-Game makespan/deadlock/path-deviation rows, legacy SNQI/v1/v2 composites,
+and rankings/sensitivity based on them. Trace initial distance/radial progress and
+paired timeout normalization retain their separately versioned reference meaning.
+Success/collision/timeout outcomes do not change. Matching-definition anchors and
+historical recomputation remain downstream review work; no dissertation source or
+admitted claim was edited.

@@ -9,23 +9,37 @@ Use Euclidean norm $\|\cdot\|$.
 rows and anchors, including published 0.0.7, mean `robot-sf-metrics.v1`.
 The episode JSON envelope remains `v1`; its `metric_schema_version` identifies meaning.
 These versions cannot be pooled or scored with each other's SNQI normalization assets.
+Unmarked inputs carrying exclusive v2 fields are refused; legacy scalar-only rows remain v1.
+Simulation and paired native traces now use v2. Readers accept v1/v2 independently and refuse
+mixed-reference pairs or cohorts; source schema identity survives trace adapters.
 See [the migration and probe evidence](../../../context/issue_10007_fxm_metrics.md).
 
-- Freeze the reset navigator's final sampled route goal for all episode metric and
-  trace-progress references. Shortest paths start at the reset pose. This is a point
-  reference even when success uses goal-zone entry, so efficiency still clips at one.
+- Freeze the reset pose, route waypoints, completion policy, goal zone and final sampled goal.
+  Goal-zone-entry completion uses the continuous polygonal shortest path from reset to the
+  goal-zone set, cached per scenario/seed and geometry. This robot-centre reference avoids
+  obstacle interiors without adding footprint inflation or grid rounding. Waypoint-radius
+  completion retains the Theta* point reference. Efficiency and SNQI-v2 ideal time share it.
+- `path_efficiency` is shortest reference / travelled path through completion, only on
+  successful episodes. Failures return NaN (JSON null); finite-value aggregation therefore
+  averages successful runs. Values are never clipped: `path_efficiency_reference_violation`
+  flags success values above one. The continuous zone reference is no longer than any
+  successful collision-free trajectory by construction.
 - With post-step samples, `reached_goal_step` is a zero-based **completed action index**.
   Elapsed successful goal time is `(index + 1) * dt`, and normalized time is `(index + 1) / H`.
   The synthetic runner retains reset as sample 0 and explicitly sets
   `robot_pos_includes_reset=True`; its completion sample index already counts completed steps.
 - Path geometry includes reset-to-first-post-step travel. Safety, pedestrian, and force
   arrays remain post-step aligned; reset adds no collision/force exposure sample.
-- Deadlock v2: for each **15-sample** window (14 intervals), first minus last distance
-  to the frozen goal must be **<= 0.05 m**. Count overlapping windows only when their
+- Deadlock v2: for each **15-sample** window (14 intervals), first minus last remaining
+  route arclength must be **<= 0.05 m**. Project positions onto the closest segment of the
+  waypoint polyline frozen at reset, including its reset-to-first-waypoint leg. Earliest
+  segment breaks ties; retreat remains visible rather than using cumulative-max progress.
+  Count overlapping windows only when their
   last sample precedes the episode's terminal sample. Deadlock requires at least one
   such window and **neither success nor collision**. Diagnostics retain stall windows
   even on successful/collision episodes; `max_no_progress_run` counts consecutive
-  stalled window starts. This radial-progress screen can still flag a route detour.
+  stalled window starts. Synthetic callers without waypoints use the straight reset/first
+  position-to-goal route.
 - `jerk_mean` divides acceleration differences by `dt`, preserving the existing first
   `T-2` differences and denominator. Fewer than three acceleration samples give zero;
   invalid `dt` gives an unavailable (`NaN`) value.
@@ -36,7 +50,7 @@ See [the migration and probe evidence](../../../context/issue_10007_fxm_metrics.
 3. $\text{collisions} = \left| \{ t : \min_k d(r_t, p_t^k) < d_{\text{coll}} \} \right|$.
 4. $\text{near\_misses} = \left| \{ t : d_{\text{coll}} \le \min_k d(r_t, p_t^k) < d_{\text{near}} \} \right|$.
 5. $\text{min\_distance} = \min_t \min_k d(r_t, p_t^k)$.
-6. $\text{path\_efficiency} = \frac{L_{\text{shortest}}}{L_{\text{actual}}}$ (clipped $\le 1$).
+6. $\text{path\_efficiency} = \frac{L_{\text{shortest}}}{L_{\text{actual}}}$ (successful episodes only; NaN on failure; unclipped).
 
 ### Convenience / Diagnostics
 - $\text{avg\_speed} = \frac{1}{T} \sum_{t=0}^{T-1} \| v_t \|$ (average robot speed magnitude).

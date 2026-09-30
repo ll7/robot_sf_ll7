@@ -294,8 +294,13 @@ Full details live in
 
 Metric meaning is versioned separately from the episode envelope:
 `robot-sf-metrics.v2` fixes route-goal references, window deadlock, physical jerk,
-and completed-step time/path geometry. Unmarked 0.0.7 rows are v1; changed metrics
-have no direct cross-version release contrast, and SNQI requires matching anchors.
+and completed-step time/path geometry. Route stalls use projected remaining arclength;
+path efficiency is success-only, NaN/JSON null on failure, and unclipped with an explicit
+reference-violation flag. Zone-entry shortest/ideal references terminate at the goal polygon;
+waypoint-radius completion retains the point reference. Unmarked 0.0.7 rows are v1; changed metrics
+have no direct cross-version release contrast, and SNQI requires matching anchors. Unmarked
+v2-only fields fail closed. Simulation-step/native paired trace schemas are v2; readers accept
+each historical version separately and refuse mixed pairs/cohorts.
 See [the metric migration](context/issue_10007_fxm_metrics.md).
 
 **Core metrics**
@@ -319,7 +324,8 @@ See [the metric migration](context/issue_10007_fxm_metrics.md).
   outputs it must agree with `outcome.collision_event`: positive when the canonical event is true
   and zero when the canonical event is false.
 * `near_misses`: count based on distance thresholds.
-* `min_distance`,  `path_efficiency`: closest approach and shortest/actual path ratio.
+* `min_distance`: closest approach. `path_efficiency`: shortest completion reference / actual
+  travel, among successful runs only; undefined failures are excluded from its mean.
 * `aggregated_time`: implementation-only cooperative completion-time diagnostic. When
   `cooperative_agents` is provided, it returns the maximum first goal-reaching step times
   `EpisodeData.dt` from the explicit `EpisodeData.cooperative_goal_steps` mapping. The legacy

@@ -66,6 +66,7 @@ from robot_sf.benchmark.metric_definitions import (
     METRIC_SCHEMA_VERSION,
     require_anchor_compatibility,
 )
+from robot_sf.benchmark.path_utils import remaining_route_length
 from robot_sf.benchmark.robot_force_contract import (
     ROBOT_FORCE_POSTHOC_SOURCE,
     ROBOT_FORCE_QUANTITY,
@@ -162,6 +163,8 @@ class EpisodeData:
     collision_event: bool = False
     # Synthetic producers retain reset in all aligned safety/force arrays.
     robot_pos_includes_reset: bool = False
+    # Frozen reset route; geometric progress must not follow waypoint handoffs.
+    route_waypoints: np.ndarray | None = None
 
 
 def recompute_robot_ped_forces(data: EpisodeData, cfg: dict[str, Any]) -> np.ndarray:
@@ -1157,15 +1160,30 @@ def _path_positions(data: EpisodeData, *, through_goal: bool = False) -> np.ndar
     return positions
 
 
-def path_efficiency(data: EpisodeData, shortest_path_len: float) -> float:
-    """Shortest route-goal path / travelled path through completion, clipped to one.
+def path_efficiency(
+    data: EpisodeData, shortest_path_len: float, *, successful: bool | None = None
+) -> float:
+    """Shortest completion reference / travelled path, among successful runs only.
+
+    Values above one remain visible and are flagged by compute_all_metrics;
+    never conceal an inconsistent reference with clipping.
 
     Returns:
-        Unitless efficiency in [0,1], with stationary paths assigned one.
+        Unclipped success efficiency, or NaN on failure/unavailable reference.
     """
+    if successful is None:
+        successful = (
+            data.reached_goal_step is not None
+            and not data.collision_event
+            and collision_count(data) == 0
+        )
+    if not successful:
+        return float("nan")
     positions = _path_positions(data, through_goal=True)
     actual = float(np.linalg.norm(np.diff(positions, axis=0), axis=1).sum())
-    return float(min(shortest_path_len / actual, 1.0)) if actual > 1e-9 else 1.0
+    if actual > 1e-9:
+        return float(shortest_path_len / actual)
+    return 1.0 if shortest_path_len == 0.0 else float("nan")
 
 
 def force_quantiles(data: EpisodeData, qs: Iterable[float] = (0.5, 0.9, 0.95)) -> dict[str, float]:
@@ -2200,7 +2218,9 @@ def compute_deadlock_stall(
     """Detect per-episode deadlock/stall as no-progress-over-window.
 
     A stall window has ``window_steps`` samples (``window_steps - 1`` intervals).
-    Its first minus last distance to the final route goal is <= ``progress_eps_m``.
+    Its first minus last remaining route arclength is <= ``progress_eps_m``.
+    Positions project onto the waypoint polyline frozen at reset. Synthetic callers
+    without a route use the straight reset/first-position to final-goal segment.
     Only windows ending strictly before the terminal sample count; overlapping
     windows count independently. A deadlock is recorded when at least one such window
     occurs while the episode still had steps remaining (the robot neither reached
@@ -2212,7 +2232,7 @@ def compute_deadlock_stall(
     Args:
         data: Episode trajectory data.
         window_steps: Consecutive-sample window length over which to test progress.
-        progress_eps_m: Minimum required distance-to-goal reduction per window.
+        progress_eps_m: Minimum required remaining-route-length reduction per window.
         collision_detected: Optional precomputed collision summary; otherwise derive
             footprint collisions from samples. Episode collision flags always take precedence.
 
@@ -2248,7 +2268,11 @@ def compute_deadlock_stall(
             ),
         }
 
-    dist_to_goal = np.linalg.norm(data.robot_pos - np.asarray(data.goal, dtype=float), axis=1)
+    route = data.route_waypoints
+    if route is None:
+        start = data.initial_robot_pos if data.initial_robot_pos is not None else data.robot_pos[0]
+        route = np.vstack([start, data.goal])
+    dist_to_goal = remaining_route_length(data.robot_pos, route)
     win = int(window_steps) if int(window_steps) > 1 else 2
 
     # A window has win samples (win-1 intervals). It must end before the
@@ -3279,7 +3303,12 @@ def _compute_core_navigation_block(
     values["min_clearance"] = robot_ped_summary["min_clearance"]
     values["mean_clearance"] = robot_ped_summary["mean_clearance"]
     values["robot_ped_within_5m_frac"] = robot_ped_summary["robot_ped_within_5m_frac"]
-    values["path_efficiency"] = path_efficiency(data, shortest_path_len)
+    values["path_efficiency"] = path_efficiency(
+        data, shortest_path_len, successful=episode_success and not data.collision_event
+    )
+    values["path_efficiency_reference_violation"] = bool(
+        data.reached_goal_step is not None and values["path_efficiency"] > 1.0
+    )
     values["socnavbench_path_length"] = socnavbench_path_length(data)
     values["socnavbench_path_length_ratio"] = socnavbench_path_length_ratio(data)
     values["socnavbench_path_irregularity"] = socnavbench_path_irregularity(data)
@@ -3533,7 +3562,9 @@ def post_process_metrics(
     metrics.pop("_episode_metadata", None)
     return _sanitize_metrics(
         {
-            key: _robot_force_json_value(value) if key.startswith("robot_force_") else value
+            key: _robot_force_json_value(value)
+            if key.startswith("robot_force_") or key == "path_efficiency"
+            else value
             for key, value in metrics.items()
         }
     )

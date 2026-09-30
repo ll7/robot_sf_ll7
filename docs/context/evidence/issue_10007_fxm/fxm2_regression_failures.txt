@@ -1,0 +1,27 @@
+FXM2 regression receipt
+Pre-fix code: 977378cbdb0d587a65b11cd28bba4c4bab6c2aba
+Command: OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 uv run pytest -n0 tests/benchmark/test_fxm2_metrics.py tests/benchmark/test_paired_effect_metric_contract.py tests/benchmark/test_critical_intervals_simulation_step_trace.py -k fxm2 -q
+Full private log: ~/fxm2_red_final.log
+
+FAILED tests/benchmark/test_fxm2_metrics.py::test_real_merging_timeout_keeps_route_progress[0]
+FAILED tests/benchmark/test_fxm2_metrics.py::test_real_merging_timeout_keeps_route_progress[1]
+FAILED tests/benchmark/test_fxm2_metrics.py::test_frozen_route_and_goal_zone_survive_navigation_mutation
+FAILED tests/benchmark/test_fxm2_metrics.py::test_failure_efficiency_is_undefined
+FAILED tests/benchmark/test_fxm2_metrics.py::test_success_efficiency_is_unclipped_and_reference_violation_flagged
+FAILED tests/benchmark/test_fxm2_metrics.py::test_unmarked_v2_only_diagnostics_are_refused[False]
+FAILED tests/benchmark/test_fxm2_metrics.py::test_unmarked_v2_only_diagnostics_are_refused[True]
+FAILED tests/benchmark/test_fxm2_metrics.py::test_fidelity_snqi_projection_preserves_marker
+FAILED tests/benchmark/test_fxm2_metrics.py::test_latency_snqi_projection_preserves_marker
+FAILED tests/benchmark/test_fxm2_metrics.py::test_goal_zone_shortest_path_is_to_continuous_polygon
+FAILED tests/benchmark/test_fxm2_metrics.py::test_success_only_efficiency_survives_json_as_null
+FAILED tests/benchmark/test_fxm2_metrics.py::test_trace_cohort_cannot_mix_reference_versions_even_with_same_metric_marker
+FAILED tests/benchmark/test_fxm2_metrics.py::test_completion_with_collision_has_no_path_efficiency
+FAILED tests/benchmark/test_fxm2_metrics.py::test_map_producer_uses_same_zone_reference_for_efficiency_and_ideal_time
+FAILED tests/benchmark/test_paired_effect_metric_contract.py::test_fxm2_trace_readers_accept_matching_versions[v2]
+FAILED tests/benchmark/test_paired_effect_metric_contract.py::test_fxm2_trace_readers_reject_mixed_native_simulation_versions
+FAILED tests/benchmark/test_paired_effect_metric_contract.py::test_fxm2_pair_rejects_mixed_trace_versions
+FAILED tests/benchmark/test_critical_intervals_simulation_step_trace.py::test_fxm2_trace_adaptation_preserves_version_identity[v2]
+18 failed, 2 passed, 155 deselected in 2.76s
+
+Separately exposed analyzer: test_fxm2_failed_run_allows_undefined_success_only_efficiency failed with metrics.path_efficiency is missing or invalid before its repair.
+Final verification: 692 passed, 1 skipped in the focused final suite.

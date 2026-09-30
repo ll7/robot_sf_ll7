@@ -12,6 +12,7 @@ METRIC_SCHEMA_VERSION = "robot-sf-metrics.v2"
 CHANGED_METRICS = frozenset(
     {
         "path_efficiency",
+        "path_efficiency_reference_violation",
         "path_length",
         "success_path_length",
         "socnavbench_path_length",
@@ -46,8 +47,13 @@ def metric_schema_version(value: Mapping[str, Any]) -> str:
         child = value.get(key)
         if isinstance(child, Mapping) and "metric_schema_version" in child:
             versions.append(child["metric_schema_version"])
+    v2_only = _carries_v2_only_fields(value)
     if not versions:
+        if v2_only:
+            raise ValueError("missing metric_schema_version on v2-only fields")
         return LEGACY_METRIC_SCHEMA_VERSION
+    if v2_only and LEGACY_METRIC_SCHEMA_VERSION in versions:
+        raise ValueError("incompatible metric definitions: v2-only fields marked v1")
     if any(v not in (LEGACY_METRIC_SCHEMA_VERSION, METRIC_SCHEMA_VERSION) for v in versions):
         raise ValueError(f"unsupported metric_schema_version: {versions}")
     if len(set(versions)) != 1:
@@ -60,6 +66,8 @@ def require_uniform_metric_schema(records: Iterable[Mapping[str, Any]]) -> str:
 
     Returns:
         Common schema version, or the legacy default for an empty collection."""
+    records = list(records)
+    require_uniform_trace_schema(records)
     versions = {metric_schema_version(record) for record in records}
     if len(versions) > 1:
         raise ValueError(
@@ -84,3 +92,51 @@ def changed_metric_field(field: str) -> bool:
     Returns:
         Whether a field depends on one of the corrected definitions."""
     return field.startswith("metrics.") and field.split(".")[1] in CHANGED_METRICS
+
+
+SIMULATION_TRACE_SCHEMAS = frozenset({"simulation-step-trace.v1", "simulation-step-trace.v2"})
+NATIVE_TRACE_SCHEMAS = frozenset({"paired_effect_native_trace.v1", "paired_effect_native_trace.v2"})
+
+
+def _carries_v2_only_fields(value: Mapping[str, Any]) -> bool:
+    """Recognize exclusive v2 evidence without guessing the units of legacy scalars.
+
+    Returns:
+        Whether this input carries fields exclusive to the current definitions.
+    """
+    if "path_efficiency_reference_violation" in value:
+        return True
+    deadlock = value.get("deadlock_stall")
+    if isinstance(deadlock, Mapping) and deadlock.get("schema_version") == "deadlock-stall.v2":
+        return True
+    for key in ("simulation_step_trace", "paired_effect_native_trace"):
+        trace = value.get(key)
+        if isinstance(trace, Mapping) and str(trace.get("schema_version", "")).endswith(".v2"):
+            return True
+    return any(
+        _carries_v2_only_fields(child)
+        for key in ("metrics", "_metadata", "algorithm_metadata")
+        if isinstance((child := value.get(key)), Mapping)
+    )
+
+
+def require_uniform_trace_schema(records: Iterable[Mapping[str, Any]]) -> None:
+    """Refuse pooling trace references with different meanings, including within rows."""
+    versions = set()
+    for row in records:
+        metadata = row.get("algorithm_metadata", {})
+        if not isinstance(metadata, Mapping):
+            continue
+        for key, supported in (
+            ("simulation_step_trace", SIMULATION_TRACE_SCHEMAS),
+            ("paired_effect_native_trace", NATIVE_TRACE_SCHEMAS),
+        ):
+            trace = metadata.get(key)
+            if not isinstance(trace, Mapping):
+                continue
+            schema = trace.get("schema_version")
+            if schema not in supported:
+                raise ValueError(f"unsupported trace schema: {schema}")
+            versions.add(schema.rsplit(".", 1)[-1])
+    if len(versions) > 1:
+        raise ValueError("trace_schema_version_mismatch: never pool v1/v2 traces")

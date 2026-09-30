@@ -130,3 +130,21 @@ def test_vendored_population_leaves_global_numpy_untouched():
     assert before[0] == after[0]
     np.testing.assert_array_equal(before[1], after[1])
     assert before[2:] == after[2:]
+
+
+def test_relocation_keeps_reaction_buffer_when_goal_is_inside_robot():
+    """A closing route heading cannot justify leaving an overlapping pedestrian unmoved."""
+    env = _env("francis2023_circular_crossing", 1001)
+    try:
+        sim = env.simulator
+        state = sim.pysf_state.pysf_states()
+        robot = np.asarray(sim.robot_pos[0])
+        state[0, :2] = robot + [0.1, 0.0]
+        state[0, 2:4] = [0.5, 0.0]
+        state[0, 4:6] = robot
+        sim._enforce_reset_spawn_clearance()
+        assert 0 in sim.last_spawn_relocation.relocated
+        assert np.linalg.norm(state[0, :2] - robot) >= 2.15
+        assert np.dot(state[0, 2:4], robot - state[0, :2]) > 0.0
+    finally:
+        env.close()

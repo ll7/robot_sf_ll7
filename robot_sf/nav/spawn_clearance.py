@@ -186,7 +186,8 @@ def relocate_overlapping_pedestrians(
         rows: Optional subset of rows that may be moved (defaults to all rows).
         reaction_clearance_m: Extra robot surface clearance per row, beyond margin.
         route_goals: When set, choose a point whose heading toward its goal is
-            not closing on any robot.
+            preferably not closing on any robot. The reaction buffer still applies
+            when all clear candidates have closing route headings.
 
     Returns:
         Report with ``row -> (old, new)`` moves and the rows left unresolved.
@@ -206,28 +207,31 @@ def relocate_overlapping_pedestrians(
         robot_margin = margin + (
             reaction_clearance_m[row] if reaction_clearance_m is not None else 0.0
         )
+        clear_candidates = [
+            candidate
+            for candidate in _relocation_candidates(positions[row], hit, ped_radius, robot_margin)
+            if _is_clear(
+                candidate,
+                row,
+                positions,
+                robots,
+                ped_radius,
+                margin,
+                (blocked, walls),
+                robot_margin=robot_margin,
+            )
+        ]
+        # Prefer a non-closing route heading. A goal inside a robot footprint
+        # makes that impossible: retain the full reaction buffer and route heading
+        # instead of leaving the pedestrian at an overlapping original position.
         new_xy = next(
             (
                 candidate
-                for candidate in _relocation_candidates(
-                    positions[row], hit, ped_radius, robot_margin
-                )
-                if _is_clear(
-                    candidate,
-                    row,
-                    positions,
-                    robots,
-                    ped_radius,
-                    margin,
-                    (blocked, walls),
-                    robot_margin=robot_margin,
-                )
-                and (
-                    route_goals is None
-                    or _route_heading_clears_robots(candidate, route_goals[row], robots)
-                )
+                for candidate in clear_candidates
+                if route_goals is None
+                or _route_heading_clears_robots(candidate, route_goals[row], robots)
             ),
-            None,
+            clear_candidates[0] if clear_candidates else None,
         )
         if new_xy is None:
             report.unresolved.append(row)

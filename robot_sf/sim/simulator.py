@@ -1806,7 +1806,7 @@ class Simulator:
         Overlapping rows are moved deterministically to the nearest clear point on the
         exclusion circle (robot radius + pedestrian radius + 0.1 m + one second
         at the pedestrian speed cap). The new velocity points toward the current
-        route goal and is non-closing on every robot; no random numbers
+        route goal, preferring a non-closing heading when feasible; no random numbers
         are drawn, so every other spawn of the seed stays unchanged. The next reset
         restores the construction-time layout and checks it again.
         """

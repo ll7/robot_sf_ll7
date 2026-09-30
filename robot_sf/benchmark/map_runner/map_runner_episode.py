@@ -2964,13 +2964,12 @@ def _surface_clearances_m(
     return clearance
 
 
-def _trace_planner_decision_fields(sim: _StepSimResult) -> dict[str, Any]:
-    """Retain available per-step planner diagnostics in the simulation trace.
+def _simulation_trace_decision_fields(decision: Any) -> dict[str, Any]:
+    """Copy the available planner decision counters into a simulation trace.
 
     Returns:
-        The producer-owned admissibility/recovery counters, including false values.
+        Available counters, or an empty mapping when the decision is unavailable.
     """
-    decision = getattr(sim, "planner_step_decision", None)
     if not isinstance(decision, dict):
         return {}
     return {
@@ -3007,7 +3006,9 @@ def _step_build_simulation_trace(
         "selected_action": sim.selected_action_payload,
         "applied_environment_action": sim.applied_environment_action_payload,
     }
-    planner_payload.update(_trace_planner_decision_fields(sim))
+    planner_payload.update(
+        _simulation_trace_decision_fields(getattr(sim, "planner_step_decision", None))
+    )
     if sim.action_conversion_payload:
         planner_payload["action_conversion"] = sim.action_conversion_payload
     if sim.actuation_step is not None:

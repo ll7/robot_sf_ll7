@@ -1,7 +1,7 @@
 {
-  "base_head": "b3fa204dc4eda5004d67e4fcf518f3370fcd0966",
+  "base_head": "1bd98ca26d181fea6fd6e95ef95cd149c9198433",
   "fixed_source_sha256": {
-    "robot_sf/planner/predictive_mppi.py": "8b5961a43c4692983682233056d53e5d975a1b344de0f48609d373c3b9375acd",
+    "robot_sf/planner/predictive_mppi.py": "1c268d4a2da87eb5a39fca37b9f09ff638dffebd2307c872548bc7d92c7b6644",
     "robot_sf/planner/socnav_base.py": "a6b19af22e1be45976ca58a2b521a0f1bc158b4934b7394de580c52d12644934",
     "robot_sf/planner/socnav_prediction.py": "7d63a94552789debdbd1eb7f62d32f71e0ae004de2805504890bc3700a51453a",
     "scripts/training/collect_predictive_planner_data.py": "39efbce55e074cc5fb2c339ef02ae00b7ffe4f1da05e3947ae1336feb4d905b5",
@@ -13,10 +13,10 @@
   },
   "raw_captures_sha256": {
     "before.observations.jsonl.gz": "69b5064421d4b0fd46db8144743ba2ff7e7ba9edec7a60f2a1e6390bddd4d4c1",
-    "before.json": "32c50a55400edcfcb23d19ebb329d2dee9c2bdecaf7c29810a79b11a3a028e76",
-    "after.json": "e2da98488b95f6b96e02c6de0fe6c0f69b8a7b65554a58cc94bce77a53f6ea17",
-    "red_final.log": "acb968935afc9e060ecdb6defd78dce0cfe0c5251af584d4a36f8fdc5edcfa1b",
-    "validation.log": "9387b569a77b61f136b209366024c65d4f712b6ba28f23afee10233b53771154",
+    "before.json": "b1c635e2412f681718938afa58a448ffe93f8ad44ae601774c02cf662ac8217f",
+    "after.json": "e76454f80de837346352325b3946a51acbe1d28ae7bdc584b6e8d80fc4f9d996",
+    "red_final.log": "ee38b46ec7449b34528e8159b194bfca48927b5fcbcf2b9281f8b6548e941041",
+    "validation.log": "ccfda7b8151f89e9416ee02adbf5c5dff6739e4a3ff93b52daaca227b567d13d",
     "velocity_model_v1.log": "abaa2fa0dccfb90c2259eda2353f96da808ceeb942d5411c2168e3a07eac5143",
     "velocity_model_v2.log": "6e0c5a3b8b66d281b18cdc95e84273e67288717e0f2710c9f2e3ea57c9c8358e"
   },
@@ -25,11 +25,12 @@
     "predictive_proxy_selected_v2_full-predictive_model.pt": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1"
   },
   "raw_capture_disposition": "Matched observation snapshot, base failure log, focused validation log, summary, probe, source digests and existing portable model release pointers are versioned. Complete scoring JSON and auxiliary logs retained locally outside checkout. No campaign or release artifact produced.",
+  "observation_capture_head": "b3fa204dc4eda5004d67e4fcf518f3370fcd0966",
   "versioned_artifacts_sha256": {
     "observations.jsonl.gz": "69b5064421d4b0fd46db8144743ba2ff7e7ba9edec7a60f2a1e6390bddd4d4c1",
-    "regression_base.txt": "c83c08e6f9434d39c1555f255591bbabbfc756d01981912fc4a2079b0271f624",
-    "validation.txt": "9387b569a77b61f136b209366024c65d4f712b6ba28f23afee10233b53771154",
-    "summary.json": "f2aac1445a4c942bfbf53d6e961f4f3f0aafc2463a220a589477980eaa09e674"
+    "regression_base.txt": "91c7eea8e86616d52ba90498f19edf669f546bc845bf7e725eb6df2bacfb8e7e",
+    "validation.txt": "ccfda7b8151f89e9416ee02adbf5c5dff6739e4a3ff93b52daaca227b567d13d",
+    "summary.json": "139517ae7c1186e64bed91892a42e9aa95aecc1b954b9d51822e72847018fb88"
   },
   "log_normalization": "Versioned base failure log has trailing whitespace removed; raw log digest pins the original local capture."
 }

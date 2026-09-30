@@ -1,5 +1,6 @@
 {
-  "base_head": "b3fa204dc4eda5004d67e4fcf518f3370fcd0966",
+  "base_head": "1bd98ca26d181fea6fd6e95ef95cd149c9198433",
+  "observation_capture_head": "b3fa204dc4eda5004d67e4fcf518f3370fcd0966",
   "evidence_tier": "diagnostic-only",
   "scenarios": [
     "classic_bottleneck_medium",
@@ -12,7 +13,7 @@
   ],
   "phases": {
     "before": {
-      "elapsed_s": 18.213039660127833,
+      "elapsed_s": 8.229555919067934,
       "observations": 426,
       "provenance": {
         "seeds": [
@@ -179,7 +180,7 @@
       }
     },
     "after": {
-      "elapsed_s": 14.95599881792441,
+      "elapsed_s": 15.383285026997328,
       "observations": 426,
       "provenance": {
         "seeds": [

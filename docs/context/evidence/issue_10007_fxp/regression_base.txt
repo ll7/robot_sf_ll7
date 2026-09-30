@@ -329,8 +329,8 @@ E       Failed: DID NOT RAISE ValueError
 
 tests/planner/test_prediction_fxp_regressions.py:117: Failed
 ----------------------------- Captured stderr call -----------------------------
-2026-09-30 10:16:02.759 | INFO     | robot_sf.models.registry:_cached_release_path_is_valid:426 - Using cached model artifact: /home/luttkule/fxp_base/output/model_cache/predictive_proxy_selected_v1/predictive_proxy_selected_v1-predictive_model.pt
-2026-09-30 10:16:02.797 | DEBUG    | robot_sf.planner.predictive_model:_log_unexpected_checkpoint_keys:31 - Ignoring unexpected checkpoint keys when loading PredictiveTrajectoryModel: ['value_head.0.bias', 'value_head.0.weight', 'value_head.2.bias', 'value_head.2.weight']
+2026-09-30 10:26:53.512 | INFO     | robot_sf.models.registry:_cached_release_path_is_valid:426 - Using cached model artifact: /home/luttkule/fxp_base/output/model_cache/predictive_proxy_selected_v1/predictive_proxy_selected_v1-predictive_model.pt
+2026-09-30 10:26:53.550 | DEBUG    | robot_sf.planner.predictive_model:_log_unexpected_checkpoint_keys:31 - Ignoring unexpected checkpoint keys when loading PredictiveTrajectoryModel: ['value_head.0.bias', 'value_head.0.weight', 'value_head.2.bias', 'value_head.2.weight']
 ________________ test_mppi_preserves_requested_shorter_horizon _________________
 
     def test_mppi_preserves_requested_shorter_horizon():
@@ -353,12 +353,12 @@ Slow Test Report (soft<20s hard=60s, top 10)
 2) tests/planner/test_prediction_fxp_regressions.py::test_mppi_preserves_requested_shorter_horizon  0.09s
 3) tests/planner/test_prediction_fxp_regressions.py::test_wall_occupancy_increases_prediction_cost[False]  0.00s
 4) tests/planner/test_prediction_fxp_regressions.py::test_wall_occupancy_increases_prediction_cost[True]  0.00s
-5) tests/planner/test_prediction_fxp_regressions.py::test_release_heading_lattice_keeps_every_heading_distinct[prediction_planner-True]  0.00s
-6) tests/planner/test_prediction_fxp_regressions.py::test_release_heading_lattice_keeps_every_heading_distinct[prediction_planner-False]  0.00s
+5) tests/planner/test_prediction_fxp_regressions.py::test_release_heading_lattice_keeps_every_heading_distinct[prediction_planner-False]  0.00s
+6) tests/planner/test_prediction_fxp_regressions.py::test_release_heading_lattice_keeps_every_heading_distinct[prediction_planner-True]  0.00s
 7) tests/planner/test_prediction_fxp_regressions.py::test_release_heading_lattice_keeps_every_heading_distinct[predictive_mppi-True]  0.00s
 8) tests/planner/test_prediction_fxp_regressions.py::test_release_heading_lattice_keeps_every_heading_distinct[predictive_mppi-False]  0.00s
 9) tests/planner/test_prediction_fxp_regressions.py::test_collector_preserves_already_ego_velocity_at_north_heading[False-scripts.training.collect_predictive_planner_data]  0.00s
-10) tests/planner/test_prediction_fxp_regressions.py::test_collector_preserves_already_ego_velocity_at_north_heading[False-scripts.training.collect_predictive_hardcase_data]  0.00s
+10) tests/planner/test_prediction_fxp_regressions.py::test_collector_preserves_already_ego_velocity_at_north_heading[True-scripts.training.collect_predictive_planner_data]  0.00s
 
 =========================== short test summary info ============================
 FAILED tests/planner/test_prediction_fxp_regressions.py::test_collector_preserves_already_ego_velocity_at_north_heading[False-scripts.training.collect_predictive_planner_data]
@@ -373,4 +373,4 @@ FAILED tests/planner/test_prediction_fxp_regressions.py::test_release_heading_la
 FAILED tests/planner/test_prediction_fxp_regressions.py::test_release_heading_lattice_keeps_every_heading_distinct[predictive_mppi-True]
 FAILED tests/planner/test_prediction_fxp_regressions.py::test_mppi_rejects_24_steps_from_eight_step_forecast
 FAILED tests/planner/test_prediction_fxp_regressions.py::test_mppi_preserves_requested_shorter_horizon
-12 failed in 4.03s
+12 failed in 4.14s

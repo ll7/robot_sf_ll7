@@ -1,27 +1,27 @@
 ........................................................................ [ 50%]
 ......................................................................   [100%]
 ============================= slowest 10 durations =============================
-0.12s call     tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_probabilistic_risk_mode_is_deterministic]
-0.12s call     tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_mcts_mode_is_deterministic]
-0.11s call     tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_speed_clearance_gain_reduces_speed]
+0.11s call     tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_probabilistic_risk_mode_is_deterministic]
+0.11s call     tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_mcts_mode_is_deterministic]
 0.11s call     tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_sequence_search_is_deterministic]
-0.11s call     tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_progress_risk_penalty_reduces_speed]
 0.11s call     tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_ttc_penalty_reduces_speed]
+0.11s call     tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_progress_risk_penalty_reduces_speed]
+0.11s call     tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_speed_clearance_gain_reduces_speed]
 0.10s call     tests/planner/test_predictive_mppi_planner.py::test_predictive_mppi_goal_target_versions_follow_route_contract
 0.10s call     tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_unpatched_prediction_contract[test_prediction_adapter_reconfigures_forecast_variant_runtime_state]
 0.09s call     tests/planner/test_prediction_fxp_regressions.py::test_mppi_rejects_24_steps_from_eight_step_forecast
 0.09s call     tests/planner/test_prediction_fxp_regressions.py::test_mppi_preserves_requested_shorter_horizon
 
 Slow Test Report (soft<20s hard=60s, top 10)
-1) tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_probabilistic_risk_mode_is_deterministic]  0.12s
-2) tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_mcts_mode_is_deterministic]  0.12s
-3) tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_speed_clearance_gain_reduces_speed]  0.11s
-4) tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_sequence_search_is_deterministic]  0.11s
+1) tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_probabilistic_risk_mode_is_deterministic]  0.11s
+2) tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_mcts_mode_is_deterministic]  0.11s
+3) tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_sequence_search_is_deterministic]  0.11s
+4) tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_ttc_penalty_reduces_speed]  0.11s
 5) tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_progress_risk_penalty_reduces_speed]  0.11s
-6) tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_ttc_penalty_reduces_speed]  0.11s
+6) tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_patched_prediction_contract[test_prediction_adapter_speed_clearance_gain_reduces_speed]  0.11s
 7) tests/planner/test_predictive_mppi_planner.py::test_predictive_mppi_goal_target_versions_follow_route_contract  0.10s
 8) tests/planner/test_socnav_prediction_module.py::test_extracted_module_runs_unpatched_prediction_contract[test_prediction_adapter_reconfigures_forecast_variant_runtime_state]  0.10s
 9) tests/planner/test_prediction_fxp_regressions.py::test_mppi_rejects_24_steps_from_eight_step_forecast  0.09s
 10) tests/planner/test_prediction_fxp_regressions.py::test_mppi_preserves_requested_shorter_horizon  0.09s
 
-142 passed in 6.30s
+142 passed in 5.99s

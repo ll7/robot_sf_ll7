@@ -1,9 +1,11 @@
 # Issue #10007: prediction planner defects, lane FXP
 
 Base: PR #9926 branch `codex/issue-9750-physical-radius-fix-20260929`,
-`b3fa204dc4eda5004d67e4fcf518f3370fcd0966`. The hunt report was treated as leads;
+`1bd98ca26d181fea6fd6e95ef95cd149c9198433`. The hunt report was treated as leads;
 A1–A4 were first confirmed at `d41cceb7f` and reconfirmed at this latest base after
-#9926 advanced; its relevant planner, collector and release-config bytes were unchanged.
+#9926 advanced twice. Its latest additions are observational target diagnostics and
+a drive-helper return annotation; the four FXP defect mechanisms are still present
+on the latest base and are covered by fresh replay/test failures.
 No retraining,
 held-out evaluation, frozen YAML changes, 0.0.2/0.0.7 artifact changes, release,
 or merge was performed. This is implementation and scorer diagnostic evidence,
@@ -17,7 +19,8 @@ and actual environment observations from `classic_doorway_low` and
 `classic_bottleneck_medium`, seeds **1001, 1002, 1003 only**. It advances the
 collector's deterministic goal policy for at most 160 steps per episode,
 stopping on environment termination: 157 doorway and 269 bottleneck observations,
-426 total per revision. The corrected scorer replays the base capture, preserving
+426 total per revision. The snapshot was collected at `b3fa204dc`; both latest-base
+and corrected scorers replay that same capture, preserving
 every observation array
 with its original dtype/shape. Per-observation SHA-256 digests are identical,
 alongside scenario/seed/tick, heading, count, and wall-distance equality. At most two serial probe
@@ -120,7 +123,7 @@ shorter requests to the anchor's effective horizon. The release declared 24 step
 at 0.1 s, but the v1 checkpoint emits eight steps. Both downloaded model payloads
 independently declare `horizon_steps: 8`.
 
-Fix: `robot_sf/planner/predictive_mppi.py:232` rejects requests outside
+Fix: `robot_sf/planner/predictive_mppi.py:235` rejects requests outside
 `1..future.shape[1]` with a descriptive `ValueError`, before optimization. Supported
 requests retain their requested length. Both the config dataclass and root builder
 now default to eight. The MPPI 0.0.8 release declares **8 × 0.1 s = 0.8 s**;

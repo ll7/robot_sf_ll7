@@ -1,0 +1,289 @@
+# #10063: exact geometric dispositions for intentional interactions.
+# Development diagnostic review; not collision-free or release-admission evidence.
+schema: scenario_validation_waivers.v1
+release_zones:
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_bottleneck_low
+  zone: goal[0]
+  actor_kind: ped_spawn
+  actor: '0'
+  geometry_sha256: 63dc9ee7389fff46951490243ac5314af64c203763cd8847e6f6ac400c0fa87a
+  rationale: 'Dormant SVG crowd zone: resolved ped_density=0; marker-controlled scenario
+    does not instantiate this population. Listed rather than silently omitted.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_bottleneck_medium
+  zone: spawn[0]
+  actor_kind: single
+  actor: h1
+  geometry_sha256: a798d68b3f2414fef5ef955538dac20e90f35412573c990ce67101f8fa704132
+  rationale: 'Intended bidirectional bottleneck traverse: pedestrians start at the
+    opposite end and walk through the robot destination and later its departure end.
+    Interaction at the interior bottleneck is the task; no pedestrian starts in the
+    robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_bottleneck_medium
+  zone: goal[0]
+  actor_kind: single
+  actor: h1
+  geometry_sha256: 589112badc1318c99acc1e795a16ae3b6bd5ad847c634052c63f5d91179dd526
+  rationale: 'Intended bidirectional bottleneck traverse: pedestrians start at the
+    opposite end and walk through the robot destination and later its departure end.
+    Interaction at the interior bottleneck is the task; no pedestrian starts in the
+    robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_bottleneck_medium
+  zone: goal[0]
+  actor_kind: ped_spawn
+  actor: '0'
+  geometry_sha256: 63dc9ee7389fff46951490243ac5314af64c203763cd8847e6f6ac400c0fa87a
+  rationale: 'Dormant SVG crowd zone: resolved ped_density=0; marker-controlled scenario
+    does not instantiate this population. Listed rather than silently omitted.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_bottleneck_high
+  zone: spawn[0]
+  actor_kind: single
+  actor: h1
+  geometry_sha256: 16cf4a43528b9c3cebcbe2ba962e3d074bf6c725872c742fd054579039541bee
+  rationale: 'Intended bidirectional bottleneck traverse: pedestrians start at the
+    opposite end and walk through the robot destination and later its departure end.
+    Interaction at the interior bottleneck is the task; no pedestrian starts in the
+    robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_bottleneck_high
+  zone: spawn[0]
+  actor_kind: single
+  actor: h2
+  geometry_sha256: a798d68b3f2414fef5ef955538dac20e90f35412573c990ce67101f8fa704132
+  rationale: 'Intended bidirectional bottleneck traverse: pedestrians start at the
+    opposite end and walk through the robot destination and later its departure end.
+    Interaction at the interior bottleneck is the task; no pedestrian starts in the
+    robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_bottleneck_high
+  zone: spawn[0]
+  actor_kind: single
+  actor: h3
+  geometry_sha256: d697e982d061cae917b56f648adb9b7e6811474b3726b40d4ad3fffbe65fe4b1
+  rationale: 'Intended bidirectional bottleneck traverse: pedestrians start at the
+    opposite end and walk through the robot destination and later its departure end.
+    Interaction at the interior bottleneck is the task; no pedestrian starts in the
+    robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_bottleneck_high
+  zone: goal[0]
+  actor_kind: single
+  actor: h1
+  geometry_sha256: fe85a5e1f8b020386ebb9bb8ec303120d66089613e40150d019e65f07348fdc6
+  rationale: 'Intended bidirectional bottleneck traverse: pedestrians start at the
+    opposite end and walk through the robot destination and later its departure end.
+    Interaction at the interior bottleneck is the task; no pedestrian starts in the
+    robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_bottleneck_high
+  zone: goal[0]
+  actor_kind: single
+  actor: h2
+  geometry_sha256: 589112badc1318c99acc1e795a16ae3b6bd5ad847c634052c63f5d91179dd526
+  rationale: 'Intended bidirectional bottleneck traverse: pedestrians start at the
+    opposite end and walk through the robot destination and later its departure end.
+    Interaction at the interior bottleneck is the task; no pedestrian starts in the
+    robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_bottleneck_high
+  zone: goal[0]
+  actor_kind: single
+  actor: h3
+  geometry_sha256: 9ede591859e683a797105688f4cb130ad4aedefdda105f353f1244e876e7c312
+  rationale: 'Intended bidirectional bottleneck traverse: pedestrians start at the
+    opposite end and walk through the robot destination and later its departure end.
+    Interaction at the interior bottleneck is the task; no pedestrian starts in the
+    robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_bottleneck_high
+  zone: goal[0]
+  actor_kind: ped_spawn
+  actor: '0'
+  geometry_sha256: 63dc9ee7389fff46951490243ac5314af64c203763cd8847e6f6ac400c0fa87a
+  rationale: 'Dormant SVG crowd zone: resolved ped_density=0; marker-controlled scenario
+    does not instantiate this population. Listed rather than silently omitted.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_realworld_double_bottleneck_high
+  zone: spawn[0]
+  actor_kind: ped_spawn
+  actor: '0'
+  geometry_sha256: dd10d7aa4bf8c3a63578397c0aae213fbe471b7a33c464d579c934e9bae76c25
+  rationale: 'Dormant SVG crowd zone: resolved ped_density=0; marker-controlled scenario
+    does not instantiate this population. Listed rather than silently omitted.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: classic_realworld_double_bottleneck_high
+  zone: goal[0]
+  actor_kind: ped_spawn
+  actor: '1'
+  geometry_sha256: e7aeac8ea97b21a40ada187e9eba18ee6fabc8cf3a1186b9216ded81d2ceabd9
+  rationale: 'Dormant SVG crowd zone: resolved ped_density=0; marker-controlled scenario
+    does not instantiate this population. Listed rather than silently omitted.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: francis2023_frontal_approach
+  zone: spawn[0]
+  actor_kind: single
+  actor: h1
+  geometry_sha256: 4257977fb5e6dfebfe22699397a1a0eff7d17faf6bd4373253ffd54b7f95f9b9
+  rationale: 'Intended frontal encounter: pedestrian starts at x=35 and ends at x=5,
+    entering the original robot spawn rectangle only after travelling 30 m against
+    the robot. Removing this reverse lane changes the archetype; no reset co-location.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: francis2023_blind_corner
+  zone: goal[0]
+  actor_kind: single
+  actor: h1
+  geometry_sha256: 43935a027975691c8f5255665f1abe2bd248c714081049501952004fc9643bbb
+  rationale: 'Intended opposing blind-corner encounter: pedestrian starts at the robot
+    destination end then departs around the blind turn before robot arrival. A shared
+    destination lane is the crossing task, not a rear-end spawn defect.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: francis2023_narrow_hallway
+  zone: spawn[0]
+  actor_kind: single
+  actor: h1
+  geometry_sha256: 19337ab6f3c07e4b021de30be67b3556c3fbd6e1267e79357206a0eeb93b608d
+  rationale: 'Intended opposite-end passage in a narrow corridor/doorway: single pedestrian
+    starts in the far robot destination end and finishes in the departure end. Physical
+    interaction at the interior constriction must remain, including the explicit 2.0
+    m infeasibility probe; no single pedestrian starts in the robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: francis2023_narrow_hallway
+  zone: goal[0]
+  actor_kind: single
+  actor: h1
+  geometry_sha256: 21695de4eb815f20a32fc3df471673fe60c351fba1cdbac6220f7fadf145ef87
+  rationale: 'Intended opposite-end passage in a narrow corridor/doorway: single pedestrian
+    starts in the far robot destination end and finishes in the departure end. Physical
+    interaction at the interior constriction must remain, including the explicit 2.0
+    m infeasibility probe; no single pedestrian starts in the robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: francis2023_narrow_doorway
+  zone: spawn[0]
+  actor_kind: single
+  actor: h1
+  geometry_sha256: f5c41e89e0c5628ef4ff607b22b9bf6b8a5820f95570539c1c39eac3bdcf9380
+  rationale: 'Intended opposite-end passage in a narrow corridor/doorway: single pedestrian
+    starts in the far robot destination end and finishes in the departure end. Physical
+    interaction at the interior constriction must remain, including the explicit 2.0
+    m infeasibility probe; no single pedestrian starts in the robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: francis2023_narrow_doorway
+  zone: goal[0]
+  actor_kind: single
+  actor: h1
+  geometry_sha256: 9e6cf06b6a931dbfb0235fab37a06972f7406db8fb6d212780b7a073cce6f985
+  rationale: 'Intended opposite-end passage in a narrow corridor/doorway: single pedestrian
+    starts in the far robot destination end and finishes in the departure end. Physical
+    interaction at the interior constriction must remain, including the explicit 2.0
+    m infeasibility probe; no single pedestrian starts in the robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: francis2023_entering_room
+  zone: goal[0]
+  actor_kind: single
+  actor: h1
+  geometry_sha256: 1abfd4eb2c208ad9655f48285dc462a33d5c73044bb3ff5af55c3fa05108a7bd
+  rationale: 'Intended doorway crossing near the robot destination: pedestrian traverses
+    (18,10)->(24,14) while the robot enters the room. Centreline misses the full goal
+    rectangle by 0.27735 m but its physical radius reaches it. This interior goal
+    crossing is the interaction, not an initial robot spawn overlap.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
+  scenario: francis2023_entering_elevator
+  zone: goal[0]
+  actor_kind: single
+  actor: h1
+  geometry_sha256: d191e99dfbdc33fa4de8f98d1588087828078c2bef2cbdbe6a78c39866a0c2ba
+  rationale: 'Intended occupied-elevator entry: occupant starts at (15,10) in the
+    far robot goal rectangle and moves to (16,11) while the robot approaches from
+    outside. Preserve entering an occupied elevator; the pedestrian is absent from
+    the robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml
+  scenario: francis2023_narrow_doorway_width_2p20
+  zone: spawn[0]
+  actor_kind: single
+  actor: h1
+  geometry_sha256: f5c41e89e0c5628ef4ff607b22b9bf6b8a5820f95570539c1c39eac3bdcf9380
+  rationale: 'Intended opposite-end passage in a narrow corridor/doorway: single pedestrian
+    starts in the far robot destination end and finishes in the departure end. Physical
+    interaction at the interior constriction must remain, including the explicit 2.0
+    m infeasibility probe; no single pedestrian starts in the robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml
+  scenario: francis2023_narrow_doorway_width_2p20
+  zone: goal[0]
+  actor_kind: single
+  actor: h1
+  geometry_sha256: 9e6cf06b6a931dbfb0235fab37a06972f7406db8fb6d212780b7a073cce6f985
+  rationale: 'Intended opposite-end passage in a narrow corridor/doorway: single pedestrian
+    starts in the far robot destination end and finishes in the departure end. Physical
+    interaction at the interior constriction must remain, including the explicit 2.0
+    m infeasibility probe; no single pedestrian starts in the robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml
+  scenario: francis2023_narrow_doorway_width_2p80
+  zone: spawn[0]
+  actor_kind: single
+  actor: h1
+  geometry_sha256: f5c41e89e0c5628ef4ff607b22b9bf6b8a5820f95570539c1c39eac3bdcf9380
+  rationale: 'Intended opposite-end passage in a narrow corridor/doorway: single pedestrian
+    starts in the far robot destination end and finishes in the departure end. Physical
+    interaction at the interior constriction must remain, including the explicit 2.0
+    m infeasibility probe; no single pedestrian starts in the robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml
+  scenario: francis2023_narrow_doorway_width_2p80
+  zone: goal[0]
+  actor_kind: single
+  actor: h1
+  geometry_sha256: 9e6cf06b6a931dbfb0235fab37a06972f7406db8fb6d212780b7a073cce6f985
+  rationale: 'Intended opposite-end passage in a narrow corridor/doorway: single pedestrian
+    starts in the far robot destination end and finishes in the departure end. Physical
+    interaction at the interior constriction must remain, including the explicit 2.0
+    m infeasibility probe; no single pedestrian starts in the robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml
+  scenario: francis2023_narrow_doorway_width_3p60
+  zone: spawn[0]
+  actor_kind: single
+  actor: h1
+  geometry_sha256: f5c41e89e0c5628ef4ff607b22b9bf6b8a5820f95570539c1c39eac3bdcf9380
+  rationale: 'Intended opposite-end passage in a narrow corridor/doorway: single pedestrian
+    starts in the far robot destination end and finishes in the departure end. Physical
+    interaction at the interior constriction must remain, including the explicit 2.0
+    m infeasibility probe; no single pedestrian starts in the robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063
+- matrix: configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml
+  scenario: francis2023_narrow_doorway_width_3p60
+  zone: goal[0]
+  actor_kind: single
+  actor: h1
+  geometry_sha256: 9e6cf06b6a931dbfb0235fab37a06972f7406db8fb6d212780b7a073cce6f985
+  rationale: 'Intended opposite-end passage in a narrow corridor/doorway: single pedestrian
+    starts in the far robot destination end and finishes in the departure end. Physical
+    interaction at the interior constriction must remain, including the explicit 2.0
+    m infeasibility probe; no single pedestrian starts in the robot spawn rectangle.'
+  decision_ref: https://github.com/ll7/robot_sf_ll7/issues/10063

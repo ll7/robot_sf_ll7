@@ -23,6 +23,9 @@ scenario_overrides_by_name:
     simulation_config:
       robot_goal_sampling_policy: footprint_clearance_v1
   classic_station_platform_medium:
+    # #10063: full rectangles must be separate from pedestrian spawn/lane geometry.
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_10063_classic_station_platform_safe_spawn_v1.svg
     simulation_config:
       robot_goal_sampling_policy: footprint_clearance_v1
   classic_cross_trap_low:
@@ -86,6 +89,9 @@ scenario_overrides_by_name:
     simulation_config:
       robot_goal_sampling_policy: footprint_clearance_v1
   francis2023_pedestrian_overtaking:
+    # #10063: full rectangles must be separate from pedestrian spawn/lane geometry.
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_10063_francis2023_ped_overtaking_safe_spawn_v1.svg
     simulation_config:
       robot_goal_sampling_policy: footprint_clearance_v1
   francis2023_robot_overtaking:
@@ -167,5 +173,10 @@ scenario_overrides_by_name:
     simulation_config:
       robot_goal_sampling_policy: footprint_clearance_v1
   francis2023_robot_crowding:
+    # #10063: full rectangles must be separate from pedestrian spawn/lane geometry.
+    map_id: null
+    map_file: ../../maps/successor_svg_maps/issue_10063_francis2023_robot_crowding_safe_spawn_v1.svg
     simulation_config:
+      # 112 m2 * 0.21 -> 24 pedestrians, retaining the original crowd count.
+      ped_density: 0.21
       robot_goal_sampling_policy: footprint_clearance_v1

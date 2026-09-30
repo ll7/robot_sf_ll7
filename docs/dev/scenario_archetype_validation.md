@@ -64,3 +64,36 @@ finding.
 
 The resulting evidence is limited to enforcement of the pinned diagnostic contract. Passing these
 checks is not evidence of scenario feasibility, planner performance, safety, or benchmark validity.
+
+
+## Release robot endpoint separation (#10063)
+
+The existing geometry validator also audits all 48 versioned 0.0.8 scenarios and
+three doorway widths, without creating or stepping environments:
+
+```bash
+uv run python scripts/validation/check_scenario_archetype_geometry.py \
+  --release-zones \
+  --waiver-file configs/scenarios/release_0_0_8_endpoint_dispositions.yaml
+```
+
+CI runs this blocking command. The JSON report lists every robot spawn and goal
+rectangle, including the implicit fourth corner, with single-pedestrian lanes
+(start through resolved trajectory/goal) and crowd spawn rectangles within the
+resolved pedestrian radius. Tangency and radius-only intersections count. It uses
+the scenario loader so YAML actor overrides are checked, and reports dormant
+crowd zones explicitly. The default scenario radius is 0.4 m, conservatively
+including the substrate's 0.35 m physical radius; this is a static lane check,
+not a guarantee against dynamic contact or role-conditioned motion.
+
+Every remaining intentional interaction has an exact matrix/scenario/zone/actor
+identity and geometry fingerprint in the disposition file, with its rationale.
+Opposite-end head-on passage, occupied destination entry and interior crossings
+remain deliberate interactions. Missing, stale, duplicate or changed dispositions
+fail; no scenario-wide exemption or global tolerance hides new overlap.
+
+The overtaking spawn now spans y=4.0–4.5 beside h1's unchanged y=6 lane, instead
+of y=4.0–6.0 across that lane. Station-platform reverse crowd spawn moves from
+y=20–23 to y=16.5–19.5 and its departure route skirts the robot goal. Robot-crowding
+uses x=6.5–14.5 instead of x=3–17 with density 0.21 preserving 24 pedestrians.
+These release-only successor inputs leave historical SVGs and frozen artifacts intact.

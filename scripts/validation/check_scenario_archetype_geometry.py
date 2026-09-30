@@ -22,6 +22,7 @@ any missing, stale, duplicate, or changed-evidence row returns exit code 2.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from dataclasses import asdict, dataclass, field
@@ -371,6 +372,129 @@ def format_console_table(report: MapGeometryReport) -> str:
     return "\n".join(lines)
 
 
+RELEASE_MATRICES = (
+    Path("configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"),
+    Path("configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml"),
+)
+
+
+def _release_actors(definition: MapDefinition, density: float) -> list[tuple]:
+    """Resolve static single-pedestrian lanes and all declared crowd start zones."""
+    actors = []
+    for ped in definition.single_pedestrians:
+        points = [ped.start] + (ped.trajectory or ([ped.goal] if ped.goal else []))
+        lane = LineString(points) if len(points) > 1 else Point(points[0])
+        actors.append(("single", ped.id, lane, {"points": points, "role": ped.role}))
+    for kind, zones in (
+        ("ped_spawn", definition.ped_spawn_zones),
+        ("crowded", definition.ped_crowded_zones),
+    ):
+        for index, zone in enumerate(zones):
+            actors.append(
+                (
+                    kind,
+                    str(index),
+                    _rect_polygon(zone),
+                    {"density": density},
+                )
+            )
+    return actors
+
+
+def inspect_release_zones(matrices=RELEASE_MATRICES) -> list[dict]:
+    """Audit every full robot rectangle against resolved actors, without stepping.
+
+    Use the scenario loader so YAML actor/route overrides and geometry contracts
+    are applied. Distance <= pedestrian radius includes tangency and round endcaps.
+    Report dormant crowd zones too: zero density is a disposition, not an omission.
+    The nominal lane test is geometric; it makes no dynamic collision claim.
+    """
+    from robot_sf.training.scenario_loader import (
+        build_robot_config_from_scenario,
+        load_scenarios,
+    )
+
+    rows = []
+    for matrix in matrices:
+        matrix = Path(matrix).resolve()
+        for scenario in load_scenarios(matrix):
+            config = build_robot_config_from_scenario(scenario, scenario_path=matrix)
+            if config.map_pool is None or not config.map_pool.map_defs:
+                raise ValueError(f"Missing map for {scenario['name']}")
+            radius = float(config.sim_config.ped_radius)
+            for map_id, definition in sorted(config.map_pool.map_defs.items()):
+                actors = _release_actors(definition, config.sim_config.peds_per_area_m2)
+                for kind, zones in (
+                    ("spawn", definition.robot_spawn_zones),
+                    ("goal", definition.robot_goal_zones),
+                ):
+                    for index, zone in enumerate(zones):
+                        rectangle = _rect_polygon(zone)
+                        hits = []
+                        for actor_kind, actor, shape, detail in actors:
+                            distance = rectangle.distance(shape)
+                            if distance > radius:
+                                continue
+                            evidence = {
+                                "zone_wkt": rectangle.wkt,
+                                "actor_wkt": shape.wkt,
+                                "ped_radius_m": radius,
+                                **detail,
+                            }
+                            fingerprint = hashlib.sha256(
+                                json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode()
+                            ).hexdigest()
+                            hits.append(
+                                {
+                                    "actor_kind": actor_kind,
+                                    "actor": actor,
+                                    "distance_m": distance,
+                                    "geometry_sha256": fingerprint,
+                                    "evidence": evidence,
+                                }
+                            )
+                        rows.append(
+                            {
+                                "matrix": canonical_repo_path(str(matrix)),
+                                "scenario": scenario["name"],
+                                "map_id": map_id,
+                                "zone": f"{kind}[{index}]",
+                                "bounds": list(rectangle.bounds),
+                                "ped_radius_m": radius,
+                                "intersections": hits,
+                            }
+                        )
+    return rows
+
+
+def enforce_release_zone_waivers(rows: list[dict], waiver_file: Path) -> None:
+    """Reject unreviewed, changed or stale endpoint intersections individually."""
+    findings = [
+        {"matrix": row["matrix"], "scenario": row["scenario"], "zone": row["zone"], **hit}
+        for row in rows
+        for hit in row["intersections"]
+    ]
+    waivers = load_waiver_rows(waiver_file, "release_zones")
+    fields = ("matrix", "scenario", "zone", "actor_kind", "actor")
+    for row in waivers:
+        if any(
+            not isinstance(row.get(key), str) or not row[key]
+            for key in (*fields, "geometry_sha256")
+        ):
+            raise WaiverValidationError(
+                "release zone waiver requires exact identity and geometry_sha256"
+            )
+    validate_exact_waivers(
+        findings,
+        waivers,
+        identity_fields=fields,
+        evidence_matches=lambda actual, waiver: (
+            actual["geometry_sha256"] == waiver["geometry_sha256"]
+        ),
+        label="release zone overlap",
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point returning a process exit code."""
 
@@ -393,7 +517,25 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Require exact waivers for every finding (for CI enforcement).",
     )
+    parser.add_argument(
+        "--release-zones",
+        action="store_true",
+        help="Audit all 48 release scenarios and three doorway widths.",
+    )
     args = parser.parse_args(argv)
+
+    if args.release_zones:
+        rows = inspect_release_zones()
+        print(json.dumps(rows, indent=2))
+        if args.waiver_file is None:
+            print("ERROR: --release-zones requires --waiver-file", file=sys.stderr)
+            return 2
+        try:
+            enforce_release_zone_waivers(rows, args.waiver_file)
+        except WaiverValidationError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+        return 0
 
     paths = [Path(p) for p in args.map] or [Path(p) for p in DEFAULT_MAPS]
     reports = [inspect_map_geometry(p, args.tolerance_m) for p in paths]

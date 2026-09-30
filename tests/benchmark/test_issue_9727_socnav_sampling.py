@@ -237,10 +237,15 @@ def test_braking_helpers_are_consistent() -> None:
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    "scenario_id", ["francis2023_crowd_navigation", "francis2023_robot_crowding"]
+    ("scenario_id", "seed"),
+    [("francis2023_crowd_navigation", 1003), ("francis2023_robot_crowding", 1011)],
 )
-def test_release_cell_replay_reaches_goal_without_wall_contact(scenario_id: str) -> None:
-    """Seed 111 of both cells ends in wall contact under legacy_v1 (#9727, #9746)."""
+def test_release_cell_replay_reaches_goal_without_wall_contact(scenario_id: str, seed: int) -> None:
+    """Both cells end in wall contact under legacy_v1 on these seeds (#9727, #9746).
+
+    The seeds come from the development band (1001-1030) so the regression never steps
+    an environment on the held-out evaluation seeds; bounded_v2 reaches the goal there.
+    """
     from robot_sf.benchmark.classic_interactions_loader import (
         load_classic_matrix,
         select_scenario,
@@ -253,7 +258,7 @@ def test_release_cell_replay_reaches_goal_without_wall_contact(scenario_id: str)
     scenario = select_scenario(load_classic_matrix(str(scenario_path)), scenario_id)
     record = _run_map_episode(
         scenario,
-        111,
+        seed,
         horizon=600,
         dt=0.1,
         record_forces=False,

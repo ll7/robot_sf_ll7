@@ -384,6 +384,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **Scenario and map review fixes (changes seeded resets).** Three-corner rectangle zones
+  (every SVG `rect` spawn, goal and crowded zone) are sampled uniformly over the full
+  rectangle again instead of only the triangle half below its diagonal; true triangles
+  (authored three-vertex `crowded_zone` paths, synthetic crowd triangles) are marked
+  `TriangleZone` and stay triangular. This moves robot starts, robot goals, route
+  respawns and crowded-zone spawns for every map that uses rectangle zones. Pedestrian
+  spawns and route respawns now reject centres whose pedestrian-radius footprint overlaps
+  an obstacle; crowded-zone behaviours keep the map obstacles for goals re-sampled during
+  the episode. Scenarios that opt into `archetype_composition` without `archetype_seed`
+  take the episode seed. An included manifest's relative `map_file` resolves beside that
+  manifest first, and a same-named file beside the root manifest is rejected as ambiguous.
+  SVG zone indices with an unfillable gap are rejected instead of compacted.
+
 * **Issue #9725 spawn defects (changes seeded resets).** Robot starts are now sampled
   only where the robot radius plus a 0.1 m margin clears every wall and map bound
   (fail loudly otherwise); pedestrians that overlap the robot footprint at reset are

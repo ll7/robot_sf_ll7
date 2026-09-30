@@ -38,7 +38,14 @@ from shapely.geometry import Point as _ShapelyPoint
 from shapely.geometry import Polygon as _ShapelyPolygon
 from shapely.prepared import PreparedGeometry, prep
 
-from robot_sf.common.types import PedGrouping, PedState, Vec2D, Zone, ZoneAssignments
+from robot_sf.common.types import (
+    PedGrouping,
+    PedState,
+    TriangleZone,
+    Vec2D,
+    Zone,
+    ZoneAssignments,
+)
 from robot_sf.nav.map_config import GlobalRoute
 from robot_sf.ped_npc.ped_archetypes import assign_archetype_speed_factors, validate_composition
 from robot_sf.ped_npc.ped_behavior import (
@@ -281,6 +288,19 @@ def _point_in_any_obstacle(point: Vec2D, obstacles: list[PreparedGeometry]) -> b
     return any(poly.contains(pt) for poly in obstacles)
 
 
+def _zone_area(zone: Zone) -> float:
+    """Return the sampled area of a rectangle zone or a ``TriangleZone``.
+
+    Returns:
+        Zone area in square map units.
+    """
+    p1, p2, p3 = zone
+    if isinstance(zone, TriangleZone):
+        cross = (p1[0] - p2[0]) * (p3[1] - p2[1]) - (p1[1] - p2[1]) * (p3[0] - p2[0])
+        return 0.5 * abs(cross)
+    return dist(p1, p2) * dist(p2, p3)
+
+
 @dataclass
 class ZonePointsGenerator:
     """
@@ -306,7 +326,7 @@ class ZonePointsGenerator:
         measuring distances between consecutive vertices. Normalizes areas to
         create probability weights for area-proportional zone selection.
         """
-        self.zone_areas = [dist(p1, p2) * dist(p2, p3) for p1, p2, p3 in self.zones]
+        self.zone_areas = [_zone_area(zone) for zone in self.zones]
 
         # Sum the areas to use for normalizing probabilities
         total_area = sum(self.zone_areas)
@@ -595,6 +615,8 @@ def populate_crowded_zones(
     config: PedSpawnConfig,
     crowded_zones: list[Zone],
     obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
+    *,
+    goal_obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
 ) -> tuple[PedState, list[PedGrouping], ZoneAssignments]:
     """Spawn pedestrian groups within crowded zones (open areas).
 
@@ -608,6 +630,9 @@ def populate_crowded_zones(
         crowded_zones: List of Zone geometries where pedestrians spawn.
         obstacle_polygons: Optional obstacle geometries to avoid during spawning.
             Can be raw coordinate lists or Shapely PreparedGeometry objects.
+        goal_obstacle_polygons: Optional obstacle geometries for the group goal. Defaults
+            to ``obstacle_polygons``; callers that inflate spawn obstacles by the
+            pedestrian radius pass the uninflated obstacles here.
 
     Returns:
         Tuple of (pedestrian_states, groups, zone_assignments):
@@ -637,7 +662,13 @@ def populate_crowded_zones(
         # spawn all group members in the same randomly sampled zone and also
         # keep them within that zone by picking the group's goal accordingly
         spawn_points, zone_id = proportional_spawn_gen.generate(num_peds_in_group)
-        group_goal = sample_zone(crowded_zones[zone_id], 1, obstacle_polygons=obstacle_polygons)[0]
+        group_goal = sample_zone(
+            crowded_zones[zone_id],
+            1,
+            obstacle_polygons=(
+                obstacle_polygons if goal_obstacle_polygons is None else goal_obstacle_polygons
+            ),
+        )[0]
 
         centroid = np.mean(spawn_points, axis=0)
         rot = atan2(group_goal[1] - centroid[1], group_goal[0] - centroid[0])
@@ -852,8 +883,8 @@ def _synthetic_crowd_zones(
             f"{map_bounds!r} have no interior after applying ped_radius={ped_radius}"
         )
     return [
-        ((x_min, y_min), (x_max, y_min), (x_max, y_max)),
-        ((x_min, y_min), (x_max, y_max), (x_min, y_max)),
+        TriangleZone(((x_min, y_min), (x_max, y_min), (x_max, y_max))),
+        TriangleZone(((x_min, y_min), (x_max, y_max), (x_min, y_max))),
     ]
 
 
@@ -1085,6 +1116,7 @@ class _BackgroundPopulation:
     initial_sections: list[int]
     behavior_zones: list[Zone]
     scatter_exclusions: list[PreparedGeometry] | None
+    """Obstacles the crowd behavior avoids when it re-samples goals during the episode."""
     scatter_rng: np.random.Generator | None
     synthesized: bool
 
@@ -1152,6 +1184,23 @@ def _synthesize_background_population(  # noqa: PLR0913
     )
 
 
+def _footprint_obstacles(
+    prepared_obstacles: list[PreparedGeometry],
+    ped_radius: float,
+) -> list[PreparedGeometry]:
+    """Inflate obstacles by the pedestrian radius so spawn checks cover the footprint.
+
+    A spawn centre outside these polygons keeps the whole pedestrian disk off the wall,
+    matching the radius-aware synthesized-background path (``_scatter_exclusions``).
+
+    Returns:
+        Prepared obstacle geometries buffered by ``ped_radius`` (unchanged when it is 0).
+    """
+    if ped_radius <= 0.0:
+        return list(prepared_obstacles)
+    return [prep(obstacle.context.buffer(ped_radius)) for obstacle in prepared_obstacles]
+
+
 def _spawn_zoned_background_population(
     crowd_spawn_config: PedSpawnConfig,
     route_spawn_config: PedSpawnConfig,
@@ -1159,22 +1208,31 @@ def _spawn_zoned_background_population(
     ped_routes: list[GlobalRoute],
     prepared_obstacles: list[PreparedGeometry],
     *,
+    spawn_obstacles: list[PreparedGeometry] | None = None,
     capture: SpawnSamplerCapture | None = None,
 ) -> _BackgroundPopulation:
     """Spawn background pedestrians from map-defined crowded zones and routes.
 
+    Spawn positions avoid ``spawn_obstacles`` (the obstacles inflated by the pedestrian
+    radius, so the footprint stays clear); goals avoid the uninflated
+    ``prepared_obstacles``. The crowd behavior keeps ``prepared_obstacles`` so goals
+    re-sampled during the episode stay out of walls as well.
+
     Returns:
         Background population drawn from the map's crowded zones and routes.
     """
+    if spawn_obstacles is None:
+        spawn_obstacles = prepared_obstacles
     crowd_ped_states_np, crowd_groups, zone_assignments = populate_crowded_zones(
         crowd_spawn_config,
         ped_crowded_zones,
-        obstacle_polygons=prepared_obstacles,
+        obstacle_polygons=spawn_obstacles,
+        goal_obstacle_polygons=prepared_obstacles,
     )
     route_ped_states_np, route_groups, route_assignments, initial_sections = populate_ped_routes(
         route_spawn_config,
         ped_routes,
-        obstacle_polygons=prepared_obstacles,
+        obstacle_polygons=spawn_obstacles,
         capture=capture,
     )
     return _BackgroundPopulation(
@@ -1186,7 +1244,7 @@ def _spawn_zoned_background_population(
         route_assignments=route_assignments,
         initial_sections=initial_sections,
         behavior_zones=ped_crowded_zones,
-        scatter_exclusions=None,
+        scatter_exclusions=list(prepared_obstacles),
         scatter_rng=None,
         synthesized=False,
     )
@@ -1266,6 +1324,9 @@ def _create_groups_and_behaviors(
     spawn_config: PedSpawnConfig,
 ) -> tuple[PedestrianGroupings, list[PedestrianBehavior]]:
     """Build pedestrian groupings and the crowded-zone/route behavior controllers.
+
+    ``prepared_obstacles`` are the spawn obstacles for route-start respawns (already
+    inflated by the pedestrian radius in ``populate_simulation``).
 
     Returns:
         Combined group memberships plus crowd and route behavior controllers.
@@ -1372,6 +1433,7 @@ def populate_simulation(  # noqa: PLR0913
     """
     # fmt: off
     prepared_obstacles = prepare_obstacle_polygons(obstacle_polygons or [])
+    spawn_obstacles = _footprint_obstacles(prepared_obstacles, ped_radius)
     single_pedestrians = single_pedestrians or []
     crowd_spawn_config, route_spawn_config, apply_archetypes_to_forced_population = (
         _spawn_configs_for_forced_population(
@@ -1390,7 +1452,7 @@ def populate_simulation(  # noqa: PLR0913
     else:
         background = _spawn_zoned_background_population(
             crowd_spawn_config, route_spawn_config, ped_crowded_zones, ped_routes,
-            prepared_obstacles, capture=sampler_capture,
+            prepared_obstacles, spawn_obstacles=spawn_obstacles, capture=sampler_capture,
         )
     ped_states, route_offset, single_offset = _merge_pedestrian_states(
         background, single_pedestrians, spawn_config, tau,
@@ -1401,7 +1463,7 @@ def populate_simulation(  # noqa: PLR0913
     )
     groups, ped_behaviors = _create_groups_and_behaviors(
         pysf_state, crowd_pysf_state, route_pysf_state, background, route_offset,
-        prepared_obstacles, spawn_config,
+        spawn_obstacles, spawn_config,
     )
     if single_pedestrians:
         _attach_single_pedestrian_behavior(

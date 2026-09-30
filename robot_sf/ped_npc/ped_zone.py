@@ -9,6 +9,8 @@ from shapely.geometry import Point as _ShapelyPoint
 from shapely.geometry import Polygon as _ShapelyPolygon
 from shapely.prepared import PreparedGeometry, prep
 
+from robot_sf.common.types import TriangleZone
+
 if TYPE_CHECKING:
     from robot_sf.common.types import Vec2D, Zone
 
@@ -23,10 +25,17 @@ def sample_zone(
     exclusions: list[PreparedGeometry] | None = None,
 ) -> list[Vec2D]:
     """
-    Generate random sample points within a triangular zone, avoiding obstacles when provided.
+    Generate uniform random points within a zone, avoiding obstacles when provided.
+
+    A plain three-corner zone encodes a rectangle (``A`` top-left, ``B`` top-right,
+    ``C`` bottom-right; the fourth corner is ``A + C - B``) and is sampled uniformly
+    over the full rectangle. A :class:`~robot_sf.common.types.TriangleZone` is sampled
+    uniformly over its triangle. Both shapes consume the same two uniform draws per
+    candidate, so a rectangle candidate whose draws fall in the triangle half is
+    identical to the pre-fix triangle-folded sample.
 
     Args:
-        zone: Triangle zone vertices.
+        zone: Rectangle zone corners, or a ``TriangleZone``.
         num_samples: Number of points to sample.
         obstacle_polygons: Optional list of polygon vertex lists to reject points inside.
         max_attempts_per_point: Attempts before giving up per requested sample.
@@ -42,6 +51,7 @@ def sample_zone(
     """
     prepared_polygons = prepare_obstacle_polygons(obstacle_polygons or [])
     rng_local = np.random if rng is None else rng
+    triangular = isinstance(zone, TriangleZone)
     a, b, c = zone
     a, b, c = np.array(a), np.array(b), np.array(c)
     vec_ba, vec_bc = a - b, c - b
@@ -56,9 +66,10 @@ def sample_zone(
         current_batch = max(batch_size, remaining)
         rel_width = rng_local.uniform(0, 1, current_batch)
         rel_height = rng_local.uniform(0, 1, current_batch)
-        fold_mask = rel_width + rel_height > 1.0
-        rel_width[fold_mask] = 1.0 - rel_width[fold_mask]
-        rel_height[fold_mask] = 1.0 - rel_height[fold_mask]
+        if triangular:
+            fold_mask = rel_width + rel_height > 1.0
+            rel_width[fold_mask] = 1.0 - rel_width[fold_mask]
+            rel_height[fold_mask] = 1.0 - rel_height[fold_mask]
         points = b + rel_width[:, None] * vec_ba + rel_height[:, None] * vec_bc
         candidates = [(float(x), float(y)) for x, y in points]
         attempts += current_batch

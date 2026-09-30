@@ -61,15 +61,15 @@ from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.sim.simulator import init_simulators
 
 # A genuine production fixture: the robot drives into a doorway crossing; the
-# forward-acceleration baseline contacts after 39 applied ticks, while native
+# forward-acceleration baseline contacts after 33 applied ticks, while native
 # braking clears it. The explicit global seed controls spawn-zone sampling.
 _FIXTURE_MAP = Path(__file__).resolve().parents[2] / "maps/svg_maps/classic_doorway.svg"
 _FIXTURE_DENSITY = [0.06]
-_FIXTURE_SEED = 21
-_FIXTURE_GLOBAL_SEED = 25
+_FIXTURE_SEED = 1007
+_FIXTURE_GLOBAL_SEED = 1007
 _DENSE_GLOBAL_SEED = 26
 _FIXTURE_SPEED = 1.0
-_FIXTURE_CONTACT_STEP = 39
+_FIXTURE_CONTACT_STEP = 33
 _COLLISION_RADIUS = 0.5
 
 
@@ -252,8 +252,11 @@ def test_restore_resynchronizes_backend_groups_and_branch_outcomes() -> None:
     # behavior step, leaving the public and backend groupings on a branch.
     sim.groups.add_to_group(0, 1)
     sim.pysf_sim.peds.groups = sim.groups.groups_as_lists
-    assert sim.groups.groups_as_lists[:2] == [[1], [0, 2]]
-    assert sim.pysf_sim.peds.groups[:2] == [[1], [0, 2]]
+    branched_groups = sim.groups.groups_as_lists
+    assert branched_groups != expected_groups
+    assert 0 in branched_groups[1]
+    assert not any(0 in group for group in branched_groups[:1])
+    assert sim.pysf_sim.peds.groups == branched_groups
 
     first_forces, first_state, first_collision = run_branch()
     second_forces, second_state, second_collision = run_branch()

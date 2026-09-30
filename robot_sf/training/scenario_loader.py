@@ -1298,8 +1298,15 @@ def _rebase_scenario_paths(
 ) -> Mapping[str, Any]:
     """Rewrite relative map paths to be relative to the root scenario file.
 
+    A relative ``map_file`` in an included manifest resolves beside that manifest first.
+    When a different file with the same relative path also exists beside the root
+    manifest, the reference is ambiguous and rejected instead of silently picking one.
+
     Returns:
         Mapping[str, Any]: Scenario entry with rebased paths when applicable.
+
+    Raises:
+        ValueError: If an included scenario's relative map path names two different files.
     """
     search_root = root if root.is_dir() else root.parent
     map_id = scenario.get("map_id")
@@ -1322,15 +1329,22 @@ def _rebase_scenario_paths(
     if candidate.is_absolute():
         return _rebase_route_override_path(scenario, source=source)
     probe = (search_root / candidate).resolve()
-    if probe.exists():
-        return _rebase_route_override_path(scenario, source=source)
     if source.parent != search_root:
         abs_target = (source.parent / candidate).resolve()
         if abs_target.exists():
+            if probe.exists() and probe != abs_target:
+                raise ValueError(
+                    f"Scenario {scenario.get('name')!r} in {source}: map_file {map_file!r} is "
+                    f"ambiguous; it exists beside the including manifest ({abs_target}) and "
+                    f"beside the root manifest ({probe}). Rename one file or use a path that "
+                    "names only one of them."
+                )
             rel = os.path.relpath(abs_target, search_root)
             updated = dict(scenario)
             updated["map_file"] = Path(rel).as_posix()
             return _rebase_route_override_path(updated, source=source)
+    if probe.exists():
+        return _rebase_route_override_path(scenario, source=source)
     resolved = _resolve_map_with_search_paths(
         map_file,
         map_search_paths=map_search_paths,

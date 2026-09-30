@@ -149,6 +149,7 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             tuple[float, float]: Linear and angular velocity command.
         """
+        time_step = self._simulation_timestep(observation)
         dist_to_goal = self._distance_to_goal(observation)
         if dist_to_goal <= self.config.goal_tolerance:
             return 0.0, 0.0
@@ -164,16 +165,6 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
         raw_action = model.actions[action_idx]
         linear = float(pref_speed * raw_action[0])
         delta_heading = float(raw_action[1])
-
-        time_step = float(
-            np.asarray(observation.get("sim", {}).get("timestep", [0.1]), dtype=float)[0]
-        )
-        if time_step <= 1e-6:
-            logger.warning(
-                "Invalid timestep ({}) for SACADRLPlannerAdapter; defaulting to 0.1s.",
-                time_step,
-            )
-            time_step = 0.1
 
         angular = float(delta_heading / time_step)
         linear = float(np.clip(linear, 0.0, self.config.max_linear_speed))

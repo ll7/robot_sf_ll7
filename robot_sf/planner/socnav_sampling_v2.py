@@ -51,7 +51,6 @@ from scipy.sparse.csgraph import dijkstra
 
 from robot_sf.common.math_utils import wrap_angle_pi_closed
 
-_DEFAULT_DT = 0.1
 _DEFAULT_DECEL = 1.0
 _STOPPED_SPEED = 0.1
 _ESCAPE_HEADINGS = 16
@@ -522,6 +521,7 @@ def plan_bounded_v2(adapter: Any, observation: dict) -> tuple[float, float]:  # 
     Returns:
         tuple[float, float]: Linear and angular velocity command.
     """
+    dt = adapter._simulation_timestep(observation)
     config = adapter.config
     robot_state, goal_state, ped_state = adapter._socnav_fields(observation)
     robot_pos = adapter._as_1d_float(robot_state["position"], pad=2)[:2]
@@ -536,8 +536,6 @@ def plan_bounded_v2(adapter: Any, observation: dict) -> tuple[float, float]:  # 
     limits = dict(getattr(adapter, "_sampling_drive_limits", {}) or {})
     robot_radius = _positive(robot_state.get("radius")) or limits.get("radius", 0.0)
     ped_radius = _positive(ped_state.get("radius") if ped_state else None) or 0.0
-    sim = observation.get("sim", {}) or {}
-    dt = _positive(sim.get("timestep") if isinstance(sim, dict) else None) or _DEFAULT_DT
     v_cap = min(float(config.max_linear_speed), limits.get("max_linear_speed", inf))
     decel = limits.get("max_linear_decel") or limits.get("max_linear_accel") or _DEFAULT_DECEL
     accel = limits.get("max_linear_accel") or _DEFAULT_DECEL

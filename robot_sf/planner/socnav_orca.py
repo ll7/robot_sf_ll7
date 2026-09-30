@@ -976,7 +976,13 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         robot_heading: float,
         observation: dict,
     ) -> tuple[float, float]:
-        """Convert a world-frame velocity vector into ``(v, w)`` with occupancy penalty.
+        """Convert world velocity to a forward-only differential-drive command.
+
+        Project speed onto the current forward axis: sideways/backward targets
+        command zero translation while turning. Occupancy and the optional
+        stronger heading slowdown can reduce this further. Acceleration limits
+        still govern braking in the environment; this is not ORCA feasibility
+        preservation for a nonholonomic robot.
 
         Returns:
             tuple[float, float]: Linear and angular velocity command.
@@ -1004,14 +1010,9 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         heading_scale = 1.0 - min(1.0, abs(heading_error) / (pi / 2)) * float(
             self.config.orca_heading_slowdown
         )
+        heading_scale = min(max(0.0, cos(heading_error)), max(0.0, heading_scale))
         linear = float(
-            np.clip(
-                speed,
-                0.0,
-                self.config.max_linear_speed
-                * max(0.0, 1.0 - occ_penalty)
-                * max(0.0, heading_scale),
-            )
+            min(speed, self.config.max_linear_speed) * max(0.0, 1.0 - occ_penalty) * heading_scale
         )
         self._record_adapter_trace(
             velocity_world=velocity_world,
@@ -1250,15 +1251,7 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
 
         preferred_velocity_world = self._ego_to_world(preferred_velocity_ego, robot_heading)
 
-        time_step = float(
-            np.asarray(observation.get("sim", {}).get("timestep", [0.1]), dtype=float)[0]
-        )
-        if time_step <= self._EPS:
-            logger.warning(
-                "Invalid timestep ({}) for ORCA planner; defaulting to 0.1s.",
-                time_step,
-            )
-            time_step = 0.1
+        time_step = self._simulation_timestep(observation)
 
         robot_radius = float(np.asarray(robot_state.get("radius", [0.3]), dtype=float)[0])
         robot_speed = float(np.asarray(robot_state.get("speed", [0.0]), dtype=float)[0])
@@ -1371,9 +1364,7 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         )
         preferred_velocity = self._world_to_ego_vec(preferred_velocity_world, robot_heading)
 
-        time_step = float(
-            np.asarray(observation.get("sim", {}).get("timestep", [0.1]), dtype=float)[0]
-        )
+        time_step = self._simulation_timestep(observation)
         robot_radius = float(np.asarray(robot_state.get("radius", [0.3]), dtype=float)[0])
 
         lines = self._build_orca_lines(
@@ -1842,11 +1833,7 @@ class HRVOPlannerAdapter(ORCAPlannerAdapter):
             dtype=float,
         )
         robot_radius = float(np.asarray(robot_state.get("radius", [0.3]), dtype=float)[0])
-        time_step = float(
-            np.asarray(observation.get("sim", {}).get("timestep", [0.1]), dtype=float)[0]
-        )
-        if time_step <= self._EPS:
-            time_step = 0.1
+        time_step = self._simulation_timestep(observation)
 
         ped_positions, ped_velocities, ped_count, ped_radius = self._extract_pedestrians(ped_state)
         if ped_count > 0:

@@ -70,3 +70,16 @@ on dev seeds and registered with exact source, checksums and W&B coordinates bef
 the matching model_id-only evaluation profiles can load them. No existing registry
 row is modified by the retraining changes. Slurm mechanics and admission packets are
 maintained in the private overlay; the orchestrator performs admission and submission.
+
+## Review fixes
+
+All four leaves load the checked-in `ppo_release_contract_dev_eval_seeds.yaml` through
+`evaluation.evaluation_seed_manifest`; the effective tuple is `(1003,)`. The loader
+consumes each evaluation key and rejects any leftovers, including the schema-recognized
+but unsupported inline `evaluation_seeds` field. Deprecated `frequency_episodes` is
+explicitly consumed with its existing warning; checkpoint cadence remains `step_schedule`. Disabled legacy policy-analysis switches
+are consumed explicitly; enabling these unimplemented features is rejected.
+The regression checks the resolved tuple and per-episode seed selection, plus rejection
+of the previously silently ignored key. Real transition tests compare nonzero float32
+`robot_speed` observations against independent state values before and after stepping.
+The inherited tracking recipe is unchanged; TensorBoard is required only when enabled.

@@ -14,6 +14,7 @@ from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.training.train_ppo import (
     _apply_env_overrides,
+    _deterministic_eval_seed_for_episode,
     _make_training_env,
     load_expert_training_config,
 )
@@ -80,7 +81,12 @@ def test_training_release_applied_command_parity(leaf):
         ]:
             training.simulator.robots[0].state.velocity = state
             evaluation.simulator.robots[0].state.velocity = state
+            training.state.sensors.reset_cache()
             evaluation.state.sensors.reset_cache()
+            train_speed = training.state.sensors.next_obs()["robot_speed"]
+            eval_speed = evaluation.state.sensors.next_obs()["robot_speed"]
+            np.testing.assert_array_equal(train_speed, np.asarray(state, dtype=np.float32))
+            np.testing.assert_array_equal(train_speed, eval_speed)
             observed_state = evaluation.state.sensors.next_obs()
             observed_speed = planner._current_unicycle_speed(observed_state)
             command = planner._action_vec_to_dict_from_array(np.array(output), observed_speed)
@@ -93,8 +99,9 @@ def test_training_release_applied_command_parity(leaf):
                     meta={},
                 ),
             )
-            training.step(np.array(output))
-            evaluation.step(accel)
+            train_after, *_ = training.step(np.array(output))
+            eval_after, *_ = evaluation.step(accel)
+            np.testing.assert_array_equal(train_after["robot_speed"], eval_after["robot_speed"])
             target = np.clip(
                 np.array(state, dtype=np.float32).astype(float) + output, [0, -1], [2, 1]
             )
@@ -110,7 +117,67 @@ def test_training_release_applied_command_parity(leaf):
             np.testing.assert_allclose(
                 training.simulator.robots[0].current_speed, expected, atol=1e-12
             )
+            np.testing.assert_array_equal(
+                train_after["robot_speed"], np.asarray(expected, dtype=np.float32)
+            )
     finally:
         training.close()
         evaluation.close()
         planner.close()
+
+
+@pytest.mark.parametrize("leaf", LEAVES)
+def test_release_contract_effective_development_eval_seeds(leaf):
+    """Selection uses the same explicit dev seed rather than the training seed fallback."""
+    recipe = load_expert_training_config(Path(leaf))
+    assert recipe.evaluation.evaluation_seeds == (1003,)
+    assert tuple(
+        _deterministic_eval_seed_for_episode(recipe, episode_idx=i, scenario_cycle_length=1)
+        for i in range(3)
+    ) == (1003, 1003, 1003)
+
+
+def test_loader_rejects_schema_valid_unconsumed_evaluation_key(tmp_path):
+    """The shared schema permits dataclass fields the YAML loader must not silently drop."""
+    leaf = Path(LEAVES[0]).resolve()
+    config = tmp_path / "ignored-evaluation-key.yaml"
+    config.write_text(
+        yaml.safe_dump(
+            {
+                "base_config": str(leaf),
+                "evaluation": {
+                    "evaluation_seeds": [1003],
+                    "evaluation_seed_manifest": str(
+                        Path(
+                            "configs/training/ppo/ppo_release_contract_dev_eval_seeds.yaml"
+                        ).resolve()
+                    ),
+                },
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="Unconsumed evaluation keys: evaluation_seeds"):
+        load_expert_training_config(config)
+
+
+@pytest.mark.parametrize("key", ["full_policy_analysis_on_new_best", "full_policy_analysis_videos"])
+def test_loader_rejects_enabled_unimplemented_evaluation_feature(tmp_path, key):
+    """Disabled legacy switches are accepted; enabling their absent behavior is refused."""
+    config = tmp_path / "unsupported-evaluation-feature.yaml"
+    config.write_text(
+        yaml.safe_dump(
+            {
+                "base_config": str(Path(LEAVES[0]).resolve()),
+                "evaluation": {
+                    key: True,
+                    "evaluation_seed_manifest": str(
+                        Path(
+                            "configs/training/ppo/ppo_release_contract_dev_eval_seeds.yaml"
+                        ).resolve()
+                    ),
+                },
+            }
+        )
+    )
+    with pytest.raises(ValueError, match=f"Unsupported evaluation feature: {key}"):
+        load_expert_training_config(config)

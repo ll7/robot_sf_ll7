@@ -189,7 +189,8 @@ def relocate_overlapping_pedestrians(
     pedestrians with margin, other robots, or a wall between the old and new
     position), paired rotated rays and slightly larger radii are tried. Clear
     candidates in each pair are ranked by geometric clearance, without preferring
-    a handed direction. Route-following pedestrians prefer a clear candidate whose
+    a handed direction. Route-following pairs preserve the original goal heading,
+    and route-following pedestrians prefer a clear candidate whose
     route velocity does not close on a robot. No random numbers are drawn, so the
     global RNG stream and every non-overlapping spawn stay unchanged.
 
@@ -249,6 +250,7 @@ def relocate_overlapping_pedestrians(
                 [point for other, point in enumerate(positions) if other != row],
                 robots,
                 ped_radius,
+                route=(positions[row], route_goals[row]) if route_goals is not None else None,
             )
         ]
         # Prefer a non-closing route heading. A goal inside a robot footprint
@@ -319,11 +321,16 @@ def _rank_relocation_pair(
     neighbors: Sequence[Vec2D],
     robots: Sequence[tuple[Vec2D, float]],
     ped_radius: float,
+    *,
+    route: tuple[Vec2D, Vec2D] | None = None,
 ) -> list[Vec2D]:
     """Rank a clear pair by distances that commute with mirrors and rotations.
 
-    Prefer the largest minimum surface clearance, then the sorted clearances to
-    every feature. Nanometre rounding prevents floating point noise from choosing
+    For route followers, first preserve the intended heading toward their goal:
+    prefer the smaller change from the original heading. Then prefer the largest
+    minimum surface clearance and the sorted clearances to every feature. All
+    scores use only dot products and distances, so transforming the whole scene
+    transforms the chosen candidate. Nanometre rounding prevents noise from choosing
     a handed side. If the geometry cannot distinguish a pair, skip it: choosing
     either side in an exactly symmetric scene would break reflection symmetry.
 
@@ -341,7 +348,18 @@ def _rank_relocation_pair(
             dist(candidate, robot_xy) - radius - ped_radius for robot_xy, radius in robots
         )
         ordered = sorted(round(clearance, 9) for clearance in clearances)
-        return tuple(ordered)
+        if route is None:
+            return tuple(ordered)
+        start, goal = route
+        original = (goal[0] - start[0], goal[1] - start[1])
+        redirected = (goal[0] - candidate[0], goal[1] - candidate[1])
+        length = hypot(*original) * hypot(*redirected)
+        alignment = (
+            (original[0] * redirected[0] + original[1] * redirected[1]) / length
+            if length > 1e-12
+            else 1.0
+        )
+        return (round(alignment, 9), *ordered)
 
     ranked = sorted(((score(candidate), candidate) for candidate in candidates), reverse=True)
     if ranked[0][0] == ranked[1][0]:

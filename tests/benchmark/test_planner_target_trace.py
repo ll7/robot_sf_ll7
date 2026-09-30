@@ -35,15 +35,51 @@ def _obs(robot: tuple[float, float], current: tuple[float, float], nxt: tuple[fl
     }
 
 
-def _historical_selector(robot: np.ndarray, current: np.ndarray, nxt: np.ndarray) -> np.ndarray:
-    """Reproduce the pre-fix selector (#9883): prefer goal.next unless it coincides with the robot."""
-    return nxt if np.linalg.norm(nxt - robot) > 1e-6 else current
-
-
 def test_historical_selector_yields_goal_next_for_sentinel_next() -> None:
-    """Robot (5,5), current (8,5), next (0,0): the historical selector returns goal.next."""
-    robot, current, nxt = np.array([5.0, 5.0]), np.array([8.0, 5.0]), np.array([0.0, 0.0])
-    assert np.array_equal(_historical_selector(robot, current, nxt), nxt)
+    """The real configured episode publishes the historical sentinel target.
+
+    Geometry is independently specified: robot (5,5), current (8,5), next (0,0).
+    This PR observes the existing selector; it does not correct its origin targeting.
+    """
+    from copy import deepcopy
+    from pathlib import Path
+
+    from robot_sf.benchmark.map_runner.map_runner import _build_policy, _run_map_episode
+    from robot_sf.training.scenario_loader import load_scenarios
+
+    path = Path("configs/scenarios/canary_corridor.yaml")
+    scenario = load_scenarios(path)[0]
+
+    def configured_policy(algo, config, **kwargs):
+        policy, metadata = _build_policy(algo, config, **kwargs)
+
+        def sentinel_observation(observation):
+            observed = deepcopy(observation)
+            observed.update(_obs((5.0, 5.0), (8.0, 5.0), (0.0, 0.0)))
+            return policy(observed)
+
+        sentinel_observation._planner_stats = policy._planner_stats
+        return sentinel_observation, metadata
+
+    row = _run_map_episode(
+        scenario,
+        1001,
+        horizon=1,
+        dt=0.1,
+        record_forces=False,
+        snqi_weights=None,
+        snqi_baseline=None,
+        algo="risk_dwa",
+        algo_config_path="configs/algos/risk_dwa_camera_ready.yaml",
+        scenario_path=path,
+        record_simulation_step_trace=True,
+        policy_builder=configured_policy,
+    )
+    steps = row["algorithm_metadata"]["simulation_step_trace"]["steps"]
+    assert len(steps) == 1
+    assert steps[0]["planner"]["planner_target_xy"] == [0.0, 0.0], (
+        "missing or incorrect live planner target telemetry"
+    )
 
 
 def test_risk_dwa_records_selector_output() -> None:
@@ -99,13 +135,12 @@ def test_step_trace_field_present_for_risk_dwa_and_null_for_goal() -> None:
     """A real episode writes planner_target_xy per step: a pair for risk_dwa, null for goal."""
     from pathlib import Path
 
-    import yaml
-
     from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
 
     path = Path("configs/scenarios/canary_corridor.yaml")
-    scenario = yaml.safe_load(path.read_text())["scenarios"][0]
-    scenario["map_file"] = str(Path("maps/svg_maps/atomic_corridor_test.svg").resolve())
+    from robot_sf.training.scenario_loader import load_scenarios
+
+    scenario = load_scenarios(path)[0]
     found: dict[str, list[Any]] = {}
     for algo in ("risk_dwa", "goal"):
         row = _run_map_episode(

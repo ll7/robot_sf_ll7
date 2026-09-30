@@ -27,6 +27,7 @@ from robot_sf.benchmark.step_trace_invariants import (
     INVARIANTS,
     Tolerances,
     check_episode,
+    invariant_coverage,
     summarize,
     to_markdown,
 )
@@ -60,6 +61,7 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
     overrides = json.loads(args.limits_json) if args.limits_json else None
     holdout = set(range(111, 141))
     results = []
+    coverage = []
     seen_holdout = 0
     files = list(_iter_files(args.paths))
     for path in files:
@@ -67,11 +69,29 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
             for line in fh:
                 if not line.strip():
                     continue
-                row = json.loads(line)
+                try:
+                    row = json.loads(line)
+                    if not isinstance(row, dict):
+                        raise TypeError("episode row must be an object")
+                    eligibility = invariant_coverage(row, args.invariants, tol)
+                    viols, has_trace = check_episode(
+                        row, tol=tol, overrides=overrides, enabled=args.invariants
+                    )
+                except (ValueError, TypeError, KeyError, AttributeError, OverflowError) as error:
+                    row = {"episode_id": f"{path.name}:invalid-row-{len(results) + 1}"}
+                    eligibility = {
+                        name: {
+                            "eligible": False,
+                            "checked_steps": 0,
+                            "issues": [f"invalid_row:{type(error).__name__}"],
+                        }
+                        for name in args.invariants
+                    }
+                    viols, has_trace = [], False
                 if isinstance(row.get("seed"), int) and row["seed"] in holdout:
                     seen_holdout += 1  # existing published rows may be read; only counted
-                viols, has_trace = check_episode(
-                    row, tol=tol, overrides=overrides, enabled=args.invariants
+                coverage.append(
+                    {"episode_id": str(row.get("episode_id", "?")), "invariants": eligibility}
                 )
                 results.append(
                     (
@@ -83,7 +103,14 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
                     )
                 )
     summary = summarize(results, args.max_examples)
+    summary["coverage"] = coverage
+    coverage_complete = (
+        bool(results)
+        and bool(args.invariants)
+        and all(c["eligible"] for r in coverage for c in r["invariants"].values())
+    )
     summary["meta"] = {
+        "coverage_complete": coverage_complete,
         "files": [str(f) for f in files],
         "episodes": len(results),
         "episodes_with_trace": sum(1 for r in results if r[4]),
@@ -117,13 +144,20 @@ def main(argv: list[str] | None = None) -> int:
     summary = _run(args)
     if args.out_json:
         Path(args.out_json).write_text(json.dumps(summary, indent=2, default=str) + "\n")
-    md = to_markdown(summary, {k: summary["meta"][k] for k in ("episodes", "episodes_with_trace")})
+    md = to_markdown(
+        summary,
+        {k: summary["meta"][k] for k in ("episodes", "episodes_with_trace", "coverage_complete")},
+    )
     if args.out_md:
         Path(args.out_md).write_text(md)
     else:
         sys.stdout.write(md)
     any_violation = any(t["flagged"][i] for t in summary["arms"].values() for i in INVARIANTS)
-    return 1 if args.fail_on_violation and any_violation else 0
+    return (
+        1
+        if args.fail_on_violation and (any_violation or not summary["meta"]["coverage_complete"])
+        else 0
+    )
 
 
 if __name__ == "__main__":

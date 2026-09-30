@@ -19,6 +19,9 @@ from pathlib import Path
 
 from robot_sf.benchmark.classic_interactions_loader import load_classic_matrix
 from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
+from robot_sf.scenario_certification.feasibility_diagnostics import make_actor_free_scenario
+from robot_sf.scenario_certification.v1 import scenario_actor_source_census
+from robot_sf.training.scenario_loader import build_robot_config_from_scenario
 
 HOLDOUT = range(111, 141)
 
@@ -62,10 +65,23 @@ def main() -> int:
         for sc in scen:
             sc = copy.deepcopy(sc)
             if a.empty_world:
-                sim = dict(sc.get("simulation_config") or {})
-                sim["ped_density"] = 0.0
-                sc["simulation_config"] = sim
-                sc["single_pedestrians"] = []
+                sc = make_actor_free_scenario(sc)
+                metadata = dict(sc.get("metadata") or {})
+                if metadata.get("behavior") in {
+                    "wait",
+                    "join",
+                    "leave",
+                    "follow",
+                    "lead",
+                    "accompany",
+                }:
+                    metadata["empty_world_original_behavior"] = metadata["behavior"]
+                    metadata["behavior"] = "none"
+                    sc["metadata"] = metadata
+                config = build_robot_config_from_scenario(sc, scenario_path=Path(a.matrix))
+                census = scenario_actor_source_census(config)
+                if census["verified_empty"] is not True:
+                    raise RuntimeError(f"empty-world actor census failed: {census}")
             for seed in a.seeds:
                 rec = _run_map_episode(
                     sc,

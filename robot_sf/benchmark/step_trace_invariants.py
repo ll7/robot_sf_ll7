@@ -97,6 +97,8 @@ class Violation:
 
 
 def _num(value: Any) -> float | None:
+    if type(value) is bool or not isinstance(value, (int, float)):
+        return None
     try:
         out = float(value)
     except (TypeError, ValueError):
@@ -152,7 +154,137 @@ def resolve_limits(row: dict[str, Any], overrides: dict[str, float] | None = Non
 def _trace_of(row: dict[str, Any]) -> dict[str, Any] | None:
     meta = row.get("algorithm_metadata")
     trace = meta.get("simulation_step_trace") if isinstance(meta, dict) else None
-    return trace if isinstance(trace, dict) and trace.get("steps") else None
+    if (
+        not isinstance(trace, dict)
+        or not isinstance(trace.get("steps"), list)
+        or not trace["steps"]
+    ):
+        return None
+    reset = trace.get("reset", {})
+    if not isinstance(reset, dict) or not isinstance(reset.get("robot", {}), dict):
+        return None
+    if any(not _safe_step(step) for step in trace["steps"]):
+        return None
+    return trace
+
+
+def _finite_pair(value: Any) -> bool:
+    """Validate a two-component finite vector.
+
+    Returns:
+        True for finite numeric pairs.
+    """
+    return isinstance(value, list) and len(value) == 2 and all(_num(v) is not None for v in value)
+
+
+def _safe_step(step: Any) -> bool:
+    """Check container shapes before running numeric diagnostics.
+
+    Returns:
+        Whether a step is safe for the legacy numeric readers.
+    """
+    return (
+        isinstance(step, dict)
+        and isinstance(step.get("robot", {}), dict)
+        and isinstance(step.get("pedestrians", []), list)
+        and all(isinstance(p, dict) for p in step.get("pedestrians", []))
+    )
+
+
+def invariant_coverage(  # noqa: C901, PLR0912
+    row: dict[str, Any], enabled: Iterable[str] = INVARIANTS, tol: Tolerances | None = None
+) -> dict[str, Any]:
+    """Establish eligibility independently for each invariant.
+
+    Returns:
+        Per-invariant eligibility, checked step counts and unavailable reasons.
+        Missing reset rates explicitly leave initial acceleration unverified.
+    """
+    tol = tol or Tolerances()
+    trace = _trace_of(row)
+    issues = {name: [] for name in enabled}
+
+    def add(names: Iterable[str], reason: str) -> None:
+        for name in names:
+            if name in issues:
+                issues[name].append(reason)
+
+    if trace is None:
+        add(issues, "missing_or_malformed_trace")
+        return {
+            name: {"eligible": False, "checked_steps": 0, "issues": reasons}
+            for name, reasons in issues.items()
+        }
+    steps = trace["steps"]
+    if trace.get("schema_version") != "simulation-step-trace.v1":
+        add(issues, "unsupported_trace_schema")
+    dt = _num(trace.get("dt"))
+    if dt is None or dt <= 0:
+        add(("b_drive_limits", "d_position_jump"), "invalid_dt")
+    if _num(row.get("steps")) != len(steps):
+        add(issues, "trace_step_count_mismatch")
+    reset = trace.get("reset")
+    robot = reset.get("robot") if isinstance(reset, dict) else None
+    if (
+        not isinstance(robot, dict)
+        or not _finite_pair(robot.get("position"))
+        or _num(robot.get("heading")) is None
+    ):
+        add(("b_drive_limits", "d_position_jump"), "missing_finite_reset_pose")
+    if not isinstance(robot, dict) or not _finite_pair(robot.get("velocity")):
+        add(("b_drive_limits",), "initial_linear_acceleration_unavailable")
+    if not isinstance(robot, dict) or _num(robot.get("angular_velocity")) is None:
+        add(("b_drive_limits",), "initial_angular_acceleration_unavailable")
+    if len(steps) <= tol.window_steps + tol.leg_settle_steps:
+        add(("a_goal_heading",), "no_heading_window")
+    for k, step in enumerate(steps):
+        if not _finite_pair(step.get("robot", {}).get("position")):
+            add(issues, f"step_{k}:invalid_position")
+        if _num(step.get("robot", {}).get("heading")) is None:
+            add(("b_drive_limits",), f"step_{k}:invalid_heading")
+        goal = step.get("goal")
+        if (
+            not isinstance(goal, dict)
+            or _goal_xy(step, "current") is None
+            or "next" not in goal
+            or (goal["next"] is not None and _goal_xy(step, "next") is None)
+        ):
+            add(("a_goal_heading", "e_termination"), f"step_{k}:invalid_goal")
+        collision = step.get("collision")
+        if not isinstance(collision, dict) or any(
+            type(collision.get(key)) is not bool for key in ("pedestrian", "obstacle", "robot")
+        ):
+            add(("c_clearance_contact", "e_termination"), f"step_{k}:invalid_collision_flags")
+        if "pedestrians" not in step:
+            add(("c_clearance_contact",), f"step_{k}:missing_pedestrians")
+        for ped in step.get("pedestrians", []):
+            if (
+                not _finite_pair(ped.get("position"))
+                or _num(ped.get("surface_clearance_m")) is None
+            ):
+                add(("c_clearance_contact",), f"step_{k}:invalid_pedestrian_geometry")
+    outcome = row.get("outcome")
+    if not isinstance(outcome, dict) or any(
+        type(outcome.get(key)) is not bool
+        for key in ("route_complete", "collision_event", "timeout_event")
+    ):
+        add(("e_termination",), "missing_outcome_flags")
+    limits = resolve_limits(row)
+    if any(
+        _num(value) is None or value <= 0
+        for value in (limits.robot_radius, limits.ped_radius, limits.goal_radius)
+    ):
+        add(issues, "invalid_radii")
+    if limits.max_linear_speed is None:
+        add(("b_drive_limits", "d_position_jump"), "unsupported_drive_type")
+    return {
+        name: {
+            "eligible": not reasons,
+            "checked_steps": len(steps) if not reasons else 0,
+            "issues": reasons,
+        }
+        for name, reasons in issues.items()
+    }
 
 
 def _steps_xy(trace: dict[str, Any]) -> list[tuple[float, float] | None]:
@@ -184,7 +316,7 @@ def check_goal_heading(  # noqa: C901
     """Flag sustained motion towards ``goal.next`` or the origin instead of ``goal.current``.
 
     Returns:
-        Violations, at most one per leg.
+        Violations, at most one per distinct alternative per leg.
     """
     steps = trace["steps"]
     pos = _steps_xy(trace)
@@ -204,57 +336,58 @@ def check_goal_heading(  # noqa: C901
         if cur is None:
             continue
         nxt = _goal_xy(steps[a], "next")
-        alt_name, alt = (
-            ("next", nxt) if nxt is not None and nxt != (0.0, 0.0) else ("origin", (0.0, 0.0))
-        )
-        if math.dist(cur, alt) < 1e-6:
-            continue
-        lo = a + tol.leg_settle_steps
-        flagged = 0
-        first_flag = None
-        for s in range(lo + w, b):
-            p0, p1 = pos[s - w], pos[s]
-            if p0 is None or p1 is None:
+        alternatives = [("origin", (0.0, 0.0))]
+        if nxt is not None and nxt != (0.0, 0.0):
+            alternatives.append(("next", nxt))
+        for alt_name, alt in alternatives:
+            if math.dist(cur, alt) < 1e-6:
                 continue
-            d = (p1[0] - p0[0], p1[1] - p0[1])
-            dn = math.hypot(*d)
-            if dn < tol.min_window_displacement:
-                continue
-            tc = (cur[0] - p0[0], cur[1] - p0[1])
-            ta = (alt[0] - p0[0], alt[1] - p0[1])
-            nc, na = math.hypot(*tc), math.hypot(*ta)
-            if nc < 1e-6 or na < 1e-6:
-                continue
-            cos_c = (d[0] * tc[0] + d[1] * tc[1]) / (dn * nc)
-            cos_a = (d[0] * ta[0] + d[1] * ta[1]) / (dn * na)
-            # distance to current must actually grow, and distance to the alternative shrink
-            grows = math.dist(p1, cur) > math.dist(p0, cur) + 0.25 * dn
-            shrinks = math.dist(p1, alt) < math.dist(p0, alt) - 0.25 * dn
-            if (
-                cos_c <= tol.max_cos_to_current
-                and cos_a >= tol.min_cos_to_alt
-                and grows
-                and shrinks
-            ):
-                flagged += 1
-                if first_flag is None:
-                    first_flag = s
-        if flagged >= tol.min_flagged_steps:
-            out.append(
-                Violation(
-                    "a_goal_heading",
-                    f"towards_{alt_name}_not_current",
-                    episode_id,
-                    first_flag,
-                    b - 1,
-                    {
-                        "leg": leg_idx,
-                        "flagged_window_ends": flagged,
-                        "current": list(cur),
-                        "alt": list(alt),
-                    },
+            lo = a + tol.leg_settle_steps
+            flagged = 0
+            first_flag = None
+            for s in range(lo + w, b):
+                p0, p1 = pos[s - w], pos[s]
+                if p0 is None or p1 is None:
+                    continue
+                d = (p1[0] - p0[0], p1[1] - p0[1])
+                dn = math.hypot(*d)
+                if dn < tol.min_window_displacement:
+                    continue
+                tc = (cur[0] - p0[0], cur[1] - p0[1])
+                ta = (alt[0] - p0[0], alt[1] - p0[1])
+                nc, na = math.hypot(*tc), math.hypot(*ta)
+                if nc < 1e-6 or na < 1e-6:
+                    continue
+                cos_c = (d[0] * tc[0] + d[1] * tc[1]) / (dn * nc)
+                cos_a = (d[0] * ta[0] + d[1] * ta[1]) / (dn * na)
+                # distance to current must actually grow, and distance to the alternative shrink
+                grows = math.dist(p1, cur) > math.dist(p0, cur) + 0.25 * dn
+                shrinks = math.dist(p1, alt) < math.dist(p0, alt) - 0.25 * dn
+                if (
+                    cos_c <= tol.max_cos_to_current
+                    and cos_a >= tol.min_cos_to_alt
+                    and grows
+                    and shrinks
+                ):
+                    flagged += 1
+                    if first_flag is None:
+                        first_flag = s
+            if flagged >= tol.min_flagged_steps:
+                out.append(
+                    Violation(
+                        "a_goal_heading",
+                        f"towards_{alt_name}_not_current",
+                        episode_id,
+                        first_flag,
+                        b - 1,
+                        {
+                            "leg": leg_idx,
+                            "flagged_window_ends": flagged,
+                            "current": list(cur),
+                            "alt": list(alt),
+                        },
+                    )
                 )
-            )
     return out
 
 
@@ -273,10 +406,11 @@ def check_drive_limits(  # noqa: C901
     pos = _steps_xy(trace)
     reset_robot = (trace.get("reset") or {}).get("robot") or {}
     rp = reset_robot.get("position")
-    prev_p = (float(rp[0]), float(rp[1])) if isinstance(rp, list) and len(rp) == 2 else None
+    prev_p = (float(rp[0]), float(rp[1])) if _finite_pair(rp) else None
     prev_h = _num(reset_robot.get("heading"))
-    prev_v: float | None = None
-    prev_w: float | None = None
+    rv = reset_robot.get("velocity")
+    prev_v = math.hypot(*rv) if _finite_pair(rv) else None
+    prev_w = _num(reset_robot.get("angular_velocity"))
     worst: dict[str, tuple[float, int, float]] = {}
 
     def note(kind: str, excess: float, step: int, limit: float) -> None:
@@ -338,7 +472,7 @@ def check_position_jumps(
         return []
     pos = _steps_xy(trace)
     rp = ((trace.get("reset") or {}).get("robot") or {}).get("position")
-    prev = (float(rp[0]), float(rp[1])) if isinstance(rp, list) and len(rp) == 2 else None
+    prev = (float(rp[0]), float(rp[1])) if _finite_pair(rp) else None
     lim = limits.max_linear_speed * dt + tol.jump_abs
     worst: tuple[float, int] | None = None
     count = 0
@@ -726,4 +860,21 @@ def to_markdown(summary: dict[str, Any], meta: dict[str, Any] | None = None) -> 
                     lines.append(
                         f"| {arm} | {scen} | {inv} | {ic['episodes']}/{cell['episodes']} | {ex} |"
                     )
+    lines += _coverage_lines(summary)
     return "\n".join(lines) + "\n"
+
+
+def _coverage_lines(summary: dict[str, Any]) -> list[str]:
+    """Render missing invariant coverage.
+
+    Returns:
+        Markdown lines listing eligibility gaps.
+    """
+    if "coverage" not in summary:
+        return []
+    lines = ["", "## Unavailable coverage", ""]
+    for result in summary["coverage"]:
+        for name, item in result["invariants"].items():
+            if not item["eligible"]:
+                lines.append(f"- {result['episode_id']} / {name}: {', '.join(item['issues'])}")
+    return lines

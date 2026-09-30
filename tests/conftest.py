@@ -972,6 +972,10 @@ _FAST_FILES = {
     # episodes on dev seeds 1001/1002, and offline trace packaging (~14s).
     "test_baseline_stats.py",
     "test_trace_reexport_packaging.py",
+    # Offline v2 baseline, distillation, and trace-binding contracts.
+    "test_snqi_cli_method_aliases.py",
+    "test_pipeline_persistence_gate_wiring.py",
+    "test_issue_6411_real_trace_reexport.py",
     # Classic planner adapter tests are deterministic planner-contract tests for
     # the changed classic_planner_adapter.py producer; keep in fast shards for
     # the exact-head changed-coverage gate.

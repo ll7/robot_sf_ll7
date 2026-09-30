@@ -61,6 +61,7 @@ SEALED_REFERENCE_ALLOWLIST = frozenset(
         "tests/benchmark/test_release_candidate.py",
         "tests/benchmark/test_release_resolved_identity.py",
         "tests/benchmark/test_sealed_source_pins.py",
+        "tests/benchmark/test_sealed_runtime_sources.py",
         "tests/benchmark/test_s30_h600_runtime_smoke_contract.py",
     ]
 )

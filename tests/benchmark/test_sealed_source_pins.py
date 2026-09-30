@@ -1,4 +1,5 @@
 """Source-byte forgeries at real release entry points; no simulation is executed."""
+# robot-sf-test-lane: slow -- native materialization and real-input Git freezes
 # seed-holdout: synthetic-fixture begin
 
 import hashlib
@@ -30,6 +31,31 @@ def git(repo, *args):
     return subprocess.check_output(["git", *args], cwd=repo, text=True).strip()
 
 
+def copy_runtime_sources(repo):
+    """Copy actual tracked runtime bytes and an isolated installed physics package."""
+    for name in git(ROOT, "ls-files", "fast-pysf/pysocialforce").splitlines():
+        target = repo / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / name, target)
+    (repo / "robot_sf").mkdir(exist_ok=True)
+    shutil.copy2(ROOT / "robot_sf/__init__.py", repo / "robot_sf/__init__.py")
+    installed = repo / "output/runtime/pysocialforce"
+    shutil.copytree(repo / "fast-pysf/pysocialforce", installed)
+    return installed
+
+
+def bind_runtime_sources(repo, monkeypatch):
+    """Point the imported-package metadata at the fixture's real copied files."""
+    import pysocialforce
+
+    import robot_sf
+
+    monkeypatch.setattr(robot_sf, "__file__", str(repo / "robot_sf/__init__.py"))
+    monkeypatch.setattr(
+        pysocialforce, "__file__", str(repo / "output/runtime/pysocialforce/__init__.py")
+    )
+
+
 @pytest.fixture
 def sealed_repository(tmp_path, monkeypatch):
     """Commit real repository inputs, including templates, in an isolated freeze."""
@@ -42,6 +68,8 @@ def sealed_repository(tmp_path, monkeypatch):
     shutil.copy2(ROOT / "robot_sf/nav/svg_map_parser.py", repo / "robot_sf/nav/svg_map_parser.py")
     shutil.copy2(ROOT / "docs/RELEASE.md", repo / "docs/RELEASE.md")
     shutil.copy2(ROOT / "CITATION.cff", repo / "CITATION.cff")
+    copy_runtime_sources(repo)
+    bind_runtime_sources(repo, monkeypatch)
     (repo / ".gitignore").write_text("output/\n")
     git(repo, "init", "-q")
     git(repo, "config", "user.name", "Sealed Fixture")
@@ -56,6 +84,8 @@ def sealed_repository(tmp_path, monkeypatch):
         "docs/RELEASE.md",
         "CITATION.cff",
         "robot_sf/nav/svg_map_parser.py",
+        "robot_sf/__init__.py",
+        "fast-pysf/pysocialforce",
     )
     git(repo, "commit", "-qm", "freeze real inputs")
     for module in (protocol, spawn, runner, campaign_config, campaign_paths):
@@ -579,6 +609,46 @@ def test_nonsealed_smoke_allows_dirty_source(sealed_repository, monkeypatch):
     report = spawn.run_manifest_preflight(manifest, workers=1)
     assert report["status"] == "valid", report
     assert reached == [[103]]
+
+
+@pytest.mark.parametrize("mutation", ["different", "extra", "foreign-robot-sf"])
+@pytest.mark.parametrize("entry", ["api", "preflight", "run", "standalone"])
+def test_installed_runtime_mismatch_refused_before_workers(
+    sealed_repository, monkeypatch, capsys, mutation, entry
+):
+    repo = sealed_repository
+    manifest = materialize(repo, "slice")
+    installed = repo / "output/runtime/pysocialforce"
+    if mutation == "different":
+        target = installed / "forces.py"
+        write_text(target, "# AI-GENERATED NEEDS-REVIEW\n" + target.read_text())
+        expected = "pysocialforce/forces.py bytes differ"
+    elif mutation == "extra":
+        write_text(installed / "extra.py", "# AI-GENERATED NEEDS-REVIEW\n")
+        expected = "pysocialforce/extra.py is an extra imported file"
+    else:
+        import robot_sf
+
+        monkeypatch.setattr(robot_sf, "__file__", str(repo.parent / "foreign/robot_sf/__init__.py"))
+        expected = "imported robot_sf is outside the checked repository"
+    assert git(repo, "status", "--porcelain=v1", "--untracked-files=normal") == ""
+    capsys.readouterr()
+    if entry == "api":
+        reached = worker_stub(monkeypatch)
+        report = spawn.run_manifest_preflight(manifest, workers=1)
+        assert report["status"] == "invalid", report
+        message = report["input_error"]
+        rc = 2
+    else:
+        # Keep admission in the guard itself for previously verified objects.
+        monkeypatch.setattr(runner, "load_release_manifest", lambda *_a, **_kw: manifest)
+        monkeypatch.setattr(spawn, "load_preflight_input", lambda *_a, **_kw: manifest)
+        rc, reached = _entry_with_stub_workers(repo, manifest.path, entry, monkeypatch)
+        message = capsys.readouterr().out
+    assert reached == [], f"installed {mutation} reached {len(reached)} workers"
+    assert rc == 2, message
+    assert expected in message, message
+    assert "uv sync --all-extras --reinstall-package robot-sf" in message, message
 
 
 # seed-holdout: synthetic-fixture end

@@ -1,4 +1,5 @@
 """End-to-end contract tests for non-self-referential release identity resolution."""
+# robot-sf-test-lane: slow -- repeated native identity generation and Git freezes
 
 from __future__ import annotations
 
@@ -28,6 +29,13 @@ from robot_sf.benchmark.zenodo_publisher import build_release_binding
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.tools import resolve_benchmark_release_identity as identity_cli
 from scripts.tools import run_benchmark_release
+from tests.benchmark.test_sealed_source_pins import bind_runtime_sources, copy_runtime_sources
+
+
+@pytest.fixture(autouse=True)
+def runtime_source_location(tmp_path, monkeypatch):
+    """Bind synthetic freezes to copied tracked runtime files, without simulation."""
+    bind_runtime_sources(tmp_path / "source", monkeypatch)
 
 
 def _sha256(path: Path) -> str:
@@ -198,6 +206,7 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
     (repo / ".gitignore").write_text("output/\n", encoding="utf-8")
     _git(repo, "add", ".gitignore")
     _git(repo, "commit", "-qm", "fixture: initialize ignored output")
+    copy_runtime_sources(repo)
 
     scenarios = repo / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
     _write_yaml(
@@ -740,7 +749,7 @@ def test_generation_rejects_symlinked_or_escaped_output(tmp_path: Path) -> None:
     repo, template, source_commit = _release_template_repository(tmp_path)
     inputs = _identity_inputs(repo, template, source_commit)
     linked_output = repo / "output" / "linked-identity.json"
-    linked_output.parent.mkdir(parents=True)
+    linked_output.parent.mkdir(parents=True, exist_ok=True)
     linked_output.symlink_to(repo / "output" / "redirected-identity.json")
 
     with pytest.raises(ValueError, match="symlink"):
@@ -780,22 +789,24 @@ def test_verification_validates_publication_coordinates_before_reproduction(
         verify_resolved_release_identity(output, repository_root=repo)
 
 
-def test_cold_checkout_reproduces_and_verifies_identity(tmp_path: Path) -> None:
+def test_cold_checkout_reproduces_and_verifies_identity(tmp_path: Path, monkeypatch) -> None:
     repo, template, source_commit = _release_template_repository(tmp_path)
     output = repo / "output" / "release" / "release_identity.resolved.json"
     write_resolved_release_identity(
         output_path=output,
         **_identity_inputs(repo, template, source_commit),
     )
+    original_manifest = load_release_manifest(output, repository_root=repo)
     cold = tmp_path / "cold"
     _git(repo, "worktree", "add", "--detach", "-q", str(cold), source_commit)
     cold_output = cold / output.relative_to(repo)
     cold_output.parent.mkdir(parents=True)
     shutil.copy2(output, cold_output)
     shutil.copy2(output.parent / "zenodo_metadata.resolved.json", cold_output.parent)
+    shutil.copytree(repo / "output/runtime", cold / "output/runtime")
+    bind_runtime_sources(cold, monkeypatch)
 
     manifest = verify_resolved_release_identity(cold_output, repository_root=cold)
-    original_manifest = load_release_manifest(output, repository_root=repo)
     cold_campaign = load_release_campaign_config(original_manifest, repository_root=cold)
 
     assert manifest.source_sha == source_commit

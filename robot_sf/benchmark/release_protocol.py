@@ -2031,6 +2031,66 @@ def _require_sealed_source_inputs(manifest: Any, root: Path, source_commit: str)
         )
 
 
+def _is_sealed_runtime_source(path: Path) -> bool:
+    """Ignore compiled Python caches in source and installed package inventories.
+
+    Returns:
+        Whether the relative path belongs in the source comparison.
+    """
+    return "__pycache__" not in path.parts and path.suffix != ".pyc"
+
+
+def _require_sealed_runtime_sources(root: Path, source_commit: str) -> None:
+    """Bind the imported Python packages to the checkout and frozen bundled physics."""
+    import pysocialforce  # noqa: PLC0415
+
+    import robot_sf  # noqa: PLC0415
+
+    remedy = (
+        "rebuild this checkout's venv with `uv sync --all-extras "
+        "--reinstall-package robot-sf` and restart the launch process"
+    )
+    if not Path(robot_sf.__file__).resolve().is_relative_to(root):
+        raise ValueError(f"imported robot_sf is outside the checked repository; {remedy}")
+    package = Path(pysocialforce.__file__).parent.resolve()
+    prefix = "fast-pysf/pysocialforce/"
+    expected = {
+        name.decode("utf-8")[len(prefix) :]
+        for name in _git_stdout(
+            root,
+            "ls-tree",
+            "-r",
+            "--name-only",
+            "-z",
+            source_commit,
+            "--",
+            prefix,
+            label="frozen pysocialforce files",
+        ).split(b"\0")
+        if name
+    }
+    expected = {name for name in expected if _is_sealed_runtime_source(Path(name))}
+    actual = {
+        path.relative_to(package).as_posix()
+        for path in package.rglob("*")
+        if path.is_file() and _is_sealed_runtime_source(path.relative_to(package))
+    }
+    if not expected:
+        raise ValueError(f"frozen pysocialforce package has no tracked files; {remedy}")
+    for name in sorted(expected | actual):
+        if name not in actual:
+            problem = "is missing from the imported package"
+        elif name not in expected:
+            problem = "is an extra imported file outside source_sha"
+        elif (package / name).read_bytes() != _git_stdout(
+            root, "show", f"{source_commit}:{prefix}{name}", label=f"frozen pysocialforce {name}"
+        ):
+            problem = "bytes differ from source_sha"
+        else:
+            continue
+        raise ValueError(f"imported pysocialforce/{name} {problem}; {remedy}")
+
+
 def sealed_seed_execution_problem(
     manifest: Any,
     seeds: tuple[int, ...],
@@ -2105,6 +2165,7 @@ def sealed_seed_execution_problem(
             source_commit=declared,
             template_path=getattr(manifest, "identity_template_path", None) or config_path,
         )
+        _require_sealed_runtime_sources(root, declared)
         _require_sealed_source_inputs(manifest, root, declared)
     except (OSError, TypeError, ValueError) as exc:
         return f"sealed evaluation source admission refused (D-049): {exc}"

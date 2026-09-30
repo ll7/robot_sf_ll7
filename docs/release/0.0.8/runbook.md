@@ -5,6 +5,25 @@ against `EVAL_SEEDS_0_0_8` before admission. The full roster resolves to 14 arms
 48 scenarios x 30 seeds = 20,160 identities, 1,440 per arm. Config validation
 computes these identities and never executes them.
 
+Before minting identities or launching the sealed main campaign and its
+materialized three-width slice at the freeze commit, refresh the bundled
+pedestrian physics in the launch environment:
+
+```bash
+uv sync --all-extras --reinstall-package robot-sf
+```
+
+Ordinary `uv sync` can retain an older installed `pysocialforce` copy after
+`fast-pysf` changes. The reinstall command rebuilds the `robot-sf` wheel and
+refreshes that bundled copy; restart the launch process afterwards so it imports
+the rebuilt files. If extra package files remain, rebuild a fresh venv rather
+than reusing its directory. The sealed guard requires imported `robot_sf` to
+come from the checked repository and every non-cache `pysocialforce` file to
+match the freeze commit's file set and bytes. It names the first differing file
+and refuses before spawn workers. `__pycache__` directories and `.pyc` files
+are excluded from that comparison. Static post-run tools validating a sealed
+identity also require this matching runtime at a clean checkout of its source.
+
 Both the fresh sealed list and retired 111..140 band are held out for all
 development, calibration, tuning and rehearsals. Spawn preflight with episode
 steps is evaluation work and must follow the author admission barrier; this

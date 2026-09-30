@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import subprocess
 from concurrent.futures import ProcessPoolExecutor
@@ -39,6 +40,14 @@ def write_json(path, payload):
     partial = path.with_suffix(path.suffix + ".partial")
     partial.write_text(json.dumps(payload, allow_nan=False) + "\n")
     partial.replace(path)
+
+
+def episode_scenario(scenario):
+    """Bind campaign-loader repo-relative maps for the direct episode builder."""
+    scenario = json.loads(json.dumps(scenario))
+    if scenario.get("map_file"):
+        scenario["map_file"] = str((ROOT / scenario["map_file"]).resolve())
+    return scenario
 
 
 def load_packet(config_path):  # noqa: C901 - explicit diagnostic input gates
@@ -135,7 +144,7 @@ def acquire(job):  # noqa: C901, PLR0915 - one process-local instrumentation bou
         for behavior in sim.peds_behaviors:
             count = len(behavior.navigators) if isinstance(behavior, FollowRouteBehavior) else 0
             recurring = count > 0 or (
-                isinstance(behavior, CrowdedZoneBehavior) and bool(behavior.groups.group_ids)
+                isinstance(behavior, CrowdedZoneBehavior) and bool(behavior.zone_assignments)
             )
             receipt["recurring_flow"] |= recurring
             receipt["behavior_inventory"].append(
@@ -189,11 +198,7 @@ def acquire(job):  # noqa: C901, PLR0915 - one process-local instrumentation bou
         moving_policy.__dict__.update(policy.__dict__)
         return moving_policy, meta
 
-    # The campaign loader emits repo-relative paths; the direct episode builder
-    # resolves relative to the scenario manifest. Bind its map explicitly here.
-    scenario = json.loads(json.dumps(scenario))
-    if scenario.get("map_file"):
-        scenario["map_file"] = str((ROOT / scenario["map_file"]).resolve())
+    scenario = episode_scenario(scenario)
     planner = next(p for p in cfg.planners if p.key == arm)
     with ExitStack() as stack:
         stack.enter_context(patch.object(episode, "_init_step_loop_state", initial_capture))
@@ -225,11 +230,29 @@ def acquire(job):  # noqa: C901, PLR0915 - one process-local instrumentation bou
         definition=raw["hzev"],
     )
     if arm == "stationary":
-        import math
-
         if any(math.dist(f["robot"]["position"], receipt["start"]) > 1e-8 for f in trace):
             raise ValueError("stationary robot moved")
     record["hzev"] = receipt
+    from scripts.validation.analyze_hzev_dynamic_window import validated_frames
+
+    # Geometry/time must be finite. Some auxiliary benchmark fields use infinity
+    # as a sentinel (e.g. no predicted TTC); retain their paths and original values
+    # explicitly while writing standards-compliant diagnostic JSON.
+    validated_frames(record)
+    nonfinite_fields = []
+
+    def json_safe(value, path="$"):
+        if isinstance(value, dict):
+            return {k: json_safe(v, f"{path}.{k}") for k, v in value.items()}
+        if isinstance(value, list | tuple):
+            return [json_safe(v, f"{path}[{i}]") for i, v in enumerate(value)]
+        if isinstance(value, float) and not math.isfinite(value):
+            nonfinite_fields.append({"path": path, "original_value": repr(value)})
+            return None
+        return value
+
+    record = json_safe(record)
+    record["hzev"]["nonfinite_auxiliary_fields"] = nonfinite_fields
     write_json(output, record)
     return {
         "path": Path(output).name,
@@ -311,6 +334,11 @@ def main():  # noqa: C901, PLR0912, PLR0915 - bounded diagnostic CLI and custody
             closer()
     count = len(scenarios) * len(args.seeds) * len(args.arms)
     if args.check_only:
+        from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
+
+        # Parse all selected maps and construct configs, without environment steps.
+        for scenario in scenarios:
+            build_env_config(episode_scenario(scenario), scenario_path=cfg.scenario_matrix_path)
         print(json.dumps({"status": "packet-valid", "episodes": count, "identity": identity}))
         return
     args.output_dir.mkdir(parents=True, exist_ok=True)

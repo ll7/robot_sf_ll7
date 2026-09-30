@@ -54,6 +54,9 @@ asset `issue9431_release_benchmark_data_0_0_7_07f7e8d43084_20260922_publication_
   Large bundle, shards and queue remain local in `/home/luttkule/aud-evidence/`;
   they are reproducible diagnostics, not durable public benchmark evidence.
   The public bundle is the durable input. No runtime depends on these local outputs.
+  Text-log/CSV presentation copies normalize line endings/trailing whitespace;
+  their sidecars retain the original source SHA. Receipts retain exact bytes.
+  Generated evidence is SHA-linked and marked `AI-GENERATED NEEDS-REVIEW`.
 
 ## Full-row comparison
 

@@ -14,7 +14,7 @@ ________________ test_published_positive_ttc_uses_seconds_bound ________________
 >       assert signal.status == "clear", signal.measured
 E       AssertionError: {'values': {'time_to_collision_min': 1.0078322058425249}, 'extreme': {'time_to_collision_min': 1.0078322058425249}, 'missing_undefined_values': ['ttc_s', 'pet_s']}
 E       assert 'flagged' == 'clear'
-E         
+E
 E         - clear
 E         + flagged
 
@@ -23,7 +23,7 @@ __________ test_orbit_uses_recorded_stall_windows_not_failure_boolean __________
 
     def test_orbit_uses_recorded_stall_windows_not_failure_boolean():
         from robot_sf.analysis_workbench.release_row_anomalies import analyze_release_rows
-    
+
         row = release_row("timeout")
         assert row["metrics"]["deadlock"] is True
         # Counterfactual on a real timeout: isolate the stall channel from geometry.
@@ -51,7 +51,7 @@ detector = 'seed_outlier'
 >       assert signal.status == "clear", signal.measured
 E       AssertionError: {'seed': 1001, 'feature_z_scores': {'time_to_goal_norm': 1000000000.0}, 'cohort_size': 5, 'seed_values_are_keys_only': True, ...}
 E       assert 'flagged' == 'clear'
-E         
+E
 E         - clear
 E         + flagged
 
@@ -68,7 +68,7 @@ detector = 'cohort_multivariate_outlier'
 >       assert signal.status == "clear", signal.measured
 E       AssertionError: {'features': {'time_to_goal_norm': 1e-06}, 'robust_z_scores': {'time_to_goal_norm': 1000000000.0}, 'priority_score_uncalibrated': 1000000000.0, 'feature_missingness': [], ...}
 E       assert 'flagged' == 'clear'
-E         
+E
 E         - clear
 E         + flagged
 
@@ -86,7 +86,7 @@ detector = 'seed_outlier'
 >       assert signal.status == "clear", signal.measured
 E       AssertionError: {'seed': 1001, 'feature_z_scores': {'time_to_goal_norm': 1000000000.0}, 'cohort_size': 16, 'seed_values_are_keys_only': True, ...}
 E       assert 'flagged' == 'clear'
-E         
+E
 E         - clear
 E         + flagged
 
@@ -104,7 +104,7 @@ detector = 'cohort_multivariate_outlier'
 >       assert signal.status == "clear", signal.measured
 E       AssertionError: {'features': {'time_to_goal_norm': 0.2}, 'robust_z_scores': {'time_to_goal_norm': 1000000000.0}, 'priority_score_uncalibrated': 1000000000.0, 'feature_missingness': [], ...}
 E       assert 'flagged' == 'clear'
-E         
+E
 E         - clear
 E         + flagged
 
@@ -113,7 +113,7 @@ ____ test_release_failure_timeout_is_admitted_but_execution_failure_is_not _____
 
     def test_release_failure_timeout_is_admitted_but_execution_failure_is_not():
         from robot_sf.analysis_workbench.audit_scan import scan_campaign
-    
+
         recorded = release_row("timeout")
         row = {
             "episode_id": recorded["episode_id"],
@@ -123,7 +123,7 @@ ____ test_release_failure_timeout_is_admitted_but_execution_failure_is_not _____
         }
 >       assert detect("extreme_measurements", row).status == "clear"
 E       AssertionError: assert 'unavailable' == 'clear'
-E         
+E
 E         - clear
 E         + unavailable
 
@@ -132,7 +132,7 @@ ________ test_disabled_tracking_infinity_is_missing_not_row_corruption _________
 
     def test_disabled_tracking_infinity_is_missing_not_row_corruption():
         from robot_sf.analysis_workbench.audit_scan import scan_campaign
-    
+
         recorded = release_row("success")
         row = {
             "episode_id": recorded["episode_id"],
@@ -159,15 +159,15 @@ ______ test_verified_release_arm_keeps_config_scopes_and_episode_identity ______
 
     def test_verified_release_arm_keeps_config_scopes_and_episode_identity():
         from robot_sf.analysis_workbench.audit_scan import scan_campaign
-    
+
         row = release_row("success")
         row["_release_arm"] = "goal"
         row["_source_member"] = "payload/runs/goal__differential_drive/episodes.jsonl"
 >       report = scan_campaign([row], detector_ids=["extreme_measurements"])
                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-../aud-work/tests/analysis_workbench/test_aud_9952.py:161: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../aud-work/tests/analysis_workbench/test_aud_9952.py:161:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 robot_sf/analysis_workbench/audit_scan.py:2082: in scan_campaign
     loaded = _load_source(source, root=root, source_ref=source_ref)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -175,7 +175,7 @@ robot_sf/analysis_workbench/audit_scan.py:1381: in _load_source
     ref = _source_ref_from_value(
 robot_sf/analysis_workbench/audit_scan.py:592: in _source_ref_from_value
     _identity_aliases(
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 payload = {'schema_version': 'episode-jsonl.v1', 'episodes': [{'algo': 'goal', 'algorithm_metadata': {'algorithm': 'goal', 'ammv...anonical_algorithm': 'goal', ...}, 'config_hash': '14b5cd02c60488e0', 'development_pedestrian_model': 'unknown', ...}]}
 names = ('config_identity', 'config_hash'), label = 'config_identity'
@@ -189,13 +189,13 @@ include_episode_rows = True
         include_episode_rows: bool = False,
     ) -> str | None:
         """Collect one identity value and reject conflicting aliases.
-    
+
         Returns:
             One normalized identity, or ``None`` when no declaration is present.
         """
-    
+
         values: list[tuple[str, str]] = []
-    
+
         def collect(container: Any, prefix: str) -> None:
             if not isinstance(container, Mapping):
                 return
@@ -206,7 +206,7 @@ include_episode_rows = True
                 if not isinstance(value, str) or not value.strip():
                     raise AuditScanError(f"{prefix}.{name} is malformed")
                 values.append((f"{prefix}.{name}", value.strip()))
-    
+
         def collect_record(record: Mapping[str, Any], prefix: str) -> None:
             collect(record, prefix)
             for nested_name in ("provenance", "result_provenance", "cell_context", "config"):
@@ -215,7 +215,7 @@ include_episode_rows = True
             if isinstance(metadata, Mapping):
                 collect(metadata, f"{prefix}.algorithm_metadata")
                 collect(metadata.get("analysis_trace"), f"{prefix}.algorithm_metadata.analysis_trace")
-    
+
         collect_record(payload, label)
         if include_episode_rows:
             entries = payload.get("episodes")
@@ -237,7 +237,7 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x73bf4eba3ce0>
     def test_scan_shards_cohorts_without_changing_signals(monkeypatch):
         from robot_sf.analysis_workbench import audit_scan
         from robot_sf.analysis_workbench.audit_contracts import record_to_dict
-    
+
         rows = []
         for scenario in range(8):
             for i in range(4):
@@ -246,11 +246,11 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x73bf4eba3ce0>
                 rows.append(row)
         seen_sizes = []
         original = audit_scan.detect
-    
+
         def observe(*args, **kwargs):
             seen_sizes.append(len(kwargs["cohort"]))
             return original(*args, **kwargs)
-    
+
         monkeypatch.setattr(audit_scan, "detect", observe)
         report = audit_scan.scan_campaign(rows, detector_ids=["seed_outlier"])
 >       assert max(seen_sizes) == 4  # A linear partition, not every row in every call.
@@ -265,7 +265,7 @@ tmp_path = PosixPath('/tmp/pytest-of-luttkule/wt-39c14eeeb5/proc-2320347/pytest-
 
     def test_scan_accepts_20160_rows_above_old_source_cap(tmp_path):
         from robot_sf.analysis_workbench.audit_scan import scan_campaign
-    
+
         source = tmp_path / "episodes.jsonl"
         with source.open("w") as stream:
             for i in range(20160):
@@ -283,26 +283,26 @@ tmp_path = PosixPath('/tmp/pytest-of-luttkule/wt-39c14eeeb5/proc-2320347/pytest-
 >       report = scan_campaign(source, root=tmp_path, detector_ids=["extreme_measurements"])
                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-../aud-work/tests/analysis_workbench/test_aud_9952.py:216: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../aud-work/tests/analysis_workbench/test_aud_9952.py:216:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 robot_sf/analysis_workbench/audit_scan.py:2082: in scan_campaign
     loaded = _load_source(source, root=root, source_ref=source_ref)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 robot_sf/analysis_workbench/audit_scan.py:1162: in _load_source
     source_path = _safe_path(source, root=root_path)
                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 value = PosixPath('/tmp/pytest-of-luttkule/wt-39c14eeeb5/proc-2320347/pytest-of-luttkule/pytest-0/test_scan_accepts_20160_rows_a0/episodes.jsonl')
 root = PosixPath('/tmp/pytest-of-luttkule/wt-39c14eeeb5/proc-2320347/pytest-of-luttkule/pytest-0/test_scan_accepts_20160_rows_a0')
 
     def _safe_path(value: str | Path, *, root: Path) -> Path:  # noqa: C901
         """Resolve one local path under ``root`` without following symlink escapes.
-    
+
         Returns:
             A resolved regular file or campaign-store directory.
         """
-    
+
         raw = str(value)
         split = urlsplit(raw)
         if (
@@ -356,11 +356,11 @@ ____________ test_common_mode_failure_has_benchmark_defect_priority ____________
 
     def test_common_mode_failure_has_benchmark_defect_priority():
         from robot_sf.analysis_workbench.audit_queue import PRIORITY_BENCHMARK_CONFIG, AuditQueue
-    
+
         ranked = AuditQueue([queue_candidate("common")]).rank_candidates()
 >       assert ranked[0].priority_band == PRIORITY_BENCHMARK_CONFIG
 E       AssertionError: assert 'safety_severity' == 'benchmark_config_defect'
-E         
+E
 E         - benchmark_config_defect
 E         + safety_severity
 
@@ -369,7 +369,7 @@ ________ test_top_100_represent_distinct_cells_and_retain_all_episodes _________
 
     def test_top_100_represent_distinct_cells_and_retain_all_episodes():
         from robot_sf.analysis_workbench.audit_queue import AuditQueue
-    
+
         candidates = [
             queue_candidate(f"{seed}-{planner}", planner, seed)
             for seed in range(1001, 1111)
@@ -387,7 +387,7 @@ tmp_path = PosixPath('/tmp/pytest-of-luttkule/wt-39c14eeeb5/proc-2320347/pytest-
 
     def test_queue_loads_20160_candidates_above_old_byte_and_node_caps(tmp_path):
         from robot_sf.analysis_workbench.audit_queue import load_queue_input
-    
+
         candidate = queue_candidate("template").to_dict()
         candidate["signals"] = []
         candidate["episode"].pop("episode_id")
@@ -405,18 +405,18 @@ tmp_path = PosixPath('/tmp/pytest-of-luttkule/wt-39c14eeeb5/proc-2320347/pytest-
 >       loaded = load_queue_input(source)
                  ^^^^^^^^^^^^^^^^^^^^^^^^
 
-../aud-work/tests/analysis_workbench/test_aud_9952.py:283: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../aud-work/tests/analysis_workbench/test_aud_9952.py:283:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 robot_sf/analysis_workbench/audit_queue.py:4961: in load_queue_input
     value = _read_json(path)
             ^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 path = PosixPath('/tmp/pytest-of-luttkule/wt-39c14eeeb5/proc-2320347/pytest-of-luttkule/pytest-0/test_queue_loads_20160_candida0/queue.json')
 
     def _read_json(path: str | Path) -> Any:
         """Read one bounded JSON document without following executable content."""
-    
+
         source = Path(path)
         if not source.is_file():
             raise QueueInputError(f"input is not a regular file: {source}")
@@ -429,7 +429,7 @@ _____ test_release_seed_cohorts_use_planner_config_not_seeded_episode_hash _____
 
     def test_release_seed_cohorts_use_planner_config_not_seeded_episode_hash():
         from robot_sf.analysis_workbench.audit_scan import scan_campaign
-    
+
         rows = []
         for i in range(4):
             row = release_row("success")
@@ -444,8 +444,8 @@ _____ test_release_seed_cohorts_use_planner_config_not_seeded_episode_hash _____
 >       report = scan_campaign(rows, detector_ids=["seed_outlier"])
                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-../aud-work/tests/analysis_workbench/test_aud_9952.py:301: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../aud-work/tests/analysis_workbench/test_aud_9952.py:301:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 robot_sf/analysis_workbench/audit_scan.py:2082: in scan_campaign
     loaded = _load_source(source, root=root, source_ref=source_ref)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -453,7 +453,7 @@ robot_sf/analysis_workbench/audit_scan.py:1381: in _load_source
     ref = _source_ref_from_value(
 robot_sf/analysis_workbench/audit_scan.py:592: in _source_ref_from_value
     _identity_aliases(
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 payload = {'schema_version': 'episode-jsonl.v1', 'episodes': [{'algo': 'goal', 'algorithm_metadata': {'algorithm': 'goal', 'ammv...canonical_algorithm': 'goal', ...}, 'config_hash': 'seeded-config-3', 'development_pedestrian_model': 'unknown', ...}]}
 names = ('config_identity', 'config_hash'), label = 'config_identity'
@@ -467,13 +467,13 @@ include_episode_rows = True
         include_episode_rows: bool = False,
     ) -> str | None:
         """Collect one identity value and reject conflicting aliases.
-    
+
         Returns:
             One normalized identity, or ``None`` when no declaration is present.
         """
-    
+
         values: list[tuple[str, str]] = []
-    
+
         def collect(container: Any, prefix: str) -> None:
             if not isinstance(container, Mapping):
                 return
@@ -484,7 +484,7 @@ include_episode_rows = True
                 if not isinstance(value, str) or not value.strip():
                     raise AuditScanError(f"{prefix}.{name} is malformed")
                 values.append((f"{prefix}.{name}", value.strip()))
-    
+
         def collect_record(record: Mapping[str, Any], prefix: str) -> None:
             collect(record, prefix)
             for nested_name in ("provenance", "result_provenance", "cell_context", "config"):
@@ -493,7 +493,7 @@ include_episode_rows = True
             if isinstance(metadata, Mapping):
                 collect(metadata, f"{prefix}.algorithm_metadata")
                 collect(metadata.get("analysis_trace"), f"{prefix}.algorithm_metadata.analysis_trace")
-    
+
         collect_record(payload, label)
         if include_episode_rows:
             entries = payload.get("episodes")

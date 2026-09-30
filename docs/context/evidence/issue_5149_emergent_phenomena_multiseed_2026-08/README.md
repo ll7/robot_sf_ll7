@@ -1,7 +1,5 @@
 <!-- AI-GENERATED (robot_sf_ll7#5149, 2026-08-12) - NEEDS-REVIEW -->
 
-**Affected / superseded geometry evidence (#10056).** This historical bundle used the pre-fix emergent-phenomena builders, whose walls were misplaced by the endpoint/axis tuple-order defect. Its original measurements and exhibits are retained for comparison, not current face-validity evidence. See the [corrected-wall replay](../issue_10056_wall_order_2026-09/README.md) and [issue #10056](https://github.com/ll7/robot_sf_ll7/issues/10056). Historical replay GIFs drew intended walls while pedestrians used misplaced walls.
-
 # Issue #5149: Multi-Seed Emergent-Phenomena Campaign (Measured Face-Validity)
 
 Plain-language summary: this bundle measures whether THIS repository's pedestrian simulator (the bundled `fast-pysf` / PySocialForce Social Force model) reproduces the canonical crowd-dynamics emergent phenomena (lane formation in bidirectional flow, doorway oscillation, and an exit arching diagnostic) across 10 seeds per scenario and speed calibration, elevating the pinned single-seed exhibit (`issue_5149_emergent_phenomena_2026-07/`) to measured evidence with seed-level dispersion.

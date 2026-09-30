@@ -541,7 +541,7 @@ Historical emergent-phenomena demonstration at released + literature speed: affe
 [README.md](evidence/issue_5149_emergent_phenomena_2026-07/README.md).
 
 Historical multi-seed emergent-phenomena campaign (10 seeds per scenario x calibration): affected and superseded by #10056; its misplaced-wall measurements are not current face-validity evidence:
-[README.md](evidence/issue_5149_emergent_phenomena_multiseed_2026-08/README.md).
+[supersession manifest](evidence/issue_5149_emergent_phenomena_multiseed_2026-08/supersession_manifest.json) and [historical README](evidence/issue_5149_emergent_phenomena_multiseed_2026-08/README.md).
 
 Current corrected-wall diagnostics for #5149, #6962 sensitivity, and #6969 reference/Stage A:
 [issue_10056_wall_order_2026-09/README.md](evidence/issue_10056_wall_order_2026-09/README.md).

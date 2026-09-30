@@ -506,26 +506,32 @@ entries:
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6969_lane_formation_reference/README.md
   status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6969_lane_formation_reference/artifact_provenance.json
   status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6969_lane_formation_reference/summary.json
   status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6962_lane_formation_sensitivity/README.md
   status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6962_lane_formation_sensitivity/artifact_provenance.json
   status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6962_lane_formation_sensitivity/summary.json
   status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6972_analysis_trace_overhead_2026-08-12/README.md
@@ -1093,6 +1099,7 @@ entries:
   area: benchmark_evidence
 - path: docs/context/evidence/issue_5149_emergent_phenomena_2026-07
   status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_4991_closure_audit_2026-07-10.md
@@ -5694,6 +5701,7 @@ entries:
   area: benchmark_evidence
 - path: docs/context/evidence/issue_5149_emergent_phenomena_multiseed_2026-08
   status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6972_trace_overhead_receipt.v1.json
@@ -7929,9 +7937,11 @@ entries:
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6962_lane_formation_sensitivity
   status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6969_lane_formation_reference
   status: superseded
+  replacement: docs/context/evidence/issue_10056_wall_order_2026-09/README.md
   freshness: evidence
   area: benchmark_evidence

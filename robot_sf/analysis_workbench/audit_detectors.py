@@ -3009,6 +3009,10 @@ def _extreme(  # noqa: C901, PLR0912, PLR0915
     for name, value in metrics.items():
         if not isinstance(name, str):
             continue
+        if name == "metric_schema_version":
+            if value not in ("robot-sf-metrics.v1", "robot-sf-metrics.v2"):
+                invalid.append(name)
+            continue
         if value is None:
             continue
         if name in STRUCTURED_DIAGNOSTIC_METRICS:
@@ -4084,6 +4088,48 @@ def _cell_seed_integrity(cells: Mapping[str, Sequence[Mapping[str, Any]]]) -> di
     return {"planner_seed_counts": counts, "seed_integrity_signatures": sorted(set(signatures))}
 
 
+def _cohort_metric_schema_signal(
+    spec: DetectorSpec,
+    row: Mapping[str, Any],
+    cells: Mapping[str, Sequence[Mapping[str, Any]]],
+    config: Mapping[str, Any],
+) -> Signal | None:
+    """Refuse comparisons across metric definitions; unmarked legacy rows are v1.
+
+    Returns:
+        An unavailable signal for incompatible schemas, otherwise None.
+    """
+    versions = set()
+    for items in cells.values():
+        for item in items:
+            markers = [
+                source["metric_schema_version"]
+                for source in (item, _metrics(item))
+                if "metric_schema_version" in source
+            ] or ["robot-sf-metrics.v1"]
+            for version in markers:
+                if version not in ("robot-sf-metrics.v1", "robot-sf-metrics.v2"):
+                    return _unavailable(
+                        spec,
+                        row,
+                        "cohort_metric_schema_invalid",
+                        missing=("cohort.metric_schema_version",),
+                        config=config,
+                    )
+                versions.add(version)
+    if len(versions) > 1:
+        return _make_signal(
+            spec,
+            row,
+            "unavailable",
+            reason="mixed_metric_schema_versions",
+            measured={"metric_schema_versions": sorted(versions)},
+            missingness=("cohort.metric_schema_version",),
+            config=config,
+        )
+    return None
+
+
 def _outcome_incidence(
     spec: DetectorSpec,
     row: Mapping[str, Any],
@@ -4091,6 +4137,9 @@ def _outcome_incidence(
     config: Mapping[str, Any],
 ) -> Signal:
     cells = _planner_scenario_cells(spec, row, cohort)
+    schema_signal = _cohort_metric_schema_signal(spec, row, cells, config)
+    if schema_signal is not None:
+        return schema_signal
     seed_integrity = _cell_seed_integrity(cells)
     if seed_integrity["seed_integrity_signatures"]:
         return _make_signal(
@@ -4201,6 +4250,9 @@ def _planner_cohort_shift(  # noqa: C901
     config: Mapping[str, Any],
 ) -> Signal:
     cells = _planner_scenario_cells(spec, row, cohort)
+    schema_signal = _cohort_metric_schema_signal(spec, row, cells, config)
+    if schema_signal is not None:
+        return schema_signal
     planner = _identity(row, "planner_id")
     minimum = _configured_integer(config, spec, "minimum_cohort", minimum=2)
     threshold = _configured_number(config, spec, "metric_z_threshold", minimum=0.0)
@@ -4219,7 +4271,7 @@ def _planner_cohort_shift(  # noqa: C901
             for values in metrics.values()
             for item in values
             for key in item
-            if isinstance(key, str)
+            if isinstance(key, str) and key != "metric_schema_version"
         }
     )
     centers: dict[str, dict[str, float]] = {}

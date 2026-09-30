@@ -1,5 +1,17 @@
 # FXB baseline controller diagnostics — issue #10007
 
+**FXB2 follow-up:** the resolver now accepts and records top-level `dt`, after
+nested `sim.timestep` and flat `sim_timestep`. The four historical non-dev
+episode tests described below have been replaced by fixed-clock dev tests
+(1001–1003), with calibration and a stated 25% spin margin in
+[`dev_seed_calibration.json`](../../../../tests/benchmark/fixtures/issue_10007_fxb/dev_seed_calibration.json).
+The new SF/ORCA missing-clock and isolated occupancy-penalty tests close the
+reviewed coverage gaps. FXB2's named, seed-audited selection passed 223 tests.
+The original text below records FXB's historical execution, not FXB2 validation.
+Its original full-PR whitespace-check claim was inaccurate; FXB2 stripped the
+failure log's trailing whitespace and updated the corresponding manifest digest.
+The separate human-review evidence-registry gate remains outstanding.
+
 Evidence status: **diagnostic-only**, development seeds 1001–1010, three
 requested scenarios, H600 and dt 0.1. These results establish controller
 defects and implementation changes; they do not admit release evidence or

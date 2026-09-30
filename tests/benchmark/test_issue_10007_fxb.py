@@ -37,6 +37,35 @@ def test_social_force_uses_real_flat_sim_dt(observation):
     assert _sf()._resolve_dt(observation) == pytest.approx(0.1)
 
 
+@pytest.mark.parametrize(
+    "clocks, expected, source",
+    [
+        ({"dt": 0.2}, 0.2, "observation.dt"),
+        ({"sim_timestep": 0.3, "dt": 0.2}, 0.3, "observation.sim_timestep"),
+        (
+            {"sim": {"timestep": 0.4}, "sim_timestep": 0.3, "dt": 0.2},
+            0.4,
+            "observation.sim.timestep",
+        ),
+    ],
+)
+def test_social_force_clock_source_and_precedence(observation, clocks, expected, source):
+    """Accept the normalizer's dt alias and record the highest-priority clock."""
+    observation.pop("sim_timestep")
+    observation.update(clocks)
+    adapter = _sf()
+    assert adapter._resolve_dt(observation) == pytest.approx(expected)
+    assert adapter._last_simulation_timestep == {"seconds": expected, "source": source}
+
+
+def test_invalid_primary_clock_does_not_fall_through_to_dt(observation):
+    """A valid alias must not conceal a corrupt higher-priority observed clock."""
+    observation["sim_timestep"] = 0.0
+    observation["dt"] = 0.2
+    with pytest.raises(ValueError, match="timestep"):
+        _sf()._resolve_dt(observation)
+
+
 def test_social_force_flat_and_nested_timestep_actions_agree(observation):
     """Identical physical state and dt must yield identical first commands."""
     nested_dt = {**observation, "sim": {"timestep": observation["sim_timestep"]}}
@@ -102,20 +131,43 @@ def test_orca_release_binding_sets_native_solver_speed_cap(observation, manifest
     assert adapter._rvo2_sim.getAgentMaxSpeed(adapter._rvo2_robot_id) == pytest.approx(2.0)
 
 
-@pytest.mark.parametrize("planner", ["sacadrl", "sampling"])
+@pytest.mark.parametrize("planner", ["sacadrl", "sampling", "social_force", "orca"])
 @pytest.mark.parametrize("bad_dt", [None, 0.0, -0.1, np.nan, np.inf])
 def test_timestep_consumers_reject_missing_or_invalid_dt(observation, monkeypatch, planner, bad_dt):
     """Malformed observed time must fail at the contract, before generating commands."""
     observation.pop("sim_timestep")
     if bad_dt is not None:
         observation["sim"] = {"timestep": np.array([bad_dt])}
-    adapter = (
-        _sacadrl(monkeypatch)
-        if planner == "sacadrl"
-        else SamplingPlannerAdapter(SocNavPlannerConfig(socnav_sampling_version="bounded_v2"))
-    )
+    adapters = {
+        "sacadrl": lambda: _sacadrl(monkeypatch),
+        "sampling": lambda: SamplingPlannerAdapter(
+            SocNavPlannerConfig(socnav_sampling_version="bounded_v2")
+        ),
+        "social_force": _sf,
+        "orca": lambda: ORCAPlannerAdapter(SocNavPlannerConfig(max_linear_speed=2.0)),
+    }
+    adapter = adapters[planner]()
     with pytest.raises(ValueError, match="timestep"):
         adapter.plan(observation)
+
+
+def test_orca_occupancy_penalty_scales_requested_speed(observation, monkeypatch):
+    """Below the cap, a 25% penalty reduces a 1 m/s aligned request to 0.75 m/s."""
+    adapter = ORCAPlannerAdapter(SocNavPlannerConfig(max_linear_speed=2.0))
+    heading = float(observation["robot_heading"][0])
+    velocity = np.array([np.cos(heading), np.sin(heading)])
+    # Keep direction aligned to isolate penalty application from heading slowdown.
+    monkeypatch.setattr(
+        adapter, "_get_safe_heading", lambda _pos, direction, _obs: (direction, 0.25)
+    )
+    linear, angular = adapter._velocity_world_to_command(
+        velocity_world=velocity,
+        robot_pos=observation["robot_position"],
+        robot_heading=heading,
+        observation=observation,
+    )
+    assert linear == pytest.approx(0.75)
+    assert angular == pytest.approx(0.0, abs=1e-8)
 
 
 @pytest.mark.parametrize(

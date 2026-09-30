@@ -8,7 +8,7 @@ observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32),
         """The release runner's flat dt must drive integration, rather than tau=0.5."""
 >       assert _sf()._resolve_dt(observation) == pytest.approx(0.1)
 E       assert 0.5 == 0.1 ± 1.0e-07
-E         
+E
 E         comparison failed
 E         Obtained: 0.5
 E         Expected: 0.1 ± 1.0e-07
@@ -23,11 +23,11 @@ observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32),
         nested_dt = {**observation, "sim": {"timestep": observation["sim_timestep"]}}
 >       assert _sf().plan(observation) == pytest.approx(_sf().plan(nested_dt))
 E       assert (0.9813681200...3665068859673) == approx((0.390...73 ± 1.9e-07))
-E         
+E
 E         comparison failed. Mismatched elements: 1 / 2:
 E         Max absolute difference: 0.5911665014160912
 E         Max relative difference: 0.6023901626074516
-E         Index | Obtained           | Expected                    
+E         Index | Obtained           | Expected
 E         0     | 0.9813681200523284 | 0.3902016186362373 ± 3.9e-07
 
 tests/benchmark/test_issue_10007_fxb.py:43: AssertionError
@@ -41,7 +41,7 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eaf3d05aea0>
         observation["sim_timestep"] = np.array([0.2], dtype=np.float32)
 >       assert _sacadrl(monkeypatch).plan(observation)[1] == pytest.approx(0.25)
 E       assert 0.5 == 0.25 ± 2.5e-07
-E         
+E
 E         comparison failed
 E         Obtained: 0.5
 E         Expected: 0.25 ± 2.5e-07
@@ -58,7 +58,7 @@ observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32),
         adapter.plan(observation)
 >       assert adapter._rvo2_sim.getTimeStep() == pytest.approx(0.2)
 E       assert 0.10000000149011612 == 0.2 ± 2.0e-07
-E         
+E
 E         comparison failed
 E         Obtained: 0.10000000149011612
 E         Expected: 0.2 ± 2.0e-07
@@ -74,19 +74,19 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eaf3d05b5c0>
         observation["sim_timestep"] = np.array([0.2], dtype=np.float32)
         dts = []
         original = socnav_sampling_v2._rollout
-    
+
         def observed_rollout(*args, **kwargs):
             dts.append(args[6] if len(args) > 6 else kwargs["dt"])
             return original(*args, **kwargs)
-    
+
         monkeypatch.setattr(socnav_sampling_v2, "_rollout", observed_rollout)
         adapter = SamplingPlannerAdapter(SocNavPlannerConfig(socnav_sampling_version="bounded_v2"))
         adapter.plan(observation)
         assert dts
 >       np.testing.assert_allclose(dts, 0.2)
-E       AssertionError: 
+E       AssertionError:
 E       Not equal to tolerance rtol=1e-07, atol=0
-E       
+E
 E       Mismatched elements: 52 / 52 (100%)
 E       First 5 mismatches are at indices:
 E        [0]: 0.1 (ACTUAL), 0.2 (DESIRED)
@@ -128,7 +128,7 @@ manifest = 'paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.
         adapter = policy._planner_adapter
 >       assert adapter._rvo2_sim.getAgentMaxSpeed(adapter._rvo2_robot_id) == pytest.approx(2.0)
 E       assert 3.0 == 2.0 ± 2.0e-06
-E         
+E
 E         comparison failed
 E         Obtained: 3.0
 E         Expected: 2.0 ± 2.0e-06
@@ -405,7 +405,7 @@ angle = 0.7853981633974483, expected = 1.060660172
         )
 >       assert linear == pytest.approx(expected, abs=1e-8)
 E       assert 1.5 == 1.060660172 ± 1.0e-08
-E         
+E
 E         comparison failed
 E         Obtained: 1.5
 E         Expected: 1.060660172 ± 1.0e-08
@@ -438,7 +438,7 @@ angle = 1.5707963267948966, expected = 0.0
         )
 >       assert linear == pytest.approx(expected, abs=1e-8)
 E       assert 1.5 == 0.0 ± 1.0e-08
-E         
+E
 E         comparison failed
 E         Obtained: 1.5
 E         Expected: 0.0 ± 1.0e-08
@@ -471,7 +471,7 @@ angle = 2.356194490192345, expected = 0.0
         )
 >       assert linear == pytest.approx(expected, abs=1e-8)
 E       assert 1.5 == 0.0 ± 1.0e-08
-E         
+E
 E         comparison failed
 E         Obtained: 1.5
 E         Expected: 0.0 ± 1.0e-08
@@ -504,7 +504,7 @@ angle = 3.141592653589793, expected = 0.0
         )
 >       assert linear == pytest.approx(expected, abs=1e-8)
 E       assert 1.5 == 0.0 ± 1.0e-08
-E         
+E
 E         comparison failed
 E         Obtained: 1.5
 E         Expected: 0.0 ± 1.0e-08
@@ -523,20 +523,20 @@ _________ test_orca_velocity_projection_records_optional_adapter_trace _________
             )
         )
         obs = _make_obs(goal=(5.0, 5.0), heading=0.0)
-    
+
         v, w = adapter._velocity_world_to_command(
             velocity_world=np.array([0.6, 0.6], dtype=float),
             robot_pos=np.array([0.0, 0.0], dtype=float),
             robot_heading=0.0,
             observation=obs,
         )
-    
+
         diagnostics = adapter.diagnostics()
         assert diagnostics["planner_type"] == "ORCAPlannerAdapter"
         assert diagnostics["adapter_trace_schema_version"] == "orca_adapter_trace.v1"
         trace_records = diagnostics["adapter_trace"]
         assert len(trace_records) == 1
-    
+
         record = trace_records[0]
         assert record["schema_version"] == "orca_adapter_trace.v1"
         assert record["planned_velocity_world_mps"] == pytest.approx([0.6, 0.6])
@@ -548,7 +548,7 @@ _________ test_orca_velocity_projection_records_optional_adapter_trace _________
         # magnitude is sqrt(0.72), so the diagnostic records the lost component.
 >       assert record["executed_speed_mps"] == pytest.approx(0.6)
 E       assert 0.848528137423857 == 0.6 ± 6.0e-07
-E         
+E
 E         comparison failed
 E         Obtained: 0.848528137423857
 E         Expected: 0.6 ± 6.0e-07

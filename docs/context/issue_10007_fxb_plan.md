@@ -21,3 +21,18 @@ Native ORCA must run without fallback. Store raw evidence outside `output/`,
 and commit compact measurements plus reproduction instructions. Retain base
 SHA, config hashes and dependency identity. On interruption, resume from saved
 episode records; never treat missing or failed rows as successful evidence.
+
+## FXB2 review repairs
+
+Reuse the clean worktree at reviewed head `39d9932efb802e4f340502f6fb8d4acfcab20795`.
+Accept and record top-level `dt` after nested/flat simulation time, preserving
+fail-closed validation. Add source/precedence, SF/ORCA missing-clock and isolated
+occupancy-penalty tests; prove the dt defect at that head and the coverage gaps
+against pre-FXB adapter code. Replace four non-dev episode tests with fixed-code
+dev calibration (1001–1003), freeze a 25% spin-count margin, then validate named
+nodes only. Preserve compact calibration with source hashes in the test fixtures.
+Normalize trailing whitespace in the historical failure log and update its digest.
+Run the seed-audited focused selection, characterization and new dev tests,
+ruff and full PR diff checks. Commit explicit paths and push the existing branch
+without force; read back the remote SHA. No main, merges or comments. Full
+readiness remains outside this lane because unrelated tests use prohibited seeds.

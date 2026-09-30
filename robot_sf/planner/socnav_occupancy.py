@@ -18,6 +18,7 @@ class OccupancyAwarePlannerMixin:
         """Read a finite positive sim dt from the nested or flat observation.
 
         Grid-enabled environments flatten ``sim.timestep`` to ``sim_timestep``.
+        Prefer nested time, then flat time, then the normalizer's ``dt`` alias.
         Never substitute a planner relaxation time or a coincidentally matching
         constant: integration and action decoding must use the observed clock.
 
@@ -31,9 +32,12 @@ class OccupancyAwarePlannerMixin:
         if isinstance(sim, dict) and "timestep" in sim:
             raw = sim["timestep"]
             source = "observation.sim.timestep"
-        else:
-            raw = observation.get("sim_timestep")
+        elif "sim_timestep" in observation:
+            raw = observation["sim_timestep"]
             source = "observation.sim_timestep"
+        else:
+            raw = observation.get("dt")
+            source = "observation.dt"
         try:
             values = np.asarray(raw, dtype=float).reshape(-1)
         except (TypeError, ValueError) as exc:

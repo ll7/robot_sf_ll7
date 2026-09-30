@@ -413,6 +413,8 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Optional encoder import contracts execute isolated modules without episodes.
+    "test_optional_moviepy_imports.py",
     # Runner isolation and resource contracts must run before a PR changes CI.
     "test_self_hosted_routing.py",
     # Doorway safe-failure contracts classify synthetic rows without planner steps.
@@ -1527,6 +1529,7 @@ def sample_baseline_data():
 # =====================================================================# Occupancy Grid Fixtures
 # =====================================================================
 
+
 @pytest.fixture
 def simple_grid_config():
     """Basic 10x10m grid with 0.1m resolution (100x100 cells)."""
@@ -1673,6 +1676,7 @@ def pre_generated_grid(occupancy_grid, simple_obstacles, simple_pedestrians, rob
 
 # =====================================================================# Shared Subprocess Mock Fixture
 # =====================================================================
+
 
 def _build_matcher_predicate(
     matcher: list[str] | tuple[str, ...] | str | Callable[[list[str]], bool],

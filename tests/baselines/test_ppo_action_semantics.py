@@ -14,7 +14,7 @@ import pytest
 import yaml
 
 from robot_sf.baselines.interface import Observation
-from robot_sf.baselines.ppo import PPOPlanner
+from robot_sf.baselines.ppo import PPOPlanner, PPOPlannerConfig
 from robot_sf.benchmark.map_runner import map_runner
 from robot_sf.models import get_registry_entry
 
@@ -134,3 +134,74 @@ def test_reconfigure_cannot_bypass_checkpoint_declaration(monkeypatch, arm):
     with pytest.raises(ValueError, match="requires registry action_semantics"):
         planner.configure(config)
     assert planner._model is previous_model
+
+
+@pytest.mark.parametrize(
+    ("semantics", "space", "message"),
+    [
+        ("unknown", "unicycle", "Unsupported PPO action_semantics"),
+        ("velocity_delta", "velocity", "requires unicycle action_space"),
+    ],
+)
+def test_invalid_delta_contracts_rejected_before_loading(semantics, space, message):
+    """Unknown semantics and delta-on-holonomic configs cannot create a usable planner."""
+    with pytest.raises(ValueError, match=message):
+        PPOPlanner(
+            PPOPlannerConfig(action_semantics=semantics, action_space=space),
+            defer_model_loading=True,
+        )
+
+
+@pytest.mark.parametrize("raw", [[float("nan"), 0.0], [0.0, float("inf")], [0.1]])
+def test_nonfinite_or_incomplete_delta_output_is_rejected(raw):
+    """Inference must not turn malformed deltas into clipped, apparently valid commands."""
+    planner = stub_planner("ppo", raw, fallback_to_goal=False)
+    with pytest.raises(ValueError, match="two finite policy outputs"):
+        planner.step({"robot_speed": [0.6, 0.2]})
+
+
+@pytest.mark.parametrize("form", ["mapping", "typed"])
+def test_vector_delta_policy_keeps_typed_current_speed(form):
+    """Vector and typed observations preserve signed speed before decoding the raw output."""
+    config = map_runner._ppo_planner_config(release_config("ppo"))
+    config["obs_mode"] = "vector"
+    planner = PPOPlanner(config, defer_model_loading=True)
+    planner._initialized = True
+    planner._model = SimpleNamespace(predict=lambda *a, **k: (np.array([-0.25, -0.1]), None))
+    robot = {
+        "position": [0.0, 0.0],
+        "velocity": [0.6, 0.0],
+        "goal": [1.0, 0.0],
+        "speed": [0.6, 0.2],
+    }
+    obs = (
+        Observation(0.1, robot, [])
+        if form == "typed"
+        else {"dt": 0.1, "robot": robot, "agents": []}
+    )
+    assert planner.step(obs) == {"v": pytest.approx(0.35), "omega": pytest.approx(0.1)}
+
+
+def test_reconfigure_refreshes_action_decoding_contract():
+    """Switching an absolute policy to delta semantics changes decoding, not just metadata."""
+    planner = PPOPlanner(
+        PPOPlannerConfig(action_space="unicycle", obs_mode="dict"), defer_model_loading=True
+    )
+    planner.configure(
+        PPOPlannerConfig(
+            action_space="unicycle", obs_mode="dict", action_semantics="velocity_delta"
+        )
+    )
+    planner._initialized = True
+    planner._model = SimpleNamespace(predict=lambda *a, **k: (np.array([-0.25, -0.1]), None))
+    assert planner.step({"robot_speed": [0.6, 0.2]}) == {
+        "v": pytest.approx(0.35),
+        "omega": pytest.approx(0.1),
+    }
+
+
+def test_delta_decoder_requires_explicit_physical_state():
+    """The decoder cannot reinterpret a delta as an absolute target when state is absent."""
+    planner = stub_planner("ppo", [0.3, 0.2], fallback_to_goal=False)
+    with pytest.raises(ValueError, match="requires current robot_speed"):
+        planner._action_vec_to_dict_from_array(np.array([0.3, 0.2]))

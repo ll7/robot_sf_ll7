@@ -160,9 +160,13 @@ frozen planner and historical evidence bytes remain unchanged.
 Fixed campaign and arm admission refuses an authored limit below the requested
 fixed horizon, before execution. Schedules cannot coexist with fixed horizons.
 Schedule digest checks run at config intake and scenario preparation. Simulator
-seconds bind after the effective timestep is selected. Schedule metadata preserves
+seconds bind after the effective timestep is selected, while the integer step
+budget reaches the simulator directly via `episode_step_limit`. Duration-only
+configs retain ceiling semantics and unchanged default hashes. Schedule metadata preserves
 source, digest, authored limit and declared limit, while each row records
-`effective_budget_steps` independently of its actual length. Scheduled metrics use
+`effective_budget_steps` independently of its actual length. Scheduled rows retain
+`horizon` and expose the same budget in `scenario_params.run_horizon`, including
+resume-time identity. Scheduled metrics use
 the effective horizon as the time-to-goal denominator.
 
 HZN2's pure-budget-timeout `max_steps` labeling and collision/success precedence

@@ -37,12 +37,17 @@ A fixed campaign or planner horizon is refused when any selected authored limit
 would end an episode earlier. To use different budgets, declare a schedule;
 schedules cannot coexist with fixed campaign or planner horizons. Admitted fixed
 budgets may shorten longer authored limits and record `metadata.campaign_horizon`.
-Both execution modes receive the same prepared scenarios. Simulator duration is
-bound after timestep overrides, so explicit budgets remain step budgets.
+Both execution modes receive the same prepared scenarios. After timestep overrides,
+the runner passes the integer budget through `SimulationSettings.episode_step_limit`
+to `RobotState`; duration is recorded in seconds without rounding the step limit.
+Duration-only simulator configurations retain ceiling semantics. Unset step limits
+stay out of legacy configuration hashes; explicit limits enter serialized identity.
 
 Schedule provenance records the source path, SHA-256, authored limit and effective
 limit in `metadata.scenario_horizon`. Every episode records `effective_budget_steps`
-as well as `horizon`; successful or collided episodes retain their declared budget,
+as well as `horizon`. Scheduled rows also expose that budget as
+`scenario_params.run_horizon` for existing consumers and resume identity.
+Successful or collided episodes retain their declared budget,
 independent of observed episode length. Rates should report the budget distribution;
 time-to-goal normalization uses the effective episode horizon in scheduled mode.
 A pure simulator timeout at that budget is `max_steps`, with collision and success

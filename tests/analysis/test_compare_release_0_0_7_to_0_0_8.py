@@ -1493,7 +1493,11 @@ def test_broad_rules_are_reported_first_without_rejection(tmp_path: Path) -> Non
 def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
     tmp_path: Path, budget: int | None
 ) -> None:
-    """Comparator accepts actual producer binding and hashes for shorter and longer fixed arms."""
+    """Compare producer binding and hashes for scheduled and fixed arms.
+
+    On base, H500 isolates a budget mismatch; scheduled/H700 cases fail on missing
+    provenance fields. Those metadata failures do not independently prove budget bugs.
+    """
     from dataclasses import replace
     from types import SimpleNamespace
     from unittest.mock import patch

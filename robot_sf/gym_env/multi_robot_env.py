@@ -167,7 +167,14 @@ class MultiRobotEnv(MultiAgentEnv):
         for sim in self.simulators:
             occupancies, sensors = init_collision_and_sensors(sim, env_config, orig_obs_space)
             states = [
-                RobotState(nav, occ, sen, d_t, max_ep_time)
+                RobotState(
+                    nav,
+                    occ,
+                    sen,
+                    d_t,
+                    max_ep_time,
+                    episode_step_limit=env_config.sim_config.episode_step_limit,
+                )
                 for nav, occ, sen in zip(sim.robot_navs, occupancies, sensors, strict=False)
             ]
             self.states.extend(states)

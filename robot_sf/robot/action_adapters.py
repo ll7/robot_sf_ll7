@@ -77,3 +77,42 @@ def holonomic_to_diff_drive_action(
 
 
 __all__ = ["DiffDriveAdapterConfig", "holonomic_to_diff_drive_action"]
+
+
+def ppo_delta_to_velocity_target(
+    action: np.ndarray,
+    current_speed: np.ndarray,
+    *,
+    max_linear_speed: float,
+    max_angular_speed: float,
+) -> np.ndarray:
+    """Sum signed PPO velocity deltas before applying the no-reverse target limits.
+
+    Deltas are velocities per policy step, not accelerations and not multiplied by dt.
+    The plant subsequently enforces its acceleration limits.
+
+    Returns:
+        The bounded target linear and angular velocity.
+    """
+    action = np.asarray(action, dtype=float).reshape(-1)
+    speed = np.asarray(current_speed, dtype=float).reshape(-1)
+    if action.size != 2 or not np.all(np.isfinite(action)):
+        raise ValueError("velocity_delta requires two finite policy outputs")
+    if speed.size != 2 or not np.all(np.isfinite(speed)):
+        raise ValueError("velocity_delta requires finite current robot_speed (v, omega)")
+    return np.clip(speed + action, [0.0, -max_angular_speed], [max_linear_speed, max_angular_speed])
+
+
+def unicycle_velocity_target_to_acceleration(
+    target: np.ndarray,
+    current_speed: np.ndarray,
+    dt: float,
+) -> np.ndarray:
+    """Convert a velocity target to the drive request before plant acceleration clipping.
+
+    Returns:
+        Requested linear and angular accelerations for this step.
+    """
+    return (np.asarray(target, dtype=float) - np.asarray(current_speed, dtype=float)) / max(
+        float(dt), 1e-6
+    )

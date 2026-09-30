@@ -50,6 +50,7 @@ from robot_sf.planner.predictive_foresight import (
     PredictiveForesightEncoder,
     predictive_foresight_config_from_source,
 )
+from robot_sf.robot.action_adapters import ppo_delta_to_velocity_target
 
 # Configure the known Torch 2.13/Python 3.12+ native-crash workaround before
 # Stable-Baselines3 imports the optimizer code that first touches torch._dynamo.
@@ -900,11 +901,12 @@ class PPOPlanner:
         if self._action_semantics == "velocity_delta":
             if current_speed is None:
                 raise ValueError("velocity_delta requires current robot_speed")
-            # Add the signed delta BEFORE clipping: negative outputs can be braking.
-            act = np.asarray(act, dtype=float).reshape(-1)
-            if act.size != 2 or not np.all(np.isfinite(act)):
-                raise ValueError("velocity_delta requires two finite policy outputs")
-            act = current_speed + act
+            act = ppo_delta_to_velocity_target(
+                act,
+                current_speed,
+                max_linear_speed=self.config.v_max,
+                max_angular_speed=self.config.omega_max,
+            )
         if self.config.action_space == "unicycle":
             # Expect target [v, omega]
             v = float(act[0]) if act.size >= 1 else 0.0

@@ -583,6 +583,7 @@ def _apply_simple_overrides(env_config, overrides: Mapping[str, object]) -> None
         "peds_have_static_obstacle_forces",
         "peds_have_robot_repulsion",
         "map_id",
+        "ppo_action_semantics",
         "predictive_foresight_enabled",
         "predictive_foresight_model_id",
         "predictive_foresight_checkpoint_path",

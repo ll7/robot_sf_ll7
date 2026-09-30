@@ -1,0 +1,26 @@
+# Contract alignment only; inherited method and full step budget retained.
+base_config: expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity.yaml
+policy_id: ppo_release_contract_issue791_delta_seed1001_20260930
+seeds:
+- 1001
+randomize_seeds: false
+env_overrides:
+  ppo_action_semantics: velocity_delta
+  robot_config:
+    type: differential_drive
+    max_linear_speed: 2.0
+    max_angular_speed: 1.0
+    allow_backwards: false
+    max_linear_accel: 1.0
+    max_linear_decel: 1.0
+    max_angular_accel: 1.0
+  sim_config:
+    time_per_step_in_secs: 0.1
+evaluation:
+  randomize_seeds: false
+  evaluation_seeds:
+  - 1003
+tracking:
+  wandb:
+    group: ppo-release-contract-20260930
+    name: ppotrain-a-seed1001

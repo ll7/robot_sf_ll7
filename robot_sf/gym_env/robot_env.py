@@ -49,6 +49,11 @@ from robot_sf.prediction.goal_intention import (
 )
 from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_state import VisualizableAction, VisualizableSimState
+from robot_sf.robot.action_adapters import (
+    ppo_delta_to_velocity_target,
+    unicycle_velocity_target_to_acceleration,
+)
+from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.robot.rollover_proxy import RolloverProxyParams, rollover_proxy_telemetry
 from robot_sf.sensor.range_sensor import lidar_ray_scan
@@ -586,6 +591,22 @@ class RobotEnv(BaseEnv):
             self.map_def,
         )
 
+        semantics = env_config.ppo_action_semantics
+        if semantics not in {"acceleration", "velocity_delta"}:
+            raise ValueError(f"Unsupported PPO action semantics: {semantics}")
+        if semantics == "velocity_delta":
+            robot_config = env_config.robot_config
+            if (
+                not isinstance(robot_config, DifferentialDriveSettings)
+                or robot_config.allow_backwards
+            ):
+                raise ValueError("velocity_delta requires a no-reverse differential drive")
+            # Signed deltas retain braking authority even though reverse motion is forbidden.
+            high = np.array(
+                [robot_config.max_linear_speed, robot_config.max_angular_speed], dtype=np.float32
+            )
+            self.action_space = spaces.Box(low=-high, high=high, dtype=np.float32)
+
         # Debug help
         self.debug_without_robot_movement: bool = bool(
             env_config.sim_config.debug_without_robot_movement
@@ -1114,6 +1135,21 @@ class RobotEnv(BaseEnv):
             requested_action = (0.0, 0.0)
         else:
             # Process the action through the simulator only when debug mode is disabled.
+            if self.config.ppo_action_semantics == "velocity_delta":
+                robot = self.simulator.robots[0]
+                target = ppo_delta_to_velocity_target(
+                    action,
+                    # SocNav exposes physical speed as float32; mirror the release adapter's
+                    # addition to that observed state before converting through the native plant.
+                    np.asarray(robot.current_speed, dtype=np.float32),
+                    max_linear_speed=self.config.robot_config.max_linear_speed,
+                    max_angular_speed=self.config.robot_config.max_angular_speed,
+                )
+                action = unicycle_velocity_target_to_acceleration(
+                    target,
+                    np.asarray(robot.current_speed),
+                    self.config.sim_config.time_per_step_in_secs,
+                )
             requested_action = tuple(self.simulator.robots[0].parse_action(action))
         action = self._apply_action_latency(requested_action)
 

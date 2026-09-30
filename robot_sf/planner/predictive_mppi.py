@@ -108,6 +108,9 @@ class PredictiveMPPIConfig:
 class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
     """Short-horizon sequence optimizer over learned pedestrian forecasts."""
 
+    # Observational only: the target chosen by the last ``plan`` call (world x, y).
+    _last_target_xy: tuple[float, float] | None = None
+
     def __init__(self, config: PredictiveMPPIConfig, *, allow_fallback: bool = False) -> None:
         """Initialize predictive optimizer and deterministic RNG state."""
         self.config = config
@@ -750,13 +753,14 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         )
         return np.asarray(rotation), cost
 
-    def plan(self, observation: dict[str, object]) -> tuple[float, float]:
+    def plan(self, observation: dict[str, object]) -> tuple[float, float]:  # noqa: PLR0915
         """Return the first action from the best sampled control sequence."""
         self._no_admissible_command = False
         self._recovery_command = False
         # Recovery rollouts consume observed speed and yaw rate, including
         # sampled/anchor/stop sequences, rather than assuming the body is at rest.
         robot_pos, heading, _, goal = self._extract_state(observation)
+        self._last_target_xy = (float(goal[0]), float(goal[1]))
         if float(np.linalg.norm(goal - robot_pos)) <= float(self.config.goal_tolerance):
             return 0.0, 0.0
 
@@ -957,7 +961,12 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
             "recovery_command": self._recovery_command,
             "recovery_command_count": self._recovery_command_count,
         }
-        return {"planner_type": "PredictiveMPPIAdapter", **decision, "last_decision": decision}
+        return {
+            "planner_type": "PredictiveMPPIAdapter",
+            **decision,
+            "last_decision": decision,
+            "planner_target_xy": list(self._last_target_xy) if self._last_target_xy else None,
+        }
 
     def foresight_diagnostics(self) -> dict[str, Any]:
         """Expose the nested predictor's checkpoint-load and fallback provenance.

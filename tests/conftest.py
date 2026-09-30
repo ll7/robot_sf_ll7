@@ -413,9 +413,14 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Clearance and LiDAR tracking contracts use fixed arrays without environment steps.
+    "test_clearance_geometry.py",
+    "test_lidar_tracked_agents.py",
     # FX3 uses real release checkpoints and static SVG pose checks without episodes.
     "test_fx3_static_recovery.py",
     "test_release_horizons.py",
+    # Doorway safe-failure contracts classify synthetic rows without planner steps.
+    "test_infeasible_probe_safe_failure.py",
     # Scenario-admissibility tests exercise deterministic candidate, manifest,
     # materialization, and provenance contracts used by the adversarial search.
     "test_scenario_admissibility.py",
@@ -1523,9 +1528,8 @@ def sample_baseline_data():
     }
 
 
-# ============================================================================
-# Occupancy Grid Fixtures
-# ============================================================================
+# =====================================================================# Occupancy Grid Fixtures
+# =====================================================================
 
 
 @pytest.fixture
@@ -1672,9 +1676,8 @@ def pre_generated_grid(occupancy_grid, simple_obstacles, simple_pedestrians, rob
     return grid
 
 
-# ============================================================================
-# Shared Subprocess Mock Fixture
-# ============================================================================
+# =====================================================================# Shared Subprocess Mock Fixture
+# =====================================================================
 
 
 def _build_matcher_predicate(

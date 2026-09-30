@@ -23,7 +23,7 @@ def native_drive_rollout(
     drive.state.wheel_speeds = drive.movement._resulting_wheel_speeds(drive.current_speed)
     positions, headings, velocities = [], [], []
 
-    def advance(command):
+    def advance(command) -> None:
         velocity = np.asarray(drive.current_speed)
         drive.apply_action(tuple((np.asarray(command) - velocity) / dt), dt)
         positions.append(drive.pos)

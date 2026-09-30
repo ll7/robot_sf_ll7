@@ -28,20 +28,34 @@ MATRIX = REPO_ROOT / DEFAULT_MATRIX
 # (respawn exclusion, reset relocation, padded robot start) must also hold there.
 MATRIX_V1 = REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml"
 
-# (scenario, seed, zero-action steps to survive). Station cells also cover the
-# route-end respawn window (steps 5-16 in the release rows).
+# Dev-only probe: b8dccb9c9^ (9c3452fac) versus f6d5ce86, with a hard
+# 1001 <= seed <= 1030 assertion before construction. Pre-fix has no v2 matrix;
+# its v1 is the closest predecessor, including the original station SVG. Both
+# v1 and the actual successor v2 were measured at head, without changing maps.
+# Reset robot-ped surface clearance in metres; first pre-fix collision is step 1:
+# scenario / seed             pre-v1  collision    head-v1  head-v2  steps
+# circular_crossing / 1001     -0.494  pedestrian      0.100    0.100      1
+# cross_trap_high / 1020       -0.810  pedestrian      0.100    0.100      1
+# head_on_corridor_low / 1001  23.050  obstacle       22.363   22.363      1
+# station_medium / 1006       -0.261  pedestrian      0.100    4.070     20
+# station_medium / 1024        0.673  pedestrian      0.673    3.490     20
+# station_medium / 1001        6.029  pedestrian      6.029    6.029     20
+# station_medium / 1021        5.938  pedestrian      5.938    5.743     20
+# Every head cell has overlap=False, positive wall clearance, no step collision
+# and no respawn-overlap events. Station cells survive the full respawn window.
+# (matrix, scenario, seed, zero-action steps to survive).
 CELLS = [
     ("v2", "francis2023_circular_crossing", 1001, 1),
-    ("v2", "classic_cross_trap_high", 1001, 1),
-    ("v2", "classic_head_on_corridor_low", 1006, 1),
-    ("v2", "classic_station_platform_medium", 1005, 20),
-    ("v2", "classic_station_platform_medium", 1008, 20),
-    ("v2", "classic_station_platform_medium", 1002, 20),
+    ("v2", "classic_cross_trap_high", 1020, 1),
+    ("v2", "classic_head_on_corridor_low", 1001, 1),
+    ("v2", "classic_station_platform_medium", 1006, 20),
+    ("v2", "classic_station_platform_medium", 1024, 20),
+    ("v2", "classic_station_platform_medium", 1001, 20),
     ("v2", "classic_station_platform_medium", 1021, 20),
-    ("v1", "classic_head_on_corridor_low", 1006, 1),
-    ("v1", "classic_station_platform_medium", 1005, 20),
-    ("v1", "classic_station_platform_medium", 1008, 20),
-    ("v1", "classic_station_platform_medium", 1002, 20),
+    ("v1", "classic_head_on_corridor_low", 1001, 1),
+    ("v1", "classic_station_platform_medium", 1006, 20),
+    ("v1", "classic_station_platform_medium", 1024, 20),
+    ("v1", "classic_station_platform_medium", 1001, 20),
     ("v1", "classic_station_platform_medium", 1021, 20),
 ]
 
@@ -69,6 +83,7 @@ def test_formerly_defective_cell_starts_clear(
     scenarios, matrix: str, name: str, seed: int, steps: int
 ) -> None:
     """The reset is clear of pedestrians and walls, and zero-action steps do not collide."""
+    assert 1001 <= seed <= 1030
     scenario = _scenario_with_episode_seed_defaults(scenarios[matrix][name], seed=seed)
     path = MATRIX if matrix == "v2" else MATRIX_V1
     env = make_robot_env(

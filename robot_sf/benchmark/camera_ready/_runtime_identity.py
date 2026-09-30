@@ -25,6 +25,9 @@ def expected_runtime_identity(
 
     ``config_root`` anchors both the planner path and repository-relative candidate
     references. It defaults to the checkout containing this module, never the cwd.
+
+    Returns:
+        Effective algorithm name and planner config hash.
     """
     algo = planner.get("algo")
     if not isinstance(algo, str) or not algo.strip():

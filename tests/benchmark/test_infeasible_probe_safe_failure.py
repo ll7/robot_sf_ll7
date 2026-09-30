@@ -42,7 +42,11 @@ def _row(
             if timeout is None
             else timeout,
         },
-        "metrics": {"collisions": 1.0 if collision else 0.0, **metrics},
+        "metrics": {
+            "collisions": 1.0 if collision else 0.0,
+            "success": float(route_complete),
+            **metrics,
+        },
         "integrity": {"contradictions": []},
     }
 
@@ -63,7 +67,7 @@ def test_force_above_zero_without_collision_is_safe_failure() -> None:
 
 
 def test_obstacle_or_wall_collision_flag_is_contact() -> None:
-    assert classify_probe_row(_row(collision=True)) == CONTACT
+    assert classify_probe_row(_row("collision", collision=True, timeout=False)) == CONTACT
 
 
 def test_error_termination_is_not_safe_failure() -> None:
@@ -81,7 +85,7 @@ def test_robot_attributable_contact_is_not_safe_failure(row: dict) -> None:
 
 
 def test_timeout_with_contact_is_not_counted_even_when_flagged_timeout() -> None:
-    assert classify_probe_row(_row(collisions=2.0)) == CONTACT
+    assert classify_probe_row(_row(collisions=2.0)) == UNRESOLVED
 
 
 def test_success_on_probe_is_a_defect() -> None:

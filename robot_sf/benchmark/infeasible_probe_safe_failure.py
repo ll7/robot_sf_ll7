@@ -37,6 +37,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
+from robot_sf.benchmark.termination_reason import TERMINATION_REASONS, outcome_contradictions
+
 PROBE_SCENARIO_IDS = frozenset({"francis2023_narrow_doorway"})
 DECLARED_PROBE_EPISODES = 420
 TIMEOUT_TERMINATIONS = frozenset({"max_steps", "truncated"})
@@ -71,39 +73,84 @@ def _contact(outcome: Mapping[str, Any], metrics: Mapping[str, Any]) -> bool | N
     collision = _flag(outcome, "collision_event")
     if collision is None:
         return None
-    collisions = _number(metrics.get("collisions", 0))
-    if collisions is None:
+    collisions = _number(metrics.get("collisions"))
+    if collisions is None or collisions < 0:
         return None
     return collision or collisions > 0
 
 
-def classify_probe_row(row: Mapping[str, Any]) -> str:
+def _valid_integrity(integrity: Any) -> bool:
+    """Validate optional integrity.
+
+    Returns:
+        Whether supplied integrity has an empty contradictions list.
+    """
+    return integrity is None or (
+        isinstance(integrity, dict)
+        and isinstance(integrity.get("contradictions"), list)
+        and not integrity["contradictions"]
+    )
+
+
+def _valid_optional_counts(metrics: Mapping[str, Any]) -> bool:
+    """Validate any supplied success/collision metric aliases.
+
+    Returns:
+        Whether supplied aliases are finite and nonnegative.
+    """
+    values = [
+        _number(
+            int(metrics[key]) if key == "success" and type(metrics[key]) is bool else metrics[key]
+        )
+        for key in ("success", "success_rate", "collision_rate")
+        if key in metrics
+    ]
+    return all(value is not None and value >= 0 for value in values)
+
+
+def classify_probe_row(  # noqa: C901 - explicit fail-closed admission branches
+    row: Mapping[str, Any],
+) -> str:
     """Classify one probe episode row.
 
     Returns:
         One of the module class names; ``unresolved`` when the row lacks the
-        fields, or contradicts itself, so no class can be established.
+        fields, or contradicts itself, so no class can be established. Collision
+        counts are required, finite and nonnegative; the canonical flag must
+        agree. Integrity is optional but must be well formed when supplied.
+        Consistency is checked again even when integrity reports no contradictions.
     """
     outcome, metrics = row.get("outcome"), row.get("metrics")
     termination = row.get("termination_reason")
     integrity = row.get("integrity")
     if not isinstance(outcome, dict) or not isinstance(metrics, dict):
         return UNRESOLVED
-    if not isinstance(termination, str):
+    if termination not in TERMINATION_REASONS:
         return UNRESOLVED
-    if isinstance(integrity, dict) and integrity.get("contradictions"):
+    if not _valid_integrity(integrity):
         return UNRESOLVED
     route_complete = _flag(outcome, "route_complete")
     timeout = _flag(outcome, "timeout_event")
     contact = _contact(outcome, metrics)
     if route_complete is None or timeout is None or contact is None:
         return UNRESOLVED
+    # Recompute consistency; an absent or forged integrity list proves nothing.
+    if not _valid_optional_counts(metrics):
+        return UNRESOLVED
+    if outcome_contradictions(termination_reason=termination, outcome=outcome, metrics=metrics):
+        return UNRESOLVED
+    if (termination == "success" and not route_complete) or (
+        termination == "collision" and not contact
+    ):
+        return UNRESOLVED
     if route_complete or termination == "success":
         return DEFECT_SUCCESS
     if contact or termination == "collision":
         return CONTACT
+    if timeout and termination in {*TIMEOUT_TERMINATIONS, "terminated"}:
+        return SAFE_FAILURE
     if termination in TIMEOUT_TERMINATIONS:
-        return SAFE_FAILURE if timeout else UNRESOLVED
+        return UNRESOLVED
     return OTHER_TERMINATION
 
 

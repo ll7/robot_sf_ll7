@@ -185,7 +185,7 @@ def test_stream_reader_discards_traces_before_retaining():
     raw["algorithm_metadata"] = {
         "simulation_step_trace": {
             "schema_version": "simulation-step-trace.v2",
-            "steps": list(range(1000)),
+            "steps": [{"t": 0}] * 1000,
         },
         "planner_decision_trace": [1] * 1000,
     }

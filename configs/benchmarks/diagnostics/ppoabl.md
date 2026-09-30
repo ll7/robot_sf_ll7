@@ -13,9 +13,11 @@ behavior, relaxing only the plant speed cap.
 | a4 | V3 | 3 | instantaneous | allowed | 1 |
 | a5 | V2 | 3 | 1 (including braking) | forbidden | 1 |
 
-All retain policy maximum bounds 3 m/s and 1 rad/s and registry-bound
-velocity-delta semantics. A1-A4 retain V3 signed proposals; A5 retains V2
-nonnegative policy clipping. A3 forbids reverse at the plant only. The guard
+All retain their comparator policy bounds and registry-bound velocity-delta
+semantics. A1-A4 retain V3 signed proposals with policy caps 3 m/s and 1 rad/s;
+A5 retains V2 nonnegative policy clipping with policy caps 2 m/s and 1 rad/s.
+Consequently, A5 relaxes only the physical cap and may never command above 2 m/s;
+a null reverse-direction result would not establish speed-cap irrelevance. A3 forbids reverse at the plant only. The guard
 and its rollout settings are unchanged. The two PPO arms retain their original,
 different checkpoints; comparisons are within arm.
 

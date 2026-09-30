@@ -31,18 +31,18 @@ MATRIX_V1 = REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_goal
 # (scenario, seed, zero-action steps to survive). Station cells also cover the
 # route-end respawn window (steps 5-16 in the release rows).
 CELLS = [
-    ("v2", "francis2023_circular_crossing", 111, 1),
-    ("v2", "classic_cross_trap_high", 111, 1),
-    ("v2", "classic_head_on_corridor_low", 116, 1),
-    ("v2", "classic_station_platform_medium", 115, 20),
-    ("v2", "classic_station_platform_medium", 118, 20),
-    ("v2", "classic_station_platform_medium", 112, 20),
-    ("v2", "classic_station_platform_medium", 131, 20),
-    ("v1", "classic_head_on_corridor_low", 116, 1),
-    ("v1", "classic_station_platform_medium", 115, 20),
-    ("v1", "classic_station_platform_medium", 118, 20),
-    ("v1", "classic_station_platform_medium", 112, 20),
-    ("v1", "classic_station_platform_medium", 131, 20),
+    ("v2", "francis2023_circular_crossing", 1001, 1),
+    ("v2", "classic_cross_trap_high", 1001, 1),
+    ("v2", "classic_head_on_corridor_low", 1006, 1),
+    ("v2", "classic_station_platform_medium", 1005, 20),
+    ("v2", "classic_station_platform_medium", 1008, 20),
+    ("v2", "classic_station_platform_medium", 1002, 20),
+    ("v2", "classic_station_platform_medium", 1021, 20),
+    ("v1", "classic_head_on_corridor_low", 1006, 1),
+    ("v1", "classic_station_platform_medium", 1005, 20),
+    ("v1", "classic_station_platform_medium", 1008, 20),
+    ("v1", "classic_station_platform_medium", 1002, 20),
+    ("v1", "classic_station_platform_medium", 1021, 20),
 ]
 
 
@@ -98,15 +98,15 @@ def test_formerly_defective_cell_starts_clear(
 @pytest.mark.slow
 @pytest.mark.skipif(
     os.environ.get("ROBOT_SF_SPAWN_MATRIX_PREFLIGHT") != "1",
-    reason="full release matrix reset preflight; set ROBOT_SF_SPAWN_MATRIX_PREFLIGHT=1",
+    reason="full development matrix reset preflight; set ROBOT_SF_SPAWN_MATRIX_PREFLIGHT=1",
 )
-def test_release_matrix_reset_preflight_has_no_overlap() -> None:
-    """Every release scenario x seed 111-140 resets without a spawn overlap."""
-    workers = int(os.environ.get("ROBOT_SF_SPAWN_MATRIX_WORKERS", "4"))
+def test_development_matrix_reset_preflight_has_no_overlap() -> None:
+    """Every release scenario x dev seeds 1001-1030 resets without a spawn overlap."""
+    workers = min(2, int(os.environ.get("ROBOT_SF_SPAWN_MATRIX_WORKERS", "1")))
     report = run_preflight(
         Namespace(
             matrix=MATRIX,
-            seeds="111-140",
+            seeds="1001-1030",
             scenario=[],
             workers=workers,
             step_zero=True,

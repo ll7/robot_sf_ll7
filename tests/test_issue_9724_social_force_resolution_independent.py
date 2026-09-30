@@ -428,7 +428,7 @@ def test_bottleneck_low_without_pedestrians_reaches_goal() -> None:
     record = _run(
         Path("configs/scenarios/archetypes/classic_bottleneck.yaml"),
         "classic_bottleneck_low",
-        111,
+        1001,
     )
     assert record["outcome"] == {
         "route_complete": True,
@@ -455,19 +455,19 @@ def test_group_crossing_seed_22_makes_monotone_progress_and_reaches_goal() -> No
 
 
 @pytest.mark.slow
-def test_release_matrix_bottleneck_low_seed_112_enters_goal_zone() -> None:
+def test_release_matrix_bottleneck_low_seed_1002_enters_goal_zone() -> None:
     """The shipped v2 config completes under goal_zone_entry_v1.
 
     With terminal_goal_v1 enabled the robot stopped 1.75 m before the final
     waypoint, outside the goal zone, and timed out on this seed.
     """
     assert V2_CONFIG == {"social_force_planner_version": V2}
-    record = _run(RELEASE_MATRIX, "classic_bottleneck_low", 112)
+    record = _run(RELEASE_MATRIX, "classic_bottleneck_low", 1002)
     assert record["outcome"]["route_complete"] is True
 
 
 @pytest.mark.slow
-def test_narrow_doorway_seed_111_does_not_spin_in_place() -> None:
+def test_narrow_doorway_seed_1001_does_not_spin_in_place() -> None:
     """In a dead end the turn direction never flips and the spin is bounded.
 
     The 1 m-radius robot does not fit through this doorway, so the episode
@@ -476,7 +476,7 @@ def test_narrow_doorway_seed_111_does_not_spin_in_place() -> None:
     sign flips and the robot creeps around the force balance instead.
     """
     commands: list[tuple[float, float]] = []
-    record = _run(RELEASE_MATRIX, "francis2023_narrow_doorway", 111, commands=commands)
+    record = _run(RELEASE_MATRIX, "francis2023_narrow_doorway", 1001, commands=commands)
     turns = [angular for _linear, angular in commands]
     flips = sum(1 for a, b in pairwise(turns) if a * b < 0.0 and abs(a) > 0.5 and abs(b) > 0.5)
     spinning = sum(1 for linear, angular in commands if linear < 0.05 and abs(angular) > 0.9)

@@ -94,7 +94,7 @@ def test_native_command_per_episode_runs_and_validates(tmp_path: Path):
     """A per-episode native-command episode produces a schema-valid record."""
     scenario = _native_command_spec(persistent=False)
     record = run_episode(
-        scenario, seed=111, algo="native_command", horizon=40, dt=0.1, record_forces=False
+        scenario, seed=1001, algo="native_command", horizon=40, dt=0.1, record_forces=False
     )
     schema = load_schema(SCHEMA_PATH)
     validate_episode(record, schema)
@@ -310,7 +310,7 @@ def test_native_row_accepted_by_issue_5416_analyzer_diagnostics():
 
     scenario = _native_command_spec(persistent=False)
     record = run_episode(
-        scenario, seed=111, algo="native_command", horizon=40, dt=0.1, record_forces=False
+        scenario, seed=1001, algo="native_command", horizon=40, dt=0.1, record_forces=False
     )
     am = record["algorithm_metadata"]
     # The analyzer's per-row diagnostic parser reads planner_diagnostics from the

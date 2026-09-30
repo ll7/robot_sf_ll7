@@ -388,53 +388,69 @@ def test_continuous_margin_oracle_rejects_unsafe_goal_and_disconnected_leg() -> 
     assert reachability["continuous_oracle"]["first_blocked_segment_index"] == 0
 
 
-def test_known_unsafe_sampled_goals_stay_blocked_on_release_seeds() -> None:
-    """The exact-margin fallback cannot admit the observed unsafe nominal goals."""
+def _reset_free_release_geometry(name: str):
+    """Load real release geometry without constructing, resetting, or stepping an env."""
+    from robot_sf.gym_env.robot_env import RobotEnv
+
     matrix = (
         REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v3.yaml"
     )
     scenario = next(
-        dict(row)
-        for row in spawn_preflight._load_matrix(matrix)
-        if row["name"] == "classic_t_intersection_low"
+        dict(row) for row in spawn_preflight._load_matrix(matrix) if row["name"] == name
     )
-    unsafe_seeds = (111, 115, 118, 121, 122, 125, 134, 138)
-    result = spawn_preflight._check_release_scenario(
-        (scenario, str(matrix), unsafe_seeds, 0.1, 20, 0.1, False)
+    config = spawn_preflight.build_env_config(scenario, scenario_path=matrix)
+    assert len(config.map_pool.map_defs) == 1
+    map_def = next(iter(config.map_pool.map_defs.values()))
+    route = map_def.robot_routes[0]
+    geometry = RobotEnv._normalize_obstacles_for_grid(map_def.obstacles, map_def.bounds)
+    robot = SimpleNamespace(pose=(route.waypoints[0], 0.0), config=config.robot_config)
+    navigator = SimpleNamespace(waypoints=list(route.waypoints[1:]))
+    env = SimpleNamespace(
+        simulator=SimpleNamespace(map_def=map_def, robots=[robot], robot_navs=[navigator]),
+        _get_static_grid_obstacles=lambda: geometry,
     )
+    analysis = spawn_preflight._build_occupancy_analysis(
+        env,
+        robot_radius_m=config.robot_config.radius,
+        margin_m=0.1,
+        resolution_m=0.1,
+    )
+    return env, analysis, scenario, route
 
-    assert [row["seed"] for row in result["rows"]] == list(unsafe_seeds)
-    for row in result["rows"]:
-        assert row["overall_status"] == "blocked", row
-        assert row["footprint_reachability"]["status"] == "fail", row
-        assert row["footprint_reachability"]["continuous_oracle"]["reason"] == (
-            "required_route_point_below_continuous_margin"
-        ), row
+
+def test_unsafe_release_goal_zone_corner_stays_blocked_without_reset() -> None:
+    """The real nominal goal zone contains an unsafe goal; no held-out sample is drawn."""
+    env, analysis, scenario, route = _reset_free_release_geometry("classic_t_intersection_low")
+    # The authored corner, rather than a random episode outcome, pins this geometry defect.
+    env.simulator.robot_navs[0].waypoints = [route.goal_zone[2]]
+    reachability, _passage = spawn_preflight._check_footprint_path(
+        env,
+        analysis,
+        scenario=scenario,
+        margin_m=0.1,
+    )
+    assert reachability["status"] == "fail", reachability
+    assert (
+        reachability["continuous_oracle"]["reason"]
+        == "required_route_point_below_continuous_margin"
+    )
+    assert reachability["continuous_oracle"]["first_unsafe_route_point_index"] == 1
 
 
-def test_historical_narrow_doorway_probe_stays_blocked_on_all_release_seeds() -> None:
-    """A probe declaration cannot admit the 2 m doorway to the nominal matrix."""
-    matrix = (
-        REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v3.yaml"
-    )
-    scenario = next(
-        dict(row)
-        for row in spawn_preflight._load_matrix(matrix)
-        if row["name"] == "francis2023_narrow_doorway"
-    )
+def test_historical_narrow_doorway_probe_stays_blocked_without_reset() -> None:
+    """A probe declaration cannot admit the real 2 m doorway to the nominal matrix."""
+    env, analysis, scenario, _route = _reset_free_release_geometry("francis2023_narrow_doorway")
     scenario["expected_outcome"] = "infeasible_safe_hold"
-    result = spawn_preflight._check_release_scenario(
-        (scenario, str(matrix), tuple(range(111, 141)), 0.1, 20, 0.1, False)
+    reachability, passage = spawn_preflight._check_footprint_path(
+        env,
+        analysis,
+        scenario=scenario,
+        margin_m=0.1,
     )
-
-    assert len(result["rows"]) == 30
-    for row in result["rows"]:
-        assert row["overall_status"] == "blocked", row
-        reachability = row["footprint_reachability"]
-        assert reachability["status"] == "invalid", row
-        assert reachability["reason"] == "infeasibility_probe_requires_separate_manifest", row
-        assert reachability["observed_status"] == "fail", row
-        assert row["passage_width"]["observed_status"] == "fail", row
+    assert reachability["status"] == "invalid", reachability
+    assert reachability["reason"] == "infeasibility_probe_requires_separate_manifest", reachability
+    assert reachability["observed_status"] == "fail", reachability
+    assert passage["observed_status"] == "fail", passage
 
 
 def test_main_grid_doorway_probe_requires_pinned_map_and_oracle() -> None:
@@ -451,7 +467,7 @@ def test_main_grid_doorway_probe_requires_pinned_map_and_oracle() -> None:
     )
     assert not spawn_preflight._verified_main_grid_probe(changed, matrix)
     result = spawn_preflight._check_release_scenario(
-        (scenario, str(matrix), (111, 119), 0.1, 20, 0.1, True)
+        (scenario, str(matrix), (1001, 1009), 0.1, 20, 0.1, True)
     )
     assert [row["overall_status"] for row in result["rows"]] == [
         "infeasibility_probe",
@@ -463,25 +479,40 @@ def test_main_grid_doorway_probe_requires_pinned_map_and_oracle() -> None:
     )
 
 
-def test_station_platform_117_respawn_defect_is_removed_by_successor_map() -> None:
+def test_station_platform_respawn_defect_geometry_is_removed_by_successor_map() -> None:
+    """The release successor removes the route-end respawn point inside the robot zone."""
     matrix = REPO_ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
     scenario = next(
         row
         for row in spawn_preflight._load_matrix(matrix)
         if row["name"] == "classic_station_platform_medium"
     )
-    corrected = spawn_preflight._check_release_scenario(
-        (scenario, str(matrix), (117,), 0.1, 20, 0.1, False)
-    )["rows"][0]
-    historical = dict(scenario)
-    historical["map_file"] = "../../maps/svg_maps/classic_station_platform.svg"
-    historical_result = spawn_preflight._check_release_scenario(
-        (historical, str(matrix), (117,), 0.1, 20, 0.1, False)
-    )["rows"][0]
-    assert corrected["overall_status"] == "valid"
-    assert corrected["respawn_safety"]["status"] == "pass"
-    assert historical_result["overall_status"] == "blocked"
-    assert historical_result["respawn_safety"]["reason"] == ("episode_ended_before_respawn_window")
+
+    def warnings_for(row):
+        config = spawn_preflight.build_env_config(row, scenario_path=matrix)
+        assert len(config.map_pool.map_defs) == 1
+        map_def = next(iter(config.map_pool.map_defs.values()))
+        return spawn_preflight._static_map_warnings(
+            SimpleNamespace(
+                map_def=map_def,
+                robots=[SimpleNamespace(config=config.robot_config)],
+                config=config.sim_config,
+            )
+        )
+
+    corrected = warnings_for(scenario)
+    historical = warnings_for(
+        dict(
+            scenario,
+            map_file="../../maps/svg_maps/classic_station_platform.svg",
+        )
+    )
+    bad_respawn_points = [
+        warning for warning in historical if warning["kind"] == "ped_waypoint_in_robot_spawn_zone"
+    ]
+    assert len(bad_respawn_points) == 1
+    assert bad_respawn_points[0]["waypoint"] == [6.0, 4.5]
+    assert not any(warning["kind"] == "ped_waypoint_in_robot_spawn_zone" for warning in corrected)
 
 
 def test_boundary_width_straight_route_requires_full_margin() -> None:

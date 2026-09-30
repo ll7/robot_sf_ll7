@@ -847,3 +847,5 @@ it as a repeatable workflow.
   conclusions.
 - Repomix: recommended for static, reproducible context packs. Generated packs are disposable
   `output/` artifacts, not source-of-truth documentation.
+
+The checkpoint-bound PPO velocity-delta adapter and shared release plant limitation are documented in [ppo_checkpoint_action_semantics.md](ppo_checkpoint_action_semantics.md).

@@ -800,7 +800,7 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
         and "planner_ids" in source
         and (config is None or "pedestrian_aware_planners" not in config)
     ):
-        roster = _unique_string_ids(source["planner_ids"], "source.planner_ids")
+        roster = sorted(_unique_string_ids(source["planner_ids"], "source.planner_ids"))
         settings["pedestrian_aware_planners"] = [
             planner for planner in roster if planner != settings["baseline_planner"]
         ]
@@ -809,6 +809,12 @@ def analyze_release_rows(  # noqa: C901, PLR0912, PLR0915
         source_info = json.loads(canonical_json(dict(source or {})))
     except (AuditContractError, TypeError, ValueError, RecursionError) as error:
         raise ReleaseRowError("source identity must be strict JSON") from error
+    if (
+        source
+        and "planner_ids" in source
+        and (config is None or "pedestrian_aware_planners" not in config)
+    ):
+        source_info["cohort_source"] = "manifest_planner_ids"
     source_info["detector_registry_digest"] = registry.digest
     expected_planners = source_info.get("planner_ids", observed_planners)
     if (

@@ -350,10 +350,10 @@ def test_shield_dictionary_still_exposes_nested_failures(
     )
 
 
-def test_declared_fallback_counter_dictionary_is_still_invalid() -> None:
-    """Declared numeric counters stay strict even when a dictionary is supplied."""
-    assert runtime_fallback_or_degraded_marker({"fallback_count": {}}) == (
-        "fallback_count",
+def test_unknown_fallback_dictionary_is_still_invalid() -> None:
+    """Only the documented typed field is a container; other counters stay strict."""
+    assert runtime_fallback_or_degraded_marker({"unknown_fallback_counter": {}}) == (
+        "unknown_fallback_counter",
         "invalid",
     )
 
@@ -912,4 +912,63 @@ def test_unverified_best_effort_decision_retains_rejection(label, binding) -> No
     assert runtime_fallback_or_degraded_marker(payload, expected_algorithm=binding) == (
         f"guard_stats.{label}",
         "1",
+    )
+
+
+@pytest.mark.parametrize("key", ["fallback_events", "route_fallback_count", "sampler_fallback"])
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (3, "3"),
+        (float("nan"), "invalid"),
+        (-1, "invalid"),
+        ("used", "invalid"),
+        ({}, "invalid"),
+        (None, "invalid"),
+    ],
+)
+@pytest.mark.parametrize("location", ["top", "nested", "list"])
+def test_undeclared_fallback_counters_fail_closed(key, value, expected, location):
+    payload = {key: value}
+    path = key
+    if location == "nested":
+        payload = {"decision_counts": payload}
+        path = "decision_counts." + path
+    elif location == "list":
+        payload = {"events": [payload]}
+        path = "events[0]." + path
+    assert runtime_fallback_or_degraded_marker(payload) == (path, expected)
+
+
+@pytest.mark.parametrize("value", [5, "used", [], None, False])
+def test_fallback_diagnostics_requires_mapping(value):
+    assert runtime_fallback_or_degraded_marker({"fallback_diagnostics": value}) == (
+        "fallback_diagnostics",
+        "invalid",
+    )
+
+
+def test_fallback_diagnostics_mapping_is_recursively_scanned():
+    from collections import UserDict
+
+    assert runtime_fallback_or_degraded_marker(
+        {"fallback_diagnostics": UserDict({"route_fallback_count": 2})}
+    ) == ("fallback_diagnostics.route_fallback_count", "2")
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (2, "2"),
+        (float("nan"), "invalid"),
+        (-1, "invalid"),
+        ("used", "invalid"),
+        ({}, "invalid"),
+        (True, "invalid"),
+    ],
+)
+def test_undeclared_degraded_counters_fail_closed(value, expected):
+    assert runtime_fallback_or_degraded_marker({"events": [{"step_degraded": value}]}) == (
+        "events[0].step_degraded",
+        expected,
     )

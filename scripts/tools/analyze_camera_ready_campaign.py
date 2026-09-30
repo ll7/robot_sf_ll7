@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import copy
 import csv
+import hashlib
 import json
 import math
 import subprocess
@@ -225,6 +226,33 @@ def _lookup_planner_row(
     return None
 
 
+def _verify_relocated_digest(path: Path) -> None:
+    """Bind relocated episode bytes to their producing sidecar when present."""
+    sidecar = path.with_name("episodes.jsonl.provenance.json")
+    if not sidecar.exists():
+        return
+    provenance = json.loads(sidecar.read_text(encoding="utf-8"))
+    artifacts = provenance.get("raw_artifacts") if isinstance(provenance, dict) else None
+    if not isinstance(artifacts, list):
+        raise ValueError(f"Invalid relocation provenance: {sidecar}")
+    matches = [
+        entry
+        for entry in artifacts
+        if isinstance(entry, dict)
+        and (
+            (path.name == "episodes.jsonl" and entry.get("kind") == "episodes_jsonl")
+            or Path(str(entry.get("path", ""))).name == path.name
+        )
+    ]
+    if not matches:
+        if path.name == "episodes.jsonl":
+            raise ValueError(f"Missing relocation digest: {sidecar}")
+        return
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if any(entry.get("sha256") != digest for entry in matches):
+        raise ValueError(f"Relocated artifact digest mismatch: {path}")
+
+
 def _relocated_campaign_path(
     campaign_root: Path, candidate_path: Path, *, label: str
 ) -> Path | None:
@@ -238,6 +266,7 @@ def _relocated_campaign_path(
         if not relocated.is_relative_to(campaign_root.resolve()):
             raise ValueError(f"Unsafe {label}: {candidate_path}")
         if relocated.is_file():
+            _verify_relocated_digest(relocated)
             return relocated
     return None
 

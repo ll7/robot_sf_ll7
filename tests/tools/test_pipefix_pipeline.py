@@ -1,6 +1,7 @@
 """Regression probes for defects found by the 0.0.8 rehearsal (dev seeds only)."""
 
 import csv
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,7 +10,7 @@ import pytest
 import yaml
 
 from robot_sf.analysis_workbench.release_row_anomalies import analyze_release_rows
-from robot_sf.benchmark.camera_ready import _reporting, campaign
+from robot_sf.benchmark.camera_ready import _artifacts, _reporting, campaign
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.planner.guarded_ppo import GuardedPPOAdapter
 from scripts.tools import analyze_camera_ready_campaign, analyze_snqi_contract
@@ -88,11 +89,7 @@ def test_breakdown_csv_metric_columns_have_values(tmp_path):
         (scenarios, campaign._SCENARIO_BREAKDOWN_HEADERS),
         (families, campaign._FAMILY_BREAKDOWN_HEADERS),
     ]:
-        output = tmp_path / "breakdown.csv"
-        with output.open("w") as handle:
-            writer = csv.DictWriter(handle, fieldnames=headers, extrasaction="ignore")
-            writer.writeheader()
-            writer.writerows(rows)
+        output, _ = _artifacts._write_table_artifacts(tmp_path, "breakdown", rows, headers=headers)
         row = next(csv.DictReader(output.open()))
         assert float(row["jerk_mean"]) == 2.5
         for metric, value in metrics.items():
@@ -131,7 +128,9 @@ def test_publication_bundle_follows_campaign_output_root(tmp_path):
 
 def test_run_rejects_checkpoint_staging_option_before_loading_config(monkeypatch, capsys):
     monkeypatch.setattr(runner, "load_campaign_config", lambda _: SimpleNamespace())
-    monkeypatch.setattr(runner, "run_campaign", lambda *a, **k: {"status": "benchmark_success"})
+    monkeypatch.setattr(
+        runner, "run_campaign", lambda *a, **k: {"status": "benchmark_success", "exit_code": 0}
+    )
     with pytest.raises(SystemExit) as exc:
         runner.main(
             [
@@ -200,3 +199,46 @@ def test_snqi_analysis_does_not_change_campaign_reports(tmp_path, capsys):
     assert after == before
     outputs = json.loads(capsys.readouterr().out)
     assert Path(outputs["snqi_sensitivity_csv"]).parent == tmp_path / "campaign_snqi_analysis"
+
+
+@pytest.mark.parametrize(
+    "option",
+    [
+        ["--checkpoint-preflight-mode", "metadata_only"],
+        ["--checkpoint-preflight-mode=metadata_only"],
+    ],
+)
+def test_run_accepts_explicit_metadata_only(monkeypatch, option):
+    monkeypatch.setattr(runner, "load_campaign_config", lambda _: SimpleNamespace())
+    monkeypatch.setattr(
+        runner, "run_campaign", lambda *a, **k: {"status": "benchmark_success", "exit_code": 0}
+    )
+    assert runner.main(["--config", "unused.yaml", "--mode", "run", *option]) == 0
+
+
+@pytest.mark.parametrize("matching", [True, False])
+def test_relocated_bytes_bind_sidecar_when_recorded_file_also_exists(tmp_path, matching):
+    recorded = tmp_path / "producer" / "runs" / "goal" / "episodes.jsonl"
+    recorded.parent.mkdir(parents=True)
+    recorded.write_bytes(b'{"seed":1002}\n')
+    root = tmp_path / "copied"
+    local = root / "runs" / "goal" / "episodes.jsonl"
+    local.parent.mkdir(parents=True)
+    local.write_bytes(b'{"seed":1001}\n')
+    expected = hashlib.sha256(local.read_bytes() if matching else recorded.read_bytes()).hexdigest()
+    local.with_name(local.name + ".provenance.json").write_text(
+        json.dumps(
+            {
+                "raw_artifacts": [
+                    {"kind": "episodes_jsonl", "path": str(recorded), "sha256": expected}
+                ]
+            }
+        )
+    )
+    if matching:
+        assert (
+            analyze_camera_ready_campaign._resolve_safe_episodes_path(root, str(recorded)) == local
+        )
+    else:
+        with pytest.raises(ValueError, match="digest mismatch"):
+            analyze_camera_ready_campaign._resolve_safe_episodes_path(root, str(recorded))

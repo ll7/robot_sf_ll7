@@ -7,8 +7,8 @@ diagnostic signals for review; a signal does not establish planner causation.
 
 ## Campaign-folder audit
 
-For a camera-ready campaign, read its own frozen inventory rather than a release-specific
-arm list:
+For camera-ready diagnostics, read the manifest inventory. Release gating also binds
+the arm list independently to the committed 0.0.8 template:
 
 ```bash
 uv run python scripts/analysis/scan_release_audit.py \
@@ -340,3 +340,10 @@ integers above `2**53`; integral floats above `2**53 - 1` block because
 adjacent counts cannot be distinguished. This command is a release gate only
 after the bundle and preflight inputs are pinned and verified; the example
 paths above are placeholders.
+
+The integrated scanner also retains `--bundle <publication-bundle>` and writes
+`release-row-gate.json`, scenario scan shards, `queue.json`, and `receipt.json`
+into a new `--output-dir`. `--release-gate` independently compares either input
+roster with the committed 0.0.8 template, even without `--config`; a missing arm
+blocks. Exit codes are 0 for completed diagnostics, 1 for a blocked release gate,
+and 2 for invalid input or a crash.

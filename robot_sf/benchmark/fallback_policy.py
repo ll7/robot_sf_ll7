@@ -76,24 +76,6 @@ _RUNTIME_BOOLEAN_MARKERS = frozenset(
         "fallback_to_goal_seeking",
     }
 )
-# Declared runtime counters. Diagnostic containers are recursively inspected.
-_RUNTIME_COUNTER_FIELDS = frozenset(
-    {
-        "fallback_count",
-        "fallback_steps",
-        "fallback_actions",
-        "fallback_step_count",
-        "fallback_stop_count",
-        "fallback_row_count",
-        "inference_fallback_count",
-        "fallback_safe",
-        "fallback_best_effort",
-        "fallback_rate",
-        "uncertainty_fallback_configured",
-        "uncertainty_fallback_stop",
-        "uncertainty_fallback_slow_down",
-    }
-)
 _RUNTIME_FORBIDDEN_STATUSES = frozenset({"degraded", "fallback", "not_available", "unavailable"})
 _RUNTIME_FORBIDDEN_STATUS_PREFIXES = ("predictive_foresight_model_fallback",)
 _RUNTIME_STATUS_COUNT_CONTAINERS = frozenset({"proposal_status_counts"})
@@ -140,7 +122,7 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
     The traversal is deliberately key-aware: descriptive strings such as an
     implementation-mode label are not failures by substring.  Only canonical
     status fields (including the predictive-foresight fallback prefix), explicit
-    boolean markers and positive or malformed fallback/stop-best-effort counters
+    boolean markers and positive or malformed fallback/degraded/stop-best-effort counters
     fail closed. The native shield decisions are telemetry only for verified
     guarded PPO; malformed native counters still fail closed.  An empty
     ``fallback_reason`` is tolerated only beside an explicit false
@@ -172,7 +154,7 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
         return None
 
     def _visit(value: Any, path: str) -> tuple[str, str] | None:  # noqa: C901, PLR0912
-        if isinstance(value, dict):
+        if isinstance(value, Mapping):
             for raw_key, item in value.items():
                 key = str(raw_key)
                 item_path = f"{path}.{key}" if path else key
@@ -227,7 +209,10 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
                     counter_marker = _counter_marker(item, item_path)
                     if counter_marker is not None:
                         return counter_marker
-                elif key in _RUNTIME_COUNTER_FIELDS:
+                elif key == "fallback_diagnostics":
+                    if not isinstance(item, Mapping):
+                        return item_path, "invalid"
+                elif "fallback" in key or "degraded" in key:
                     counter_marker = _counter_marker(item, item_path)
                     if counter_marker is not None:
                         return counter_marker

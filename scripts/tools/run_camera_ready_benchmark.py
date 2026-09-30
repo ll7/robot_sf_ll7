@@ -141,13 +141,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.mode == "run" and (
         args.checkpoint_preflight_mode != "metadata_only"
-        or "--checkpoint-preflight-mode" in raw_argv
-        or any(arg.startswith("--checkpoint-preflight-mode=") for arg in raw_argv)
         or args.checkpoint_cache_dir is not None
         or args.checkpoint_registry_path is not None
     ):
         parser.error(
-            "checkpoint staging configuration requires --mode preflight; stage and verify checkpoints before running"
+            "checkpoint staging configuration requires --mode preflight; stage and verify checkpoints with --mode preflight before --mode run"
         )
 
     logger.remove()

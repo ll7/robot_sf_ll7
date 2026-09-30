@@ -1,0 +1,9 @@
+# 0.0.8 sampling baseline: use bounded, footprint-aware rollout mechanics and
+# remove the additive pedestrian repulsion enhancement absent from SocNavBench.
+max_linear_speed: 2.0
+max_angular_speed: 1.0
+socnav_sampling_version: bounded_v2
+sampling_repulsion_weight: 0.0
+sampling_footprint_margin: 0.0
+sampling_pedestrian_prediction: false
+sampling_braking_envelope: false

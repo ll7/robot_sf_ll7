@@ -2892,6 +2892,26 @@ def _surface_clearances_m(
     return clearance
 
 
+def _simulation_trace_decision_fields(decision: Any) -> dict[str, Any]:
+    """Copy the available planner decision counters into a simulation trace.
+
+    Returns:
+        Available counters, or an empty mapping when the decision is unavailable.
+    """
+    if not isinstance(decision, dict):
+        return {}
+    return {
+        key: decision[key]
+        for key in (
+            "no_admissible_command",
+            "no_admissible_command_count",
+            "recovery_command",
+            "recovery_command_count",
+        )
+        if key in decision
+    }
+
+
 def _step_build_simulation_trace(
     state: _StepLoopState,
     slc: _StepLoopConfig,
@@ -2914,16 +2934,9 @@ def _step_build_simulation_trace(
         "selected_action": sim.selected_action_payload,
         "applied_environment_action": sim.applied_environment_action_payload,
     }
-    decision = getattr(sim, "planner_step_decision", None)
-    if isinstance(decision, dict):
-        for key in (
-            "no_admissible_command",
-            "no_admissible_command_count",
-            "recovery_command",
-            "recovery_command_count",
-        ):
-            if key in decision:
-                planner_payload[key] = decision[key]
+    planner_payload.update(
+        _simulation_trace_decision_fields(getattr(sim, "planner_step_decision", None))
+    )
     if sim.action_conversion_payload:
         planner_payload["action_conversion"] = sim.action_conversion_payload
     if sim.actuation_step is not None:

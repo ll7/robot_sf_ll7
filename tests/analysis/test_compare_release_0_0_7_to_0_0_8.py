@@ -1605,7 +1605,13 @@ def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
         item["hash"] for item in resolved["scoped_hashes"] if item["planner"] == "goal"
     )
     assert scoped_hash == _config_hash(runner_scenarios)
-    params = {**scenario, **expected["controls"], "seed": 111, "algo": "goal"}
+    # Static recorded-row reconstruction only; the worker does not step a planner.
+    params = {
+        **scenario,
+        **expected["controls"],
+        "seed": 111,  # seed-holdout: setup-only
+        "algo": "goal",
+    }
     # The resolver hashes the recorded row as well as reconstructing its controls.
     result = subprocess.run(
         [sys.executable, "-I", str(worker)],

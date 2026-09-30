@@ -20,6 +20,7 @@ from robot_sf.benchmark.fallback_policy import (
     summarize_benchmark_availability,
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.metric_definitions import metric_schema_version
 from robot_sf.benchmark.result_provenance import (
     manifest_path_for_result_jsonl,
     validate_result_provenance_manifest,
@@ -128,7 +129,11 @@ def score_episode(
     metrics = episode.get("metrics")
     if not isinstance(metrics, Mapping):
         raise ValueError("SNQI-v2 episode requires metrics")
-    inputs = {**metrics, "executed_steps": episode.get("steps")}
+    inputs = {
+        **metrics,
+        "executed_steps": episode.get("steps"),
+        "metric_schema_version": metric_schema_version(episode),
+    }
     normalized = normalize_snqi_v2_terms(inputs, spec)
     force_provenance = validate_robot_force_provenance(inputs, spec.force_source)
     return {
@@ -431,6 +436,7 @@ def compact_report_episode(
     """
     scored = score_episode(episode, spec, expected_algorithm=expected_algorithm)
     compact_metrics = {source: scored["metrics"].get(source) for source in spec.sources.values()}
+    compact_metrics["metric_schema_version"] = metric_schema_version(scored)
     compact_metrics["robot_force_metadata"] = compact_robot_force_metadata(
         scored["metrics"], spec.force_source
     )

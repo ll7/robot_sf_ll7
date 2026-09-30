@@ -23,6 +23,7 @@ from robot_sf.benchmark.fallback_policy import (
     summarize_benchmark_availability,
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.metric_definitions import require_uniform_metric_schema
 from robot_sf.benchmark.result_provenance import (
     manifest_path_for_result_jsonl,
     validate_result_provenance_manifest,
@@ -59,6 +60,7 @@ def derive_calibration_anchors(
     Returns:
         A JSON-serializable anchor document ready for review and commit.
     """
+    metric_version = require_uniform_metric_schema(episodes)
     _validate_provenance(run_id, source_commit, episodes_sha256)
     expected = set(product(arms, scenarios, (101, 102)))
     if (
@@ -113,6 +115,7 @@ def derive_calibration_anchors(
     ).hexdigest()
     return {
         "version": "SNQI-v2.0",
+        "metric_schema_version": metric_version,
         "status": "derived_pending_custody",
         "anchors": anchors,
         "force_decision": {

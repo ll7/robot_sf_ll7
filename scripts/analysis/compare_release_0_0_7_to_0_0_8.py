@@ -29,7 +29,6 @@ from robot_sf.benchmark.infeasible_probe_safe_failure import (
     PROBE_SCENARIO_IDS,
     classify_probe_slots,
 )
-
 from robot_sf.benchmark.metric_definitions import changed_metric_field, metric_schema_version
 from scripts.analysis.compare_issue_9431_release import (
     EXPECTED_SUCCESSOR_SCENARIO_MANIFEST,
@@ -136,10 +135,9 @@ def _insert_rows(
         compact = {
             "outcome": row["outcome"],
             "metrics": row["metrics"],
+            "metric_schema_version": metric_schema_version(row),
             "termination_reason": row.get("termination_reason"),
             "integrity": row.get("integrity"),
-
-            "metric_schema_version": metric_schema_version(row),
             "_source_commit": _row_source_commit(row),
         }
         if retain_provenance:

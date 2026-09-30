@@ -284,7 +284,7 @@ def test_step_builder_annotates_heading_and_clearance() -> None:
 
 
 def test_finalize_attaches_reset_block_with_schema_version() -> None:
-    """Finalization keeps the v1 schema key and attaches the reset ledger."""
+    """Finalization labels the metric-v2 producer's trace v2 and keeps the reset ledger."""
     algo_meta: dict[str, object] = {}
     config = SimpleNamespace(sim_config=SimpleNamespace(time_per_step_in_secs=0.1))
 
@@ -315,7 +315,7 @@ def test_finalize_attaches_reset_block_with_schema_version() -> None:
     )
 
     trace = algo_meta["simulation_step_trace"]
-    assert trace["schema_version"] == "simulation-step-trace.v1"
+    assert trace["schema_version"] == "simulation-step-trace.v2"
     assert trace["reset"]["collision_at_reset"] is True
     assert trace["reset"]["min_surface_clearance_m"] == -0.4
 

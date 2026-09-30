@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import copy
 import csv
+import hashlib
 import json
 import math
 import subprocess
@@ -164,6 +165,29 @@ def verify_head(head_sha: str) -> str:
     return full
 
 
+def _write_authored_horizon_schedule(
+    payload: dict[str, Any], scenarios: list[dict[str, Any]], out_dir: Path, suite: str
+) -> None:
+    """Bind derived 0.0.8 inputs to their authored budgets with an exact hash."""
+    # The width slice still carries the historical H600 setting. Derived
+    # 0.0.8 inputs must retain each scenario's authored budget explicitly.
+    schedule_out = out_dir / f"horizons_{suite}_empty_world.yaml"
+    schedule = {
+        "schema_version": 1,
+        "scenarios": {
+            item["name"]: {
+                "recommended_horizon_steps": item["simulation_config"]["max_episode_steps"],
+                "status": "authored",
+            }
+            for item in scenarios
+        },
+    }
+    schedule_out.write_text(yaml.safe_dump(schedule, sort_keys=False), "utf-8")
+    payload.pop("horizon")
+    payload["scenario_horizons"] = str(schedule_out)
+    payload["scenario_horizons_sha256"] = hashlib.sha256(schedule_out.read_bytes()).hexdigest()
+
+
 def build_derived_inputs(  # noqa: C901
     suite: str,
     *,
@@ -226,6 +250,8 @@ def build_derived_inputs(  # noqa: C901
             payload[slot] = "empty-world-sweep-9978-unpublished"
     payload["name"] = f"{payload['name']}_empty_world_sweep_9978"
     payload["scenario_matrix"] = str(matrix_out)
+    if "horizon" in payload:
+        _write_authored_horizon_schedule(payload, scenarios, out_dir, suite)
     payload["seed_policy"] = {"mode": "fixed-list", "seeds": list(seeds)}
     payload["workers"] = int(workers)
     payload["resume"] = False

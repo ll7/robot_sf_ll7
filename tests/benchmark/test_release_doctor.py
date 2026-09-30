@@ -111,8 +111,8 @@ def test_scheduler_closeout_check_requires_explicit_final_identity(tmp_path: Pat
     assert "expected job ID is required" in missing_job.summary
 
 
-def test_manifest_doctor_confirms_s30_h600_cardinality() -> None:
-    """The current 14-arm predecessor resolves to exactly 20,160 cells."""
+def test_manifest_doctor_refuses_historical_h600_over_shorter_authored_limits() -> None:
+    """Historical cardinality cannot authorize extending an authored H500 limit."""
     check, manifest, cfg = release_doctor._manifest_check(
         Path(
             "configs/benchmarks/releases/"
@@ -120,10 +120,18 @@ def test_manifest_doctor_confirms_s30_h600_cardinality() -> None:
         ),
         20160,
     )
-    assert check.status == "pass"
-    assert "20160-cell" in check.summary
-    assert manifest is not None
-    assert cfg is not None
+    assert check.status == "fail"
+    assert check.summary == "manifest or matrix could not be validated"
+    assert manifest is None
+    assert cfg is None
+    historical = release_doctor.load_release_manifest(
+        Path(
+            "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_release_v0_0_3_post1.yaml"
+        )
+    )
+    historical_cfg = release_doctor.load_campaign_config(historical.canonical_campaign_config_path)
+    with pytest.raises(ValueError, match="authored limit 500 is below fixed horizon 600"):
+        release_doctor._load_campaign_scenarios(historical_cfg)
 
 
 def test_doctor_anchors_manifest_and_git_checks_to_explicit_release_checkout(
@@ -223,8 +231,25 @@ def test_campaign_asset_paths_use_explicit_release_checkout(
     assert seed_policy.seed_sets_path == release_seed_sets
 
 
-def test_v02_manifest_cardinality_cannot_be_overridden() -> None:
-    """The v0.2 doctor binds its matrix check to the manifest's 20,160 cells."""
+def test_v02_manifest_cardinality_cannot_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
+    """After budget admission, doctor still binds cardinality to the manifest."""
+    # Isolate the cardinality stage with an admitted, synthetic H600 matrix.
+    # The real historical source is refused in the budget-admission test above.
+    monkeypatch.setattr(
+        release_doctor, "validate_release_manifest", lambda *_args, **_kwargs: {"problems": []}
+    )
+    monkeypatch.setattr(
+        release_doctor,
+        "_load_campaign_scenarios",
+        lambda *_args, **_kwargs: [
+            {
+                "name": f"synthetic_h600_{index}",
+                "simulation_config": {"max_episode_steps": 600},
+                "seeds": list(range(1001, 1031)),
+            }
+            for index in range(48)
+        ],
+    )
     check, manifest, cfg = release_doctor._manifest_check(
         Path("configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml"),
         1,

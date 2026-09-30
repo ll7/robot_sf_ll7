@@ -1,6 +1,8 @@
 """Exercise emitted 0.0.8 sweep inputs and execution accounting without a campaign."""
 
+import hashlib
 import json
+from collections import Counter
 
 import pytest
 
@@ -23,13 +25,27 @@ def test_unchanged_emitted_scenarios_load_from_arbitrary_output_dir(tmp_path, su
         step_trace=True,
     )
     cfg = load_campaign_config(cfg_path)
+    assert cfg.horizon is None
+    assert cfg.scenario_horizons_path is not None
+    assert (
+        cfg.scenario_horizons_sha256
+        == hashlib.sha256(cfg.scenario_horizons_path.read_bytes()).hexdigest()
+    )
+    expected_budgets = {400: 25, 500: 13, 600: 8, 650: 1, 700: 1} if suite == "main" else {400: 3}
+    assert Counter(row["simulation_config"]["max_episode_steps"] for row in scenarios) == (
+        expected_budgets
+    )
     consumed = load_scenarios(cfg.scenario_matrix_path)
     assert len(consumed) == len(scenarios)
     for scenario in consumed:
         config = build_robot_config_from_scenario(scenario, scenario_path=cfg.scenario_matrix_path)
         assert scenario_actor_source_census(config)["verified_empty"] is True
     # Campaigns deliberately normalize references against repository-root scoped_scenarios.
-    for scenario in _load_campaign_scenarios(cfg):
+    resolved = _load_campaign_scenarios(cfg)
+    assert Counter(row["simulation_config"]["max_episode_steps"] for row in resolved) == (
+        expected_budgets
+    )
+    for scenario in resolved:
         config = build_robot_config_from_scenario(
             scenario, scenario_path=sweep.REPO_ROOT / "scoped_scenarios.json"
         )

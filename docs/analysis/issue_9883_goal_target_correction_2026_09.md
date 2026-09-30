@@ -66,9 +66,9 @@ cannot count as model-provenance or benchmark evidence.
 
 ## Release integration and open gates
 
-The 0.0.8 campaign template now binds Risk-DWA and Predictive-MPPI to their
-`*_camera_ready_goal_v2.yaml` paths, and guarded PPO to its v2 fallback
-profile. Candidate admission checks unique planner keys, those exact paths,
+The 0.0.8 campaign template now binds Risk-DWA, Predictive-MPPI and guarded
+PPO to their `*_release_v0_0_8.yaml` profiles, which retain the v2 active
+waypoint selectors. Candidate admission checks unique planner keys, those exact paths,
 and the effective `active_waypoint_v2` selector in all three arms. Each arm
 has a historical-path and selector-mutation regression test. This is static
 candidate proof, not a release or episode outcome.

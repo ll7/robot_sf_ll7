@@ -1354,6 +1354,34 @@ def _accepts_runtime_input_records(builder: Callable[..., Any]) -> bool:
     )
 
 
+def _apply_diagnostic_ppo_plant(
+    config: RobotSimulationConfig, policy_cfg: dict[str, Any], algo: str, robot_kinematics: str
+) -> None:
+    """Apply diagnostic-only PPOEVAL/PPOABL plant controls after policy resolution."""
+    plant_variant = policy_cfg.get("diagnostic_plant_variant")
+    training_plant = bool(policy_cfg.get("diagnostic_training_plant", False))
+    if training_plant or plant_variant is not None:
+        if algo not in {"ppo", "guarded_ppo"} or robot_kinematics != "differential_drive":
+            raise ValueError("Diagnostic plants are restricted to differential-drive PPO arms")
+    if plant_variant is not None:
+        if plant_variant not in {"a1", "a2", "a3", "a4", "a5"}:
+            raise ValueError("Unknown diagnostic PPOABL plant variant")
+        if bool(policy_cfg.get("diagnostic_training_plant", False)) != (plant_variant != "a5"):
+            raise ValueError("PPOABL A1-A4 require V3 policy bounds; A5 requires V2 bounds")
+    if training_plant:
+        config.robot_config.max_linear_speed = 3.0
+        config.robot_config.max_angular_speed = 1.0
+        config.robot_config.allow_backwards = True
+        config.robot_config.diagnostic_training_plant = True
+    if plant_variant is not None:
+        config.robot_config.diagnostic_plant_variant = plant_variant
+        if plant_variant in {"a1", "a5"}:
+            # A5 keeps V2 release behavior and relaxes only the plant cap.
+            config.robot_config.max_linear_speed = {"a1": 2.0, "a5": 3.0}[plant_variant]
+        elif plant_variant == "a3":
+            config.robot_config.allow_backwards = False
+
+
 def _resolve_episode_run_context(  # noqa: PLR0913
     *,
     scenario: dict[str, Any],
@@ -1477,13 +1505,7 @@ def _resolve_episode_run_context(  # noqa: PLR0913
         seed=int(seed),
     )
     policy_cfg = _apply_scenario_uncertainty_envelope_config(algo, policy_cfg, scenario)
-    if policy_cfg.get("diagnostic_training_plant", False):
-        if algo not in {"ppo", "guarded_ppo"} or robot_kinematics != "differential_drive":
-            raise ValueError("PPOEVAL training plant is restricted to the two PPO arms")
-        config.robot_config.max_linear_speed = 3.0
-        config.robot_config.max_angular_speed = 1.0
-        config.robot_config.allow_backwards = True
-        config.robot_config.diagnostic_training_plant = True
+    _apply_diagnostic_ppo_plant(config, policy_cfg, algo, robot_kinematics)
     return _EpisodeRunContext(
         scenario=scenario,
         scenario_id=scenario_id,

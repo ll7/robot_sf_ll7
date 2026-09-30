@@ -413,6 +413,7 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    "test_emergent_wall_geometry.py",
     # Generator contracts construct scenes without stepping an environment.
     "test_scenario_generator.py",
     # Clearance and LiDAR tracking contracts use fixed arrays without environment steps.

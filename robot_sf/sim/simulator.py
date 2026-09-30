@@ -158,6 +158,24 @@ class _ForceStageArrays:
     result_force_xy: np.ndarray | None
 
 
+#: Seconds of pedestrian travel reserved at robot starts and route respawns.
+SPAWN_REACTION_TIME_S = 1.0
+
+
+def _spawn_reaction_buffer(speed_m_s: float) -> float:
+    """Return the surface margin plus one reaction interval at the supplied speed.
+
+    Zoned crowds are sampled before population speeds exist, so their zone-level
+    allowance uses the nominal spawn speed times peds_speed_mult (0.6 m at
+    multiplier 1.0; 0.75 m at 1.3). Actual-pose
+    reset and route-respawn guards use the initialized population's speed cap or
+    current speed, whichever is larger. Desired-speed settings and archetypes can
+    make that larger than the construction allowance. These distinct inputs keep
+    the broad spawn-zone reservation separate from the stronger live-pose guard.
+    """
+    return SPAWN_CLEARANCE_MARGIN_M + SPAWN_REACTION_TIME_S * speed_m_s
+
+
 def _row_xy(values: np.ndarray, row: int) -> tuple[float, float]:
     """Return one finite two-dimensional row as a typed coordinate tuple.
 
@@ -480,15 +498,17 @@ def _build_pysf_simulation(  # noqa: PLR0913
         add_ego_state=add_ego_state,
         map_bounds=map_def.get_map_bounds(),
         reserved_zones=[*map_def.robot_spawn_zones, *map_def.robot_goal_zones],
+        crowd_spawn_reserved_zones=map_def.robot_spawn_zones,
         ped_radius=config.ped_radius,
         reserved_zone_radius=max(
             (float(robot.config.radius) for robot in robots),
             default=0.0,
         ),
         sampler_capture=sampler_capture,
-        # Nominal one-second walking cap (0.5 * peds_speed_mult) plus the 0.1 m margin.
-        robot_reaction_buffer=SPAWN_CLEARANCE_MARGIN_M
-        + spawn_config.initial_speed * config.peds_speed_mult,
+        # Nominal construction speed; the live-pose guard below uses population caps.
+        robot_reaction_buffer=_spawn_reaction_buffer(
+            spawn_config.initial_speed * config.peds_speed_mult
+        ),
     )
     max_robot_radius = max((float(robot.config.radius) for robot in robots), default=0.0)
     for behavior in peds_behaviors:
@@ -500,8 +520,7 @@ def _build_pysf_simulation(  # noqa: PLR0913
                 robot_pose_provider,
                 max_robot_radius
                 + float(config.ped_radius)
-                + SPAWN_CLEARANCE_MARGIN_M
-                + spawn_config.initial_speed * config.peds_speed_mult,
+                + _spawn_reaction_buffer(spawn_config.initial_speed * config.peds_speed_mult),
             )
 
     if include_response_law_multipliers:
@@ -1791,9 +1810,11 @@ class Simulator:
             ((float(r.pose[0][0]), float(r.pose[0][1])), float(r.config.radius))
             for r in self.robots
         ]
-        reaction_buffer = SPAWN_CLEARANCE_MARGIN_M + max(
-            float(np.max(self.pysf_sim.peds.max_speeds)),
-            float(np.linalg.norm(self.ped_vel, axis=1).max()),
+        reaction_buffer = _spawn_reaction_buffer(
+            max(
+                float(np.max(self.pysf_sim.peds.max_speeds)),
+                float(np.linalg.norm(self.ped_vel, axis=1).max()),
+            )
         )
         self._set_route_reaction_clearance(
             max(radius for _, radius in robots) + ped_radius + reaction_buffer

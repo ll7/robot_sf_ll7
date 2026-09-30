@@ -1408,6 +1408,7 @@ def populate_simulation(  # noqa: PLR0913
     reserved_zone_radius: float = 0.0,
     sampler_capture: SpawnSamplerCapture | None = None,
     robot_reaction_buffer: float = 0.0,
+    crowd_spawn_reserved_zones: list[Zone] | None = None,
 ) -> tuple[PedestrianStates, PedestrianGroupings, list[PedestrianBehavior]]:
     """Orchestrate complete pedestrian population initialization for simulation.
 
@@ -1430,6 +1431,8 @@ def populate_simulation(  # noqa: PLR0913
         reserved_zone_radius: Additional agent radius applied around reserved zones.
         sampler_capture: Optional per-episode sampler-decision record; sampler
             hooks and route-assignment recording run only when provided.
+        crowd_spawn_reserved_zones: Robot spawn zones reserved for zoned crowds;
+            defaults to reserved_zones for callers without separate zone roles.
         robot_reaction_buffer: Extra surface buffer around reserved robot zones for
             zoned crowd spawns and goals. Routes use actual-pose reset/respawn guards.
 
@@ -1457,7 +1460,8 @@ def populate_simulation(  # noqa: PLR0913
         )
     else:
         crowd_robot_exclusions = _scatter_exclusions(
-            [], reserved_zones or [], [], ped_radius,
+            [], (reserved_zones if crowd_spawn_reserved_zones is None
+                 else crowd_spawn_reserved_zones) or [], [], ped_radius,
             reserved_zone_radius + robot_reaction_buffer,
         )
         background = _spawn_zoned_background_population(

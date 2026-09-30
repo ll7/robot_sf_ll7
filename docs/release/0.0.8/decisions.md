@@ -11,9 +11,11 @@
   No planner or environment step on either held-out band is permitted **anywhere,
   except the sealed campaign (including its own spawn preflight) at the freeze commit**.
   The sealed campaign includes the main 0.0.8 evaluation and the three-width
-  doorway slice (`three_width_doorway_release_0_0_8_v1.yaml`), minted together
-  and bound to the same freeze commit. Both require `source_sha` equal to HEAD
-  at execution. Retired seeds 111..140 have no execution exception; historical
+  doorway slice, minted together and bound to the same freeze commit. The slice
+  runs from its materialized v0.2 identity, generated from
+  `three_width_doorway_release_0_0_8_v1.template.yaml` by the same
+  `resolve_benchmark_release_identity.py generate` command as the main campaign.
+  Both require `source_sha` equal to HEAD at execution. Retired seeds 111..140 have no execution exception; historical
   pins permit STATIC validation of archived artifacts only. A failed sealed
   spawn preflight requires an author decision before fixing and rerunning it.
   The full-release stress pre-run gate requires dev seed 1001.
@@ -27,7 +29,10 @@
   in unnamed releases, development, or unfrozen slices.
 - **Implemented in:** `robot_sf/benchmark/release_protocol.py` checks resolved
   seeds in every policy mode, refuses retired seeds in non-historical releases,
-  and applies the reverse sealed-seed identity/source check. The shared guard in
+  and applies the reverse sealed-seed identity/source check. Sealed campaign,
+  scenario matrix, seed-set and referenced planner configs must use canonical
+  repository paths, be tracked, and match their blobs at `source_sha` byte for
+  byte; matching basenames or self-declared hashes confer no permission. The shared guard in
   `robot_sf/benchmark/spawn_preflight.py` refuses retired execution even with
   historical pins and protects the release runner and standalone preflight.
   `scripts/validation/check_seed_holdout_diff.py` treats every value in
@@ -39,6 +44,13 @@
   `tests/benchmark/test_sealed_execution_policy.py`, and
   `tests/validation/test_check_seed_holdout_diff.py`; all holdout witnesses are
   static or use recording stubs, with environment creation forbidden.
+  `test_forged_sealed_inputs_refused_before_workers` and
+  `test_canonical_inputs_must_equal_source_blobs` in
+  `tests/benchmark/test_sealed_source_pins.py` enforce source pins.
+  `test_real_materialized_identity_passes_frozen_guard`,
+  `test_slice_requires_freeze_source` and
+  `test_freeze_bound_slice_preflight_uses_runtime_source` enforce the reachable
+  materialized slice and its freeze binding.
 
 Derivation label: `robot_sf_ll7 release 0.0.8 evaluation seeds v1 (sealed 2026-09-30)`.
 SHA-256: `166597da1e0e813d8a9cdc810f4b85db1407e9286c3113821423e17c50908dc0`.

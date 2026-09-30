@@ -1967,6 +1967,70 @@ HISTORICAL_RELEASE_CONFIG_PINS = frozenset(
 )
 
 
+def _require_sealed_source_inputs(manifest: Any, root: Path, source_commit: str) -> None:
+    """Bind scientific input paths and bytes to the frozen Git source, not manifest hashes."""
+    # Candidate admission imports this module; resolve its closure helper after initialization.
+    from robot_sf.benchmark.release_candidate import (  # noqa: PLC0415
+        _full_release_nested_config_path,
+        _planner_config_paths,
+    )
+
+    config_path = manifest.canonical_campaign_config_path
+    matrix_path = manifest.scenario_matrix_path.resolve()
+    cfg = load_campaign_config(config_path, repository_root=root)
+    seed_path = _safe_repository_file(
+        cfg.seed_policy.seed_sets_path, root, field_name="sealed seed sets"
+    )
+    if seed_path.relative_to(root).as_posix() != "configs/benchmarks/seed_sets_0_0_8.yaml":
+        raise ValueError("sealed seed sets must use their canonical repository path")
+    declared_seeds = _resolve_manifest_side_path(
+        manifest.path, manifest.seed_policy.get("seed_sets_path", "")
+    ).resolve()
+    if declared_seeds != seed_path:
+        raise ValueError("sealed identity must reference its canonical seed sets")
+    if cfg.scenario_matrix_path.resolve() != matrix_path:
+        raise ValueError("sealed campaign must reference its canonical scenario matrix")
+    tracked = {
+        item.decode("utf-8")
+        for item in _git_stdout(root, "ls-files", "-z", "--cached", label="sealed inputs").split(
+            b"\0"
+        )
+        if item
+    }
+    inputs = [
+        (config_path, "sealed campaign config"),
+        (matrix_path, "sealed scenario matrix"),
+        *[
+            (path, "sealed scenario matrix include")
+            for path in sorted(_scenario_matrix_include_paths(matrix_path, repository_root=root))
+        ],
+        (seed_path, "sealed seed sets"),
+        *[
+            (path, f"sealed planner config for {planner['key']}")
+            for planner in _load_mapping(config_path)["planners"]
+            if planner.get("algo_config")
+            for path in sorted(
+                _planner_config_paths(
+                    root,
+                    _full_release_nested_config_path(
+                        planner["algo_config"],
+                        config_anchor=config_path.parent,
+                        source_repository_root=root,
+                        label=f"sealed planner config for {planner['key']}",
+                    ),
+                )
+            )
+        ],
+    ]
+    for path, label in inputs:
+        path = _safe_repository_file(path, root, field_name=label)
+        if path.relative_to(root).as_posix() not in tracked:
+            raise ValueError(f"{label} is not tracked at source_sha")
+        _require_tracked_input_at_source(
+            path, repository_root=root, source_commit=source_commit, label=label
+        )
+
+
 def sealed_seed_execution_problem(
     manifest: Any,
     seeds: tuple[int, ...],
@@ -1981,31 +2045,46 @@ def sealed_seed_execution_problem(
     """
     if not set(seeds).intersection(EVAL_SEEDS_0_0_8):
         return None
-    config_name = Path(manifest.canonical_campaign_config_path).name
-    matrix_name = Path(manifest.scenario_matrix_path).name
+    root = (repository_root or get_repository_root()).resolve()
+    try:
+        config_path = _safe_repository_file(
+            manifest.canonical_campaign_config_path, root, field_name="sealed campaign config"
+        )
+        matrix_path = _safe_repository_file(
+            manifest.scenario_matrix_path, root, field_name="sealed scenario matrix"
+        )
+        config_name = config_path.relative_to(root).as_posix()
+        matrix_name = matrix_path.relative_to(root).as_posix()
+    except (OSError, ValueError) as exc:
+        return f"sealed evaluation input is not at its canonical repository path: {exc}"
     main_campaign = (
         manifest.release_kind == "benchmark-data"
         and config_name
         in {
-            "paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
-            "paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml",
+            "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
+            "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml",
         }
-        and matrix_name == "classic_interactions_francis2023_release_0_0_8_v1.yaml"
+        and matrix_name
+        == "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
     )
     doorway_slice = (
         manifest.release_kind == "benchmark-width-slice"
         and manifest.release_id == "three_width_doorway_0_0_8_v1"
-        and config_name == "paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml"
-        and matrix_name == "francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml"
+        and config_name
+        == "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml"
+        and matrix_name
+        == "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml"
     )
     if seeds != EVAL_SEEDS_0_0_8 or not (main_campaign or doorway_slice):
-        return "sealed evaluation seeds require the main 0.0.8 campaign or its three-width slice (D-049)"
+        return (
+            "sealed evaluation seeds require the main 0.0.8 campaign or its three-width slice "
+            "at canonical repository paths (D-049)"
+        )
     declared = getattr(manifest, "source_sha", None)
     if declared is None:
         return (
             "sealed evaluation seeds require source_sha equal to HEAD at the freeze commit (D-049)"
         )
-    root = (repository_root or get_repository_root()).resolve()
     try:
         current = (
             _git_stdout(root, "rev-parse", "HEAD", label="sealed source HEAD").decode().strip()
@@ -2018,6 +2097,10 @@ def sealed_seed_execution_problem(
         return (
             "sealed evaluation seeds require source_sha equal to HEAD at the freeze commit (D-049)"
         )
+    try:
+        _require_sealed_source_inputs(manifest, root, declared)
+    except (OSError, TypeError, ValueError) as exc:
+        return f"sealed evaluation input is not pinned at source_sha (D-049): {exc}"
     return None
 
 
@@ -2743,12 +2826,16 @@ def _identity_template_payload(  # noqa: C901, PLR0912
         )
     if payload.get("schema_version") != RELEASE_MANIFEST_SCHEMA_VERSION_V0_2:
         raise ValueError("release identity template must describe a v0.2 release manifest")
-    if payload.get("release_kind") != "benchmark-data":
-        raise ValueError("release identity template must describe a benchmark-data release")
-    if payload.get("source_sha") is not None:
-        raise ValueError("tracked release identity template must omit source_sha")
+    kind = payload.get("release_kind")
+    if kind not in {"benchmark-data", "benchmark-width-slice"}:
+        raise ValueError("release identity template must describe benchmark-data or a width slice")
+    slice_template = kind == "benchmark-width-slice"
+    if payload.get("source_sha") != ("{{source_sha}}" if slice_template else None):
+        raise ValueError(
+            "width slice template must use {{source_sha}}; benchmark-data template must omit it"
+        )
     required_slots = {
-        "release_id": "{{release_tag}}",
+        "release_id": "three_width_doorway_0_0_8_v1" if slice_template else "{{release_tag}}",
         "release_tag": "{{release_tag}}",
         "latest_main_base_commit": "{{latest_main_base_commit}}",
     }
@@ -2762,12 +2849,13 @@ def _identity_template_payload(  # noqa: C901, PLR0912
         repository_root=repository_root,
     )
     campaign_payload = _load_mapping(campaign_template)
-    for field, expected in (
-        ("release_tag", "{{release_tag}}"),
-        ("doi", "{{version_doi}}"),
-    ):
-        if campaign_payload.get(field) != expected:
-            raise ValueError(f"campaign {field} must use the explicit {expected} slot")
+    if not slice_template:
+        for field, expected in (
+            ("release_tag", "{{release_tag}}"),
+            ("doi", "{{version_doi}}"),
+        ):
+            if campaign_payload.get(field) != expected:
+                raise ValueError(f"campaign {field} must use the explicit {expected} slot")
     publication = payload.get("publication")
     provenance = payload.get("provenance")
     if not isinstance(publication, Mapping) or not isinstance(provenance, Mapping):
@@ -2851,7 +2939,6 @@ def _materialize_release_template_payload(  # noqa: PLR0913
     }
     payload = _replace_identity_tokens(copy.deepcopy(dict(template_payload)), replacements)
     payload.pop("identity_resolution", None)
-    payload["release_id"] = release_tag
     payload["release_tag"] = release_tag
     payload["source_sha"] = source_commit
     payload["latest_main_base_commit"] = latest_main_base_commit

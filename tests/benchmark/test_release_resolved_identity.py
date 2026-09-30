@@ -45,6 +45,7 @@ def _git(repo: Path, *args: str) -> str:
 
 
 def _write_yaml(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
 
@@ -198,9 +199,11 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
     _git(repo, "add", ".gitignore")
     _git(repo, "commit", "-qm", "fixture: initialize ignored output")
 
-    scenarios = repo / "classic_interactions_francis2023_release_0_0_8_v1.yaml"
-    _write_yaml(scenarios, [{"name": f"scenario_{index:02d}"} for index in range(48)])
-    seed_sets = repo / "seed_sets.yaml"
+    scenarios = repo / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    _write_yaml(
+        scenarios, {"scenarios": [{"name": f"scenario_{index:02d}"} for index in range(48)]}
+    )
+    seed_sets = repo / "configs/benchmarks/seed_sets_0_0_8.yaml"
     _write_yaml(seed_sets, {"release_eval_0_0_8": list(EVAL_SEEDS_0_0_8)})
     for name in ("suite.yaml", "route.yaml", "comparability.yaml"):
         _write_yaml(repo / name, {"schema_version": "fixture.v1"})
@@ -210,7 +213,9 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
     _write_yaml(planner_config, {"schema_version": "fixture-planner.v1"})
 
     planner_keys = [f"planner_{index:02d}" for index in range(14)]
-    campaign = repo / "paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+    campaign = (
+        repo / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+    )
     _write_yaml(
         campaign,
         {
@@ -218,13 +223,13 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
             "paper_facing": True,
             "paper_profile_version": "paper-matrix-v1",
             "paper_interpretation_profile": "baseline-ready-core",
-            "scenario_matrix": "classic_interactions_francis2023_release_0_0_8_v1.yaml",
-            "comparability_mapping": "comparability.yaml",
-            "route_clearance_certifications": "route.yaml",
+            "scenario_matrix": "../scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+            "comparability_mapping": "../../comparability.yaml",
+            "route_clearance_certifications": "../../route.yaml",
             "seed_policy": {
                 "mode": "seed-set",
                 "seed_set": "release_eval_0_0_8",
-                "seed_sets_path": "seed_sets.yaml",
+                "seed_sets_path": "seed_sets_0_0_8.yaml",
             },
             "workers": 1,
             "horizon": 600,
@@ -239,7 +244,7 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
                     "algo": "goal",
                     "planner_group": "core",
                     "socnav_missing_prereq_policy": "fail-fast",
-                    **({"algo_config": planner_config.name} if index == 0 else {}),
+                    **({"algo_config": "../../planner.yaml"} if index == 0 else {}),
                 }
                 for index, key in enumerate(planner_keys)
             ],
@@ -298,7 +303,7 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
             "release_kind": "benchmark-data",
             "latest_main_base_commit": "{{latest_main_base_commit}}",
             "planning_base_sha": "{{latest_main_base_commit}}",
-            "canonical_campaign_config": "paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
+            "canonical_campaign_config": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
             "campaign_config_sha256": _sha256(campaign),
             "expected_paper_profile_version": "paper-matrix-v1",
             "expected_paper_interpretation_profile": "baseline-ready-core",
@@ -311,7 +316,7 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
                 "metadata_sha256": _sha256(metadata_template),
             },
             "scenario": {
-                "matrix_path": scenarios.name,
+                "matrix_path": scenarios.relative_to(repo).as_posix(),
                 "matrix_sha256": _sha256(scenarios),
                 "suite_policy_path": "suite.yaml",
                 "suite_policy_sha256": _sha256(repo / "suite.yaml"),
@@ -322,7 +327,7 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
                 "mode": "seed-set",
                 "seed_set": "release_eval_0_0_8",
                 "seeds": [],
-                "seed_sets_path": seed_sets.name,
+                "seed_sets_path": seed_sets.relative_to(repo).as_posix(),
                 "seed_sets_sha256": _sha256(seed_sets),
                 "resolved_seeds": list(EVAL_SEEDS_0_0_8),
             },
@@ -406,7 +411,7 @@ def test_clean_candidate_generates_and_verifies_byte_identical_resolved_identity
         "output/release/zenodo_metadata.resolved.json"
     )
     assert second_identity["resolved_manifest"]["canonical_campaign_config_sha256"] == _sha256(
-        repo / "paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+        repo / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
     )
     assert second_identity["resolved_manifest"]["identity_resolution"] == {
         "schema_version": "benchmark-release-resolved-identity.v1",
@@ -584,12 +589,14 @@ def test_verification_rejects_post_freeze_mutation_and_alternate_checkout(
         output_path=output,
         **_identity_inputs(repo, template, source_commit),
     )
-    scenarios = repo / "classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    scenarios = repo / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
     scenarios.write_text(scenarios.read_text(encoding="utf-8") + "# changed\n", encoding="utf-8")
     with pytest.raises(ValueError, match="not clean"):
         verify_resolved_release_identity(output, repository_root=repo)
 
-    _git(repo, "restore", "classic_interactions_francis2023_release_0_0_8_v1.yaml")
+    _git(
+        repo, "restore", "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    )
     planner_config = repo / "planner.yaml"
     planner_config.write_text(
         planner_config.read_text(encoding="utf-8") + "# changed after freeze\n",
@@ -614,7 +621,9 @@ def test_generation_rechecks_cleanliness_after_resolving_inputs(
 
     def _mutating_build(**kwargs: Any) -> Any:
         result = original_build(**kwargs)
-        scenarios = repo / "classic_interactions_francis2023_release_0_0_8_v1.yaml"
+        scenarios = (
+            repo / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+        )
         scenarios.write_text(
             scenarios.read_text(encoding="utf-8") + "# mutated after resolution\n",
             encoding="utf-8",
@@ -645,7 +654,9 @@ def test_generation_rejects_source_mutation_during_materialization(
         nonlocal mutation_applied
         if not mutation_applied:
             mutation_applied = True
-            scenarios = repo / "classic_interactions_francis2023_release_0_0_8_v1.yaml"
+            scenarios = (
+                repo / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+            )
             scenarios.write_text(
                 scenarios.read_text(encoding="utf-8") + "# changed before replacement\n",
                 encoding="utf-8",
@@ -705,14 +716,16 @@ def test_generation_rejects_invalid_resolved_zenodo_metadata(tmp_path: Path) -> 
 
 def test_generation_requires_campaign_publication_identity_slots(tmp_path: Path) -> None:
     repo, template, _ = _release_template_repository(tmp_path)
-    campaign_path = repo / "paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+    campaign_path = (
+        repo / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+    )
     campaign = yaml.safe_load(campaign_path.read_text(encoding="utf-8"))
     campaign["release_tag"] = "stale-semantic-tag"
     _write_yaml(campaign_path, campaign)
     template_payload = yaml.safe_load(template.read_text(encoding="utf-8"))
     template_payload["campaign_config_sha256"] = _sha256(campaign_path)
     _write_yaml(template, template_payload)
-    _git(repo, "add", template.name, campaign_path.name)
+    _git(repo, "add", template.name, campaign_path.relative_to(repo).as_posix())
     _git(repo, "commit", "-qm", "fixture: concrete campaign publication identity")
     source_commit = _git(repo, "rev-parse", "HEAD")
 
@@ -789,7 +802,7 @@ def test_cold_checkout_reproduces_and_verifies_identity(tmp_path: Path) -> None:
     assert manifest.identity_template_path == cold / template.name
     assert (
         cold_campaign.scenario_matrix_path
-        == cold / "classic_interactions_francis2023_release_0_0_8_v1.yaml"
+        == cold / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
     )
     assert cold_output.read_bytes() == output.read_bytes()
 

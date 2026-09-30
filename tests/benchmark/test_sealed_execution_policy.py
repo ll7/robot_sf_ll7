@@ -2,7 +2,6 @@
 # seed-holdout: synthetic-fixture begin
 
 import json
-import subprocess
 from dataclasses import replace
 from pathlib import Path
 
@@ -12,6 +11,16 @@ from robot_sf.benchmark import release_protocol as protocol
 from robot_sf.benchmark import spawn_preflight as spawn
 from robot_sf.benchmark.camera_ready._config import load_campaign_config
 from scripts.tools import run_benchmark_release as runner
+from tests.benchmark.test_sealed_source_pins import (
+    git,
+    materialize,
+    worker_stub,
+)
+from tests.benchmark.test_sealed_source_pins import (
+    sealed_repository as _sealed_repository,
+)
+
+sealed_repository = _sealed_repository
 
 ROOT = Path(__file__).resolve().parents[2]
 RELEASES = ROOT / "configs/benchmarks/releases"
@@ -97,17 +106,21 @@ def test_historical_execution_refused_at_shared_preflight(monkeypatch, tmp_path,
 
 
 @pytest.mark.parametrize("source", [None, "another-commit", "HEAD"])
-def test_slice_requires_freeze_source(source):
-    manifest = protocol.load_release_manifest(RELEASES / SLICE)
-    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
-    manifest = replace(
-        manifest, source_sha=head if source == "HEAD" else "a" * 40 if source else None
-    )
-    result = protocol.validate_release_manifest(manifest)
-    if source == "HEAD":
-        assert result["status"] == "valid", result["problems"]
-    else:
+def test_slice_requires_freeze_source(sealed_repository, source):
+    repo = sealed_repository
+    if source is None:
+        manifest = protocol.load_release_manifest(repo / "configs/benchmarks/releases" / SLICE)
+        result = protocol.validate_release_manifest(manifest, repository_root=repo)
         assert any("sealed" in p and "source_sha" in p for p in result["problems"]), result
+        return
+    manifest = materialize(repo, "slice")
+    if source == "another-commit":
+        git(repo, "commit", "--allow-empty", "-qm", "alternate source")
+        with pytest.raises(ValueError, match="does not match source_commit"):
+            protocol.load_release_manifest(manifest.path, repository_root=repo)
+    else:
+        result = protocol.validate_release_manifest(manifest, repository_root=repo)
+        assert result["status"] == "valid", result["problems"]
 
 
 def test_anonymous_mixed_sealed_seed_release_refused(tmp_path):
@@ -156,21 +169,16 @@ def test_anonymous_mixed_sealed_seed_release_refused(tmp_path):
 
 
 @pytest.mark.parametrize("source", ["HEAD", "another-commit"])
-def test_freeze_bound_slice_preflight_uses_runtime_source(monkeypatch, source):
-    manifest = protocol.load_release_manifest(RELEASES / SLICE)
-    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
-    manifest = replace(manifest, source_sha=head)
-    reached = []
-
-    def record(job):
-        reached.append(job[2])
-        return {"scenario": job[0]["name"], "rows": [], "map_warnings": []}
-
-    monkeypatch.setattr(spawn, "_check_release_scenario", record)
+def test_freeze_bound_slice_preflight_uses_runtime_source(sealed_repository, monkeypatch, source):
+    manifest = materialize(sealed_repository, "slice")
+    reached = worker_stub(monkeypatch)
     report = spawn.run_manifest_preflight(
-        manifest, source_commit=head if source == "HEAD" else "a" * 40
+        manifest,
+        workers=1,
+        source_commit=manifest.source_sha if source == "HEAD" else "a" * 40,
     )
     if source == "HEAD":
+        assert report["status"] == "valid", report
         assert len(reached) == 3, report
         assert all(len(seeds) == 30 for seeds in reached)
     else:

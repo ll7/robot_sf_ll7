@@ -42,3 +42,6 @@ fallback_risk_dwa:
 # DIAGNOSTIC ONLY; never promote or use for release.
 diagnostic_training_plant: true
 allow_backwards: true
+
+# PPOABL diagnostic-only plant selector.
+diagnostic_plant_variant: a3

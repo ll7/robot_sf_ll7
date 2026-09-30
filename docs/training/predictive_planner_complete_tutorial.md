@@ -301,6 +301,17 @@ The adapter is `PredictionPlannerAdapter` in `robot_sf/planner/socnav.py`.
 ### 5.2 Candidate generation
 
 Baseline candidates come from configured speed ratios and heading deltas.
+The historical `per_step_v1` lattice divides deltas by the rollout timestep and clips
+turn rates. The 0.0.8 candidate selects `predictive_heading_lattice_version:
+horizon_scaled_v2`: deltas describe yaw changes across the supported prediction horizon.
+When outer deltas exceed reachable yaw, the entire set is scaled proportionally to the
+turn limit, preserving distinct headings rather than saturating each one separately.
+This changes robot controls only; it never extends the pedestrian forecast.
+
+Both released learned predictors emit eight steps at 0.1 s, giving 0.8 s of forecast.
+Predictive MPPI rejects a requested `horizon_steps` outside the returned model horizon;
+it does not cap requests or repeat the final forecast to invent a longer horizon. The
+0.0.8 configs disable horizon boosting because those models have no additional steps.
 
 Near predicted crowd interaction:
 
@@ -519,6 +530,10 @@ In this repo, those ideas became:
    - implemented as sampled rollout scoring instead of MCTS.
 3. Static obstacle handling:
    - implemented via occupancy-grid path penalty in scoring (not a separate LiDAR branch model).
+     The 0.0.8 candidate selects `predictive_occupancy_version: combined_v2`, which uses
+     the preferred combined/obstacle term plus half the pedestrian term in both action
+     and sequence scoring. Historical `pedestrians_v1` discarded the obstacle term;
+     it remains the default for reproducing historical configurations.
 4. Reimplementation tractability:
    - prioritized deterministic benchmark integration, reproducible scripts, and explicit quality gates.
 
@@ -624,6 +639,12 @@ pedestrian observations are recorded and transformed into robot frame.
 Consequence:
 - The predictor is trained on ego-relative dynamics under changing robot pose,
   which is required for planner-time consistency.
+
+The collectors copy SOCNAV pedestrian velocities, which the observation producer already
+rotates into the robot frame. World pedestrian positions are transformed separately.
+Collectors before the FXP correction rotated velocities a second time. Existing v2_full
+weights remain unchanged and require recollection/retraining; see the
+[FXP audit and retraining plan](../context/issue_10007_fxp_prediction_defects.md).
 
 ### Q2) What exactly is in the predictive dataset?
 

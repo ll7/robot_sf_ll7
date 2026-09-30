@@ -58,7 +58,7 @@ class PredictiveMPPIConfig:
 
     socnav: SocNavPlannerConfig
     random_seed: int = 42
-    horizon_steps: int = 12
+    horizon_steps: int = 8
     rollout_dt: float = 0.2
     sample_count: int = 128
     iterations: int = _DEFAULT_ITERATIONS
@@ -229,12 +229,14 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         """
         state, mask, _robot_pos, _robot_heading = self._predictor._build_model_input(observation)
         future = self._predictor._predict_trajectories(state, mask)
-        learned_steps = self._predictor._effective_rollout_steps(future_peds=future, mask=mask)
-        steps = min(
-            max(1, int(self.config.horizon_steps)),
-            max(1, int(future.shape[1])),
-        )
-        steps = min(max(steps, learned_steps), int(future.shape[1]))
+        steps = int(self.config.horizon_steps)
+        supported_steps = int(future.shape[1])
+        if steps < 1 or steps > supported_steps:
+            raise ValueError(
+                f"predictive_mppi horizon_steps={steps} exceeds or is outside the model's "
+                f"supported horizon of {supported_steps} steps; use 1..{supported_steps}. "
+                "Longer forecasts require a validated predictor, not silent capping or extrapolation."
+            )
         return future, mask, steps
 
     def _speed_cap(self, future: np.ndarray, mask: np.ndarray) -> float:
@@ -987,7 +989,7 @@ def build_predictive_mppi_config(cfg: dict[str, object] | None) -> PredictiveMPP
     return PredictiveMPPIConfig(
         socnav=socnav,
         random_seed=int(cfg.get("random_seed", 42)),
-        horizon_steps=int(cfg.get("horizon_steps", 12)),
+        horizon_steps=int(cfg.get("horizon_steps", 8)),
         rollout_dt=float(cfg.get("rollout_dt", socnav.predictive_rollout_dt)),
         sample_count=int(cfg.get("sample_count", 128)),
         iterations=int(cfg.get("iterations", _DEFAULT_ITERATIONS)),

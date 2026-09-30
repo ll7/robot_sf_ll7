@@ -1,0 +1,28 @@
+{
+  "base_head": "d41cceb7f9422337bd34b602ae49f3dddbddb2a5",
+  "fixed_source_sha256": {
+    "robot_sf/planner/predictive_mppi.py": "8b5961a43c4692983682233056d53e5d975a1b344de0f48609d373c3b9375acd",
+    "robot_sf/planner/socnav_base.py": "a6b19af22e1be45976ca58a2b521a0f1bc158b4934b7394de580c52d12644934",
+    "robot_sf/planner/socnav_prediction.py": "7d63a94552789debdbd1eb7f62d32f71e0ae004de2805504890bc3700a51453a",
+    "scripts/training/collect_predictive_planner_data.py": "39efbce55e074cc5fb2c339ef02ae00b7ffe4f1da05e3947ae1336feb4d905b5",
+    "scripts/training/collect_predictive_hardcase_data.py": "61426b82babb1de92442fe65d8ae40fe6cba93e52e5a1eac85a4938ceced64cc",
+    "configs/algos/prediction_planner_release_v0_0_8.yaml": "1fbbe7ca4899f6e3420b8908fe63c33d6423cd4cacd2347ab539b69eb2c8f31d",
+    "configs/algos/predictive_mppi_release_v0_0_8.yaml": "24bdeb3f70ca9677b02e043e50104d57f20728b54034e52e917ed84fe47a803c",
+    "tests/planner/test_prediction_fxp_regressions.py": "37831d02acafaf4ea558e302bc27f9d4c0b9b616ce97bdab7dd87b3f1d79af93",
+    "docs/context/evidence/issue_10007_fxp/probe.py": "ee6b75149b67503d0beae038c310e18364b419ed48b163ead61d29569d3df8f2"
+  },
+  "raw_captures_sha256": {
+    "before.json": "b262a46e38c2cc986535a1691b4462fcb2fec8071e5a25088106ec033f3aada9",
+    "after.json": "eccf316170b3e0c568932253293bd7ad6c103b8d821db2df098fd3422b907ec9",
+    "red_final.log": "185393fbb747caa07f66ac849630b4db726a7c82e7b4e037ffa53661d756ed8c",
+    "green_final.log": "f16bea0daa9d8be06c5a4463bd055ca80ea49da3f2fdd44c236a462e5bc6071e",
+    "validation.log": "ee287e708627877a78dfc706736b7d8969bd803241024665c777063cda660e61",
+    "velocity_model_v1.log": "abaa2fa0dccfb90c2259eda2353f96da808ceeb942d5411c2168e3a07eac5143",
+    "velocity_model_v2.log": "6e0c5a3b8b66d281b18cdc95e84273e67288717e0f2710c9f2e3ea57c9c8358e"
+  },
+  "checkpoint_sha256": {
+    "predictive_proxy_selected_v1-predictive_model.pt": "0e7e775fd09509543761d8326237c4f85b0cc540fb24f98b3c5f8f7c0009fccc",
+    "predictive_proxy_selected_v2_full-predictive_model.pt": "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1"
+  },
+  "raw_capture_disposition": "Local diagnostic traces retained outside checkout; summary, probe source, source digests, and model release pointers are versioned. No campaign or release artifact was produced."
+}

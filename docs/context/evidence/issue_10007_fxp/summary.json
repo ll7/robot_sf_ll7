@@ -1,0 +1,376 @@
+{
+  "base_head": "d41cceb7f9422337bd34b602ae49f3dddbddb2a5",
+  "evidence_tier": "diagnostic-only",
+  "scenarios": [
+    "classic_bottleneck_medium",
+    "classic_doorway_low"
+  ],
+  "seeds": [
+    1001,
+    1002,
+    1003
+  ],
+  "phases": {
+    "before": {
+      "elapsed_s": 15.201219922164455,
+      "observations": 426,
+      "provenance": {
+        "seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "scenarios": [
+          "classic_doorway_low",
+          "classic_bottleneck_medium"
+        ],
+        "trajectory_policy": "collector goal policy; identical deterministic comparator observations",
+        "predictor_fallback": false,
+        "mppi_predictor_fallback": false
+      },
+      "by_scenario": {
+        "classic_bottleneck_medium": {
+          "observations": 269,
+          "collector_velocity_error_m_s": {
+            "base": {
+              "mean": 0.7288983410508216,
+              "maximum": 0.9855927228927612
+            },
+            "hardcase": {
+              "mean": 0.7288983410508216,
+              "maximum": 0.9855927228927612
+            }
+          },
+          "wall_facing_control": {
+            "single": {
+              "nonzero_count": 0,
+              "maximum_cost_delta": 0.0,
+              "mean_cost_delta": 0.0
+            },
+            "sequence": {
+              "nonzero_count": 0,
+              "maximum_cost_delta": 0.0,
+              "mean_cost_delta": 0.0
+            }
+          },
+          "prediction_heading_counts": [
+            3
+          ],
+          "mppi_anchor_heading_counts": [
+            3
+          ],
+          "example": {
+            "scenario": "classic_bottleneck_medium",
+            "seed": 1001,
+            "tick": 0,
+            "heading": -1.575972080230713,
+            "ped_count": 1,
+            "collector_velocity_error": {
+              "base": 0.7089342474937439,
+              "hardcase": 0.7089342474937439
+            },
+            "wall_facing_control": [
+              2.1213206765716217,
+              0.0,
+              0.0
+            ],
+            "heading_rates": [
+              -1.0,
+              0.0,
+              1.0
+            ],
+            "mppi_heading_rates": [
+              -1.0,
+              0.0,
+              1.0
+            ],
+            "mppi_horizon": {
+              "24": {
+                "steps": 8,
+                "error": null
+              },
+              "4": {
+                "steps": 8,
+                "error": null
+              }
+            }
+          }
+        },
+        "classic_doorway_low": {
+          "observations": 157,
+          "collector_velocity_error_m_s": {
+            "base": {
+              "mean": 1.0752209071900434,
+              "maximum": 1.270861268043518
+            },
+            "hardcase": {
+              "mean": 1.0752209071900434,
+              "maximum": 1.270861268043518
+            }
+          },
+          "wall_facing_control": {
+            "single": {
+              "nonzero_count": 0,
+              "maximum_cost_delta": 0.0,
+              "mean_cost_delta": 0.0
+            },
+            "sequence": {
+              "nonzero_count": 0,
+              "maximum_cost_delta": 0.0,
+              "mean_cost_delta": 0.0
+            }
+          },
+          "prediction_heading_counts": [
+            3
+          ],
+          "mppi_anchor_heading_counts": [
+            3
+          ],
+          "example": {
+            "scenario": "classic_doorway_low",
+            "seed": 1001,
+            "tick": 0,
+            "heading": -2.783853769302368,
+            "ped_count": 3,
+            "collector_velocity_error": {
+              "base": 0.9840455055236816,
+              "hardcase": 0.9840455055236816
+            },
+            "wall_facing_control": [
+              6.736468392630024,
+              0.0,
+              0.0
+            ],
+            "heading_rates": [
+              -1.0,
+              0.0,
+              1.0
+            ],
+            "mppi_heading_rates": [
+              -1.0,
+              0.0,
+              1.0
+            ],
+            "mppi_horizon": {
+              "24": {
+                "steps": 8,
+                "error": null
+              },
+              "4": {
+                "steps": 8,
+                "error": null
+              }
+            }
+          }
+        }
+      },
+      "mppi_horizon_requests": {
+        "24": {
+          "steps": 8,
+          "error": null
+        },
+        "4": {
+          "steps": 8,
+          "error": null
+        }
+      }
+    },
+    "after": {
+      "elapsed_s": 22.578933163080364,
+      "observations": 426,
+      "provenance": {
+        "seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "scenarios": [
+          "classic_doorway_low",
+          "classic_bottleneck_medium"
+        ],
+        "trajectory_policy": "collector goal policy; identical deterministic comparator observations",
+        "predictor_fallback": false,
+        "mppi_predictor_fallback": false
+      },
+      "by_scenario": {
+        "classic_bottleneck_medium": {
+          "observations": 269,
+          "collector_velocity_error_m_s": {
+            "base": {
+              "mean": 0.0,
+              "maximum": 0.0
+            },
+            "hardcase": {
+              "mean": 0.0,
+              "maximum": 0.0
+            }
+          },
+          "wall_facing_control": {
+            "single": {
+              "nonzero_count": 19,
+              "maximum_cost_delta": 0.09375,
+              "mean_cost_delta": 0.00383364312267658
+            },
+            "sequence": {
+              "nonzero_count": 19,
+              "maximum_cost_delta": 0.09375,
+              "mean_cost_delta": 0.00383364312267658
+            }
+          },
+          "prediction_heading_counts": [
+            7,
+            11
+          ],
+          "mppi_anchor_heading_counts": [
+            7,
+            15
+          ],
+          "example": {
+            "scenario": "classic_bottleneck_medium",
+            "seed": 1001,
+            "tick": 70,
+            "heading": -1.4815282821655273,
+            "ped_count": 1,
+            "collector_velocity_error": {
+              "base": 0.0,
+              "hardcase": 0.0
+            },
+            "wall_facing_control": [
+              1.3038407276910229,
+              0.03125,
+              0.03125
+            ],
+            "heading_rates": [
+              -0.9817475,
+              -0.65449875,
+              -0.32724875,
+              0.0,
+              0.32724875,
+              0.65449875,
+              0.9817475
+            ],
+            "mppi_heading_rates": [
+              -0.9817475,
+              -0.65449875,
+              -0.32724875,
+              0.0,
+              0.32724875,
+              0.65449875,
+              0.9817475
+            ],
+            "mppi_horizon": {
+              "8": {
+                "steps": 8,
+                "error": null
+              },
+              "24": {
+                "steps": null,
+                "error": "predictive_mppi horizon_steps=24 exceeds or is outside the model's supported horizon of 8 steps; use 1..8. Longer forecasts require a validated predictor, not silent capping or extrapolation."
+              },
+              "4": {
+                "steps": 4,
+                "error": null
+              }
+            }
+          }
+        },
+        "classic_doorway_low": {
+          "observations": 157,
+          "collector_velocity_error_m_s": {
+            "base": {
+              "mean": 0.0,
+              "maximum": 0.0
+            },
+            "hardcase": {
+              "mean": 0.0,
+              "maximum": 0.0
+            }
+          },
+          "wall_facing_control": {
+            "single": {
+              "nonzero_count": 7,
+              "maximum_cost_delta": 0.09375,
+              "mean_cost_delta": 0.002786624203821656
+            },
+            "sequence": {
+              "nonzero_count": 7,
+              "maximum_cost_delta": 0.09375,
+              "mean_cost_delta": 0.002786624203821656
+            }
+          },
+          "prediction_heading_counts": [
+            7,
+            11
+          ],
+          "mppi_anchor_heading_counts": [
+            7,
+            15
+          ],
+          "example": {
+            "scenario": "classic_doorway_low",
+            "seed": 1001,
+            "tick": 55,
+            "heading": -2.499518871307373,
+            "ped_count": 3,
+            "collector_velocity_error": {
+              "base": 0.0,
+              "hardcase": 0.0
+            },
+            "wall_facing_control": [
+              1.2727922167448644,
+              0.03125,
+              0.03125
+            ],
+            "heading_rates": [
+              -0.9817475,
+              -0.65449875,
+              -0.32724875,
+              0.0,
+              0.32724875,
+              0.65449875,
+              0.9817475
+            ],
+            "mppi_heading_rates": [
+              -0.9817475,
+              -0.65449875,
+              -0.32724875,
+              0.0,
+              0.32724875,
+              0.65449875,
+              0.9817475
+            ],
+            "mppi_horizon": {
+              "8": {
+                "steps": 8,
+                "error": null
+              },
+              "24": {
+                "steps": null,
+                "error": "predictive_mppi horizon_steps=24 exceeds or is outside the model's supported horizon of 8 steps; use 1..8. Longer forecasts require a validated predictor, not silent capping or extrapolation."
+              },
+              "4": {
+                "steps": 4,
+                "error": null
+              }
+            }
+          }
+        }
+      },
+      "mppi_horizon_requests": {
+        "8": {
+          "steps": 8,
+          "error": null
+        },
+        "24": {
+          "steps": null,
+          "error": "predictive_mppi horizon_steps=24 exceeds or is outside the model's supported horizon of 8 steps; use 1..8. Longer forecasts require a validated predictor, not silent capping or extrapolation."
+        },
+        "4": {
+          "steps": 4,
+          "error": null
+        }
+      }
+    }
+  },
+  "matched_observables_equal": true
+}

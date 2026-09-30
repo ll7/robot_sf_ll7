@@ -683,7 +683,7 @@ def records():
             "metrics": metrics(success=success),
         }
         for key, success in (("a", 1), ("b", 0))
-        for seed in (111, 112)
+        for seed in (201, 202)
     ]
 
 

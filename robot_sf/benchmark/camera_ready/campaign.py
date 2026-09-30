@@ -2888,7 +2888,11 @@ def _build_release_artifact_urls(
 
 
 def _legacy_snqi_artifacts(snqi: _SnqiSectionResult | None) -> dict[str, str]:
-    """Declare legacy artifact paths only when the legacy section exists."""
+    """Declare legacy artifact paths only when the legacy section exists.
+
+    Returns:
+        Relative legacy artifact paths, or an empty mapping for exclusion.
+    """
     if snqi is None:
         return {}
     return {

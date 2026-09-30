@@ -110,9 +110,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
     def __init__(self, config: PredictiveMPPIConfig, *, allow_fallback: bool = False) -> None:
         """Initialize predictive optimizer and deterministic RNG state."""
         self.config = config
-        self._drive_settings = DifferentialDriveSettings(
-            radius=config.socnav.predictive_robot_radius
-        )
+        self._drive_settings = DifferentialDriveSettings()
         self._rng = np.random.default_rng(int(config.random_seed))
         self._no_admissible_command = False
         self._no_admissible_command_count = 0
@@ -126,9 +124,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
     def bind_env(self, env: Any) -> None:
         """Bind the episode's original static grid geometry."""
         self._bind_static_obstacles(env)
-        self._drive_settings = DifferentialDriveSettings(
-            radius=self.config.socnav.predictive_robot_radius
-        )
+        self._drive_settings = DifferentialDriveSettings()
         robots = getattr(getattr(env, "simulator", None), "robots", None)
         if robots:
             settings = getattr(robots[0], "config", None)

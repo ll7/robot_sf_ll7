@@ -26,7 +26,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from math import atan2, cos, isfinite, pi, sin
-from random import sample, uniform
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -2291,6 +2290,9 @@ class PedSimulator(Simulator):
         the ego pedestrian at a random valid location 10-15 units away
         from the first robot.
         """
+        self._ego_rng = np.random.default_rng(
+            np.random.SeedSequence(self.config.pedestrian_seed, spawn_key=(4,))
+        )
         self._reset_social_force_state()
         self._oracle_episode_index += 1
         self._oracle_episode_id = f"simulator-episode-{self._oracle_episode_index}"
@@ -2326,8 +2328,10 @@ class PedSimulator(Simulator):
                 raise ValueError(
                     "spawn_near_robot=False requires at least one pedestrian spawn zone.",
                 )
-            ped_spawn_zone = sample(self.map_def.ped_spawn_zones, k=1)[0]
-            ped_spawn = sample_zone(ped_spawn_zone, 1)[0]
+            ped_spawn_zone = self.map_def.ped_spawn_zones[
+                int(self._ego_rng.integers(len(self.map_def.ped_spawn_zones)))
+            ]
+            ped_spawn = sample_zone(ped_spawn_zone, 1, rng=self._ego_rng)[0]
             npc_orient = self.ego_ped.pose[1]
             if self.pysf_state.num_peds > 1:
                 npc_velocity = self.pysf_state.pysf_states()[0, PYSF_VELOCITY_SLICE]
@@ -2421,8 +2425,8 @@ class PedSimulator(Simulator):
         """
         x, y = fixed_point
         for _ in range(10):
-            angle = uniform(0, 2 * pi)
-            distance = uniform(lower_bound, upper_bound)
+            angle = float(self._ego_rng.uniform(0, 2 * pi))
+            distance = float(self._ego_rng.uniform(lower_bound, upper_bound))
 
             new_x = x + distance * cos(angle)
             new_y = y + distance * sin(angle)
@@ -2430,8 +2434,10 @@ class PedSimulator(Simulator):
                 return new_x, new_y
 
         logger.warning("Could not find a valid proximity point: {point}.", point=f"{fixed_point}")
-        spawn_id = sample(self.map_def.ped_spawn_zones, k=1)[0]  # Spawn in pedestrian spawn_zone
-        initial_spawn = sample_zone(spawn_id, 1)[0]
+        spawn_id = self.map_def.ped_spawn_zones[
+            int(self._ego_rng.integers(len(self.map_def.ped_spawn_zones)))
+        ]
+        initial_spawn = sample_zone(spawn_id, 1, rng=self._ego_rng)[0]
         return initial_spawn
 
     def is_obstacle_collision(self, x: float, y: float) -> bool:

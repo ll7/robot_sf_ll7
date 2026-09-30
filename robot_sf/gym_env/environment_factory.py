@@ -289,6 +289,7 @@ class EnvironmentFactory:
         video_path: str | None = None,
         video_fps: float | None = None,
         peds_have_obstacle_forces: bool = True,
+        seed: int | None = None,
     ) -> SingleAgentEnv:
         """Construct a pedestrian (adversarial) environment.
 
@@ -296,6 +297,7 @@ class EnvironmentFactory:
         agent navigating among crowds controlled by a provided robot policy.
 
         Args:
+            seed: Episode seed for private pedestrian sampling.
             robot_model: Trained policy or model providing robot actions in the scene.
             config: PedestrianSimulationConfig instance; defaults to standard if None.
             reward_func: Custom reward function for pedestrian agent; uses canonical
@@ -312,6 +314,7 @@ class EnvironmentFactory:
         """
         if config is None:
             config = PedestrianSimulationConfig()
+        config.sim_config.pedestrian_seed = seed
         PedestrianEnv = _load_pedestrian_env()
 
         # Allow None to be passed through from ergonomic factories and
@@ -368,6 +371,7 @@ class EnvironmentFactory:
         """
         if config is None:
             config = MultiRobotConfig()
+        config.sim_config.pedestrian_seed = seed
         if config.num_robots != num_robots:
             config.num_robots = num_robots
         _apply_global_seed(seed)
@@ -857,6 +861,7 @@ def make_pedestrian_env(  # noqa: PLR0913
         video_path=eff_video_path,
         video_fps=eff_video_fps,
         peds_have_obstacle_forces=peds_have_obstacle_forces,
+        seed=seed,
     )
     env.applied_seed = seed
     return env

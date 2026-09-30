@@ -18,7 +18,7 @@ from shapely.prepared import prep
 
 from robot_sf.nav.navigation import get_prepared_obstacles
 from robot_sf.nav.svg_map_parser import SvgMapConverter
-from robot_sf.ped_npc import ped_behavior, ped_population
+from robot_sf.ped_npc import ped_population
 from robot_sf.ped_npc.ped_archetypes import assign_archetype_labels
 from robot_sf.ped_npc.ped_behavior import CrowdedZoneBehavior
 from robot_sf.ped_npc.ped_population import PedSpawnConfig, populate_simulation

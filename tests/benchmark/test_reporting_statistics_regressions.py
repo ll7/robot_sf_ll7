@@ -1,31 +1,97 @@
 """External-review counterexamples through real reporting functions; no rollouts."""
 
+import json
+import math
 from types import SimpleNamespace
 
 import pytest
 
 from robot_sf.benchmark.aggregate import _paired_metric_differences, compute_aggregates
-from robot_sf.benchmark.camera_ready._reporting import _resolve_planner_metrics
+from robot_sf.benchmark.camera_ready._reporting import (
+    _build_breakdown_rows,
+    _resolve_planner_metrics,
+)
 from robot_sf.benchmark.full_classic.aggregation import _bootstrap_params
 from robot_sf.benchmark.rank_metrics import spearman_from_rank_maps
 from robot_sf.benchmark.seed_variance import build_seed_variability_rows
 
 
 def test_f1_table_recomputation_preserves_aggregate_evidence_cohort():
-    """The valid-spawn, explicitly ineligible success cannot re-enter table means."""
+    """Ineligible rows cannot re-enter table means, clearance minima, or CIs."""
     rows = [
-        {"algo": "A", "metrics": {"success": False, "snqi": 0}, "algorithm_metadata": {}},
         {
             "algo": "A",
-            "metrics": {"success": True, "snqi": 1},
+            "metrics": {"success": False, "snqi": 0, "collisions": 1, "min_clearance": 0.4},
+            "algorithm_metadata": {},
+        },
+        {
+            "algo": "A",
+            "metrics": {"success": True, "snqi": 1, "collisions": 0, "min_clearance": 0.1},
             "algorithm_metadata": {"foresight_prediction": {"evidence_eligible": False}},
         },
     ]
     aggregate = compute_aggregates(rows)["A"]
     assert aggregate["success"]["mean"] == 0.0
-    resolved, *_ = _resolve_planner_metrics(aggregate, rows, (0, 0), (0, 0), (0, 0))
+    resolved, success_ci, collision_ci, snqi_ci = _resolve_planner_metrics(
+        aggregate, rows, (9, 9), (9, 9), (9, 9)
+    )
     assert resolved["success_mean"] == 0.0
     assert resolved["snqi_mean"] == 0.0
+    assert resolved["min_clearance_m"] == 0.4
+    # Recomputed table metrics deliberately invalidate stale aggregate CIs.
+    for interval in (success_ci, collision_ci, snqi_ci):
+        assert len(interval) == 2
+        assert all(math.isnan(bound) for bound in interval)
+
+
+def test_breakdown_excludes_reviewers_ineligible_success(tmp_path):
+    """Scenario and family breakdowns use only the eligible failure."""
+    episodes_path = tmp_path / "episodes.jsonl"
+    rows = [
+        {"algo": "A", "scenario_id": "s", "seed": 1001, "metrics": {"success": 0.0}},
+        {
+            "algo": "A",
+            "scenario_id": "s",
+            "seed": 1002,
+            "metrics": {"success": 1.0},
+            "algorithm_metadata": {"foresight_prediction": {"evidence_eligible": False}},
+        },
+    ]
+    episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    scenario_rows, family_rows = _build_breakdown_rows(
+        [{"planner": {"key": "A", "algo": "A"}, "episodes_path": str(episodes_path)}]
+    )
+    assert len(scenario_rows) == len(family_rows) == 1
+    assert float(scenario_rows[0]["success_mean"]) == 0.0
+    assert float(family_rows[0]["success_mean"]) == 0.0
+    assert scenario_rows[0]["episodes"] == family_rows[0]["episodes"] == 1
+
+
+def test_seed_variability_excludes_reviewers_ineligible_success():
+    """The seed report averages only the eligible failure, with one retained seed."""
+    rows = [
+        {"algo": "A", "scenario_id": "s", "seed": 1001, "metrics": {"success": 0.0}},
+        {
+            "algo": "A",
+            "scenario_id": "s",
+            "seed": 1002,
+            "metrics": {"success": 1.0},
+            "algorithm_metadata": {"foresight_prediction": {"evidence_eligible": False}},
+        },
+    ]
+    report_rows = build_seed_variability_rows(
+        rows,
+        metrics=("success",),
+        campaign_id="synthetic",
+        config_hash="synthetic",
+        git_hash="synthetic",
+        confidence_settings={"bootstrap_samples": 0},
+    )
+    assert len(report_rows) == 1
+    report = report_rows[0]
+    assert report["summary"]["success"]["mean"] == 0.0
+    assert report["seed_count"] == report["episode_count"] == 1
+    assert report["seed_list"] == [1001]
 
 
 @pytest.mark.parametrize(

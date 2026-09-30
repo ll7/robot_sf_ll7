@@ -14,6 +14,7 @@ import numpy as np
 
 from robot_sf.benchmark.aggregate import (
     ensure_observation_track_policy,
+    filter_evidence_eligible_records,
     flatten_metrics,
     normalize_observation_track_mode,
     observation_track_group_label,
@@ -396,10 +397,8 @@ def build_seed_variability_rows(
         dict[int, list[dict[str, Any]]],
     ] = defaultdict(lambda: defaultdict(list))
 
+    records, _excluded = filter_evidence_eligible_records(list(records))
     for record in records:
-        if record_has_invalid_spawn(record):
-            # Issues #9725/#9861: invalid or unmeasured starts are not seed variance.
-            continue
         scenario_id = str(record.get("scenario_id") or "unknown")
         planner_key = str(
             record.get("planner_key")

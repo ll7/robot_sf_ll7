@@ -1209,7 +1209,8 @@ def _build_breakdown_rows(  # noqa: C901, PLR0912, PLR0915
         candidate = get_repository_root() / episodes_path
         if not candidate.exists():
             continue
-        for record in read_jsonl(str(candidate)):
+        records, _excluded = filter_evidence_eligible_records(read_jsonl(str(candidate)))
+        for record in records:
             if not isinstance(record, dict):
                 continue
             scenario_id = str(record.get("scenario_id", "unknown")).strip()

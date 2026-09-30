@@ -10,12 +10,16 @@ manifests and historical 0.0.2/0.0.7 artifacts are unchanged.
 ## SA-CADRL release inputs (B1/B2)
 
 The release arm reads `configs/algos/socnav_release_v0_0_8.yaml` through the
-benchmark's `_build_socnav_config`. Its 2 m/s speed cap did not override the
-1 m/s preferred speed or three-agent default. The checkpoint therefore saw
-`pref_speed=1` and at most three pedestrian records, independently of drive bounds.
-The release config now supplies `sacadrl_pref_speed: 2.0` and
-`sacadrl_max_other_agents: 19`. These names are specific to SA-CADRL and do not
+benchmark's `_build_socnav_config`. The release now explicitly pins
+`sacadrl_pref_speed: 1.0` and retains `sacadrl_max_other_agents: 19`. Both 1.0 and
+2.0 m/s are inside the checkpoint's training range, but the benchmark drive brakes
+at 1 m/s² while upstream dynamics change speed instantly. At 2.0 m/s the policy's
+stop action does not stop in time: stopping distance is 2 m, versus 0.5 m at 1.0.
+The controlled split below identifies the preference change as the cause of the
+observed outcome collapse. The delegated decision restores the working 1.0 m/s
+configuration and keeps the 19-agent capacity. These SA-CADRL-specific keys do not
 alter other SocNav arms sharing the bounds config. General defaults stay historical.
+Reopen this speed decision only with new controlled evidence or changed drive dynamics.
 
 Upstream source is pinned to gym-collision-avoidance commit
 `903564097509e3fbdbbb850a3a89729a28377b81`:
@@ -42,9 +46,9 @@ toward the selected heading at the rate limit over the current step. At dt=0.1,
 nonzero choices ±π/12 and ±π/6 all exceed the 0.1 rad per-step rate bound.
 The 11-action table becomes **nine distinct commands**, three turn rates for
 each of three speed scales (1, 0.5, 0). The hunt's six was an empirical sample
-of actions selected over 300 states, not the full table's cardinality. Raising
-preferred speed changes these scales from {1, 0.5, 0} to {2, 1, 0} m/s and
-leaves the full cardinality **9 before / 9 after**.
+of actions selected over 300 states, not the full table's cardinality. With the
+restored 1.0 m/s preference, emitted speed scales remain {1, 0.5, 0} m/s and
+the full cardinality remains nine.
 
 The drive additionally limits angular acceleration to 1 rad/s²: from rest the
 first endpoint rate is 0.1 rad/s and the first heading increment is 0.005 rad
@@ -76,6 +80,12 @@ step, rather than passing a fixed open-loop sequence to that helper. Candidate
 horizons and release enhancement switches are unchanged. Future aligned escape
 samples still describe translation after a stopped robot completes its in-place turn.
 
+The diagnostic's `native_candidate` mirrors the new `_rollout`; its after-fix
+agreement is by construction. The before numbers show the old rollout differed
+from this native-drive model by up to 2.43 m and yielded 1,300 false-clear
+candidates. Execution-match is not shown: executed commands add penalty scaling
+and brake limits, and the planner replans every step.
+
 ## Reproduction and regression gate
 
 Run `scripts/diagnostics/probe_fxs_sacadrl_sampling.py --output <durable-directory>`
@@ -84,50 +94,69 @@ episodes for seeds 1001–1010 on group crossing high, doorway medium and head-o
 corridor medium, both arms: 60 episodes per revision. Horizon comes from each
 scenario. No fallback, timeout overrides, held-out seeds or degraded backend.
 The script compares every sampler candidate and swept blocking index against
-commands applied to the native robot, and records SA-CADRL input/command statistics.
+the matching native-drive model, and records SA-CADRL input/command statistics.
 The additional three-versus-nineteen-agent inference is observational only.
 
 Regression file: `tests/planner/test_fxs_release_contract.py`.
 
-| Test | Defect / credible regression | Existing coverage gap | Bytes / independent oracle |
+| Test | Defect / credible regression | Existing coverage gap | Literal contract / reference |
 |---|---|---|---|
-| preferred speed | Release silently reverts to the 1 m/s default | Release action-bound test injects its own preferred speed; it never tests release host input | Actual release YAML → benchmark filter → checkpoint host feature; literal drive speed 2 |
-| observed agents | Release silently truncates to three | Observation parity probe explicitly sets native row count | Actual release YAML and real 138-column tensor; ordered pedestrian positions and valid count; padded rows excluded |
+| preferred speed | Release silently changes from the working 1.0 m/s preference | Release action-bound test injects its own preferred speed; it never tests release host input | Actual release YAML → benchmark filter → checkpoint host feature; literal 1.0 with the braking-lag reason |
+| observed agents | Release silently truncates to three | Observation parity probe explicitly sets native row count | Actual release YAML and real 138-column tensor; shuffled input with independently sorted literal expected positions and valid count; padded rows excluded |
 | first rollout step | Instant turn or endpoint Euler displacement returns | Existing rollout-limit test expects endpoint Euler distance and omits angular acceleration | Hand-calculated 5 mm displacement and 0.005 rad rotation from trapezoidal wheel integration |
 | bound drive / turn state | Binding or flat angular velocity is lost | Existing binding fixture has only linear limits and radius | Real flat observation, nondefault drive settings, actual DifferentialDriveRobot applied action; production candidate compared across consumer boundary |
 
-No production test-only seams. Base failures and numeric episode outcomes are in the
-[compact evidence summary](evidence/issue_10007_fxs_summary.json). These probes support implementation integrity only.
+The model now rejects sequences exceeding the checkpoint's 19 slots before inference,
+rather than cropping them with an inconsistent count. A separate regression builds
+the real 20-slot input and asserts that inference is never called.
+
+No production test-only seams. Historical base failures and initial episode outcomes
+are in the [original evidence summary](evidence/issue_10007_fxs_summary.json); its
+`after` phase used 2.0 m/s and is superseded for release configuration. FXS2 split
+and replay evidence is in the [decision summary](evidence/issue_10007_fxs2_summary.json).
+These probes support implementation integrity only.
 
 ## Measured outcomes and limitations
 
-Ten seeds (1001–1010) per scenario, before → after. Entries are
-success / collision / timeout episode counts:
+SA-CADRL split: the same three scenarios and seeds 1001–1010, 30 episodes per
+arm, native TensorFlow checkpoint without fallback. Reviewer runs at
+`1e1b9bcb8dbad2dda7d07db286678bb564e33c81` separate B1 from B2:
 
-| Planner | Group crossing high | Doorway medium | Head-on corridor medium |
-|---|---|---|---|
-| SA-CADRL | 7 / 3 / 0 → 1 / 9 / 0 | 0 / 10 / 0 → 0 / 10 / 0 | 4 / 6 / 0 → 2 / 8 / 0 |
-| Sampling | 10 / 0 / 0 → 10 / 0 / 0 | 10 / 0 / 0 → 10 / 0 / 0 | 10 / 0 / 0 → 10 / 0 / 0 |
+| Arm | Preferred speed (m/s) | Observed-agent capacity | Success / collision (of 30) |
+|---|---:|---:|---:|
+| A | 1.0 | 3 | 11 / 19 |
+| B (B1 only) | 2.0 | 3 | 2 / 28 |
+| C (B2 only; chosen release configuration) | 1.0 | 19 | 14 / 16 |
+| D (initial combined change) | 2.0 | 19 | 3 / 27 |
 
-SA-CADRL's maximum issued speed is 1 → 2 m/s. Actual observed pedestrians are
-3 → 4 for crossing/corridor and 3 → 6 for doorway; omitted-agent steps are
-4,696 → 0. Comparing three versus nineteen agents on the same baseline states
-changes the checkpoint argmax on 689 steps. Episodes contain 4–6 pedestrians;
-the regression tensor verifies the 19-agent ceiling separately. B1/B2 change together,
-so the outcome difference cannot be attributed to either one separately. Preferred
-speed and observation fidelity do not imply better performance: successes decrease
-from 11/30 to 3/30, collisions increase from 19/30 to 27/30. No retuning is included.
+B versus A and D versus C isolate the collapse to the 2.0 m/s preference under
+the benchmark's braking lag. C versus A supports keeping the 19-agent capacity
+(corridor successes 4 → 7). The FXS2 arm-C replay reproduces **14/30 successes**
+and **16/30 collisions**, matching outcome, step count and termination reason on
+all 30 reviewer episodes (crossing 7/3, doorway 0/10, corridor 7/3). These
+are development diagnostics, not held-out or paper-grade performance evidence.
+Doorway is 10/10 collisions in every arm; episodes contain only 4–6 pedestrians
+and do not exercise the 19-slot ceiling. Physical radius and heading adaptation
+limitations remain. No retuning is included.
 
-Sampling's 213,120 baseline candidates have up to 2.427882 m forecast error against
-the native drive, 32,367 differing swept blocking indices and 1,300 candidates
-predicted clear while the drive reference blocks them. The 213,252 fixed candidates
-have maximum error 1.4211e-14 m, zero blocking-index disagreements and zero false-clear
-candidates. Sampling succeeds on all 30 episodes both before and after. These are
-candidate forecast diagnoses, not counts of executed collisions or a safety guarantee.
+Sampling's 213,120 baseline candidates differed from the native-drive model by
+up to 2.427882 m, with 32,367 swept blocking-index differences and 1,300
+false-clear candidates. The 213,252 fixed candidates agree within floating-point
+precision (maximum error 1.4211e-14 m, zero blocking-index differences and zero
+false-clear candidates) **by construction**, because the reference mirrors the
+new rollout. Execution-match is not shown. All 30 sampling episodes succeeded
+before and after; candidate classifications are not executed collision counts or
+a safety guarantee.
 
-The new tests and updated native-distance assertion fail on both the initial and
-refreshed base (five failures); the focused fixed suite passes 44 tests. Ruff check,
-format and diff whitespace checks pass. No skip/xfail/timeout edits were made.
+The restored preference intentionally passes on the base, which already preferred
+1.0 m/s; its new assertion fails on the reviewed 2.0 m/s head. The other four
+original regression cases still fail on the base for their intended defects.
+The additional oversized-input guard fails before implementation. The reviewer
+no-sort mutation is killed by the shuffled fixture (17/19 slot mismatches).
+All 44 original focused tests plus the guard pass: **45 passed**. Ruff check,
+format check on all six PR Python paths and whitespace checks pass. The FXS2
+summary records named test nodes and evidence hashes. No skip/xfail/timeout edits
+are made; the broad readiness suite remains unrun under the seed/node restriction.
 
 **Validation exception:** an additional run of `tests/test_socnav_env_integration.py`
 executed its existing `env.reset(seed=123)` fixture before its seed values were

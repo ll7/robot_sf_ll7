@@ -233,8 +233,8 @@ def test_goal_approach_preserves_wall_avoidance(version: str) -> None:
 
 
 @pytest.mark.slow
-def test_frozen_seed_legacy_limit_cycle_and_opt_in_completion() -> None:
-    """The frozen native seed reproduces legacy timeout and fixed completion."""
+def test_dev_seed_legacy_limit_cycle_and_opt_in_completion() -> None:
+    """Development seed 1013 reproduces legacy timeout and opt-in completion."""
     scenario = next(
         dict(row) for row in load_scenarios(SCENARIO_PATH) if row.get("name") == SCENARIO_ID
     )

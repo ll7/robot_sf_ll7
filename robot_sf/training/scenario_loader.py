@@ -2931,13 +2931,74 @@ def _apply_residual_adversary_override(
     config.sim_config.residual_adversary = ResidualAdversaryConfig(**dict(overrides))
 
 
-def _apply_simulation_overrides(
+_SIMULATION_OVERRIDE_ATTRS = (
+    "peds_speed_mult",
+    "peds_reset_follow_route_at_start",
+    "action_latency_steps",
+    "action_latency_ms",
+    "pedestrian_integration_scheme",
+    "oracle_force_trace_enabled",
+    "sampler_capture_enabled",
+    "ped_radius",
+    "pedestrian_uncertainty_envelope_enabled",
+    "pedestrian_uncertainty_alpha_mps",
+    "goal_radius",
+    "goal_completion_policy",
+    "robot_goal_sampling_policy",
+    "pedestrian_model",
+    "social_force_kernel_version",
+    "ttc_predictive_force",
+    "zanlungo_collision_prediction",
+    "anisotropic_fov",
+    "alignment_torque",
+    "route_spawn_distribution",
+    "route_spawn_jitter_frac",
+    "route_spawn_seed",
+    "archetype_composition",
+    "archetype_speed_factors",
+    "archetype_seed",
+    "response_law_composition",
+    "response_law_seed",
+    "population_size",
+    "non_reactive_response_multiplier",
+    "hesitating_response_multiplier",
+)
+
+
+def _apply_simulation_overrides(  # noqa: C901
     config: RobotSimulationConfig,
     overrides: Mapping[str, Any] | None,
 ) -> None:
     """Apply scenario-level simulation overrides to a config instance."""
-    if not isinstance(overrides, Mapping):
+    if overrides is None:
         return
+    if not isinstance(overrides, Mapping):
+        raise ValueError("simulation_config must be a mapping")
+    supported = set(_SIMULATION_OVERRIDE_ATTRS) | {
+        "time_per_step_in_secs",
+        "max_episode_steps",
+        "difficulty",
+        "ped_density",
+        "max_peds_per_group",
+        "groups",
+        "prf_config",
+        "residual_adversary",
+    }
+    unknown = sorted(set(overrides) - supported)
+    if unknown:
+        raise ValueError(f"simulation_config contains unknown keys: {', '.join(unknown)}")
+    if "groups" in overrides:
+        groups = _coerce_finite_float(overrides["groups"], field_name="simulation_config.groups")
+        if not 0.0 <= groups <= 1.0:
+            raise ValueError("simulation_config.groups must be in [0, 1]")
+        config.sim_config.groups = groups
+    if "time_per_step_in_secs" in overrides:
+        dt = _coerce_finite_float(
+            overrides["time_per_step_in_secs"], field_name="simulation_config.time_per_step_in_secs"
+        )
+        if dt <= 0:
+            raise ValueError("simulation_config.time_per_step_in_secs must be positive")
+        config.sim_config.time_per_step_in_secs = dt
     if "max_episode_steps" in overrides:
         steps = max(1, int(overrides["max_episode_steps"]))
         config.sim_config.sim_time_in_secs = steps * config.sim_config.time_per_step_in_secs
@@ -2953,37 +3014,7 @@ def _apply_simulation_overrides(
         config.sim_config.ped_density_by_difficulty[difficulty] = density
     if "max_peds_per_group" in overrides:
         config.sim_config.max_peds_per_group = int(overrides["max_peds_per_group"])
-    for attr in (
-        "peds_speed_mult",
-        "action_latency_steps",
-        "action_latency_ms",
-        "pedestrian_integration_scheme",
-        "oracle_force_trace_enabled",
-        "sampler_capture_enabled",
-        "ped_radius",
-        "pedestrian_uncertainty_envelope_enabled",
-        "pedestrian_uncertainty_alpha_mps",
-        "goal_radius",
-        "goal_completion_policy",
-        "robot_goal_sampling_policy",
-        "pedestrian_model",
-        "social_force_kernel_version",
-        "ttc_predictive_force",
-        "zanlungo_collision_prediction",
-        "anisotropic_fov",
-        "alignment_torque",
-        "route_spawn_distribution",
-        "route_spawn_jitter_frac",
-        "route_spawn_seed",
-        "archetype_composition",
-        "archetype_speed_factors",
-        "archetype_seed",
-        "response_law_composition",
-        "response_law_seed",
-        "population_size",
-        "non_reactive_response_multiplier",
-        "hesitating_response_multiplier",
-    ):
+    for attr in _SIMULATION_OVERRIDE_ATTRS:
         if attr in overrides:
             _set_simulation_override_attr(config, attr, overrides)
     # Expose the pedestrian-robot force as a calibration surface (issue #4974):

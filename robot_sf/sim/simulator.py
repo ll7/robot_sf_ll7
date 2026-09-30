@@ -26,7 +26,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from math import atan2, cos, isfinite, pi, sin
-from random import sample, uniform
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -81,6 +80,7 @@ from robot_sf.nav.navigation import (
 from robot_sf.nav.occupancy import circle_collides_any_lines
 from robot_sf.nav.spawn_clearance import (
     SPAWN_CLEARANCE_MARGIN_M,
+    PedestrianRelocationOptions,
     relocate_overlapping_pedestrians,
 )
 from robot_sf.ped_npc.adversial_ped_force import (
@@ -381,6 +381,63 @@ def _compute_pedestrian_response_multipliers(
     return multipliers
 
 
+def _pedestrian_stream_seed(config: SimulationSettings) -> int | None:
+    """Use episode identity, or an explicit feature seed when no episode seed exists.
+
+    This prevents OS entropy in legacy direct callers that supply only a route
+    or other pedestrian feature seed. No process-global RNG state is consulted.
+    Feature overrides still independently pin their own streams.
+
+    Returns:
+        Explicit seed, or None only when every pedestrian seed is absent.
+    """
+    return next(
+        (
+            seed
+            for seed in (
+                config.pedestrian_seed,
+                config.route_spawn_seed,
+                config.archetype_seed,
+                config.response_law_seed,
+                config.desired_speed_seed,
+            )
+            if seed is not None
+        ),
+        None,
+    )
+
+
+def _group_member_probabilities(config: SimulationSettings) -> list[float]:
+    """Match the expected fraction of pedestrians in multi-member groups.
+
+    Let q(k) be the normalized default decay on sizes 2..N and m = E_q[k].
+    If p is P(size>1), the pedestrian fraction is f = p*m/(1-p+p*m).
+    Solving gives p = f/(m*(1-f)+f); preserve q within that mass.
+    This is a large-crowd expectation. With small crowds, truncating the last
+    group lowers the realised fraction below the target. For f=0.5 and max
+    size 3, expected fractions at 2/3/4 pedestrians are 0.31/0.37/0.40.
+    Release map-runner diagnostics realised 0.17/0.36/0.44 on dev seeds
+    1001-1030 in the low/medium/high group scenarios.
+
+    Returns:
+        Group-size probabilities, or an empty list to retain the default law.
+    """
+    if config.groups is None:
+        return []
+    fraction = float(config.groups)
+    if not np.isfinite(fraction) or not 0.0 <= fraction <= 1.0:
+        raise ValueError("simulation_config.groups must be finite and in [0, 1]")
+    if config.max_peds_per_group == 1:
+        if fraction > 0:
+            raise ValueError("groups > 0 requires max_peds_per_group >= 2")
+        return [1.0]
+    weights = np.power(0.3, np.arange(config.max_peds_per_group - 1))
+    conditional = weights / weights.sum()
+    mean_group_size = float(np.dot(np.arange(2, config.max_peds_per_group + 1), conditional))
+    multi_probability = fraction / (mean_group_size * (1.0 - fraction) + fraction)
+    return [1.0 - multi_probability, *(multi_probability * conditional).tolist()]
+
+
 def _build_pysf_simulation(  # noqa: PLR0913
     *,
     config: SimulationSettings,
@@ -457,6 +514,24 @@ def _build_pysf_simulation(  # noqa: PLR0913
         Tuple of ``(pysf_sim, pysf_state, groups, peds_behaviors,
         pedestrian_response_multipliers)`` for the caller to assign to its instance.
     """
+    # Independent streams never inspect or mutate NumPy's process-global RNG.
+    streams = np.random.SeedSequence(_pedestrian_stream_seed(config)).spawn(4)
+    config = replace(
+        config,
+        route_spawn_seed=config.route_spawn_seed
+        if config.route_spawn_seed is not None
+        else int(streams[0].generate_state(1)[0]),
+        archetype_seed=config.archetype_seed
+        if config.archetype_seed is not None
+        else int(streams[1].generate_state(1)[0]),
+        response_law_seed=response_law_seed
+        if response_law_seed is not None
+        else int(streams[2].generate_state(1)[0]),
+        desired_speed_seed=config.desired_speed_seed
+        if config.desired_speed_seed is not None
+        else int(streams[3].generate_state(1)[0]),
+    )
+    response_law_seed = config.response_law_seed
     pysf_config = PySFSimConfig()
     pysf_config.scene_config.dt_secs = config.time_per_step_in_secs
     pysf_config.scene_config.integration_scheme = config.pedestrian_integration_scheme
@@ -475,6 +550,8 @@ def _build_pysf_simulation(  # noqa: PLR0913
     spawn_config = PedSpawnConfig(
         config.peds_per_area_m2,
         config.max_peds_per_group,
+        group_member_probs=_group_member_probabilities(config),
+        rng=np.random.default_rng(config.route_spawn_seed),
         route_spawn_distribution=config.route_spawn_distribution,
         route_spawn_jitter_frac=config.route_spawn_jitter_frac,
         route_spawn_seed=config.route_spawn_seed,
@@ -733,13 +810,13 @@ class Simulator:
         enabled = bool(getattr(self.config, "sampler_capture_enabled", False))
         return SpawnSamplerCapture() if enabled else None
 
-    def repopulate_crowd(self) -> None:
+    def repopulate_crowd(self, seed: int | None = None) -> None:
         """Re-sample the pedestrian crowd by replaying construction-time population.
 
         Re-runs :func:`_build_pysf_simulation` with the exact arguments stored at
         construction (issue #9760), so a directly-constructed simulator whose crowd
-        was sampled from an unseeded RNG can establish a deterministic crowd under
-        a caller-held seeded RNG context (e.g. ``global_reset_seed``). The
+        was sampled from an unseeded RNG can establish a deterministic crowd from
+        an explicit episode ``seed``. The
         per-class population divergence (issue #4618 R2) is preserved because the
         replayed arguments are the class-specific ones stored at construction.
 
@@ -751,6 +828,12 @@ class Simulator:
         """
         if not self._pysf_build_kwargs:
             raise RuntimeError("repopulate_crowd() requires construction-time build args")
+        if seed is not None:
+            self.config.pedestrian_seed = int(seed)
+            if isinstance(self, PedSimulator):
+                self._ego_rng = np.random.default_rng(
+                    np.random.SeedSequence(int(seed), spawn_key=(4,))
+                )
         self.sampler_capture = self._new_sampler_capture()
         build_kwargs = dict(self._pysf_build_kwargs)
         build_kwargs["robot_pose_provider"] = lambda: self.robot_poses
@@ -1789,8 +1872,9 @@ class Simulator:
         Pedestrians are placed at construction, before any robot start is sampled, so a
         route or crowd pedestrian can start inside the robot footprint (issue #9725).
         Overlapping rows are moved deterministically to the nearest clear point on the
-        exclusion circle (robot radius + pedestrian radius + 0.1 m + one second at
-        the population walking speed cap); no random numbers
+        exclusion circle (robot radius + pedestrian radius + 0.1 m + one second
+        at the pedestrian speed cap). The new velocity points toward the current
+        route goal, preferring a non-closing heading when feasible; no random numbers
         are drawn, so every other spawn of the seed stays unchanged. The next reset
         restores the construction-time layout and checks it again.
         """
@@ -1829,20 +1913,34 @@ class Simulator:
         if not overlapping_rows:
             self.last_spawn_relocation = None
             return
+        states = self.pysf_state.pysf_states()
+        # One second at the walking speed cap, plus the existing 0.1 m margin.
+        reaction_clearance = SPAWN_REACTION_TIME_S * np.maximum(
+            np.linalg.norm(states[:, 2:4], axis=1), self.pysf_sim.peds.max_speeds
+        )
         report = relocate_overlapping_pedestrians(
             ped_xy,
             ped_radius,
             robots,
             self.map_def,
-            rows=sorted(overlapping_rows),
+            options=PedestrianRelocationOptions(
+                rows=sorted(overlapping_rows), route_goals=states[:, 4:6]
+            ),
             robot_margin=reaction_buffer,
+            reaction_clearance_m=reaction_clearance,
         )
         self.last_spawn_relocation = report
         if not report.relocated and not report.unresolved:
             return
         states = self.pysf_state.pysf_states()
         for row, (_old, new_xy) in report.relocated.items():
+            speed = float(np.linalg.norm(states[row, 2:4]))
             states[row, PYSF_POSITION_SLICE] = new_xy
+            direction = states[row, 4:6] - states[row, 0:2]
+            length = float(np.linalg.norm(direction))
+            states[row, 2:4] = direction * speed / length if length > 1e-9 else 0.0
+            if hasattr(self, "ped_headings"):
+                self.ped_headings[row] = np.arctan2(states[row, 3], states[row, 2])
         if report.relocated:
             logger.debug(
                 "Moved {count} pedestrian(s) off the robot start footprint at reset: {rows}",
@@ -2276,6 +2374,10 @@ class PedSimulator(Simulator):
         the ego pedestrian at a random valid location 10-15 units away
         from the first robot.
         """
+        if not hasattr(self, "_ego_rng"):
+            self._ego_rng = np.random.default_rng(
+                np.random.SeedSequence(_pedestrian_stream_seed(self.config), spawn_key=(4,))
+            )
         self._reset_social_force_state()
         self._oracle_episode_index += 1
         self._oracle_episode_id = f"simulator-episode-{self._oracle_episode_index}"
@@ -2311,8 +2413,10 @@ class PedSimulator(Simulator):
                 raise ValueError(
                     "spawn_near_robot=False requires at least one pedestrian spawn zone.",
                 )
-            ped_spawn_zone = sample(self.map_def.ped_spawn_zones, k=1)[0]
-            ped_spawn = sample_zone(ped_spawn_zone, 1)[0]
+            ped_spawn_zone = self.map_def.ped_spawn_zones[
+                int(self._ego_rng.integers(len(self.map_def.ped_spawn_zones)))
+            ]
+            ped_spawn = sample_zone(ped_spawn_zone, 1, rng=self._ego_rng)[0]
             npc_orient = self.ego_ped.pose[1]
             if self.pysf_state.num_peds > 1:
                 npc_velocity = self.pysf_state.pysf_states()[0, PYSF_VELOCITY_SLICE]
@@ -2406,8 +2510,8 @@ class PedSimulator(Simulator):
         """
         x, y = fixed_point
         for _ in range(10):
-            angle = uniform(0, 2 * pi)
-            distance = uniform(lower_bound, upper_bound)
+            angle = float(self._ego_rng.uniform(0, 2 * pi))
+            distance = float(self._ego_rng.uniform(lower_bound, upper_bound))
 
             new_x = x + distance * cos(angle)
             new_y = y + distance * sin(angle)
@@ -2415,8 +2519,10 @@ class PedSimulator(Simulator):
                 return new_x, new_y
 
         logger.warning("Could not find a valid proximity point: {point}.", point=f"{fixed_point}")
-        spawn_id = sample(self.map_def.ped_spawn_zones, k=1)[0]  # Spawn in pedestrian spawn_zone
-        initial_spawn = sample_zone(spawn_id, 1)[0]
+        spawn_id = self.map_def.ped_spawn_zones[
+            int(self._ego_rng.integers(len(self.map_def.ped_spawn_zones)))
+        ]
+        initial_spawn = sample_zone(spawn_id, 1, rng=self._ego_rng)[0]
         return initial_spawn
 
     def is_obstacle_collision(self, x: float, y: float) -> bool:

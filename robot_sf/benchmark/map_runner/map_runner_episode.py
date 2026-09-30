@@ -2224,8 +2224,11 @@ def _prepare_episode_env(  # noqa: C901
             # Record the *instantiated* count so the readiness gate and any
             # future triage can see declared-vs-actual without re-running.
             simulation_config["population_size"] = instantiated_count
-            simulation_config["instantiated_population_size"] = instantiated_count
-            simulation_config["declared_population_size"] = expected_population_size
+            metadata = scenario.setdefault("metadata", {})
+            metadata["population_realization"] = {
+                "instantiated_population_size": instantiated_count,
+                "declared_population_size": expected_population_size,
+            }
     if callable(planner_bind_env):
         planner_bind_env(env)
     if callable(planner_reset):

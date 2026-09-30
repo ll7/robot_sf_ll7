@@ -3,7 +3,8 @@
   "artifact_path": "docs/context/evidence/issue_9952_auditor/aud2/green.txt",
   "artifact_sha256": "af4ec8eb7ec387e0ab9bfd9fc406e5b44822ebefafc1c03e9b84f2a671be1a09",
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "preserved_exact_bytes": false,
+  "preserved_exact_bytes": true,
   "source_artifact_sha256": "af4ec8eb7ec387e0ab9bfd9fc406e5b44822ebefafc1c03e9b84f2a671be1a09",
-  "presentation_normalization": "line endings and trailing whitespace only"
+  "presentation_normalization": "line endings and trailing whitespace only",
+  "preservation_scope": "Reviewed tracked artifact bytes at b321e72089af45baedcc40b310b46264cb57dc7c; prior presentation normalization and original source hash remain recorded."
 }

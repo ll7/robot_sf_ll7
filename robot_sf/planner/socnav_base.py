@@ -54,7 +54,7 @@ _SOCNAV_CONFIG_INIT_KEYS = frozenset(
 )
 
 _PREDICTIVE_SCORING_VERSIONS = {
-    "predictive_occupancy_version": frozenset({"pedestrians_v1", "combined_v2"}),
+    "predictive_occupancy_version": frozenset({"pedestrians_v1"}),
     "predictive_heading_lattice_version": frozenset({"per_step_v1", "horizon_scaled_v2"}),
 }
 
@@ -493,8 +493,9 @@ class SocNavPlannerConfig:
     # reference-aligned 0.0.8 candidate selects zero (the upstream sampler has
     # no additive pedestrian repulsion vector).
     sampling_repulsion_weight: InitVar[float | None] = field(default=None, kw_only=True)
-    # Hunt A2/A4: explicit corrections without changing historical config identity.
+    # A2 retains only the base pedestrian cost; its default is absent from config hashes.
     predictive_occupancy_version: InitVar[str] = field(default="pedestrians_v1", kw_only=True)
+    # A4: distinct horizon headings without changing historical config identity.
     predictive_heading_lattice_version: InitVar[str] = field(default="per_step_v1", kw_only=True)
     # Pedestrians whose surface distance (centre distance minus robot and
     # pedestrian radius) is at most this value keep the full, uncapped legacy

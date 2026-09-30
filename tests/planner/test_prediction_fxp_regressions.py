@@ -62,7 +62,7 @@ def test_collector_preserves_already_ego_velocity_at_north_heading(collector, fl
 @pytest.mark.parametrize("sequence", [False, True])
 @pytest.mark.parametrize("pedestrian_only", [False, True])
 def test_prediction_occupancy_scores_wall_and_pedestrian_channels(sequence, pedestrian_only):
-    """Wall and pedestrian-only grids each apply the declared occupancy cost."""
+    """Base scoring ignores walls and weights pedestrian cells exactly once."""
     planner = PredictionPlannerAdapter(release_config(), allow_fallback=True)
     obs = observation()
     obs.update(
@@ -89,9 +89,53 @@ def test_prediction_occupancy_scores_wall_and_pedestrian_channels(sequence, pede
     occupied_channels = [1, 3] if pedestrian_only else [0, 3]
     obs["occupancy_grid"][occupied_channels, :, :] = 1.0
     occupied = score()
-    # Combined already includes pedestrians; MPPI's added half-ped term makes 1.5.
-    expected = 0.375 if pedestrian_only else 0.25
+    expected = 0.25 if pedestrian_only else 0.0
     assert occupied - free == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("sequence", [False, True])
+def test_prediction_real_doorway_grid_has_no_effective_static_obstacle_cost(sequence):
+    """Captured dev walls do not affect scores; a future wall method must revise this."""
+    planner = PredictionPlannerAdapter(release_config(), allow_fallback=True)
+    with np.load(ROOT / "tests/fixtures/prediction_fxp/doorway_low_seed1001.npz") as fixture:
+        obs = {key: fixture[key] for key in fixture.files}
+    grid, meta = planner._extract_grid_payload(obs)
+    obstacle_channel = planner._grid_channel_index(meta, "obstacles")
+    combined_channel = planner._grid_channel_index(meta, "combined")
+    pedestrian_channel = planner._grid_channel_index(meta, "pedestrians")
+    assert grid.shape == (3, 160, 160)
+    assert np.count_nonzero(grid[obstacle_channel]) > 2000
+    assert float(meta["resolution"][0]) == pytest.approx(0.2)
+    assert planner.config.predictive_robot_radius == pytest.approx(1.0)
+    robot_pos = obs["robot_position"].astype(float)
+    wall_direction = np.array([np.cos(np.deg2rad(-100)), np.sin(np.deg2rad(-100))])
+    # Real thin wall is visible at 1.0 m, within a footprint at that centre point.
+    assert planner._grid_value(robot_pos + wall_direction, grid, meta, obstacle_channel) == 1
+    # Eight centre-line samples can step over its outline even at maximum lookahead.
+    assert (
+        planner._path_penalty(
+            robot_pos=robot_pos,
+            direction=wall_direction,
+            observation=obs,
+            base_distance=1.28,
+            num_samples=8,
+        )[0]
+        == 0.0
+    )
+    future = np.zeros((0, 8, 2))
+    mask = np.zeros(0)
+    without_walls = {**obs, "occupancy_grid": grid.copy()}
+    without_walls["occupancy_grid"][obstacle_channel] = 0
+    without_walls["occupancy_grid"][combined_channel] = grid[pedestrian_channel]
+
+    def score(observation, v, w):
+        kwargs = {"observation": observation, "future_peds": future, "mask": mask, "steps": 8}
+        if sequence:
+            return planner._score_action_sequence(**kwargs, sequence=[(v, w)])
+        return planner._score_action(**kwargs, v=v, w=w)
+
+    for v, w in planner._candidate_set(future_peds=future, mask=mask):
+        assert score(obs, v, w) == pytest.approx(score(without_walls, v, w), abs=1e-12)
 
 
 @pytest.mark.parametrize("near", [False, True])

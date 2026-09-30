@@ -64,6 +64,7 @@ predictive_clearance_model: surface_v2
 predictive_robot_radius: 1.0
 predictive_pedestrian_radius: 0.4
 
-# Hunt A2/A4: wall costs and distinct reachable horizon heading options.
-predictive_occupancy_version: combined_v2
+# The prediction anchor retains the base default/hash identity for occupancy.
+predictive_occupancy_version: pedestrians_v1
+# A4: distinct reachable horizon heading options.
 predictive_heading_lattice_version: horizon_scaled_v2

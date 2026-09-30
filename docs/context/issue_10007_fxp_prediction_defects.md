@@ -8,7 +8,10 @@ a drive-helper return annotation; the four FXP defect mechanisms are still prese
 on the latest base and are covered by fresh replay/test failures.
 No retraining,
 held-out evaluation, frozen YAML changes, 0.0.2/0.0.7 artifact changes, release,
-or merge was performed. This is implementation and scorer diagnostic evidence,
+or merge was performed. FXP2 retains A1/A3/A4 and reverts A2 after review of head
+`2129f53710093d862e0bb4b8024d82ceb5a7879a`. The original A2 probe artifacts
+are historical diagnostics of the reverted wiring, not evidence of current wall handling.
+This is implementation and scorer diagnostic evidence,
 not a planner ranking, navigation-success improvement, or release admission.
 
 ## Evidence method
@@ -26,15 +29,13 @@ with its original dtype/shape. Per-observation SHA-256 digests are identical,
 alongside scenario/seed/tick, heading, count, and wall-distance equality. At most two serial probe
 processes ran concurrently; each owned one environment.
 
-For A2, it compares costs on the actual map grid against the same grid with only
-obstacle occupancy removed and the combined channel rebuilt from pedestrian cells.
-A controlled wall-facing comparison changes observation yaw to point at the
-nearest occupied cell, keeping the original grid-pose metadata and actual sampled
-robot position; it scores a legal 1.6 m/s straight command, masking pedestrians
-from both comparisons. This is a diagnostic counterfactual, not an executed
-navigation rollout. Unmodified candidate scoring is also retained in the raw
-captures. Most ordinary candidates did not reach wall cells within 0.8 s; four
-ordinary doorway sequence scores gained 0.03125. Do not infer fewer collisions.
+The original A2 probe used counterfactual wall-facing yaw rather than executed
+candidate paths. Its positive costs did not prove effective wall avoidance. Review
+found identical outcomes with A2 on/off in 15 actual planner episodes; the wall
+channel contributed zero on 70,258 bottleneck and 9,931 doorway scorer calls.
+The doorway episode still ended in a wall collision. FXP2 therefore reverts A2;
+see the limitation and real-map characterization below. The original capture and
+probe remain available as explicitly historical diagnostics.
 
 The [summary](evidence/issue_10007_fxp/summary.json) preserves aggregates and
 concrete counterexamples. The [manifest](evidence/issue_10007_fxp/manifest.json)
@@ -89,42 +90,39 @@ responses support investigation but do not uniquely diagnose training corruption
 a learned model need not equal constant velocity. Collector fixes do not change
 these already-trained checkpoint outputs.
 
-## A2 — confirmed dropped wall term
+## A2 — reverted wiring; static-obstacle method limitation
 
-Root cause: `_path_penalty` returns preferred combined/obstacle occupancy followed
-by pedestrian occupancy. Both prediction score paths unpacked `_, occ_penalty`,
-so wall-only bytes had no cost, contrary to the tutorial's static-obstacle intent.
+`prediction_planner` has **no effective static-obstacle term**. Both action and
+sequence scoring retain base behavior: discard the first `_path_penalty` return
+and use pedestrian occupancy once (weight 1.0). Both release YAMLs retain the
+`pedestrians_v1` default selector, which is omitted from resolved config identity;
+A2 adds no hash override. A3/A4 still intentionally change release configuration.
+The unproven `combined_v2` opt-in is removed from accepted selectors.
 
-Fix: the 0.0.8 configs select `predictive_occupancy_version: combined_v2`.
-Action and sequence scoring use `obstacle_penalty + 0.5 * ped_penalty`, matching
-the MPPI occupancy convention, at `robot_sf/planner/socnav_prediction.py:1284`
-and `:1421`. The first term prefers combined occupancy, so this deliberately
-retains the existing MPPI convention's additional pedestrian contribution.
-Historical `pedestrians_v1` remains the default, preserving old config identity.
+The reviewed obstacle wiring had no effect on termination, steps or minimum
+clearance in 15 wall-heavy dev episodes (three maps, seeds 1001–1005). It also
+increased pedestrian-cell weighting from 1.0 to 1.5 without demonstrated benefit;
+that reweighting is removed. The underlying probe ignores the 1.0 m robot radius,
+its eight centre-line samples can skip one-cell wall outlines, and action scoring
+uses `heading + omega * 0.1` instead of the candidate rollout path. Adding a useful
+footprint-aware wall method is a separate design and validation task.
 
-| Wall-facing dev comparison | Before, positive-cost observations | After | Maximum added cost |
-| --- | ---: | ---: | ---: |
-| Bottleneck medium, each score path | 0/269 | 19/269 | 0.09375 |
-| Doorway low, each score path | 0/157 | 7/157 | 0.09375 |
+The former filled-grid A2 oracle passed despite the real-episode limitation. It
+now asserts base wall contribution zero and pedestrian contribution 0.25 (the
+release occupancy weight), in both score paths. Against the reviewed wiring all
+four cases fail for the intended reason: wall increment 0.25 versus expected zero,
+and pedestrian increment 0.375 versus expected 0.25.
 
-Example: bottleneck seed 1001, tick 70, nearest occupied-cell center distance
-1.303841 m: both scores gain 0.03125 after the correction, versus zero before.
-Doorway seed 1001, tick 55, distance 1.272792 m: the same 0 → 0.03125 change.
-These costs restore wall sensitivity; the soft term alone is no safety guarantee.
-
-Regression: `tests/planner/test_prediction_fxp_regressions.py:64`, both real
-scoring methods, obstacle/combined grid arrays occupied and pedestrian channel
-empty, plus pedestrian-only grids. Base failures: `Obtained: 0.0; Expected: 0.25`
-and `Obtained: 0.25; Expected: 0.375`. All four pass after.
-
-The convention also increases pedestrian-only occupancy weight from 1 to 1.5
-when combined occupancy is present. An additional controlled pedestrian-facing
-yaw probe at the actual dev pose clears obstacles and compares the original
-pedestrian cells with an empty grid. Two of 269 bottleneck observations have
-nonzero scores in both methods: 0.0625 before, 0.09375 after. The 157 doorway
-observations contribute zero in this control. This is an explicit cost-convention
-change included in the probe and regression gate, not a claimed improvement in
-pedestrian avoidance.
+The additional real-map test uses an unmodified production observation from
+`classic_doorway_low`, dev seed 1001, captured at the reviewed head. Its portable
+fixture and source digest are in `tests/fixtures/prediction_fxp/`. The 3×160×160
+ego grid has 0.2 m cells and over 2,000 occupied obstacle cells. An occupied wall
+cell is visible 1.0 m along a -100 degree world ray, but the eight-sample 1.28 m
+probe misses it. Both score paths give identical scores for all release candidates
+with and without the real static wall cells. This is a characterization that also
+passes on the reviewed head, not proof of a wall fix. A future effective method
+must deliberately update this limitation test and supply episode-level evidence.
+MPPI's separate static checks are unaffected by this reversion.
 
 ## A3 — confirmed silent horizon cap
 
@@ -139,6 +137,13 @@ requests retain their requested length. Both the config dataclass and root build
 now default to eight. The MPPI 0.0.8 release declares **8 × 0.1 s = 0.8 s**;
 both predictive release configs disable ineffective horizon boosting. Historical
 configs with unsupported requests now fail explicitly; their files are untouched.
+In particular, `predictive_mppi_camera_ready.yaml`,
+`predictive_mppi_camera_ready_goal_v2.yaml` and
+`predictive_mppi_relaxed_progress.yaml` request 12 steps from an eight-output model
+and now raise `ValueError` on the first `plan()` call. The batch runner records
+failed jobs. **Historical 0.0.7 predictive_mppi rows cannot be re-run from this
+code.** Reproduce those rows at their historical source revision; do not silently
+truncate or alter frozen configs to make a rerun pass.
 
 At all 426 dev observations, the base accepted a 24-step request and returned
 8; fixed code rejects 24 with `horizon_steps=24 ... supported horizon of 8 steps`.
@@ -247,6 +252,15 @@ old double-rotated NPZ rows. A successor model ID, e.g.
 `predictive_proxy_selected_v2_full_velocity_v3`, must leave existing registry IDs
 and published assets intact.
 
+Retrain follow-up: `feature_schema_json` currently includes no collector-revision
+or velocity-frame marker. Old double-rotated and corrected NPZ rows therefore
+look identical to the loader. Before successor training, write an explicit collector
+version/source revision and velocity-frame marker into both dataset components;
+make the loader/trainer fail closed on missing, incompatible or mixed markers.
+Test rejection of an old/new mixture plus acceptance of matching corrected data.
+This dataset-frame gate belongs to the retrain issue; no schema migration or
+training is included here.
+
 A concrete dev-only collection packet should copy the full profile to a new versioned
 config and set an explicit base seed manifest: all 23 scenarios on seeds 1001–1008
 (184 episodes), with four original hardcase scenario families represented by seven
@@ -303,7 +317,8 @@ promotion and release evidence need a separate authorized task.
 | Test group | Defect and credible regression | Existing coverage gap | Real bytes / independent oracle / seam |
 | --- | --- | --- | --- |
 | A1, four cases | Accidental second rotation of already-ego velocities | Existing collector fixture headings are zero, so both implementations agree | Actual nested/flat observation extraction and sample arrays; hand-derived north/east `[0,-1]`; no production seam |
-| A2, four cases | Discarding wall occupancy or changing the documented combined-plus-half-pedestrian formula in either score path | Existing prediction caching/progress tests do not compare wall-only grids | Real grid arrays, production release YAML/builder and both scorers; wall-only mean occupancy is 1 (cost 0.25), pedestrian-only combined-plus-half occupancy is 1.5 (cost 0.375); no monkeypatch/seam |
+| A2 reversion, four cases | Reintroducing wall wiring or 1.5 pedestrian weighting in either score path | Prior filled-grid test pinned the unproven wiring rather than base behavior | Production release YAML/builder and both scorers; base wall cost 0, pedestrian cost 0.25; no seam |
+| A2 real-map limitation, two cases | A future wall method or denser probe changes the documented limitation | Filled grids cannot expose thin-outline aliasing or realistic candidate score insensitivity | Captured production dev grid and independent occupied ray point; all candidates with/without walls; no environment step or production seam |
 | A3, rejection | Silent truncation of configured horizon | Existing MPPI determinism/conflict tests tolerated default 12→8 capping | Real runtime forecast length and production MPPI method; explicit 24 request must raise; hashed model payload/dev probes independently prove eight outputs; no seam |
 | A3, shorter request | Inflating a supported horizon through the anchor | Existing cache/target tests silently accepted short stub horizons | Request four versus returned count four; independent integer oracle, no seam; two existing four-step fixtures now declare four explicitly |
 | A4, four cases | Dividing horizon heading by one tick and clipping all inner deltas | Existing candidate tests count risk-distance calls and determinism, not distinct configured rates | Both real release YAMLs/builders, actual candidate arrays, independent 7/11 counts and `0.523599/0.8` angular-rate arithmetic; no seam |
@@ -313,11 +328,15 @@ all previous feature/schema assertions. The two MPPI fixture edits make their ex
 cache/target behavior tests use a supported four-step forecast contract. They are not
 new bug-proof tests; the new regressions and dev probes supply the red/green evidence.
 
-The final new regression file has **14 failures on the base**, with the precise
-lines shown above, and **14 passes after correction**. The broader focused lane has
-**144 passes, no skips or xfails** across prediction contracts, MPPI, both collectors,
-predictive model, pipeline, mixed datasets, and probabilistic prediction interface.
-Ruff check/format and `git diff --check` pass. No timeout, skip, or xfail was added.
+The original FXP regression file had 14 failures on the base and 14 passes at
+the reviewed head; its A2 oracles and 144-pass focused log are historical evidence
+for the reverted wiring. FXP2 changes the A2 oracles first: **4 intended failures,
+12 passes** on the reviewed implementation, then **16 passes** after reversion.
+The real-map cases pass at both heads and explicitly document a limitation.
+The expanded serial lane is **253 passed, 4 existing xfailed**, covering the
+original focused tests plus release horizons with real checkpoints, planner unit
+consistency, release hybrid slots/candidate metadata, and risk DWA. No skips,
+timeouts or xfails were added. Ruff check/format and `git diff --check` pass.
 The full repository readiness pipeline was not run because its automatic broad
 simulation/test selection is outside this lane's seed and serial-test constraints.
 Hosted CI and domain review remain separate; this delivery is a draft, not merge-ready.

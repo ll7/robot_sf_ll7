@@ -529,11 +529,15 @@ In this repo, those ideas became:
 2. Strategic lookahead:
    - implemented as sampled rollout scoring instead of MCTS.
 3. Static obstacle handling:
-   - implemented via occupancy-grid path penalty in scoring (not a separate LiDAR branch model).
-     The 0.0.8 candidate selects `predictive_occupancy_version: combined_v2`, which uses
-     the preferred combined/obstacle term plus half the pedestrian term in both action
-     and sequence scoring. Historical `pedestrians_v1` discarded the obstacle term;
-     it remains the default for reproducing historical configurations.
+   - **method limitation:** `prediction_planner` has no effective static-obstacle term.
+     Both action and sequence scoring retain the base pedestrian-only occupancy cost
+     (`predictive_occupancy_version: pedestrians_v1`, pedestrian-cell weight 1.0).
+     Wiring the obstacle channel into the existing probe had no measured effect in
+     15 wall-heavy dev episodes: its centre-line samples ignore the 1.0 m robot radius,
+     can step over one-cell wall outlines, and action scoring probes along
+     `heading + omega * 0.1` rather than the candidate rollout path.
+     Effective wall avoidance needs a separately designed and validated method;
+     this PR does not supply one. MPPI's separate static checks are a different path.
 4. Reimplementation tractability:
    - prioritized deterministic benchmark integration, reproducible scripts, and explicit quality gates.
 

@@ -32,5 +32,10 @@
     "validation.txt": "5c95b46ee1d08aea8d55dbf274d3f5fed30e92ad4409bba9a55a38f59ff0808b",
     "summary.json": "0afbabccff6190828d33e204993f0a4df8ca2f02d7fe051f4f5feb0d780401c8"
   },
-  "log_normalization": "Versioned base failure log has trailing whitespace removed; raw log digest pins the original local capture."
+  "log_normalization": "Versioned base failure log has trailing whitespace removed; raw log digest pins the original local capture.",
+  "historical_scope": {
+    "reviewed_head": "2129f53710093d862e0bb4b8024d82ceb5a7879a",
+    "superseded_by": "FXP2 A2 reversion documented in ../../issue_10007_fxp_prediction_defects.md",
+    "boundary": "This manifest pins the original FXP probe/source bytes, not the final FXP2 source. A2 summary, probe and regression/validation logs describe reverted combined_v2 wiring and do not establish effective static-obstacle handling. A1/A3/A4 findings retained."
+  }
 }

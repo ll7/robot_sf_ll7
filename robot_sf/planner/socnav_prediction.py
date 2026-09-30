@@ -1281,7 +1281,9 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
         candidate_heading = robot_heading + w * dt
         direction = np.array([np.cos(candidate_heading), np.sin(candidate_heading)], dtype=float)
-        obstacle_penalty, ped_penalty = self._path_penalty(
+        # Method limitation: retain the historical pedestrian-only occupancy cost.
+        # The centre-line probe is not effective footprint-aware wall avoidance.
+        _, occ_penalty = self._path_penalty(
             robot_pos=robot_pos,
             direction=direction,
             observation=observation,
@@ -1291,11 +1293,6 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             num_samples=max(2, int(self.config.predictive_horizon_steps)),
         )
 
-        occ_penalty = (
-            obstacle_penalty + 0.5 * ped_penalty
-            if self.config.predictive_occupancy_version == "combined_v2"
-            else ped_penalty
-        )
         return (
             -float(self.config.predictive_goal_weight) * goal_progress
             + float(self.config.predictive_collision_weight) * collision_pen
@@ -1418,7 +1415,8 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         direction = final_world - robot_pos
         if np.linalg.norm(direction) <= self._EPS:
             direction = np.array([np.cos(robot_heading), np.sin(robot_heading)], dtype=float)
-        obstacle_penalty, ped_penalty = self._path_penalty(
+        # Keep the same pedestrian-only cost as action scoring (weight 1.0).
+        _, occ_penalty = self._path_penalty(
             robot_pos=robot_pos,
             direction=direction,
             observation=observation,
@@ -1448,11 +1446,6 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             goal_progress=goal_progress,
         )
 
-        occ_penalty = (
-            obstacle_penalty + 0.5 * ped_penalty
-            if self.config.predictive_occupancy_version == "combined_v2"
-            else ped_penalty
-        )
         return (
             -float(self.config.predictive_goal_weight) * goal_progress
             + float(self.config.predictive_collision_weight) * collision_pen

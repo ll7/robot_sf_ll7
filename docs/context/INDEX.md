@@ -1,6 +1,6 @@
 # Context Retrieval Index
 
-Issue #10007 prediction planner hunt lane FXP: collector velocity frame, wall costs,
+Issue #10007 prediction planner hunt lane FXP: collector velocity frame, static-obstacle limitation,
 model-horizon rejection, distinct turn candidates, and checkpoint/retraining provenance.
 Dev-only scorer diagnostics; no retraining or release claim:
 [issue_10007_fxp_prediction_defects.md](issue_10007_fxp_prediction_defects.md).

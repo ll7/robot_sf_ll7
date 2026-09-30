@@ -74,6 +74,7 @@ predictive_phase_recover_weight: 1.5
 
 occupancy_weight: 0.25
 
-# Hunt A2/A4: wall costs and distinct reachable horizon heading options.
-predictive_occupancy_version: combined_v2
+# A2 retains the base default/hash identity; this planner has no effective wall term.
+predictive_occupancy_version: pedestrians_v1
+# A4: distinct reachable horizon heading options.
 predictive_heading_lattice_version: horizon_scaled_v2

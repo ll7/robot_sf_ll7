@@ -63,12 +63,12 @@ scenario matrices select the same `wrapped_v2` kernel for pedestrians.
 The successor runtime smoke `v0_5` uses development seed 103. It is disjoint
 from calibration 101/102, evaluation 111-140, and #9748 development 1001-1030;
 `v0_4` remains byte-identical history and seed 111 remains closed to pre-anchor
-smoke. This is an interim static parity check, not a release freeze or a
-runtime-smoke result. The four v4 arm slots remain fail-closed placeholders
-under the #9874 freeze guard until #9748 selects and freezes their parameters.
-The parity check must pass again at the frozen v4 source head before #9668
-release admission or any calibration acquisition. #9850 remains open for that
-gate.
+smoke. The four v4 slots now resolve to the frozen #9932 configs in calibration,
+smoke, and the release template. The three profiles use the versioned v2
+comparability map that declares those keys. Static parity and a passing
+one-seed preflight are not calibration, runtime-smoke, or release evidence.
+Rerun the parity and release gates on the selected execution freeze before
+calibration acquisition; #9850 remains open until its runtime gate is satisfied.
 The config preserves planner/checkpoint references, requires force recording,
 and disallows prerequisite fallback. V2 scoring is disabled for acquisition.
 The canonical preflight and checkpoint staging gates must pass before submission.

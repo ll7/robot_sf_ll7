@@ -1,0 +1,109 @@
+{
+  "claim_boundary": "diagnostic_only_finite_search_budget_no_planner_safety_or_search_coverage_claim",
+  "comparison_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_comparison.json",
+  "comparison_sha256": "7c8e7d0f6c74cef38bc776d24d19737176eb9eaebcac99ff1a91faeda302e02d",
+  "expected_episode_record_count": 64,
+  "experiment_source_commit": "58e516aa4f69ff3098bf518199f483006589758c",
+  "experiment_source_commit_evidence_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/run_metadata.json",
+  "experiment_source_commit_sha256": "1bfcdb06d972c058f9581804cc746335aaff7c91a4b5495d865b80dde3c720f1",
+  "manifest_path_map_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/pilot_report_manifest_path_map.v1.json",
+  "manifest_path_map_sha256": "a07850e8bd9aff2932a31bf06bc847f00fa6f526e1a128e0c726bf7ab4f1c235",
+  "reproduction_input_rebase_map_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/input_rebase_map.v1.json",
+  "reproduction_input_rebase_map_sha256": "1c183f85125a0dc29868ab97d820b99a57c58d8d983d5e01242454341787eb6f",
+  "outputs": [
+    {
+      "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/convergence_report.json",
+      "sha256": "69baf2d7e8d948878f1fc6a474ee13b6f687c509eea31314ca4ccf70b55d6971",
+      "size_bytes": 212384,
+      "producer_relative_path": "falsification_report.json"
+    },
+    {
+      "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/convergence_report.md",
+      "sha256": "84a5755c3ddf1b26bcfade982493fac91b728c2f4609b82d8532934d97d91504",
+      "size_bytes": 9082,
+      "producer_relative_path": "falsification_report.md"
+    },
+    {
+      "path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/convergence_constraints_first_lexicographic_v1.png",
+      "sha256": "9c90cde66ccd990e28b68711ed70137ff3d96fb32d568226c04def35d25d070d",
+      "size_bytes": 67720,
+      "producer_relative_path": "convergence_constraints_first_lexicographic_v1.png"
+    }
+  ],
+  "paired_random_tpe_eligible_seed_count": 2,
+  "paired_random_tpe_excluded_seed_count": 0,
+  "report_command": "uv run python scripts/tools/report_falsification_search.py --comparison docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_comparison.json --manifest-path-map docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/reproduction_inputs/pilot_report_manifest_path_map.v1.json --output-dir output/issue9645-report-v3-dual-byte-recovery-20260927 --repo-root .",
+  "report_generator_branch": "autopilot/issue9645-falsification-final-20260927",
+  "report_generator_commit": "7815da2daaf646d8fb6d3bada1ab8c31fb2d3572",
+  "report_build_execution_checkout_head": "06af083bbce55c0f9c3bd830537d2f712b239fa3",
+  "report_generator_source_sha256": "ae199779cebe91ee9ea1bcee8756f11ddddba9018d10df9276e0004c76b88fff",
+  "report_reproduction_environment": "Rebuilt from the tracked comparison, four derived digest-pinned manifests, 64 path-normalized episode records, digest bindings for their withheld exact producer-byte copies, and the tracked report generator. Exact producer bytes were recovered from the pre-normalization evidence commit recorded in candidate_episode_record_recovery. No ignored issue9645-pilot outputs, simulator, or search were used.",
+  "report_schema_version": "adversarial-search-convergence-report.v3",
+  "report_source_revision_status": "consistent",
+  "exact_episode_source_revision": "58e516aa4f69ff3098bf518199f483006589758c",
+  "reproduction_precondition": "The tracked reproduction_inputs manifests, all 64 path_normalized_episode_records, must be present. Their path, SHA-256, and size bindings are verified; the exact producer copies are withheld (they contain absolute host paths) and only their digests are recorded; no local output/issue9645-pilot tree is consulted. Episode records are eligible for report analysis summaries, but detailed simulation-step and planner-decision trace capture is disabled for all 64 records; embedded scenario/map digests are missing for all 64.",
+  "safety_criticality_inputs": "All 64 digest-verified episode records plus four derived manifests. Severe-intrusion metrics are absent, so criticality and collision/intrusion tier remain unknown for every candidate.",
+  "schema_version": "issue_9645_report_build_provenance.v3",
+  "search_or_simulation_rerun": false,
+  "report_rebuild": true,
+  "source_search_commit": "58e516aa4f69ff3098bf518199f483006589758c",
+  "supersedes": {
+    "archived_prior_outputs": "archive/report_schema_v1/",
+    "prior_provenance_schema_version": "issue_9645_report_build_provenance.v2",
+    "prior_report_sha256": "8a438c02e0a7352d79e093f74fc804eee3fcee1fd985259031592f1e5c8243ce",
+    "prior_report_build_provenance_sha256": "8c82366d59cb74b0ccfe035685500a2c92479a5e9aa2bc8cdfaad49893155a9b",
+    "prior_report_schema_version": "adversarial-search-convergence-report.v3"
+  },
+  "tracked_episode_record_count": 64,
+  "episode_record_artifact_counts": {
+    "tracked": 64,
+    "digest_verified": 64,
+    "missing": 0
+  },
+  "analysis_evidence_eligibility_counts": {
+    "eligible": 64,
+    "ineligible": 0
+  },
+  "trace_capture_flag_counts": {
+    "scenario_params.record_simulation_step_trace": {
+      "enabled": 0,
+      "disabled": 64
+    },
+    "scenario_params.record_planner_decision_trace": {
+      "enabled": 0,
+      "disabled": 64
+    }
+  },
+  "embedded_digest_counts": {
+    "provenance.scenario_digest": {
+      "present": 0,
+      "missing": 64
+    },
+    "provenance.map_digest": {
+      "present": 0,
+      "missing": 64
+    }
+  },
+  "episode_record_path_field_disposition": {
+    "field": "scenario_params.route_overrides_file",
+    "absolute_producer_paths_remaining": 0,
+    "path_normalized_candidate_record_count": 64,
+    "path_normalized_recorded_replay_count": 5,
+    "rewritten": true,
+    "report_rebuild_dereferenced_field": false,
+    "portable_replay_inputs_retained_for_all_candidates": false,
+    "reason": "Absolute worktree paths were removed. Candidate records now use repo-relative producer output paths, but candidate-specific route overrides are not retained for every case; these records alone are not portable replay bundles."
+  },
+  "episode_record_scenario_map_binding": "unknown_for_all_64; provenance.scenario_digest and provenance.map_digest are null in every retained episode record",
+  "producer_analysis_eligibility_trace_present_semantics": "In search_analysis_eligibility.v1, trace_present means an episode_record_path was present; it does not indicate that record_simulation_step_trace or record_planner_decision_trace was enabled.",
+  "producer_episode_artifact_path_map_path": "docs/context/evidence/issue_9645_bounded_falsification_2026-09-24/payload/pilot_report_artifact_path_map.v1.json",
+  "producer_episode_artifact_path_map_sha256": "878b8fb5c913dd8eb01eee91fa5ad834bd57db6b1b9c393d683db82183b9196e",
+  "producer_episode_record_recovery": {
+    "count": 64,
+    "total_size_bytes": 1629062,
+    "path_normalized_copy_count": 64,
+    "path_normalized_copy_total_size_bytes": 1623686,
+    "recovered_from_commit": "7588b785a607680400adcc6398d8c983c160e4bd",
+    "search_or_simulation_rerun": false
+  }
+}

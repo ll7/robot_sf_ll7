@@ -463,4 +463,129 @@ def test_seed_alias_rejection_payload_does_not_run_episodes(tmp_path: Path) -> N
     assert check_diff(diff, tmp_path) == []
 
 
+# The marker text is assembled so that this file never carries the marker literally.
+RELEASE_KIND = "release-evaluation"
+RELEASE_PATHS = [
+    "configs/benchmarks/releases/example_release.yaml",
+    "configs/benchmarks/paper_experiment_matrix_example.yaml",
+]
+
+
+def _release_manifest(kind: str = RELEASE_KIND, *, closing: bool = True) -> str:
+    lines = [f"# seed-holdout: {kind} begin", "seeds:", "  - 111", "  - 112"]
+    if closing:
+        lines.append(f"# seed-holdout: {kind} end")
+    return "\n".join(lines) + "\n"
+
+
+def _file_diff(path: str, content: str) -> str:
+    added = content.splitlines()
+    rows = [f"diff --git a/{path} b/{path}", f"+++ b/{path}", f"@@ -0,0 +1,{len(added)} @@"]
+    rows.extend(f"+{line}" for line in added)
+    return "\n".join(rows) + "\n"
+
+
+def _write(root: Path, path: str, content: str) -> None:
+    file = root / path
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_text(content)
+
+
+@pytest.mark.parametrize("path", RELEASE_PATHS)
+def test_release_evaluation_block_passes_in_release_manifest(tmp_path: Path, path: str) -> None:
+    content = _release_manifest()
+    _write(tmp_path, path, content)
+    assert check_diff(_file_diff(path, content), tmp_path) == []
+
+
+@pytest.mark.parametrize("path", RELEASE_PATHS)
+def test_release_evaluation_line_marker_passes_in_release_manifest(
+    tmp_path: Path, path: str
+) -> None:
+    content = f"seeds: [111, 112]  # seed-holdout: {RELEASE_KIND}\n"
+    _write(tmp_path, path, content)
+    assert check_diff(_file_diff(path, content), tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "configs/adversarial/pilot.yaml",
+        "configs/benchmarks/other_matrix.yaml",
+        "tests/benchmark/test_pilot.yaml",
+        "scripts/benchmark/run_pilot.yaml",
+    ],
+)
+def test_release_evaluation_block_rejected_outside_release_manifest(
+    tmp_path: Path, path: str
+) -> None:
+    content = _release_manifest()
+    _write(tmp_path, path, content)
+    findings = check_diff(_file_diff(path, content), tmp_path)
+    assert findings
+    assert {finding.path for finding in findings} == {path}
+    assert any("outside release manifests" in finding.text for finding in findings)
+    assert any(finding.text.startswith("- 111") for finding in findings)
+
+
+def test_release_evaluation_line_marker_rejected_outside_release_manifest(
+    tmp_path: Path,
+) -> None:
+    path = "tests/benchmark/test_pilot.py"
+    added = f"seeds = [111, 112]  # seed-holdout: {RELEASE_KIND}"
+    findings = check_diff(_diff(path, added), tmp_path)
+    assert len(findings) == 1
+    assert "outside release manifests" in findings[0].text
+
+
+def test_release_evaluation_marker_rejected_even_without_seed(tmp_path: Path) -> None:
+    path = "scripts/benchmark/run_pilot.py"
+    findings = check_diff(_diff(path, f"# seed-holdout: {RELEASE_KIND} begin"), tmp_path)
+    assert len(findings) == 1
+
+
+def test_release_evaluation_marker_in_release_prefix_lookalike_rejected(tmp_path: Path) -> None:
+    path = "configs/benchmarks/releases_extra/example.yaml"
+    content = _release_manifest()
+    _write(tmp_path, path, content)
+    assert check_diff(_file_diff(path, content), tmp_path)
+
+
+def test_unpaired_release_evaluation_block_rejected(tmp_path: Path) -> None:
+    path = RELEASE_PATHS[0]
+    content = _release_manifest(closing=False)
+    _write(tmp_path, path, content)
+    findings = check_diff(_file_diff(path, content), tmp_path)
+    assert [finding.text for finding in findings] == ["- 111", "- 112"]
+
+
+def test_mismatched_release_evaluation_block_rejected(tmp_path: Path) -> None:
+    path = RELEASE_PATHS[0]
+    content = (
+        f"# seed-holdout: {RELEASE_KIND} begin\nseeds:\n  - 111\n# seed-holdout: setup-only end\n"
+    )
+    _write(tmp_path, path, content)
+    assert [finding.text for finding in check_diff(_file_diff(path, content), tmp_path)] == [
+        "- 111"
+    ]
+
+
+def test_release_evaluation_block_does_not_exempt_later_seed(tmp_path: Path) -> None:
+    path = RELEASE_PATHS[0]
+    content = _release_manifest() + "pilot_seeds: [113]\n"
+    _write(tmp_path, path, content)
+    findings = check_diff(_file_diff(path, content), tmp_path)
+    assert [finding.text for finding in findings] == ["pilot_seeds: [113]"]
+
+
+@pytest.mark.parametrize("kind", ["setup-only", "synthetic-fixture"])
+def test_existing_markers_still_work_outside_release_manifests(tmp_path: Path, kind: str) -> None:
+    path = "tests/benchmark/test_setup.py"
+    content = f"# seed-holdout: {kind} begin\nseed = 111\n# seed-holdout: {kind} end\n"
+    _write(tmp_path, path, content)
+    diff = f"diff --git a/{path} b/{path}\n+++ b/{path}\n@@ -1,0 +2 @@\n+seed = 111\n"
+    assert check_diff(diff, tmp_path) == []
+    assert check_diff(_diff(path, f"seed = 111  # seed-holdout: {kind}"), tmp_path) == []
+
+
 # seed-holdout: synthetic-fixture end

@@ -112,9 +112,19 @@ Example: bottleneck seed 1001, tick 70, nearest occupied-cell center distance
 Doorway seed 1001, tick 55, distance 1.272792 m: the same 0 → 0.03125 change.
 These costs restore wall sensitivity; the soft term alone is no safety guarantee.
 
-Regression: `tests/planner/test_prediction_fxp_regressions.py:63`, both real
+Regression: `tests/planner/test_prediction_fxp_regressions.py:64`, both real
 scoring methods, obstacle/combined grid arrays occupied and pedestrian channel
-empty. Base failure: `Obtained: 0.0; Expected: 0.25 ± 2.5e-07`. Both pass after.
+empty, plus pedestrian-only grids. Base failures: `Obtained: 0.0; Expected: 0.25`
+and `Obtained: 0.25; Expected: 0.375`. All four pass after.
+
+The convention also increases pedestrian-only occupancy weight from 1 to 1.5
+when combined occupancy is present. An additional controlled pedestrian-facing
+yaw probe at the actual dev pose clears obstacles and compares the original
+pedestrian cells with an empty grid. Two of 269 bottleneck observations have
+nonzero scores in both methods: 0.0625 before, 0.09375 after. The 157 doorway
+observations contribute zero in this control. This is an explicit cost-convention
+change included in the probe and regression gate, not a claimed improvement in
+pedestrian avoidance.
 
 ## A3 — confirmed silent horizon cap
 
@@ -135,7 +145,7 @@ At all 426 dev observations, the base accepted a 24-step request and returned
 A supported 4-step request returned 8 before and 4 after; the corrected release's
 8-step request returns 8. No future was extrapolated.
 
-Regressions: `tests/planner/test_prediction_fxp_regressions.py:111` and `:120`.
+Regressions: `tests/planner/test_prediction_fxp_regressions.py:116` and `:125`.
 Base failure lines: `Failed: DID NOT RAISE ValueError` and `assert 8 == 4`.
 Both pass after. Two existing MPPI fixtures with four forecast steps now explicitly
 request four steps, preserving their cache and route-target checks.
@@ -173,7 +183,7 @@ release planners have seven in ordinary states and eleven in near-field states
 ±1 while inner rates remain distinct. These are distinct configured commands,
 not proof of distinct first-tick motion under the drive's acceleration limits.
 
-Regression: `tests/planner/test_prediction_fxp_regressions.py:95`, ordinary and
+Regression: `tests/planner/test_prediction_fxp_regressions.py:99`, ordinary and
 near-field states for both production release YAMLs/builders. Base failure:
 `assert 3 == 7` and `assert 3 == 11` (the historical MPPI near-field union also
 contains pi/decimal near-duplicates). All four cases pass after.
@@ -293,7 +303,7 @@ promotion and release evidence need a separate authorized task.
 | Test group | Defect and credible regression | Existing coverage gap | Real bytes / independent oracle / seam |
 | --- | --- | --- | --- |
 | A1, four cases | Accidental second rotation of already-ego velocities | Existing collector fixture headings are zero, so both implementations agree | Actual nested/flat observation extraction and sample arrays; hand-derived north/east `[0,-1]`; no production seam |
-| A2, two cases | Discarding the first occupancy result in either score path | Existing prediction caching/progress tests do not compare wall-only grids | Real grid arrays, production release YAML/builder and both scorers; wall-only mean occupancy is 1, added cost is configured 0.25; no monkeypatch/seam |
+| A2, four cases | Discarding wall occupancy or changing the documented combined-plus-half-pedestrian formula in either score path | Existing prediction caching/progress tests do not compare wall-only grids | Real grid arrays, production release YAML/builder and both scorers; wall-only mean occupancy is 1 (cost 0.25), pedestrian-only combined-plus-half occupancy is 1.5 (cost 0.375); no monkeypatch/seam |
 | A3, rejection | Silent truncation of configured horizon | Existing MPPI determinism/conflict tests tolerated default 12→8 capping | Real runtime forecast length and production MPPI method; explicit 24 request must raise; hashed model payload/dev probes independently prove eight outputs; no seam |
 | A3, shorter request | Inflating a supported horizon through the anchor | Existing cache/target tests silently accepted short stub horizons | Request four versus returned count four; independent integer oracle, no seam; two existing four-step fixtures now declare four explicitly |
 | A4, four cases | Dividing horizon heading by one tick and clipping all inner deltas | Existing candidate tests count risk-distance calls and determinism, not distinct configured rates | Both real release YAMLs/builders, actual candidate arrays, independent 7/11 counts and `0.523599/0.8` angular-rate arithmetic; no seam |
@@ -303,9 +313,9 @@ all previous feature/schema assertions. The two MPPI fixture edits make their ex
 cache/target behavior tests use a supported four-step forecast contract. They are not
 new bug-proof tests; the new regressions and dev probes supply the red/green evidence.
 
-The final new regression file has **12 failures on the base**, with the precise
-lines shown above, and **12 passes after correction**. The broader focused lane has
-**142 passes, no skips or xfails** across prediction contracts, MPPI, both collectors,
+The final new regression file has **14 failures on the base**, with the precise
+lines shown above, and **14 passes after correction**. The broader focused lane has
+**144 passes, no skips or xfails** across prediction contracts, MPPI, both collectors,
 predictive model, pipeline, mixed datasets, and probabilistic prediction interface.
 Ruff check/format and `git diff --check` pass. No timeout, skip, or xfail was added.
 The full repository readiness pipeline was not run because its automatic broad

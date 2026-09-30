@@ -60,8 +60,9 @@ def test_collector_preserves_already_ego_velocity_at_north_heading(collector, fl
 
 
 @pytest.mark.parametrize("sequence", [False, True])
-def test_wall_occupancy_increases_prediction_cost(sequence):
-    """Occupied obstacles/combined bytes must raise cost with no pedestrians."""
+@pytest.mark.parametrize("pedestrian_only", [False, True])
+def test_prediction_occupancy_scores_wall_and_pedestrian_channels(sequence, pedestrian_only):
+    """Wall and pedestrian-only grids each apply the declared occupancy cost."""
     planner = PredictionPlannerAdapter(release_config(), allow_fallback=True)
     obs = observation()
     obs.update(
@@ -85,9 +86,12 @@ def test_wall_occupancy_increases_prediction_cost(sequence):
         return planner._score_action(**kwargs, v=1.0, w=0.0)
 
     free = score()
-    obs["occupancy_grid"][[0, 3], :, :] = 1.0
-    wall = score()
-    assert wall - free == pytest.approx(planner.config.occupancy_weight)
+    occupied_channels = [1, 3] if pedestrian_only else [0, 3]
+    obs["occupancy_grid"][occupied_channels, :, :] = 1.0
+    occupied = score()
+    # Combined already includes pedestrians; MPPI's added half-ped term makes 1.5.
+    expected = 0.375 if pedestrian_only else 0.25
+    assert occupied - free == pytest.approx(expected)
 
 
 @pytest.mark.parametrize("near", [False, True])

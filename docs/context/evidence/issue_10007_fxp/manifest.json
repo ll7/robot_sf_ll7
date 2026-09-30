@@ -8,15 +8,15 @@
     "scripts/training/collect_predictive_hardcase_data.py": "61426b82babb1de92442fe65d8ae40fe6cba93e52e5a1eac85a4938ceced64cc",
     "configs/algos/prediction_planner_release_v0_0_8.yaml": "1fbbe7ca4899f6e3420b8908fe63c33d6423cd4cacd2347ab539b69eb2c8f31d",
     "configs/algos/predictive_mppi_release_v0_0_8.yaml": "30f6f0392bc5f01f733f8fb2507efc2fcb5381e58706c34ec1b3d5ac4eac3c91",
-    "tests/planner/test_prediction_fxp_regressions.py": "f119e69a8b5facc7fd62b8c417f412ad98455b5159fb2842a80b8397288dc127",
-    "docs/context/evidence/issue_10007_fxp/probe.py": "7a103d0aedb4f8f719bb66c367f93d15137e71475eda747802134406d9df4ecb"
+    "tests/planner/test_prediction_fxp_regressions.py": "95a2fad3984cf2045d7ca6d3d2f36a7f68b199b34854b8ee3fcb2a5d8322583c",
+    "docs/context/evidence/issue_10007_fxp/probe.py": "7d04b50414bd009dc33f05333f36e86719f883a7469bea73f59c4f4f7829a9de"
   },
   "raw_captures_sha256": {
     "before.observations.jsonl.gz": "69b5064421d4b0fd46db8144743ba2ff7e7ba9edec7a60f2a1e6390bddd4d4c1",
-    "before.json": "b1c635e2412f681718938afa58a448ffe93f8ad44ae601774c02cf662ac8217f",
-    "after.json": "e76454f80de837346352325b3946a51acbe1d28ae7bdc584b6e8d80fc4f9d996",
-    "red_final.log": "ee38b46ec7449b34528e8159b194bfca48927b5fcbcf2b9281f8b6548e941041",
-    "validation.log": "ccfda7b8151f89e9416ee02adbf5c5dff6739e4a3ff93b52daaca227b567d13d",
+    "before.json": "a6dae00f7458a720b6fa6c0eb27e8216de4aeb95ec9fa808dce1fe89005789ff",
+    "after.json": "d2568987ea313e50a91e1fdf676f61c28b9c1c6e2cc6032d18e4b9fc64a9a185",
+    "red_final.log": "36e5d8ff57b279de5635fb8fb4e037de06e2c14d3fa90c989ac9366eda19e547",
+    "validation.log": "5c95b46ee1d08aea8d55dbf274d3f5fed30e92ad4409bba9a55a38f59ff0808b",
     "velocity_model_v1.log": "abaa2fa0dccfb90c2259eda2353f96da808ceeb942d5411c2168e3a07eac5143",
     "velocity_model_v2.log": "6e0c5a3b8b66d281b18cdc95e84273e67288717e0f2710c9f2e3ea57c9c8358e"
   },
@@ -28,9 +28,9 @@
   "observation_capture_head": "b3fa204dc4eda5004d67e4fcf518f3370fcd0966",
   "versioned_artifacts_sha256": {
     "observations.jsonl.gz": "69b5064421d4b0fd46db8144743ba2ff7e7ba9edec7a60f2a1e6390bddd4d4c1",
-    "regression_base.txt": "91c7eea8e86616d52ba90498f19edf669f546bc845bf7e725eb6df2bacfb8e7e",
-    "validation.txt": "ccfda7b8151f89e9416ee02adbf5c5dff6739e4a3ff93b52daaca227b567d13d",
-    "summary.json": "139517ae7c1186e64bed91892a42e9aa95aecc1b954b9d51822e72847018fb88"
+    "regression_base.txt": "349b586153bfefdc64c19985ae98f04966b50b33bb9828861bd178ab320d46ac",
+    "validation.txt": "5c95b46ee1d08aea8d55dbf274d3f5fed30e92ad4409bba9a55a38f59ff0808b",
+    "summary.json": "0afbabccff6190828d33e204993f0a4df8ca2f02d7fe051f4f5feb0d780401c8"
   },
   "log_normalization": "Versioned base failure log has trailing whitespace removed; raw log digest pins the original local capture."
 }

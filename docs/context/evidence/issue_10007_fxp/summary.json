@@ -13,7 +13,7 @@
   ],
   "phases": {
     "before": {
-      "elapsed_s": 8.229555919067934,
+      "elapsed_s": 8.958163134055212,
       "observations": 426,
       "provenance": {
         "seeds": [
@@ -61,6 +61,26 @@
           "mppi_anchor_heading_counts": [
             3
           ],
+          "pedestrian_occupancy_control": {
+            "single": {
+              "nonzero_count": 2,
+              "maximum_cost_delta": 0.0625
+            },
+            "sequence": {
+              "nonzero_count": 2,
+              "maximum_cost_delta": 0.0625
+            }
+          },
+          "pedestrian_occupancy_example": {
+            "scenario": "classic_bottleneck_medium",
+            "observation_sha256": "a74b34774af75dd67fc34c047e142579477fe6c69d1d54e83f9e1da261d99771",
+            "seed": 1001,
+            "tick": 100,
+            "pedestrian_occupancy_control": [
+              0.03125,
+              0.03125
+            ]
+          },
           "example": {
             "scenario": "classic_bottleneck_medium",
             "observation_sha256": "bd92bb23cd0e88588ea2f3281b36183918d8eddf3f00a972b7ce9afc07271c39",
@@ -129,6 +149,17 @@
           "mppi_anchor_heading_counts": [
             3
           ],
+          "pedestrian_occupancy_control": {
+            "single": {
+              "nonzero_count": 0,
+              "maximum_cost_delta": 0.0
+            },
+            "sequence": {
+              "nonzero_count": 0,
+              "maximum_cost_delta": 0.0
+            }
+          },
+          "pedestrian_occupancy_example": null,
           "example": {
             "scenario": "classic_doorway_low",
             "observation_sha256": "03e08055a060c694e4d0db0542ec2672acd5c948602724e49cb0372779c9c87e",
@@ -180,7 +211,7 @@
       }
     },
     "after": {
-      "elapsed_s": 15.383285026997328,
+      "elapsed_s": 15.992420008871704,
       "observations": 426,
       "provenance": {
         "seeds": [
@@ -230,6 +261,26 @@
             7,
             11
           ],
+          "pedestrian_occupancy_control": {
+            "single": {
+              "nonzero_count": 2,
+              "maximum_cost_delta": 0.09375
+            },
+            "sequence": {
+              "nonzero_count": 2,
+              "maximum_cost_delta": 0.09375
+            }
+          },
+          "pedestrian_occupancy_example": {
+            "scenario": "classic_bottleneck_medium",
+            "observation_sha256": "a74b34774af75dd67fc34c047e142579477fe6c69d1d54e83f9e1da261d99771",
+            "seed": 1001,
+            "tick": 100,
+            "pedestrian_occupancy_control": [
+              0.046875,
+              0.046875
+            ]
+          },
           "example": {
             "scenario": "classic_bottleneck_medium",
             "observation_sha256": "66311f5742d17ce38c095ee4ba6a2bd224b10ce12943da6c92954dc2f665fe6b",
@@ -312,6 +363,17 @@
             7,
             11
           ],
+          "pedestrian_occupancy_control": {
+            "single": {
+              "nonzero_count": 0,
+              "maximum_cost_delta": 0.0
+            },
+            "sequence": {
+              "nonzero_count": 0,
+              "maximum_cost_delta": 0.0
+            }
+          },
+          "pedestrian_occupancy_example": null,
           "example": {
             "scenario": "classic_doorway_low",
             "observation_sha256": "b0114311c71f15c7e994ec3e2b381509185eb4ebda82c99c0219f11b7398b477",

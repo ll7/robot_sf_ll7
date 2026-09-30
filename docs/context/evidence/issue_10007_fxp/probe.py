@@ -120,6 +120,36 @@ def probe_collectors(obs, state):
     return a1
 
 
+def aim_at_channel(obs, grid, meta, channel):
+    """Face the nearest occupied cell at the actual dev pose, preserving grid metadata.
+
+    Returns:
+        dict: Observation with yaw directed at this channel's nearest occupied cell.
+    """
+    aimed = copy.deepcopy(obs)
+    occupied = np.argwhere(grid[channel] > 0.5)
+    if not occupied.size:
+        return aimed
+    local = np.asarray(meta["origin"]).reshape(-1)[:2] + (occupied[:, [1, 0]] + 0.5) * float(
+        np.asarray(meta["resolution"]).reshape(-1)[0]
+    )
+    if float(np.asarray(meta.get("use_ego_frame", [0])).reshape(-1)[0]) > 0.5:
+        pose = np.asarray(meta["robot_pose"]).reshape(-1)
+        ch, sh = np.cos(pose[2]), np.sin(pose[2])
+        world = local @ np.array([[ch, sh], [-sh, ch]]) + pose[:2]
+    else:
+        world = local
+    pos = np.asarray(planner._socnav_fields(obs)[0]["position"], dtype=float)[:2]
+    delta = world - pos
+    closest = int(np.argmin(np.linalg.norm(delta, axis=1)))
+    yaw = float(np.arctan2(delta[closest, 1], delta[closest, 0]))
+    if "robot" in aimed:
+        aimed["robot"]["heading"] = np.array([yaw])
+    else:
+        aimed["robot_heading"] = np.array([yaw])
+    return aimed
+
+
 def probe_walls(obs, future, mask, candidates):
     """Compare original and obstacle-cleared costs at sampled dev poses.
 
@@ -186,7 +216,21 @@ def probe_walls(obs, future, mask, candidates):
             - planner._score_action_sequence(observation=aimed_clear, sequence=[(vv, 0.0)], **wk)
         ),
     ]
-    return a2, wall_facing
+    # Isolate the convention's pedestrian-only contribution on original dev bytes.
+    pedestrian_aimed = aim_at_channel(clear, grid, meta, peds)
+    empty = copy.deepcopy(pedestrian_aimed)
+    empty["occupancy_grid"] = np.zeros_like(cleared)
+    pedestrian_control = [
+        float(
+            planner._score_action(observation=pedestrian_aimed, v=vv, w=0.0, **wk)
+            - planner._score_action(observation=empty, v=vv, w=0.0, **wk)
+        ),
+        float(
+            planner._score_action_sequence(observation=pedestrian_aimed, sequence=[(vv, 0.0)], **wk)
+            - planner._score_action_sequence(observation=empty, sequence=[(vv, 0.0)], **wk)
+        ),
+    ]
+    return a2, wall_facing, pedestrian_control
 
 
 def score_observation(name, seed, tick, obs):
@@ -199,7 +243,7 @@ def score_observation(name, seed, tick, obs):
     future = planner._predict_trajectories(state, mask)
     candidates = planner._candidate_set(future_peds=future, mask=mask)
     a1 = probe_collectors(obs, state)
-    a2, wall_facing = probe_walls(obs, future, mask, candidates)
+    a2, wall_facing, pedestrian_control = probe_walls(obs, future, mask, candidates)
     a3 = {}
     configured = mppi.config.horizon_steps
     for requested in (configured, 24, 4):
@@ -222,6 +266,7 @@ def score_observation(name, seed, tick, obs):
         "collector_velocity_error": a1,
         "wall_cost_deltas": a2,
         "wall_facing_control": wall_facing,
+        "pedestrian_occupancy_control": pedestrian_control,
         "heading_rates": sorted({w for _, w in candidates}),
         "mppi_heading_rates": mrates,
         "mppi_horizon": a3,

@@ -396,6 +396,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   take the episode seed. An included manifest's relative `map_file` resolves beside that
   manifest first, and a same-named file beside the root manifest is rejected as ambiguous.
   SVG zone indices with an unfillable gap are rejected instead of compacted.
+  Full-rectangle sampling intentionally changes scenario difficulty: in the development
+  review (seeds 1001-1030, H600, dt 0.1), ORCA narrow_hallway success fell from 27 to
+  17 of 30, and overall success from 1242 to 1218 of 1440. After the robot-start
+  reaction-clearance repair, these counts are 17/30 and 1227/1440; robot_crowding
+  recovers from 5 to 13/30 (review baseline 17/30). These are development diagnostics,
+  not held-out release results. Zoned crowds now exclude buffered robot spawn and
+  goal zones, matching synthesized crowds; actual-start reset checks and route
+  respawns keep a one-second walking-speed buffer plus 0.1 m (0.75 m on these maps).
+  Robot zones and maps are unchanged. Missing route-zone fallbacks now encode a
+  proper B-corner rectangle. Remaining goal-wall and bottleneck goal-zone geometry
+  work is tracked for 0.0.9 in #10037.
 
 * **Issue #9725 spawn defects (changes seeded resets).** Robot starts are now sampled
   only where the robot radius plus a 0.1 m margin clears every wall and map bound

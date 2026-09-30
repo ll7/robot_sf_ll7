@@ -832,11 +832,14 @@ def _spawn_configs_for_forced_population(
 
 
 def _zone_polygon(zone: Zone) -> _ShapelyPolygon:
-    """Expand a three-corner map rectangle into its four-corner Shapely polygon.
+    """Convert a map rectangle encoding or an explicit polygon into a polygon.
 
     Returns:
-        The rectangular zone polygon.
+        The zone polygon; three corners encode the map's B-corner rectangle,
+        while four or more corners are already an authored polygon boundary.
     """
+    if len(zone) != 3:
+        return _ShapelyPolygon(zone)
     a, b, c = zone
     d = (a[0] + c[0] - b[0], a[1] + c[1] - b[1])
     return _ShapelyPolygon((a, b, c, d))

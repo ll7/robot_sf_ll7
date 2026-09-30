@@ -1176,6 +1176,7 @@ def _build_episode_data(  # noqa: PLR0913
         goal=goal,
         dt=dt,
         reached_goal_step=reached_goal_step,
+        robot_pos_includes_reset=True,
         robot_radius=float(robot_radius),
         ped_radius=float(ped_radius),
     )

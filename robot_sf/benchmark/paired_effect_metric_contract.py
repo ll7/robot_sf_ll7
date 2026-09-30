@@ -19,6 +19,12 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.metric_definitions import (
+    NATIVE_TRACE_SCHEMAS,
+    SIMULATION_TRACE_SCHEMAS,
+    require_uniform_trace_schema,
+)
+
 CONTRACT_SCHEMA_VERSION = "paired_effect_metric_contract.v1"
 CLARIFICATION_SCHEMA_VERSION = "paired_effect_metric_clarification.v1"
 PRODUCER_SCHEMA_VERSION = "paired_effect_metric_producer.v1"
@@ -152,9 +158,9 @@ def validate_paired_effect_metric_clarification(  # noqa: C901, PLR0912, PLR0915
     native_trace = normalized.get("native_trace")
     if not isinstance(native_trace, Mapping):
         raise PairedEffectMetricContractError(f"native_trace must be a mapping{location}")
-    if native_trace.get("schema_version") != "paired_effect_native_trace.v1":
+    if native_trace.get("schema_version") not in NATIVE_TRACE_SCHEMAS:
         raise PairedEffectMetricContractError(
-            f"native_trace.schema_version must be 'paired_effect_native_trace.v1'{location}"
+            f"native_trace.schema_version must be a supported paired_effect_native_trace version{location}"
         )
     for key in ("wrapper_trace_path", "simulation_trace_path", "time_basis"):
         value = native_trace.get(key)
@@ -695,8 +701,12 @@ def _trace_view(record: Mapping[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
     native = _record_native_trace_metadata(record)
     if native is None:
         return _status_payload("unavailable", "missing_paired_effect_native_trace")
-    if native.get("schema_version") != "paired_effect_native_trace.v1":
+    if native.get("schema_version") not in NATIVE_TRACE_SCHEMAS:
         return _status_payload("invalid", "invalid_native_trace_schema")
+    try:
+        require_uniform_trace_schema([record])
+    except ValueError:
+        return _status_payload("invalid", "trace_schema_version_mismatch")
     native_arm = native.get("arm_key")
     if native_arm is not None and native_arm != arm:
         return _status_payload("invalid", "native_trace_arm_mismatch")
@@ -810,6 +820,10 @@ def _validate_pair(  # noqa: C901
             str(off_trace["reason"]),
             side="wrapper_off",
         )
+    try:
+        require_uniform_trace_schema([wrapper_on_record, wrapper_off_record])
+    except ValueError:
+        return _status_payload("invalid", "trace_schema_version_mismatch")
     if on_trace["arm_key"] != "wrapper_on" or off_trace["arm_key"] != "wrapper_off":
         return _status_payload("invalid", "wrapper_arm_mismatch")
     off_interventions = {
@@ -1128,12 +1142,16 @@ def _simulation_trace_view(record: Mapping[str, Any]) -> dict[str, Any]:  # noqa
     raw_trace = metadata.get("simulation_step_trace")
     if not isinstance(raw_trace, Mapping):
         return _status_payload("unavailable", "missing_simulation_step_trace")
-    if raw_trace.get("schema_version") != "simulation-step-trace.v1":
+    if raw_trace.get("schema_version") not in SIMULATION_TRACE_SCHEMAS:
         return _status_payload("invalid", "invalid_simulation_trace_schema")
     raw_steps = raw_trace.get("steps")
     if not isinstance(raw_steps, Sequence) or isinstance(raw_steps, (str, bytes)) or not raw_steps:
         return _status_payload("unavailable", "missing_simulation_step_trace_steps")
     native = _record_native_trace_metadata(record)
+    try:
+        require_uniform_trace_schema([record])
+    except ValueError:
+        return _status_payload("invalid", "trace_schema_version_mismatch")
     declared_time_steps: list[float] = []
     if "dt" in raw_trace:
         raw_dt = _finite_metric_scalar(raw_trace.get("dt"))
@@ -1387,6 +1405,8 @@ def validate_paired_effect_metric_rows(
         Aggregate validation report.
     """
 
+    rows = list(rows)
+    require_uniform_trace_schema(rows)
     validated = validate_paired_effect_metric_contract(contract)
     missing_counts: Counter[str] = Counter()
     invalid_counts: Counter[str] = Counter()

@@ -117,6 +117,7 @@ from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
 from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
     load_synthetic_actuation_profile as _load_synthetic_actuation_profile,
 )
+from robot_sf.benchmark.metric_definitions import METRIC_SCHEMA_VERSION
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.observation_noise import (
     ObservationNoiseState,
@@ -130,7 +131,10 @@ from robot_sf.benchmark.observation_noise import (
 )
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.paired_effect_metric_contract import evaluate_paired_effect_metric_fields
-from robot_sf.benchmark.path_utils import compute_shortest_path_length
+from robot_sf.benchmark.path_utils import (
+    compute_completion_reference_length,
+    compute_shortest_path_length,
+)
 from robot_sf.benchmark.ped_model_sensitivity import (
     attach_pedestrian_model_fields,
     build_pedestrian_model_provenance,
@@ -220,7 +224,7 @@ PedestrianControlTraceLabelBuilder = Callable[[int], list[dict[str, Any]]]
 # only persists its mapping payload in algorithm metadata.
 _PairResetHook = Callable[[object, object], Mapping[str, str]]
 _OBSTACLE_FORCE_LAW_RUNTIME_RECORD_SCHEMA = "obstacle_force_law_runtime_record.v1"
-_PAIRED_EFFECT_NATIVE_TRACE_SCHEMA = "paired_effect_native_trace.v1"
+_PAIRED_EFFECT_NATIVE_TRACE_SCHEMA = "paired_effect_native_trace.v2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -1542,6 +1546,11 @@ class _MetadataFinalizationOptions:
 def _compute_post_loop_metrics(  # noqa: PLR0913
     *,
     robot_positions: list[np.ndarray],
+    initial_robot_pos: np.ndarray | None = None,
+    route_waypoints: np.ndarray | None = None,
+    goal_zone: np.ndarray | None = None,
+    completion_policy: str = "waypoint_radius_v1",
+    seed: int | None = None,
     robot_headings: list[float],
     hybrid_command_sources: list[str | None] | None = None,
     ped_positions: list[np.ndarray],
@@ -1624,7 +1633,23 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
         sample_obstacle_points(map_def.obstacles, map_def.bounds) if map_def is not None else None
     )
     if robot_pos_arr.size:
-        shortest_path = compute_shortest_path_length(map_def, robot_pos_arr[0], goal_vec)
+        shortest_path = (
+            compute_completion_reference_length(
+                map_def,
+                initial_robot_pos if initial_robot_pos is not None else robot_pos_arr[0],
+                goal_vec,
+                goal_zone=goal_zone,
+                completion_policy=completion_policy,
+                scenario_id=str(scenario.get("name", "")),
+                seed=seed,
+            )
+            if completion_policy == "goal_zone_entry_v1"
+            else compute_shortest_path_length(
+                map_def,
+                initial_robot_pos if initial_robot_pos is not None else robot_pos_arr[0],
+                goal_vec,
+            )
+        )
     else:
         shortest_path = float("nan")
 
@@ -1646,6 +1671,9 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
             goal=goal_vec,
             dt=float(config.sim_config.time_per_step_in_secs),
             reached_goal_step=reached_goal_step,
+            initial_robot_pos=initial_robot_pos,
+            route_waypoints=route_waypoints,
+            collision_event=collision_seen,
             robot_radius=float(getattr(robot_config, "radius", 1.0)),
             ped_radius=float(getattr(config.sim_config, "ped_radius", 0.4)),
             episode_metadata=_episode_metadata_for_benchmark_metrics(scenario, map_def),
@@ -1908,6 +1936,9 @@ class _EpisodeStepLoopResult:
     reset_spawn_clearance: dict[str, Any] | None = None
     reset_spawn_clearance_error: str | None = None
     respawn_overlap_events: list[dict[str, Any]] = field(default_factory=list)
+    route_waypoints: np.ndarray | None = None
+    goal_zone: np.ndarray | None = None
+    completion_policy: str = "waypoint_radius_v1"
 
 
 @dataclass(slots=True)
@@ -1969,6 +2000,9 @@ class _StepLoopState:
     reset_spawn_clearance: dict[str, Any] | None = None
     reset_spawn_clearance_error: str | None = None
     respawn_overlap_events: list[dict[str, Any]] = field(default_factory=list)
+    route_waypoints: np.ndarray | None = None
+    goal_zone: np.ndarray | None = None
+    completion_policy: str = "waypoint_radius_v1"
 
 
 def _read_reset_spawn_clearance(simulator: Any) -> tuple[dict[str, Any] | None, str | None]:
@@ -2246,8 +2280,14 @@ def _init_step_loop_state(
         _StepLoopState: Initialized mutable state bundle.
     """
     map_def = getattr(env.simulator, "map_def", None)
-    goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
-    initial_robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
+    navigators = getattr(env.simulator, "robot_navs", None)
+    if navigators is not None:
+        # Freeze the sampled terminal target; waypoint handoffs and route reset
+        # after success must not alter episode metric/trace denominators.
+        goal_vec = np.array(navigators[0].waypoints[-1], dtype=float, copy=True)
+    else:
+        goal_vec = np.array(env.simulator.goal_pos[0], dtype=float, copy=True)
+    initial_robot_pos = np.array(env.simulator.robot_pos[0], dtype=float, copy=True)
     initial_ped_positions = np.array(env.simulator.ped_pos, dtype=float, copy=True).reshape(-1, 2)
     initial_robot_velocity = _initial_robot_velocity(env.simulator)
     initial_ped_velocities = _initial_ped_velocities(env.simulator, len(initial_ped_positions))
@@ -2266,6 +2306,13 @@ def _init_step_loop_state(
     state.goal_vec = goal_vec
     state.initial_goal_vec = np.array(goal_vec, dtype=float, copy=True)
     state.initial_robot_pos = initial_robot_pos
+    if navigators:
+        state.route_waypoints = np.array(navigators[0].waypoints, dtype=float, copy=True)
+        if not np.array_equal(state.route_waypoints[0], initial_robot_pos):
+            state.route_waypoints = np.vstack([initial_robot_pos, state.route_waypoints])
+        zone = getattr(navigators[0], "goal_zone", None)
+        state.goal_zone = np.array(zone, dtype=float, copy=True) if zone is not None else None
+        state.completion_policy = getattr(navigators[0], "completion_policy", "waypoint_radius_v1")
     state.initial_ped_positions = initial_ped_positions
     state.initial_robot_velocity = initial_robot_velocity
     state.initial_ped_velocities = initial_ped_velocities
@@ -3417,6 +3464,9 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
         goal_vec=state.goal_vec,
         initial_goal_vec=state.initial_goal_vec,
         initial_robot_pos=state.initial_robot_pos,
+        route_waypoints=state.route_waypoints,
+        goal_zone=state.goal_zone,
+        completion_policy=state.completion_policy,
         initial_robot_heading=state.initial_robot_heading,
         initial_ped_positions=state.initial_ped_positions,
         initial_robot_velocity=state.initial_robot_velocity,
@@ -3671,7 +3721,6 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
             state.respawn_overlap_events = _read_respawn_overlap_events(env.simulator)
             state.simulator_obstacle_force_law_metadata = _read_obstacle_force_law_metadata(env)
             state.map_def = env.simulator.map_def
-            state.goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
     finally:
         _teardown_step_loop(
             env,
@@ -4170,7 +4219,7 @@ def _finalize_trace_metadata(  # noqa: PLR0913
     if record_simulation_step_trace:
         reset_robot_radius_m, reset_ped_radius_m = _trace_surface_radii_m(config)
         algo_meta["simulation_step_trace"] = {
-            "schema_version": "simulation-step-trace.v1",
+            "schema_version": "simulation-step-trace.v2",
             "dt": float(config.sim_config.time_per_step_in_secs),
             "initial_goal_distance_m": initial_goal_distance,
             "steps": simulation_step_trace,
@@ -4530,6 +4579,7 @@ def _build_episode_record_dict(  # noqa: PLR0913
         retained_metric_values = {}
     return {
         "version": "v1",
+        "metric_schema_version": METRIC_SCHEMA_VERSION,
         "episode_id": _compute_map_episode_id(scenario_params, seed),
         "scenario_id": scenario_id,
         "seed": seed,
@@ -5519,6 +5569,11 @@ def run_map_episode(  # noqa: PLR0913
     )
     post_loop = _compute_post_loop_metrics(
         robot_positions=loop_result.robot_positions,
+        initial_robot_pos=loop_result.initial_robot_pos,
+        route_waypoints=loop_result.route_waypoints,
+        goal_zone=loop_result.goal_zone,
+        completion_policy=loop_result.completion_policy,
+        seed=seed,
         robot_headings=loop_result.robot_headings,
         hybrid_command_sources=loop_result.hybrid_command_sources,
         ped_positions=loop_result.ped_positions,

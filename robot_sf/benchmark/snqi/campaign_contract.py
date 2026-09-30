@@ -10,6 +10,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.benchmark.metric_definitions import (
+    metric_schema_version,
+    require_anchor_compatibility,
+    require_uniform_metric_schema,
+)
 from robot_sf.benchmark.rank_metrics import spearman
 from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES, compute_snqi, normalize_metric
 
@@ -275,6 +280,8 @@ def sanitize_baseline_stats(
                 f"Adjusted degenerate baseline for '{metric}' (p95 <= med) using fallback width {width:.6g}"
             )
         sanitized[metric] = {"med": med, "p95": p95}
+    if "_metadata" in source or "metric_schema_version" in source:
+        sanitized["_metadata"] = {"metric_schema_version": metric_schema_version(source)}
     return sanitized, warnings
 
 
@@ -288,6 +295,7 @@ def compute_baseline_stats_from_episodes(
     Returns:
         Tuple of sanitized baseline mapping and adjustment warnings.
     """
+    metric_version = require_uniform_metric_schema(episodes)
     values_by_metric: dict[str, list[float]] = {name: [] for name in metric_names}
     for episode in episodes:
         metrics = episode.get("metrics") if isinstance(episode, Mapping) else None
@@ -306,6 +314,7 @@ def compute_baseline_stats_from_episodes(
             med = 0.0
             p95 = 1.0
         baseline[metric] = {"med": med, "p95": p95}
+    baseline["_metadata"] = {"metric_schema_version": metric_version}
     sanitized, warnings = sanitize_baseline_stats(baseline, metric_names=metric_names)
     return sanitized, warnings
 
@@ -622,6 +631,9 @@ def compute_planner_snqi_ordering(
     Returns:
         Sorted planner rows with ``rank``, ``mean_snqi``, and ``episode_count`` fields.
     """
+    require_uniform_metric_schema(episodes)
+    for episode in episodes:
+        require_anchor_compatibility(episode, baseline)
     grouped: dict[str, dict[str, Any]] = {}
     for episode in episodes:
         metrics = episode.get("metrics")

@@ -33,6 +33,9 @@ from datetime import datetime
 from subprocess import run
 from typing import Any
 
+from robot_sf.benchmark.metric_definitions import (
+    require_anchor_compatibility,
+)
 from robot_sf.benchmark.robot_force_contract import validate_robot_force_provenance
 from robot_sf.benchmark.snqi.types import SNQIWeights
 from robot_sf.benchmark.snqi.v2_spec import SnqiV2Spec, finite_nonnegative
@@ -139,6 +142,7 @@ def compute_snqi_v0(metrics: Metrics, weights: Weights, baseline_stats: Baseline
           so a genuine ``NaN`` under a non-zero weight propagates as before
           (issue #5132).
     """
+    require_anchor_compatibility(metrics, baseline_stats)
     success_raw = metrics.get("success", 0.0)
     success = 1.0 if isinstance(success_raw, bool) and success_raw else float(success_raw)
 
@@ -193,6 +197,7 @@ def compute_snqi_v1(metrics: Metrics, weights: Weights, baseline_stats: Baseline
         - Shares the zero-weight contract of :func:`compute_snqi_v0`: a term with
           weight ``0.0`` never propagates ``NaN`` (issue #5132).
     """
+    require_anchor_compatibility(metrics, baseline_stats)
     success_raw = metrics.get("success", 0.0)
     success = 1.0 if isinstance(success_raw, bool) and success_raw else float(success_raw)
 
@@ -250,6 +255,7 @@ def normalize_snqi_v2_terms(metrics: Metrics, spec: SnqiV2Spec) -> dict[str, flo
     Returns:
         Validated result described above.
     """
+    require_anchor_compatibility(metrics, {"metric_schema_version": spec.metric_schema_version})
     validate_robot_force_provenance(metrics, spec.force_source)
 
     def required(name: str) -> float:

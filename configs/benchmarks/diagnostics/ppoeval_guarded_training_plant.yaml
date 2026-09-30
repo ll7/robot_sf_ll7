@@ -42,3 +42,6 @@ fallback_risk_dwa:
 # DIAGNOSTIC ONLY; never promote or use for release.
 diagnostic_training_plant: true
 allow_backwards: true
+
+# PPOABL A1: plant speed cap only; policy bounds remain V3.
+diagnostic_plant_variant: a1

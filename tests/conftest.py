@@ -413,6 +413,10 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Scenario/map sampling and reserved-polygon regressions use dev seeds and
+    # authored geometry without environment steps; include them in PR coverage.
+    "test_scenario_map_review_fixes.py",
+    "test_reserved_zone_polygons.py",
     # Clearance and LiDAR tracking contracts use fixed arrays without environment steps.
     "test_clearance_geometry.py",
     "test_lidar_tracked_agents.py",

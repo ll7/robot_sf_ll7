@@ -441,6 +441,8 @@ _FAST_FILES = {
     # Social-force v2 planner contracts (issue #9724) are deterministic adapter
     # checks on synthetic grids; the four episode tests stay marked slow.
     "test_issue_9724_social_force_resolution_independent.py",
+    # FXB regressions replay captured dev observation bytes; no map episodes.
+    "test_issue_10007_fxb.py",
     # The #9645 constraints-first objective is a pure episode projection/scoring
     # contract; run it in PR shards so changed objective branches receive coverage.
     "test_constraints_first_lexicographic_objective.py",

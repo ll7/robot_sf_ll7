@@ -4,6 +4,11 @@ Issue #10007 FXS: SA-CADRL release speed and 19-agent inputs, documented heading
 saturation, and native sampling drive forecasts; dev-only before/after diagnostics:
 [issue_10007_fxs_sacadrl_sampling.md](issue_10007_fxs_sacadrl_sampling.md).
 
+Issue #10007 FXB baseline controller corrections: real map-runner timestep
+resolution, ORCA forward projection, explicit release speed binding, and
+development-only before/after probes with test-value evidence:
+[FXB diagnostic report](evidence/issue_10007_fxb/README.md).
+
 Issue #9750 per-arm physical-faithfulness audit against the actual 0.0.7 roster:
 release-bundle identity, resolved configuration inheritance, cited method, correctness or
 enhancement classification, and deterministic oracle-test anchors. Unit tests only; no campaign

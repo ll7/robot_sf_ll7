@@ -1,0 +1,603 @@
+FFFFF.FFFFFFFFFFF.FFFFF                                                  [100%]
+=================================== FAILURES ===================================
+___________________ test_social_force_uses_real_flat_sim_dt ____________________
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+
+    def test_social_force_uses_real_flat_sim_dt(observation):
+        """The release runner's flat dt must drive integration, rather than tau=0.5."""
+>       assert _sf()._resolve_dt(observation) == pytest.approx(0.1)
+E       assert 0.5 == 0.1 ± 1.0e-07
+E         
+E         comparison failed
+E         Obtained: 0.5
+E         Expected: 0.1 ± 1.0e-07
+
+tests/benchmark/test_issue_10007_fxb.py:37: AssertionError
+___________ test_social_force_flat_and_nested_timestep_actions_agree ___________
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+
+    def test_social_force_flat_and_nested_timestep_actions_agree(observation):
+        """Identical physical state and dt must yield identical first commands."""
+        nested_dt = {**observation, "sim": {"timestep": observation["sim_timestep"]}}
+>       assert _sf().plan(observation) == pytest.approx(_sf().plan(nested_dt))
+E       assert (0.9813681200...3665068859673) == approx((0.390...73 ± 1.9e-07))
+E         
+E         comparison failed. Mismatched elements: 1 / 2:
+E         Max absolute difference: 0.5911665014160912
+E         Max relative difference: 0.6023901626074516
+E         Index | Obtained           | Expected                    
+E         0     | 0.9813681200523284 | 0.3902016186362373 ± 3.9e-07
+
+tests/benchmark/test_issue_10007_fxb.py:43: AssertionError
+_____________________ test_sacadrl_uses_flat_nondefault_dt _____________________
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eaf3d05aea0>
+
+    def test_sacadrl_uses_flat_nondefault_dt(observation, monkeypatch):
+        """A real flat observation at dt=0.2 decodes a 0.05-rad action to 0.25 rad/s."""
+        observation["sim_timestep"] = np.array([0.2], dtype=np.float32)
+>       assert _sacadrl(monkeypatch).plan(observation)[1] == pytest.approx(0.25)
+E       assert 0.5 == 0.25 ± 2.5e-07
+E         
+E         comparison failed
+E         Obtained: 0.5
+E         Expected: 0.25 ± 2.5e-07
+
+tests/benchmark/test_issue_10007_fxb.py:58: AssertionError
+_______________ test_native_orca_solver_uses_flat_nondefault_dt ________________
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+
+    def test_native_orca_solver_uses_flat_nondefault_dt(observation):
+        """Check the real RVO2 solver clock, independent of the adapter's own diagnostics."""
+        observation["sim_timestep"] = np.array([0.2], dtype=np.float32)
+        adapter = ORCAPlannerAdapter(SocNavPlannerConfig(max_linear_speed=2.0))
+        adapter.plan(observation)
+>       assert adapter._rvo2_sim.getTimeStep() == pytest.approx(0.2)
+E       assert 0.10000000149011612 == 0.2 ± 2.0e-07
+E         
+E         comparison failed
+E         Obtained: 0.10000000149011612
+E         Expected: 0.2 ± 2.0e-07
+
+tests/benchmark/test_issue_10007_fxb.py:66: AssertionError
+________________ test_sampling_rollouts_use_flat_nondefault_dt _________________
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eaf3d05b5c0>
+
+    def test_sampling_rollouts_use_flat_nondefault_dt(observation, monkeypatch):
+        """Every real rollout must receive the observed clock, even when commands tie."""
+        observation["sim_timestep"] = np.array([0.2], dtype=np.float32)
+        dts = []
+        original = socnav_sampling_v2._rollout
+    
+        def observed_rollout(*args, **kwargs):
+            dts.append(args[6] if len(args) > 6 else kwargs["dt"])
+            return original(*args, **kwargs)
+    
+        monkeypatch.setattr(socnav_sampling_v2, "_rollout", observed_rollout)
+        adapter = SamplingPlannerAdapter(SocNavPlannerConfig(socnav_sampling_version="bounded_v2"))
+        adapter.plan(observation)
+        assert dts
+>       np.testing.assert_allclose(dts, 0.2)
+E       AssertionError: 
+E       Not equal to tolerance rtol=1e-07, atol=0
+E       
+E       Mismatched elements: 52 / 52 (100%)
+E       First 5 mismatches are at indices:
+E        [0]: 0.1 (ACTUAL), 0.2 (DESIRED)
+E        [1]: 0.1 (ACTUAL), 0.2 (DESIRED)
+E        [2]: 0.1 (ACTUAL), 0.2 (DESIRED)
+E        [3]: 0.1 (ACTUAL), 0.2 (DESIRED)
+E        [4]: 0.1 (ACTUAL), 0.2 (DESIRED)
+E       Max absolute difference among violations: 0.1
+E       Max relative difference among violations: 0.5
+E        ACTUAL: array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
+E              0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
+E              0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
+E              0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
+E        DESIRED: array(0.2)
+
+tests/benchmark/test_issue_10007_fxb.py:83: AssertionError
+----------------------------- Captured stderr call -----------------------------
+2026-09-30 09:59:19.275 | INFO     | robot_sf.planner.socnav_base:__init__:822 - SamplingPlannerAdapter is using the explicit in-repository heuristic baseline.
+_ test_orca_release_binding_sets_native_solver_speed_cap[paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml] _
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+manifest = 'paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml'
+
+    @pytest.mark.parametrize(
+        "manifest",
+        [
+            "paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
+            "paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml",
+        ],
+    )
+    def test_orca_release_binding_sets_native_solver_speed_cap(observation, manifest):
+        """Resolve real release manifest/config bytes through the actual policy builder."""
+        matrix = yaml.safe_load((Path("configs/benchmarks") / manifest).read_text())
+        arm = next(p for p in matrix["planners"] if p["key"] == "orca")
+        config_path = arm.get("algo_config")
+        config = yaml.safe_load(Path(config_path).read_text()) if config_path else {}
+        policy, _ = _build_policy("orca", config)
+        policy(observation)
+        adapter = policy._planner_adapter
+>       assert adapter._rvo2_sim.getAgentMaxSpeed(adapter._rvo2_robot_id) == pytest.approx(2.0)
+E       assert 3.0 == 2.0 ± 2.0e-06
+E         
+E         comparison failed
+E         Obtained: 3.0
+E         Expected: 2.0 ± 2.0e-06
+
+tests/benchmark/test_issue_10007_fxb.py:102: AssertionError
+______ test_timestep_consumers_reject_missing_or_invalid_dt[None-sacadrl] ______
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eaf3cedab10>
+planner = 'sacadrl', bad_dt = None
+
+    @pytest.mark.parametrize("planner", ["sacadrl", "sampling"])
+    @pytest.mark.parametrize("bad_dt", [None, 0.0, -0.1, np.nan, np.inf])
+    def test_timestep_consumers_reject_missing_or_invalid_dt(observation, monkeypatch, planner, bad_dt):
+        """Malformed observed time must fail at the contract, before generating commands."""
+        observation.pop("sim_timestep")
+        if bad_dt is not None:
+            observation["sim"] = {"timestep": np.array([bad_dt])}
+        adapter = (
+            _sacadrl(monkeypatch)
+            if planner == "sacadrl"
+            else SamplingPlannerAdapter(SocNavPlannerConfig(socnav_sampling_version="bounded_v2"))
+        )
+>       with pytest.raises(ValueError, match="timestep"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests/benchmark/test_issue_10007_fxb.py:117: Failed
+_____ test_timestep_consumers_reject_missing_or_invalid_dt[None-sampling] ______
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eaf3cdb29c0>
+planner = 'sampling', bad_dt = None
+
+    @pytest.mark.parametrize("planner", ["sacadrl", "sampling"])
+    @pytest.mark.parametrize("bad_dt", [None, 0.0, -0.1, np.nan, np.inf])
+    def test_timestep_consumers_reject_missing_or_invalid_dt(observation, monkeypatch, planner, bad_dt):
+        """Malformed observed time must fail at the contract, before generating commands."""
+        observation.pop("sim_timestep")
+        if bad_dt is not None:
+            observation["sim"] = {"timestep": np.array([bad_dt])}
+        adapter = (
+            _sacadrl(monkeypatch)
+            if planner == "sacadrl"
+            else SamplingPlannerAdapter(SocNavPlannerConfig(socnav_sampling_version="bounded_v2"))
+        )
+>       with pytest.raises(ValueError, match="timestep"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests/benchmark/test_issue_10007_fxb.py:117: Failed
+----------------------------- Captured stderr call -----------------------------
+2026-09-30 09:59:19.313 | INFO     | robot_sf.planner.socnav_base:__init__:822 - SamplingPlannerAdapter is using the explicit in-repository heuristic baseline.
+______ test_timestep_consumers_reject_missing_or_invalid_dt[0.0-sacadrl] _______
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eaf3cdb38a0>
+planner = 'sacadrl', bad_dt = 0.0
+
+    @pytest.mark.parametrize("planner", ["sacadrl", "sampling"])
+    @pytest.mark.parametrize("bad_dt", [None, 0.0, -0.1, np.nan, np.inf])
+    def test_timestep_consumers_reject_missing_or_invalid_dt(observation, monkeypatch, planner, bad_dt):
+        """Malformed observed time must fail at the contract, before generating commands."""
+        observation.pop("sim_timestep")
+        if bad_dt is not None:
+            observation["sim"] = {"timestep": np.array([bad_dt])}
+        adapter = (
+            _sacadrl(monkeypatch)
+            if planner == "sacadrl"
+            else SamplingPlannerAdapter(SocNavPlannerConfig(socnav_sampling_version="bounded_v2"))
+        )
+>       with pytest.raises(ValueError, match="timestep"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests/benchmark/test_issue_10007_fxb.py:117: Failed
+----------------------------- Captured stderr call -----------------------------
+2026-09-30 09:59:19.324 | WARNING  | robot_sf.planner.socnav_sacadrl:plan:172 - Invalid timestep (0.0) for SACADRLPlannerAdapter; defaulting to 0.1s.
+______ test_timestep_consumers_reject_missing_or_invalid_dt[0.0-sampling] ______
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eaf3d01f950>
+planner = 'sampling', bad_dt = 0.0
+
+    @pytest.mark.parametrize("planner", ["sacadrl", "sampling"])
+    @pytest.mark.parametrize("bad_dt", [None, 0.0, -0.1, np.nan, np.inf])
+    def test_timestep_consumers_reject_missing_or_invalid_dt(observation, monkeypatch, planner, bad_dt):
+        """Malformed observed time must fail at the contract, before generating commands."""
+        observation.pop("sim_timestep")
+        if bad_dt is not None:
+            observation["sim"] = {"timestep": np.array([bad_dt])}
+        adapter = (
+            _sacadrl(monkeypatch)
+            if planner == "sacadrl"
+            else SamplingPlannerAdapter(SocNavPlannerConfig(socnav_sampling_version="bounded_v2"))
+        )
+>       with pytest.raises(ValueError, match="timestep"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests/benchmark/test_issue_10007_fxb.py:117: Failed
+----------------------------- Captured stderr call -----------------------------
+2026-09-30 09:59:19.331 | INFO     | robot_sf.planner.socnav_base:__init__:822 - SamplingPlannerAdapter is using the explicit in-repository heuristic baseline.
+______ test_timestep_consumers_reject_missing_or_invalid_dt[-0.1-sacadrl] ______
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eaf3d01f150>
+planner = 'sacadrl', bad_dt = -0.1
+
+    @pytest.mark.parametrize("planner", ["sacadrl", "sampling"])
+    @pytest.mark.parametrize("bad_dt", [None, 0.0, -0.1, np.nan, np.inf])
+    def test_timestep_consumers_reject_missing_or_invalid_dt(observation, monkeypatch, planner, bad_dt):
+        """Malformed observed time must fail at the contract, before generating commands."""
+        observation.pop("sim_timestep")
+        if bad_dt is not None:
+            observation["sim"] = {"timestep": np.array([bad_dt])}
+        adapter = (
+            _sacadrl(monkeypatch)
+            if planner == "sacadrl"
+            else SamplingPlannerAdapter(SocNavPlannerConfig(socnav_sampling_version="bounded_v2"))
+        )
+>       with pytest.raises(ValueError, match="timestep"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests/benchmark/test_issue_10007_fxb.py:117: Failed
+----------------------------- Captured stderr call -----------------------------
+2026-09-30 09:59:19.342 | WARNING  | robot_sf.planner.socnav_sacadrl:plan:172 - Invalid timestep (-0.1) for SACADRLPlannerAdapter; defaulting to 0.1s.
+_____ test_timestep_consumers_reject_missing_or_invalid_dt[-0.1-sampling] ______
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eaf3cedd040>
+planner = 'sampling', bad_dt = -0.1
+
+    @pytest.mark.parametrize("planner", ["sacadrl", "sampling"])
+    @pytest.mark.parametrize("bad_dt", [None, 0.0, -0.1, np.nan, np.inf])
+    def test_timestep_consumers_reject_missing_or_invalid_dt(observation, monkeypatch, planner, bad_dt):
+        """Malformed observed time must fail at the contract, before generating commands."""
+        observation.pop("sim_timestep")
+        if bad_dt is not None:
+            observation["sim"] = {"timestep": np.array([bad_dt])}
+        adapter = (
+            _sacadrl(monkeypatch)
+            if planner == "sacadrl"
+            else SamplingPlannerAdapter(SocNavPlannerConfig(socnav_sampling_version="bounded_v2"))
+        )
+>       with pytest.raises(ValueError, match="timestep"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests/benchmark/test_issue_10007_fxb.py:117: Failed
+----------------------------- Captured stderr call -----------------------------
+2026-09-30 09:59:19.347 | INFO     | robot_sf.planner.socnav_base:__init__:822 - SamplingPlannerAdapter is using the explicit in-repository heuristic baseline.
+______ test_timestep_consumers_reject_missing_or_invalid_dt[nan-sacadrl] _______
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eb05beda7b0>
+planner = 'sacadrl', bad_dt = nan
+
+    @pytest.mark.parametrize("planner", ["sacadrl", "sampling"])
+    @pytest.mark.parametrize("bad_dt", [None, 0.0, -0.1, np.nan, np.inf])
+    def test_timestep_consumers_reject_missing_or_invalid_dt(observation, monkeypatch, planner, bad_dt):
+        """Malformed observed time must fail at the contract, before generating commands."""
+        observation.pop("sim_timestep")
+        if bad_dt is not None:
+            observation["sim"] = {"timestep": np.array([bad_dt])}
+        adapter = (
+            _sacadrl(monkeypatch)
+            if planner == "sacadrl"
+            else SamplingPlannerAdapter(SocNavPlannerConfig(socnav_sampling_version="bounded_v2"))
+        )
+>       with pytest.raises(ValueError, match="timestep"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests/benchmark/test_issue_10007_fxb.py:117: Failed
+______ test_timestep_consumers_reject_missing_or_invalid_dt[nan-sampling] ______
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eaf3cecacf0>
+planner = 'sampling', bad_dt = nan
+
+    @pytest.mark.parametrize("planner", ["sacadrl", "sampling"])
+    @pytest.mark.parametrize("bad_dt", [None, 0.0, -0.1, np.nan, np.inf])
+    def test_timestep_consumers_reject_missing_or_invalid_dt(observation, monkeypatch, planner, bad_dt):
+        """Malformed observed time must fail at the contract, before generating commands."""
+        observation.pop("sim_timestep")
+        if bad_dt is not None:
+            observation["sim"] = {"timestep": np.array([bad_dt])}
+        adapter = (
+            _sacadrl(monkeypatch)
+            if planner == "sacadrl"
+            else SamplingPlannerAdapter(SocNavPlannerConfig(socnav_sampling_version="bounded_v2"))
+        )
+>       with pytest.raises(ValueError, match="timestep"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests/benchmark/test_issue_10007_fxb.py:117: Failed
+----------------------------- Captured stderr call -----------------------------
+2026-09-30 09:59:19.364 | INFO     | robot_sf.planner.socnav_base:__init__:822 - SamplingPlannerAdapter is using the explicit in-repository heuristic baseline.
+______ test_timestep_consumers_reject_missing_or_invalid_dt[inf-sacadrl] _______
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eaf3cec9b70>
+planner = 'sacadrl', bad_dt = inf
+
+    @pytest.mark.parametrize("planner", ["sacadrl", "sampling"])
+    @pytest.mark.parametrize("bad_dt", [None, 0.0, -0.1, np.nan, np.inf])
+    def test_timestep_consumers_reject_missing_or_invalid_dt(observation, monkeypatch, planner, bad_dt):
+        """Malformed observed time must fail at the contract, before generating commands."""
+        observation.pop("sim_timestep")
+        if bad_dt is not None:
+            observation["sim"] = {"timestep": np.array([bad_dt])}
+        adapter = (
+            _sacadrl(monkeypatch)
+            if planner == "sacadrl"
+            else SamplingPlannerAdapter(SocNavPlannerConfig(socnav_sampling_version="bounded_v2"))
+        )
+>       with pytest.raises(ValueError, match="timestep"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests/benchmark/test_issue_10007_fxb.py:117: Failed
+______ test_timestep_consumers_reject_missing_or_invalid_dt[inf-sampling] ______
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eaf3ce028f0>
+planner = 'sampling', bad_dt = inf
+
+    @pytest.mark.parametrize("planner", ["sacadrl", "sampling"])
+    @pytest.mark.parametrize("bad_dt", [None, 0.0, -0.1, np.nan, np.inf])
+    def test_timestep_consumers_reject_missing_or_invalid_dt(observation, monkeypatch, planner, bad_dt):
+        """Malformed observed time must fail at the contract, before generating commands."""
+        observation.pop("sim_timestep")
+        if bad_dt is not None:
+            observation["sim"] = {"timestep": np.array([bad_dt])}
+        adapter = (
+            _sacadrl(monkeypatch)
+            if planner == "sacadrl"
+            else SamplingPlannerAdapter(SocNavPlannerConfig(socnav_sampling_version="bounded_v2"))
+        )
+>       with pytest.raises(ValueError, match="timestep"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests/benchmark/test_issue_10007_fxb.py:117: Failed
+----------------------------- Captured stderr call -----------------------------
+2026-09-30 09:59:19.381 | INFO     | robot_sf.planner.socnav_base:__init__:822 - SamplingPlannerAdapter is using the explicit in-repository heuristic baseline.
+_ test_orca_default_adapter_projects_forward_component[0.7853981633974483-1.060660172] _
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+angle = 0.7853981633974483, expected = 1.060660172
+
+    @pytest.mark.parametrize(
+        "angle, expected",
+        [(0.0, 1.5), (np.pi / 4, 1.060660172), (np.pi / 2, 0.0), (3 * np.pi / 4, 0.0), (np.pi, 0.0)],
+    )
+    def test_orca_default_adapter_projects_forward_component(observation, angle, expected):
+        """Release-default heading slowdown must bind even below the physical speed cap."""
+        adapter = ORCAPlannerAdapter(SocNavPlannerConfig(max_linear_speed=2.0))
+        # The actual observation bytes determine robot heading; remove the grid to
+        # isolate differential-drive conversion from occupancy steering.
+        observation = {
+            key: value for key, value in observation.items() if not key.startswith("occupancy")
+        }
+        heading = float(observation["robot_heading"][0])
+        velocity = 1.5 * np.array([np.cos(heading + angle), np.sin(heading + angle)])
+        linear, angular = adapter._velocity_world_to_command(
+            velocity_world=velocity,
+            robot_pos=observation["robot_position"],
+            robot_heading=heading,
+            observation=observation,
+        )
+>       assert linear == pytest.approx(expected, abs=1e-8)
+E       assert 1.5 == 1.060660172 ± 1.0e-08
+E         
+E         comparison failed
+E         Obtained: 1.5
+E         Expected: 1.060660172 ± 1.0e-08
+
+tests/benchmark/test_issue_10007_fxb.py:141: AssertionError
+_ test_orca_default_adapter_projects_forward_component[1.5707963267948966-0.0] _
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+angle = 1.5707963267948966, expected = 0.0
+
+    @pytest.mark.parametrize(
+        "angle, expected",
+        [(0.0, 1.5), (np.pi / 4, 1.060660172), (np.pi / 2, 0.0), (3 * np.pi / 4, 0.0), (np.pi, 0.0)],
+    )
+    def test_orca_default_adapter_projects_forward_component(observation, angle, expected):
+        """Release-default heading slowdown must bind even below the physical speed cap."""
+        adapter = ORCAPlannerAdapter(SocNavPlannerConfig(max_linear_speed=2.0))
+        # The actual observation bytes determine robot heading; remove the grid to
+        # isolate differential-drive conversion from occupancy steering.
+        observation = {
+            key: value for key, value in observation.items() if not key.startswith("occupancy")
+        }
+        heading = float(observation["robot_heading"][0])
+        velocity = 1.5 * np.array([np.cos(heading + angle), np.sin(heading + angle)])
+        linear, angular = adapter._velocity_world_to_command(
+            velocity_world=velocity,
+            robot_pos=observation["robot_position"],
+            robot_heading=heading,
+            observation=observation,
+        )
+>       assert linear == pytest.approx(expected, abs=1e-8)
+E       assert 1.5 == 0.0 ± 1.0e-08
+E         
+E         comparison failed
+E         Obtained: 1.5
+E         Expected: 0.0 ± 1.0e-08
+
+tests/benchmark/test_issue_10007_fxb.py:141: AssertionError
+_ test_orca_default_adapter_projects_forward_component[2.356194490192345-0.0] __
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+angle = 2.356194490192345, expected = 0.0
+
+    @pytest.mark.parametrize(
+        "angle, expected",
+        [(0.0, 1.5), (np.pi / 4, 1.060660172), (np.pi / 2, 0.0), (3 * np.pi / 4, 0.0), (np.pi, 0.0)],
+    )
+    def test_orca_default_adapter_projects_forward_component(observation, angle, expected):
+        """Release-default heading slowdown must bind even below the physical speed cap."""
+        adapter = ORCAPlannerAdapter(SocNavPlannerConfig(max_linear_speed=2.0))
+        # The actual observation bytes determine robot heading; remove the grid to
+        # isolate differential-drive conversion from occupancy steering.
+        observation = {
+            key: value for key, value in observation.items() if not key.startswith("occupancy")
+        }
+        heading = float(observation["robot_heading"][0])
+        velocity = 1.5 * np.array([np.cos(heading + angle), np.sin(heading + angle)])
+        linear, angular = adapter._velocity_world_to_command(
+            velocity_world=velocity,
+            robot_pos=observation["robot_position"],
+            robot_heading=heading,
+            observation=observation,
+        )
+>       assert linear == pytest.approx(expected, abs=1e-8)
+E       assert 1.5 == 0.0 ± 1.0e-08
+E         
+E         comparison failed
+E         Obtained: 1.5
+E         Expected: 0.0 ± 1.0e-08
+
+tests/benchmark/test_issue_10007_fxb.py:141: AssertionError
+_ test_orca_default_adapter_projects_forward_component[3.141592653589793-0.0] __
+
+observation = {'robot_position': array([15.264647 ,  3.6000772], dtype=float32), 'robot_heading': array([1.3913689], dtype=float32), 'robot_speed': array([0., 0.], dtype=float32), 'robot_velocity_xy': array([0., 0.], dtype=float32), ...}
+angle = 3.141592653589793, expected = 0.0
+
+    @pytest.mark.parametrize(
+        "angle, expected",
+        [(0.0, 1.5), (np.pi / 4, 1.060660172), (np.pi / 2, 0.0), (3 * np.pi / 4, 0.0), (np.pi, 0.0)],
+    )
+    def test_orca_default_adapter_projects_forward_component(observation, angle, expected):
+        """Release-default heading slowdown must bind even below the physical speed cap."""
+        adapter = ORCAPlannerAdapter(SocNavPlannerConfig(max_linear_speed=2.0))
+        # The actual observation bytes determine robot heading; remove the grid to
+        # isolate differential-drive conversion from occupancy steering.
+        observation = {
+            key: value for key, value in observation.items() if not key.startswith("occupancy")
+        }
+        heading = float(observation["robot_heading"][0])
+        velocity = 1.5 * np.array([np.cos(heading + angle), np.sin(heading + angle)])
+        linear, angular = adapter._velocity_world_to_command(
+            velocity_world=velocity,
+            robot_pos=observation["robot_position"],
+            robot_heading=heading,
+            observation=observation,
+        )
+>       assert linear == pytest.approx(expected, abs=1e-8)
+E       assert 1.5 == 0.0 ± 1.0e-08
+E         
+E         comparison failed
+E         Obtained: 1.5
+E         Expected: 0.0 ± 1.0e-08
+
+tests/benchmark/test_issue_10007_fxb.py:141: AssertionError
+_________ test_orca_velocity_projection_records_optional_adapter_trace _________
+
+    def test_orca_velocity_projection_records_optional_adapter_trace():
+        """Enabled adapter trace should expose planned/executed projection diagnostics."""
+        adapter = ORCAPlannerAdapter(
+            SocNavPlannerConfig(
+                max_linear_speed=1.0,
+                max_angular_speed=0.75,
+                angular_gain=1.0,
+                orca_adapter_trace_enabled=True,
+            )
+        )
+        obs = _make_obs(goal=(5.0, 5.0), heading=0.0)
+    
+        v, w = adapter._velocity_world_to_command(
+            velocity_world=np.array([0.6, 0.6], dtype=float),
+            robot_pos=np.array([0.0, 0.0], dtype=float),
+            robot_heading=0.0,
+            observation=obs,
+        )
+    
+        diagnostics = adapter.diagnostics()
+        assert diagnostics["planner_type"] == "ORCAPlannerAdapter"
+        assert diagnostics["adapter_trace_schema_version"] == "orca_adapter_trace.v1"
+        trace_records = diagnostics["adapter_trace"]
+        assert len(trace_records) == 1
+    
+        record = trace_records[0]
+        assert record["schema_version"] == "orca_adapter_trace.v1"
+        assert record["planned_velocity_world_mps"] == pytest.approx([0.6, 0.6])
+        assert record["planned_speed_mps"] == pytest.approx(float(np.sqrt(0.72)))
+        assert record["executed_command_vw"] == pytest.approx([v, w])
+        assert record["executed_speed_mps"] == pytest.approx(v)
+        assert record["angle_error_rad"] == pytest.approx(np.pi / 4)
+        # The forward projection of [0.6, 0.6] is 0.6 m/s; the planned
+        # magnitude is sqrt(0.72), so the diagnostic records the lost component.
+>       assert record["executed_speed_mps"] == pytest.approx(0.6)
+E       assert 0.848528137423857 == 0.6 ± 6.0e-07
+E         
+E         comparison failed
+E         Obtained: 0.848528137423857
+E         Expected: 0.6 ± 6.0e-07
+
+tests/test_socnav_planner_adapter.py:480: AssertionError
+============================= slowest 10 durations =============================
+0.01s call     tests/benchmark/test_issue_10007_fxb.py::test_orca_release_binding_sets_native_solver_speed_cap[paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml]
+0.01s call     tests/benchmark/test_issue_10007_fxb.py::test_orca_release_binding_sets_native_solver_speed_cap[paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml]
+0.01s call     tests/benchmark/test_issue_10007_fxb.py::test_sampling_rollouts_use_flat_nondefault_dt
+0.01s call     tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[inf-sampling]
+0.01s call     tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[nan-sampling]
+0.01s call     tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[None-sampling]
+0.01s call     tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[-0.1-sampling]
+0.01s call     tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[0.0-sampling]
+
+(2 durations < 0.005s hidden.  Use -vv to show these durations.)
+
+Slow Test Report (soft<20s hard=60s, top 10)
+1) tests/benchmark/test_issue_10007_fxb.py::test_orca_release_binding_sets_native_solver_speed_cap[paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml]  0.01s
+2) tests/benchmark/test_issue_10007_fxb.py::test_orca_release_binding_sets_native_solver_speed_cap[paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml]  0.01s
+3) tests/benchmark/test_issue_10007_fxb.py::test_sampling_rollouts_use_flat_nondefault_dt  0.01s
+4) tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[inf-sampling]  0.01s
+5) tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[nan-sampling]  0.01s
+6) tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[None-sampling]  0.01s
+7) tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[-0.1-sampling]  0.01s
+8) tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[0.0-sampling]  0.01s
+9) tests/benchmark/test_issue_10007_fxb.py::test_native_orca_solver_uses_flat_nondefault_dt  0.00s
+10) tests/benchmark/test_issue_10007_fxb.py::test_social_force_flat_and_nested_timestep_actions_agree  0.00s
+
+=========================== short test summary info ============================
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_social_force_uses_real_flat_sim_dt
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_social_force_flat_and_nested_timestep_actions_agree
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_sacadrl_uses_flat_nondefault_dt
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_native_orca_solver_uses_flat_nondefault_dt
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_sampling_rollouts_use_flat_nondefault_dt
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_orca_release_binding_sets_native_solver_speed_cap[paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml]
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[None-sacadrl]
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[None-sampling]
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[0.0-sacadrl]
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[0.0-sampling]
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[-0.1-sacadrl]
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[-0.1-sampling]
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[nan-sacadrl]
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[nan-sampling]
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[inf-sacadrl]
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_timestep_consumers_reject_missing_or_invalid_dt[inf-sampling]
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_orca_default_adapter_projects_forward_component[0.7853981633974483-1.060660172]
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_orca_default_adapter_projects_forward_component[1.5707963267948966-0.0]
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_orca_default_adapter_projects_forward_component[2.356194490192345-0.0]
+FAILED tests/benchmark/test_issue_10007_fxb.py::test_orca_default_adapter_projects_forward_component[3.141592653589793-0.0]
+FAILED tests/test_socnav_planner_adapter.py::test_orca_velocity_projection_records_optional_adapter_trace
+21 failed, 2 passed in 4.74s

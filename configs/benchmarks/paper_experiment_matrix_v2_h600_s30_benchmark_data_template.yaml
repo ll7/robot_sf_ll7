@@ -153,17 +153,17 @@ planners:
   - key: guarded_ppo
     algo: guarded_ppo
     planner_group: experimental
-    algo_config: configs/algos/guarded_ppo_camera_ready_cpu.yaml
+    algo_config: configs/algos/guarded_ppo_camera_ready_cpu_goal_v2.yaml
     benchmark_profile: experimental
 
   - key: predictive_mppi
     algo: predictive_mppi
     planner_group: experimental
-    algo_config: configs/algos/predictive_mppi_camera_ready.yaml
+    algo_config: configs/algos/predictive_mppi_camera_ready_goal_v2.yaml
     benchmark_profile: experimental
 
   - key: risk_dwa
     algo: risk_dwa
     planner_group: experimental
-    algo_config: configs/algos/risk_dwa_camera_ready.yaml
+    algo_config: configs/algos/risk_dwa_camera_ready_goal_v2.yaml
     benchmark_profile: experimental

@@ -4054,10 +4054,10 @@
   ],
   "distance_convention": "robot_zone_to_nominal_pedestrian_centres",
   "evidence_status": "diagnostic-only",
-  "geometry_sha": "ce4d0f04162f5b1675b864ae71fbdfc3f8828279",
+  "geometry_sha": "a4955c3d18122a5f424ff84167c295313ab3308d",
   "issue": 10063,
   "ped_radius_m": 0.4,
-  "resolved_current_matrix_sha256": "b35eeb651495230e39a9e468b91f6af52061be04da962cc9038214c6978236c6",
+  "resolved_current_matrix_sha256": "6d31a10eac7ba945fab5e6c02f02444aae54cc87bb2cb38aa64563327f8131be",
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "release_endpoint_overlap_audit.v1",
   "substrate_radius_m": 0.35

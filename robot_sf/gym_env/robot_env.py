@@ -116,7 +116,9 @@ def _hash_payload_without_default_goal_policy(value: Any) -> Any:
             key: _hash_payload_without_default_goal_policy(item)
             for key, item in value.items()
             if not (
-                (
+                key == "pedestrian_seed"
+                or (key == "groups" and item is None)
+                or (
                     key == "goal_completion_policy"
                     and (item is None or item == _LEGACY_GOAL_COMPLETION_POLICY)
                 )

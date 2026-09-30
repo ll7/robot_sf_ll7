@@ -362,8 +362,39 @@ def _compute_pedestrian_response_multipliers(
     return multipliers
 
 
+def _pedestrian_stream_seed(config: SimulationSettings) -> int | None:
+    """Use episode identity, or an explicit feature seed when no episode seed exists.
+
+    This prevents OS entropy in legacy direct callers that supply only a route
+    or other pedestrian feature seed. No process-global RNG state is consulted.
+    Feature overrides still independently pin their own streams.
+
+    Returns:
+        Explicit seed, or None only when every pedestrian seed is absent.
+    """
+    return next(
+        (
+            seed
+            for seed in (
+                config.pedestrian_seed,
+                config.route_spawn_seed,
+                config.archetype_seed,
+                config.response_law_seed,
+                config.desired_speed_seed,
+            )
+            if seed is not None
+        ),
+        None,
+    )
+
+
 def _group_member_probabilities(config: SimulationSettings) -> list[float]:
-    """Map groups to P(size>1), keeping the default decay among sizes 2..N.
+    """Match the expected fraction of pedestrians in multi-member groups.
+
+    Let q(k) be the normalized default decay on sizes 2..N and m = E_q[k].
+    If p is P(size>1), the pedestrian fraction is f = p*m/(1-p+p*m).
+    Solving gives p = f/(m*(1-f)+f); preserve q within that mass.
+    A finite population may end with a truncated last group.
 
     Returns:
         Group-size probabilities, or an empty list to retain the default law.
@@ -378,7 +409,10 @@ def _group_member_probabilities(config: SimulationSettings) -> list[float]:
             raise ValueError("groups > 0 requires max_peds_per_group >= 2")
         return [1.0]
     weights = np.power(0.3, np.arange(config.max_peds_per_group - 1))
-    return [1.0 - fraction, *(fraction * weights / weights.sum()).tolist()]
+    conditional = weights / weights.sum()
+    mean_group_size = float(np.dot(np.arange(2, config.max_peds_per_group + 1), conditional))
+    multi_probability = fraction / (mean_group_size * (1.0 - fraction) + fraction)
+    return [1.0 - multi_probability, *(multi_probability * conditional).tolist()]
 
 
 def _build_pysf_simulation(  # noqa: PLR0913
@@ -458,7 +492,7 @@ def _build_pysf_simulation(  # noqa: PLR0913
         pedestrian_response_multipliers)`` for the caller to assign to its instance.
     """
     # Independent streams never inspect or mutate NumPy's process-global RNG.
-    streams = np.random.SeedSequence(config.pedestrian_seed).spawn(4)
+    streams = np.random.SeedSequence(_pedestrian_stream_seed(config)).spawn(4)
     config = replace(
         config,
         route_spawn_seed=config.route_spawn_seed
@@ -766,6 +800,10 @@ class Simulator:
             raise RuntimeError("repopulate_crowd() requires construction-time build args")
         if seed is not None:
             self.config.pedestrian_seed = int(seed)
+            if isinstance(self, PedSimulator):
+                self._ego_rng = np.random.default_rng(
+                    np.random.SeedSequence(int(seed), spawn_key=(4,))
+                )
         self.sampler_capture = self._new_sampler_capture()
         build_kwargs = dict(self._pysf_build_kwargs)
         build_kwargs["robot_pose_provider"] = lambda: self.robot_poses
@@ -2290,9 +2328,10 @@ class PedSimulator(Simulator):
         the ego pedestrian at a random valid location 10-15 units away
         from the first robot.
         """
-        self._ego_rng = np.random.default_rng(
-            np.random.SeedSequence(self.config.pedestrian_seed, spawn_key=(4,))
-        )
+        if not hasattr(self, "_ego_rng"):
+            self._ego_rng = np.random.default_rng(
+                np.random.SeedSequence(_pedestrian_stream_seed(self.config), spawn_key=(4,))
+            )
         self._reset_social_force_state()
         self._oracle_episode_index += 1
         self._oracle_episode_id = f"simulator-episode-{self._oracle_episode_index}"

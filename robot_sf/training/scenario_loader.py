@@ -2919,6 +2919,8 @@ def _apply_residual_adversary_override(
 
 _SIMULATION_OVERRIDE_ATTRS = (
     "peds_speed_mult",
+    "peds_reset_follow_route_at_start",
+    "time_per_step_in_secs",
     "action_latency_steps",
     "action_latency_ms",
     "pedestrian_integration_scheme",
@@ -2976,6 +2978,13 @@ def _apply_simulation_overrides(  # noqa: C901
         if not 0.0 <= groups <= 1.0:
             raise ValueError("simulation_config.groups must be in [0, 1]")
         config.sim_config.groups = groups
+    if "time_per_step_in_secs" in overrides:
+        dt = _coerce_finite_float(
+            overrides["time_per_step_in_secs"], field_name="simulation_config.time_per_step_in_secs"
+        )
+        if dt <= 0:
+            raise ValueError("simulation_config.time_per_step_in_secs must be positive")
+        config.sim_config.time_per_step_in_secs = dt
     if "max_episode_steps" in overrides:
         steps = max(1, int(overrides["max_episode_steps"]))
         config.sim_config.sim_time_in_secs = steps * config.sim_config.time_per_step_in_secs

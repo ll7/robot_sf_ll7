@@ -30,8 +30,8 @@ def sample_zone(
         num_samples: Number of points to sample.
         obstacle_polygons: Optional list of polygon vertex lists to reject points inside.
         max_attempts_per_point: Attempts before giving up per requested sample.
-        rng: Pedestrian callers pass their private population generator.
-            The legacy global fallback is retained for robot navigation sampling.
+        rng: Private generator for pedestrian callers. Omitting it uses NumPy's
+            global RNG for compatibility; robot navigation uses its own sampler.
         exclusions: Optional prepared geometries (for example walls padded by an agent
             radius, or robot footprints); candidates intersecting any are rejected. The
             random draws are identical to the unconstrained call, so a candidate that was

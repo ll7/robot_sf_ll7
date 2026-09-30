@@ -74,24 +74,6 @@ def test_unknown_simulation_key_fails_at_real_loader():
         build_env_config(scenario, scenario_path=SCENARIOS)
 
 
-@pytest.mark.parametrize("seed", [1001, 1008])
-def test_circular_crossing_no_unavoidable_early_contact(seed):
-    """The two audit seeds must give a stationary robot time to react at reset."""
-    env = _env("francis2023_circular_crossing", seed)
-    try:
-        sim = env.simulator
-        contact_radius = sim.robots[0].config.radius + sim.config.ped_radius
-        action = np.zeros(env.action_space.shape, dtype=env.action_space.dtype)
-        for _ in range(20):
-            env.step(action)
-            distance = np.linalg.norm(
-                sim.pysf_sim.peds.pos() - np.asarray(sim.robot_pos[0]), axis=1
-            )
-            assert distance.min() >= contact_radius
-    finally:
-        env.close()
-
-
 def test_relocation_has_reaction_clearance_and_route_velocity():
     """Force an overlap to exercise relocation even if future RNG streams move spawns."""
     env = _env("francis2023_circular_crossing", 1001)

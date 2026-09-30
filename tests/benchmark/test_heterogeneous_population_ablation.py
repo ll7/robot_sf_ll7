@@ -1149,8 +1149,18 @@ def test_small_map_low_density_forces_declared_population_and_realizes_mix(
         # Declared-vs-actual recorded for triage (issue #5666 #3).
         sim_cfg = record["scenario_params"]["simulation_config"]
         assert sim_cfg["population_size"] == 12
-        assert sim_cfg["declared_population_size"] == 12
-        assert sim_cfg["instantiated_population_size"] == 12
+        assert (
+            record["scenario_params"]["metadata"]["population_realization"][
+                "declared_population_size"
+            ]
+            == 12
+        )
+        assert (
+            record["scenario_params"]["metadata"]["population_realization"][
+                "instantiated_population_size"
+            ]
+            == 12
+        )
 
         labels = record["scenario_params"][PEDESTRIAN_CONTROL_TRACE_LABELS_KEY]
         assert len(labels) == 12
@@ -1188,8 +1198,18 @@ def test_harness_emits_control_trace_that_clears_readiness_gate(tmp_path: Path) 
         assert trace["near_field_clearance_threshold_m"] == pytest.approx(1.0)
         assert trace["pedestrians"], "trace must carry per-pedestrian rows"
         sim_cfg = record["scenario_params"]["simulation_config"]
-        assert sim_cfg["declared_population_size"] == 6
-        assert sim_cfg["instantiated_population_size"] == 6
+        assert (
+            record["scenario_params"]["metadata"]["population_realization"][
+                "declared_population_size"
+            ]
+            == 6
+        )
+        assert (
+            record["scenario_params"]["metadata"]["population_realization"][
+                "instantiated_population_size"
+            ]
+            == 6
+        )
         assert sim_cfg["population_size"] == 6
         for pedestrian in trace["pedestrians"]:
             assert pedestrian["steps"], "each pedestrian must carry per-step rows"

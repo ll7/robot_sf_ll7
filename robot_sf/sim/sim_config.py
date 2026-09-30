@@ -315,7 +315,7 @@ class SimulationSettings:
     """Episode seed for private pedestrian random streams; set by env reset/factory."""
 
     groups: float | None = None
-    """Probability of a multi-person group; None retains the default size law."""
+    """Expected fraction of pedestrians in multi-person groups; None retains the default law."""
 
     max_peds_per_group: int = 3
     """Maximum number of pedestrians per group"""

@@ -237,7 +237,8 @@ class EnvironmentFactory:
         """
         if config is None:
             config = ImageRobotConfig() if use_image_obs else RobotSimulationConfig()
-        config.sim_config.pedestrian_seed = seed
+        if seed is not None:
+            config.sim_config.pedestrian_seed = seed
         config.use_image_obs = use_image_obs
         legacy_override = None if peds_have_obstacle_forces is True else peds_have_obstacle_forces
         sync_pedestrian_obstacle_force_alias(config, legacy_override)
@@ -314,7 +315,8 @@ class EnvironmentFactory:
         """
         if config is None:
             config = PedestrianSimulationConfig()
-        config.sim_config.pedestrian_seed = seed
+        if seed is not None:
+            config.sim_config.pedestrian_seed = seed
         PedestrianEnv = _load_pedestrian_env()
 
         # Allow None to be passed through from ergonomic factories and
@@ -371,7 +373,8 @@ class EnvironmentFactory:
         """
         if config is None:
             config = MultiRobotConfig()
-        config.sim_config.pedestrian_seed = seed
+        if seed is not None:
+            config.sim_config.pedestrian_seed = seed
         if config.num_robots != num_robots:
             config.num_robots = num_robots
         _apply_global_seed(seed)

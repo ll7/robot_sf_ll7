@@ -125,6 +125,75 @@ def test_doi_free_candidate_loads_but_publication_loader_rejects(candidate_repo)
         load_release_manifest(path, repository_root=root)
 
 
+def _replace_campaign_algorithm(candidate_repo, arm: str) -> dict:
+    """Change only one algo value in real template bytes, then re-pin the checkout."""
+    root, path, payload = candidate_repo
+    config_path = root / payload["canonical_campaign_config"]
+    original = CONFIG.read_bytes()
+    assert config_path.read_bytes() == original
+    config = yaml.safe_load(original)
+    row = next(row for row in config["planners"] if row["key"] == arm)
+    replacement = "risk_dwa" if row["algo"] == "goal" else "goal"
+    old = f"  - key: {arm}\n    algo: {row['algo']}\n".encode()
+    new = f"  - key: {arm}\n    algo: {replacement}\n".encode()
+    assert original.count(old) == 1
+    changed = original.replace(old, new, 1)
+    config_path.write_bytes(changed)
+    changed_config = yaml.safe_load(changed)
+    row["algo"] = replacement
+    assert changed_config == config  # No matrix, config path, or other row changes.
+    payload["sha256_files"][payload["canonical_campaign_config"]] = hashlib.sha256(
+        changed
+    ).hexdigest()
+    _git(root, "add", payload["canonical_campaign_config"])
+    _git(
+        root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "substituted campaign algorithm",
+    )
+    payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return changed_config
+
+
+@pytest.mark.parametrize(
+    "arm", [row["key"] for row in yaml.safe_load(CONFIG.read_bytes())["planners"]]
+)
+def test_candidate_rejects_algo_only_substitution(candidate_repo, arm: str) -> None:
+    """Every real-template arm must retain its actual approved algorithm."""
+    root, path, _payload = candidate_repo
+    _replace_campaign_algorithm(candidate_repo, arm)
+    with pytest.raises(ValueError, match=f"{arm} must bind its approved algorithm"):
+        load_prepublication_candidate(path, repository_root=root)
+
+
+@pytest.mark.parametrize("arm", list(_APPROVED_008_HYBRID_CONFIGS))
+def test_hybrid_input_admission_uses_actual_campaign_algorithm(candidate_repo, arm: str) -> None:
+    """Runtime admission must use the row algo even without the roster identity gate."""
+    root, _path, payload = candidate_repo
+    config = _replace_campaign_algorithm(candidate_repo, arm)
+    matrix_path = root / payload["scenario"]["matrix_path"]
+    scenarios = load_scenarios_for_validation(matrix_path, base_dir=root)
+    assert scenarios.load_error is None and not scenarios.load_issues and not scenarios.entry_issues
+    with pytest.raises(
+        ValueError, match=f"v4 hybrid slot {arm} resolves to a non-v4 planner variant"
+    ):
+        _expected_input_paths(
+            root,
+            root / payload["canonical_campaign_config"],
+            config,
+            matrix_path,
+            [dict(row) for row in scenarios.scenarios],
+            {**payload["seed_policy"], **payload["inputs"]},
+            config["planners"],
+        )
+
+
 def test_candidate_rejects_changed_map_bytes(candidate_repo) -> None:
     root, path, payload = candidate_repo
     map_path = next(name for name in payload["sha256_files"] if name.endswith(".svg"))

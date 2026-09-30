@@ -181,12 +181,14 @@ def relocate_overlapping_pedestrians(
 ) -> PedestrianRelocationReport:
     """Find clear positions for pedestrians that overlap a robot footprint.
 
-    A pedestrian overlaps when its centre is closer than
-    ``robot_radius + ped_radius + margin`` to a robot centre. Each such pedestrian is
+    The robot exclusion radius adds the larger of the scalar robot margin and
+    ``margin + reaction_clearance_m[row]`` to the two agent radii. Each selected
+    pedestrian inside that radius is
     moved along the ray from the robot through its current position, to the
     nearest point on the exclusion circle; if that point is blocked (walls, other
     pedestrians with margin, other robots, or a wall between the old and new
-    position), rotated rays and slightly larger radii are tried in a fixed order. No random numbers are drawn, so the global RNG stream and
+    position), rotated rays and slightly larger radii are tried in a fixed order.
+    No random numbers are drawn, so the global RNG stream and
     every non-overlapping spawn stay unchanged.
 
     Args:

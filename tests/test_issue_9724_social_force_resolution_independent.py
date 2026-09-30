@@ -438,13 +438,13 @@ def test_bottleneck_low_without_pedestrians_reaches_goal() -> None:
 
 
 @pytest.mark.slow
-def test_group_crossing_seed_22_makes_monotone_progress_and_reaches_goal() -> None:
-    """Group crossing seed 22 progresses every second of the first 10 s and completes."""
+def test_group_crossing_dev_seed_makes_monotone_progress_and_reaches_goal() -> None:
+    """Group crossing dev seed 1001 progresses each second of the first 10 s and completes."""
     positions: list[np.ndarray] = []
     record = _run(
         Path("configs/scenarios/archetypes/classic_group_crossing.yaml"),
         "classic_group_crossing_medium",
-        22,
+        1001,
         positions,
     )
     assert record["outcome"]["route_complete"] is True

@@ -432,6 +432,9 @@ _FAST_FILES = {
     # Social-force v2 planner contracts (issue #9724) are deterministic adapter
     # checks on synthetic grids; the four episode tests stay marked slow.
     "test_issue_9724_social_force_resolution_independent.py",
+    # The #9645 constraints-first objective is a pure episode projection/scoring
+    # contract; run it in PR shards so changed objective branches receive coverage.
+    "test_constraints_first_lexicographic_objective.py",
     # VV-3 bounded metamorphic tests, including the release-arm episodes, run in
     # the default lane; none is marked slow, so PR shards execute all of them.
     "test_grid_resolution_invariance.py",

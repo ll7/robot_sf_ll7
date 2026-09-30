@@ -555,7 +555,9 @@ def _manifest_with_seed_policy(seed_policy: dict[str, object]):
 
 def test_release_input_resolver_rejects_fixed_list_that_differs_from_resolved_seeds() -> None:
     """A fixed list of [111] cannot stand in for the resolved 111-140 evaluation seeds."""
-    manifest = _manifest_with_seed_policy({"mode": "fixed-list", "seeds": [111]})
+    manifest = _manifest_with_seed_policy(
+        {"mode": "fixed-list", "seeds": [111]}  # seed-holdout: synthetic-fixture
+    )
 
     with pytest.raises(ValueError, match="do not match seed_policy.seeds"):
         spawn_preflight._release_manifest_inputs(manifest)
@@ -572,7 +574,9 @@ def test_release_input_resolver_rejects_fixed_list_without_a_seed_list() -> None
 def test_release_input_resolver_rejects_unknown_seed_mode(mode: object) -> None:
     """An unknown mode must not skip the named seed-set check."""
     manifest = _manifest_with_seed_policy(
+        # seed-holdout: synthetic-fixture begin
         {"mode": mode, "seed_set": "paper_eval_s30", "seeds": list(range(111, 141))}
+        # seed-holdout: synthetic-fixture end
     )
 
     with pytest.raises(ValueError, match="unsupported seed_policy mode"):

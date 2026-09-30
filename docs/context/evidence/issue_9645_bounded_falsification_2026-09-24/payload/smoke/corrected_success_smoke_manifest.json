@@ -1,0 +1,275 @@
+{
+  "candidates": [
+    {
+      "analysis_eligibility": {
+        "certificate_ok": true,
+        "eligible": true,
+        "execution_mode": "native",
+        "objective_scored": true,
+        "reason_codes": [],
+        "schema_version": "search_analysis_eligibility.v1",
+        "trace_present": true
+      },
+      "bundle_path": "output/issue9645-smoke-v2/results/constraints_first_lexicographic_v1/budget_0001/seed_910/random/candidate_0000",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 8.279311106902934,
+          "y": 3.4221569671674446
+        },
+        "pedestrian_delay_s": 0.0,
+        "pedestrian_speed_mps": 0.8727825235299894,
+        "scenario_seed": 123,
+        "spawn_time_s": 0.0,
+        "start": {
+          "theta": 0.0,
+          "x": 2.811924221419298,
+          "y": 3.1779863176341276
+        }
+      },
+      "certification_status": {
+        "details": {
+          "certificates": [
+            {
+              "benchmark_eligibility": "eligible",
+              "checks": {
+                "all_routes_benchmark_eligible": true,
+                "route_count": 1,
+                "settings": {
+                  "hard_clearance_margin_m": 0.35,
+                  "hard_path_length_ratio": 1.5,
+                  "hard_turn_count": 3,
+                  "knife_edge_clearance_margin_m": 0.15,
+                  "knife_edge_path_length_ratio": 2.5,
+                  "planner_cells_per_meter": 2.0
+                }
+              },
+              "classification": "valid",
+              "evidence": {
+                "archetype": "adversarial_crossing_ttc",
+                "difficulty_analysis": {
+                  "role": "optional_diagnostic_evidence_only",
+                  "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+                },
+                "scenario_fingerprint": "ec759cc5fd65fef8"
+              },
+              "reasons": [
+                "inflated_path_found_with_nominal_clearance"
+              ],
+              "route_certificates": [
+                {
+                  "benchmark_eligibility": "eligible",
+                  "checks": {
+                    "authored_route_length_m": 5.472836436588616,
+                    "direct_start_goal_distance_m": 5.472836436588616,
+                    "dynamic": {
+                      "single_pedestrian_count": 0,
+                      "static_blocking_pedestrian_ids": []
+                    },
+                    "goal": [
+                      8.279311106902934,
+                      3.4221569671674446
+                    ],
+                    "inflated_collision_free_path": true,
+                    "infrastructure": {
+                      "illegal_amv_zone_ids": [],
+                      "intersected_zone_ids": [],
+                      "zone_count": 0
+                    },
+                    "kinodynamic": {
+                      "command_limits_valid": true,
+                      "controller_semantics": "can_rotate_in_place",
+                      "minimum_turning_radius_m": 0.0,
+                      "robot_model": "DifferentialDriveSettings"
+                    },
+                    "map_name": "classic_cross_trap",
+                    "minimum_static_clearance_m": 0.8119242214192979,
+                    "path_length_ratio": 1.0049633428161278,
+                    "ped_radius_m": 0.4,
+                    "planned_turn_count": 0,
+                    "planned_waypoint_count": 12,
+                    "planner": {
+                      "algorithm": "a_star",
+                      "cells_per_meter": 2.0,
+                      "inflation_fallback": false,
+                      "inflation_radius_m": 1.0,
+                      "raw_info": {
+                        "cost": 11.0,
+                        "expand": {
+                          "(10, 73)": "Node((10, 73), (9, 73), 5.0, 6.0)",
+                          "(11, 73)": "Node((11, 73), (10, 73), 6.0, 5.0)",
+                          "(12, 73)": "Node((12, 73), (11, 73), 7.0, 4.0)",
+                          "(13, 73)": "Node((13, 73), (12, 73), 8.0, 3.0)",
+                          "(14, 73)": "Node((14, 73), (13, 73), 9.0, 2.0)",
+                          "(15, 73)": "Node((15, 73), (14, 73), 10.0, 1.0)",
+                          "(16, 73)": "Node((16, 73), (15, 73), 11.0, 0.0)",
+                          "(5, 73)": "Node((5, 73), None, 0, 11.0)",
+                          "(6, 73)": "Node((6, 73), (5, 73), 1.0, 10.0)",
+                          "(7, 73)": "Node((7, 73), (6, 73), 2.0, 9.0)",
+                          "(8, 73)": "Node((8, 73), (7, 73), 3.0, 8.0)",
+                          "(9, 73)": "Node((9, 73), (8, 73), 4.0, 7.0)"
+                        },
+                        "goal": [
+                          16,
+                          73
+                        ],
+                        "inflation_cells": 2,
+                        "inflation_meters": 1.0,
+                        "length": 5.5,
+                        "start": [
+                          5,
+                          73
+                        ],
+                        "success": true
+                      }
+                    },
+                    "robot_radius_m": 1.0,
+                    "shortest_path_length_m": 5.5,
+                    "simulator_obstacle_collision": {
+                      "blocker": null,
+                      "checked_sample_count": 111,
+                      "collides_obstacle": false,
+                      "first_collision_sample_index": null,
+                      "obstacle_source": "MapDefinition.obstacles_pysf_runtime_normalized",
+                      "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+                      "sample_spacing_m": 0.05,
+                      "validated": true
+                    },
+                    "start": [
+                      2.811924221419298,
+                      3.1779863176341276
+                    ],
+                    "swept_envelope": {
+                      "blocker": null,
+                      "clearance_m": 0.75,
+                      "clipped_vertex_count": 0,
+                      "clips_obstacle": false,
+                      "planned_waypoint_count": 12,
+                      "validated": true,
+                      "vertex_clearance_m": 0.75
+                    },
+                    "waypoint_count": 2
+                  },
+                  "classification": "valid",
+                  "evidence": {
+                    "difficulty_analysis": {
+                      "role": "optional_diagnostic_evidence_only",
+                      "source": "docs/context/issue_692_scenario_difficulty_analysis.md"
+                    }
+                  },
+                  "goal_id": 100000,
+                  "reasons": [
+                    "inflated_path_found_with_nominal_clearance"
+                  ],
+                  "route_id": "override_adversarial",
+                  "spawn_id": 100000
+                }
+              ],
+              "scenario_id": "crossing_ttc_template_adversarial_0000",
+              "schema_version": "scenario_cert.v1",
+              "source": "output/issue9645-smoke-v2/results/constraints_first_lexicographic_v1/budget_0001/seed_910/random/candidate_0000/scenario.yaml"
+            }
+          ]
+        },
+        "reason": "inflated_path_found_with_nominal_clearance",
+        "schema_version": "scenario_cert.v1",
+        "status": "passed"
+      },
+      "effective_scenario_hash": "c911b8712cf11e71cbfa9793bbc763f78700443645be91505177ee4ea9367b44",
+      "episode_record_path": "output/issue9645-smoke-v2/results/constraints_first_lexicographic_v1/budget_0001/seed_910/random/candidate_0000/episode_records.jsonl",
+      "error": null,
+      "failure_attribution": {
+        "details": {
+          "availability_status": "available",
+          "execution_mode": "native",
+          "outcome": {
+            "collision_event": false,
+            "route_complete": true,
+            "timeout_event": false
+          },
+          "readiness_status": "native",
+          "status": "success",
+          "termination_reason": "success"
+        },
+        "primary_failure": "success",
+        "reasons": [
+          "episode completed without an attributed failure"
+        ],
+        "status": "attributed"
+      },
+      "objective_value": 0.0,
+      "scenario_yaml_path": "output/issue9645-smoke-v2/results/constraints_first_lexicographic_v1/budget_0001/seed_910/random/candidate_0000/scenario.yaml",
+      "trajectory_csv_path": "output/issue9645-smoke-v2/results/constraints_first_lexicographic_v1/budget_0001/seed_910/random/candidate_0000/trajectory.csv"
+    }
+  ],
+  "config": {
+    "algo_config_path": null,
+    "benchmark_profile": "baseline-safe",
+    "budget": 1,
+    "dt": null,
+    "horizon": null,
+    "objective": "constraints_first_lexicographic_v1",
+    "output_dir": "output/issue9645-smoke-v2/results/constraints_first_lexicographic_v1/budget_0001/seed_910/random",
+    "policy": "goal",
+    "record_forces": true,
+    "require_certification": true,
+    "scenario_template": "configs/scenarios/templates/crossing_ttc.yaml",
+    "search_space": {
+      "constraints": {
+        "min_start_goal_distance_m": 2.0
+      },
+      "pedestrian": {},
+      "variables": {
+        "goal_x": {
+          "max": 9.0,
+          "min": 7.0
+        },
+        "goal_y": {
+          "max": 4.0,
+          "min": 2.5
+        },
+        "pedestrian_delay_s": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "pedestrian_speed_mps": {
+          "max": 1.4,
+          "min": 0.8
+        },
+        "scenario_seed": {
+          "max": 123.0,
+          "min": 123.0
+        },
+        "spawn_time_s": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "start_x": {
+          "max": 3.0,
+          "min": 2.5
+        },
+        "start_y": {
+          "max": 4.0,
+          "min": 2.5
+        }
+      }
+    },
+    "search_space_path": "configs/adversarial/issue_9645_pilot_space.v1.yaml",
+    "seed": 910,
+    "snqi_baseline_path": null,
+    "snqi_weights_path": null,
+    "warm_start": [],
+    "workers": 1
+  },
+  "created_at": "2026-09-24T06:58:23.310155+00:00",
+  "schema_version": "adversarial-search-manifest.v1",
+  "summary": {
+    "best_bundle_path": "output/issue9645-smoke-v2/results/constraints_first_lexicographic_v1/budget_0001/seed_910/random/candidate_0000",
+    "best_objective_value": 0.0,
+    "num_analysis_eligible": 1,
+    "num_candidates": 1,
+    "num_failed_evaluations": 0,
+    "num_invalid_candidates": 0,
+    "num_valid_candidates": 1
+  }
+}

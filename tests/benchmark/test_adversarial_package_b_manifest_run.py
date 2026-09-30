@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import shutil
 from dataclasses import replace
@@ -20,8 +21,10 @@ from robot_sf.benchmark.adversarial.adversarial_package_b_preflight import (
 )
 from robot_sf.benchmark.adversarial.adversarial_package_b_report import validate_package_b_report
 from scripts.tools.compare_adversarial_samplers import (
+    SamplerComparisonRow,
     build_comparison_payload,
     load_package_b_manifest,
+    render_durable_comparison_table,
     run_sampler_comparison,
 )
 from scripts.tools.run_adversarial_package_b import main as run_package_b_main
@@ -276,13 +279,232 @@ def test_issue_5326_canonical_example_command_emits_durable_table(tmp_path: Path
     assert len(report["rows"]) == 72
 
     table = table_md.read_text(encoding="utf-8")
-    assert "## Issue #5326 durable objective-comparison table" in table
+    assert "## Adversarial sampler comparison (diagnostic tier)" in table
     assert "Stop-rule decision" in table
     assert "not paper-facing benchmark evidence" in table
+    assert "Execution mode: `CPU-synthetic`" in table
+    assert "matched CPU-synthetic budgets" in table
     assert "| temporal_robustness |" in table
     assert "| worst_case_snqi |" in table
     # Baseline objective shows no signed sidecar; signed objective is annotated.
     assert "| - |" in table
+
+
+def test_durable_table_labels_empirical_mode_without_claiming_synthetic() -> None:
+    """Persisted empirical comparisons must not inherit a synthetic-only label."""
+    row = SamplerComparisonRow(
+        objective="constraints_first_lexicographic_v1",
+        sampler="random",
+        budget=16,
+        seed=1101,
+        manifest_path="",
+        best_bundle_path=None,
+        best_objective_value=0.0,
+        best_valid_objective=0.0,
+        num_candidates=16,
+        num_valid_candidates=16,
+        num_invalid_candidates=0,
+        num_failed_evaluations=0,
+        invalid_candidate_rate=0.0,
+        first_failure_iteration=None,
+        certified_valid_failure_count=0,
+        replayable_valid_failure_count=0,
+        replay_success_rate=None,
+        fallback_candidate_count=0,
+        degraded_candidate_count=0,
+        held_out_family_yield=None,
+        held_out_family_status="not_evaluated_narrow_archive",
+        caveats=(),
+    )
+    table = render_durable_comparison_table(
+        report_path=None,
+        rows=[row],
+        objectives=[row.objective],
+        budget_grid=[16],
+        seeds=[1101],
+        execution_mode="empirical",
+    )
+
+    assert "Execution mode: `CPU-empirical`" in table
+    assert "matched CPU-empirical budgets" in table
+    assert "CPU-synthetic" not in table
+    assert "Issue #5326" not in table
+
+
+def test_render_stored_comparison_reuses_json_without_running_search(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The render-only mode must reproduce a report without new evaluations."""
+    from scripts.tools import compare_adversarial_samplers as compare_module
+
+    row = SamplerComparisonRow(
+        objective="constraints_first_lexicographic_v1",
+        sampler="random",
+        budget=16,
+        seed=1101,
+        manifest_path="",
+        best_bundle_path=None,
+        best_objective_value=0.0,
+        best_valid_objective=0.0,
+        num_candidates=16,
+        num_valid_candidates=16,
+        num_invalid_candidates=0,
+        num_failed_evaluations=0,
+        invalid_candidate_rate=0.0,
+        first_failure_iteration=None,
+        certified_valid_failure_count=0,
+        replayable_valid_failure_count=0,
+        replay_success_rate=None,
+        fallback_candidate_count=0,
+        degraded_candidate_count=0,
+        held_out_family_yield=None,
+        held_out_family_status="not_evaluated_narrow_archive",
+        caveats=("finite-budget diagnostic only",),
+    )
+    source_json = tmp_path / "comparison.json"
+    source_json.write_text(
+        json.dumps(
+            build_comparison_payload(
+                rows=[row],
+                objectives=[row.objective],
+                budgets=[row.budget],
+                seeds=[row.seed],
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    def unexpected_search(**_kwargs: object) -> list[SamplerComparisonRow]:
+        pytest.fail("render-only mode must not execute search")
+
+    monkeypatch.setattr(compare_module, "run_sampler_comparison", unexpected_search)
+    output_md = tmp_path / "comparison.md"
+    provenance_json = tmp_path / "render_provenance.json"
+    assert (
+        compare_module.main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--render-existing-json",
+                str(source_json),
+                "--render-execution-mode",
+                "empirical",
+                "--out-md",
+                str(output_md),
+                "--render-provenance-json",
+                str(provenance_json),
+            ]
+        )
+        == 0
+    )
+
+    report = output_md.read_text(encoding="utf-8")
+    provenance = json.loads(provenance_json.read_text(encoding="utf-8"))
+    assert "Execution mode: `CPU-empirical`" in report
+    assert "CPU-synthetic" not in report
+    assert provenance["search_or_simulation_rerun"] is False
+    assert provenance["row_count"] == 1
+    assert provenance["comparison_sha256"] == hashlib.sha256(source_json.read_bytes()).hexdigest()
+
+
+@pytest.mark.parametrize("collision", ["input_markdown", "input_provenance", "markdown_provenance"])
+def test_render_stored_comparison_rejects_aliased_paths_before_writing(
+    tmp_path: Path, collision: str
+) -> None:
+    """Input and generated artifacts must have distinct file identities."""
+    from scripts.tools import compare_adversarial_samplers as compare_module
+
+    source = tmp_path / "comparison.json"
+    source.write_text(
+        json.dumps(
+            build_comparison_payload(
+                rows=[], objectives=["worst_case_snqi"], budgets=[16], seeds=[1101]
+            )
+        ),
+        encoding="utf-8",
+    )
+    original = source.read_bytes()
+    output = tmp_path / "comparison.md"
+    provenance = tmp_path / "render_provenance.json"
+    if collision == "input_markdown":
+        output = source
+    elif collision == "input_provenance":
+        provenance = source
+    else:
+        provenance = output
+
+    with pytest.raises(ValueError, match="paths must be distinct"):
+        compare_module.render_stored_comparison(
+            comparison_path=source,
+            output_path=output,
+            provenance_path=provenance,
+            repo_root=tmp_path,
+            execution_mode="synthetic",
+        )
+
+    assert source.read_bytes() == original
+    if output != source:
+        assert not output.exists()
+    if provenance not in {source, output}:
+        assert not provenance.exists()
+
+
+def test_render_stored_comparison_rejects_hardlink_alias_before_writing(tmp_path: Path) -> None:
+    """Distinct path spellings that share an inode cannot overwrite the input."""
+    from scripts.tools import compare_adversarial_samplers as compare_module
+
+    source = tmp_path / "comparison.json"
+    source.write_text(
+        json.dumps(
+            build_comparison_payload(
+                rows=[], objectives=["worst_case_snqi"], budgets=[16], seeds=[1101]
+            )
+        ),
+        encoding="utf-8",
+    )
+    original = source.read_bytes()
+    output_alias = tmp_path / "comparison-alias.md"
+    output_alias.hardlink_to(source)
+
+    with pytest.raises(ValueError, match="paths must be distinct"):
+        compare_module.render_stored_comparison(
+            comparison_path=source,
+            output_path=output_alias,
+            provenance_path=None,
+            repo_root=tmp_path,
+            execution_mode="synthetic",
+        )
+
+    assert source.read_bytes() == original
+
+
+def test_render_stored_comparison_rejects_symlink_alias_before_writing(tmp_path: Path) -> None:
+    """A symlinked destination cannot turn the stored input into Markdown."""
+    from scripts.tools import compare_adversarial_samplers as compare_module
+
+    source = tmp_path / "comparison.json"
+    source.write_text(
+        json.dumps(
+            build_comparison_payload(
+                rows=[], objectives=["worst_case_snqi"], budgets=[16], seeds=[1101]
+            )
+        ),
+        encoding="utf-8",
+    )
+    original = source.read_bytes()
+    output_alias = tmp_path / "comparison-alias.md"
+    output_alias.symlink_to(source)
+
+    with pytest.raises(ValueError, match="paths must be distinct"):
+        compare_module.render_stored_comparison(
+            comparison_path=source,
+            output_path=output_alias,
+            provenance_path=None,
+            repo_root=tmp_path,
+            execution_mode="synthetic",
+        )
+
+    assert source.read_bytes() == original
 
 
 def test_issue_5326_orchestrator_writes_durable_table_when_declared(tmp_path: Path) -> None:
@@ -314,7 +536,7 @@ def test_issue_5326_orchestrator_writes_durable_table_when_declared(tmp_path: Pa
     assert summary["stage"] == "complete"
     table_md = tmp_path / summary["durable_table_md"]
     assert table_md.is_file()
-    assert "## Issue #5326 durable objective-comparison table" in table_md.read_text(
+    assert "## Adversarial sampler comparison (diagnostic tier)" in table_md.read_text(
         encoding="utf-8"
     )
 

@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-09-29
+updated_at: 2026-09-30
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -20,6 +20,23 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+# Diagnostic-only metric-v2 dev-seed proof from dependency PR #10014.
+- path: docs/context/evidence/issue_10007_fxm/fxm2_paired_metrics.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10007_fxm/fxm2_regression_failures.txt
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10007_fxm/paired_metrics.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_10007_fxm/test_failures_base.txt
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/issue_9750_baseline_physical_faithfulness.md
   status: current
   freshness: maintained

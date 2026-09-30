@@ -5,12 +5,21 @@ Diagnostic-only rehearsal data, not release or paper evidence. Source commit:
 workarounds documented in the lane report). Every copied episode has seed **1001**.
 No planner or environment execution on either evaluation band occurred.
 
-- `camera_ready_row.json` / `goal_row.json`: unedited first goal row from
+The original JSON and their missing source companions live in
+`rehearsal_snapshot.zip`, an archived diagnostic source namespace. Internal paths
+refer to the rehearsal commit, not this checkout. The archive retains the exact
+row/config bytes and `provenance.json` binds every member by SHA-256. This packages
+source data without creating release policy at canonical config paths.
+
+- Archive members `camera_ready_row.json` / `goal_row.json`: unedited first goal row from
   `reh_main_v2/runs/goal__differential_drive/episodes.jsonl`.
-- `guarded_ppo_row.json`: unedited first guarded PPO row from that campaign.
-- `pinned_runtime_rows.json`: configuration projection resolved from the pinned
+- Archive member `guarded_ppo_row.json`: unedited first guarded PPO row from that campaign.
+- Archive member `pinned_runtime_rows.json`: configuration projection resolved from the pinned
   source/config for those slots, without model loading or simulator steps. Cached
   literals exercise the validator independently of a test-built identity envelope.
+- Archive source companions: the original authored horizon schedule and the
+  dev1001–1003 rehearsal campaign config, under `source/`. Neither is executed or
+  adopted as current release policy.
 - `rehearsal_traces.jsonl.gz`: unchanged JSONL lines from `reh_probe_traces_v2`,
   compressed with deterministic gzip metadata. Includes the ten flagged episodes
   and one clean goal episode (11 of 672). `provenance.json` records original line

@@ -12,6 +12,7 @@ import tarfile
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 
@@ -1538,11 +1539,16 @@ def test_changed_definitions_suppress_paired_metric_delta(tmp_path, mixed_succes
     assert finding["delta_0_0_8_minus_0_0_7"] is None
 
 
+def _real_fixture_json(name):
+    """Read unchanged snapshot bytes in their original source namespace."""
+    archive = Path(__file__).parents[1] / "fixtures/cmpreal/rehearsal_snapshot.zip"
+    with ZipFile(archive) as snapshot:
+        return json.loads(snapshot.read(name))
+
+
 def test_real_camera_ready_row_provenance_is_admitted():
     """The unedited dev1001 row binds its scenario through camera-ready provenance."""
-    row = json.loads(
-        (Path(__file__).parents[1] / "fixtures/cmpreal/camera_ready_row.json").read_text()
-    )
+    row = _real_fixture_json("camera_ready_row.json")
     slot = ("goal", "differential_drive", "classic_bottleneck_low", 1001, "")
     compact = {"_provenance": row}
     # Scoped/campaign hashes live in campaign manifests, not episode provenance.
@@ -1553,12 +1559,9 @@ def test_real_camera_ready_row_provenance_is_admitted():
 @pytest.mark.parametrize("arm", ["goal", "guarded_ppo"])
 def test_real_camera_ready_rows_match_pinned_runtime(arm):
     """Actual producer rows have no scenario seed and retain typed PPO metadata."""
-    fixtures = Path(__file__).parents[1] / "fixtures/cmpreal"
-    row = json.loads((fixtures / f"{arm}_row.json").read_text())
+    row = _real_fixture_json(f"{arm}_row.json")
     expected = next(
-        r
-        for r in json.loads((fixtures / "pinned_runtime_rows.json").read_text())
-        if r["slot"][0] == arm
+        r for r in _real_fixture_json("pinned_runtime_rows.json") if r["slot"][0] == arm
     )
     slot = tuple(expected.pop("slot"))
     comparator._validate_successor_row(

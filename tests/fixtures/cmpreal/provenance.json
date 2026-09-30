@@ -63,8 +63,9 @@
   ],
   "camera_ready_source": "reh_main_v2/runs/goal__differential_drive/episodes.jsonl:1",
   "camera_ready_sha256": "1fb2b59808bb07dbbe9b1ed6650a745238abb3e77ba99da5bdb26f2b3a881cd4",
-  "pinned_runtime_rows": "Pinned source runtime config resolution (no model loading or steps), configs/benchmarks/rehearsal_0_0_8_dev_seeds.yaml",
-  "camera_ready_rows": {
+  "pinned_runtime_rows": "Cached resolution without model loading or steps; source config: snapshot://rehearsal_snapshot.zip/source/configs/benchmarks/rehearsal_0_0_8_dev_seeds.yaml",
+  "archived_source_root": "snapshot://rehearsal_snapshot.zip/source/",
+  "archive_members": {
     "camera_ready_row.json": {
       "sha256": "1fb2b59808bb07dbbe9b1ed6650a745238abb3e77ba99da5bdb26f2b3a881cd4",
       "bytes": 27490
@@ -80,6 +81,20 @@
     "pinned_runtime_rows.json": {
       "sha256": "55f8b1eea48b71fa7d11e5ab1852b3d1e0011caf52c2babb97e2de72a7536778",
       "bytes": 8808
+    },
+    "source/configs/benchmarks/horizon_schedules/release_0_0_8_authored_v1.yaml": {
+      "sha256": "3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650",
+      "bytes": 4264
+    },
+    "source/configs/benchmarks/rehearsal_0_0_8_dev_seeds.yaml": {
+      "sha256": "21976c68ed6976a2e3071922249c2e7542c98d0f167a9215163e33f7ea86ed34",
+      "bytes": 6817
+    }
+  },
+  "fixture_files": {
+    "rehearsal_snapshot.zip": {
+      "sha256": "1a0c2d4cb02c3fa77100c0f8657fc563a14a4293804b00aa8015cc2008a23bf6",
+      "bytes": 28549
     },
     "rehearsal_traces.jsonl.gz": {
       "sha256": "28cf997addfe503630b291f51edbf44e689eabbf68a22cd80a815f7868d659c5",

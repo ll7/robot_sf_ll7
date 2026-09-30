@@ -192,7 +192,6 @@ def relocate_overlapping_pedestrians(
     a handed direction. Route-following pedestrians prefer a clear candidate whose
     route velocity does not close on a robot. No random numbers are drawn, so the
     global RNG stream and every non-overlapping spawn stay unchanged.
-    every non-overlapping spawn stay unchanged.
 
     Args:
         ped_xy: Current pedestrian positions.

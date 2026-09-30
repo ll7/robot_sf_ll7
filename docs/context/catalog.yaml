@@ -7923,3 +7923,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_10056_wall_order_2026-09
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

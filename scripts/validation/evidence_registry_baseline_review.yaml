@@ -18,6 +18,24 @@ latest_reconciliation_issue: 9645
 latest_reviewed_date: 2026-09-28
 latest_reviewed_by: Codex autonomous lead; exact packet checksums and combined-tree inventory verified; no maintainer sign-off is claimed.
 evidence_tree_refresh_addenda:
+  - issue: 10056
+    reviewed_date: 2026-09-30
+    previous:
+      count: 2792
+      sha256: d4e17cb644e5960331595480e53c6441f38bed677209647ed3180b91b69e1b9b
+    candidate:
+      count: 2801
+      sha256: 99b486497a3e21645c5f76d88cdea0593f3d14496b299c22548fd453208c6339
+    files_added: 9
+    finding_delta: none
+    decision: >-
+      Reviewed the corrected-wall diagnostic comparison summary, README, three actual-wall
+      snapshots with their exact-byte marked sidecars, and checksum manifest. Registered the
+      new bundle in the catalog. Both original configurations and seed schedules are retained;
+      all 428 corrected rows and 428 main replay rows have external raw custody with archive
+      SHA-256 2063d0c848274c465761cbce5dd6622a57a466a674d6246955958bc1bbb91189.
+      The 446 existing findings are unchanged; there are no new findings or exclusions to
+      disposition. Historical bundles and preregistered thresholds remain unchanged.
   - issue: 9647
     reviewed_date: 2026-09-26
     previous:

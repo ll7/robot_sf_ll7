@@ -15,6 +15,7 @@ import numpy as np
 from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
 from robot_sf.planner.clearance_geometry import (
     CENTER_CLEARANCE_V1,
+    obstacle_rollout_admissible,
     occupied_cell_clearance,
     pedestrian_clearance,
     surface_search_radius_cells,
@@ -137,6 +138,12 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         self.config = config or RiskDWAPlannerConfig()
         self._no_admissible_command = False
         self._no_admissible_command_count = 0
+        self._recovery_command_count = 0
+        self._recovery_command = False
+
+    def bind_env(self, env: Any) -> None:
+        """Bind the episode's original static grid geometry."""
+        self._bind_static_obstacles(env)
 
     def _dynamic_window(
         self, observation: dict[str, Any], current_speed: float, speed_cap: float
@@ -247,6 +254,9 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             float: Clearance in meters (`inf` when unavailable/no nearby obstacle).
         """
+        exact = self._exact_obstacle_clearance(point)
+        if exact is not None:
+            return exact
         if grid_payload is None:
             if observation is None:
                 raise ValueError(
@@ -382,9 +392,20 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             observation=observation,
             grid_payload=grid_payload,
         )
+        current_clearance = self._min_obstacle_clearance(
+            robot_pos, observation=observation, grid_payload=grid_payload
+        )
+        previous = robot_pos
+        for point in trajectory:
+            swept = self._exact_obstacle_clearance(point, previous=previous)
+            if swept is not None:
+                min_obs_clear = min(min_obs_clear, swept)
+            previous = point
         if self.config.clearance_model == "surface_v2" and (
             min_ped_clear < float(self.config.safe_distance)
-            or min_obs_clear < float(self.config.hard_obstacle_clearance)
+            or not obstacle_rollout_admissible(
+                current_clearance, min_obs_clear, float(self.config.hard_obstacle_clearance)
+            )
         ):
             return float("-inf")
         x = trajectory[-1]
@@ -495,6 +516,7 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return best unicycle command `(v, omega)` for the current observation."""
         self._no_admissible_command = False
+        self._recovery_command = False
         robot_pos, heading, goal, ped_pos, ped_vel = self._extract_robot_goal_ped(observation)
         grid_payload = self._cache_grid_payload(observation)
         to_goal = float(np.linalg.norm(goal - robot_pos))
@@ -577,11 +599,22 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         if best_score == float("-inf"):
             self._no_admissible_command = True
             self._no_admissible_command_count += 1
+        current_clearance = self._min_obstacle_clearance(
+            robot_pos, observation=observation, grid_payload=grid_payload
+        )
+        self._recovery_command = bool(
+            self.config.clearance_model == "surface_v2"
+            and 0.0 < current_clearance < float(self.config.hard_obstacle_clearance)
+            and np.isfinite(best_score)
+        )
+        self._recovery_command_count += int(self._recovery_command)
         return best_cmd
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""
         decision = {
+            "recovery_command": self._recovery_command,
+            "recovery_command_count": self._recovery_command_count,
             "no_admissible_command": getattr(self, "_no_admissible_command", False),
             "no_admissible_command_count": getattr(self, "_no_admissible_command_count", 0),
         }

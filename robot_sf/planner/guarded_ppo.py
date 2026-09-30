@@ -199,6 +199,9 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         self.fallback_adapter = fallback_adapter or RiskDWAPlannerAdapter()
         self.prior_adapter = prior_adapter
         self._last_action_adaptation: dict[str, Any] | None = None
+        self._recovery_command_count = 0
+        self._no_admissible_command_count = 0
+        self._no_admissible_command = False
 
     def _child_adapters(self) -> tuple[_CommandPlanner, ...]:
         """Return configured child planners that may own episode-local state."""
@@ -208,6 +211,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
 
     def bind_env(self, env: Any) -> None:
         """Propagate environment binding to child planners that need map context."""
+        self._bind_static_obstacles(env)
         for adapter in self._child_adapters():
             bind_env = getattr(adapter, "bind_env", None)
             if callable(bind_env):
@@ -397,6 +401,9 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         Returns:
             float: Clearance in meters, or ``inf`` when unavailable.
         """
+        exact = self._exact_obstacle_clearance(point)
+        if exact is not None:
+            return exact
         if grid_payload is None:
             if observation is None:
                 raise ValueError(
@@ -481,6 +488,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         min_obs_clear = float("inf")
         min_ttc = float("inf")
 
+        previous_x = x.copy()
         for step in range(steps):
             t = (step + 1) * dt
             x = x + np.array(
@@ -549,6 +557,10 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                             ttc = ttc[ttc > 0.0]
                             if ttc.size > 0:
                                 min_ttc = min(min_ttc, float(np.min(ttc)))
+            swept = self._exact_obstacle_clearance(x, previous=previous_x)
+            if swept is not None:
+                min_obs_clear = min(min_obs_clear, swept)
+            previous_x = x.copy()
             min_obs_clear = min(
                 min_obs_clear,
                 self._min_obstacle_clearance(x, observation=observation, grid_payload=grid_payload),
@@ -687,6 +699,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         Returns:
             ShieldDecision: Proposed action, selected action, and shield decision metadata.
         """
+        self._no_admissible_command = False
         self._init_action_adaptation(ppo_command)
         cached_state = self._extract_state(observation)
         cached_grid = self._cache_grid_payload(observation)
@@ -1032,11 +1045,42 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 fallback_policy="stop",
             )
 
-        if float(fallback_eval["min_ped_clear"]) > max(
-            float(ppo_eval["min_ped_clear"]),
-            float(stop_eval["min_ped_clear"]),
-            float(prior_eval["min_ped_clear"]) if prior_eval is not None else float("-inf"),
+        def clearance_rank(evaluation):
+            if self.config.clearance_model != "surface_v2":
+                return (float(evaluation["min_ped_clear"]),)
+            return tuple(
+                float(evaluation.get(key, float("-inf")))
+                for key in ("min_ped_clear", "min_obs_clear", "progress")
+            )
+
+        current_obs = self._min_obstacle_clearance(
+            cached_state[0], observation=observation, grid_payload=cached_grid
+        )
+        recovery = (
+            self.config.clearance_model == "surface_v2"
+            and 0.0 < current_obs < float(self.config.hard_obstacle_clearance)
+            and float(fallback_eval["min_obs_clear"]) > 0.0
+            and float(fallback_eval["min_obs_clear"]) >= current_obs
+        )
+        alternatives = [ppo_eval, stop_eval]
+        if prior_eval is not None:
+            alternatives.append(prior_eval)
+        best_rank = max(map(clearance_rank, alternatives))
+        fallback_rank = clearance_rank(fallback_eval)
+        # Empty pedestrian sets yield inf for all commands. Static clearance
+        # and then progress break those ties. At equal progress a nonzero
+        # recovery rotation preserves the circular footprint and beats stasis.
+        prefer_recovery_turn = (
+            recovery
+            and fallback_command[0] == 0.0
+            and fallback_command[1] != 0.0
+            and fallback_rank == best_rank
+        )
+        if (fallback_rank > best_rank or prefer_recovery_turn) and (
+            self.config.clearance_model != "surface_v2"
+            or float(fallback_eval["min_obs_clear"]) > 0.0
         ):
+            self._recovery_command_count += int(recovery)
             return self._shield_decision(
                 ppo_command=ppo_command,
                 filtered_command=(float(fallback_command[0]), float(fallback_command[1])),
@@ -1047,6 +1091,8 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 fallback_policy=type(self.fallback_adapter).__name__,
                 hard_constraint_violation=True,
             )
+        self._no_admissible_command = True
+        self._no_admissible_command_count += 1
         return self._shield_decision(
             ppo_command=ppo_command,
             filtered_command=(0.0, 0.0),
@@ -1164,7 +1210,14 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""
-        return {"planner_type": "GuardedPPOAdapter"}
+        fallback_diagnostics = getattr(self.fallback_adapter, "diagnostics", lambda: {})()
+        return {
+            "planner_type": "GuardedPPOAdapter",
+            "no_admissible_command": self._no_admissible_command,
+            "no_admissible_command_count": self._no_admissible_command_count,
+            "recovery_command_count": self._recovery_command_count,
+            "fallback_diagnostics": fallback_diagnostics,
+        }
 
 
 def build_guarded_ppo_config(cfg: dict[str, Any] | None) -> GuardedPPOConfig:

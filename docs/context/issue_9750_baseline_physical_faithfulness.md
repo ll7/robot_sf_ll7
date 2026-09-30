@@ -81,14 +81,18 @@ at `1.0 m/s²` linear acceleration/braking and `1.0 rad/s²` angular acceleratio
 The historical fixed lattice remains `fixed_v1` by default. The guarded PPO
 fallback selects the same versioned window. Risk-DWA and Guarded PPO keep their
 historical durations by doubling step counts at `0.1 s`. Checkpoint-backed
-prediction and MPPI instead restore the historical `0.2 s` forecast/rollout grid
-and step counts (prediction 8, boost 6; MPPI 12, nested prediction 10, boost 6).
-Both actual decoder artifacts emit eight positions, capping the effective window
-at `8 × 0.2 s = 1.6 s`. The environment executes the selected command for `0.1 s`.
-[`test_release_checkpoint_effective_window_is_one_point_six_seconds`](../../tests/planner/test_release_horizons.py)
-loads each real release checkpoint; the adjacent hand-built crossing test scores
-a crossing at `t=1.0 s` on that effective grid. It does not claim the model
-predicts that particular trajectory.
+prediction and MPPI now use the source-proven training cadence: eight forecast
+steps at `0.1 s`, giving `0.8 s`. MPPI requests 24 optimizer steps at `0.1 s`,
+retaining the pre-FX2 `604794af` optimizer contract (24 × 0.1 s requested),
+but `_predict_future` caps execution to the eight available decoder outputs.
+Extending or interpolating forecasts beyond the learned window would invent
+prediction evidence. Thus the effective optimizer window is also `0.8 s`.
+Adaptive horizon requests remain capped by those outputs. Risk-DWA and Guarded
+PPO durations/cadence are unchanged by FX3. The environment executes at `0.1 s`.
+[`test_release_checkpoint_effective_window_is_zero_point_eight_seconds`](../../tests/planner/test_release_horizons.py)
+loads each actual registry-pinned checkpoint without fallback. The retained
+crossing oracle now scores `t=0.5 s`, with a `0.3 s` truncation negative control.
+It claims scoring cadence, not that the learned model predicts that trajectory.
 The Risk-DWA crossing oracle enters the physical safety margin near `t=1.0 s`:
 an `0.8 s` truncated rollout misses it; the restored `1.6 s` rollout rejects it.
 The Risk-DWA test exercises horizon scoring for a prescribed `0.5 m/s` command,
@@ -105,8 +109,7 @@ it does not certify a collision-free trajectory. Diagnostics expose the per-plan
 `no_admissible_command` flag and cumulative `no_admissible_command_count`, also
 copied into the simulation step trace's `planner` block. Reaching the goal or a
 later admissible plan clears the flag. The direct Risk-DWA adapter owns these
-fields; Guarded PPO's outer diagnostic block does not currently forward its
-fallback adapter's diagnostics.
+fields; Guarded PPO now forwards its fallback adapter diagnostics as well.
 [`test_release_all_rejected_commands_report_emergency_brake_and_reset_flag`](../../tests/planner/test_risk_dwa.py)
 pins a `0.7/0.4` moving state and overlapping occupied cell: the reachable brake
 is `0.6/0.3`, with the fallback flag set.
@@ -122,24 +125,56 @@ is a declared representation limitation, unchanged by this repair.
 pins the edge, an epsilon beyond it, and an occupied last cell for all three arms.
 It passes on the pre-fix head and is characterization evidence.
 
-### Checkpoint temporal provenance limitation
+### FX3 training cadence provenance and static geometry
 
-The `0.2 s` grid above restores the historical **inference interpretation**. It
-cannot presently be described as a proven trained cadence. The registry binds
-v1 to commit `dfc4aea84e25cc83f9888c620286457bab3e1596` and v2-full to
-`cef93136b92ddca9b0c4436bc44049412461a2fd`
-([registry](../../model/registry.yaml)); the published metadata and checkpoint
-payloads specify eight decoder steps but no step duration. The v2-full registry
-training config ([config](../../configs/training/predictive/predictive_br07_all_maps_randomized_full.yaml))
-sets eight target steps; `proxy_dt`/evaluation `dt=0.1` are evaluation settings.
-At its source commit, `scripts/training/collect_predictive_planner_data.py:185-186` uses
-consecutive frames, `:311` steps the environment once per frame, and
-`robot_sf/sim/sim_config.py:18` defaults to `0.1 s`. These source bytes imply
-an `8 × 0.1 s` training target window unless the actual collection run supplied
-an unrecorded override. The authoritative dataset collection metadata is missing
-from the published artifacts. Recover that metadata or explicitly resolve this
-conflict before claiming training-aligned timing or release admission. No model
-retraining, forecast interpolation, or checkpoint bytes changed here.
+At `cef93136b92ddca9b0c4436bc44049412461a2fd`,
+`scripts/training/collect_predictive_planner_data.py:185-186` indexes consecutive
+frames (`frames[t+k]`), `:281` constructs `RobotSimulationConfig()`, and `:309-311`
+records a frame and steps the environment exactly once. At that same commit,
+`robot_sf/sim/sim_config.py:18` sets `time_per_step_in_secs=0.1`.
+The eight decoder targets therefore represent `0.8 s`. The checkpoint payloads
+lack an embedded duration; the source collection contract, rather than the old
+`0.2 s` inference default, supplies its provenance. No checkpoint bytes change.
+
+Risk-DWA, Guarded PPO and predictive MPPI bind static polygons and wall/boundary
+segments through the existing benchmark `bind_env` hook after each reset.
+The source is `RobotEnv._get_static_grid_obstacles()`, exactly the geometry used
+for occupancy-grid generation, including compound polygon holes. No pedestrian,
+future, waypoint or policy information enters this evaluator, and PPO model
+observations retain their trained schema. Mathematical distance to these
+primitives has **zero raster discretization error**; GEOS uses double precision.
+The executable independent face-distance checks allow **1e-7 m numerical error**
+on the release maps (coordinates below 100 m). This is a tested floating-point
+budget, not a global GEOS precision theorem. No margin or cell correction is
+subtracted. Distances are signed inside solid polygons; motion between rollout
+samples is checked as a swept line segment plus the circular body radius.
+Unbound standalone/grid-only observations retain the conservative occupied-square
+fallback. The grid-edge characterization above applies to that fallback, not to
+an exact bound map: the bound map's physical wall segments define its boundary.
+
+For a positive current obstacle clearance below `0.3 m`, Risk-DWA and MPPI admit
+only rollouts with strictly positive clearance that never falls below the current
+clearance. At-rest rotation qualifies for a circular body. Otherwise the full
+hard margin applies. MPPI also retains `0.35 m` first-step padding outside
+recovery: a centered `2.6 m` corridor fits the hard margin but fails that stronger
+constraint. At an exactly `2.7 m` corridor the first-step threshold is a floating
+point boundary, conservatively rejected if rounded below `0.35 m`.
+MPPI explicitly scores a zero-speed recovery turn because continuous CEM samples
+almost never contain one, and chooses it over a stationary recovery winner.
+The forward progress escape still goes through the same hard constraints.
+
+Guarded PPO keeps veto authority. Best-effort ranking uses pedestrian clearance,
+then static clearance, then progress; on a complete tie it prefers a feasible
+nonzero recovery turn to stasis. A penetrating fallback cannot be selected in
+surface mode. Per-plan no-admissible flags/counts and recovery counts are exposed
+in runtime diagnostics and step traces, including Guarded PPO's fallback details.
+[`test_fx3_static_recovery.py`](../../tests/planner/test_fx3_static_recovery.py)
+uses real release configs, registered MPPI checkpoint bytes, production SVG
+parsing/rasterization, TDIAG coordinates, three headings and three grid phases.
+The width controls procedurally vary the named wall faces in the real corridor
+map to 1.9/2.0/2.6/2.7 m and include penetrating poses; no tracked fixture is
+rewritten. The full final-head sweep is diagnostic development evidence, not
+release admission. Class f receives no policy-specific code change.
 
 The 0.0.8 release template binds these corrections through new config files for the predictor, Guarded
 PPO, MPPI, RiskDWA, SocialForce, SocNav/ORCA/SACADRL, and bounded SocNav sampling. The PPO learned

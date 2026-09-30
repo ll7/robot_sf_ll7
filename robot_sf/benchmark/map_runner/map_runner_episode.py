@@ -2856,7 +2856,12 @@ def _step_build_simulation_trace(
     }
     decision = getattr(sim, "planner_step_decision", None)
     if isinstance(decision, dict):
-        for key in ("no_admissible_command", "no_admissible_command_count"):
+        for key in (
+            "no_admissible_command",
+            "no_admissible_command_count",
+            "recovery_command",
+            "recovery_command_count",
+        ):
             if key in decision:
                 planner_payload[key] = decision[key]
     if sim.action_conversion_payload:
@@ -3158,6 +3163,8 @@ def _step_planner_decision_dwa_keys(
     for dwa_key in (
         "no_admissible_command",
         "no_admissible_command_count",
+        "recovery_command",
+        "recovery_command_count",
         "constraint_reason",
         "candidate_total",
         "candidate_feasible",

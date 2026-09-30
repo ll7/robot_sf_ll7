@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Literal
 
 import numpy as np
+from shapely.geometry import LineString, Point
+from shapely.ops import unary_union
 
 ClearanceModel = Literal["center_v1", "surface_v2"]
 CENTER_CLEARANCE_V1: ClearanceModel = "center_v1"
@@ -92,6 +94,45 @@ def occupied_cell_clearance(
         column_gap = np.maximum(np.abs(columns * resolution_m - offset_x) - resolution_m / 2.0, 0.0)
         distance = np.hypot(row_gap, column_gap) - robot_radius_m
     return float(np.min(distance))
+
+
+class StaticObstacleClearance:
+    """Continuous body distance to the exact world primitives used to build the grid.
+
+    Polygon interiors are solid; open wall/boundary segments have zero thickness.
+    GEOS distances have zero raster discretization error. For the release maps
+    (coordinates below 100 m), validation uses a 1e-7 m numerical error budget.
+    No cell-size correction is applied. Segments cover motion between samples.
+    """
+
+    def __init__(self, segments, polygons) -> None:
+        self.geometry = unary_union([*polygons, *(LineString(line) for line in segments)])
+        self.solid = unary_union(polygons)
+
+    def clearance(self, point: np.ndarray, radius: float, previous=None) -> float:
+        """Return signed body clearance, including the swept segment if supplied."""
+        if self.geometry.is_empty:
+            return float("inf")
+        query = Point(point)
+        if self.solid.contains(query):
+            return -float(query.distance(self.solid.boundary)) - radius
+        if previous is not None and not np.array_equal(previous, point):
+            query = LineString([previous, point])
+        return float(query.distance(self.geometry)) - radius
+
+
+def obstacle_rollout_admissible(current: float, minimum: float, margin: float) -> bool:
+    """Retain the margin, or allow strictly positive nondecreasing recovery.
+
+    A penetrated or tangent initial body is never a recovery state. Comparing the
+    whole swept minimum to the initial clearance also rejects intermediate dips.
+
+    Returns:
+        bool: Whether the obstacle rollout is admissible.
+    """
+    if 0.0 < current < margin:
+        return minimum > 0.0 and minimum >= current
+    return minimum >= margin
 
 
 def surface_search_radius_cells(robot_radius: float, margin: float, resolution: float) -> int:

@@ -81,26 +81,26 @@ def checkpoint_window(request):
     return arm, planner, predictor, future, mask, steps, dt, observation
 
 
-def test_release_checkpoint_effective_window_is_one_point_six_seconds(checkpoint_window):
-    """The real eight-output checkpoint and robot rollout cover the historical 1.6 s."""
+def test_release_checkpoint_effective_window_is_zero_point_eight_seconds(checkpoint_window):
+    """The real eight-output checkpoint and robot rollout cover the training 0.8 s."""
     arm, planner, predictor, future, _mask, steps, dt, _obs = checkpoint_window
-    assert steps * dt == pytest.approx(1.6)
-    assert future.shape[1] * predictor.config.predictive_rollout_dt == pytest.approx(1.6)
+    assert steps * dt == pytest.approx(0.8)
+    assert future.shape[1] * predictor.config.predictive_rollout_dt == pytest.approx(0.8)
     if arm == "predictive_mppi":
         assert planner.config.rollout_dt == predictor.config.predictive_rollout_dt
     trajectory = predictor._rollout_robot(v=0.5, w=0.0, dt=dt, steps=steps)
-    assert trajectory[-1, 0] == pytest.approx(0.8)  # 0.5 m/s for 1.6 s.
+    assert trajectory[-1, 0] == pytest.approx(0.4)  # 0.5 m/s for 0.8 s.
 
 
-def test_release_checkpoint_window_scores_crossing_at_one_second(checkpoint_window):
+def test_release_checkpoint_window_scores_crossing_at_half_second(checkpoint_window):
     """Score a hand crossing on the real model's effective grid; no learned-path claim."""
     arm, planner, predictor, future, mask, steps, dt, observation = checkpoint_window
-    # Pedestrian crosses x=0.5 at t=1.0 s; robot at 0.5 m/s reaches it then.
-    # At t<=0.8 s the lateral distance is >=2.4 m: safe for 1.0/0.4 m bodies.
+    # Pedestrian crosses x=0.5 at t=0.5 s; robot at 0.5 m/s reaches it then.
+    # At t<=0.3 s the lateral distance is >=4.8 m: safe for 1.0/0.4 m bodies.
     times = np.arange(1, future.shape[1] + 1) * dt
     crossing = np.zeros_like(future)
-    crossing[0, :, 0] = 0.5
-    crossing[0, :, 1] = 12.0 * (1.0 - times)
+    crossing[0, :, 0] = 0.25
+    crossing[0, :, 1] = 24.0 * (0.5 - times)
     if arm == "prediction_planner":
         collision, _ = predictor._collision_cost(
             future_peds=crossing,
@@ -109,13 +109,13 @@ def test_release_checkpoint_window_scores_crossing_at_one_second(checkpoint_wind
             w=0.0,
             steps=steps,
         )
-        assert collision > 0.0, "1.0 s crossing must be inside the effective checkpoint window"
+        assert collision > 0.0, "0.5 s crossing must be inside the effective checkpoint window"
         short_collision, _ = predictor._collision_cost(
             future_peds=crossing,
             mask=mask,
             v=0.5,
             w=0.0,
-            steps=round(0.8 / dt),
+            steps=round(0.3 / dt),
         )
         assert short_collision == 0.0
     else:
@@ -133,6 +133,6 @@ def test_release_checkpoint_window_scores_crossing_at_one_second(checkpoint_wind
             )
 
         assert score(steps) >= planner.config.invalid_sequence_cost, (
-            "1.0 s crossing must be inside the effective checkpoint window"
+            "0.5 s crossing must be inside the effective checkpoint window"
         )
-        assert score(round(0.8 / dt)) < planner.config.invalid_sequence_cost
+        assert score(round(0.3 / dt)) < planner.config.invalid_sequence_cost

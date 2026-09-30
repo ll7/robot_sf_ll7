@@ -15,6 +15,7 @@ import numpy as np
 from robot_sf.common.math_utils import wrap_angle_pi_array
 from robot_sf.planner.clearance_geometry import (
     CENTER_CLEARANCE_V1,
+    obstacle_rollout_admissible,
     occupied_cell_clearance,
     pedestrian_clearance,
     surface_search_radius_cells,
@@ -109,10 +110,18 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         """Initialize predictive optimizer and deterministic RNG state."""
         self.config = config
         self._rng = np.random.default_rng(int(config.random_seed))
+        self._no_admissible_command = False
+        self._no_admissible_command_count = 0
+        self._recovery_command = False
+        self._recovery_command_count = 0
         self._predictor = PredictionPlannerAdapter(
             config=config.socnav,
             allow_fallback=allow_fallback,
         )
+
+    def bind_env(self, env: Any) -> None:
+        """Bind the episode's original static grid geometry."""
+        self._bind_static_obstacles(env)
 
     def _extract_state(
         self, observation: dict[str, object]
@@ -174,6 +183,9 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         Returns:
             float: Minimum obstacle distance in meters, ``0.0`` when occupied.
         """
+        exact = self._exact_obstacle_clearance(point)
+        if exact is not None:
+            return exact
         if grid_payload is None:
             if observation is None:
                 raise ValueError(
@@ -276,14 +288,13 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         min_obs = float("inf")
         first_clear = float("inf")
         first_obs = float("inf")
-        ttc_penalty = 0.0
-        smooth_penalty = 0.0
-        anchor_penalty = 0.0
+        ttc_penalty = smooth_penalty = anchor_penalty = 0.0
         prev_action = np.array([0.0, 0.0], dtype=float)
         anchor = np.asarray(anchor_action, dtype=float)
         future_steps = int(future.shape[1])
         valid_idx = np.where(mask > 0.5)[0]
 
+        previous_world = robot_pos
         for step, action in enumerate(sequence):
             v = float(action[0])
             w = float(action[1])
@@ -318,9 +329,10 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                 ],
                 dtype=float,
             )
-            obs_clear = self._min_obstacle_clearance(
-                world_point, observation=observation, grid_payload=grid_payload
+            obs_clear = self._obstacle_motion_clearance(
+                world_point, previous_world, observation, grid_payload
             )
+            previous_world = world_point
             min_obs = min(min_obs, obs_clear)
             if step == 0:
                 first_obs = min(first_obs, obs_clear)
@@ -333,6 +345,9 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
             min_obs=min_obs,
             first_clear=first_clear,
             first_obs=first_obs,
+            current_obs=self._min_obstacle_clearance(
+                robot_pos, observation=observation, grid_payload=grid_payload
+            ),
         )
         if hard_constraint_cost is not None:
             return hard_constraint_cost
@@ -420,6 +435,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         anchor_pen = np.zeros(samples, dtype=float)
         prev_action = np.zeros((samples, 2), dtype=float)
 
+        previous_world = np.tile(robot_pos, (samples, 1))
         for step in range(horizon):
             v = batch[:, step, 0]  # (samples,)
             w = batch[:, step, 1]  # (samples,)
@@ -457,6 +473,11 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                     observation=observation,
                     grid_payload=grid_payload,
                 )
+                point = np.array([world_pos_x[s], world_pos_y[s]])
+                swept = self._exact_obstacle_clearance(point, previous=previous_world[s])
+                if swept is not None:
+                    obs_clear = min(obs_clear, swept)
+                previous_world[s] = point
                 min_obs[s] = min(min_obs[s], obs_clear)
                 if step == 0:
                     first_obs[s] = min(first_obs[s], obs_clear)
@@ -469,12 +490,16 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         # Hard constraint rejection per sample
         costs = np.full(samples, float(self.config.invalid_sequence_cost), dtype=float)
         alive = np.ones(samples, dtype=bool)
+        current_obs = self._min_obstacle_clearance(
+            robot_pos, observation=observation, grid_payload=grid_payload
+        )
         for s in range(samples):
             hc = self._hard_constraint_cost(
                 min_clear=float(min_clear[s]),
                 min_obs=float(min_obs[s]),
                 first_clear=float(first_clear[s]),
                 first_obs=float(first_obs[s]),
+                current_obs=current_obs,
             )
             if hc is not None:
                 alive[s] = False
@@ -542,6 +567,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         min_obs: float,
         first_clear: float,
         first_obs: float,
+        current_obs: float = float("inf"),
     ) -> float | None:
         """Return a large penalty for unsafe sequences, otherwise ``None``.
 
@@ -553,7 +579,16 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                 float(self.config.invalid_sequence_cost)
                 + (float(self.config.hard_ped_clearance) - min_clear) * 1e3
             )
-        if min_obs < float(self.config.hard_obstacle_clearance):
+        recovery = self.config.clearance_model == "surface_v2" and 0.0 < current_obs < float(
+            self.config.hard_obstacle_clearance
+        )
+        if (
+            not obstacle_rollout_admissible(
+                current_obs, min_obs, float(self.config.hard_obstacle_clearance)
+            )
+            if self.config.clearance_model == "surface_v2"
+            else min_obs < float(self.config.hard_obstacle_clearance)
+        ):
             return (
                 float(self.config.invalid_sequence_cost)
                 + (float(self.config.hard_obstacle_clearance) - min_obs) * 1e3
@@ -563,15 +598,57 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                 float(self.config.invalid_sequence_cost)
                 + (float(self.config.first_step_ped_clearance) - first_clear) * 5e2
             )
-        if first_obs < float(self.config.first_step_obstacle_clearance):
+        if not recovery and first_obs < float(self.config.first_step_obstacle_clearance):
             return (
                 float(self.config.invalid_sequence_cost)
                 + (float(self.config.first_step_obstacle_clearance) - first_obs) * 5e2
             )
         return None
 
+    def _recovery_rotation(  # noqa: PLR0913
+        self,
+        current_obs,
+        robot_pos,
+        heading,
+        goal,
+        horizon,
+        future,
+        mask,
+        observation,
+        anchor_action,
+        grid_payload,
+    ):
+        """Return a scored at-rest recovery rotation, or None outside recovery."""
+        if self.config.clearance_model != "surface_v2" or not (
+            0.0 < current_obs < float(self.config.hard_obstacle_clearance)
+        ):
+            return None
+        target_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
+        turn = float(
+            np.clip(
+                _wrap_angle(target_heading - heading),
+                -self.config.max_angular_speed,
+                self.config.max_angular_speed,
+            )
+        )
+        rotation = (0.0, turn)
+        cost = self._sequence_rollout(
+            self._constant_sequence(rotation, horizon),
+            robot_pos=robot_pos,
+            heading=heading,
+            goal=goal,
+            future=future,
+            mask=mask,
+            observation=observation,
+            anchor_action=anchor_action,
+            grid_payload=grid_payload,
+        )
+        return np.asarray(rotation), cost
+
     def plan(self, observation: dict[str, object]) -> tuple[float, float]:
         """Return the first action from the best sampled control sequence."""
+        self._no_admissible_command = False
+        self._recovery_command = False
         robot_pos, heading, _speed, goal = self._extract_state(observation)
         if float(np.linalg.norm(goal - robot_pos)) <= float(self.config.goal_tolerance):
             return 0.0, 0.0
@@ -689,7 +766,35 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                 ),
             ),
         ]
-        action = min(arbitration, key=lambda item: float(item[1]))[0]
+        current_obs = self._min_obstacle_clearance(
+            robot_pos, observation=observation, grid_payload=grid_payload
+        )
+        recovery_rotation = self._recovery_rotation(
+            current_obs,
+            robot_pos,
+            heading,
+            goal,
+            horizon,
+            future,
+            mask,
+            observation,
+            anchor_action,
+            grid_payload,
+        )
+        if recovery_rotation is not None:
+            arbitration.append(recovery_rotation)
+        selected_action, selected_cost = min(arbitration, key=lambda item: float(item[1]))
+        action = selected_action
+        if (
+            recovery_rotation is not None
+            and action[0] == 0.0
+            and action[1] == 0.0
+            and recovery_rotation[1] < float(self.config.invalid_sequence_cost)
+        ):
+            # A stationary score winner is safe but cannot leave the recovery
+            # trap. The explicit feasible rotation changes heading while keeping
+            # the circular body's clearance unchanged.
+            action, selected_cost = recovery_rotation
         if bool(self.config.progress_escape_enabled):
             goal_dist = float(np.linalg.norm(goal - robot_pos))
             if (
@@ -723,11 +828,32 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                 )
                 if forced_cost < float(self.config.invalid_sequence_cost):
                     action = forced_action
+                    selected_cost = forced_cost
+        self._record_admissibility(current_obs, selected_cost)
+        if self._no_admissible_command:
+            action = np.zeros(2)
         return float(action[0]), float(action[1])
+
+    def _record_admissibility(self, current_obs: float, selected_cost: float) -> None:
+        """Record final selected-command feasibility and recovery diagnostics."""
+        self._no_admissible_command = selected_cost >= float(self.config.invalid_sequence_cost)
+        self._no_admissible_command_count += int(self._no_admissible_command)
+        self._recovery_command = bool(
+            self.config.clearance_model == "surface_v2"
+            and 0.0 < current_obs < float(self.config.hard_obstacle_clearance)
+            and not self._no_admissible_command
+        )
+        self._recovery_command_count += int(self._recovery_command)
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""
-        return {"planner_type": "PredictiveMPPIAdapter"}
+        decision = {
+            "no_admissible_command": self._no_admissible_command,
+            "no_admissible_command_count": self._no_admissible_command_count,
+            "recovery_command": self._recovery_command,
+            "recovery_command_count": self._recovery_command_count,
+        }
+        return {"planner_type": "PredictiveMPPIAdapter", **decision, "last_decision": decision}
 
     def foresight_diagnostics(self) -> dict[str, Any]:
         """Expose the nested predictor's checkpoint-load and fallback provenance.

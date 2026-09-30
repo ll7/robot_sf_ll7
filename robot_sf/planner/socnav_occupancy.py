@@ -6,6 +6,7 @@ import numpy as np
 
 from robot_sf.nav.occupancy_grid import OBSERVATION_CHANNEL_ORDER
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
+from robot_sf.planner.clearance_geometry import StaticObstacleClearance
 
 
 class OccupancyAwarePlannerMixin:
@@ -24,6 +25,38 @@ class OccupancyAwarePlannerMixin:
         if pad is not None and arr.size < pad:
             arr = np.pad(arr, (0, pad - arr.size), constant_values=default)
         return arr
+
+    def _bind_static_obstacles(self, env: Any) -> None:
+        """Bind only static geometry from the same source as the live occupancy grid.
+
+        Binding occurs after each episode reset. No pedestrian state, route, or
+        future information is accessed; PPO's observation schema stays intact.
+        Unbound standalone observations retain the conservative cell evaluator.
+        """
+        geometry_source = getattr(env, "_get_static_grid_obstacles", None)
+        self._static_clearance = None
+        if callable(geometry_source):
+            segments, polygons = geometry_source()
+            self._static_clearance = StaticObstacleClearance(segments, polygons)
+
+    def _exact_obstacle_clearance(self, point: np.ndarray, *, previous=None) -> float | None:
+        """Return bound static surface clearance or None for the raster fallback."""
+        geometry = getattr(self, "_static_clearance", None)
+        if geometry is None or self.config.clearance_model != "surface_v2":
+            return None
+        radius = getattr(self.config, "robot_radius_m", None)
+        if radius is None:
+            radius = self.config.socnav.predictive_robot_radius
+        return geometry.clearance(point, float(radius), previous)
+
+    def _obstacle_motion_clearance(self, point, previous, observation, grid_payload) -> float:
+        """Return continuous swept clearance when bound, else conservative grid clearance."""
+        exact = self._exact_obstacle_clearance(point, previous=previous)
+        if exact is not None:
+            return exact
+        return self._min_obstacle_clearance(
+            point, observation=observation, grid_payload=grid_payload
+        )
 
     def _extract_grid_payload(self, observation: dict) -> tuple[np.ndarray, dict[str, Any]] | None:
         """Extract occupancy grid tensor and metadata from observation.

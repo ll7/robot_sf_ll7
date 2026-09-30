@@ -1171,6 +1171,7 @@ def _build_predictive_mppi_policy(
 
     _attach_planner_reset(_policy, adapter)
     _policy._planner_adapter = adapter
+    _policy._planner_bind_env = adapter.bind_env
 
     def _planner_stats() -> dict[str, Any]:
         """Expose predictive-checkpoint runtime provenance for release admission.
@@ -1263,7 +1264,7 @@ def _attach_checkpoint_runtime_stats(
 
 
 def _attach_guard_decision_stats(
-    policy: Callable[[dict[str, Any]], Any], metadata: dict[str, Any]
+    policy: Callable[[dict[str, Any]], Any], metadata: dict[str, Any], guard_adapter=None
 ) -> None:
     """Expose the latest shield decision through the per-step planner stats hook.
 
@@ -1277,11 +1278,20 @@ def _attach_guard_decision_stats(
         """Return checkpoint provenance and the most recent guard decision."""
         base_payload = checkpoint_stats() if callable(checkpoint_stats) else {}
         runtime = dict(base_payload) if isinstance(base_payload, dict) else {}
+        if guard_adapter is not None:
+            runtime.update(guard_adapter.diagnostics())
         shield_stats = metadata.get("shield_stats")
         if isinstance(shield_stats, dict):
             last_decision = shield_stats.get("last_decision")
             if isinstance(last_decision, dict):
                 runtime["last_decision"] = dict(last_decision)
+                if guard_adapter is not None:
+                    for key in (
+                        "no_admissible_command",
+                        "no_admissible_command_count",
+                        "recovery_command_count",
+                    ):
+                        runtime["last_decision"][key] = runtime[key]
         return runtime
 
     policy._planner_stats = _planner_stats
@@ -1703,7 +1713,7 @@ def _build_guarded_ppo_policy(  # noqa: C901, PLR0915
 
     _policy._planner_close = _close_guarded_ppo
     _attach_checkpoint_runtime_stats(_policy, ppo_planner, ppo_config)
-    _attach_guard_decision_stats(_policy, meta)
+    _attach_guard_decision_stats(_policy, meta, guard_adapter)
     ppo_bind_env = getattr(ppo_planner, "bind_env", None)
     guard_bind_env = getattr(guard_adapter, "bind_env", None)
     bind_hooks = [hook for hook in (ppo_bind_env, guard_bind_env) if callable(hook)]

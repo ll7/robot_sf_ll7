@@ -649,6 +649,8 @@ def test_added_yaml_bound_uses_unchanged_sibling(tmp_path):
         "robot_sf/benchmark/release_protocol.py",
         "docs/release/0.0.8/decisions.md",
         "configs/benchmarks/seed_sets_0_0_8.yaml",
+        "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.template.yaml",
+        "tests/benchmark/test_sealed_source_pins.py",
     ],
 )
 def test_legitimate_sealed_names_are_allowlisted(tmp_path, path):

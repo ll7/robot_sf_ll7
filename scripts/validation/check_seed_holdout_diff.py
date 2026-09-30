@@ -53,12 +53,14 @@ SEALED_REFERENCE_ALLOWLIST = frozenset(
         "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml",
         "configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml",
         "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.yaml",
+        "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.template.yaml",
         "tests/analysis/test_pinned_successor_lineage.py",
         "tests/analysis/test_compare_issue_9431_release.py",
         "tests/validation/test_check_seed_holdout_diff.py",
         "tests/benchmark/test_newseeds.py",
         "tests/benchmark/test_release_candidate.py",
         "tests/benchmark/test_release_resolved_identity.py",
+        "tests/benchmark/test_sealed_source_pins.py",
         "tests/benchmark/test_s30_h600_runtime_smoke_contract.py",
     ]
 )

@@ -22,7 +22,7 @@ def _trace(positions, times):
     return p, t
 
 
-def acceleration_fit(speeds, times, *, reaction_s=0.35, fit_duration_s=3.0):
+def acceleration_fit(speeds, times, *, reaction_s=0.35, fit_duration_s=3.0) -> dict[str, object]:
     """Fit v0 and tau from early acceleration, using equation 4.1 of Moussaid.
 
     Clock starts at the cue. Fit only post-reaction acceleration, not the final
@@ -47,7 +47,7 @@ def acceleration_fit(speeds, times, *, reaction_s=0.35, fit_duration_s=3.0):
         }
     initial = float(np.interp(reaction_s, t, v))
 
-    def residual(params):
+    def residual(params) -> np.ndarray:
         desired, tau = params
         return desired + (initial - desired) * np.exp(-u / tau) - observed
 
@@ -68,7 +68,7 @@ def acceleration_fit(speeds, times, *, reaction_s=0.35, fit_duration_s=3.0):
     }
 
 
-def crossing_times(positions, times, plane_m):
+def crossing_times(positions, times, plane_m) -> list[float | None]:
     """First forward crossing per person, interpolated; initial beyond-line excluded.
 
     Returns:
@@ -88,7 +88,7 @@ def crossing_times(positions, times, plane_m):
     return result
 
 
-def aperture_drop(positions, times, *, plane_m, capture_upstream_m=4.0):
+def aperture_drop(positions, times, *, plane_m, capture_upstream_m=4.0) -> dict[str, object]:
     """Wilmut temporal phases and 3-SD event; explicit cubic LS trend equivalent.
 
     CM substitutes for C7, cubic LS polynomial for unspecified Higuchi trend and
@@ -131,7 +131,9 @@ def aperture_drop(positions, times, *, plane_m, capture_upstream_m=4.0):
     }
 
 
-def bottleneck_flow(positions, times, *, width_m, plane_m, expected_n, steady_min_s=5.0):
+def bottleneck_flow(
+    positions, times, *, width_m, plane_m, expected_n, steady_min_s=5.0
+) -> dict[str, object]:
     """Finite-N flow plus density/velocity-stable window: documented Liao equivalent.
 
     Exit plane explicit. One-second bins inside (plane-1, plane), five-bin density
@@ -196,7 +198,7 @@ def bottleneck_flow(positions, times, *, width_m, plane_m, expected_n, steady_mi
     }
 
 
-def circumvention_clearance(positions, times, *, centre_xy, obstacle_radius_m):
+def circumvention_clearance(positions, times, *, centre_xy, obstacle_radius_m) -> dict[str, object]:
     """CM-to-cylinder edge and abeam clearance equivalent for lateral PS extent.
 
     Does not estimate a fitted ellipse or longitudinal 2 m radius. No abeam
@@ -226,7 +228,7 @@ def circumvention_clearance(positions, times, *, centre_xy, obstacle_radius_m):
     }
 
 
-def huber_filtered(positions, times):
+def huber_filtered(positions, times) -> np.ndarray:
     """0.5 Hz Gaussian (-3 dB), five-sample median; linear endpoint padding.
 
     Gaussian cutoff normalization/endpoints are not published: these are explicit
@@ -248,7 +250,7 @@ def huber_filtered(positions, times):
     return median_filter(filtered, size=(5, 1), mode="nearest")[pad:-pad]
 
 
-def turning_onset(positions, interferer, times, baselines):
+def turning_onset(positions, interferer, times, baselines) -> dict[str, object]:
     """Mean-max baseline turning threshold; own X distance to synchronized PoMD.
 
     Returns:
@@ -259,7 +261,7 @@ def turning_onset(positions, interferer, times, baselines):
     p, q = huber_filtered(p, t), huber_filtered(q, t)
     closest = int(np.argmin(np.linalg.norm(p - q, axis=1)))
 
-    def angular(path):
+    def angular(path) -> np.ndarray:
         vel = np.gradient(path, t, axis=0, edge_order=2)
         heading = np.unwrap(np.arctan2(vel[:, 1], vel[:, 0]))
         return np.abs(np.gradient(heading, t, edge_order=2))
@@ -290,7 +292,7 @@ def turning_onset(positions, interferer, times, baselines):
     }
 
 
-def pair_overlap(positions, radius_m, groups=()):
+def pair_overlap(positions, radius_m, groups=()) -> dict[str, object]:
     """Unordered post-step pairs split by actual groups; starts reported separately.
 
     Strict thresholds. Zero denominator has null fractions and minimum.

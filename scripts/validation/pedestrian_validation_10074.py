@@ -348,17 +348,24 @@ def protocol_simulate(
     sim = pysocialforce.Simulator(state=state.copy(), obstacles=walls, config=config)
     positions, speeds = [sim.peds.pos().copy()], []
     desired = sim.peds.max_speeds.copy()
+    if speed_cap_m_s is not None:
+        integrate = sim.peds.step
+
+        def capped_integration(force, *args, **kwargs):
+            # Forces see desired speeds; only velocity integration sees the cap.
+            desired_speeds = sim.peds.max_speeds.copy()
+            sim.peds.max_speeds = np.full(sim.peds.size(), speed_cap_m_s)
+            try:
+                return integrate(force, *args, **kwargs)
+            finally:
+                sim.peds.max_speeds = desired_speeds
+
+        sim.peds.step = capped_integration
     for k in range(steps):
         if goal_update is not None:
             goal_update(sim)
-        if speed_cap_m_s is None:
-            sim.step()
-        else:
-            force = np.zeros_like(sim.peds.pos())
-            for component in sim.forces:
-                force += component()
-            sim.peds.max_speeds = np.full(sim.peds.size(), speed_cap_m_s)
-            sim.peds.step(force)
+        # Preserve registered forces, callbacks and future post-integration contact handling.
+        sim.step()
         if interferer:
             # Subject forces saw the exact prescribed position/velocity at step start.
             sim.peds.state[1, :2] = (

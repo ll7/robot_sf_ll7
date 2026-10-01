@@ -258,3 +258,53 @@ def test_gate_rejects_incomplete_all_data_even_with_a_steady_window():
     row["all_data_specific_flow_persons_m_s"] = float("nan")
     assert suite.acceptance_gate([row])["exit_code"] == 2
     assert suite.acceptance_gate([])["exit_code"] == 4
+
+
+def test_literature_cap_preserves_normal_simulator_step_and_desired_force(monkeypatch):
+    from types import SimpleNamespace
+
+    observed = {"force_desired": [], "integration_caps": [], "callbacks": []}
+
+    class Peds:
+        def __init__(self, state):
+            self.state = state.copy()
+            self.max_speeds = np.array([1.3])
+
+        def pos(self):
+            return self.state[:, :2]
+
+        def vel(self):
+            return self.state[:, 2:4]
+
+        def size(self):
+            return len(self.state)
+
+        def step(self, force):
+            cap = float(self.max_speeds[0])
+            observed["integration_caps"].append(cap)
+            self.state[:, 0] += 0.1 * cap
+            self.state[:, 2] = cap
+
+    class Sim:
+        def __init__(self, state, **kwargs):
+            self.peds = Peds(state)
+            self.t = 0
+            self.forces = [self.desired_force]
+
+        def desired_force(self):
+            observed["force_desired"].append(float(self.peds.max_speeds[0]))
+            return np.zeros((1, 2))
+
+        def step(self):
+            self.peds.step(self.desired_force())
+            observed["callbacks"].append(self.t)
+            self.t += 1
+
+    monkeypatch.setattr(suite.pysocialforce, "Simulator", Sim)
+    config = SimpleNamespace(scene_config=SimpleNamespace(dt_secs=0.1))
+    p, _, desired = suite.protocol_simulate(np.zeros((1, 7)), [], config, 2, speed_cap_m_s=3)
+    assert observed["callbacks"] == [0, 1], "literature tier bypasses normal simulator stepping"
+    assert observed["force_desired"] == [1.3, 1.3]
+    assert observed["integration_caps"] == [3.0, 3.0]
+    assert p[:, 0, 0] == pytest.approx([0.0, 0.3, 0.6])
+    assert desired.tolist() == [1.3]

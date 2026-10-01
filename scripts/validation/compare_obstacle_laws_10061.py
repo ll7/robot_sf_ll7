@@ -34,10 +34,12 @@ def exponential_kernel(positions, obstacles, amplitude, length, radius):
             vx, vy = bx - ax, by - ay
             denominator = vx * vx + vy * vy
             t = (
-                np.clip(
-                    ((positions[i, 0] - ax) * vx + (positions[i, 1] - ay) * vy) / denominator,
-                    0.0,
+                min(
                     1.0,
+                    max(
+                        0.0,
+                        ((positions[i, 0] - ax) * vx + (positions[i, 1] - ay) * vy) / denominator,
+                    ),
                 )
                 if denominator
                 else 0.0

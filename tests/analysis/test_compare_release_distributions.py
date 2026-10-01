@@ -150,11 +150,12 @@ def test_bootstrap_and_outputs_byte_reproducible(tmp_path):
 
 
 def test_two_stage_bootstrap_retains_between_scenario_variation():
+    """The ruled fixed-suite primary excludes between-scenario resampling variation."""
     groups = [np.zeros(30), np.ones(30)]
     draws = cmp._bootstrap(groups, np.random.default_rng(20260930), 10000, pooled=True)
     assert np.mean(draws) == pytest.approx(0.5, abs=0.02)
-    # Pooling episodes directly would wrongly shrink scenario-level uncertainty.
-    assert cmp._ci(draws) == [0.0, 1.0]
+    # The fixed-suite primary conditions on scenarios: only within-scenario seeds vary.
+    assert cmp._ci(draws) == [0.5, 0.5]
 
 
 def test_bh_rejects_nominal_false_positive():
@@ -255,3 +256,120 @@ def test_diagnostic_output_label_and_success_only_cell_insufficient():
     assert not cell(report, "path_efficiency")["sufficient"]
     with pytest.raises(ValueError, match="at least 10000"):
         cmp.compare_samples(rows(), rows(release="0.0.8"), resamples=9999)
+
+
+def test_null_split_half_fixed_suite_has_zero_difference_and_narrow_interval():
+    """Two synthetic 15-seed halves have identical rates despite strong scenario effects."""
+    old, new = {}, {}
+    for scenario_index in range(12):
+        successes = 1 if scenario_index % 2 == 0 else 14
+        source = rows(successes=0)
+        for index, (slot, row) in enumerate(source.items()):
+            row = copy.deepcopy(row)
+            success = index % 15 < successes
+            row["outcome"].update(route_complete=success, collision_event=not success)
+            target = old if index < 15 else new
+            row["metric_schema_version"] = (
+                "robot-sf-metrics.v1" if index < 15 else "robot-sf-metrics.v2"
+            )
+            target[slot[0], slot[1], f"fixed_{scenario_index}", slot[3], slot[4]] = row
+    report = cmp.compare_samples(old, new)
+    primary = cell(report, "success", "arm")
+    assert primary["difference"] == 0.0
+    lo, hi = primary["difference_ci"]
+    assert lo <= 0 <= hi
+    assert hi - lo < 0.12  # independent within-scenario SE ~0.0263; 95% width ~0.103
+    assert not primary["changed"]
+
+
+def test_paired_scenario_sensitivity_preserves_fixed_suite_primary():
+    old, new = {}, {}
+    for scenario_index, (old_success, new_success) in enumerate([(0, 30), (30, 30)]):
+        for target, release, successes in [
+            (old, "0.0.7", old_success),
+            (new, "0.0.8", new_success),
+        ]:
+            for slot, row in rows(successes=successes, release=release).items():
+                target[slot[0], slot[1], f"fixed_{scenario_index}", slot[3], slot[4]] = row
+    report = cmp.compare_samples(old, new)
+    primary = cell(report, "success", "arm")
+    assert primary["difference"] == 0.5
+    assert primary["difference_ci"] == [0.5, 0.5]
+    # Joint scenario draws select the common-effect strata together: effects are 1 and 0.
+    assert primary["sensitivity_difference_ci"] == [0.0, 1.0]
+    assert primary["changed"]  # sensitivity is reported; the primary drives this decision
+
+
+def test_primary_holm_family_is_separate_from_exploratory_bh():
+    report = cmp.compare_samples(rows(successes=0), rows(successes=30, release="0.0.8"))
+    primary = cell(report, "success", "arm")
+    assert primary["inference_family"] == "primary"
+    assert primary["multiplicity_method"] == "Holm alpha=0.05"
+    assert primary["family_size"] == 28
+    # Constant planted difference: plus-one centred-bootstrap p=1/10001;
+    # 28 predeclared primaries, including the unobserved diagnostic arms.
+    assert primary["adjusted_p_value"] == pytest.approx(28 / 10001)
+    assert primary["q_value"] is None
+    assert primary["changed"]
+    for c in report["cells"]:
+        if not c["primary"]:
+            assert c["inference_family"] == "exploratory"
+            assert c["multiplicity_method"] == "BH q=0.05"
+
+
+def test_report_labels_families_sensitivity_and_success_conditioning(tmp_path):
+    import csv
+
+    report = cmp.compare_samples(rows(), rows(release="0.0.8"))
+    cmp.write_report(report, tmp_path)
+    csv_rows = list(csv.DictReader((tmp_path / "distribution.csv").open()))
+    md = (tmp_path / "distribution.md").read_text()
+    warning = "conditional on success; estimands differ when success rates differ"
+    assert "paired joint scenario" in md
+    assert "Holm" in md and "exploratory" in md
+    for c in csv_rows:
+        assert c["inference_family"] == ("primary" if c["primary"] == "True" else "exploratory")
+        if c["metric"].split(".")[0] in cmp.SUCCESS_ONLY:
+            assert c["conditioning"] == warning
+            assert any(c["metric"] in line and warning in line for line in md.splitlines())
+    assert any(
+        c["inference_family"] == "primary" and c["sensitivity_difference_ci"] != "null"
+        for c in csv_rows
+    )
+
+
+def test_bh_step_up_monotonicity_hand_calculated():
+    cells = [{"p_value": p, "difference_ci": [0.1, 0.2]} for p in [0.01, 0.04, 0.041]]
+    cmp.benjamini_hochberg(cells)
+    # Raw rank adjustments .03, .06, .041 require reverse cumulative minima.
+    assert [c["q_value"] for c in cells] == pytest.approx([0.03, 0.041, 0.041])
+    assert all(c["changed"] for c in cells)
+
+
+@pytest.mark.parametrize("method", ["BH", "Holm"])
+@pytest.mark.parametrize(
+    "interval,expected",
+    [
+        ([-0.1, 0.1], False),
+        ([0.0, 0.1], False),
+        ([-0.1, 0.0], False),
+        (None, False),
+        ([0.1, 0.2], True),
+        ([-0.2, -0.1], True),
+    ],
+)
+def test_changed_requires_difference_ci_to_exclude_zero(method, interval, expected):
+    c = {"p_value": 0.001, "difference_ci": interval}
+    if method == "BH":
+        cmp.benjamini_hochberg([c])
+    else:
+        cmp.holm([c], family_size=28)
+    assert c["changed"] is expected
+
+
+def test_holm_predeclared_family_uses_step_down_monotonicity():
+    cells = [{"p_value": p, "difference_ci": [0.1, 0.2]} for p in [0.001, 0.01, 0.0101]]
+    cmp.holm(cells, family_size=28)
+    # 28*.001=.028, 27*.01=.27, 26*.0101=.2626: forward maximum retains .27.
+    assert [c["adjusted_p_value"] for c in cells] == pytest.approx([0.028, 0.27, 0.27])
+    assert [c["changed"] for c in cells] == [True, False, False]

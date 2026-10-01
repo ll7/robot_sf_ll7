@@ -33,6 +33,8 @@ comes from episode rows and remains version-qualified. Null, NaN and infinite sc
 are excluded and counted. Success-only fields report successes/exclusions and need at
 least five successes in each release for a sufficient cell. They are conditioned on
 successful episodes in each release, including the historical path-efficiency display.
+Every such CSV/Markdown cell carries **conditional on success; estimands differ when
+success rates differ**. This warns against comparing differently selected populations.
 
 ## Reviewed definitions
 
@@ -73,29 +75,47 @@ the tool never labels a planner effect.
 
 ## Statistical contract and outputs
 
-Predeclared primary outputs are arm-level success and collision differences.
+The **28 predeclared primaries** are success and collision differences for each of the
+14 mapped arms. The primary estimand is **scenario-conditional**: outcomes on this
+fixed benchmark suite, with equal weight per non-probe scenario. Scenarios are held
+fixed; seeds are resampled with replacement within each scenario independently per
+release. Disjoint release seed sets are never paired. Shared scenario effects therefore
+do not inflate the primary difference interval.
+
 All statistics are descriptive. Unit rates use Wilson 95% intervals; independent rate
 differences use Newcombe hybrid-score intervals and two-sided Fisher exact p-values.
 Continuous means use percentile seed bootstrap intervals with independent samples
 for their differences. Their two-sided p-values use the centred independent bootstrap
-null distribution with a plus-one correction.
+null distribution with a plus-one correction. Arm rates use the scenario-conditional
+seed bootstrap for their primary intervals and centred-bootstrap p-values; pooled
+per-episode Wilson intervals remain reference summaries only.
+
+A separate **paired joint scenario resample sensitivity** interval draws one set of
+scenario indices for both releases, matched by scenario_id, then independently samples
+seeds within each selected scenario and release. Scenario pairing does not pair episode
+seeds. This interval measures sensitivity to scenario composition, appears in JSON,
+CSV and a Markdown column, and does not replace the primary interval in `changed`.
+Pooling over changed scenario definitions does not establish an isolated planner effect.
 
 The fixed analysis RNG seed **20260930** is never passed to an environment. Each cell
-has a deterministic SHA-256-derived stream and at least **10,000** resamples. Input
-ordering does not affect outputs. Matrices are batched in at most 256 replicates.
-Arm rates use equal scenario weight and an independent two-stage bootstrap per release:
-sample scenarios, then seeds within each sampled scenario, with replacement. The main
-intervals are hierarchical percentile intervals; pooled per-episode Wilson intervals
-are also provided for reference. Pooling over changed scenario definitions does not
-establish an isolated planner effect.
+has a deterministic SHA-256-derived stream and at least **10,000** resamples. Sensitivity
+uses a separate deterministic stream. Input ordering does not affect outputs; matrices
+are batched in at most 256 replicates. The synthetic null split-half regression holds
+strong scenario effects in common and pins the primary difference to zero with a narrow
+interval, without running any episode.
 
-Benjamini–Hochberg at q=0.05 covers every tested unit/arm metric cell together, including
-primaries. A `changed` label also requires its difference interval to exclude zero.
-Changed-definition and successor-only fields are never tested.
+Primary contrasts use **Holm at alpha=0.05** in their own predeclared family of 28.
+The family size stays 28 even for a partial diagnostic sample. Other unit and arm cells
+use **Benjamini–Hochberg at q=0.05** in a separate **exploratory** family. Every output
+labels the family and adjustment method. `adjusted_p_value` holds the applicable
+adjustment; `q_value` is populated only for BH exploratory cells. `changed` requires
+both a passing family-adjusted threshold and a primary difference interval strictly
+excluding zero. Changed-definition and successor-only fields are never tested.
 
 `distribution.json` preserves input paths, both source commits, archive/manifest and
 row-file SHA-256 values, schemas, registry/digest, RNG seed, methods, support, missing
 counts, fingerprints, probe classes and adjusted tests. `distribution.csv` and
 `distribution.md` contain every unit/metric and pooled arm rate, with definition status,
-statistics, intervals and flags for thesis review. Quantitative findings belong in
+statistics, primary and sensitivity intervals, inference family, conditioning markers
+and flags for thesis review. Quantitative findings belong in
 those artifacts. These tooling changes admit no dissertation evidence or release claim.

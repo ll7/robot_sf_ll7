@@ -27,6 +27,7 @@ REGISTRY_PATH = Path(__file__).with_name("registries") / "release_distribution_m
 BOOTSTRAP_SEED = 20260930  # analysis RNG only; never an episode seed
 RESAMPLES = 10_000
 Q = 0.05
+SUCCESS_CONDITIONING = "conditional on success; estimands differ when success rates differ"
 RATES = ("success", "collision", "timeout")
 SUCCESS_ONLY = {
     "path_efficiency",
@@ -182,28 +183,42 @@ def _bootstrap(
     draws = np.empty(resamples)
     for start in range(0, resamples, 256):
         size = min(256, resamples - start)
-        if pooled:
-            selected = rng.integers(0, len(groups), (size, len(groups)))
-            totals = np.zeros(size)
-            counts = np.zeros(size)
-            for index, group in enumerate(groups):
-                if not len(group):
-                    continue
-                multiplicity = (selected == index).sum(axis=1)
-                for occurrence in range(int(multiplicity.max())):
-                    mask = multiplicity > occurrence
-                    n = int(mask.sum())
-                    sample = group[rng.integers(0, len(group), (n, len(group)))].mean(axis=1)
-                    totals[mask] += sample
-                    counts[mask] += 1
-            draws[start : start + size] = np.divide(
-                totals, counts, out=np.full(size, np.nan), where=counts > 0
-            )
-        else:
-            group = defined[0]
-            draws[start : start + size] = group[
-                rng.integers(0, len(group), (size, len(group)))
-            ].mean(axis=1)
+        # Scenarios are fixed; resample seeds independently within each scenario.
+        totals = np.zeros(size)
+        selected_groups = defined if pooled else defined[:1]
+        for group in selected_groups:
+            totals += group[rng.integers(0, len(group), (size, len(group)))].mean(axis=1)
+        draws[start : start + size] = totals / len(selected_groups)
+    return draws
+
+
+def _joint_scenario_difference(
+    old: list[np.ndarray], new: list[np.ndarray], rng: np.random.Generator, resamples: int
+) -> np.ndarray:
+    """Sensitivity: common scenario draws, independent within-release seed draws."""
+    if len(old) != len(new):
+        raise ValueError("joint sensitivity requires matched scenario groups")
+    draws = np.empty(resamples)
+    for start in range(0, resamples, 256):
+        size = min(256, resamples - start)
+        selected = rng.integers(0, len(old), (size, len(old)))
+        totals = [np.zeros(size), np.zeros(size)]
+        counts = [np.zeros(size), np.zeros(size)]
+        for index, pair in enumerate(zip(old, new, strict=True)):
+            multiplicity = (selected == index).sum(axis=1)
+            for occurrence in range(int(multiplicity.max())):
+                mask = multiplicity > occurrence
+                n = int(mask.sum())
+                for release, group in enumerate(pair):
+                    if len(group):
+                        sample = group[rng.integers(0, len(group), (n, len(group)))].mean(axis=1)
+                        totals[release][mask] += sample
+                        counts[release][mask] += 1
+        means = [
+            np.divide(total, count, out=np.full(size, np.nan), where=count > 0)
+            for total, count in zip(totals, counts, strict=True)
+        ]
+        draws[start : start + size] = means[1] - means[0]
     return draws
 
 
@@ -293,11 +308,19 @@ def _cell(
     a, b = summaries
     difference = None
     interval = None
+    sensitivity_interval = None
     p = None
     if status == "same" and all(s["sufficient"] and s["estimate"] is not None for s in summaries):
         difference = b["estimate"] - a["estimate"]
         delta_draws = draws[1] - draws[0]  # independent RNG draws, no seed pairing
         interval = _ci(delta_draws)
+        if pooled:
+            sensitivity_rng = np.random.default_rng(
+                [BOOTSTRAP_SEED, int(hashlib.sha256(key.encode()).hexdigest()[:16], 16), 1]
+            )
+            sensitivity_interval = _ci(
+                _joint_scenario_difference(groups[0], groups[1], sensitivity_rng, resamples)
+            )
         if metric in RATES and not pooled:
             k0, k1 = int(groups[0][0].sum()), int(groups[1][0].sum())
             n0, n1 = a["n_defined"], b["n_defined"]
@@ -322,6 +345,9 @@ def _cell(
     return {
         **identity,
         "metric": metric,
+        "conditioning": SUCCESS_CONDITIONING
+        if metric.split(".", maxsplit=1)[0] in SUCCESS_ONLY
+        else "",
         "definition_status": status,
         "definition_changed": status == "changed",
         "sufficient": (b["sufficient"] and b["n_defined"] > 0)
@@ -333,11 +359,15 @@ def _cell(
         "release_0_0_8": b,
         "difference": difference,
         "difference_ci": interval,
+        "sensitivity_difference_ci": sensitivity_interval,
+        "sensitivity_method": "paired joint scenario/independent seed percentile bootstrap"
+        if pooled
+        else None,
         "p_value": p,
         "q_value": None,
         "changed": False,
         "primary": pooled and metric in ("success", "collision"),
-        "ci_method": "two-stage scenario/seed percentile bootstrap"
+        "ci_method": "scenario-conditional seed percentile bootstrap"
         if pooled
         else "Wilson/Newcombe"
         if metric in RATES
@@ -346,15 +376,43 @@ def _cell(
 
 
 def benjamini_hochberg(cells: list[dict]) -> None:
-    """Adjust across every tested unit/metric, including predeclared primaries."""
+    """Adjust the exploratory family with BH step-up monotonicity."""
     tested = sorted((c for c in cells if c["p_value"] is not None), key=lambda c: c["p_value"])
     minimum = 1.0
     for rank in range(len(tested), 0, -1):
         cell = tested[rank - 1]
         minimum = min(minimum, cell["p_value"] * len(tested) / rank)
         cell["q_value"] = minimum
+        cell["adjusted_p_value"] = minimum
         interval = cell["difference_ci"]
         cell["changed"] = bool(minimum <= Q and interval and (interval[0] > 0 or interval[1] < 0))
+
+
+def holm(cells: list[dict], *, family_size: int) -> None:
+    """Control family-wise error for the 28 predeclared primary contrasts."""
+    tested = sorted((c for c in cells if c["p_value"] is not None), key=lambda c: c["p_value"])
+    if len(tested) > family_size:
+        raise ValueError("tested primary contrasts exceed the predeclared family")
+    maximum = 0.0
+    for rank, cell in enumerate(tested):
+        maximum = max(maximum, min(1.0, cell["p_value"] * (family_size - rank)))
+        cell["adjusted_p_value"] = maximum
+        interval = cell["difference_ci"]
+        cell["changed"] = bool(maximum <= Q and interval and (interval[0] > 0 or interval[1] < 0))
+
+
+def _multiplicity(cells: list[dict]) -> None:
+    primary = [c for c in cells if c["primary"]]
+    exploratory = [c for c in cells if not c["primary"]]
+    primary_size = 2 * len(ARM_SLOTS_0_0_7_TO_0_0_8)
+    exploratory_size = sum(c["p_value"] is not None for c in exploratory)
+    for cell in cells:
+        cell["inference_family"] = "primary" if cell["primary"] else "exploratory"
+        cell["multiplicity_method"] = "Holm alpha=0.05" if cell["primary"] else "BH q=0.05"
+        cell["family_size"] = primary_size if cell["primary"] else exploratory_size
+        cell["adjusted_p_value"] = None
+    holm(primary, family_size=primary_size)
+    benjamini_hochberg(exploratory)
 
 
 def compare_samples(  # noqa: C901 - separate unit definitions, metric statuses and arm pooling
@@ -472,7 +530,7 @@ def compare_samples(  # noqa: C901 - separate unit definitions, metric statuses 
                     resamples=resamples,
                 )
             )
-    benjamini_hochberg(cells)
+    _multiplicity(cells)
     return {
         "schema": "release-distribution-comparison.v1",
         "label": "diagnostic, not the release comparison"
@@ -487,9 +545,10 @@ def compare_samples(  # noqa: C901 - separate unit definitions, metric statuses 
         "methods": {
             "rates": "Wilson 95%; Newcombe independent hybrid score; two-sided Fisher exact p",
             "means": "seed percentile bootstrap; independent two-sample difference; centred bootstrap p",
-            "pool": "equal scenario weight; two-stage scenario then independent seed bootstrap; probe excluded",
-            "multiplicity": "Benjamini-Hochberg q=0.05 across all tested unit and arm cells",
-            "primary": "arm-level success and collision differences",
+            "pool": "equal scenario weight; fixed scenarios with independent within-scenario seed bootstrap per release; probe excluded",
+            "sensitivity": "paired joint scenario resample matched by scenario_id; independent seeds per release",
+            "multiplicity": "28 predeclared primaries: Holm alpha=0.05; other unit and arm cells: exploratory BH q=0.05",
+            "primary": "scenario-conditional arm-level success and collision differences (fixed benchmark suite)",
             "missing": "null/NaN/infinite excluded and counted; no imputation; success-only >=5 each",
             "timeout": "0.0.7 max_steps and unsuccessful, noncollision terminated at authored step limit (#9999)",
             "jerk": "episode rows only; empty breakdown cells are missing (#10044)",
@@ -534,8 +593,10 @@ def write_report(report: dict, output: Path) -> None:
         "",
         "All statistics are descriptive. Flagged cells are combined release differences. Probe excluded from pooling.",
         "",
-        "| Level | Arm (old → new) | Scenario | Metric / definition | n defined v1 / v2 | v1 mean/rate [95% CI] | v2 mean/rate [95% CI] | Difference [95% CI] | q | Changed | Flags |",
-        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "28 predeclared primaries: Holm alpha=0.05. Other unit and arm cells: exploratory BH q=0.05. Fixed-scenario primary; paired joint scenario sensitivity.",
+        "",
+        "| Family | Level | Arm (old → new) | Scenario | Metric / definition | n defined v1 / v2 | v1 mean/rate [95% CI] | v2 mean/rate [95% CI] | Difference [95% CI] | Paired joint scenario sensitivity [95% CI] | Adjusted p / q | Changed | Flags | Conditioning |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for cell in report["cells"]:
         a, b = cell["release_0_0_7"], cell["release_0_0_8"]
@@ -545,7 +606,7 @@ def write_report(report: dict, output: Path) -> None:
             if cell[key]
         )
         lines.append(
-            f"| {cell['level']} | {cell['arm_0_0_7']} → {cell['arm_0_0_8']} | {cell['scenario_id']} | {cell['name_0_0_7']} / {cell['name_0_0_8']} ({cell['definition_status']}) | {a['n_defined']} / {b['n_defined']} | {a['estimate']} {a['ci']} | {b['estimate']} {b['ci']} | {cell['difference']} {cell['difference_ci']} | {cell['q_value']} | {cell['changed']} | {flags} |"
+            f"| {cell['inference_family']} | {cell['level']} | {cell['arm_0_0_7']} → {cell['arm_0_0_8']} | {cell['scenario_id']} | {cell['name_0_0_7']} / {cell['name_0_0_8']} ({cell['definition_status']}) | {a['n_defined']} / {b['n_defined']} | {a['estimate']} {a['ci']} | {b['estimate']} {b['ci']} | {cell['difference']} {cell['difference_ci']} | {cell['sensitivity_difference_ci']} | {cell['adjusted_p_value']} | {cell['changed']} | {flags} | {cell['conditioning']} |"
         )
     (output / "distribution.md").write_text("\n".join(lines) + "\n")
 

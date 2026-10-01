@@ -18,6 +18,25 @@ latest_reconciliation_issue: 9645
 latest_reviewed_date: 2026-09-28
 latest_reviewed_by: Codex autonomous lead; exact packet checksums and combined-tree inventory verified; no maintainer sign-off is claimed.
 evidence_tree_refresh_addenda:
+  - issue: 10064
+    reviewed_date: 2026-10-01
+    previous:
+      count: 2792
+      sha256: d4e17cb644e5960331595480e53c6441f38bed677209647ed3180b91b69e1b9b
+    candidate:
+      count: 2796
+      sha256: c29bfbac7786b5370a8ca35f335b42d37ce38d7d815a11a52b661786bde4c19a
+    files_added: 4
+    finding_delta: none
+    decision: >-
+      Reviewed the four marked #10064 recovery evidence members. The shared writer
+      registered the bundle, and narrow strict provenance lint has no findings.
+      Initially missing raw-artifact locations and config hash path metadata were
+      remediated with explicit source locations and resolved paths; none were
+      grandfathered. The 446 existing findings are unchanged. Validation and
+      empty-world parity are complete; paired dev-only matrix analysis remains
+      pending. No held-out evaluation, release ranking, safety certification or
+      maintainer result sign-off is asserted.
   - issue: 9647
     reviewed_date: 2026-09-26
     previous:

@@ -449,6 +449,10 @@ _FAST_FILES = {
     "test_emergent_wall_geometry.py",
     # Generator contracts construct scenes without stepping an environment.
     "test_scenario_generator.py",
+    # Rehearsal pipeline and release audit regressions use dev-seed row fixtures
+    # and offline files; keep their real campaign branches covered in PR CI.
+    "test_pipefix_pipeline.py",
+    "test_scan_release_audit.py",
     # Clearance and LiDAR tracking contracts use fixed arrays without environment steps.
     "test_clearance_geometry.py",
     "test_lidar_tracked_agents.py",

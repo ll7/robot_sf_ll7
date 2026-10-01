@@ -136,6 +136,7 @@ def test_updated_legacy_report_keeps_collision_gate_opt_in() -> None:
             _row("legacy-v1", 1, "social_force", steps=100, collision=True, timeout=False),
         ],
         source=_source("goal", "social_force"),
+        config=release_row_anomalies.DEFAULT_CONFIG,
     )
 
     # Golden includes detector engine v1.5 provenance; collision opt-in is unchanged.

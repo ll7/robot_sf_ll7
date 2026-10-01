@@ -8029,3 +8029,7 @@ entries:
   status: evidence
   freshness: evidence
   area: tooling
+- path: docs/context/evidence/issue_10064_no_admissible_recovery
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

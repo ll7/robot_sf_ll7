@@ -14,6 +14,7 @@ import numpy as np
 from robot_sf.benchmark.uncertainty_safety import compute_intrusion_metrics
 from robot_sf.planner.clearance_geometry import (
     CENTER_CLEARANCE_V1,
+    least_bad_clearance_rank,
     obstacle_rollout_admissible,
     occupied_cell_clearance,
     pedestrian_clearance,
@@ -751,6 +752,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             ShieldDecision: Proposed action, selected action, and shield decision metadata.
         """
         self._no_admissible_command = False
+        self._recovery_kind = None
         self.last_fallback_target_xy = None
         self._init_action_adaptation(ppo_command)
         cached_state = self._extract_state(observation)
@@ -1098,67 +1100,68 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 fallback_policy="stop",
             )
 
-        static_ranking = cached_state[3].size == 0 and self._static_recovery_available()
+        # Both executable alternatives violate a hard constraint. Vetoed PPO/prior
+        # proposals cannot defeat the fallback and leave a worse stop selected.
+        self._no_admissible_command = True
+        self._no_admissible_command_count += 1
 
-        def clearance_rank(evaluation) -> tuple[float, ...]:
-            if not static_ranking:
-                return (float(evaluation["min_ped_clear"]),)
-            return tuple(
-                float(evaluation.get(key, float("-inf")))
-                for key in ("min_ped_clear", "min_obs_clear", "progress")
+        def clearance_rank(evaluation) -> tuple[float, float]:
+            return least_bad_clearance_rank(
+                float(evaluation["min_ped_clear"]),
+                float(evaluation["min_obs_clear"]),
+                ped_threshold=float(self.config.hard_ped_clearance),
+                obstacle_threshold=float(self.config.hard_obstacle_clearance),
+                progress=float(evaluation["progress"]),
             )
 
         current_obs = self._min_obstacle_clearance(
             cached_state[0], observation=observation, grid_payload=cached_grid
         )
-        recovery = (
-            static_ranking
-            and 0.0 < current_obs < float(self.config.hard_obstacle_clearance)
+        recovery_turn = (
+            cached_state[3].size == 0
+            and self._static_recovery_available()
             and self._drive_settings is not None
+            and 0.0 < current_obs < float(self.config.hard_obstacle_clearance)
+            and fallback_command[0] == 0.0
+            and fallback_command[1] != 0.0
             and obstacle_rollout_admissible(
                 current_obs,
                 float(fallback_eval["min_obs_clear"]),
                 float(self.config.hard_obstacle_clearance),
             )
+            and clearance_rank(fallback_eval) == clearance_rank(stop_eval)
         )
-        # Vetoed proposals are unavailable: they cannot defeat an executable
-        # fallback's static recovery rank. Preserve FX4/FX5 pedestrian behavior.
-        alternatives = [stop_eval] if static_ranking else [ppo_eval, stop_eval]
-        if not static_ranking and prior_eval is not None:
-            alternatives.append(prior_eval)
-        best_rank = max(map(clearance_rank, alternatives))
-        fallback_rank = clearance_rank(fallback_eval)
-        # With bound exact geometry, static clearance and progress break empty
-        # pedestrian ties. Otherwise preserve strict pedestrian arbitration:
-        # grid endpoints cannot authorize a below-margin translation.
-        prefer_recovery_turn = (
-            recovery
-            and fallback_command[0] == 0.0
-            and fallback_command[1] != 0.0
-            and fallback_rank == best_rank
+        # Endpoint-only grids cannot justify below-margin static translation:
+        # keep the swept-geometry contract for pedestrian-free standalone guards.
+        unbound_static = (
+            self.config.clearance_model == "surface_v2"
+            and cached_state[3].size == 0
+            and not self._static_recovery_available()
         )
-        if (fallback_rank > best_rank or prefer_recovery_turn) and (not static_ranking or recovery):
-            self._recovery_command_count += int(recovery)
-            return self._shield_decision(
-                ppo_command=ppo_command,
-                filtered_command=(float(fallback_command[0]), float(fallback_command[1])),
-                label="fallback_best_effort",
-                reason="no_safe_command_available_fallback_has_largest_clearance",
-                ppo_eval=ppo_eval,
-                selected_eval=fallback_eval,
-                fallback_policy=type(self.fallback_adapter).__name__,
-                hard_constraint_violation=True,
-            )
-        self._no_admissible_command = True
-        self._no_admissible_command_count += 1
+        use_fallback = not unbound_static and (
+            clearance_rank(fallback_eval) > clearance_rank(stop_eval) or recovery_turn
+        )
+        self._recovery_command_count += int(recovery_turn)
+        fallback_diagnostics = getattr(self.fallback_adapter, "diagnostics", lambda: {})()
+        self._recovery_kind = (
+            fallback_diagnostics.get("recovery_kind") or "least_bad_clearance"
+            if use_fallback
+            else "brake"
+        )
         return self._shield_decision(
             ppo_command=ppo_command,
-            filtered_command=(0.0, 0.0),
-            label="stop_best_effort",
-            reason="no_safe_command_available_stop_has_largest_clearance",
+            filtered_command=(float(fallback_command[0]), float(fallback_command[1]))
+            if use_fallback
+            else (0.0, 0.0),
+            label="fallback_best_effort" if use_fallback else "stop_best_effort",
+            reason=(
+                "no_safe_command_available_fallback_has_largest_clearance"
+                if use_fallback
+                else "no_safe_command_available_stop_has_largest_clearance"
+            ),
             ppo_eval=ppo_eval,
-            selected_eval=stop_eval,
-            fallback_policy="stop",
+            selected_eval=fallback_eval if use_fallback else stop_eval,
+            fallback_policy=type(self.fallback_adapter).__name__ if use_fallback else "stop",
             hard_constraint_violation=True,
         )
 
@@ -1271,6 +1274,7 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         fallback_diagnostics = getattr(self.fallback_adapter, "diagnostics", lambda: {})()
         return {
             "planner_type": "GuardedPPOAdapter",
+            "recovery_kind": getattr(self, "_recovery_kind", None),
             "no_admissible_command": self._no_admissible_command,
             "no_admissible_command_count": self._no_admissible_command_count,
             "recovery_command_count": self._recovery_command_count,

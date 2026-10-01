@@ -2979,6 +2979,17 @@ def _step_build_simulation_trace(
     planner_payload.update(
         _simulation_trace_decision_fields(getattr(sim, "planner_step_decision", None))
     )
+    decision = getattr(sim, "planner_step_decision", None)
+    if isinstance(decision, dict):
+        for key in (
+            "recovery_kind",
+            "no_admissible_command",
+            "no_admissible_command_count",
+            "recovery_command",
+            "recovery_command_count",
+        ):
+            if key in decision:
+                planner_payload[key] = decision[key]
     if sim.action_conversion_payload:
         planner_payload["action_conversion"] = sim.action_conversion_payload
     if sim.actuation_step is not None:
@@ -3286,6 +3297,7 @@ def _step_planner_decision_dwa_keys(
     planners' traces are unchanged.
     """
     for dwa_key in (
+        "recovery_kind",
         "no_admissible_command",
         "no_admissible_command_count",
         "recovery_command",

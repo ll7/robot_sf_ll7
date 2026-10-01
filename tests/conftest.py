@@ -417,6 +417,8 @@ _FAST_FILES = {
     "test_exact_repeat_campaign.py",
     # Historical schedule bytes are static; its native episodes are explicitly slow.
     "test_scheduled_campaign_compatibility.py",
+    # Authored-budget and historical-identity contracts resolve inputs without stepping.
+    "test_campaign_horizon_contracts.py",
     # Clearance and LiDAR tracking contracts use fixed arrays without environment steps.
     "test_clearance_geometry.py",
     "test_lidar_tracked_agents.py",

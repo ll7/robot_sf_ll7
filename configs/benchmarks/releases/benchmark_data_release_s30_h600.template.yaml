@@ -48,7 +48,7 @@ claim_boundary:
 
 scenario:
   matrix_path: ../../scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml
-  matrix_sha256: "a5daeabaaa10596295991db03bb8c3024d3ec5313e8d41fe928e8512a65670f7"
+  matrix_sha256: "c68a96f1d74fac4b5d199343e98227242efef1a44043db6286642b906705e2b7"
   suite_policy_path: paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml
   suite_policy_sha256: "b5eb0a0cd6e07c7ef285781adcda207457e423f3bfb381cc78cd313c62dd6395"
   route_certification_path: ../route_clearance_certifications_v1.yaml

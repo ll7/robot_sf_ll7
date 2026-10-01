@@ -45,7 +45,7 @@ repository).
   rule, D-002); block on every finding.
 - **Implemented in:** process rule; milestone 0.0.9.
 - **Evidence:** Original ledger in PR #10032 (author or delegated ruling as recorded above); original ledger provenance preserved.
-- **Enforced by:** none yet: check the recorded contract for which new findings still block 0.0.8.
+- **Enforced by:** no test yet.
 
 ### D-002: Earlier admission rule for side-quest findings (superseded by D-001)
 - **Date:** 2026-09-30 (morning)
@@ -59,7 +59,7 @@ repository).
 - **Alternatives:** treat every review finding as a merge blocker.
 - **Implemented in:** process rule, stated on tracker #10013. Tightened by D-001.
 - **Evidence:** #10013; original ledger provenance preserved.
-- **Enforced by:** none yet: check the recorded contract for earlier admission rule for side-quest findings.
+- **Enforced by:** no test yet.
 
 ### D-003: Fix result-changing planner defects before the freeze
 - **Date:** 2026-09-30
@@ -75,7 +75,7 @@ repository).
 - **Implemented in:** #9926, #9995, #10008, #10009, #10011, #10014 (see the
   decisions below).
 - **Evidence:** #9926, #9995, #10008, #10009, #10011, #10014; original ledger provenance preserved.
-- **Enforced by:** none yet: check the recorded contract for fix result-changing planner defects before the freeze for the rule itself; the individual fixes
+- **Enforced by:** no test yet for the rule itself; the individual fixes
   carry their own tests.
 
 ### D-004: 0.0.8 runs from a pinned freeze commit
@@ -94,7 +94,7 @@ repository).
 - **Implemented in:** #9932; the private mint binds a freeze commit
   (private-ops #407).
 - **Evidence:** #9932, private-ops #407; original ledger provenance preserved.
-- **Enforced by:** none yet: check the recorded contract for 0.0.8 runs from a pinned freeze commit in this repository. The private mint refuses
+- **Enforced by:** no test yet in this repository. The private mint refuses
   inputs that are not the pinned freeze blobs
   (`ops/jobs/scripts/test_full_campaign_authority.py::test_forged_scientific_authority_should_be_refused`,
   private).
@@ -112,7 +112,7 @@ repository).
 - **Alternatives:** go straight from merges to the full campaign.
 - **Implemented in:** operational (no pull request).
 - **Evidence:** Original ledger in PR #10032 (author or delegated ruling as recorded above); original ledger provenance preserved.
-- **Enforced by:** none yet: check the recorded contract for rehearsal campaign before the real campaign.
+- **Enforced by:** no test yet.
 
 ### D-006: One last external review for 0.0.8
 - **Date:** 2026-09-30
@@ -125,7 +125,7 @@ repository).
 - **Implemented in:** process rule. The adapter review arrived on 2026-09-30
   and is listed in findings.md, triage pending.
 - **Evidence:** Original ledger in PR #10032 (author or delegated ruling as recorded above); original ledger provenance preserved.
-- **Enforced by:** none yet: check the recorded contract for one last external review for 0.0.8.
+- **Enforced by:** no test yet.
 
 ### D-007: Behaviour-change gate for planner and simulator changes
 - **Date:** 2026-09-30
@@ -145,7 +145,7 @@ repository).
 - **Implemented in:** applied by hand in 0.0.8; automation is #10000
   (milestone 0.0.9).
 - **Evidence:** #10000; original ledger provenance preserved.
-- **Enforced by:** none yet: check the recorded contract for behaviour-change gate for planner and simulator changes (no CI check requires a gate receipt).
+- **Enforced by:** no test yet (no CI check requires a gate receipt).
 
 ### D-008: Held-out evaluation seeds 111-140 are never stepped outside the campaign
 
@@ -208,7 +208,7 @@ repository).
 - **Implemented in:** disclosure (#10006, #10002, thesis intake); fail-closed
   key check in 0.0.9.
 - **Evidence:** #10006, #10002; original ledger provenance preserved.
-- **Enforced by:** none yet: check the recorded contract for hybrid v4 inert keys and scenario-name overrides are disclosed, not changed.
+- **Enforced by:** no test yet.
 
 ### D-011: Planner horizons keep their length in seconds after the 0.1 s step fix
 - **Date:** 2026-09-29
@@ -276,7 +276,7 @@ repository).
   passes.
 - **Implemented in:** docs task #10002 (open).
 - **Evidence:** #10002; original ledger provenance preserved.
-- **Enforced by:** none yet: check the recorded contract for residual empty-world failures are method limits, not tuned away.
+- **Enforced by:** no test yet.
 
 ### D-015: guarded_ppo keeps its one-step waypoint lookahead
 - **Date:** 2026-09-29
@@ -362,7 +362,7 @@ repository).
   `tests/planner/test_fxs_release_contract.py::test_release_preferred_speed_reaches_checkpoint_host_input`,
   `tests/planner/test_fxs_release_contract.py::test_release_observes_nineteen_nearest_agents_without_padding_in_sequence`,
   `tests/planner/test_fxs_release_contract.py::test_checkpoint_rejects_configured_agent_count_above_nineteen`
-  (open PR). The heading mapping has none yet: check the recorded contract for sa-cadrl is evaluated as published: preferred speed 1.0 m/s, 19 observed agents.
+  (open PR). The heading mapping has no test yet.
 
 ### D-019: Planners read the simulation clock and fail closed without it
 - **Date:** 2026-09-30
@@ -516,7 +516,7 @@ repository).
 - **Alternatives:** lengthen or shorten the four budgets now.
 - **Implemented in:** disclosure; probe queued.
 - **Evidence:** Original ledger in PR #10032 (author or delegated ruling as recorded above); original ledger provenance preserved.
-- **Enforced by:** none yet: check the recorded contract for budgets stay after the data check; four scenarios are disclosed.
+- **Enforced by:** no test yet.
 
 ## Metrics and reporting
 
@@ -659,7 +659,7 @@ repository).
 - **Implemented in:** #10019, fix round in progress (not yet pushed when this
   file was written).
 - **Evidence:** #10019; original ledger provenance preserved.
-- **Enforced by:** none yet: check the recorded contract for release acceptance counts `episodes_total`; excluded rows are named.
+- **Enforced by:** no test yet.
 
 ## Pedestrian simulation
 
@@ -696,7 +696,7 @@ repository).
   key.
 - **Implemented in:** #10024, fix round in progress.
 - **Evidence:** #10024; original ledger provenance preserved.
-- **Enforced by:** none yet: check the recorded contract for `simulation_config.groups` is the fraction of pedestrians in groups for the fraction meaning. The current test
+- **Enforced by:** no test yet for the fraction meaning. The current test
   `tests/ped_npc/test_pedfix_episode_contract.py::test_groups_override_changes_real_population`
   (open PR) only checks that the key has an effect.
 
@@ -750,7 +750,7 @@ repository).
 - **Alternatives:** change the wall law before 0.0.8.
 - **Implemented in:** disclosure (thesis intake diss#3021); fix in #10017.
 - **Evidence:** #3021, #10017; original ledger provenance preserved.
-- **Enforced by:** none yet: check the recorded contract for wall law and stuck pedestrians: disclosed for 0.0.8, fixed in 0.0.9.
+- **Enforced by:** no test yet.
 
 ### D-039: Declared pedestrian speed is the desired speed; the 1.3 cap stays
 - **Date:** 2026-09-30
@@ -763,7 +763,7 @@ repository).
 - **Alternatives:** divide by 1.3 when seeding the speed.
 - **Implemented in:** documentation (#10017).
 - **Evidence:** #10017; original ledger provenance preserved.
-- **Enforced by:** none yet: check the recorded contract for declared pedestrian speed is the desired speed; the 1.3 cap stays.
+- **Enforced by:** no test yet.
 
 ### D-040: Group gaze and group repulsion: disclosed for 0.0.8, fixed in 0.0.9
 - **Date:** 2026-09-30
@@ -781,7 +781,7 @@ repository).
 - **Alternatives:** fix the group laws before 0.0.8.
 - **Implemented in:** #10027 (0.0.9); disclosure in the thesis intake.
 - **Evidence:** #10027; original ledger provenance preserved.
-- **Enforced by:** none yet: check the recorded contract for group gaze and group repulsion: disclosed for 0.0.8, fixed in 0.0.9.
+- **Enforced by:** no test yet.
 
 ### D-041: join_group and leave_group are disclosed as containing no group
 - **Date:** 2026-09-30
@@ -796,7 +796,7 @@ repository).
 - **Alternatives:** drop or rename the scenarios for 0.0.8.
 - **Implemented in:** #10028 (0.0.9).
 - **Evidence:** #10028; original ledger provenance preserved.
-- **Enforced by:** none yet: check the recorded contract for join_group and leave_group are disclosed as containing no group.
+- **Enforced by:** no test yet.
 
 ## Scenarios and maps
 
@@ -831,7 +831,7 @@ repository).
 - **Alternatives:** present it as an error in 0.0.7 results.
 - **Implemented in:** thesis intake.
 - **Evidence:** Original ledger in PR #10032 (author or delegated ruling as recorded above); original ledger provenance preserved.
-- **Enforced by:** none yet: check the recorded contract for triangle sampling in 0.0.7 is a coverage limitation, not a numbers error.
+- **Enforced by:** no test yet.
 
 ### D-044: The elevator wall geometry change is disclosed
 - **Date:** 2026-09-29
@@ -844,7 +844,7 @@ repository).
 - **Alternatives:** none recorded.
 - **Implemented in:** #9972 (merged); disclosure pending.
 - **Evidence:** #9972; original ledger provenance preserved.
-- **Enforced by:** none yet: check the recorded contract for the elevator wall geometry change is disclosed.
+- **Enforced by:** no test yet.
 
 ### D-045: The narrow-doorway probe counts contact only, not force
 - **Date:** 2026-09-29
@@ -882,7 +882,7 @@ repository).
 - **Evidence:** private-ops #414, #418; original ledger provenance preserved.
 - **Enforced by:** the guard is tested by
   `ops/jobs/scripts/test_submit_remote_sync.py::test_pinned_runtime_sync_accepts_reviewed_ancestor_and_refuses_dirty_or_diverged`
-  (private). The merge method itself has none yet: check the recorded contract for private-ops pull requests that carry a runtime pin are merged with a merge commit.
+  (private). The merge method itself has no test yet.
 
 ### D-047: Admission uses one fixture rule and binds the reviewed public commit
 - **Date:** 2026-09-30
@@ -1080,8 +1080,8 @@ this ruling; never reuse an observed evaluation band for a fresh release claim.
   seed 1004 changes from main success at step 325 to a train **pedestrian
   collision at step 32**, minimum distance 1.39 m. The non-release safety,
   freeze, and progress checks remain; they make no release-success claim.
-- **Evidence:** rr10080_report.md, private-ops review archive, finding F1 and
-  claim 4; PR #10080. The review binds jobs 16110, 16112, and 16117 to
+- **Evidence:** Review rr10080 (rr10080_report.md), archived in the private-ops review archive, finding F1 and
+  claim 4; PR #10080. The review binds Slurm jobs 16110, 16112, and 16117 to
   development seeds only.
 - **Alternatives:** Tune the release sampler to recover the old outcomes;
   retain the incorrect crowd world. Neither was adopted.
@@ -1115,8 +1115,10 @@ Historical measurements below are attributed to the named review report; they we
   migrate all of them to development seeds before the freeze.
 - **Amends:** D-049, which says "Retired seeds 111..140 have no execution
   exception". The exception is now: existing tests only.
-- **Evidence:** chat 2026-10-01 07:19-07:21; private orchestration notes;
-  lane rules on all workstations updated the same morning.
+- **Evidence:** Author records-lane instruction, 2026-10-01 evening;
+  author-rule summary, 2026-10-01 13:32 ("Seed rule (user)"); lane rules.
+  These sources confirm the existing-test exception without an unsupported
+  chat timestamp.
 - **Implemented in:** process rule (lane rules); #10053 had already migrated
   the seeds it touched to development seeds.
 - **Enforced by:** none yet: distinguish existing retired-seed tests from new episode work. `tests/validation/test_check_seed_holdout_diff.py::test_new_sealed_names_require_explicit_allowlist` covers added sealed names only; the current runtime test guard still rejects the retired band. This implementation gap does not rescind the author ruling.
@@ -1274,10 +1276,9 @@ Historical measurements below are attributed to the named review report; they we
   path just before the freeze (D-001). Speed, radius and wall law are coupled
   (the wall stop sits where the wall force equals v0/tau), so they must be
   changed together, not one at a time.
-- **Decided by:** orchestrator (delegated). The author asked "so this means we
-  definitly should change to the literature-based option in the benchmark?"
-  (2026-10-01 13:14); the orchestrator answered "yes for 0.0.9, but not in
-  0.0.8", and the author did not object.
+- **Decided by:** orchestrator (delegated) for the 0.0.8 no-change and disclosure;
+  author for moving the literature-based speed model to the next release
+  (0.1.0 D-005; author direction, 2026-10-01 13:14).
 - **Alternatives:** switch on the existing `typical` speed tier for
   0.0.8; shrink the radius for 0.0.8.
 - **Evidence:** #10074 comment 5932171567 (speed source check); pedestrian
@@ -1525,9 +1526,13 @@ Historical measurements below are attributed to the named review report; they we
 - **Choice:** Release rows are untraced. Traces come from rehearsal 2 (dev
   seed 1001) at the freeze commit. No sealed-seed trace run.
 - **Reason:** Cost, and no sealed-seed step outside the campaign.
-- **Decided by:** orchestrator (delegated). Private label: D-057.
+- **Decided by:** authority disputed: private notes attribute a delegated
+  orchestrator ruling; #10047's body says "Author directed" for private
+  D-057 untraced release rows. No author ruling on traces was found in the
+  chat extract. The policy is recorded; author attribution remains unresolved
+  pending confirmation.
 - **Alternatives:** trace all release rows.
-- **Evidence:** #10047 review RR10047; rr10047_report.md, private-ops review archive.
+- **Evidence:** #10047 body and review RR10047; rr10047_report.md, private-ops review archive.
 - **Implemented in:** #10047 (open).
 - **Enforced by:** (open PR #10047) `tests/analysis/test_compare_release_0_0_7_to_0_0_8.py::test_small_real_trace_read_discards_series` verifies reading untraced rows; none yet: campaign-level prohibition of sealed diagnostic trace runs. Trace-schema tests do not enforce the untraced-release policy.
 - **Reopen:** New material evidence or an explicit author ruling.
@@ -1620,7 +1625,7 @@ Historical measurements below are attributed to the named review report; they we
 - **Reason:** Fail-closed seam between two independently reviewed PRs.
 - **Decided by:** orchestrator (delegated), from the release-notes lane.
 - **Alternatives:** none recorded.
-- **Evidence:** #10085; relnotes_report.md, private-ops review archive; statically verified candidate seed policy at the #9999 head and canonical-path allowlist in `robot_sf/benchmark/release_protocol.py` on main; relnotes_report.md, private-ops review archive.
+- **Evidence:** #10085; relnotes_report.md, private-ops review archive; statically verified candidate seed policy at the #9999 head and canonical-path allowlist in `robot_sf/benchmark/release_protocol.py` on main.
 - **Implemented in:** Not yet; tracked by #10085.
 - **Enforced by:** none yet: selected release template resolves to the sealed tuple and passes the guard with non-stepping recording stubs.
 - **Reopen:** New material evidence or an explicit author ruling.
@@ -1733,7 +1738,7 @@ These private labels were never public ledger IDs. Read each citation in its PR 
 | D-050 (initial horizon extension) | not adopted | #9999; refuted premise, replaced by the corrected rule. Public D-050 is the crowd-distribution acceptance. |
 | D-050 (corrected horizon), D-054 | D-064 | #9999; reproduce historical main limits, authored authority only for current protocols. |
 | D-051 | D-063 | Group-allocation truncation; private notes, #10024 review context. |
-| D-052 | D-033 | Duplicate of the public robot-zone clearance choice. |
+| D-052 | unresolved | unresolved: no source defines private D-052; the draft's duplicate claim is unverified |
 | D-053 | D-071 | Manual merge trains and exact-head full suite. |
 | D-055 | D-066 | #10054 implements curvature; #10058 cites its changed-definition exclusion. Formula verified, author/delegated attribution unresolved. |
 | D-056 | D-067 | SNQI-v2 reporting rules; implementing PR not located. |

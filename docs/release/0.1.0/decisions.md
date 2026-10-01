@@ -26,7 +26,7 @@ Related: the 0.0.8 ledger (`docs/release/0.0.8/decisions.md`), whose
 disclosures (wall stand-off, doorway queue, 0.65 m/s, disc size, no steering,
 no reverse, grid offset, TTC) are the starting point for this release.
 
-Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. The evening author rulings are recorded explicitly. Measurements are attributed to their source reports; this records lane executed no new simulation.
+Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. The evening author rulings are recorded explicitly. Measurements and literature numbers are source-attributed planning inputs; this records lane executed no new simulation. Evening author rulings apply where stated.
 
 ## Release identity
 
@@ -53,7 +53,7 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
   (#10061, #10068, #10070, #10071, #10079).
 - **Enforced by:** none yet: the release identity and notes check that the
   version is 0.1.0 and that a non-comparability sentence is present.
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-002: 0.0.8 is finished first; 0.1.0 never delays it
 - **Date:** 2026-10-01
@@ -66,7 +66,7 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
 - **Evidence:** Author records-lane instruction, 2026-10-01 evening; earlier chat 2026-10-01 14:19–14:25; 0.0.8 D-079.
 - **Implemented in:** process.
 - **Enforced by:** none yet: record the selected thesis release at the stop-or-continue check.
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-003: Scope: a core set, cheap coupled items, everything else optional
 - **Date:** 2026-10-01
@@ -125,11 +125,11 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
   includes avoidance).
 - **Evidence:** #10074 comments 5929476286 and 5929692628 (source check);
   diss research note `2026-10-01_chatgpt_pedestrian_radius_evidence.md`;
-  #10073 calibration round; measurements and literature numbers are source-attributed planning inputs, not a newly executed validation. Evening author rulings apply where stated.
+  #10073 calibration round.
 - **Implemented in:** not yet (#10074 step 2, #10034 B5, #10079 D6).
 - **Enforced by:** none yet: a test that fails if any consumer uses a
   literal 0.35 or 0.40 (scope acceptance 1).
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-005: Desired speed N(1.3, 0.2) m/s per pedestrian with a separate cap
 - **Date:** 2026-10-01
@@ -154,11 +154,11 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
 - **Alternatives:** flip the existing `typical` tier alone (the cap
   is still tied to the desired speed); keep 0.65 m/s.
 - **Evidence:** #10074 comment 5932171567; diss research note
-  `2026-10-01_chatgpt_pedestrian_dynamics.md`; validation baseline (#10075); measurements and literature numbers are source-attributed planning inputs, not a newly executed validation. Evening author rulings apply where stated.
+  `2026-10-01_chatgpt_pedestrian_dynamics.md`; validation baseline (#10075).
 - **Implemented in:** not yet; depends on #10083 (D-020).
 - **Enforced by:** none yet: V1 in the validation suite (simulated mean
   1.29 +- 0.05 m/s, SD 0.15-0.25 on 30 dev seeds, as proposed in the scope).
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-006: Joint calibration of radius, speed, wall law and contact, time-boxed to 5 working days
 - **Date:** 2026-10-01
@@ -174,10 +174,10 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
 - **Decided by:** author; joint calibration, friction off, the 5-working-day time box and hard/soft gate split explicitly confirmed in the 2026-10-01 evening records-lane ruling.
 - **Alternatives:** sequential calibration; hard gates on every V
   case.
-- **Evidence:** #10074 comment 5933617449; scope proposal (risk 1); measurements and literature numbers are source-attributed planning inputs, not a newly executed validation. Evening author rulings apply where stated.
+- **Evidence:** #10074 comment 5933617449; scope proposal (risk 1).
 - **Implemented in:** not yet.
 - **Enforced by:** none yet: the validation suite's hard gates (D-007).
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-007: The validation suite is the acceptance gate for the pedestrian model
 - **Date:** 2026-10-01
@@ -203,12 +203,12 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
 - **Alternatives:** a single "human clearance" number; copying
   published coefficients.
 - **Evidence:** #10074 body; #10075; diss research notes of 2026-10-01; diss
-  issue #3017 (consumer); measurements and literature numbers are source-attributed planning inputs, not a newly executed validation. Evening author rulings apply where stated.
+  issue #3017 (consumer).
 - **Implemented in:** draft #10075 (stacked on #10073); V2/V4-V6 and the
   single-radius plumbing incomplete.
 - **Enforced by:** none yet: the suite's own hard-gate assertions, run in
   the release rehearsal.
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-008: Contact rule: per-step velocity projection (replaces the capped contact force)
 - **Date:** 2026-10-01
@@ -249,11 +249,11 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
   repulsion (no guarantee).
 - **Evidence:** #10074 comments 5933617449 (capped force) and 5934117678
   (switch); diss research note `2026-10-01_chatgpt_pedestrian_contact_model.md`
-  (its header still describes the capped-force plan); diss#3030; measurements and literature numbers are source-attributed planning inputs, not a newly executed validation. Evening author rulings apply where stated.
+  (its header still describes the capped-force plan); diss#3030.
 - **Implemented in:** not yet.
 - **Enforced by:** none yet: the overlap acceptance (D-010) and a step-time
   overhead measurement in the validation suite.
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-009: Sliding friction is off
 - **Date:** 2026-10-01
@@ -265,11 +265,11 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
   densities, far above the benchmark's; it adds parameters without benefit.
 - **Decided by:** author; friction off explicitly confirmed in the 2026-10-01 evening records-lane ruling.
 - **Alternatives:** friction on by default.
-- **Evidence:** #10074 comments 5933617449 and 5934117678; measurements and literature numbers are source-attributed planning inputs, not a newly executed validation. Evening author rulings apply where stated.
+- **Evidence:** #10074 comments 5933617449 and 5934117678.
 - **Implemented in:** not yet.
 - **Enforced by:** none yet: the manifest records the contact rule and
   friction setting (D-019).
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-010: Overlap and wall-penetration acceptance (revised)
 - **Date:** 2026-10-01
@@ -289,10 +289,10 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
 - **Supersedes:** the first bar of at most 1 % of non-group pair-steps below 2r
   (posted with the capped force; also in the scope proposal's acceptance 5).
 - **Evidence:** #10074 comment 5934117678; overlap measurement lane (dev seeds
-  1001-1030, 1,530 episodes); measurements and literature numbers are source-attributed planning inputs, not a newly executed validation. Evening author rulings apply where stated.
+  1001-1030, 1,530 episodes).
 - **Implemented in:** not yet (overlap metric in #10075).
 - **Enforced by:** none yet: the suite's overlap gate.
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-011: The obstacle (wall) law is refit after the radius, against behaviour targets
 - **Date:** 2026-10-01
@@ -313,10 +313,10 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
 - **Alternatives:** copy Helbing or Moussaid coefficients; the 0.3x
   probe value.
 - **Evidence:** #10061 comments (2026-10-01); #10073; diss note
-  `2026-10-01_chatgpt_pedestrian_calibration_literature_routed.md`; measurements and literature numbers are source-attributed planning inputs, not a newly executed validation. Evening author rulings apply where stated.
+  `2026-10-01_chatgpt_pedestrian_calibration_literature_routed.md`.
 - **Implemented in:** draft #10073 (opt-in profiles; no profile accepted).
 - **Enforced by:** none yet: V2 aperture gate; slice crossing on dev seeds.
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-012: Pedestrian-robot activation scales with robot size; collisions are attributed
 - **Date:** 2026-10-01
@@ -328,16 +328,17 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
   swerving; report outcomes across the range. Add collision attribution to
   each row (robot moving or stationary, closing agent, approach direction).
 - **Reason:** The force is radial and has no anticipatory side selection; attribution is absent. The current cutoff already scales with radii: `PedRobotForce.__call__` uses activation_threshold + force radius + robot radius (about 3.35 m with defaults). The 2.0 m centre-cutoff/0.65 m approach argument in #10065 is therefore not an established premise. Candidate activation distances must be reinterpreted against the effective cutoff and the distinct collision radius before choosing a default.
-- **Decided by:** author ("the bigger problem is the 2.0m reaction distance
-  ... we need good arguments to increase this by how much", 2026-10-01
-  06:27); orchestrator for the sensitivity design.
+- **Decided by:** author ("this should probably increased. Here we need good arguments to increase this by how much",
+  relayed in #10065 comment 5925990390, 2026-10-01 06:28 UTC);
+  orchestrator for the summary "the bigger problem is the 2.0m reaction distance"
+  and the sensitivity design. The summary is not part of the author's quote.
 - **Alternatives:** a single literature onset value (none exists);
   fixing collinear encounters (author: rare).
-- **Evidence:** #10065 comments 5925930814 and 5925990390; measurements and literature numbers are source-attributed planning inputs, not a newly executed validation. Evening author rulings apply where stated.
+- **Evidence:** #10065 comments 5925930814 and 5925990390.
 - **Implemented in:** not yet; blocked by #10074.
 - **Enforced by:** none yet: attribution fields present in every collision
   row; the sensitivity table.
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-013: Forecast models are retrained in parallel with PPO
 - **Date:** 2026-10-01
@@ -350,12 +351,12 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
 - **Decided by:** author ("Retrain in parallel (Recommended)", chat,
   2026-10-01 14:32).
 - **Alternatives:** keep and disclose; drop both arms.
-- **Evidence:** #10074 comment 5933617449; measurements and literature numbers are source-attributed planning inputs, not a newly executed validation. Evening author rulings apply where stated.
+- **Evidence:** #10074 comment 5933617449.
 - **Implemented in:** native links: #10033 and #10018 blocked by the
   environment issues.
 - **Enforced by:** none yet: registry entries with SHA-256 for the new
   forecast models before any campaign uses them.
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-014: Group spacing stays above 2r; the gaze-force singularity is fixed
 - **Date:** 2026-10-01
@@ -375,11 +376,11 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
 - **Decided by:** orchestrator (delegated).
 - **Alternatives:** a full Moussaid-2010 group rewrite as a new
   calibration axis.
-- **Evidence:** #10027 comment 5933982284; #10074 comment 5934117678; measurements and literature numbers are source-attributed planning inputs, not a newly executed validation. Evening author rulings apply where stated.
+- **Evidence:** #10027 comment 5933982284; #10074 comment 5934117678.
 - **Implemented in:** not yet.
 - **Enforced by:** none yet: group-pair overlap reported by the suite;
   a unit test that gaze stays bounded at zero waypoint distance.
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-015: Limited reverse driving is included
 - **Date:** 2026-10-01
@@ -401,11 +402,11 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
 - **Alternatives:** defer to a later release; 1.0 m/s cap.
 - **Evidence:** #10068 body and comments; no verified standard gives a
   reverse-specific limit (ISO 13482:2014, ISO 3691-4:2023); one manufacturer
-  example reverses at 0.30 m/s; measurements and literature numbers are source-attributed planning inputs, not a newly executed validation. Evening author rulings apply where stated.
+  example reverses at 0.30 m/s.
 - **Implemented in:** not yet. #10064 (its prerequisite) is fixed by #10066.
 - **Enforced by:** none yet: plant identity records the reverse cap; the
   comparison report.
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-016: PPO is retrained after the environment freeze
 - **Date:** 2026-10-01
@@ -426,12 +427,12 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
 - **Decided by:** author ("more training for 0.0.9 could become interesting",
   2026-10-01 07:28); orchestrator for acceptance and ordering.
 - **Alternatives:** reuse the 0.0.8 retrain.
-- **Evidence:** #10071; #10077 evaluation table; measurements and literature numbers are source-attributed planning inputs, not a newly executed validation. Evening author rulings apply where stated.
+- **Evidence:** #10071; #10077 evaluation table.
 - **Implemented in:** not yet; #10071 blocked by #10082 and the environment
   issues.
 - **Enforced by:** none yet: paired sign tests and the cap-signature slice
   in #10071's acceptance.
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-017: The occupancy-grid rasteriser is fixed before the PPO retrain
 - **Date:** 2026-10-01
@@ -441,11 +442,11 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
   shift after the fix.
 - **Decided by:** orchestrator (delegated).
 - **Alternatives:** fix after the retrain.
-- **Evidence:** #10082; measurements and literature numbers are source-attributed planning inputs, not a newly executed validation. Evening author rulings apply where stated.
+- **Evidence:** #10082.
 - **Implemented in:** not yet.
 - **Enforced by:** none yet: centroid within 0.25 cell of the true position;
   circle and polygon rasterisers agree (both fail on base).
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-018: Metrics measure from footprints; thresholds are reported as sensitivity ranges
 - **Date:** 2026-10-01
@@ -460,11 +461,11 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
   to 2 m/s; centre distances make "near miss" mean deep contact.
 - **Decided by:** orchestrator (delegated).
 - **Alternatives:** single thresholds presented as validated.
-- **Evidence:** #10079; diss note `2026-10-01_chatgpt_safety_metric_thresholds.md`; measurements and literature numbers are source-attributed planning inputs, not a newly executed validation. Evening author rulings apply where stated.
+- **Evidence:** #10079; diss note `2026-10-01_chatgpt_safety_metric_thresholds.md`.
 - **Implemented in:** not yet.
 - **Enforced by:** none yet: each of D1, D2, D4, D5, D6 with a test that
   fails on base; anchor-digest mismatch refused.
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-019: The release manifest records the effective pedestrian physics
 - **Date:** 2026-10-01
@@ -479,11 +480,11 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
   run; 0.1.0 changes exactly these facts.
 - **Decided by:** orchestrator (delegated).
 - **Alternatives:** record config defaults.
-- **Evidence:** #10084; diss#3031; measurements and literature numbers are source-attributed planning inputs, not a newly executed validation. Evening author rulings apply where stated.
+- **Evidence:** #10084; diss#3031.
 - **Implemented in:** not yet.
 - **Enforced by:** none yet: a test that fails if a declared field differs
   from the live value.
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-020: Scenario-level simulation keys must apply or be refused
 - **Date:** 2026-10-01
@@ -495,14 +496,15 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
   is a fail-open path.
 - **Decided by:** orchestrator (delegated).
 - **Alternatives:** set the tier only in code.
-- **Evidence:** #10083 (overlap measurement lane); measurements and literature numbers are source-attributed planning inputs, not a newly executed validation. Evening author rulings apply where stated.
+- **Evidence:** #10083 (overlap measurement lane).
 - **Implemented in:** not yet.
 - **Enforced by:** none yet: load a scenario with `ped_speed_tier: typical`
   and assert the live caps are not all 0.65 (must fail on base).
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
 
 ### D-021: Acceptance criteria for 0.1.0
 - **Date:** 2026-10-01
+- **Question:** Which proposed acceptance checks define readiness for the new benchmark generation?
 - **Choice:** (proposed, from the scope triage, revised by D-010)
   1. One radius parameter (D-004).
   2. V1 speed: mean 1.29 +- 0.05 m/s, SD 0.15-0.25, 30 dev seeds.
@@ -525,16 +527,16 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
       never used in development.
   14. A 0.0.8 -> 0.1.0 report attributes each headline change to a declared
       mechanism.
+- **Reason:** Make the ship gate explicit while preserving the distinction between author-approved hard gates and the remaining proposed scope checks.
 - **Decided by:** proposed as a whole; the author confirmed V1, V2, overlap and wall penetration as the only calibration hard gates, with bottleneck flows reported as differences with reasons. That confirmation does not approve every other proposed scope threshold.
+- **Alternatives:** Treat every milestone item or every bottleneck-flow difference as a hard ship gate.
 - **Evidence:** 0.1.0 scope proposal; #10074 comments.
 - **Enforced by:** none yet: each item names its own check.
-- **Question:** Which proposed acceptance checks define readiness for the new benchmark generation?
-- **Reason:** Make the ship gate explicit while preserving the distinction between author-approved hard gates and the remaining proposed scope checks.
-- **Alternatives:** Treat every milestone item or every bottleneck-flow difference as a hard ship gate.
 - **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
 
 ### D-022: New sealed evaluation seeds; development on dev seeds only
 - **Date:** 2026-10-01
+- **Question:** Can previously observed evaluation seeds support a fresh benchmark-generation claim?
 - **Choice:** 0.1.0 gets new sealed evaluation seeds, drawn before the
   campaign and never used in development. All 0.1.0 development uses dev seeds
   1001-1030; the 0.0.8 sealed seeds and retired 111-140 stay forbidden for new
@@ -542,11 +544,11 @@ Verification snapshot: GitHub issue/PR metadata and code checked on 2026-10-01. 
 - **Reason:** Same reasoning as 0.0.8 D-049: a band observed during
   development cannot support a fresh release claim.
 - **Decided by:** orchestrator, following the author's 0.0.8 seed rule.
+- **Alternatives:** Reuse the 0.0.8 sealed set or the published retired band.
 - **Evidence:** #10074 ("Dev seeds only"); #10071.
 - **Implemented in:** not yet (#10055, #10059 required before the campaign).
 - **Enforced by:** none yet: the held-out guard extended to the new band.
-- **Question:** Can previously observed evaluation seeds support a fresh benchmark-generation claim?
-- **Alternatives:** Reuse the 0.0.8 sealed set or the published retired band.
-- **Reopen:** New material evidence or an explicit author ruling. Proposed choices remain open for author adoption.
+- **Reopen:** New material evidence or an explicit author ruling.
+
 
 See 0.0.8 D-080 for the approved decision-record policy; its tooling is a separate later lane.

@@ -18,12 +18,17 @@ REQUIRED_FIELDS = (
     "Evidence",
     "Enforced by",
 )
-HEADING = re.compile(r"^### (D-\d{3}): .+$", re.MULTILINE)
+HEADING = re.compile(r"^### (D-\d{3,}): .+$", re.MULTILINE)
+DECISION_HEADING = re.compile(r"^#{2,4}\s*D-\d+[^\n]*", re.MULTILINE)
 FIELD = re.compile(r"^- \*\*([^*]+):\*\*\s*(.*?)(?=^- \*\*|^#{1,3} |\Z)", re.MULTILINE | re.DOTALL)
 
 
 def validate_ledger(text: str) -> None:
-    """Reject duplicate IDs or absent/empty required fields within one release."""
+    """Reject heading drift, duplicate IDs or absent/empty required fields."""
+    for candidate in DECISION_HEADING.finditer(text):
+        assert HEADING.fullmatch(candidate.group()), (
+            f"invalid decision heading: {candidate.group()}"
+        )
     headings = list(HEADING.finditer(text))
     assert headings, "no decision entries"
     ids = [heading.group(1) for heading in headings]
@@ -71,4 +76,59 @@ def test_missing_field_mutant_is_rejected(version: str, field: str) -> None:
     )
     assert count == 1, f"mutation did not remove {field}"
     with pytest.raises(AssertionError, match=rf"D-001 missing field: {re.escape(field)}"):
+        validate_ledger(mutant)
+
+
+@pytest.mark.parametrize("version", ["0.0.8", "0.1.0"])
+@pytest.mark.parametrize(
+    ("heading", "reason"),
+    [
+        ("## D-081 — x", "invalid decision heading"),
+        ("### D-081 - x", "invalid decision heading"),
+        ("#### D-081: x", "invalid decision heading"),
+        ("## D-080 — dup", "invalid decision heading"),
+        ("### D-1000: x", "D-1000 missing field: Question"),
+    ],
+)
+def test_heading_mutants_are_rejected(version: str, heading: str, reason: str) -> None:
+    """A drifted heading cannot hide an incomplete or duplicated decision."""
+    text = (RELEASE_ROOT / version / "decisions.md").read_text(encoding="utf-8")
+    mutant = text + "\n" + heading + "\n- **Choice:** only\n"
+    with pytest.raises(AssertionError, match=reason):
+        validate_ledger(mutant)
+
+
+@pytest.mark.parametrize("version", ["0.0.8", "0.1.0"])
+def test_complete_four_digit_decision_is_accepted(version: str) -> None:
+    """Growing past D-999 retains the same required fields and heading form."""
+    text = (RELEASE_ROOT / version / "decisions.md").read_text(encoding="utf-8")
+    entry = "\n### D-1000: Future decision\n" + "\n".join(
+        f"- **{field}:** Present" for field in REQUIRED_FIELDS
+    )
+    validate_ledger(text + entry)
+
+
+@pytest.mark.parametrize("version", ["0.0.8", "0.1.0"])
+@pytest.mark.parametrize(
+    ("replacement", "missing"),
+    [
+        ("- **Choice:**\n", "Choice"),
+        ("- **Decided By:** Present\n", "Decided by"),
+        ("  - **Decided by:** Present\n", "Decided by"),
+    ],
+)
+def test_empty_or_malformed_field_mutants_are_rejected(
+    version: str, replacement: str, missing: str
+) -> None:
+    """Empty values, changed labels and nested fields cannot satisfy a record."""
+    text = (RELEASE_ROOT / version / "decisions.md").read_text(encoding="utf-8")
+    mutant, count = re.subn(
+        rf"^- \*\*{re.escape(missing)}:\*\*.*?(?=^- \*\*|^#|\Z)",
+        replacement,
+        text,
+        count=1,
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    assert count == 1, f"mutation did not change {missing}"
+    with pytest.raises(AssertionError, match=rf"D-001 missing field: {missing}"):
         validate_ledger(mutant)

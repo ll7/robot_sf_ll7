@@ -1808,3 +1808,56 @@ def test_cmpfix_runner_seeded_scenario_matches_expected_mapping(tmp_path: Path) 
     path.write_text(json.dumps(recorded) + "\n")
     result = _compare(bundle, root, digest)
     assert result["paired_rows"] == 1
+
+
+@pytest.mark.parametrize("mismatch", [False, True])
+def test_resolved_publication_config_hash_is_bound(tmp_path: Path, mismatch: bool) -> None:
+    """Publication fields affect campaign hashes without changing scientific inputs."""
+    from dataclasses import replace
+
+    from robot_sf.benchmark.camera_ready._config import load_campaign_config
+    from robot_sf.benchmark.camera_ready._util import _config_hash_payload
+
+    manifest_path, _, source, commit = _successor_contract(tmp_path, rows=[_row("s1", 1001)])
+    manifest = json.loads(manifest_path.read_text())
+    config_path = manifest["campaign_config"]["path"]
+    publication = {"release_tag": "diagnostic-" + commit, "doi": "diagnostic-unpublished"}
+    cfg = load_campaign_config(source / config_path, repository_root=source)
+    from unittest.mock import patch
+
+    with patch("robot_sf.benchmark.camera_ready._util.get_repository_root", return_value=source):
+        expected = _config_hash(_config_hash_payload(replace(cfg, **publication)))
+    assert expected != manifest["campaign_config"]["runtime_hash"]
+    manifest["campaign_config"]["publication_identity"] = publication
+    manifest["campaign_config"]["runtime_hash"] = "f" * 16 if mismatch else expected
+    manifest_path.write_text(json.dumps(manifest))
+    digest = sha256(manifest_path.read_bytes()).hexdigest()
+    if mismatch:
+        with pytest.raises(
+            ValueError, match="campaign_config runtime_hash differs from pinned source"
+        ):
+            comparator._verified_successor_manifest(manifest_path, digest, source, {})
+    else:
+        verified = comparator._verified_successor_manifest(manifest_path, digest, source, {})
+        assert verified["campaign_config"]["runtime_hash"] == expected
+        assert verified["expected_slots"]
+
+
+@pytest.mark.parametrize(
+    "publication",
+    [
+        {"release_tag": "dev", "doi": "unpublished", "workers": 2},
+        {"release_tag": "dev"},
+        {"release_tag": "dev", "doi": None},
+    ],
+)
+def test_publication_binding_refuses_scientific_or_incomplete_overlays(tmp_path, publication):
+    """The pinned manifest permits exactly two nonempty publication fields."""
+    path, _, source, _ = _successor_contract(tmp_path, rows=[_row("s1", 1001)])
+    manifest = json.loads(path.read_text())
+    manifest["campaign_config"]["publication_identity"] = publication
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="publication_identity requires only release_tag and doi"):
+        comparator._verified_successor_manifest(
+            path, sha256(path.read_bytes()).hexdigest(), source, {}
+        )

@@ -374,6 +374,8 @@ def _runtime_successor_identity(
     commit: str,
     config_path: str,
     rows: Mapping[tuple[str, str, str, int, str], dict[str, Any]],
+    *,
+    publication_identity: Mapping[str, str] | None = None,
 ) -> tuple[
     str,
     str,
@@ -402,6 +404,8 @@ def _runtime_successor_identity(
                     for slot, row in rows.items()
                 ],
             }
+            if publication_identity is not None:
+                request["publication_identity"] = dict(publication_identity)
             resolved = subprocess.run(
                 [sys.executable, "-I", str(worker)],
                 input=json.dumps(request),
@@ -499,8 +503,20 @@ def _verified_successor_manifest(  # noqa: C901, PLR0912
         actual = hashlib.sha256(_source_bytes(source_root, commit, binding["path"])).hexdigest()
         if actual != expected:
             raise ValueError(f"successor planner binding SHA-256 mismatch: {key}")
+    publication = manifest["campaign_config"].get("publication_identity")
+    if "publication_identity" in manifest["campaign_config"] and (
+        not isinstance(publication, dict)
+        or set(publication) != {"release_tag", "doi"}
+        or any(not isinstance(value, str) or not value.strip() for value in publication.values())
+    ):
+        raise ValueError(
+            "publication_identity requires only release_tag and doi as nonempty strings"
+        )
+    runtime_kwargs = {"publication_identity": publication} if publication is not None else {}
     config_hash, scenario_hash, runtime_rows, scoped_hashes, expected_slots = (
-        _runtime_successor_identity(source_root, commit, manifest["campaign_config"]["path"], rows)
+        _runtime_successor_identity(
+            source_root, commit, manifest["campaign_config"]["path"], rows, **runtime_kwargs
+        )
     )
     for key, actual in (("campaign_config", config_hash), ("scenario_matrix", scenario_hash)):
         if manifest[key]["runtime_hash"] != actual:

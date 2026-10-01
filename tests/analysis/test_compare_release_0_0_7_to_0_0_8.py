@@ -202,6 +202,9 @@ def _successor_contract(
         ],
         check=True,
     )
+    # Older Git versions default to non-cone sparse patterns, omitting parent
+    # files such as maps/registry.yaml needed by real scenario manifests.
+    subprocess.run(["git", "-C", str(source), "sparse-checkout", "init", "--cone"], check=True)
     subprocess.run(
         [
             "git",
@@ -1527,14 +1530,15 @@ def test_pinned_v4_lineage_rejects_contradictory_config_declaration(tmp_path: Pa
     assert f"successor planner binding lacks reviewed v4 lineage: {key}" in result.stderr
 
 
+@pytest.mark.parametrize("protocol,current", [(None, False), ("0.0.7", False), ("0.0.8", True)])
 @pytest.mark.parametrize("budget", [None, 500, 700])
 def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
-    tmp_path: Path, budget: int | None
+    tmp_path: Path, budget: int | None, protocol: str | None, current: bool
 ) -> None:
-    """Compare producer binding and hashes for scheduled and fixed arms.
+    """Pinned rows match the real producer's protocol-scoped budgets and hashes.
 
-    On base, H500 isolates a budget mismatch; scheduled/H700 cases fail on missing
-    provenance fields. Those metadata failures do not independently prove budget bugs.
+    Current fixed arms bind H500/H700; older arms retain the authored simulator
+    limit and use a runner cap. Historical schedules keep their old provenance.
     """
     from dataclasses import replace
     from types import SimpleNamespace
@@ -1549,6 +1553,7 @@ def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
     )
     from robot_sf.benchmark.camera_ready.campaign import _prepare_campaign_planner_variant_run
     from robot_sf.benchmark.runner import _apply_track_metadata_to_scenarios
+    from robot_sf.evidence.writers import write_text
 
     _, _, source, source_commit = _successor_contract(tmp_path)
     # The minimal-row helper replaces this SVG; restore the real matrix input.
@@ -1559,6 +1564,8 @@ def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
         / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
     )
     payload = yaml.safe_load(template_path.read_text())
+    payload["seed_policy"] = {"mode": "fixed-list", "seeds": [1001]}
+    payload["protocol_version"] = protocol
     payload["planners"] = [p for p in payload["planners"] if p["key"] == "goal"]
     if budget is not None:
         payload["planners"][0]["horizon"] = budget
@@ -1571,13 +1578,13 @@ def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
         for item in authored:
             item["simulation_config"]["max_episode_steps"] = 700
         fixture_matrix = source / "configs/scenarios/arm_budgets.yaml"
-        fixture_matrix.write_text(yaml.safe_dump(authored))
+        write_text(fixture_matrix, "# AI-GENERATED / NEEDS-REVIEW\n" + yaml.safe_dump(authored))
         payload["scenario_matrix"] = "configs/scenarios/arm_budgets.yaml"
         payload.pop("scenario_horizons", None)
         payload.pop("scenario_horizons_sha256", None)
         payload["horizon"] = 600
     config_path = source / "configs/benchmarks/override.yaml"
-    config_path.write_text(yaml.safe_dump(payload))
+    write_text(config_path, "# AI-GENERATED / NEEDS-REVIEW\n" + yaml.safe_dump(payload))
     with patch.object(_util, "get_repository_root", return_value=source):
         cfg = load_campaign_config(config_path, repository_root=source)
         scenarios = _load_campaign_scenarios(cfg, repository_root=source)
@@ -1603,7 +1610,7 @@ def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
         "goal",
         "differential_drive",
         "classic_bottleneck_low",
-        111,
+        1001,
         "",
     )  # Static join key only.
     worker = Path(comparator.__file__).with_name("_pinned_successor_runtime.py")
@@ -1624,21 +1631,21 @@ def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
     assert result.returncode == 0, result.stderr
     resolved = json.loads(result.stdout)
     expected = resolved["rows"][0]
-    assert expected["scenario"]["simulation_config"]["max_episode_steps"] == (budget or 500)
+    expected_steps = 500 if budget is None else (budget if current else 700)
+    assert expected["scenario"]["simulation_config"]["max_episode_steps"] == expected_steps
     if budget is None:
         assert (
             expected["scenario"]["metadata"]["scenario_horizon"]["recommended_horizon_steps"] == 500
         )
-        assert (
-            expected["scenario"]["metadata"]["scenario_horizon"]["sha256"]
-            == payload["scenario_horizons_sha256"]
+        assert expected["scenario"]["metadata"]["scenario_horizon"].get("sha256") == (
+            payload["scenario_horizons_sha256"] if current else None
         )
     else:
-        assert expected["scenario"]["metadata"]["campaign_horizon"] == {
-            "mode": "fixed",
-            "horizon_steps": budget,
-            "authored_max_episode_steps": 700,
-        }
+        assert expected["scenario"]["metadata"].get("campaign_horizon") == (
+            {"mode": "fixed", "horizon_steps": budget, "authored_max_episode_steps": 700}
+            if current
+            else None
+        )
     scoped_hash = next(
         item["hash"] for item in resolved["scoped_hashes"] if item["planner"] == "goal"
     )
@@ -1647,7 +1654,7 @@ def test_pinned_runtime_rebinds_real_scenario_for_arm_horizon(
     params = {
         **scenario,
         **expected["controls"],
-        "seed": 111,  # seed-holdout: setup-only
+        "seed": 1001,  # Static recorded-row reconstruction only.
         "algo": "goal",
     }
     # The resolver hashes the recorded row as well as reconstructing its controls.

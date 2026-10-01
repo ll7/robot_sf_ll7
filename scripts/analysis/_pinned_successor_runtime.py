@@ -224,7 +224,12 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915 - pinned resolution stays to
                 spec.horizon_override if spec.horizon_override is not None else cfg.horizon
             )
             runner_scenarios = _apply_track_metadata_to_scenarios(
-                _apply_fixed_campaign_horizon(scoped, horizon=arm_horizon),
+                _apply_fixed_campaign_horizon(
+                    scoped,
+                    horizon=arm_horizon,
+                    horizon_policy=cfg.horizon_policy,
+                    protocol_version=cfg.protocol_version,
+                ),
                 observation_mode=planner["observation_mode"],
                 observation_level=None,
                 benchmark_track=None,

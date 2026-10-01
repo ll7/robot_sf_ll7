@@ -321,67 +321,6 @@ def markdown(table):
     return "\n".join(lines) + "\n"
 
 
-def legacy_main(argv=None):
-    """Execute all V1-V8 cases, saving raw measurements and exact execution identity."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
-    parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--mode", choices=["baseline", "radius"], default="baseline")
-    parser.add_argument("--radius", type=float, default=0.4)
-    parser.add_argument("--workers", type=int, default=2)
-    args = parser.parse_args(argv)
-    config = load_config(args.config)
-    if args.radius not in config["radii_m"] or (args.mode == "baseline" and args.radius != 0.4):
-        parser.error("baseline radius must stay .40; radius sweep must use the declared grid")
-    max_workers = min(16, int(os.environ.get("SLURM_CPUS_PER_TASK", "2")))
-    if not 1 <= args.workers <= max_workers:
-        parser.error(f"workers must be 1..{max_workers}; local limit is two")
-    grid = tasks(config, args.radius, args.mode)
-    print("RESOLVED SEEDS", config["seeds"], "CASES", len(grid), flush=True)
-    args.out.mkdir(parents=True, exist_ok=False)
-    write_json(
-        args.out / "identity.json",
-        {
-            "source_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
-            "config_sha256": hashlib.sha256(args.config.read_bytes()).hexdigest(),
-            "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-            "harness_sha256": hashlib.sha256(Path(reused.__file__).read_bytes()).hexdigest(),
-            "force_sha256": hashlib.sha256(
-                (ROOT / "fast-pysf/pysocialforce/forces.py").read_bytes()
-            ).hexdigest(),
-            "substrate_path": pysocialforce.__file__,
-            "model": config["model"],
-            "mode": args.mode,
-            "radius_m": args.radius,
-            "resolved_force_radius_m": 0.35 if args.mode == "baseline" else args.radius,
-            "seeds": config["seeds"],
-            "episode_n": len(grid),
-            "workers": args.workers,
-            "slurm_job": os.environ.get("SLURM_JOB_ID"),
-            "diagnostic_only": True,
-        },
-    )
-    rows = []
-    with ProcessPoolExecutor(args.workers) as pool:
-        futures = {pool.submit(run_task, t): i for i, t in enumerate(grid)}
-        for future in as_completed(futures):
-            row = future.result()
-            write_json(args.out / f"case_{futures[future]:04}.json", row)
-            rows.append(row)
-            print("DONE", len(rows), "/", len(grid), row["case"], row["seed"], flush=True)
-    rows.sort(key=lambda r: (r["case"], r["variant"], r["seed"]))
-    table = summary(rows, config)
-    write_json(
-        args.out / "table.json",
-        {
-            "schema": "pedval.table.v1",
-            "identity": json.loads((args.out / "identity.json").read_text()),
-            "rows": table,
-        },
-    )
-    write_text(args.out / "table.md", markdown(table), issue_ref="#10074")
-
-
 # Source protocol runner. Historical helpers above remain callable for default-byte proof.
 
 

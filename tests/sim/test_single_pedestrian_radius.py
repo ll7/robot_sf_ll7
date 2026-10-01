@@ -79,3 +79,9 @@ def test_scenario_loader_forwards_shared_radius_to_actual_simulation_config():
     config = RobotSimulationConfig()
     _apply_simulation_overrides(config, {"pedestrian_radius_m": 0.28})
     assert config.sim_config.ped_radius == 0.28, "scenario radius was silently dropped"
+
+
+@pytest.mark.parametrize("value", [False, "0.28", float("nan")])
+def test_benchmark_metric_radius_rejects_malformed_explicit_selector(value):
+    with pytest.raises(ValueError, match="pedestrian_radius_m"):
+        _scenario_ped_radius_m({"sim_config": {"pedestrian_radius_m": value}, "ped_radius": 0.4})

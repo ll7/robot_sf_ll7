@@ -421,6 +421,10 @@ _FAST_FILES = {
     "test_unit_edge_cases.py",
     # Train coverage repair: deterministic resume job identity contracts (#10029).
     "test_resume_plan.py",
+    # Campaign integrity/resume contracts use static rows and mocked runner seams.
+    "test_cmpfix_integrity.py",
+    "test_campaign_resume_scheduler.py",
+    "test_camera_ready_campaign_characterization.py",
     # Train coverage repair: deterministic PPO action contracts (#9995).
     "test_ppo_action_semantics.py",
     # TRAIN1 deterministic benchmark contracts from PR #10019.

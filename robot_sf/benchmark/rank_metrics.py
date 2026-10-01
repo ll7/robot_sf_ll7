@@ -157,17 +157,20 @@ def spearman_from_rank_maps(
     *,
     degenerate: float | None = None,
 ) -> float | None:
-    """Return Spearman rho from caller-provided rank positions.
+    """Return tie-aware Spearman rho after re-ranking the common cohort.
 
-    This preserves legacy callers that compare absolute rank positions over the
-    overlapping keys instead of re-ranking the overlap.
+    Absolute positions outside the common cohort do not affect its ordering.
+    Fewer than three common items or a constant vector are unavailable and
+    return ``degenerate``. No caller requires the old absolute-rank statistic.
     """
     common = sorted(set(left_ranks) & set(right_ranks), key=str)
-    n = len(common)
-    if n < 2:
+    if len(common) < 3:
         return degenerate
-    d_squared = math.fsum((float(left_ranks[key]) - float(right_ranks[key])) ** 2 for key in common)
-    return float(1.0 - ((6.0 * d_squared) / (n * (n * n - 1))))
+    return spearman(
+        [left_ranks[key] for key in common],
+        [right_ranks[key] for key in common],
+        degenerate=degenerate,
+    )
 
 
 def kendall_tau(

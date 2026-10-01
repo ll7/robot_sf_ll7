@@ -25,6 +25,7 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.benchmark.aggregate import filter_evidence_eligible_records
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.benchmark.metrics import snqi as _curvature_aware_snqi
 from robot_sf.benchmark.snqi_scalarization_sensitivity import (
@@ -2222,7 +2223,7 @@ def _snqi_scan_episode_snqi_fields(
             )
             if field_present:
                 episode_field_present += 1
-            if stored_snqi is not None:
+            if stored_snqi is not None and filter_evidence_eligible_records([json.loads(line)])[0]:
                 per_arm_field_sum[arm] += stored_snqi
                 per_arm_field_count[arm] += 1
             if rejection is not None:

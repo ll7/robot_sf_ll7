@@ -1,0 +1,6 @@
+# Native RVO2 solves with the robot's physical speed bound, not the 3 m/s default.
+# Geometry comes from the per-episode observation (robot 1.0 m, pedestrian 0.4 m).
+# The differential-drive adapter projects onto the forward axis and rotates
+# with zero commanded translation for sideways/backward velocity requests.
+max_linear_speed: 2.0
+max_angular_speed: 1.0

@@ -166,6 +166,35 @@ def _summary(values: Sequence[float | None]) -> dict[str, Any]:
     }
 
 
+def _paired_bootstrap_seeds(grouped: Mapping[str, Sequence[Mapping[str, Any]]]) -> list[Any]:
+    """Validate unique paired cells and balanced seed coverage for episode-mean CIs.
+
+    Returns:
+        Sorted common seeds, each contributing the same number of episodes.
+    """
+    groups = list(grouped)
+    paired_cells = [
+        {(ep.get("scenario_id"), ep.get("seed")) for ep in grouped[key]} for key in groups
+    ]
+    for key, cells in zip(groups, paired_cells, strict=True):
+        if (
+            any(scenario is None or seed is None for scenario, seed in cells)
+            or len(cells) != len(grouped[key])
+            or cells != paired_cells[0]
+        ):
+            raise ValueError(
+                "SNQI-v2 family requires complete unique paired scenario/seed coverage"
+            )
+    seed_sets = [{ep.get("seed") for ep in grouped[key]} for key in groups]
+    if any(None in seeds or seeds != seed_sets[0] for seeds in seed_sets):
+        raise ValueError("SNQI-v2 paired seed bootstrap requires identical explicit seed coverage")
+    seeds = sorted(seed_sets[0])
+    seed_counts = [sum(ep["seed"] == seed for ep in grouped[groups[0]]) for seed in seeds]
+    if len(set(seed_counts)) != 1:
+        raise ValueError("SNQI-v2 family requires equal episode coverage across seeds")
+    return seeds
+
+
 def build_family_report(
     episodes: Sequence[Mapping[str, Any]],
     spec: SnqiV2Spec,
@@ -188,6 +217,7 @@ def build_family_report(
     ]
     groups = sorted({_planner(episode) for episode in scored})
     grouped = {key: [episode for episode in scored if _planner(episode) == key] for key in groups}
+    seeds = _paired_bootstrap_seeds(grouped)
     means = np.array(
         [
             [
@@ -234,22 +264,6 @@ def build_family_report(
         flips += (declared[:, None] - declared[None, :]) * (
             values[:, None] - values[None, :]
         ) < -1e-12
-    paired_cells = [
-        {(ep.get("scenario_id"), ep.get("seed")) for ep in grouped[key]} for key in groups
-    ]
-    for key, cells in zip(groups, paired_cells, strict=True):
-        if (
-            any(scenario is None or seed is None for scenario, seed in cells)
-            or len(cells) != len(grouped[key])
-            or cells != paired_cells[0]
-        ):
-            raise ValueError(
-                "SNQI-v2 family requires complete unique paired scenario/seed coverage"
-            )
-    seed_sets = [{ep.get("seed") for ep in grouped[key]} for key in groups]
-    if any(None in seeds or seeds != seed_sets[0] for seeds in seed_sets):
-        raise ValueError("SNQI-v2 paired seed bootstrap requires identical explicit seed coverage")
-    seeds = sorted(seed_sets[0])
     by_seed = np.array(
         [
             [

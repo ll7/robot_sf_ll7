@@ -1,0 +1,474 @@
+FFFFFFFFFFFFFF                                                           [100%]
+=================================== FAILURES ===================================
+_ test_collector_preserves_already_ego_velocity_at_north_heading[False-scripts.training.collect_predictive_planner_data] _
+
+collector = <module 'scripts.training.collect_predictive_planner_data' from '/home/luttkule/fxp_base/scripts/training/collect_predictive_planner_data.py'>
+flat = False
+
+    @pytest.mark.parametrize(
+        "collector", [collect_predictive_planner_data, collect_predictive_hardcase_data]
+    )
+    @pytest.mark.parametrize("flat", [False, True])
+    def test_collector_preserves_already_ego_velocity_at_north_heading(collector, flat):
+        """The observation producer already rotates east world velocity to [0,-1]."""
+        obs = observation(np.pi / 2)
+        if flat:
+            obs = {
+                f"{block}_{key}": value
+                for block, values in obs.items()
+                for key, value in values.items()
+            }
+        frame = collector._extract_frame(obs, max_agents=2)
+        state, _, mask, _ = collector._frames_to_samples(
+            [frame, frame], max_agents=2, horizon_steps=1, ego_conditioning=False
+        )
+        assert mask[0, 0] == 1
+>       np.testing.assert_allclose(state[0, 0, 2:4], [0.0, -1.0], atol=1e-6)
+E       AssertionError:
+E       Not equal to tolerance rtol=1e-07, atol=1e-06
+E
+E       Mismatched elements: 2 / 2 (100%)
+E       Mismatch at indices:
+E        [0]: -1.0 (ACTUAL), 0.0 (DESIRED)
+E        [1]: 4.371138828673793e-08 (ACTUAL), -1.0 (DESIRED)
+E       Max absolute difference among violations: 1.00000004
+E       Max relative difference among violations: 1.00000004
+E        ACTUAL: array([-1.000000e+00,  4.371139e-08], dtype=float32)
+E        DESIRED: array([ 0., -1.])
+
+tests/planner/test_prediction_fxp_regressions.py:59: AssertionError
+_ test_collector_preserves_already_ego_velocity_at_north_heading[False-scripts.training.collect_predictive_hardcase_data] _
+
+collector = <module 'scripts.training.collect_predictive_hardcase_data' from '/home/luttkule/fxp_base/scripts/training/collect_predictive_hardcase_data.py'>
+flat = False
+
+    @pytest.mark.parametrize(
+        "collector", [collect_predictive_planner_data, collect_predictive_hardcase_data]
+    )
+    @pytest.mark.parametrize("flat", [False, True])
+    def test_collector_preserves_already_ego_velocity_at_north_heading(collector, flat):
+        """The observation producer already rotates east world velocity to [0,-1]."""
+        obs = observation(np.pi / 2)
+        if flat:
+            obs = {
+                f"{block}_{key}": value
+                for block, values in obs.items()
+                for key, value in values.items()
+            }
+        frame = collector._extract_frame(obs, max_agents=2)
+        state, _, mask, _ = collector._frames_to_samples(
+            [frame, frame], max_agents=2, horizon_steps=1, ego_conditioning=False
+        )
+        assert mask[0, 0] == 1
+>       np.testing.assert_allclose(state[0, 0, 2:4], [0.0, -1.0], atol=1e-6)
+E       AssertionError:
+E       Not equal to tolerance rtol=1e-07, atol=1e-06
+E
+E       Mismatched elements: 2 / 2 (100%)
+E       Mismatch at indices:
+E        [0]: -1.0 (ACTUAL), 0.0 (DESIRED)
+E        [1]: 4.371138828673793e-08 (ACTUAL), -1.0 (DESIRED)
+E       Max absolute difference among violations: 1.00000004
+E       Max relative difference among violations: 1.00000004
+E        ACTUAL: array([-1.000000e+00,  4.371139e-08], dtype=float32)
+E        DESIRED: array([ 0., -1.])
+
+tests/planner/test_prediction_fxp_regressions.py:59: AssertionError
+_ test_collector_preserves_already_ego_velocity_at_north_heading[True-scripts.training.collect_predictive_planner_data] _
+
+collector = <module 'scripts.training.collect_predictive_planner_data' from '/home/luttkule/fxp_base/scripts/training/collect_predictive_planner_data.py'>
+flat = True
+
+    @pytest.mark.parametrize(
+        "collector", [collect_predictive_planner_data, collect_predictive_hardcase_data]
+    )
+    @pytest.mark.parametrize("flat", [False, True])
+    def test_collector_preserves_already_ego_velocity_at_north_heading(collector, flat):
+        """The observation producer already rotates east world velocity to [0,-1]."""
+        obs = observation(np.pi / 2)
+        if flat:
+            obs = {
+                f"{block}_{key}": value
+                for block, values in obs.items()
+                for key, value in values.items()
+            }
+        frame = collector._extract_frame(obs, max_agents=2)
+        state, _, mask, _ = collector._frames_to_samples(
+            [frame, frame], max_agents=2, horizon_steps=1, ego_conditioning=False
+        )
+        assert mask[0, 0] == 1
+>       np.testing.assert_allclose(state[0, 0, 2:4], [0.0, -1.0], atol=1e-6)
+E       AssertionError:
+E       Not equal to tolerance rtol=1e-07, atol=1e-06
+E
+E       Mismatched elements: 2 / 2 (100%)
+E       Mismatch at indices:
+E        [0]: -1.0 (ACTUAL), 0.0 (DESIRED)
+E        [1]: 4.371138828673793e-08 (ACTUAL), -1.0 (DESIRED)
+E       Max absolute difference among violations: 1.00000004
+E       Max relative difference among violations: 1.00000004
+E        ACTUAL: array([-1.000000e+00,  4.371139e-08], dtype=float32)
+E        DESIRED: array([ 0., -1.])
+
+tests/planner/test_prediction_fxp_regressions.py:59: AssertionError
+_ test_collector_preserves_already_ego_velocity_at_north_heading[True-scripts.training.collect_predictive_hardcase_data] _
+
+collector = <module 'scripts.training.collect_predictive_hardcase_data' from '/home/luttkule/fxp_base/scripts/training/collect_predictive_hardcase_data.py'>
+flat = True
+
+    @pytest.mark.parametrize(
+        "collector", [collect_predictive_planner_data, collect_predictive_hardcase_data]
+    )
+    @pytest.mark.parametrize("flat", [False, True])
+    def test_collector_preserves_already_ego_velocity_at_north_heading(collector, flat):
+        """The observation producer already rotates east world velocity to [0,-1]."""
+        obs = observation(np.pi / 2)
+        if flat:
+            obs = {
+                f"{block}_{key}": value
+                for block, values in obs.items()
+                for key, value in values.items()
+            }
+        frame = collector._extract_frame(obs, max_agents=2)
+        state, _, mask, _ = collector._frames_to_samples(
+            [frame, frame], max_agents=2, horizon_steps=1, ego_conditioning=False
+        )
+        assert mask[0, 0] == 1
+>       np.testing.assert_allclose(state[0, 0, 2:4], [0.0, -1.0], atol=1e-6)
+E       AssertionError:
+E       Not equal to tolerance rtol=1e-07, atol=1e-06
+E
+E       Mismatched elements: 2 / 2 (100%)
+E       Mismatch at indices:
+E        [0]: -1.0 (ACTUAL), 0.0 (DESIRED)
+E        [1]: 4.371138828673793e-08 (ACTUAL), -1.0 (DESIRED)
+E       Max absolute difference among violations: 1.00000004
+E       Max relative difference among violations: 1.00000004
+E        ACTUAL: array([-1.000000e+00,  4.371139e-08], dtype=float32)
+E        DESIRED: array([ 0., -1.])
+
+tests/planner/test_prediction_fxp_regressions.py:59: AssertionError
+__ test_prediction_occupancy_scores_wall_and_pedestrian_channels[False-False] __
+
+sequence = False, pedestrian_only = False
+
+    @pytest.mark.parametrize("sequence", [False, True])
+    @pytest.mark.parametrize("pedestrian_only", [False, True])
+    def test_prediction_occupancy_scores_wall_and_pedestrian_channels(sequence, pedestrian_only):
+        """Wall and pedestrian-only grids each apply the declared occupancy cost."""
+        planner = PredictionPlannerAdapter(release_config(), allow_fallback=True)
+        obs = observation()
+        obs.update(
+            occupancy_grid=np.zeros((4, 20, 20)),
+            occupancy_grid_meta_origin=np.array([-2.0, -2.0]),
+            occupancy_grid_meta_size=np.array([4.0, 4.0]),
+            occupancy_grid_meta_resolution=np.array([0.2]),
+            occupancy_grid_meta_channel_indices=np.array([0, 1, 2, 3]),
+            occupancy_grid_meta_use_ego_frame=np.array([0]),
+        )
+        kwargs = {
+            "observation": obs,
+            "future_peds": np.zeros((0, 8, 2)),
+            "mask": np.zeros(0),
+            "steps": 8,
+        }
+
+        def score():
+            if sequence:
+                return planner._score_action_sequence(**kwargs, sequence=[(1.0, 0.0)])
+            return planner._score_action(**kwargs, v=1.0, w=0.0)
+
+        free = score()
+        occupied_channels = [1, 3] if pedestrian_only else [0, 3]
+        obs["occupancy_grid"][occupied_channels, :, :] = 1.0
+        occupied = score()
+        # Combined already includes pedestrians; MPPI's added half-ped term makes 1.5.
+        expected = 0.375 if pedestrian_only else 0.25
+>       assert occupied - free == pytest.approx(expected)
+E       assert 0.0 == 0.25 ± 2.5e-07
+E
+E         comparison failed
+E         Obtained: 0.0
+E         Expected: 0.25 ± 2.5e-07
+
+tests/planner/test_prediction_fxp_regressions.py:94: AssertionError
+__ test_prediction_occupancy_scores_wall_and_pedestrian_channels[False-True] ___
+
+sequence = True, pedestrian_only = False
+
+    @pytest.mark.parametrize("sequence", [False, True])
+    @pytest.mark.parametrize("pedestrian_only", [False, True])
+    def test_prediction_occupancy_scores_wall_and_pedestrian_channels(sequence, pedestrian_only):
+        """Wall and pedestrian-only grids each apply the declared occupancy cost."""
+        planner = PredictionPlannerAdapter(release_config(), allow_fallback=True)
+        obs = observation()
+        obs.update(
+            occupancy_grid=np.zeros((4, 20, 20)),
+            occupancy_grid_meta_origin=np.array([-2.0, -2.0]),
+            occupancy_grid_meta_size=np.array([4.0, 4.0]),
+            occupancy_grid_meta_resolution=np.array([0.2]),
+            occupancy_grid_meta_channel_indices=np.array([0, 1, 2, 3]),
+            occupancy_grid_meta_use_ego_frame=np.array([0]),
+        )
+        kwargs = {
+            "observation": obs,
+            "future_peds": np.zeros((0, 8, 2)),
+            "mask": np.zeros(0),
+            "steps": 8,
+        }
+
+        def score():
+            if sequence:
+                return planner._score_action_sequence(**kwargs, sequence=[(1.0, 0.0)])
+            return planner._score_action(**kwargs, v=1.0, w=0.0)
+
+        free = score()
+        occupied_channels = [1, 3] if pedestrian_only else [0, 3]
+        obs["occupancy_grid"][occupied_channels, :, :] = 1.0
+        occupied = score()
+        # Combined already includes pedestrians; MPPI's added half-ped term makes 1.5.
+        expected = 0.375 if pedestrian_only else 0.25
+>       assert occupied - free == pytest.approx(expected)
+E       assert 0.0 == 0.25 ± 2.5e-07
+E
+E         comparison failed
+E         Obtained: 0.0
+E         Expected: 0.25 ± 2.5e-07
+
+tests/planner/test_prediction_fxp_regressions.py:94: AssertionError
+__ test_prediction_occupancy_scores_wall_and_pedestrian_channels[True-False] ___
+
+sequence = False, pedestrian_only = True
+
+    @pytest.mark.parametrize("sequence", [False, True])
+    @pytest.mark.parametrize("pedestrian_only", [False, True])
+    def test_prediction_occupancy_scores_wall_and_pedestrian_channels(sequence, pedestrian_only):
+        """Wall and pedestrian-only grids each apply the declared occupancy cost."""
+        planner = PredictionPlannerAdapter(release_config(), allow_fallback=True)
+        obs = observation()
+        obs.update(
+            occupancy_grid=np.zeros((4, 20, 20)),
+            occupancy_grid_meta_origin=np.array([-2.0, -2.0]),
+            occupancy_grid_meta_size=np.array([4.0, 4.0]),
+            occupancy_grid_meta_resolution=np.array([0.2]),
+            occupancy_grid_meta_channel_indices=np.array([0, 1, 2, 3]),
+            occupancy_grid_meta_use_ego_frame=np.array([0]),
+        )
+        kwargs = {
+            "observation": obs,
+            "future_peds": np.zeros((0, 8, 2)),
+            "mask": np.zeros(0),
+            "steps": 8,
+        }
+
+        def score():
+            if sequence:
+                return planner._score_action_sequence(**kwargs, sequence=[(1.0, 0.0)])
+            return planner._score_action(**kwargs, v=1.0, w=0.0)
+
+        free = score()
+        occupied_channels = [1, 3] if pedestrian_only else [0, 3]
+        obs["occupancy_grid"][occupied_channels, :, :] = 1.0
+        occupied = score()
+        # Combined already includes pedestrians; MPPI's added half-ped term makes 1.5.
+        expected = 0.375 if pedestrian_only else 0.25
+>       assert occupied - free == pytest.approx(expected)
+E       assert 0.25 == 0.375 ± 3.8e-07
+E
+E         comparison failed
+E         Obtained: 0.25
+E         Expected: 0.375 ± 3.8e-07
+
+tests/planner/test_prediction_fxp_regressions.py:94: AssertionError
+___ test_prediction_occupancy_scores_wall_and_pedestrian_channels[True-True] ___
+
+sequence = True, pedestrian_only = True
+
+    @pytest.mark.parametrize("sequence", [False, True])
+    @pytest.mark.parametrize("pedestrian_only", [False, True])
+    def test_prediction_occupancy_scores_wall_and_pedestrian_channels(sequence, pedestrian_only):
+        """Wall and pedestrian-only grids each apply the declared occupancy cost."""
+        planner = PredictionPlannerAdapter(release_config(), allow_fallback=True)
+        obs = observation()
+        obs.update(
+            occupancy_grid=np.zeros((4, 20, 20)),
+            occupancy_grid_meta_origin=np.array([-2.0, -2.0]),
+            occupancy_grid_meta_size=np.array([4.0, 4.0]),
+            occupancy_grid_meta_resolution=np.array([0.2]),
+            occupancy_grid_meta_channel_indices=np.array([0, 1, 2, 3]),
+            occupancy_grid_meta_use_ego_frame=np.array([0]),
+        )
+        kwargs = {
+            "observation": obs,
+            "future_peds": np.zeros((0, 8, 2)),
+            "mask": np.zeros(0),
+            "steps": 8,
+        }
+
+        def score():
+            if sequence:
+                return planner._score_action_sequence(**kwargs, sequence=[(1.0, 0.0)])
+            return planner._score_action(**kwargs, v=1.0, w=0.0)
+
+        free = score()
+        occupied_channels = [1, 3] if pedestrian_only else [0, 3]
+        obs["occupancy_grid"][occupied_channels, :, :] = 1.0
+        occupied = score()
+        # Combined already includes pedestrians; MPPI's added half-ped term makes 1.5.
+        expected = 0.375 if pedestrian_only else 0.25
+>       assert occupied - free == pytest.approx(expected)
+E       assert 0.25 == 0.375 ± 3.8e-07
+E
+E         comparison failed
+E         Obtained: 0.25
+E         Expected: 0.375 ± 3.8e-07
+
+tests/planner/test_prediction_fxp_regressions.py:94: AssertionError
+_ test_release_heading_lattice_keeps_every_heading_distinct[prediction_planner-False] _
+
+near = False, planner_name = 'prediction_planner'
+
+    @pytest.mark.parametrize("near", [False, True])
+    @pytest.mark.parametrize("planner_name", ["prediction_planner", "predictive_mppi"])
+    def test_release_heading_lattice_keeps_every_heading_distinct(near, planner_name):
+        """Both release planners retain distinct configured deltas within the turn limit."""
+        planner = PredictionPlannerAdapter(release_config(planner_name), allow_fallback=True)
+        future = np.full((1, 8, 2), 10.0 if not near else 0.1)
+        mask = np.ones(1)
+        candidates = planner._candidate_set(future_peds=future, mask=mask)
+        rates = {round(w, 10) for _, w in candidates}
+        deltas = set(planner.config.predictive_candidate_heading_deltas)
+        if near:
+            deltas.update(planner.config.predictive_near_field_heading_deltas)
+>       assert len(rates) == len(deltas)
+E       assert 3 == 7
+E        +  where 3 = len({-1.0, 0.0, 1.0})
+E        +  and   7 = len({-0.785398, -0.523599, -0.261799, 0.0, 0.261799, 0.523599, ...})
+
+tests/planner/test_prediction_fxp_regressions.py:109: AssertionError
+_ test_release_heading_lattice_keeps_every_heading_distinct[prediction_planner-True] _
+
+near = True, planner_name = 'prediction_planner'
+
+    @pytest.mark.parametrize("near", [False, True])
+    @pytest.mark.parametrize("planner_name", ["prediction_planner", "predictive_mppi"])
+    def test_release_heading_lattice_keeps_every_heading_distinct(near, planner_name):
+        """Both release planners retain distinct configured deltas within the turn limit."""
+        planner = PredictionPlannerAdapter(release_config(planner_name), allow_fallback=True)
+        future = np.full((1, 8, 2), 10.0 if not near else 0.1)
+        mask = np.ones(1)
+        candidates = planner._candidate_set(future_peds=future, mask=mask)
+        rates = {round(w, 10) for _, w in candidates}
+        deltas = set(planner.config.predictive_candidate_heading_deltas)
+        if near:
+            deltas.update(planner.config.predictive_near_field_heading_deltas)
+>       assert len(rates) == len(deltas)
+E       assert 3 == 11
+E        +  where 3 = len({-1.0, 0.0, 1.0})
+E        +  and   11 = len({-1.570796, -1.047198, -0.785398, -0.523599, -0.261799, 0.0, ...})
+
+tests/planner/test_prediction_fxp_regressions.py:109: AssertionError
+_ test_release_heading_lattice_keeps_every_heading_distinct[predictive_mppi-False] _
+
+near = False, planner_name = 'predictive_mppi'
+
+    @pytest.mark.parametrize("near", [False, True])
+    @pytest.mark.parametrize("planner_name", ["prediction_planner", "predictive_mppi"])
+    def test_release_heading_lattice_keeps_every_heading_distinct(near, planner_name):
+        """Both release planners retain distinct configured deltas within the turn limit."""
+        planner = PredictionPlannerAdapter(release_config(planner_name), allow_fallback=True)
+        future = np.full((1, 8, 2), 10.0 if not near else 0.1)
+        mask = np.ones(1)
+        candidates = planner._candidate_set(future_peds=future, mask=mask)
+        rates = {round(w, 10) for _, w in candidates}
+        deltas = set(planner.config.predictive_candidate_heading_deltas)
+        if near:
+            deltas.update(planner.config.predictive_near_field_heading_deltas)
+>       assert len(rates) == len(deltas)
+E       assert 3 == 7
+E        +  where 3 = len({-1.0, 0.0, 1.0})
+E        +  and   7 = len({-0.785398, -0.523599, -0.261799, 0.0, 0.261799, 0.523599, ...})
+
+tests/planner/test_prediction_fxp_regressions.py:109: AssertionError
+_ test_release_heading_lattice_keeps_every_heading_distinct[predictive_mppi-True] _
+
+near = True, planner_name = 'predictive_mppi'
+
+    @pytest.mark.parametrize("near", [False, True])
+    @pytest.mark.parametrize("planner_name", ["prediction_planner", "predictive_mppi"])
+    def test_release_heading_lattice_keeps_every_heading_distinct(near, planner_name):
+        """Both release planners retain distinct configured deltas within the turn limit."""
+        planner = PredictionPlannerAdapter(release_config(planner_name), allow_fallback=True)
+        future = np.full((1, 8, 2), 10.0 if not near else 0.1)
+        mask = np.ones(1)
+        candidates = planner._candidate_set(future_peds=future, mask=mask)
+        rates = {round(w, 10) for _, w in candidates}
+        deltas = set(planner.config.predictive_candidate_heading_deltas)
+        if near:
+            deltas.update(planner.config.predictive_near_field_heading_deltas)
+>       assert len(rates) == len(deltas)
+E       assert 3 == 15
+E        +  where 3 = len({-1.0, 0.0, 1.0})
+E        +  and   15 = len({-1.5707963267948966, -1.0471975511965976, -0.7853981633974483, -0.785398, -0.523599, -0.5235987755982988, ...})
+
+tests/planner/test_prediction_fxp_regressions.py:109: AssertionError
+_____________ test_mppi_rejects_24_steps_from_eight_step_forecast ______________
+
+    def test_mppi_rejects_24_steps_from_eight_step_forecast():
+        """Configured 2.4s horizon cannot silently become 0.8s."""
+        planner = PredictiveMPPIAdapter(
+            build_predictive_mppi_config({"horizon_steps": 24}), allow_fallback=True
+        )
+>       with pytest.raises(ValueError, match="horizon_steps=24.*8"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests/planner/test_prediction_fxp_regressions.py:121: Failed
+----------------------------- Captured stderr call -----------------------------
+2026-09-30 10:36:46.554 | INFO     | robot_sf.models.registry:_cached_release_path_is_valid:426 - Using cached model artifact: /home/luttkule/fxp_base/output/model_cache/predictive_proxy_selected_v1/predictive_proxy_selected_v1-predictive_model.pt
+2026-09-30 10:36:46.591 | DEBUG    | robot_sf.planner.predictive_model:_log_unexpected_checkpoint_keys:31 - Ignoring unexpected checkpoint keys when loading PredictiveTrajectoryModel: ['value_head.0.bias', 'value_head.0.weight', 'value_head.2.bias', 'value_head.2.weight']
+________________ test_mppi_preserves_requested_shorter_horizon _________________
+
+    def test_mppi_preserves_requested_shorter_horizon():
+        """A supported 4-step request is not expanded to all 8 model outputs."""
+        planner = PredictiveMPPIAdapter(
+            build_predictive_mppi_config({"horizon_steps": 4}), allow_fallback=True
+        )
+>       assert planner._predict_future(observation())[2] == 4
+E       assert 8 == 4
+
+tests/planner/test_prediction_fxp_regressions.py:130: AssertionError
+============================= slowest 10 durations =============================
+0.09s call     tests/planner/test_prediction_fxp_regressions.py::test_mppi_rejects_24_steps_from_eight_step_forecast
+0.09s call     tests/planner/test_prediction_fxp_regressions.py::test_mppi_preserves_requested_shorter_horizon
+
+(8 durations < 0.005s hidden.  Use -vv to show these durations.)
+
+Slow Test Report (soft<20s hard=60s, top 10)
+1) tests/planner/test_prediction_fxp_regressions.py::test_mppi_rejects_24_steps_from_eight_step_forecast  0.09s
+2) tests/planner/test_prediction_fxp_regressions.py::test_mppi_preserves_requested_shorter_horizon  0.09s
+3) tests/planner/test_prediction_fxp_regressions.py::test_prediction_occupancy_scores_wall_and_pedestrian_channels[False-False]  0.00s
+4) tests/planner/test_prediction_fxp_regressions.py::test_prediction_occupancy_scores_wall_and_pedestrian_channels[False-True]  0.00s
+5) tests/planner/test_prediction_fxp_regressions.py::test_prediction_occupancy_scores_wall_and_pedestrian_channels[True-True]  0.00s
+6) tests/planner/test_prediction_fxp_regressions.py::test_release_heading_lattice_keeps_every_heading_distinct[prediction_planner-False]  0.00s
+7) tests/planner/test_prediction_fxp_regressions.py::test_prediction_occupancy_scores_wall_and_pedestrian_channels[True-False]  0.00s
+8) tests/planner/test_prediction_fxp_regressions.py::test_release_heading_lattice_keeps_every_heading_distinct[prediction_planner-True]  0.00s
+9) tests/planner/test_prediction_fxp_regressions.py::test_release_heading_lattice_keeps_every_heading_distinct[predictive_mppi-True]  0.00s
+10) tests/planner/test_prediction_fxp_regressions.py::test_release_heading_lattice_keeps_every_heading_distinct[predictive_mppi-False]  0.00s
+
+=========================== short test summary info ============================
+FAILED tests/planner/test_prediction_fxp_regressions.py::test_collector_preserves_already_ego_velocity_at_north_heading[False-scripts.training.collect_predictive_planner_data]
+FAILED tests/planner/test_prediction_fxp_regressions.py::test_collector_preserves_already_ego_velocity_at_north_heading[False-scripts.training.collect_predictive_hardcase_data]
+FAILED tests/planner/test_prediction_fxp_regressions.py::test_collector_preserves_already_ego_velocity_at_north_heading[True-scripts.training.collect_predictive_planner_data]
+FAILED tests/planner/test_prediction_fxp_regressions.py::test_collector_preserves_already_ego_velocity_at_north_heading[True-scripts.training.collect_predictive_hardcase_data]
+FAILED tests/planner/test_prediction_fxp_regressions.py::test_prediction_occupancy_scores_wall_and_pedestrian_channels[False-False]
+FAILED tests/planner/test_prediction_fxp_regressions.py::test_prediction_occupancy_scores_wall_and_pedestrian_channels[False-True]
+FAILED tests/planner/test_prediction_fxp_regressions.py::test_prediction_occupancy_scores_wall_and_pedestrian_channels[True-False]
+FAILED tests/planner/test_prediction_fxp_regressions.py::test_prediction_occupancy_scores_wall_and_pedestrian_channels[True-True]
+FAILED tests/planner/test_prediction_fxp_regressions.py::test_release_heading_lattice_keeps_every_heading_distinct[prediction_planner-False]
+FAILED tests/planner/test_prediction_fxp_regressions.py::test_release_heading_lattice_keeps_every_heading_distinct[prediction_planner-True]
+FAILED tests/planner/test_prediction_fxp_regressions.py::test_release_heading_lattice_keeps_every_heading_distinct[predictive_mppi-False]
+FAILED tests/planner/test_prediction_fxp_regressions.py::test_release_heading_lattice_keeps_every_heading_distinct[predictive_mppi-True]
+FAILED tests/planner/test_prediction_fxp_regressions.py::test_mppi_rejects_24_steps_from_eight_step_forecast
+FAILED tests/planner/test_prediction_fxp_regressions.py::test_mppi_preserves_requested_shorter_horizon
+14 failed in 3.96s

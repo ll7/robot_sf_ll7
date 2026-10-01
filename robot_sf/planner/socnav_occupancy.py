@@ -14,6 +14,42 @@ class OccupancyAwarePlannerMixin:
 
     _CHANNEL_KEYS = tuple(channel.value for channel in OBSERVATION_CHANNEL_ORDER)
 
+    def _simulation_timestep(self, observation: dict) -> float:
+        """Read a finite positive sim dt from the nested or flat observation.
+
+        Grid-enabled environments flatten ``sim.timestep`` to ``sim_timestep``.
+        Prefer nested time, then flat time, then the normalizer's ``dt`` alias.
+        Never substitute a planner relaxation time or a coincidentally matching
+        constant: integration and action decoding must use the observed clock.
+
+        Returns:
+            float: Observed simulation timestep in seconds.
+
+        Raises:
+            ValueError: The timestep is missing, non-scalar, nonfinite or nonpositive.
+        """
+        sim = observation.get("sim")
+        if isinstance(sim, dict) and "timestep" in sim:
+            raw = sim["timestep"]
+            source = "observation.sim.timestep"
+        elif "sim_timestep" in observation:
+            raw = observation["sim_timestep"]
+            source = "observation.sim_timestep"
+        else:
+            raw = observation.get("dt")
+            source = "observation.dt"
+        try:
+            values = np.asarray(raw, dtype=float).reshape(-1)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Simulation timestep must be a finite positive scalar") from exc
+        if values.size != 1 or not np.isfinite(values[0]) or values[0] <= 0.0:
+            raise ValueError(
+                "Simulation timestep is missing or invalid; expected finite positive scalar"
+            )
+        dt = float(values[0])
+        self._last_simulation_timestep = {"seconds": dt, "source": source}
+        return dt
+
     @staticmethod
     def _as_1d_float(values: Any, *, pad: int | None = None, default: float = 0.0) -> np.ndarray:
         """Normalize metadata values to at least 1D float array with optional padding.

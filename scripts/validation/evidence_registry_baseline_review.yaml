@@ -37,6 +37,10 @@ evidence_tree_refresh_addenda:
       scientific admission is added. This is a Codex-prepared review disposition, not
       maintainer sign-off. Production single-radius integration and source protocols remain
       explicitly blocked in issue 10074.
+      Publication-only follow-up normalizes five installed-substrate identity paths
+      relative to the producer root and records the verified Wilmut Table 1 addendum.
+      The original absolute identities and all raw episode bytes remain unchanged
+      in the checksum-bound archive. No evidence paths or registry findings are added.
   - issue: 9647
     reviewed_date: 2026-09-26
     previous:

@@ -55,7 +55,8 @@
     ],
     "slurm_job": "16059",
     "source_sha": "cb80f275db20ace8b5a58e18858cff57cc494c24",
-    "substrate_path": "/home/luttkule/pedval-10074/repo/.venv/lib/python3.13/site-packages/pysocialforce/__init__.py",
+    "substrate_path": ".venv/lib/python3.13/site-packages/pysocialforce/__init__.py",
+    "substrate_path_basis": "Relative to the producer repository root. Exact original absolute identity remains in raw_science.tar.gz.",
     "workers": 8
   },
   "review_marker": "AI-GENERATED NEEDS-REVIEW",

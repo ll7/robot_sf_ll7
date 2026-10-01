@@ -1150,7 +1150,9 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         )
         return self._shield_decision(
             ppo_command=ppo_command,
-            filtered_command=tuple(map(float, fallback_command)) if use_fallback else (0.0, 0.0),
+            filtered_command=(float(fallback_command[0]), float(fallback_command[1]))
+            if use_fallback
+            else (0.0, 0.0),
             label="fallback_best_effort" if use_fallback else "stop_best_effort",
             reason=(
                 "no_safe_command_available_fallback_has_largest_clearance"

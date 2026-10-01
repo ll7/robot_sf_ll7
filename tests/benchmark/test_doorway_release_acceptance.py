@@ -7,7 +7,6 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.release_acceptance import validate_full_benchmark_release_acceptance
-from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8  # seed-holdout: synthetic-fixture
 from tests.benchmark import test_release_acceptance as fixtures
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -15,14 +14,26 @@ TEMPLATE = ROOT / "configs/benchmarks/releases/three_width_doorway_release_0_0_8
 MATRIX = ROOT / "configs/scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml"
 
 
+@pytest.fixture(autouse=True)
+def forbid_environment_construction(monkeypatch):
+    """Static witnesses must fail immediately if they ever attempt an environment."""
+
+    def abort(*args, **kwargs):
+        pytest.fail("environment construction attempted by static acceptance witness")
+
+    monkeypatch.setattr("robot_sf.gym_env.environment_factory.make_robot_env", abort)
+    monkeypatch.setattr("robot_sf.gym_env.robot_env.RobotEnv.__init__", abort)
+
+
 @pytest.fixture
 def doorway(tmp_path, monkeypatch):
     """Build producer-format JSONLs and sidecars without instantiating any planner."""
     payload = yaml.safe_load(TEMPLATE.read_text())
     scenarios = yaml.safe_load(MATRIX.read_text())["scenarios"]
+    sealed_inventory = tuple(payload["seed_policy"]["resolved_seeds"])
     # seed-holdout: synthetic-fixture begin
     for scenario in scenarios:
-        scenario["seeds"] = list(EVAL_SEEDS_0_0_8)  # seed-holdout: synthetic-fixture
+        scenario["seeds"] = list(sealed_inventory)
         scenario["map_file"] = (
             (MATRIX.parent / scenario["map_file"]).resolve().relative_to(ROOT).as_posix()
         )
@@ -31,7 +42,7 @@ def doorway(tmp_path, monkeypatch):
     monkeypatch.setattr(fixtures, "_PLANNER_KEYS", roster)
     monkeypatch.setattr(fixtures, "_PLANNER_ALGORITHMS", algorithms)
     monkeypatch.setattr(fixtures, "_SCENARIO_IDS", tuple(s["name"] for s in scenarios))
-    monkeypatch.setattr(fixtures, "_SEEDS", EVAL_SEEDS_0_0_8)  # seed-holdout: synthetic-fixture
+    monkeypatch.setattr(fixtures, "_SEEDS", sealed_inventory)
     campaign, cfg = fixtures._write_provenance_bound_full_campaign(
         tmp_path,
         monkeypatch,

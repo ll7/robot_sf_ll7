@@ -413,6 +413,10 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Main CI repair guards: filesystem/Sphinx and stubbed diagnostic contracts.
+    # The full real-site build keeps its explicit slow marker.
+    "test_sphinx_strict_build.py",
+    "test_check_broad_exceptions.py",
     # Train coverage repair: deterministic SA-CADRL checkpoint capacity (#10008).
     "test_socnav_sacadrl_module.py",
     # Train coverage repair: deterministic physical PPO drive contracts (#9995).

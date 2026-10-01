@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import json
+import runpy
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "validation" / "check_broad_exceptions.py"
@@ -212,3 +216,84 @@ def test_ratchet_is_wired_into_pr_ready_check() -> None:
     assert "check_broad_exceptions.py" in pr_ready, (
         "broad-exception ratchet is not invoked by pr_ready_check.sh; local enforcement is missing"
     )
+
+
+def test_pedfix_diagnostic_boundary_has_reviewed_inventory_entry() -> None:
+    """The actual diagnostic handler must pass the ratchet with a written review reason."""
+    from scripts.validation.check_broad_exceptions import check_against_baseline, inventory
+
+    path = "scripts/validation/measure_pedfix_planners.py"
+    entries = inventory(ROOT, (path,))
+    baseline = json.loads((ROOT / "scripts/validation/broad_exception_baseline.json").read_text())
+    approved = [entry for entry in baseline["entries"] if entry["path"] == path]
+    scoped = {
+        "entries": approved,
+        "counts": {"total": len(approved), "by_path": {path: len(approved)} if approved else {}},
+    }
+    assert check_against_baseline(entries, scoped) == []
+    assert len(approved) == 1
+    assert approved[0]["review_reason"]
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [RuntimeError("adapter unavailable"), LookupError("plugin defect"), KeyboardInterrupt()],
+)
+def test_pedfix_diagnostic_boundary_records_failures_and_propagates_interrupts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    failure: BaseException,
+) -> None:
+    """Real probe bytes preserve failed dev cells without simulating or swallowing interruption."""
+    roster_path = (
+        tmp_path
+        / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+    )
+    roster_path.parent.mkdir(parents=True)
+    roster_path.write_text("planners:\n- key: goal\n  algo: goal\n  benchmark_profile: test\n")
+    calls = []
+
+    def episode(scenario, seed, **kwargs):
+        calls.append((scenario["name"], seed))
+        if len(calls) == 1:
+            raise failure
+        return {"success": True}
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["measure_pedfix_planners.py", "--mode", "roster"])
+    monkeypatch.setattr(subprocess, "check_output", lambda *args, **kwargs: "fixture-sha\n")
+    stubs = {
+        "robot_sf.benchmark.map_runner.map_runner": {
+            "build_map_policy": lambda *args, **kwargs: None
+        },
+        "robot_sf.benchmark.map_runner.map_runner_env": {
+            "build_env_config": lambda *args, **kwargs: None
+        },
+        "robot_sf.benchmark.map_runner.map_runner_episode": {"run_map_episode": episode},
+        "robot_sf.training.scenario_loader": {
+            "load_scenarios": lambda *args: [
+                {"name": "classic_head_on_corridor_medium"},
+                {"name": "francis2023_circular_crossing"},
+            ]
+        },
+    }
+    for name, attributes in stubs.items():
+        monkeypatch.setitem(sys.modules, name, SimpleNamespace(**attributes))
+    probe = ROOT / "scripts/validation/measure_pedfix_planners.py"
+    if isinstance(failure, KeyboardInterrupt):
+        with pytest.raises(KeyboardInterrupt):
+            runpy.run_path(str(probe), run_name="__main__")
+        assert len(calls) == 1
+        assert capsys.readouterr().out == ""
+    else:
+        with pytest.raises(SystemExit) as exit_info:
+            runpy.run_path(str(probe), run_name="__main__")
+        assert exit_info.value.code == 1
+        captured = capsys.readouterr()
+        rows = [json.loads(line) for line in captured.out.splitlines()]
+        assert [row["status"] for row in rows] == ["error", "ok", "ok", "ok"]
+        assert rows[0]["error"] == repr(failure)
+        assert "record" not in rows[0]
+        assert type(failure).__name__ in captured.err
+        assert [seed for _, seed in calls] == [1001, 1002, 1001, 1002]

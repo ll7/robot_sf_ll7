@@ -155,6 +155,10 @@ seed-bootstrap 95% intervals, rank correlations against declared/success orderin
 top-1 frequencies, top-3 overlap, pairwise flips, and leave-one-out rank changes.
 The separate existing ranking-stability helper resamples seeds independently per
 planner and is explicitly labeled unpaired; the confidence intervals share seed draws.
+Family reports require unique paired scenario/seed cells across arms and equal episode
+counts across seeds. Uneven seed coverage is rejected: under balanced coverage the
+mean of seed means bootstrapped by the CI is exactly the reported episode-weighted
+planner mean. A shared but uneven grid does not meet this reporting contract.
 Undefined correlations are null. Correlations use average ties; tied top-1 values
 split credit; top-3 boundary ties use lexical arm identity. Bootstrap intervals
 with very few seeds are diagnostic and do not establish population precision.

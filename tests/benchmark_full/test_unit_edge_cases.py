@@ -11,8 +11,11 @@ These are focused fast tests using the existing aggregation & effects modules.
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
 
-from robot_sf.benchmark.full_classic.aggregation import aggregate_metrics
+import pytest
+
+from robot_sf.benchmark.full_classic.aggregation import _bootstrap_params, aggregate_metrics
 from robot_sf.benchmark.full_classic.effects import compute_effect_sizes
 
 
@@ -131,3 +134,20 @@ def test_all_nan_metric_samples_produces_nan_stats():
     assert math.isnan(path_eff.p95)
     assert all(math.isnan(v) for v in path_eff.mean_ci)
     assert all(math.isnan(v) for v in path_eff.median_ci)
+
+
+@pytest.mark.parametrize(
+    ("samples", "confidence", "expected"),
+    [
+        (0, 0.95, (0, 0.95, 1001, "flat", "scenario_id")),
+        (1000, 0.0, (1000, 0.0, 1001, "flat", "scenario_id")),
+    ],
+)
+def test_explicit_zero_bootstrap_parameters_are_not_defaults(samples, confidence, expected):
+    """Explicit zero is preserved; only missing parameters receive the documented defaults."""
+    config = SimpleNamespace(
+        bootstrap_samples=samples, bootstrap_confidence=confidence, master_seed=1001
+    )
+    assert _bootstrap_params(config) == expected
+    defaults = SimpleNamespace(bootstrap_samples=None, bootstrap_confidence=None, master_seed=1001)
+    assert _bootstrap_params(defaults) == (1000, 0.95, 1001, "flat", "scenario_id")

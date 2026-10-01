@@ -93,7 +93,7 @@ def _planner_row_signature(row: dict[str, Any]) -> dict[str, Any]:
             metrics[metric] = value
     return {
         "status": str(row.get("status") or "unknown"),
-        "episodes": int(row.get("episodes") or 0),
+        **_episode_counts(row),
         "metrics": metrics,
     }
 
@@ -140,6 +140,25 @@ def _row_episodes(row: dict[str, Any]) -> int:
     return int(value)
 
 
+def _episode_counts(row: dict[str, Any]) -> dict[str, int]:
+    """Normalize eligible, total and excluded N; legacy rows are wholly eligible."""
+    eligible = _row_episodes(row)
+    return {
+        "episodes": eligible,
+        "episodes_total": int(row.get("episodes_total", eligible) or 0),
+        "episodes_excluded": int(row.get("episodes_excluded", 0) or 0),
+    }
+
+
+def _comparison_episode_counts(base: dict[str, Any], candidate: dict[str, Any]) -> dict[str, int]:
+    """Preserve both cohorts in machine-readable comparison deltas."""
+    return {
+        f"{prefix}_{key}": count
+        for prefix, row in (("base", base), ("candidate", candidate))
+        for key, count in _episode_counts(row).items()
+    }
+
+
 def _breakdown_row_signature(row: dict[str, Any], key_fields: tuple[str, ...]) -> dict[str, Any]:
     """Return a canonical signature for a scenario or family breakdown row."""
     metrics: dict[str, float] = {}
@@ -150,7 +169,7 @@ def _breakdown_row_signature(row: dict[str, Any], key_fields: tuple[str, ...]) -
     return {
         "key": {field: str(row.get(field) or "") for field in key_fields},
         "archetype": str(row.get("archetype") or ""),
-        "episodes": _row_episodes(row),
+        **_episode_counts(row),
         "metrics": metrics,
     }
 
@@ -203,8 +222,7 @@ def _compare_breakdown_artifact(
         row_payload: dict[str, Any] = _key_to_payload(key_fields, key)
         row_payload.update(
             {
-                "base_episodes": _row_episodes(base_row),
-                "candidate_episodes": _row_episodes(candidate_row),
+                **_comparison_episode_counts(base_row, candidate_row),
                 "exact_match": base_signature == candidate_signature,
                 "base_signature_sha256": _planner_row_digest(base_signature),
                 "candidate_signature_sha256": _planner_row_digest(candidate_signature),
@@ -269,6 +287,10 @@ def _append_breakdown_markdown(
             *key_fields,
             "base_episodes",
             "candidate_episodes",
+            "base_episodes_total",
+            "candidate_episodes_total",
+            "base_episodes_excluded",
+            "candidate_episodes_excluded",
             "metric",
             "base",
             "candidate",
@@ -276,7 +298,7 @@ def _append_breakdown_markdown(
         ]
     )
     alignment = " | ".join(
-        ["---"] * len(key_fields) + ["---:", "---:", "---", "---:", "---:", "---:"]
+        ["---"] * len(key_fields) + ["---:"] * 6 + ["---", "---:", "---:", "---:"]
     )
     lines.append(f"| {header} |")
     lines.append(f"| {alignment} |")
@@ -291,6 +313,10 @@ def _append_breakdown_markdown(
                         *values,
                         str(row.get("base_episodes", 0)),
                         str(row.get("candidate_episodes", 0)),
+                        str(row.get("base_episodes_total", row.get("base_episodes", 0))),
+                        str(row.get("candidate_episodes_total", row.get("candidate_episodes", 0))),
+                        str(row.get("base_episodes_excluded", 0)),
+                        str(row.get("candidate_episodes_excluded", 0)),
                         "N/A",
                         "N/A",
                         "N/A",
@@ -309,6 +335,10 @@ def _append_breakdown_markdown(
                         *values,
                         str(row.get("base_episodes", 0)),
                         str(row.get("candidate_episodes", 0)),
+                        str(row.get("base_episodes_total", row.get("base_episodes", 0))),
+                        str(row.get("candidate_episodes_total", row.get("candidate_episodes", 0))),
+                        str(row.get("base_episodes_excluded", 0)),
+                        str(row.get("candidate_episodes_excluded", 0)),
                         metric,
                         f"{metric_values['base']:.4f}",
                         f"{metric_values['candidate']:.4f}",
@@ -337,8 +367,8 @@ def _build_markdown(payload: dict[str, Any]) -> str:
         "",
         "## Planner Deltas",
         "",
-        "| planner | base_status | candidate_status | base_episodes | candidate_episodes | exact_match | metric | base | candidate | delta(candidate-base) |",
-        "|---|---|---|---:|---:|---|---|---:|---:|---:|",
+        "| planner | base_status | candidate_status | base_episodes | candidate_episodes | base_episodes_total | candidate_episodes_total | base_episodes_excluded | candidate_episodes_excluded | exact_match | metric | base | candidate | delta(candidate-base) |",
+        "|---|---|---|---:|---:|---:|---:|---:|---:|---|---|---:|---:|---:|",
     ]
     for planner in payload["planner_deltas"]:
         planner_key = planner["planner_key"]
@@ -346,6 +376,12 @@ def _build_markdown(payload: dict[str, Any]) -> str:
         candidate_status = planner.get("candidate_status", "unknown")
         base_episodes = int(planner.get("base_episodes", 0) or 0)
         candidate_episodes = int(planner.get("candidate_episodes", 0) or 0)
+        cohort_counts = (
+            f"{planner.get('base_episodes_total', base_episodes)} | "
+            f"{planner.get('candidate_episodes_total', candidate_episodes)} | "
+            f"{planner.get('base_episodes_excluded', 0)} | "
+            f"{planner.get('candidate_episodes_excluded', 0)} | "
+        )
         exact_match = "yes" if planner.get("exact_match") else "no"
         metrics = planner.get("metrics", {})
         if isinstance(metrics, dict) and metrics:
@@ -353,14 +389,14 @@ def _build_markdown(payload: dict[str, Any]) -> str:
                 lines.append(
                     "| "
                     f"{planner_key} | {base_status} | {candidate_status} | "
-                    f"{base_episodes} | {candidate_episodes} | {exact_match} | {metric} | "
+                    f"{base_episodes} | {candidate_episodes} | {cohort_counts}{exact_match} | {metric} | "
                     f"{values['base']:.4f} | {values['candidate']:.4f} | {values['delta']:.4f} |"
                 )
             continue
         lines.append(
             "| "
             f"{planner_key} | {base_status} | {candidate_status} | "
-            f"{base_episodes} | {candidate_episodes} | {exact_match} | N/A | N/A | N/A | N/A |"
+            f"{base_episodes} | {candidate_episodes} | {cohort_counts}{exact_match} | N/A | N/A | N/A | N/A |"
         )
     missing_in_base = payload.get("missing_in_base", [])
     missing_in_candidate = payload.get("missing_in_candidate", [])
@@ -453,8 +489,7 @@ def compare_campaigns(base_root: Path, candidate_root: Path) -> dict[str, Any]:
                 "planner_key": planner_key,
                 "base_status": str(base_row.get("status", "unknown")),
                 "candidate_status": str(candidate_row.get("status", "unknown")),
-                "base_episodes": int(base_row.get("episodes", 0) or 0),
-                "candidate_episodes": int(candidate_row.get("episodes", 0) or 0),
+                **_comparison_episode_counts(base_row, candidate_row),
                 "exact_match": exact_match,
                 "base_signature_sha256": _planner_row_digest(base_signature),
                 "candidate_signature_sha256": _planner_row_digest(candidate_signature),

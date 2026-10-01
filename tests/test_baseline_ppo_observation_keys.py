@@ -42,18 +42,15 @@ def _bounded_box(shape: tuple[int, ...], low: float, high: float) -> gym_spaces.
 
 def _planner_with_model(model: _FakePPOModel) -> PPOPlanner:
     """Build a PPOPlanner with a fake loaded model and no checkpoint IO."""
-    planner = PPOPlanner.__new__(PPOPlanner)
-    planner.config = PPOPlannerConfig(
-        obs_mode="dict",
-        action_space="velocity",
-        fallback_to_goal=False,
+    planner = PPOPlanner(
+        PPOPlannerConfig(
+            obs_mode="dict",
+            action_space="velocity",
+            fallback_to_goal=False,
+        ),
+        defer_model_loading=True,
     )
-    planner._seed = None
     planner._model = model
-    planner._status = "ok"
-    planner._fallback_reason = None
-    planner._predictive_foresight = None
-    planner._runtime_observation_space = None
     return planner
 
 

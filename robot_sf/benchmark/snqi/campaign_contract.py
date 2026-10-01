@@ -11,12 +11,12 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.benchmark.aggregate import filter_evidence_eligible_records
 from robot_sf.benchmark.metric_definitions import (
     metric_schema_version,
     require_anchor_compatibility,
     require_uniform_metric_schema,
 )
-from robot_sf.benchmark.aggregate import filter_evidence_eligible_records
 from robot_sf.benchmark.rank_metrics import spearman
 from robot_sf.benchmark.snqi.compute import WEIGHT_NAMES, compute_snqi, normalize_metric
 from robot_sf.benchmark.spawn_validity import record_has_invalid_spawn

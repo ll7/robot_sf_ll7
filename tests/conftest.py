@@ -413,6 +413,8 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # D-083 source-bound release admission records workers without reset or step.
+    "test_release_campaign_authority.py",
     # Exact-repeat resolution verifies retained data and identities without simulation.
     "test_exact_repeat_campaign.py",
     # Historical schedule bytes are static; its native episodes are explicitly slow.

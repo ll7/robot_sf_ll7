@@ -52,10 +52,11 @@ ROOT = Path(__file__).resolve().parents[2]
     [
         ("paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml", 48),
         ("paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml", 48),
+        ("paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml", 48),
         ("paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml", 3),
     ],
 )
-def test_release_template_resolves_fresh_sealed_grid(config_name, scenario_count):
+def test_current_and_archived_templates_transport_sealed_grid(config_name, scenario_count):
     cfg = load_campaign_config(ROOT / "configs/benchmarks" / config_name)
     scenarios = _load_campaign_scenarios(cfg, repository_root=ROOT)
     identities = {(row["name"], seed) for row in scenarios for seed in row["seeds"]}

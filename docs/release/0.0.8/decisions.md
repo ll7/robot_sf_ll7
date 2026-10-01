@@ -1815,6 +1815,17 @@ Historical measurements below are attributed to the named review report; they we
 - **Reopen:** New material evidence, a changed estimand or implementation,
   or an explicit author/orchestrator ruling.
 
+### D-083: The authored-budget candidate is the single authoritative 0.0.8 campaign
+- **Date:** 2026-10-02
+- **Question:** Which candidate must the release identity and sealed guard select for #10085?
+- **Choice:** Select `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml` as the single authoritative 0.0.8 release campaign template, consistent with D-064's authored budgets. Bind its named seed policy to the sealed seed-set file, the current release matrix and approved 14-arm release bindings. The alternate `paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml` is retired from release admission and retained for historical static references. The generic campaign template is also no longer a canonical sealed execution path. Identity materialization must select and hash the authored template; no inline seed list replaces the sealed file.
+- **Decided by:** orchestrator, delegated direction for #9999, 2026-10-02.
+- **Reason:** D-074 identified the seam: the authored candidate resolved the retired seed band while the sealed allowlist selected another template. One source-bound authority closes that seam without changing authored-budget policy or historical artifacts.
+- **Alternatives:** Keep two executable candidates; return to the retired seed band; select the fixed-H600 candidate. None is adopted.
+- **Evidence:** [#10085](https://github.com/ll7/robot_sf_ll7/issues/10085), implemented in [#9999](https://github.com/ll7/robot_sf_ll7/pull/9999). The packaging rehearsal item remains open for the later train; this decision and its static tests do not claim it has run.
+- **Enforced by:** `tests/benchmark/test_release_campaign_authority.py::test_d083_authored_template_resolves_exact_sealed_seed_file` and `tests/benchmark/test_release_campaign_authority.py::test_d083_materialized_selected_template_passes_guard_without_execution`: real seed transport, public identity materialization, source-bound guard admission with recording workers, and retired-band/canonical-path refusal without reset or step.
+- **Reopen:** New material evidence about release input binding or an explicit author/orchestrator ruling.
+
 ## Private working labels
 
 These private labels were never public ledger IDs. Read each citation in its PR context; a collision does not supersede the public entry of the same number. Bodies of the 100 most recently updated PRs were scanned, including every PR citing the labels named in this catch-up request.

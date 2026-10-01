@@ -2148,11 +2148,9 @@ def sealed_seed_execution_problem(
         return f"sealed evaluation input is not at its canonical repository path: {exc}"
     main_campaign = (
         manifest.release_kind == "benchmark-data"
+        # D-083 selects one authored-budget release campaign; archives are not admitted.
         and config_name
-        in {
-            "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
-            "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml",
-        }
+        == "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
         and matrix_name
         == "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
     )

@@ -78,7 +78,7 @@ PUBLIC_RELEASE_TEMPLATE = REPO_ROOT / (
     "configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml"
 )
 CAMPAIGN_TEMPLATE = REPO_ROOT / (
-    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
 )
 ZENODO_METADATA_TEMPLATE = REPO_ROOT / (
     "configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.template.json"
@@ -234,7 +234,8 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
 
     planner_keys = [f"planner_{index:02d}" for index in range(14)]
     campaign = (
-        repo / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+        repo
+        / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
     )
     _write_yaml(
         campaign,
@@ -323,7 +324,7 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
             "release_kind": "benchmark-data",
             "latest_main_base_commit": "{{latest_main_base_commit}}",
             "planning_base_sha": "{{latest_main_base_commit}}",
-            "canonical_campaign_config": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
+            "canonical_campaign_config": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml",
             "campaign_config_sha256": _sha256(campaign),
             "expected_paper_profile_version": "paper-matrix-v1",
             "expected_paper_interpretation_profile": "baseline-ready-core",
@@ -431,7 +432,8 @@ def test_clean_candidate_generates_and_verifies_byte_identical_resolved_identity
         "output/release/zenodo_metadata.resolved.json"
     )
     assert second_identity["resolved_manifest"]["canonical_campaign_config_sha256"] == _sha256(
-        repo / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+        repo
+        / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
     )
     assert second_identity["resolved_manifest"]["identity_resolution"] == {
         "schema_version": "benchmark-release-resolved-identity.v1",
@@ -737,7 +739,8 @@ def test_generation_rejects_invalid_resolved_zenodo_metadata(tmp_path: Path) -> 
 def test_generation_requires_campaign_publication_identity_slots(tmp_path: Path) -> None:
     repo, template, _ = _release_template_repository(tmp_path)
     campaign_path = (
-        repo / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+        repo
+        / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml"
     )
     campaign = yaml.safe_load(campaign_path.read_text(encoding="utf-8"))
     campaign["release_tag"] = "stale-semantic-tag"

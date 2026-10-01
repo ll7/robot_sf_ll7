@@ -1,3 +1,5 @@
+# Retired for the 0.0.8 release by D-083; retained for historical static references.
+# New releases use paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate_authored.yaml.
 # Distinct 0.0.8 candidate: corrected social-force pair kernel.
 # Diagnostic configuration only; release-row equivalence remains gated by #9668.
 # Derived from the unchanged benchmark-data template.

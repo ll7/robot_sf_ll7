@@ -78,7 +78,7 @@ def test_single_episode_with_metrics():
 
     episode_data = run_episode(
         scenario_params=scenario_params,
-        seed=123,
+        seed=1013,
         horizon=50,
         algo="random",
     )

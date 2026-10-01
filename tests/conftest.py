@@ -445,6 +445,7 @@ _FAST_FILES = {
     "test_coverage_paths_remap.py",
     # Static runtime-copy admission: small Git fixtures, no environment or episode.
     "test_sealed_runtime_sources.py",
+    "test_heldout_seed_guard.py",
     # Clearance and LiDAR tracking contracts use fixed arrays without environment steps.
     "test_clearance_geometry.py",
     "test_lidar_tracked_agents.py",

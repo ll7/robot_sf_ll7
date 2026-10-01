@@ -20,6 +20,7 @@ from robot_sf.benchmark.adversarial.adversarial_package_b_preflight import (
     preflight_package_b_manifest,
 )
 from robot_sf.benchmark.adversarial.adversarial_package_b_report import validate_package_b_report
+from robot_sf.evidence.writers import write_text
 from scripts.tools.compare_adversarial_samplers import (
     SamplerComparisonRow,
     build_comparison_payload,
@@ -32,6 +33,14 @@ from scripts.tools.run_adversarial_package_b import main as run_package_b_main
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SHIPPED_MANIFEST = REPO_ROOT / "configs/adversarial/issue_3079_package_b_budget_matched.yaml"
 ISSUE_5326_MANIFEST = REPO_ROOT / "configs/adversarial/issue_5326_objective_comparison.yaml"
+
+
+def _development_search_space(source: Path, destination: Path) -> Path:
+    """Keep candidate geometry bounds while constraining real episodes to development seeds."""
+    payload = yaml.safe_load(source.read_text(encoding="utf-8"))
+    payload["variables"]["scenario_seed"] = {"min": 1001, "max": 1030}
+    write_text(destination, "# AI-GENERATED NEEDS-REVIEW\n" + yaml.safe_dump(payload))
+    return destination
 
 
 def _copy_pipeline_fixture(tmp_path: Path) -> Path:
@@ -573,10 +582,18 @@ def test_empirical_cpu_run_produces_certified_replayable_failures(tmp_path: Path
 
     Seed 1105 replaces 1101 (issue #9725): the only certified failure under seed 1101 was a
     pedestrian placed on the robot at reset (collision at step 1), a spawn defect the
-    simulator now prevents. Seed 1105 yields a certified collision at step 10.
+    simulator now prevents. The search RNG remains 1105; actual episode seeds are restricted to 1001..1030.
     """
     config, objectives, _samplers, _budgets, _seeds = load_package_b_manifest(SHIPPED_MANIFEST)
-    config = replace(config, output_dir=tmp_path / "comparison")
+    development_space = _development_search_space(
+        config.search_space_path, tmp_path / "development_space.yaml"
+    )
+    config = replace(
+        config,
+        output_dir=tmp_path / "comparison",
+        search_space_path=development_space,
+        search_space=type(config.search_space).from_file(development_space),
+    )
     rows = run_sampler_comparison(
         config=config,
         sampler_names=("random",),
@@ -626,6 +643,8 @@ def test_package_b_orchestrator_empirical_flag_runs_real_evaluator(tmp_path: Pat
     Slurm/GPU-only; the full 27-cell empirical campaign is the same driver scaled up.
     """
     manifest = _copy_pipeline_fixture(tmp_path)
+    space = tmp_path / "configs/adversarial/crossing_ttc_space.yaml"
+    _development_search_space(space, space)
     # Shrink the matrix so the CPU empirical run stays fast under test. The compare CLI does
     # not enforce the preflight's fixed 27-cell contract, so a reduced manifest runs here.
     payload = yaml.safe_load(manifest.read_text(encoding="utf-8"))

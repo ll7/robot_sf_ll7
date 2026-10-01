@@ -60,7 +60,7 @@ def test_robot_start_exclusions_keep_footprint_off_walls(corridor_map) -> None:
     samples = sample_zone(
         zone_on_wall,
         200,
-        rng=np.random.default_rng(116),
+        rng=np.random.default_rng(1006),
         max_attempts_per_point=50,
         exclusions=exclusions,
     )
@@ -174,7 +174,7 @@ def test_respawn_excludes_robot_footprint() -> None:
     """Route-end respawns never land inside the robot exclusion circle."""
     robot_xy = (3.0, 1.0)
     behavior, _groups, gid, states, exclusion = _route_behavior(robot_xy)
-    np.random.seed(115)
+    np.random.seed(1005)
     for _ in range(200):
         behavior.respawn_group_at_start(gid)
         for row in states[:, 0:2]:

@@ -469,10 +469,11 @@ def test_group_crossing_dev_seeds_make_monotone_progress_and_reach_goal(seed: in
 
 
 @pytest.mark.slow
-def test_release_matrix_bottleneck_low_dev_seed_enters_goal_zone() -> None:
-    """The shipped v2 config completes under goal_zone_entry_v1 on dev seed 1001."""
+@pytest.mark.parametrize("seed", [1001, 1002])
+def test_release_matrix_bottleneck_low_dev_seed_enters_goal_zone(seed: int) -> None:
+    """The shipped v2 config completes under goal_zone_entry_v1 on dev seeds."""
     assert V2_CONFIG == {"social_force_planner_version": V2}
-    record = _run(RELEASE_MATRIX, "classic_bottleneck_low", 1001)
+    record = _run(RELEASE_MATRIX, "classic_bottleneck_low", seed)
     assert record["outcome"]["route_complete"] is True
     assert record["outcome"]["collision_event"] is False
 

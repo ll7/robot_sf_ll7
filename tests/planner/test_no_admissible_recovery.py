@@ -23,10 +23,11 @@ def _risk_config():
     )
 
 
-@pytest.mark.parametrize("ped,velocity", [((-1.6, 0.21), (1.04, -0.05)), ((0.0, 1.0), (0.0, -0.8))])
+@pytest.mark.parametrize("ped,velocity", [((-1.6, 0.21), (1.04, -0.05)), ((0.0, 1.6), (0.0, -0.8))])
 def test_all_rejected_rear_or_lateral_commands_move_and_improve_clearance(ped, velocity):
     """Every reachable rollout fails, but a moving command beats braking."""
     planner = RiskDWAPlannerAdapter(_risk_config())
+    assert np.linalg.norm(ped) > 1.4  # The physical discs are separated at observation time.
     obs = _observation(goal=(7.0, -0.8), pedestrians=[ped], pedestrian_velocities=[velocity])
     robot, heading, goal, peds, velocities = planner._extract_robot_goal_ped(obs)
     for v in (0.0, 0.1):
@@ -89,7 +90,7 @@ def test_infeasible_escape_is_selectable_above_the_slow_speed_trigger():
     obs = _observation(
         speed=0.5,
         goal=(7.0, 0.0),
-        pedestrians=[(-1.6, 0.0), (0.8, 0.0)],
+        pedestrians=[(-2.4, 0.0), (1.6, 0.0)],
         pedestrian_velocities=[(1.2, 0.0), (0.4, 0.0)],
     )
     command = planner.plan(obs)

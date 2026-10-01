@@ -2980,16 +2980,8 @@ def _step_build_simulation_trace(
         _simulation_trace_decision_fields(getattr(sim, "planner_step_decision", None))
     )
     decision = getattr(sim, "planner_step_decision", None)
-    if isinstance(decision, dict):
-        for key in (
-            "recovery_kind",
-            "no_admissible_command",
-            "no_admissible_command_count",
-            "recovery_command",
-            "recovery_command_count",
-        ):
-            if key in decision:
-                planner_payload[key] = decision[key]
+    if isinstance(decision, dict) and "recovery_kind" in decision:
+        planner_payload["recovery_kind"] = decision["recovery_kind"]
     if sim.action_conversion_payload:
         planner_payload["action_conversion"] = sim.action_conversion_payload
     if sim.actuation_step is not None:

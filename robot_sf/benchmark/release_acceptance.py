@@ -66,8 +66,8 @@ from robot_sf.benchmark.release_protocol import (
     resolve_campaign_artifact_path,
 )
 from robot_sf.benchmark.result_provenance import validate_result_provenance_manifest
-from robot_sf.benchmark.spawn_validity import record_has_invalid_spawn
 from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
+from robot_sf.benchmark.spawn_validity import record_has_invalid_spawn
 from robot_sf.benchmark.utils import _config_hash
 from robot_sf.common.artifact_paths import get_repository_root
 

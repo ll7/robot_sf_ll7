@@ -3,7 +3,7 @@
 name: paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5
 derived_from:
   config: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
-  config_sha256: 51553004b4d0437a37a3d571e2e9401f0c09f584dd4661ea2af9eae69d00de2b
+  config_sha256: a5d35d7e250958e84f4d662efa65864d6bf63c6d923a543bab812c9bd10763f5
 paper_facing: true
 paper_profile_version: paper-matrix-v1
 scenario_matrix: configs/scenarios/single/francis2023_blind_corner_release_0_0_8_v1.yaml
@@ -99,7 +99,7 @@ planners:
   - key: ppo
     algo: ppo
     planner_group: experimental
-    algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
+    algo_config: configs/baselines/ppo_release_robot_0_0_8_cpu.yaml
     benchmark_profile: experimental
     adapter_impact_eval: true
   - key: socnav_sampling

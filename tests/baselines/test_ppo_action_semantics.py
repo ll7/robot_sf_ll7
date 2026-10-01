@@ -205,3 +205,49 @@ def test_delta_decoder_requires_explicit_physical_state():
     planner = stub_planner("ppo", [0.3, 0.2], fallback_to_goal=False)
     with pytest.raises(ValueError, match="requires current robot_speed"):
         planner._action_vec_to_dict_from_array(np.array([0.3, 0.2]))
+
+
+def test_new_registry_checkpoint_decodes_signed_velocity_delta(monkeypatch):
+    """A new registry ID must brake from current speed without a config override."""
+    monkeypatch.setattr(
+        "robot_sf.baselines.ppo.get_registry_entry",
+        lambda *_: {"action_semantics": "velocity_delta"},
+    )
+    planner = PPOPlanner(
+        PPOPlannerConfig(model_id="release_robot_new", action_space="unicycle", obs_mode="dict"),
+        defer_model_loading=True,
+    )
+    planner._initialized = True
+    planner._model = SimpleNamespace(predict=lambda *a, **k: (np.array([-0.25, -0.1]), None))
+    assert planner.step({"robot_speed": [0.6, 0.2]}) == {
+        "v": pytest.approx(0.35),
+        "omega": pytest.approx(0.1),
+    }
+
+
+@pytest.mark.parametrize("declared", ["velocity_delta", "absolute_velocity"])
+def test_new_registry_checkpoint_rejects_conflicting_override(monkeypatch, declared):
+    """An arbitrary registered checkpoint cannot be reinterpreted by an algo override."""
+    monkeypatch.setattr(
+        "robot_sf.baselines.ppo.get_registry_entry", lambda *_: {"action_semantics": declared}
+    )
+    override = "absolute_velocity" if declared == "velocity_delta" else "velocity_delta"
+    with pytest.raises(ValueError, match="conflicts with checkpoint registry"):
+        PPOPlanner(
+            PPOPlannerConfig(
+                model_id="release_robot_new", action_space="unicycle", action_semantics=override
+            ),
+            defer_model_loading=True,
+        )
+
+
+def test_new_registry_checkpoint_rejects_unknown_semantics(monkeypatch):
+    """An invalid registry declaration must fail before loading or fallback."""
+    monkeypatch.setattr(
+        "robot_sf.baselines.ppo.get_registry_entry", lambda *_: {"action_semantics": "unknown"}
+    )
+    with pytest.raises(ValueError, match="Unsupported PPO action_semantics"):
+        PPOPlanner(
+            PPOPlannerConfig(model_id="release_robot_new", fallback_to_goal=True),
+            defer_model_loading=True,
+        )

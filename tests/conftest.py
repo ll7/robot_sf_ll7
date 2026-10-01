@@ -423,6 +423,8 @@ _FAST_FILES = {
     "test_resume_plan.py",
     # Train coverage repair: deterministic PPO action contracts (#9995).
     "test_ppo_action_semantics.py",
+    # D-062: registry and release-resolver checks with stub inference and no episodes.
+    "test_ppo_release_robot_binding.py",
     # TRAIN1 deterministic benchmark contracts from PR #10019.
     "test_multi_amv.py",
     "test_rank_metrics.py",

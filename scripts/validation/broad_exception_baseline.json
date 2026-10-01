@@ -100,6 +100,7 @@
       "scripts/validation/check_docstring_todos.py": 1,
       "scripts/validation/check_issue_6158_topology_parallel_nmpc_offline_verdict.py": 1,
       "scripts/validation/extended_osm_validation.py": 12,
+      "scripts/validation/measure_pedfix_planners.py": 1,
       "scripts/validation/performance_smoke_test.py": 2,
       "scripts/validation/playback_trajectory.py": 1,
       "scripts/validation/run_examples_smoke.py": 1,
@@ -115,7 +116,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 205
+    "total": 206
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -1783,6 +1784,16 @@
       "lineno": 501,
       "path": "scripts/validation/extended_osm_validation.py",
       "source": "except Exception as e:"
+    },
+    {
+      "col_offset": 12,
+      "context": "<module>",
+      "fingerprint": "46179720ad14c6b4",
+      "handler": "Exception",
+      "lineno": 138,
+      "path": "scripts/validation/measure_pedfix_planners.py",
+      "review_reason": "Diagnostic matrix boundary around heterogeneous planner adapters: record every ordinary failure with traceback and an explicit error row, continue remaining dev-seed cells, and exit 1 if any cell failed. No fallback or success substitution; BaseException (including interruption) propagates. Narrow adapter-specific types would lose later diagnostic cells for unexpected plugin failures.",
+      "source": "except Exception as e:  # noqa: BLE001 - retain each failed matrix cell explicitly"
     },
     {
       "col_offset": 4,

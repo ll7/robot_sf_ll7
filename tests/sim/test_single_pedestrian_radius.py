@@ -53,6 +53,19 @@ def test_radius_roundtrip_and_unset_default_hash_payload():
     assert settings.ped_radius == 0.5
 
 
+def test_shared_radius_sets_gradient_profile_body_edge_origin():
+    np.random.seed(1001)
+    settings = SimulationSettings(
+        difficulty=0,
+        ped_density_by_difficulty=[0.04],
+        population_size=8,
+        obstacle_force_profile="gradient_v3",
+    )
+    settings.pedestrian_radius_m = 0.28
+    sim = _build_simulator(settings)
+    assert sim.pysf_sim.config.obstacle_force_config.threshold == 0.28
+
+
 @pytest.mark.parametrize("radius", [0, -1, float("nan"), float("inf"), True, "0.28"])
 def test_invalid_radius_is_rejected_before_simulation(radius):
     with pytest.raises((TypeError, ValueError), match="pedestrian_radius_m"):

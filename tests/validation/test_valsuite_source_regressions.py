@@ -98,3 +98,147 @@ def test_all_cases_carry_pair_step_measure_not_initial_overlap_only(monkeypatch)
     pair = row.get("pair_overlap", {}).get("non_group", {})
     assert pair.get("pair_steps") == 200 * 60 * 59 // 2
     assert pair["minimum_centre_distance_m"] == pytest.approx(0.02)
+
+
+def test_gate_reports_censoring_contact_and_unapproved_tolerances():
+    row = {
+        "case": "V1",
+        "variant": "native",
+        "seed": 1001,
+        "fitted_desired_speed_m_s": 1.3,
+        "pair_overlap": {"all": {"below_2r_count": 0}},
+    }
+    assert suite.acceptance_gate([row])["exit_code"] == 5
+    row["pair_overlap"]["all"]["below_2r_count"] = 1
+    assert suite.acceptance_gate([row])["exit_code"] == 3
+    row["fitted_desired_speed_m_s"] = None
+    result = suite.acceptance_gate([row])
+    assert result["exit_code"] == 2
+    assert len(result["physical_violations"]) == 1
+    assert len(result["measurement_missing"]) == 1
+
+
+def test_saved_acquisition_requires_unique_grid_and_exact_raw_bytes(tmp_path):
+    import hashlib
+    import json
+
+    from robot_sf.evidence.writers import write_json, write_text
+
+    config = suite.load_config(suite.DEFAULT_CONFIG)
+    config["seeds"] = [1001]
+    config_path = tmp_path / "config.json"
+    write_json(config_path, config)
+    out = tmp_path / "data"
+    out.mkdir()
+    grid = suite.protocol_tasks(config, 0.4, "baseline", {})
+    write_json(
+        out / "identity.json",
+        {
+            "protocol": "source",
+            "config_sha256": hashlib.sha256(config_path.read_bytes()).hexdigest(),
+            "mode": "baseline",
+            "radius_m": 0.4,
+            "episode_n": len(grid),
+            "seeds": [1001],
+        },
+    )
+    for index, task in enumerate(grid):
+        trace = out / f"trajectory_{index:04}.npz"
+        np.savez_compressed(trace, positions=np.zeros((3, 1, 2)))
+        write_json(
+            out / f"case_{index:04}.json",
+            {
+                "case": task[0],
+                "seed": task[1],
+                "variant": task[2],
+                "raw_trajectory": trace.name,
+                "raw_trajectory_sha256": hashlib.sha256(trace.read_bytes()).hexdigest(),
+            },
+        )
+    for name in ["table.json", "gate.json"]:
+        write_json(out / name, {})
+    write_text(out / "table.md", "Synthetic acquisition", issue_ref="#10074")
+
+    def manifest():
+        write_text(
+            out / "SHA256SUMS",
+            "".join(
+                f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n"
+                for p in sorted(out.iterdir())
+                if p.name != "SHA256SUMS"
+            ),
+            issue_ref="#10074",
+        )
+
+    manifest()
+    assert len(suite.verify_acquisition(out, config, config_path)) == 25
+    path = out / "case_0001.json"
+    original = path.read_bytes()
+    row = json.loads((out / "case_0000.json").read_text())
+    write_json(path, row)
+    manifest()  # A valid manifest cannot disguise a duplicate/missing case.
+    with pytest.raises(ValueError, match="duplicate"):
+        suite.verify_acquisition(out, config, config_path)
+    write_json(path, json.loads(original))
+    manifest()
+    trace = out / "trajectory_0000.npz"
+    trace.write_bytes(trace.read_bytes() + b"corrupt")
+    with pytest.raises(ValueError, match="digest mismatch"):
+        suite.verify_acquisition(out, config, config_path)
+    assert suite.source_main(["--out", str(out), "--config", str(config_path), "--gate-only"]) == 4
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        [],
+        [
+            "--mode",
+            "radius",
+            "--radius",
+            ".28",
+            "--speed-tier",
+            "literature",
+            "--wall-profile",
+            "gradient_v3",
+        ],
+    ],
+)
+def test_acquisition_cli_writes_replayable_known_answer_raw_trace(tmp_path, monkeypatch, extra):
+    import json
+    from concurrent.futures import ThreadPoolExecutor
+
+    from robot_sf.evidence.writers import write_json
+
+    config = suite.load_config(suite.DEFAULT_CONFIG)
+    config["seeds"] = [1001]
+    config_path = tmp_path / "config.json"
+    write_json(config_path, config)
+    monkeypatch.setattr(suite, "ProcessPoolExecutor", ThreadPoolExecutor)
+    monkeypatch.setattr(
+        suite,
+        "protocol_tasks",
+        lambda config, radius, mode, options: [("V1", 1001, "native", radius, mode, options)],
+    )
+    fake = _fake_trace("V1")
+
+    def trace(*args, **kwargs):
+        p, v = fake(*args, **kwargs)
+        return p, v, np.array([1.3])
+
+    monkeypatch.setattr(suite, "protocol_simulate", trace)
+    out = tmp_path / "data"
+    assert (
+        suite.source_main(
+            ["--out", str(out), "--config", str(config_path), "--workers", "1", *extra]
+        )
+        == 0
+    )
+    row = json.loads((out / "case_0000.json").read_text())
+    assert row["fitted_desired_speed_m_s"] == pytest.approx(1.3)
+    raw = np.load(out / row["raw_trajectory"])
+    assert np.array_equal(raw["positions"], fake(None, None, None, None)[0])
+    assert suite.source_main(["--out", str(out), "--config", str(config_path), "--gate-only"]) == 5
+    trace_path = out / row["raw_trajectory"]
+    trace_path.write_bytes(trace_path.read_bytes() + b"corrupt")
+    assert suite.source_main(["--out", str(out), "--config", str(config_path), "--gate-only"]) == 4

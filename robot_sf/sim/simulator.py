@@ -455,7 +455,9 @@ def _build_pysf_simulation(  # noqa: PLR0913
         pysf_config.obstacle_force_config.obstacle_force_law_resolution_mode,
     )
     apply_obstacle_force_profile(
-        pysf_config.obstacle_force_config, getattr(config, "obstacle_force_profile", None)
+        pysf_config.obstacle_force_config,
+        getattr(config, "obstacle_force_profile", None),
+        config.pedestrian_radius_m,
     )
     pysf_config.social_force_config.kernel_version = getattr(
         config, "social_force_kernel_version", None

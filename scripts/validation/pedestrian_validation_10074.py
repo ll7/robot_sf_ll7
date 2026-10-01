@@ -1,7 +1,7 @@
-"""Source-bound pedestrian diagnostics; one command, no empirical-fit admission.
+"""Source-bound pedestrian release measurements and fail-closed admission checks.
 
-Reuses #10073's aperture, corrected Seyfried-shaped and Liao harnesses verbatim.
-Unverified measurement definitions produce null comparisons, never inferred targets.
+Runs published or explicitly documented equivalent protocols on unchanged legacy
+and successor force profiles. Censored observations remain null, never zero.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ import itertools
 import json
 import os
 import subprocess
+import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
@@ -454,7 +455,9 @@ def run_task(task):  # noqa: C901, PLR0915
         settings = SimulationSettings(pedestrian_radius_m=radius if mode == "radius" else None)
         if settings.pedestrian_radius_m is not None:
             cfg.scene_config.agent_radius = settings.pedestrian_radius_m
-        apply_obstacle_force_profile(cfg.obstacle_force_config, profile)
+        apply_obstacle_force_profile(
+            cfg.obstacle_force_config, profile, settings.pedestrian_radius_m
+        )
         if literature:
             cfg.scene_config.desired_speed_mean = 1.3
             cfg.scene_config.desired_speed_std = 0.2
@@ -757,6 +760,45 @@ def acceptance_gate(rows):
     }
 
 
+def verify_acquisition(out, config, config_path):  # noqa: C901
+    """Verify complete, unique case grid and byte manifests before judging a model."""
+    identity = json.loads((out / "identity.json").read_text())
+    if identity["protocol"] != "source":
+        raise ValueError("compatibility protocol cannot admit a release")
+    if identity["config_sha256"] != hashlib.sha256(config_path.read_bytes()).hexdigest():
+        raise ValueError("acquisition config differs from requested gate config")
+    expected = {
+        (t[0], t[1], t[2])
+        for t in protocol_tasks(config, identity["radius_m"], identity["mode"], {})
+    }
+    paths = sorted(out.glob("case_*.json"))
+    rows = [json.loads(path.read_text()) for path in paths]
+    observed = [(r["case"], r["seed"], r["variant"]) for r in rows]
+    if len(rows) != len(expected) or set(observed) != expected:
+        raise ValueError("incomplete or duplicate acquisition case grid")
+    if identity["episode_n"] != len(expected) or identity["seeds"] != config["seeds"]:
+        raise ValueError("acquisition identity does not match the declared dev grid")
+    manifest = {}
+    for line in (out / "SHA256SUMS").read_text().splitlines():
+        if line.startswith("<!--") or not line.strip():
+            continue
+        digest, name = line.split("  ", 1)
+        if Path(name).name != name or name in manifest:
+            raise ValueError("invalid manifest member")
+        if hashlib.sha256((out / name).read_bytes()).hexdigest() != digest:
+            raise ValueError(f"manifest digest mismatch: {name}")
+        manifest[name] = digest
+    required = {"identity.json", "table.json", "table.md", "gate.json"}
+    required.update(p.name for p in paths)
+    required.update(r["raw_trajectory"] for r in rows)
+    if not required <= manifest.keys():
+        raise ValueError("manifest omits required raw acquisition files")
+    for row in rows:
+        if manifest[row["raw_trajectory"]] != row["raw_trajectory_sha256"]:
+            raise ValueError("row trajectory digest differs from manifest")
+    return rows
+
+
 def source_main(argv=None):  # noqa: C901, PLR0915, PLR0912
     """Run the full source case grid unchanged for baseline and successor profiles."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -779,12 +821,11 @@ def source_main(argv=None):  # noqa: C901, PLR0915, PLR0912
     args = parser.parse_args(argv)
     config = load_config(args.config)
     if args.gate_only:
-        identity = json.loads((args.out / "identity.json").read_text())
-        rows = [json.loads(p.read_text()) for p in sorted(args.out.glob("case_*.json"))]
-        if identity["protocol"] != "source" or len(rows) != identity["episode_n"]:
-            raise ValueError("incomplete or non-source acquisition")
-        if any(r["seed"] not in config["seeds"] for r in rows):
-            raise ValueError("acquisition contains forbidden seeds")
+        try:
+            rows = verify_acquisition(args.out, config, args.config)
+        except (OSError, ValueError, KeyError) as error:
+            print(f"INVALID ACQUISITION: {error}", file=sys.stderr)
+            return 4
         return acceptance_gate(rows)["exit_code"]
     if args.radius not in config["radii_m"] or (args.mode == "baseline" and args.radius != 0.4):
         parser.error("baseline radius must stay .40; radius must be in declared grid")
@@ -826,7 +867,9 @@ def source_main(argv=None):  # noqa: C901, PLR0915, PLR0912
         "protocol": args.protocol,
         "seeds": config["seeds"],
         "episode_n": len(grid),
-        "baseline_trial_n": 450 if args.protocol == "source" else 0,
+        "baseline_trial_n": len(config["seeds"]) * len(config["V6"]["speeds_m_s"]) * 5
+        if args.protocol == "source"
+        else 0,
         "slurm_job": os.environ.get("SLURM_JOB_ID"),
         "workers": args.workers,
         "source_files": {},

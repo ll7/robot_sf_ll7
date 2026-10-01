@@ -64,7 +64,7 @@
       10,
       20
     ],
-    "setup_status": "native asymptotic speed measured over 10-20 s; Moussaid target is fitted desired speed from acceleration, not this window; human population/marker protocol not reproduced",
+    "setup_status": "Acceleration fit with explicit reaction clock; CM velocities substitute for marker data and native Euler integration remains unchanged.",
     "equivalence": "documented_equivalent",
     "protocol_reason": "Equation 4.1 desired speed fitted from first 3 s of acceleration after a .35 s clock shift; simulator velocities replace supplementary marker preprocessing; tau is fitted, not imposed."
   },
@@ -84,7 +84,7 @@
     "drop_window": {
       "approach": "first 2 s of capture starting 4 m upstream",
       "crossing": "remaining capture",
-      "speed_drop_statistic": null
+      "speed_drop_statistic": "approach mean minus minimum cubic trend before passage, conditional on >3 approach-SD event; documented equivalent"
     },
     "published_drop_m_s": {
       "0.9": 0.4,
@@ -93,7 +93,7 @@
         0.16
       ]
     },
-    "setup_status": "source phase split verified; individual acromion shoulder widths and Table 1 speed-drop statistic unverified; archived spatial estimator differs; rigid discs cannot rotate",
+    "setup_status": "Published temporal phases/event implemented with an explicit cubic speed trend and .46 m shoulder proxy; rigid discs cannot rotate.",
     "diagnostic_widths_m": [
       0.8,
       1.0,
@@ -147,7 +147,7 @@
     "counting_line": null,
     "all_data_window": "entire experiment; counting plane, clock origin and denominator unverified",
     "steady_state_window": null,
-    "setup_status": "original counting line/window not supplied; exit-plane finite-N and 20-80% diagnostics are explicitly not source estimators",
+    "setup_status": "Explicit exit-plane all-data and density/speed stationarity equivalent; original counting line and deterministic source window unpublished.",
     "equivalence": "documented_equivalent",
     "protocol_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width."
   },
@@ -176,7 +176,7 @@
       2.7
     ],
     "onset_definition": "first absolute angular speed above subject/speed mean maximum from five no-interferer trials; own X displacement to PoMD after marker filtering",
-    "setup_status": "source onset definition verified; source uses nonreactive interferer, 0.5 Hz Gaussian/5th-order median filtering and no-interferer baseline bank; reactive diagnostic does not reproduce this protocol, onset unavailable",
+    "setup_status": "Nonreactive matching-speed interferer, filtered own-X onset and five no-interferer trials; deterministic CM samples substitute for trunk markers.",
     "equivalence": "documented_equivalent",
     "protocol_reason": "Straight prescribed matching-speed nonreactive interferer; mean maximum angular speed from five no-interferer trials; own X distance to synchronized PoMD; 0.5 Hz -3dB Gaussian then five-sample median with linear endpoint padding; source filter normalization/endpoints unspecified; deterministic CM baselines lack trunk sway."
   },

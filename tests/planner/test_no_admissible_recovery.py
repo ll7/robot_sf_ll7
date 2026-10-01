@@ -81,6 +81,31 @@ def test_infeasible_progress_escape_is_selectable():
     assert planner.diagnostics()["recovery_kind"] == "progress_escape"
 
 
+def test_infeasible_escape_is_selectable_above_the_slow_speed_trigger():
+    """An intermediate escape balances two approaching clearance constraints."""
+    planner = RiskDWAPlannerAdapter(
+        replace(_risk_config(), linear_candidates=(0.4, 0.6), angular_candidates=(-0.1, 0.0, 0.1))
+    )
+    obs = _observation(
+        speed=0.5,
+        goal=(7.0, 0.0),
+        pedestrians=[(-1.6, 0.0), (0.8, 0.0)],
+        pedestrian_velocities=[(1.2, 0.0), (0.4, 0.0)],
+    )
+    command = planner.plan(obs)
+    assert command == pytest.approx((0.55, 0.0))
+    assert planner.diagnostics()["no_admissible_command"] is True
+    assert planner.diagnostics()["recovery_kind"] == "progress_escape"
+    guard_cfg = build_guarded_ppo_config(
+        yaml.safe_load((ROOT / "configs/algos/guarded_ppo_release_v0_0_8.yaml").read_text())
+    )
+    guard = GuardedPPOAdapter(config=guard_cfg, fallback_adapter=planner)
+    selected, label = guard.choose_command(obs, (0.6, 0.0))
+    assert selected == pytest.approx(command)
+    assert label == "fallback_best_effort"
+    assert guard.diagnostics()["recovery_kind"] == "progress_escape"
+
+
 def test_mppi_infeasible_escape_beats_zero_with_real_clearance_costs():
     """MPPI must retain an improving escape when every cost is invalid."""
     cfg = build_predictive_mppi_config(

@@ -1142,7 +1142,12 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             clearance_rank(fallback_eval) > clearance_rank(stop_eval) or recovery_turn
         )
         self._recovery_command_count += int(recovery_turn)
-        self._recovery_kind = "least_bad_clearance" if use_fallback else "brake"
+        fallback_diagnostics = getattr(self.fallback_adapter, "diagnostics", lambda: {})()
+        self._recovery_kind = (
+            fallback_diagnostics.get("recovery_kind") or "least_bad_clearance"
+            if use_fallback
+            else "brake"
+        )
         return self._shield_decision(
             ppo_command=ppo_command,
             filtered_command=tuple(map(float, fallback_command)) if use_fallback else (0.0, 0.0),

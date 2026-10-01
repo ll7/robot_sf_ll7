@@ -612,9 +612,9 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
                     best_cmd = (v, w)
 
         if bool(self.config.progress_escape_enabled):
-            if (
-                to_goal > float(self.config.progress_escape_distance)
-                and best_cmd[0] < float(self.config.progress_escape_speed) * 0.6
+            if to_goal > float(self.config.progress_escape_distance) and (
+                best_cmd[0] < float(self.config.progress_escape_speed) * 0.6
+                or best_score == float("-inf")
             ):
                 goal_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
                 heading_err = _wrap_angle(goal_heading - heading)

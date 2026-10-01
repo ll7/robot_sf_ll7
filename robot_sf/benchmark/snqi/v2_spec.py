@@ -17,6 +17,10 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from robot_sf.benchmark.metric_definitions import (
+    LEGACY_METRIC_SCHEMA_VERSION,
+    metric_schema_version,
+)
 from robot_sf.benchmark.robot_force_contract import declared_force_source_contract
 from robot_sf.common.artifact_paths import get_repository_root
 
@@ -165,9 +169,11 @@ class SnqiV2Spec:
     calibration_rho: float
     paths: Mapping[str, str]
     hashes: Mapping[str, str]
+    metric_schema_version: str = LEGACY_METRIC_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
         """Enforce the complete score contract even for direct construction."""
+        metric_schema_version({"metric_schema_version": self.metric_schema_version})
         if set(self.weights) != set(TERMS):
             raise ValueError("SNQI-v2 weights must contain exactly S,C,T,N,F,J,K")
         weights = {
@@ -215,6 +221,7 @@ class SnqiV2Spec:
         """Return campaign/manifest provenance with explicit versioned file hashes."""
         return {
             "snqi_v2_version": "SNQI-v2",
+            "metric_schema_version": self.metric_schema_version,
             "snqi_v2_calibration_split_id": self.calibration_split_id,
             "snqi_v2_force_source": self.force_source,
             "snqi_v2_force_source_contract": declared_force_source_contract(self.force_source),
@@ -278,6 +285,7 @@ def load_snqi_v2_spec(weights_path: Path, anchors_path: Path, family_path: Path)
         calibration_seeds=tuple(calibration["seeds"]),
         paths={key: str(path) for key, path in paths.items()},
         hashes={key: hashlib.sha256(value).hexdigest() for key, value in raw.items()},
+        metric_schema_version=metric_schema_version(anchors_doc),
     )
     return spec
 

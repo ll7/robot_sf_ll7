@@ -171,10 +171,10 @@ def test_success_rate_requires_goal_before_horizon_and_no_collisions() -> None:
     assert timeout(data, horizon=3) == 1.0
 
 
-def test_time_to_goal_is_step_times_dt() -> None:
-    """``time_to_goal`` is ``reached_goal_step * dt``; NaN when the goal is unreached."""
+def test_time_to_goal_is_completed_steps_times_dt() -> None:
+    """``time_to_goal`` is ``(reached_goal_step + 1) * dt``; NaN when the goal is unreached."""
     data = _straight_line_episode()
-    assert time_to_goal(data) == pytest.approx(3 * 0.5)
+    assert time_to_goal(data) == pytest.approx(4 * 0.5)
     no_goal = _episode(robot_pos=np.zeros((3, 2)), reached_goal_step=None)
     assert math.isnan(time_to_goal(no_goal))
 
@@ -221,7 +221,7 @@ def test_path_motion_metrics_on_curved_nonuniform_trajectory() -> None:
     )
 
     assert path_length(data) == pytest.approx(3.0)
-    assert jerk_mean(data) == pytest.approx(1.0)
+    assert jerk_mean(data) == pytest.approx(2.0)
     assert curvature_mean(data) == pytest.approx(1.0)
 
 

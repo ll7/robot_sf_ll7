@@ -989,6 +989,21 @@ _FAST_FILES = {
     "test_metric_layers.py",
     "test_metrics.py",
     "test_aggregated_time_cooperative.py",
+    # Offline metric/schema and shortest-path contracts measured below 3s per file;
+    # they never step an environment or simulator (PR #10014 routing audit).
+    "test_critical_intervals.py",
+    "test_cross_benchmark_metrics.py",
+    "test_control_action_latency_snqi.py",
+    "test_path_utils.py",
+    "test_snqi_scalarization_sensitivity.py",
+    # Maintainer-approved fast-lane exceptions for PR #10014: two 8-step
+    # episodes on dev seeds 1001/1002, and offline trace packaging (~14s).
+    "test_baseline_stats.py",
+    "test_trace_reexport_packaging.py",
+    # Offline v2 baseline, distillation, and trace-binding contracts.
+    "test_snqi_cli_method_aliases.py",
+    "test_pipeline_persistence_gate_wiring.py",
+    "test_issue_6411_real_trace_reexport.py",
     # Classic planner adapter tests are deterministic planner-contract tests for
     # the changed classic_planner_adapter.py producer; keep in fast shards for
     # the exact-head changed-coverage gate.

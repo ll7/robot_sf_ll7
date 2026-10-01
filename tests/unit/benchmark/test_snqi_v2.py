@@ -2538,22 +2538,43 @@ def test_real_small_campaign_v2_outputs(tmp_path, monkeypatch):
     scenario_path.write_text(
         "- name: v2_smoke\n  map_file: "
         + str(ROOT / "maps/svg_maps/classic_crossing.svg")
-        + "\n  seeds: [201]\n  simulation_config:\n    ped_density: 0.0\n"
+        + "\n  seeds: [1001]\n  simulation_config:\n    ped_density: 0.0\n"
+    )
+    # Synthetic matching-schema anchors, not a relabelled publication asset.
+    baseline_path = tmp_path / "baseline.v2.json"
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "_metadata": {"metric_schema_version": "robot-sf-metrics.v2"},
+                **{
+                    name: {"med": 0.0, "p95": 1.0}
+                    for name in (
+                        "collisions",
+                        "near_misses",
+                        "comfort_exposure",
+                        "force_exceed_events",
+                        "jerk_mean",
+                        "time_to_goal_norm",
+                        "curvature_mean",
+                    )
+                },
+            }
+        )
     )
     cfg = CampaignConfig(
         name="v2_smoke",
         scenario_matrix_path=scenario_path,
         planners=(PlannerSpec(key="goal", algo="goal"),),
-        seed_policy=SeedPolicy(mode="fixed-list", seeds=(201,)),
+        seed_policy=SeedPolicy(mode="fixed-list", seeds=(1001,)),
         horizon=4,
         dt=0.1,
         workers=1,
         export_publication_bundle=False,
         snqi_weights_path=ROOT / "configs/benchmarks/snqi_weights_camera_ready_v3.json",
-        snqi_baseline_path=ROOT / "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+        snqi_baseline_path=baseline_path,
         bootstrap_samples=10,
         snqi_contract=SnqiContractConfig(calibration_trials=10),
-        snqi_v2_spec=fixture_spec(),
+        snqi_v2_spec=replace(fixture_spec(), metric_schema_version="robot-sf-metrics.v2"),
     )
     from robot_sf.benchmark.camera_ready import campaign
     from robot_sf.benchmark.identity.hash_utils import sha256_file
@@ -2656,7 +2677,8 @@ def test_streaming_retains_only_compact_records_and_distinguishes_same_algo_arms
         assert all("algorithm_metadata" not in row for row in rows)
         assert all(
             set(row["metrics"])
-            == set(SOURCES.values()) | {"robot_force_metadata", "snqi_v2_force_provenance"}
+            == set(SOURCES.values())
+            | {"robot_force_metadata", "snqi_v2_force_provenance", "metric_schema_version"}
             for row in rows
         )
         assert all(
@@ -2724,3 +2746,10 @@ def test_offline_execution_map_rejects_duplicate_planner_key(tmp_path):
     path.write_text('{"episodes.jsonl":{"key":"arm","algo":"goal","algo":"guarded_ppo"}}')
     with pytest.raises(ValueError, match="duplicate JSON key: algo"):
         _v2_execution_declarations(argparse.Namespace(execution_map=path))
+
+
+def test_historical_v2_anchors_reject_corrected_physical_metrics():
+    """A frozen legacy spec must fail on v2 definitions before normalizing J/T."""
+    values = metrics(metric_schema_version="robot-sf-metrics.v2")
+    with pytest.raises(ValueError, match="incompatible metric definitions"):
+        normalize_snqi_v2_terms(values, fixture_spec())

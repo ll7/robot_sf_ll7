@@ -1,6 +1,7 @@
 """Static witnesses for release endpoint safety; no environment is constructed."""
 
 from pathlib import Path
+from xml.etree import ElementTree
 
 import pytest
 from shapely.geometry import LineString, Point
@@ -21,15 +22,25 @@ def test_overtaking_parked_pedestrian_clears_robot_goal_and_final_approach():
     definition = next(iter(config.map_pool.map_defs.values()))
     pedestrian = definition.single_pedestrians[0]
     parked = Point(pedestrian.trajectory[-1] if pedestrian.trajectory else pedestrian.goal)
-    # The review's stalled robots were within 3 m of the goal. Protect the whole
-    # destination rectangle and authored approach, not one RNG draw.
+    map_path = (MATRIX.resolve().parent / scenario["map_file"]).resolve()
+    actor_id = scenario["single_pedestrians"][0]["id"]
+    goal_circle = next(
+        node
+        for node in ElementTree.parse(map_path).iter()
+        if node.get("{http://www.inkscape.org/namespaces/inkscape}label")
+        == f"single_ped_{actor_id}_goal"
+    )
+    parking_radius = float(goal_circle.attrib["r"])
+    # Protect the whole authored parking region, not just its nominal centre:
+    # the first candidate's centre cleared 3 m while the settled walker did not.
+    # The review's 3 m approach margin remains independent of this SVG's values.
     goals = [_rect_polygon(zone) for zone in definition.robot_goal_zones]
-    assert all(parked.distance(goal) > 3.0 for goal in goals), (
+    assert all(parked.distance(goal) - parking_radius > 3.0 for goal in goals), (
         "parked overtaking pedestrian blocks the full robot goal rectangle"
     )
     for route in definition.robot_routes:
         approach = LineString(route.waypoints)
-        assert parked.distance(approach) > 3.0, (
+        assert parked.distance(approach) - parking_radius > 3.0, (
             "parked overtaking pedestrian blocks the robot's final approach"
         )
 

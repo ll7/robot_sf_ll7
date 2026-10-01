@@ -1,6 +1,8 @@
 <!-- AI-GENERATED NEEDS-REVIEW -->
 # Pedestrian obstacle-force development fit for 0.0.9
 
+The [corrected-law continuation](CONTINUATION.md) evaluates `gradient_v3` and body-edge exponentials against separate named experiment cases, records the Pareto trade-off, and explains every classic doorway preview change. **No accepted calibration exists.** The sections below retain the original fit and full 48-scenario preview as historical diagnostics; their force-radius safety interpretation is explicitly superseded.
+
 **Rejected diagnostic prototype; adoption blocked by footprint penetration and narrow-door flow.** `calibrated_v2` is an opt-in candidate,
 not an accepted calibration or release setting. The missing selector remains `legacy_v1` and
 preserves the released defaults and configuration digest. No held-out seeds were stepped.

@@ -1,0 +1,8 @@
+{
+  "artifact_path": "docs/context/evidence/issue_10061_obstacle_force_calibration_0_0_9/corrected_laws_raw.tar.gz",
+  "artifact_sha256": "7183bccad5e53ded17c620ce59d33a956631742181a45dfcd9aa90ca3c973f19",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "review_status": "needs-review",
+  "schema_version": "evidence-review-marker.v1"
+}

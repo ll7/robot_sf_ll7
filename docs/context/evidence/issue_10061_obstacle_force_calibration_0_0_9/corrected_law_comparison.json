@@ -1,0 +1,932 @@
+{
+  "accepted_profile": null,
+  "candidates": [
+    {
+      "accepted": false,
+      "aperture_0_8m_passes": 0,
+      "aperture_cases_at_least_1m": 120,
+      "aperture_passes_at_least_1m": 100,
+      "candidate": [
+        "legacy_refit",
+        0.003,
+        0.375
+      ],
+      "diagnostic_cost_vector": [
+        0.16666666666666663,
+        0.06449136243215314,
+        2.01726106321121,
+        0.28043129590715177
+      ],
+      "direct_wall_max_penetration_m": 0.0,
+      "flow_by_width": [
+        {
+          "complete_runs": 0,
+          "initial_pair_overlap_range": [
+            197,
+            202
+          ],
+          "maximum_wall_penetration_m": 0.06248718425323152,
+          "mean_central_20_80_specific_flow_persons_m_s": 0.0,
+          "mean_crossed": 0.0,
+          "mean_specific_flow_persons_m_s": 0.0,
+          "min_initial_pair_distance_m": 0.3859942002740253,
+          "seeds": 10,
+          "supply": 60,
+          "width_m": 0.8
+        },
+        {
+          "complete_runs": 0,
+          "initial_pair_overlap_range": [
+            197,
+            202
+          ],
+          "maximum_wall_penetration_m": 0.04118193458355701,
+          "mean_central_20_80_specific_flow_persons_m_s": 0.5818901694808539,
+          "mean_crossed": 56.0,
+          "mean_specific_flow_persons_m_s": 0.4110245068744538,
+          "min_initial_pair_distance_m": 0.3859942002740253,
+          "seeds": 10,
+          "supply": 60,
+          "width_m": 1.0
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            197,
+            202
+          ],
+          "maximum_wall_penetration_m": 0.03168314807433775,
+          "mean_central_20_80_specific_flow_persons_m_s": 1.6634757124016393,
+          "mean_crossed": 60.0,
+          "mean_specific_flow_persons_m_s": 0.8552645289104834,
+          "min_initial_pair_distance_m": 0.3859942002740253,
+          "seeds": 10,
+          "supply": 60,
+          "width_m": 1.2
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.06151745497748978,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.4908963002237927,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.8040933491462376,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 2.4
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.06449136243215314,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.4847973079999703,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.7425644109086322,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 3.0
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.05928744838341771,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.4380590265699427,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.657143924547955,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 3.6
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.05637735215162759,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.3002444833595304,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.4307638107529406,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 5.0
+        }
+      ],
+      "flow_max_penetration_m": 0.06449136243215314,
+      "mean_1m_speed_drop_m_s": {
+        "0.65": 0.6494558242899204,
+        "1.3": 1.297419018949928
+      },
+      "mse_is_valid_complete_experiment_fit": false,
+      "nondominated_in_measured_subset": true,
+      "provisional_censored_narrow_mse": 2.01726106321121,
+      "steady_corridor_center_range_m": [
+        0.7117446738826738,
+        0.7488217234359267
+      ],
+      "steady_corridor_edge_range_m": [
+        0.3117446738826738,
+        0.34882172343592666
+      ],
+      "wide_all_data_free_intercept": 1.9522567116407703,
+      "wide_all_data_free_intercept_slope": 2.0620019718750804,
+      "wide_all_data_linear_r2": 0.9946373567292194,
+      "wide_all_data_origin_slope": 2.5804312959071516
+    },
+    {
+      "accepted": false,
+      "aperture_0_8m_passes": 0,
+      "aperture_cases_at_least_1m": 120,
+      "aperture_passes_at_least_1m": 120,
+      "candidate": [
+        "exponential_edge",
+        15.0,
+        0.04
+      ],
+      "diagnostic_cost_vector": [
+        0.0,
+        0.14479435668509433,
+        1.2469988941433405,
+        0.41271977680943417
+      ],
+      "direct_wall_max_penetration_m": 0.025779229810165893,
+      "flow_by_width": [
+        {
+          "complete_runs": 0,
+          "initial_pair_overlap_range": [
+            197,
+            202
+          ],
+          "maximum_wall_penetration_m": 0.13265294221485108,
+          "mean_central_20_80_specific_flow_persons_m_s": 0.11740424970093317,
+          "mean_crossed": 7.7,
+          "mean_specific_flow_persons_m_s": 0.09414325447252418,
+          "min_initial_pair_distance_m": 0.3859942002740253,
+          "seeds": 10,
+          "supply": 60,
+          "width_m": 0.8
+        },
+        {
+          "complete_runs": 2,
+          "initial_pair_overlap_range": [
+            197,
+            202
+          ],
+          "maximum_wall_penetration_m": 0.10147818688772181,
+          "mean_central_20_80_specific_flow_persons_m_s": 1.7499877194168747,
+          "mean_crossed": 58.4,
+          "mean_specific_flow_persons_m_s": 1.3448965282498748,
+          "min_initial_pair_distance_m": 0.3859942002740253,
+          "seeds": 10,
+          "supply": 60,
+          "width_m": 1.0
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            197,
+            202
+          ],
+          "maximum_wall_penetration_m": 0.1117953722533983,
+          "mean_central_20_80_specific_flow_persons_m_s": 1.7849949277593176,
+          "mean_crossed": 60.0,
+          "mean_specific_flow_persons_m_s": 0.9046197180725425,
+          "min_initial_pair_distance_m": 0.3859942002740253,
+          "seeds": 10,
+          "supply": 60,
+          "width_m": 1.2
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.14479435668509433,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.6860042431259075,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.974711701635706,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 2.4
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.14462893352590822,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.656390093464311,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.894309334936294,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 3.0
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.13318723176236108,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.5865415238764498,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.7914318431621497,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 3.6
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.1332772949724691,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.4262242419240705,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.546180261206543,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 5.0
+        }
+      ],
+      "flow_max_penetration_m": 0.14479435668509433,
+      "mean_1m_speed_drop_m_s": {
+        "0.65": 0.3534949811627749,
+        "1.3": 0.19491526246146726
+      },
+      "mse_is_valid_complete_experiment_fit": false,
+      "nondominated_in_measured_subset": true,
+      "provisional_censored_narrow_mse": 1.2469988941433405,
+      "steady_corridor_center_range_m": [
+        0.657079236424341,
+        0.6726329122174945
+      ],
+      "steady_corridor_edge_range_m": [
+        0.25707923642434094,
+        0.2726329122174945
+      ],
+      "wide_all_data_free_intercept": 2.2116010055144772,
+      "wide_all_data_free_intercept_slope": 2.1254205720066515,
+      "wide_all_data_linear_r2": 0.9949495078432302,
+      "wide_all_data_origin_slope": 2.712719776809434
+    },
+    {
+      "accepted": false,
+      "aperture_0_8m_passes": 0,
+      "aperture_cases_at_least_1m": 120,
+      "aperture_passes_at_least_1m": 110,
+      "candidate": [
+        "exponential_edge",
+        40.0,
+        0.04
+      ],
+      "diagnostic_cost_vector": [
+        0.08333333333333337,
+        0.0980349512478414,
+        1.398903283801124,
+        0.35814730916241766
+      ],
+      "direct_wall_max_penetration_m": 0.0,
+      "flow_by_width": [
+        {
+          "complete_runs": 0,
+          "initial_pair_overlap_range": [
+            197,
+            202
+          ],
+          "maximum_wall_penetration_m": 0.08573798073067296,
+          "mean_central_20_80_specific_flow_persons_m_s": 0.0,
+          "mean_crossed": 0.0,
+          "mean_specific_flow_persons_m_s": 0.0,
+          "min_initial_pair_distance_m": 0.3859942002740253,
+          "seeds": 10,
+          "supply": 60,
+          "width_m": 0.8
+        },
+        {
+          "complete_runs": 4,
+          "initial_pair_overlap_range": [
+            197,
+            202
+          ],
+          "maximum_wall_penetration_m": 0.06325323997948384,
+          "mean_central_20_80_specific_flow_persons_m_s": 1.6565620856172483,
+          "mean_crossed": 58.8,
+          "mean_specific_flow_persons_m_s": 1.1996655008974515,
+          "min_initial_pair_distance_m": 0.3859942002740253,
+          "seeds": 10,
+          "supply": 60,
+          "width_m": 1.0
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            197,
+            202
+          ],
+          "maximum_wall_penetration_m": 0.06343267711300304,
+          "mean_central_20_80_specific_flow_persons_m_s": 1.7208978989254136,
+          "mean_crossed": 60.0,
+          "mean_specific_flow_persons_m_s": 0.9144710137707472,
+          "min_initial_pair_distance_m": 0.3859942002740253,
+          "seeds": 10,
+          "supply": 60,
+          "width_m": 1.2
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.0980349512478414,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.6048933770964107,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.896184071177511,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 2.4
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.09277059497913348,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.5814708063896212,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.825470030537901,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 3.0
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.09073070531112526,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.5271440935981566,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.739409450040092,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 3.6
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.09078490778801257,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.379750142472018,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.5009411656679794,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 5.0
+        }
+      ],
+      "flow_max_penetration_m": 0.0980349512478414,
+      "mean_1m_speed_drop_m_s": {
+        "0.65": 0.6499808507930189,
+        "1.3": 0.560253585220974
+      },
+      "mse_is_valid_complete_experiment_fit": false,
+      "nondominated_in_measured_subset": true,
+      "provisional_censored_narrow_mse": 1.398903283801124,
+      "steady_corridor_center_range_m": [
+        0.6671133090228016,
+        0.6848463715346835
+      ],
+      "steady_corridor_edge_range_m": [
+        0.2671133090228016,
+        0.2848463715346835
+      ],
+      "wide_all_data_free_intercept": 2.054129156808733,
+      "wide_all_data_free_intercept_slope": 2.1126653631206445,
+      "wide_all_data_linear_r2": 0.9945582650262134,
+      "wide_all_data_origin_slope": 2.6581473091624175
+    },
+    {
+      "accepted": false,
+      "aperture_0_8m_passes": 0,
+      "aperture_cases_at_least_1m": 120,
+      "aperture_passes_at_least_1m": 120,
+      "candidate": [
+        "true_gradient",
+        0.001,
+        0.4
+      ],
+      "diagnostic_cost_vector": [
+        0.0,
+        0.10286930661840066,
+        1.3809750913276204,
+        0.2511930424403017
+      ],
+      "direct_wall_max_penetration_m": 0.0,
+      "flow_by_width": [
+        {
+          "complete_runs": 0,
+          "initial_pair_overlap_range": [
+            197,
+            202
+          ],
+          "maximum_wall_penetration_m": 0.0866426827325214,
+          "mean_central_20_80_specific_flow_persons_m_s": 0.0,
+          "mean_crossed": 0.0,
+          "mean_specific_flow_persons_m_s": 0.0,
+          "min_initial_pair_distance_m": 0.3859942002740253,
+          "seeds": 10,
+          "supply": 60,
+          "width_m": 0.8
+        },
+        {
+          "complete_runs": 1,
+          "initial_pair_overlap_range": [
+            197,
+            202
+          ],
+          "maximum_wall_penetration_m": 0.07349227899552269,
+          "mean_central_20_80_specific_flow_persons_m_s": 1.5405309119228652,
+          "mean_crossed": 58.2,
+          "mean_specific_flow_persons_m_s": 1.2746012992321414,
+          "min_initial_pair_distance_m": 0.3859942002740253,
+          "seeds": 10,
+          "supply": 60,
+          "width_m": 1.0
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            197,
+            202
+          ],
+          "maximum_wall_penetration_m": 0.07239315370592936,
+          "mean_central_20_80_specific_flow_persons_m_s": 1.572060622567073,
+          "mean_crossed": 60.0,
+          "mean_specific_flow_persons_m_s": 0.8931055116397267,
+          "min_initial_pair_distance_m": 0.3859942002740253,
+          "seeds": 10,
+          "supply": 60,
+          "width_m": 1.2
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.09982406830303192,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.4798180776061165,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.807401777413827,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 2.4
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.10018184690223658,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.468906449808584,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.742624904987441,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 3.0
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.10286930661840066,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.416532260593469,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.632187336223949,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 3.6
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.10168936332447398,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.248227155941403,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.3812596374879873,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 5.0
+        }
+      ],
+      "flow_max_penetration_m": 0.10286930661840066,
+      "mean_1m_speed_drop_m_s": {
+        "0.65": 0.29646946903230664,
+        "1.3": 0.17750252216203002
+      },
+      "mse_is_valid_complete_experiment_fit": false,
+      "nondominated_in_measured_subset": true,
+      "provisional_censored_narrow_mse": 1.3809750913276204,
+      "steady_corridor_center_range_m": [
+        0.6677821573345077,
+        0.6911616140082344
+      ],
+      "steady_corridor_edge_range_m": [
+        0.2677821573345077,
+        0.29116161400823437
+      ],
+      "wide_all_data_free_intercept": 2.2360259179799846,
+      "wide_all_data_free_intercept_slope": 1.957407707620123,
+      "wide_all_data_linear_r2": 0.9927772107564543,
+      "wide_all_data_origin_slope": 2.5511930424403015
+    },
+    {
+      "accepted": false,
+      "aperture_0_8m_passes": 0,
+      "aperture_cases_at_least_1m": 120,
+      "aperture_passes_at_least_1m": 120,
+      "candidate": [
+        "legacy_refit",
+        0.0003,
+        0.4
+      ],
+      "diagnostic_cost_vector": [
+        0.0,
+        0.09270373725694803,
+        1.689914532372894,
+        0.23698779237397183
+      ],
+      "direct_wall_max_penetration_m": 0.0,
+      "flow_by_width": [
+        {
+          "complete_runs": 0,
+          "initial_pair_overlap_range": [
+            197,
+            202
+          ],
+          "maximum_wall_penetration_m": 0.06874149086826709,
+          "mean_central_20_80_specific_flow_persons_m_s": 0.0,
+          "mean_crossed": 0.0,
+          "mean_specific_flow_persons_m_s": 0.0,
+          "min_initial_pair_distance_m": 0.3859942002740253,
+          "seeds": 10,
+          "supply": 60,
+          "width_m": 0.8
+        },
+        {
+          "complete_runs": 0,
+          "initial_pair_overlap_range": [
+            197,
+            202
+          ],
+          "maximum_wall_penetration_m": 0.055852281755441546,
+          "mean_central_20_80_specific_flow_persons_m_s": 1.314746986404523,
+          "mean_crossed": 58.0,
+          "mean_specific_flow_persons_m_s": 0.751380599919852,
+          "min_initial_pair_distance_m": 0.3859942002740253,
+          "seeds": 10,
+          "supply": 60,
+          "width_m": 1.0
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            197,
+            202
+          ],
+          "maximum_wall_penetration_m": 0.05944653346155149,
+          "mean_central_20_80_specific_flow_persons_m_s": 1.5424299743506367,
+          "mean_crossed": 60.0,
+          "mean_specific_flow_persons_m_s": 0.893748602380372,
+          "min_initial_pair_distance_m": 0.3859942002740253,
+          "seeds": 10,
+          "supply": 60,
+          "width_m": 1.2
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.08650148886761233,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.4484599076395197,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.7869969803305357,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 2.4
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.09270373725694803,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.438505048423626,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.7027687644293055,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 3.0
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.08541514281294416,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.398997215677455,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.618836314136811,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 3.6
+        },
+        {
+          "complete_runs": 10,
+          "initial_pair_overlap_range": [
+            910,
+            930
+          ],
+          "maximum_wall_penetration_m": 0.08338417697510003,
+          "mean_central_20_80_specific_flow_persons_m_s": 3.2484257479989127,
+          "mean_crossed": 350.0,
+          "mean_specific_flow_persons_m_s": 2.377274251847003,
+          "min_initial_pair_distance_m": 0.5585306087976747,
+          "seeds": 10,
+          "supply": 350,
+          "width_m": 5.0
+        }
+      ],
+      "flow_max_penetration_m": 0.09270373725694803,
+      "mean_1m_speed_drop_m_s": {
+        "0.65": 0.37624130198745587,
+        "1.3": 0.21384183373574742
+      },
+      "mse_is_valid_complete_experiment_fit": false,
+      "nondominated_in_measured_subset": true,
+      "provisional_censored_narrow_mse": 1.689914532372894,
+      "steady_corridor_center_range_m": [
+        0.6636073811064844,
+        0.6841940490074685
+      ],
+      "steady_corridor_edge_range_m": [
+        0.2636073811064844,
+        0.2841940490074685
+      ],
+      "wide_all_data_free_intercept": 2.102606615157506,
+      "wide_all_data_free_intercept_slope": 1.9786324696841937,
+      "wide_all_data_linear_r2": 0.9942577139747548,
+      "wide_all_data_origin_slope": 2.5369877923739717
+    }
+  ],
+  "evidence_status": "diagnostic-only; physical and empirical admission blocked",
+  "fit_limit": "All candidates fail a hard physical/flow gate. MSE uses censored observed-count flow and is diagnostic only; a mathematical Pareto frontier is not an empirical accepted fit.",
+  "footprint_radius_m": 0.4,
+  "force_radius_m": 0.35,
+  "narrow_lanes": [
+    {
+      "calibration": "released_default",
+      "candidate": [
+        "legacy_refit",
+        0.003,
+        0.375
+      ],
+      "clear_runs": 0,
+      "maximum_wall_penetration_m": 0.0,
+      "mean_change_from_initial": 0.1432982654101327,
+      "mean_segregation": 0.2608157606321516,
+      "weak_or_clear_runs": 9,
+      "width_m": 3.0
+    },
+    {
+      "calibration": "literature_typical",
+      "candidate": [
+        "legacy_refit",
+        0.003,
+        0.375
+      ],
+      "clear_runs": 0,
+      "maximum_wall_penetration_m": 0.0,
+      "mean_change_from_initial": -0.04562168796954674,
+      "mean_segregation": 0.07189580725247216,
+      "weak_or_clear_runs": 1,
+      "width_m": 3.0
+    },
+    {
+      "calibration": "released_default",
+      "candidate": [
+        "legacy_refit",
+        0.003,
+        0.375
+      ],
+      "clear_runs": 0,
+      "maximum_wall_penetration_m": 0.0,
+      "mean_change_from_initial": 0.14172321526840442,
+      "mean_segregation": 0.25908265798420427,
+      "weak_or_clear_runs": 8,
+      "width_m": 3.6
+    },
+    {
+      "calibration": "literature_typical",
+      "candidate": [
+        "legacy_refit",
+        0.003,
+        0.375
+      ],
+      "clear_runs": 0,
+      "maximum_wall_penetration_m": 0.0,
+      "mean_change_from_initial": -0.04664494734094577,
+      "mean_segregation": 0.07071449537485408,
+      "weak_or_clear_runs": 0,
+      "width_m": 3.6
+    },
+    {
+      "calibration": "released_default",
+      "candidate": [
+        "legacy_refit",
+        10.0,
+        -0.57
+      ],
+      "clear_runs": 0,
+      "maximum_wall_penetration_m": 0.16777276366846838,
+      "mean_change_from_initial": 0.0959221913648122,
+      "mean_segregation": 0.21343968658683105,
+      "weak_or_clear_runs": 8,
+      "width_m": 3.0
+    },
+    {
+      "calibration": "literature_typical",
+      "candidate": [
+        "legacy_refit",
+        10.0,
+        -0.57
+      ],
+      "clear_runs": 0,
+      "maximum_wall_penetration_m": 0.2647023256812556,
+      "mean_change_from_initial": -0.051830830578832324,
+      "mean_segregation": 0.06568666464318659,
+      "weak_or_clear_runs": 1,
+      "width_m": 3.0
+    },
+    {
+      "calibration": "released_default",
+      "candidate": [
+        "legacy_refit",
+        10.0,
+        -0.57
+      ],
+      "clear_runs": 0,
+      "maximum_wall_penetration_m": 0.04568368993479888,
+      "mean_change_from_initial": 0.06955926538379084,
+      "mean_segregation": 0.1869187080995907,
+      "weak_or_clear_runs": 8,
+      "width_m": 3.6
+    },
+    {
+      "calibration": "literature_typical",
+      "candidate": [
+        "legacy_refit",
+        10.0,
+        -0.57
+      ],
+      "clear_runs": 0,
+      "maximum_wall_penetration_m": 0.12855724747306174,
+      "mean_change_from_initial": -0.05139704964864502,
+      "mean_segregation": 0.06596239306715483,
+      "weak_or_clear_runs": 0,
+      "width_m": 3.6
+    },
+    {
+      "calibration": "released_default",
+      "candidate": [
+        "true_gradient",
+        0.001,
+        0.4
+      ],
+      "clear_runs": 0,
+      "maximum_wall_penetration_m": 0.0,
+      "mean_change_from_initial": 0.17010557427784048,
+      "mean_segregation": 0.28762306949985933,
+      "weak_or_clear_runs": 9,
+      "width_m": 3.0
+    },
+    {
+      "calibration": "literature_typical",
+      "candidate": [
+        "true_gradient",
+        0.001,
+        0.4
+      ],
+      "clear_runs": 0,
+      "maximum_wall_penetration_m": 0.009111573242350901,
+      "mean_change_from_initial": -0.039213760131161304,
+      "mean_segregation": 0.07830373509085758,
+      "weak_or_clear_runs": 1,
+      "width_m": 3.0
+    },
+    {
+      "calibration": "released_default",
+      "candidate": [
+        "true_gradient",
+        0.001,
+        0.4
+      ],
+      "clear_runs": 0,
+      "maximum_wall_penetration_m": 0.0,
+      "mean_change_from_initial": 0.16713529682994874,
+      "mean_segregation": 0.2844947395457486,
+      "weak_or_clear_runs": 9,
+      "width_m": 3.6
+    },
+    {
+      "calibration": "literature_typical",
+      "candidate": [
+        "true_gradient",
+        0.001,
+        0.4
+      ],
+      "clear_runs": 0,
+      "maximum_wall_penetration_m": 0.0,
+      "mean_change_from_initial": -0.03366004429917345,
+      "mean_segregation": 0.08369939841662641,
+      "weak_or_clear_runs": 2,
+      "width_m": 3.6
+    }
+  ],
+  "raw_archive": "corrected_laws_raw.tar.gz",
+  "raw_location": "Tracked archive in this evidence directory preserves every case and exact producer.",
+  "reset_gradient_vs_legacy": {
+    "any_profile_overlap": 0,
+    "identical": 240,
+    "new_overlaps": 0,
+    "paired_cases": 240
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "runtime_heads": {
+    "corrected_flow": "c9ca7e779f3fa829001523db59376884e4428fa9",
+    "corrected_lanes": "c9ca7e779f3fa829001523db59376884e4428fa9",
+    "corrected_screen": "4054ce5c963a09c07dae88e896f9b3c1b21e41e1",
+    "narrow_lanes_v2": "c9ca7e779f3fa829001523db59376884e4428fa9",
+    "seyfried_matched_v2": "c9ca7e779f3fa829001523db59376884e4428fa9"
+  },
+  "seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010
+  ]
+}

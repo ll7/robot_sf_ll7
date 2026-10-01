@@ -96,11 +96,12 @@ def test_legacy_profile_keeps_released_force_parameters():
     assert (force.config.factor, force.config.threshold, force.config.sigma) == (10.0, -0.57, 0.0)
 
 
-def test_profile_constructor_roundtrip_and_hash_identity():
+@pytest.mark.parametrize("profile", ["calibrated_v2", "gradient_v3"])
+def test_profile_constructor_roundtrip_and_hash_identity(profile):
     """Constructor and serialized settings retain explicit profile selection."""
-    settings = SimulationSettings(obstacle_force_profile="calibrated_v2")
-    assert settings.obstacle_force_profile == "calibrated_v2"
-    assert settings._config_hash_overrides()["obstacle_force_profile"] == "calibrated_v2"
+    settings = SimulationSettings(obstacle_force_profile=profile)
+    assert settings.obstacle_force_profile == profile
+    assert settings._config_hash_overrides()["obstacle_force_profile"] == profile
     assert SimulationSettings(**settings.to_dict()) == settings
     assert replace(settings) == settings
     assert deepcopy(settings) == settings
@@ -127,7 +128,7 @@ def test_candidate_rejects_a_conflicting_force_law():
 
 def test_metadata_distinguishes_opt_in_from_missing_selector():
     """Actual substrate records expose the profile without changing legacy payloads."""
-    for profile in (None, "legacy_v1", "calibrated_v2"):
+    for profile in (None, "legacy_v1", "calibrated_v2", "gradient_v3"):
         substrate, _ = _doorway_force(profile)
         simulator = Simulator.__new__(Simulator)
         simulator.config = SimulationSettings(obstacle_force_profile=profile)

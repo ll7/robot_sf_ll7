@@ -1,0 +1,129 @@
+{
+  "admission": "Each new job rejected pending a30 work or insufficient idle capacity. No unrelated job was modified. Initial screen admission survives in transcript; all later admissions are archived.",
+  "aggregate_peak_over_entire_work": 16,
+  "cpu_peak_from_sacct_allocation_intervals": 14,
+  "jobs": [
+    {
+      "AllocCPUS": "8",
+      "Elapsed": "00:01:04",
+      "End": "2026-10-01T08:40:23",
+      "ExitCode": "0:0",
+      "JobID": "16028",
+      "JobName": "wallcal-laws-screen",
+      "Start": "2026-10-01T08:39:19",
+      "State": "COMPLETED"
+    },
+    {
+      "AllocCPUS": "1",
+      "Elapsed": "00:01:15",
+      "End": "2026-10-01T08:42:31",
+      "ExitCode": "1:0",
+      "JobID": "16029",
+      "JobName": "wallcal-door-trace",
+      "Start": "2026-10-01T08:41:16",
+      "State": "FAILED"
+    },
+    {
+      "AllocCPUS": "1",
+      "Elapsed": "00:04:43",
+      "End": "2026-10-01T08:49:22",
+      "ExitCode": "0:0",
+      "JobID": "16030",
+      "JobName": "wallcal-door-trace",
+      "Start": "2026-10-01T08:44:39",
+      "State": "COMPLETED"
+    },
+    {
+      "AllocCPUS": "8",
+      "Elapsed": "00:26:16",
+      "End": "2026-10-01T09:11:28",
+      "ExitCode": "0:0",
+      "JobID": "16031",
+      "JobName": "wallcal-laws-flow",
+      "Start": "2026-10-01T08:45:12",
+      "State": "COMPLETED"
+    },
+    {
+      "AllocCPUS": "4",
+      "Elapsed": "00:44:56",
+      "End": "2026-10-01T09:31:46",
+      "ExitCode": "1:0",
+      "JobID": "16032",
+      "JobName": "wallcal-laws-suite",
+      "Start": "2026-10-01T08:46:50",
+      "State": "FAILED"
+    },
+    {
+      "AllocCPUS": "1",
+      "Elapsed": "00:02:57",
+      "End": "2026-10-01T08:53:10",
+      "ExitCode": "0:0",
+      "JobID": "16033",
+      "JobName": "wallcal-door-control",
+      "Start": "2026-10-01T08:50:13",
+      "State": "COMPLETED"
+    },
+    {
+      "AllocCPUS": "2",
+      "Elapsed": "00:00:04",
+      "End": "2026-10-01T09:07:15",
+      "ExitCode": "1:0",
+      "JobID": "16034",
+      "JobName": "wallcal-lanes-narrow",
+      "Start": "2026-10-01T09:07:11",
+      "State": "FAILED"
+    },
+    {
+      "AllocCPUS": "2",
+      "Elapsed": "00:00:41",
+      "End": "2026-10-01T09:08:22",
+      "ExitCode": "0:0",
+      "JobID": "16035",
+      "JobName": "wallcal-lanes-narrow",
+      "Start": "2026-10-01T09:07:41",
+      "State": "COMPLETED"
+    },
+    {
+      "AllocCPUS": "6",
+      "Elapsed": "00:00:03",
+      "End": "2026-10-01T09:25:45",
+      "ExitCode": "1:0",
+      "JobID": "16036",
+      "JobName": "wallcal-seyfried",
+      "Start": "2026-10-01T09:25:42",
+      "State": "FAILED"
+    },
+    {
+      "AllocCPUS": "6",
+      "Elapsed": "00:01:18",
+      "End": "2026-10-01T09:29:38",
+      "ExitCode": "0:0",
+      "JobID": "16037",
+      "JobName": "wallcal-seyfried",
+      "Start": "2026-10-01T09:28:20",
+      "State": "COMPLETED"
+    },
+    {
+      "AllocCPUS": "2",
+      "Elapsed": "00:05:07",
+      "End": "2026-10-01T09:52:34",
+      "ExitCode": "0:0",
+      "JobID": "16049",
+      "JobName": "wallcal-other-traces",
+      "Start": "2026-10-01T09:47:27",
+      "State": "COMPLETED"
+    }
+  ],
+  "location": "Exact admission/accounting bytes in the adjacent tracked continuation_validation_raw.tar.gz.",
+  "original_run_peak": 16,
+  "raw_artifact_uri": "archive-member://continuation_validation_raw.tar.gz!/continuation_resources/",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "wallcal-resource-receipts.v1",
+  "screen_admission": {
+    "idle_cpus": 92,
+    "job": "16028",
+    "queued": "",
+    "requested_cpus": 8,
+    "timestamp": 1790836759.7860818
+  }
+}

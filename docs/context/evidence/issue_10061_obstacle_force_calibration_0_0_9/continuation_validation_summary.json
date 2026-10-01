@@ -1,0 +1,64 @@
+{
+  "base_commit": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+  "full_suite": {
+    "command": "pytest -m not slow -n2 with explicit eligible file list after provenance and collect-only check",
+    "duration_seconds": 2587.4,
+    "existing_skipped": 7,
+    "existing_xfailed": 7,
+    "failed": 4,
+    "failures": [
+      {
+        "classification": "NFS output temporary-entry retirement",
+        "local_current_result": "pass",
+        "node": "tests/analysis_workbench/test_review_context.py::test_cli_produces_schema_valid_report_from_fixture_request",
+        "reproduced_on_base": true
+      },
+      {
+        "classification": "NFS output temporary-entry retirement",
+        "local_current_result": "pass",
+        "node": "tests/analysis_workbench/test_review_context.py::test_cli_main_fixture_request_in_process",
+        "reproduced_on_base": true
+      },
+      {
+        "classification": "NFS cleanup ENOTEMPTY with open image-backed files",
+        "local_current_result": "pass",
+        "node": "tests/render/test_review_overlays.py::test_cli_execution",
+        "reproduced_on_base": true
+      },
+      {
+        "classification": "Inherited Slurm launch activates private-source gate; captured reason requires SLURM_EXPECTED_PUBLIC_COMMIT; no gate bypassed",
+        "local_current_result": "pass",
+        "node": "tests/tools/test_run_benchmark_release.py::test_diagnostic_stress_success_is_never_release_success",
+        "reproduced_on_base": true
+      }
+    ],
+    "green": false,
+    "guard_note": "No refusal log created in this run; earlier full-run refusals were before stepping and informed the refined exclusions.",
+    "guard_refusals": 0,
+    "held_out_stepping_files_excluded": 40,
+    "job": "16032",
+    "passed": 13617
+  },
+  "location": "Exact logs, XML, coverage, exclusion/collection, guard and provenance bytes in tracked archive. Scientific admission and hosted CI remain blocked independently.",
+  "production_ast_identity": {
+    "robot_sf/sim/obstacle_force_profile.py": true,
+    "robot_sf/sim/sim_config.py": true,
+    "robot_sf/sim/simulator.py": true,
+    "robot_sf/training/scenario_loader.py": true
+  },
+  "raw_artifact_uri": "archive-member://continuation_validation_raw.tar.gz!/continuation_validation/",
+  "residual_local_confirmation": {
+    "duration_seconds": 5.66,
+    "passed": 4,
+    "simulation_steps": 0
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "runtime_source_commit": "c9ca7e779f3fa829001523db59376884e4428fa9",
+  "schema_version": "wallcal-validation.v1",
+  "supplemental_static_profile_tests": {
+    "duration_seconds": 4.11,
+    "oracle": "Finite-difference gradient of the chosen potential on independently measured real polygon distances.",
+    "passed": 14,
+    "red_failure": "ValueError: unsupported obstacle_force_profile: gradient_v3"
+  }
+}

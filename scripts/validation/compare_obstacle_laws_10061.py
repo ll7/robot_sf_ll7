@@ -184,13 +184,19 @@ def bottleneck(candidate, seed, width, wide=False):
         x, y = sites[:, 0], sites[:, 1]
         half = 10.0
     else:
-        columns = 6
-        rows = n // columns
-        spacing = 1 / np.sqrt(density)
-        xx, yy = np.meshgrid(np.arange(columns) * spacing, np.arange(rows) * spacing)
-        x = xx.ravel() - (columns - 1) * spacing / 2 - 3.0
-        y = yy.ravel() - (rows - 1) * spacing / 2
-        half = 3.5
+        # Figure 2: 4 m upstream corridor and three nominal N=20 holding sections.
+        holding_width = 4.0
+        holding_length = n / (holding_width * density)
+        section_length = holding_length / 3
+        bulk_center = -3.0 - section_length
+        xx, yy = np.meshgrid(
+            np.linspace(
+                bulk_center - holding_length / 2 + 0.45, bulk_center + holding_length / 2 - 0.45, 10
+            ),
+            np.linspace(-1.55, 1.55, 6),
+        )
+        x, y = xx.ravel(), yy.ravel()
+        half = 2.0
     x = x + rng.uniform(-0.01, 0.01, n)
     y = y + rng.uniform(-0.01, 0.01, n)
     downstream = length + 20.0
@@ -225,8 +231,8 @@ def bottleneck(candidate, seed, width, wide=False):
         1600,
         goal_update=update,
     )
-    # Seyfried Table 2 samples 0.4 m inside; wide opening at exit.
-    plane = length if wide else 0.4
+    # Seyfried calls the plane the channel centre; y=0.4 is a local video coordinate.
+    plane = length if wide else length / 2
     times = []
     for j in range(n):
         index = np.flatnonzero(positions[:, j, 0] >= plane)
@@ -254,6 +260,9 @@ def bottleneck(candidate, seed, width, wide=False):
         "initial_min_pair_distance_m": float(pair.min()),
         "initial_footprint_pair_overlaps": int((pair < 2 * RADIUS).sum() // 2),
         "crossing_plane_m": plane,
+        "upstream_width_m": 2 * half,
+        "holding_section_count": None if wide else 3,
+        "first_holding_section_center_upstream_m": None if wide else 3.0,
         "crossed": count,
         "all_crossed": count == n,
         "flow_persons_s": flow,

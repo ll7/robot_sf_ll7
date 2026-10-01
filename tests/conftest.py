@@ -453,6 +453,10 @@ _FAST_FILES = {
     # and offline files; keep their real campaign branches covered in PR CI.
     "test_pipefix_pipeline.py",
     "test_scan_release_audit.py",
+    # Scenario/map sampling and reserved-polygon regressions use dev seeds and
+    # authored geometry without environment steps; include them in PR coverage.
+    "test_scenario_map_review_fixes.py",
+    "test_reserved_zone_polygons.py",
     # Clearance and LiDAR tracking contracts use fixed arrays without environment steps.
     "test_clearance_geometry.py",
     "test_lidar_tracked_agents.py",

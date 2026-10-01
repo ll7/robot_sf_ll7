@@ -3,8 +3,8 @@
     "base": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
     "base_sha": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
     "coverage_artifact": {
-      "path": "/home/luttkule/admfix_evidence/coverage_final_own.json",
-      "sha256": "dfbe94e261e721609902cde8008f6fbb179b8d103b5d034af7073a71ba696cae"
+      "path": "/home/luttkule/admfix_evidence/coverage_162_own.json",
+      "sha256": "06fb8a513c6756739ca5bcc9418fc68dcf19db55ae455a036de5534531ce4cb6"
     },
     "event": "local",
     "exclude_patterns": [],
@@ -132,9 +132,11 @@
           1157,
           1158,
           1159,
+          1160,
           1161,
-          1162,
-          1275
+          1163,
+          1164,
+          1277
         ],
         "coverage": 100.0,
         "covered_changed_lines": [
@@ -429,7 +431,7 @@
         "scope": "changed executable lines 17/17"
       }
     ],
-    "head_sha": "a2611129e79c5e27ee235481cec1b3c318e44e5e",
+    "head_sha": "1620663b6ea868d48153a699ee0a3382cab92f1a",
     "include_patterns": [
       "robot_sf/*.py",
       "robot_sf/**/*.py"
@@ -446,6 +448,23 @@
       "robot_sf/planner/risk_dwa.py"
     ],
     "skipped_paths": [
+      "docs/context/catalog.yaml",
+      "docs/context/evidence/issue_10064_no_admissible_recovery/README.md",
+      "docs/context/evidence/issue_10064_no_admissible_recovery/changed_outcomes.json",
+      "docs/context/evidence/issue_10064_no_admissible_recovery/empty.svg",
+      "docs/context/evidence/issue_10064_no_admissible_recovery/empty.svg.review.json",
+      "docs/context/evidence/issue_10064_no_admissible_recovery/empty_world.json",
+      "docs/context/evidence/issue_10064_no_admissible_recovery/horizon_schedule.yaml",
+      "docs/context/evidence/issue_10064_no_admissible_recovery/horizon_schedule.yaml.review.json",
+      "docs/context/evidence/issue_10064_no_admissible_recovery/inner_checkpoints.json",
+      "docs/context/evidence/issue_10064_no_admissible_recovery/manual_inspections.json",
+      "docs/context/evidence/issue_10064_no_admissible_recovery/paired_analysis.json",
+      "docs/context/evidence/issue_10064_no_admissible_recovery/provenance.json",
+      "docs/context/evidence/issue_10064_no_admissible_recovery/reproduce.txt",
+      "docs/context/evidence/issue_10064_no_admissible_recovery/trace_samples.json",
+      "docs/context/evidence/issue_10064_no_admissible_recovery/validation.json",
+      "scripts/validation/evidence_registry_baseline.json",
+      "scripts/validation/evidence_registry_baseline_review.yaml",
       "tests/benchmark/test_no_admissible_recovery_trace.py",
       "tests/conftest.py",
       "tests/fixtures/planner/no_admissible_admissible_observations.json",
@@ -483,9 +502,11 @@
     "source_sha": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b"
   },
   "final_own": {
+    "coverage": "coverage_162_own.json",
+    "log": "own_162.log",
     "passed": 30,
-    "seconds": 14.88,
-    "source_sha": "a2611129e79c5e27ee235481cec1b3c318e44e5e"
+    "seconds": 48.1,
+    "source_sha": "1620663b6ea868d48153a699ee0a3382cab92f1a"
   },
   "full_default": {
     "eligible_file_selection": [
@@ -1102,16 +1123,54 @@
       "tests/test_public_api.py",
       "tests/training/test_train_dreamerv3_rllib_runtime.py"
     ],
+    "junit": "full_162.xml",
+    "log": "full_162.log",
     "passed": 13841,
-    "seconds": 589.53,
+    "seconds": 546.127,
     "serialized_vector_env": {
       "passed": 4,
-      "seconds": 19.18
+      "seconds": 19.16
     },
     "skipped_existing": 6,
-    "source_sha": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+    "source_sha": "1620663b6ea868d48153a699ee0a3382cab92f1a",
     "total_passed": 13845,
     "xfailed_existing": 7
+  },
+  "held_ci_audit": {
+    "disposition": "A pytest-only deselection cannot make ready safe; retain draft while delivering the complete planner gate. No held-out stepping was activated.",
+    "dreamer_exclusion": {
+      "config": "configs/training/rllib_dreamerv3/benchmark_socnav_grid_br08_full.yaml",
+      "config_seed": 123,
+      "disposition": "Correctly excluded: indirect configuration seed is held out; no supplemental run.",
+      "file": "tests/training/test_train_dreamerv3_rllib_runtime.py",
+      "reset_nodes": [
+        "test_periodic_eval_prefers_evaluation_scenario_matrix_selection",
+        "test_benchmark_socnav_grid_eval_env_matches_base_scenario_contract"
+      ]
+    },
+    "hosted_ci_blockers": [
+      {
+        "file": "tests/test_public_api.py",
+        "path": "ci.yml -> ci_driver.sh test -> run_tests_parallel.sh",
+        "proof": "hosted_held_collection.log",
+        "seeds": [
+          111,
+          123
+        ]
+      },
+      {
+        "behavior": "Real environment reset and step on forbidden seed; pytest deselection does not protect this shell-embedded smoke.",
+        "file": "scripts/validation/wheel_install_smoke.sh",
+        "lines": [
+          143,
+          148,
+          151,
+          152
+        ],
+        "path": "ci.yml wheel-smoke-install",
+        "seed": 123
+      }
+    ]
   },
   "held_out_evaluation": false,
   "hosted_ci": {
@@ -1130,10 +1189,12 @@
     "extra_excluded_file": "tests/benchmark/test_hybrid_rule_v4_doorway_regression.py",
     "failed_preexisting": 1,
     "failure_disposition": "Unchanged optimized-mode issue5303 preregistration digest failure; reproduced on exact base; frozen contract left intact",
+    "junit": "all_importing_162.xml",
+    "log": "all_importing_162.log",
     "passed": 2549,
-    "seconds": 250.32,
+    "seconds": 145.802,
     "skipped_existing": 1,
-    "source_sha": "a2611129e79c5e27ee235481cec1b3c318e44e5e",
+    "source_sha": "1620663b6ea868d48153a699ee0a3382cab92f1a",
     "xfailed_existing": 5
   },
   "location": "Local /home/luttkule/admfix_evidence, with digests in adjacent provenance.json; raw logs not tracked.",
@@ -1167,7 +1228,7 @@
       "robot_sf/planner/risk_dwa.py"
     ],
     "findings": [],
-    "head_sha": "a2611129e79c5e27ee235481cec1b3c318e44e5e",
+    "head_sha": "1620663b6ea868d48153a699ee0a3382cab92f1a",
     "observations": [
       {
         "classification": "needs-explicit-classification",
@@ -1196,5 +1257,17 @@
     ],
     "passed": true,
     "schema": "fast_lane_routing.v1"
+  },
+  "type_check": {
+    "all_compared_bytes_equal": true,
+    "behavior_source_sha": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+    "exact_replacement_assertion_passed": true,
+    "new_findings_vs_base": 0,
+    "only_production_delta": "Replace tuple(map(float, two-value-command)) with explicit two float elements. Fallback adapter command contract is tuple[float, float].",
+    "ratchet_exit": 1,
+    "recorded_command_pair_cast_ieee_comparisons": 168869,
+    "tested_sha": "1620663b6ea868d48153a699ee0a3382cab92f1a",
+    "type_baseline_disposition": "Both base and PR have 6063 general / 168 optional findings; committed general baseline 5704 is already exceeded on base.",
+    "type_diagnostics_new_relative_to_exact_base": 0
   }
 }

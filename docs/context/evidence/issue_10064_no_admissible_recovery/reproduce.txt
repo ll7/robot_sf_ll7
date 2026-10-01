@@ -782,6 +782,8 @@ for arm in ARMS:
  base=load('base',arm);pr=load('pr',arm);assert base.keys()==pr.keys();tc=collections.Counter();changes=[]
  for key,b in sorted(base.items()):
   p=pr[key];be=b['episode'];pe=p['episode'];assert b['reset']==p['reset'],(arm,key,'reset differs')
+  assert be['config_hash']==pe['config_hash'],(arm,key,'resolved episode config differs')
+  assert sorted((x['role'],x['scenario_id'],x['sha256']) for x in be['input_records'])==sorted((x['role'],x['scenario_id'],x['sha256']) for x in pe['input_records']),(arm,key,'map bytes differ')
   d=first_divergence(b,p)
   first_b=b['frames'][min(d,len(b['frames'])-1)] if d is not None else None
   first_p=p['frames'][min(d,len(p['frames'])-1)] if d is not None else None
@@ -829,7 +831,7 @@ def features(row):
  for x in f:
   run=run+1 if x['speed']<0.01 else 0;longest=max(longest,run)
  nearest=[x['nearest_ped_center'] for x in f if x['nearest_ped_center'] is not None]
- return {'longest_frozen_steps':longest,'terminal_active_waypoint_distance_m':f[-1]['goal_distance'],'min_ped_center_m':min(nearest,default=None),'terminal_speed_m_s':f[-1]['speed'],'terminal_command':f[-1]['selected'],'terminal_position_m':f[-1]['position'],'recovery_kinds':row['episode']['recovery_kinds'],'path_travelled_m':sum(math.dist(x['position'],y['position']) for x,y in zip(f,f[1:]))}
+ return {'longest_frozen_steps':longest,'finite_frozen_steps':sum(x['speed']<0.01 and not x['no_admissible'] for x in f),'infeasible_frozen_steps':sum(x['speed']<0.01 and x['no_admissible'] for x in f),'terminal_active_waypoint_distance_m':f[-1]['goal_distance'],'min_ped_center_m':min(nearest,default=None),'terminal_speed_m_s':f[-1]['speed'],'terminal_command':f[-1]['selected'],'terminal_position_m':f[-1]['position'],'recovery_kinds':row['episode']['recovery_kinds'],'path_travelled_m':sum(math.dist(x['position'],y['position']) for x,y in zip(f,f[1:]))}
 verified_path=R/'inner_infeasible_verification.json'
 inner={(x['scenario'],x['seed']):x for x in json.loads(verified_path.read_text())['checkpoints']} if verified_path.exists() else {}
 result=[]
@@ -842,13 +844,15 @@ for x in a['every_changed_outcome']:
  elif x['before']=='S' and x['after']=='T':
   x['classification']='Clearance-driven steering changes produce longer sustained stasis and lose completion.' if pf['longest_frozen_steps']>bf['longest_frozen_steps']+10 else 'Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.'
  if not kind and x['arm']=='guarded_ppo' and key in inner:kind='inner_'+str(inner[key]['pr_inner']['recovery_kind'])+'; outer_'+str(p['frames'][d]['guard_label'])
- detail=f"First command divergence at step{d}, base({bc['linear_velocity']:.4f},{bc['angular_velocity']:.4f}) -> PR({pc['linear_velocity']:.4f},{pc['angular_velocity']:.4f}), recovery={kind or p['frames'][d]['guard_label']}. "
+ detail=f"First command divergence at step {d}, base ({bc['linear_velocity']:.4f},{bc['angular_velocity']:.4f}) -> PR ({pc['linear_velocity']:.4f},{pc['angular_velocity']:.4f}), recovery={kind or p['frames'][d]['guard_label']}. "
  detail+=f"Longest physical freeze {bf['longest_frozen_steps']} -> {pf['longest_frozen_steps']} steps; terminal active-waypoint distance {bf['terminal_active_waypoint_distance_m']:.3f} -> {pf['terminal_active_waypoint_distance_m']:.3f} m. "
  if x['after']=='C':
   c=x['pr_collision_counts'];actors=[name for name,n in c.items() if n and n>0];detail+='PR collision counters: '+','.join(actors)+'. '
  elif x['after']=='T':detail+='PR still exhausts the unchanged authored step budget. '
  else:detail+='PR completes within the unchanged authored step budget. '
  detail+=x['classification']
+ if x['arm']=='predictive_mppi' and x['scenario']=='classic_overtaking_low' and x['seed']==1003:
+  detail+=' The first three changed commands are infeasible recovery; the final 116-step zero-command stall has no_admissible=False, showing a later finite-arbitration stasis state on the altered trajectory. Base brake commands coast without reaching rest.'
  result.append({**x,'classification_detail':detail,'base_features':bf,'pr_features':pf,'distance_convention':'center_center','clearance_convention':'surface_clearance','causal_limit':'Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.'})
 (R/'changed_outcome_classifications.json').write_text(json.dumps({'complete_matrix':a['complete_matrix'],'episodes_classified':len(result),'every_changed_outcome':result},indent=2,allow_nan=False)+'\n')
 for x in result:print(f"{x['arm']} | {x['scenario']} | {x['seed']} | {x['before']}->{x['after']} | {x['classification_detail']}")

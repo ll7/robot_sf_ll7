@@ -86,6 +86,41 @@
       "outcome": "C->S",
       "scenario": "francis2023_circular_crossing",
       "seed": 1001
+    },
+    {
+      "arm": "predictive_mppi",
+      "note": "At step 87 the baseline reachable brake command coasts at 0.8231 m/s while PR selects (0.5198,0.4917), followed by two more infeasible recovery turns. The trajectories then diverge. Base never physically freezes and succeeds at 320 steps; PR freezes 299/600 steps overall, including the final 116 consecutive steps at (32.9947,19.5554), and times out. Those final zero commands have no_admissible=False: the changed trajectory reaches a later finite-score stasis state in the otherwise unchanged MPPI arbitration. This is a real individual regression; fewer no-admissible steps do not guarantee less freezing.",
+      "outcome": "S->T",
+      "scenario": "classic_overtaking_low",
+      "seed": 1003
+    },
+    {
+      "arm": "predictive_mppi",
+      "note": "At step 121 moving PR selects progress_escape (0.55,-0.2694) where base commands zero and decelerates from 1.5 m/s. PR records two escape recoveries and one least-bad command, never reaches physical stasis and completes. Base stalls for 364 consecutive steps and times out. This native trace verifies escape reachability during moving infeasibility, rather than relying only on the unit witness.",
+      "outcome": "T->S",
+      "scenario": "classic_bottleneck_low",
+      "seed": 1005
+    },
+    {
+      "arm": "predictive_mppi",
+      "note": "At the same near-pedestrian reset where base collides after 3 stationary steps, MPPI PR selects (0.975,0.5489), physically accelerates, stays moving and completes without any collision counter. This is a native collision-to-success witness on identical reset geometry.",
+      "outcome": "C->S",
+      "scenario": "francis2023_circular_crossing",
+      "seed": 1001
+    },
+    {
+      "arm": "predictive_mppi",
+      "note": "At step 154 base selects zero and later remains frozen for 236 consecutive steps. PR selects (0.6206,0.9633), then another least-bad command and progress_escape (0.55,0.2478). Its speed stays positive, ordinary finite commands resume at step 157, and it succeeds at step 353 without physical frozen steps.",
+      "outcome": "T->S",
+      "scenario": "francis2023_pedestrian_overtaking",
+      "seed": 1005
+    },
+    {
+      "arm": "predictive_mppi",
+      "note": "At step 77 base zero command decelerates to rest by step 86, then stalls for 314 consecutive steps with 277 infeasible steps overall. PR selects (0.6149,0.5745) and a second recovery turn; ordinary finite commands resume at step 79. It never physically freezes and succeeds at step 262. The observed recovery prevents a long baseline stasis state.",
+      "outcome": "T->S",
+      "scenario": "francis2023_accompanying_peer",
+      "seed": 1001
     }
   ],
   "review_marker": "AI-GENERATED NEEDS-REVIEW",

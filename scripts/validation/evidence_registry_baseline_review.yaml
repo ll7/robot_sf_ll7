@@ -21,6 +21,30 @@ evidence_tree_refresh_addenda:
   - issue: 10064
     reviewed_date: 2026-10-01
     previous:
+      count: 2806
+      sha256: c9bb836013f114c657a52c8b04f9618daffba7f7e273d2381de46c4f478203e8
+    candidate:
+      count: 2806
+      sha256: c9bb836013f114c657a52c8b04f9618daffba7f7e273d2381de46c4f478203e8
+    files_added: 0
+    finding_delta: none
+    decision: >-
+      Reviewed the final content of the fourteen existing #10064 evidence members.
+      All 1440 dev-only matrix episodes are complete, with identical paired resets,
+      config hashes and map bytes. All 63 changed outcomes are classified; 17 paired
+      traces were directly inspected, including all six success-to-timeout regressions
+      (five guarded PPO, one MPPI). No unexplained first finite-state divergence remains.
+      The two-float guard tuple spelling is the only production delta after the paired
+      source; 168869 recorded conversions preserve IEEE bytes. The refreshed full suite
+      has 13841 passes plus four serialized vector tests. The importer preregistration
+      failure and type baseline excess reproduce on base; no new findings are waived.
+      Strict provenance lint has no new findings, and all 446 existing findings remain
+      unchanged. Hosted CI is held in draft because it steps forbidden 111/123, including
+      a shell-embedded wheel smoke outside pytest. No sealed evaluation, release claim,
+      safety certification or maintainer result sign-off is asserted.
+  - issue: 10064
+    reviewed_date: 2026-10-01
+    previous:
       count: 2796
       sha256: c29bfbac7786b5370a8ca35f335b42d37ce38d7d815a11a52b661786bde4c19a
     candidate:

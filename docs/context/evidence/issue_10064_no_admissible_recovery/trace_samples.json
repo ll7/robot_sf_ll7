@@ -6,7 +6,7 @@
   "location": "Raw compact archives /home/luttkule/admfix_evidence; original native episodes imech192:/home/luttkule/admfix/out and /direct; compact selected evidence tracked in this bundle",
   "manually_inspected": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "sample_count": 12,
+  "sample_count": 17,
   "samples": [
     {
       "after": "S",
@@ -17,6 +17,8 @@
         "ped_collision_count": 0
       },
       "base_features": {
+        "finite_frozen_steps": 0,
+        "infeasible_frozen_steps": 343,
         "longest_frozen_steps": 343,
         "min_ped_center_m": 1.8526615692983672,
         "path_travelled_m": 15.315000178813966,
@@ -429,7 +431,7 @@
       "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
       "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
       "classification": "Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
-      "classification_detail": "First command divergence at step138, base(1.8000,0.0000) -> PR(1.8000,0.1724), recovery=inner_least_bad_clearance; outer_fallback_safe. Longest physical freeze 343 -> 104 steps; terminal active-waypoint distance 12.438 -> 19.423 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "classification_detail": "First command divergence at step 138, base (1.8000,0.0000) -> PR (1.8000,0.1724), recovery=inner_least_bad_clearance; outer_fallback_safe. Longest physical freeze 343 -> 104 steps; terminal active-waypoint distance 12.438 -> 19.423 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
       "clearance_convention": "surface_clearance",
       "distance_convention": "center_center",
       "first_command_divergence_step": 138,
@@ -488,6 +490,8 @@
         "ped_collision_count": 0
       },
       "pr_features": {
+        "finite_frozen_steps": 0,
+        "infeasible_frozen_steps": 104,
         "longest_frozen_steps": 104,
         "min_ped_center_m": 1.8238982214550734,
         "path_travelled_m": 22.68621132671836,
@@ -912,6 +916,8 @@
         "ped_collision_count": 0
       },
       "base_features": {
+        "finite_frozen_steps": 0,
+        "infeasible_frozen_steps": 419,
         "longest_frozen_steps": 419,
         "min_ped_center_m": 2.344591021700593,
         "path_travelled_m": 8.875000004768369,
@@ -1324,7 +1330,7 @@
       "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
       "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
       "classification": "Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
-      "classification_detail": "First command divergence at step63, base(0.0000,0.0000) -> PR(1.7000,-0.6000), recovery=fallback_safe. Longest physical freeze 419 -> 0 steps; terminal active-waypoint distance 5.358 -> 8.627 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "classification_detail": "First command divergence at step 63, base (0.0000,0.0000) -> PR (1.7000,-0.6000), recovery=fallback_safe. Longest physical freeze 419 -> 0 steps; terminal active-waypoint distance 5.358 -> 8.627 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
       "clearance_convention": "surface_clearance",
       "distance_convention": "center_center",
       "first_command_divergence_step": 63,
@@ -1383,6 +1389,8 @@
         "ped_collision_count": 0
       },
       "pr_features": {
+        "finite_frozen_steps": 0,
+        "infeasible_frozen_steps": 0,
         "longest_frozen_steps": 0,
         "min_ped_center_m": 2.1159795511293336,
         "path_travelled_m": 12.28128245234489,
@@ -1807,6 +1815,8 @@
         "ped_collision_count": 0
       },
       "base_features": {
+        "finite_frozen_steps": 32,
+        "infeasible_frozen_steps": 31,
         "longest_frozen_steps": 17,
         "min_ped_center_m": 2.056135617298751,
         "path_travelled_m": 21.506220422424377,
@@ -2219,7 +2229,7 @@
       "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
       "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
       "classification": "Clearance-driven steering changes produce longer sustained stasis and lose completion.",
-      "classification_detail": "First command divergence at step302, base(0.0000,0.0000) -> PR(0.0000,-0.1000), recovery=least_bad_clearance. Longest physical freeze 17 -> 197 steps; terminal active-waypoint distance 12.780 -> 7.306 m. PR still exhausts the unchanged authored step budget. Clearance-driven steering changes produce longer sustained stasis and lose completion.",
+      "classification_detail": "First command divergence at step 302, base (0.0000,0.0000) -> PR (0.0000,-0.1000), recovery=least_bad_clearance. Longest physical freeze 17 -> 197 steps; terminal active-waypoint distance 12.780 -> 7.306 m. PR still exhausts the unchanged authored step budget. Clearance-driven steering changes produce longer sustained stasis and lose completion.",
       "clearance_convention": "surface_clearance",
       "distance_convention": "center_center",
       "first_command_divergence_step": 302,
@@ -2278,6 +2288,8 @@
         "ped_collision_count": 0
       },
       "pr_features": {
+        "finite_frozen_steps": 205,
+        "infeasible_frozen_steps": 38,
         "longest_frozen_steps": 197,
         "min_ped_center_m": 2.033957365051102,
         "path_travelled_m": 12.151697768755264,
@@ -2702,6 +2714,8 @@
         "ped_collision_count": 0
       },
       "base_features": {
+        "finite_frozen_steps": 5,
+        "infeasible_frozen_steps": 1,
         "longest_frozen_steps": 3,
         "min_ped_center_m": 2.0954928130620836,
         "path_travelled_m": 32.84299341216682,
@@ -3114,7 +3128,7 @@
       "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
       "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
       "classification": "Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
-      "classification_detail": "First command divergence at step129, base(0.0000,0.0000) -> PR(0.2000,-0.3000), recovery=least_bad_clearance. Longest physical freeze 3 -> 3 steps; terminal active-waypoint distance 12.827 -> 11.069 m. PR still exhausts the unchanged authored step budget. Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
+      "classification_detail": "First command divergence at step 129, base (0.0000,0.0000) -> PR (0.2000,-0.3000), recovery=least_bad_clearance. Longest physical freeze 3 -> 3 steps; terminal active-waypoint distance 12.827 -> 11.069 m. PR still exhausts the unchanged authored step budget. Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
       "clearance_convention": "surface_clearance",
       "distance_convention": "center_center",
       "first_command_divergence_step": 129,
@@ -3173,6 +3187,8 @@
         "ped_collision_count": 0
       },
       "pr_features": {
+        "finite_frozen_steps": 5,
+        "infeasible_frozen_steps": 1,
         "longest_frozen_steps": 3,
         "min_ped_center_m": 2.0954928130620836,
         "path_travelled_m": 67.73599181398747,
@@ -3597,6 +3613,8 @@
         "ped_collision_count": 0
       },
       "base_features": {
+        "finite_frozen_steps": 4,
+        "infeasible_frozen_steps": 1,
         "longest_frozen_steps": 2,
         "min_ped_center_m": 2.042773315440683,
         "path_travelled_m": 22.471899329200387,
@@ -4009,7 +4027,7 @@
       "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
       "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
       "classification": "Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
-      "classification_detail": "First command divergence at step181, base(0.7875,0.4000) -> PR(0.0000,0.0000), recovery=brake. Longest physical freeze 2 -> 2 steps; terminal active-waypoint distance 12.811 -> 10.733 m. PR still exhausts the unchanged authored step budget. Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
+      "classification_detail": "First command divergence at step 181, base (0.7875,0.4000) -> PR (0.0000,0.0000), recovery=brake. Longest physical freeze 2 -> 2 steps; terminal active-waypoint distance 12.811 -> 10.733 m. PR still exhausts the unchanged authored step budget. Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
       "clearance_convention": "surface_clearance",
       "distance_convention": "center_center",
       "first_command_divergence_step": 181,
@@ -4068,6 +4086,8 @@
         "ped_collision_count": 0
       },
       "pr_features": {
+        "finite_frozen_steps": 4,
+        "infeasible_frozen_steps": 1,
         "longest_frozen_steps": 2,
         "min_ped_center_m": 2.042773315440683,
         "path_travelled_m": 54.684904728904364,
@@ -4492,6 +4512,8 @@
         "ped_collision_count": 0
       },
       "base_features": {
+        "finite_frozen_steps": 0,
+        "infeasible_frozen_steps": 500,
         "longest_frozen_steps": 500,
         "min_ped_center_m": 7.658164294278514,
         "path_travelled_m": 0.0,
@@ -4832,7 +4854,7 @@
       "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
       "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
       "classification": "Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
-      "classification_detail": "First command divergence at step0, base(0.0000,0.0000) -> PR(0.1000,0.1000), recovery=least_bad_clearance. Longest physical freeze 500 -> 0 steps; terminal active-waypoint distance 5.064 -> 25.554 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "classification_detail": "First command divergence at step 0, base (0.0000,0.0000) -> PR (0.1000,0.1000), recovery=least_bad_clearance. Longest physical freeze 500 -> 0 steps; terminal active-waypoint distance 5.064 -> 25.554 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
       "clearance_convention": "surface_clearance",
       "distance_convention": "center_center",
       "first_command_divergence_step": 0,
@@ -4891,6 +4913,8 @@
         "ped_collision_count": 0
       },
       "pr_features": {
+        "finite_frozen_steps": 0,
+        "infeasible_frozen_steps": 0,
         "longest_frozen_steps": 0,
         "min_ped_center_m": 2.242279700718719,
         "path_travelled_m": 31.760707952976244,
@@ -5242,6 +5266,8 @@
         "ped_collision_count": 0
       },
       "base_features": {
+        "finite_frozen_steps": 0,
+        "infeasible_frozen_steps": 500,
         "longest_frozen_steps": 500,
         "min_ped_center_m": 7.536515388565976,
         "path_travelled_m": 0.0,
@@ -5582,7 +5608,7 @@
       "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
       "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
       "classification": "Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
-      "classification_detail": "First command divergence at step0, base(0.0000,0.0000) -> PR(0.1000,0.1000), recovery=least_bad_clearance. Longest physical freeze 500 -> 60 steps; terminal active-waypoint distance 5.064 -> 25.527 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "classification_detail": "First command divergence at step 0, base (0.0000,0.0000) -> PR (0.1000,0.1000), recovery=least_bad_clearance. Longest physical freeze 500 -> 60 steps; terminal active-waypoint distance 5.064 -> 25.527 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
       "clearance_convention": "surface_clearance",
       "distance_convention": "center_center",
       "first_command_divergence_step": 0,
@@ -5641,6 +5667,8 @@
         "ped_collision_count": 0
       },
       "pr_features": {
+        "finite_frozen_steps": 1,
+        "infeasible_frozen_steps": 117,
         "longest_frozen_steps": 60,
         "min_ped_center_m": 1.849269828850683,
         "path_travelled_m": 31.958532465845337,
@@ -5993,6 +6021,8 @@
         "ped_collision_count": 0
       },
       "base_features": {
+        "finite_frozen_steps": 24,
+        "infeasible_frozen_steps": 27,
         "longest_frozen_steps": 16,
         "min_ped_center_m": 1.5553162353755268,
         "path_travelled_m": 36.14882612958552,
@@ -6405,7 +6435,7 @@
       "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
       "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
       "classification": "Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
-      "classification_detail": "First command divergence at step92, base(0.0000,0.0000) -> PR(1.5000,-0.3000), recovery=least_bad_clearance. Longest physical freeze 16 -> 10 steps; terminal active-waypoint distance 27.539 -> 16.486 m. PR still exhausts the unchanged authored step budget. Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
+      "classification_detail": "First command divergence at step 92, base (0.0000,0.0000) -> PR (1.5000,-0.3000), recovery=least_bad_clearance. Longest physical freeze 16 -> 10 steps; terminal active-waypoint distance 27.539 -> 16.486 m. PR still exhausts the unchanged authored step budget. Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
       "clearance_convention": "surface_clearance",
       "distance_convention": "center_center",
       "first_command_divergence_step": 92,
@@ -6464,6 +6494,8 @@
         "ped_collision_count": 0
       },
       "pr_features": {
+        "finite_frozen_steps": 10,
+        "infeasible_frozen_steps": 4,
         "longest_frozen_steps": 10,
         "min_ped_center_m": 1.9477438620704837,
         "path_travelled_m": 79.28636247187852,
@@ -6888,6 +6920,8 @@
         "ped_collision_count": 0
       },
       "base_features": {
+        "finite_frozen_steps": 29,
+        "infeasible_frozen_steps": 232,
         "longest_frozen_steps": 246,
         "min_ped_center_m": 1.835227379004954,
         "path_travelled_m": 31.931476865857842,
@@ -7300,7 +7334,7 @@
       "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
       "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
       "classification": "Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
-      "classification_detail": "First command divergence at step68, base(1.9000,0.0640) -> PR(1.9000,0.2640), recovery=inner_least_bad_clearance; outer_fallback_safe. Longest physical freeze 246 -> 12 steps; terminal active-waypoint distance 24.963 -> 26.200 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "classification_detail": "First command divergence at step 68, base (1.9000,0.0640) -> PR (1.9000,0.2640), recovery=inner_least_bad_clearance; outer_fallback_safe. Longest physical freeze 246 -> 12 steps; terminal active-waypoint distance 24.963 -> 26.200 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
       "clearance_convention": "surface_clearance",
       "distance_convention": "center_center",
       "first_command_divergence_step": 68,
@@ -7359,6 +7393,8 @@
         "ped_collision_count": 0
       },
       "pr_features": {
+        "finite_frozen_steps": 23,
+        "infeasible_frozen_steps": 0,
         "longest_frozen_steps": 12,
         "min_ped_center_m": 2.8462994970248543,
         "path_travelled_m": 28.725023044571305,
@@ -7780,6 +7816,8 @@
         "ped_collision_count": 1
       },
       "base_features": {
+        "finite_frozen_steps": 0,
+        "infeasible_frozen_steps": 3,
         "longest_frozen_steps": 3,
         "min_ped_center_m": 1.3843065119021487,
         "path_travelled_m": 0.0,
@@ -7952,7 +7990,7 @@
       "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
       "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
       "classification": "Recovery changes the trajectory and avoids the baseline collision while completing.",
-      "classification_detail": "First command divergence at step0, base(0.0000,0.0000) -> PR(0.1000,0.1000), recovery=least_bad_clearance. Longest physical freeze 3 -> 0 steps; terminal active-waypoint distance 2.781 -> 9.184 m. PR completes within the unchanged authored step budget. Recovery changes the trajectory and avoids the baseline collision while completing.",
+      "classification_detail": "First command divergence at step 0, base (0.0000,0.0000) -> PR (0.1000,0.1000), recovery=least_bad_clearance. Longest physical freeze 3 -> 0 steps; terminal active-waypoint distance 2.781 -> 9.184 m. PR completes within the unchanged authored step budget. Recovery changes the trajectory and avoids the baseline collision while completing.",
       "clearance_convention": "surface_clearance",
       "distance_convention": "center_center",
       "first_command_divergence_step": 0,
@@ -8011,6 +8049,8 @@
         "ped_collision_count": 0
       },
       "pr_features": {
+        "finite_frozen_steps": 0,
+        "infeasible_frozen_steps": 0,
         "longest_frozen_steps": 0,
         "min_ped_center_m": 1.4205068308070279,
         "path_travelled_m": 12.329034184217454,
@@ -8362,6 +8402,8 @@
         "ped_collision_count": 0
       },
       "base_features": {
+        "finite_frozen_steps": 25,
+        "infeasible_frozen_steps": 21,
         "longest_frozen_steps": 31,
         "min_ped_center_m": 2.0709427031303442,
         "path_travelled_m": 16.990696657299992,
@@ -8774,7 +8816,7 @@
       "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
       "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
       "classification": "Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
-      "classification_detail": "First command divergence at step26, base(1.8367,-0.7000) -> PR(1.8367,-0.9000), recovery=inner_least_bad_clearance; outer_fallback_safe. Longest physical freeze 31 -> 38 steps; terminal active-waypoint distance 9.419 -> 8.406 m. PR still exhausts the unchanged authored step budget. Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
+      "classification_detail": "First command divergence at step 26, base (1.8367,-0.7000) -> PR (1.8367,-0.9000), recovery=inner_least_bad_clearance; outer_fallback_safe. Longest physical freeze 31 -> 38 steps; terminal active-waypoint distance 9.419 -> 8.406 m. PR still exhausts the unchanged authored step budget. Clearance-driven steering/braking changes the later path or timing and misses goal-zone completion, despite continued motion.",
       "clearance_convention": "surface_clearance",
       "distance_convention": "center_center",
       "first_command_divergence_step": 26,
@@ -8833,6 +8875,8 @@
         "ped_collision_count": 0
       },
       "pr_features": {
+        "finite_frozen_steps": 3,
+        "infeasible_frozen_steps": 101,
         "longest_frozen_steps": 38,
         "min_ped_center_m": 1.7635211697836382,
         "path_travelled_m": 12.176993516981625,
@@ -9250,13 +9294,2710 @@
     },
     {
       "after": "S",
-      "arm": "risk_dwa",
+      "arm": "predictive_mppi",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "base_features": {
+        "finite_frozen_steps": 364,
+        "infeasible_frozen_steps": 0,
+        "longest_frozen_steps": 364,
+        "min_ped_center_m": null,
+        "path_travelled_m": 18.121408366469065,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 16.22336265503159,
+        "terminal_command": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "terminal_position_m": [
+          20.790839660887364,
+          12.094596431606803
+        ],
+        "terminal_speed_m_s": 0.0
+      },
+      "base_frozen_fraction": 0.728,
+      "base_no_admissible_fraction": 0.03,
+      "base_steps": 500,
+      "base_trace": {
+        "first_divergence_window": [
+          {
+            "goal_distance": 14.79836855338808,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5259720087051392,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.726986437241234,
+              13.518165104284728
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.4999999999999938,
+            "step": 118,
+            "t": 11.9
+          },
+          {
+            "goal_distance": 14.948367879551505,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5259720087051392,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.733707829203983,
+              13.368315770318631
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.4999999999999938,
+            "step": 119,
+            "t": 12.0
+          },
+          {
+            "goal_distance": 15.098367219103828,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5259720087051392,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.740429221166732,
+              13.218466436352534
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.4999999999999938,
+            "step": 120,
+            "t": 12.100000000000001
+          },
+          {
+            "goal_distance": 15.243366593026433,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5259720087051392,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": true,
+            "position": [
+              20.746926566730725,
+              13.073612080185306
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 1.4500000000000004,
+            "step": 121,
+            "t": 12.200000000000001
+          },
+          {
+            "goal_distance": 15.37836602073985,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5259720087051392,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": true,
+            "position": [
+              20.752975819497202,
+              12.938747679615819
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 1.349999999999994,
+            "step": 122,
+            "t": 12.3
+          },
+          {
+            "goal_distance": 15.503365499731482,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5259720087051392,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": true,
+            "position": [
+              20.75857697946616,
+              12.81387323464407
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 1.2500000000000038,
+            "step": 123,
+            "t": 12.4
+          },
+          {
+            "goal_distance": 15.618365027769364,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5259720087051392,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": true,
+            "position": [
+              20.7637300466376,
+              12.698988745270062
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 1.1499999999999975,
+            "step": 124,
+            "t": 12.5
+          },
+          {
+            "goal_distance": 15.723364602876844,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5259720087051392,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": true,
+            "position": [
+              20.768435021011527,
+              12.594094211493795
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 1.049999999999991,
+            "step": 125,
+            "t": 12.600000000000001
+          },
+          {
+            "goal_distance": 15.818364223310779,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5259720087051392,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": true,
+            "position": [
+              20.772691902587937,
+              12.499189633315266
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.9500000000000024,
+            "step": 126,
+            "t": 12.700000000000001
+          },
+          {
+            "goal_distance": 15.903363887542875,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5259720087051392,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": true,
+            "position": [
+              20.776500691366827,
+              12.414275010734478
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.8499999999999944,
+            "step": 127,
+            "t": 12.8
+          }
+        ],
+        "terminal_window": [
+          {
+            "goal_distance": 16.22336265503159,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5259720087051392,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.790839660887364,
+              12.094596431606803
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 494,
+            "t": 49.5
+          },
+          {
+            "goal_distance": 16.22336265503159,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5259720087051392,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.790839660887364,
+              12.094596431606803
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 495,
+            "t": 49.6
+          },
+          {
+            "goal_distance": 16.22336265503159,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5259720087051392,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.790839660887364,
+              12.094596431606803
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 496,
+            "t": 49.7
+          },
+          {
+            "goal_distance": 16.22336265503159,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5259720087051392,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.790839660887364,
+              12.094596431606803
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 497,
+            "t": 49.800000000000004
+          },
+          {
+            "goal_distance": 16.22336265503159,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5259720087051392,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.790839660887364,
+              12.094596431606803
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 498,
+            "t": 49.900000000000006
+          },
+          {
+            "goal_distance": 16.22336265503159,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5259720087051392,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.790839660887364,
+              12.094596431606803
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 499,
+            "t": 50.0
+          }
+        ]
+      },
+      "before": "T",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "classification_detail": "First command divergence at step 121, base (0.0000,0.0000) -> PR (0.5500,-0.2694), recovery=progress_escape. Longest physical freeze 364 -> 0 steps; terminal active-waypoint distance 16.223 -> 18.448 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 121,
+      "first_divergence_base": {
+        "goal_distance": 15.243366593026433,
+        "goal_progress": 0.0,
+        "guard_label": "unknown",
+        "heading": -1.5259720087051392,
+        "infeasible_branch": true,
+        "min_obs_clear": null,
+        "min_ped_clear": null,
+        "nearest_ped_center": null,
+        "no_admissible": true,
+        "position": [
+          20.746926566730725,
+          13.073612080185306
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "speed": 1.4500000000000004,
+        "step": 121,
+        "t": 12.200000000000001
+      },
+      "first_divergence_pr": {
+        "goal_distance": 15.243365084041043,
+        "goal_progress": 0.0,
+        "guard_label": "unknown",
+        "heading": -1.5309720039367676,
+        "infeasible_branch": true,
+        "min_obs_clear": null,
+        "min_ped_clear": null,
+        "nearest_ped_center": null,
+        "no_admissible": true,
+        "position": [
+          20.746564410913336,
+          13.073596289507943
+        ],
+        "recovery_count": 0,
+        "recovery_kind": "progress_escape",
+        "selected": {
+          "angular_velocity": -0.2693713053852054,
+          "linear_velocity": 0.55
+        },
+        "speed": 1.4500000000000046,
+        "step": 121,
+        "t": 12.200000000000001
+      },
+      "mechanism_support": "First command divergence is in the infeasible branch.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "finite_frozen_steps": 0,
+        "infeasible_frozen_steps": 0,
+        "longest_frozen_steps": 0,
+        "min_ped_center_m": null,
+        "path_travelled_m": 20.356408366469076,
+        "recovery_kinds": {
+          "least_bad_clearance": 1,
+          "progress_escape": 2
+        },
+        "terminal_active_waypoint_distance_m": 18.448061459728372,
+        "terminal_command": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 1.5
+        },
+        "terminal_position_m": [
+          20.625128084690868,
+          9.86149206262509
+        ],
+        "terminal_speed_m_s": 1.5000000000000029
+      },
+      "pr_frozen_fraction": 0.0,
+      "pr_no_admissible_fraction": 0.020833333333333332,
+      "pr_steps": 144,
+      "pr_trace": {
+        "first_divergence_window": [
+          {
+            "goal_distance": 14.79836855338808,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5259720087051392,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.726986437241234,
+              13.518165104284728
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.4999999999999938,
+            "step": 118,
+            "t": 11.9
+          },
+          {
+            "goal_distance": 14.948367879551505,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5259720087051392,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.733707829203983,
+              13.368315770318631
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.4999999999999938,
+            "step": 119,
+            "t": 12.0
+          },
+          {
+            "goal_distance": 15.098367219103828,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5259720087051392,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.740429221166732,
+              13.218466436352534
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.4999999999999938,
+            "step": 120,
+            "t": 12.100000000000001
+          },
+          {
+            "goal_distance": 15.243365084041043,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5309720039367676,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": true,
+            "position": [
+              20.746564410913336,
+              13.073596289507943
+            ],
+            "recovery_count": 0,
+            "recovery_kind": "progress_escape",
+            "selected": {
+              "angular_velocity": -0.2693713053852054,
+              "linear_velocity": 0.55
+            },
+            "speed": 1.4500000000000046,
+            "step": 121,
+            "t": 12.200000000000001
+          },
+          {
+            "goal_distance": 15.378349214843077,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5459719896316528,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": true,
+            "position": [
+              20.750927429981804,
+              12.938666811392121
+            ],
+            "recovery_count": 0,
+            "recovery_kind": "progress_escape",
+            "selected": {
+              "angular_velocity": -0.26916650084184557,
+              "linear_velocity": 0.55
+            },
+            "speed": 1.3499999999999974,
+            "step": 122,
+            "t": 12.3
+          },
+          {
+            "goal_distance": 15.503272120229218,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5709720849990845,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": true,
+            "position": [
+              20.752467927050134,
+              12.81367630427745
+            ],
+            "recovery_count": 0,
+            "recovery_kind": "least_bad_clearance",
+            "selected": {
+              "angular_velocity": -1.0,
+              "linear_velocity": 0.9084544602643081
+            },
+            "speed": 1.2500000000000024,
+            "step": 123,
+            "t": 12.4
+          },
+          {
+            "goal_distance": 15.628049123734344,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.5959720611572266,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.750883505546277,
+              12.688686346246822
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.2500000000000053,
+            "step": 124,
+            "t": 12.5
+          },
+          {
+            "goal_distance": 15.762626357428177,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.6109720468521118,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.746473069434227,
+              12.553758409727724
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.3500000000000085,
+            "step": 125,
+            "t": 12.600000000000001
+          },
+          {
+            "goal_distance": 15.907059959425627,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.6159720420837402,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.740286969374505,
+              12.408890427875104
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.4499999999999993,
+            "step": 126,
+            "t": 12.700000000000001
+          },
+          {
+            "goal_distance": 16.05645165633192,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.6159720420837402,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.73351291733429,
+              12.259043465213338
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.5000000000000029,
+            "step": 127,
+            "t": 12.8
+          }
+        ],
+        "terminal_window": [
+          {
+            "goal_distance": 17.700439413333942,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.6159720420837402,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.658998344891938,
+              10.610726875933917
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.5000000000000029,
+            "step": 138,
+            "t": 13.9
+          },
+          {
+            "goal_distance": 17.849947861673645,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.6159720420837402,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.652224292851724,
+              10.460879913272151
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.5000000000000029,
+            "step": 139,
+            "t": 14.0
+          },
+          {
+            "goal_distance": 17.99946448936272,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.6159720420837402,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.64545024081151,
+              10.311032950610386
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.5000000000000029,
+            "step": 140,
+            "t": 14.100000000000001
+          },
+          {
+            "goal_distance": 18.148989094249615,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.6159720420837402,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.638676188771296,
+              10.16118598794862
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.5000000000000029,
+            "step": 141,
+            "t": 14.200000000000001
+          },
+          {
+            "goal_distance": 18.298521480779627,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.6159720420837402,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.63190213673108,
+              10.011339025286855
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.5000000000000029,
+            "step": 142,
+            "t": 14.3
+          },
+          {
+            "goal_distance": 18.448061459728372,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -1.6159720420837402,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": null,
+            "no_admissible": false,
+            "position": [
+              20.625128084690868,
+              9.86149206262509
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.5000000000000029,
+            "step": 143,
+            "t": 14.4
+          }
+        ]
+      },
+      "review_note": "At step 121 moving PR selects progress_escape (0.55,-0.2694) where base commands zero and decelerates from 1.5 m/s. PR records two escape recoveries and one least-bad command, never reaches physical stasis and completes. Base stalls for 364 consecutive steps and times out. This native trace verifies escape reachability during moving infeasibility, rather than relying only on the unit witness.",
+      "scenario": "classic_bottleneck_low",
+      "seed": 1005
+    },
+    {
+      "after": "T",
+      "arm": "predictive_mppi",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "base_features": {
+        "finite_frozen_steps": 0,
+        "infeasible_frozen_steps": 0,
+        "longest_frozen_steps": 0,
+        "min_ped_center_m": 2.665727360717574,
+        "path_travelled_m": 37.57041575893865,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 29.23031599780385,
+        "terminal_command": {
+          "angular_velocity": 1.0,
+          "linear_velocity": 1.5
+        },
+        "terminal_position_m": [
+          43.53048387542446,
+          21.37996435785579
+        ],
+        "terminal_speed_m_s": 1.500000000000007
+      },
+      "base_frozen_fraction": 0.0,
+      "base_no_admissible_fraction": 0.0125,
+      "base_steps": 320,
+      "base_trace": {
+        "first_divergence_window": [
+          {
+            "goal_distance": 3.052179134576393,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.6251067519187927,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.077074370849118,
+            "no_admissible": false,
+            "position": [
+              19.451208583630773,
+              10.924448589376572
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.8230901858916473,
+            "step": 84,
+            "t": 8.5
+          },
+          {
+            "goal_distance": 3.144473777593387,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.6933440566062927,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.05059901132094,
+            "no_admissible": false,
+            "position": [
+              19.524175808471785,
+              10.980988301189562
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.9230901858916445,
+            "step": 85,
+            "t": 8.6
+          },
+          {
+            "goal_distance": 3.2364914752131497,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.7515813112258911,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.020403455952013,
+            "no_admissible": false,
+            "position": [
+              19.593424150821754,
+              11.042026174634469
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": -0.8434059985298413,
+              "linear_velocity": 0.8109761585007332
+            },
+            "speed": 0.9230901858916545,
+            "step": 86,
+            "t": 8.700000000000001
+          },
+          {
+            "goal_distance": 3.3181067301218485,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.7998185753822327,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.99568272132254,
+            "no_admissible": true,
+            "position": [
+              19.65218711800285,
+              11.099660263758743
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.8230901858916403,
+            "step": 87,
+            "t": 8.8
+          },
+          {
+            "goal_distance": 3.3893768488620974,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.8380558490753174,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.9776251115806396,
+            "no_admissible": true,
+            "position": [
+              19.701574022918134,
+              11.152476244221257
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.723090185891632,
+            "step": 88,
+            "t": 8.9
+          },
+          {
+            "goal_distance": 3.450452095299172,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.8662931323051453,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.967165428185136,
+            "no_admissible": true,
+            "position": [
+              19.742595035748874,
+              11.19937710033162
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.6230901858916391,
+            "step": 89,
+            "t": 9.0
+          },
+          {
+            "goal_distance": 3.501510229951714,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.8845304250717163,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.96501298872213,
+            "no_admissible": true,
+            "position": [
+              19.776108416531162,
+              11.239540351374119
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.523090185891632,
+            "step": 90,
+            "t": 9.1
+          },
+          {
+            "goal_distance": 3.552453080438733,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.8927677273750305,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.9626224909790633,
+            "no_admissible": false,
+            "position": [
+              19.80908722464439,
+              11.280143696571189
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": -1.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.5230901858916422,
+            "step": 91,
+            "t": 9.200000000000001
+          },
+          {
+            "goal_distance": 3.6131406893945752,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.8910049796104431,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.9511087208923965,
+            "no_admissible": false,
+            "position": [
+              19.8482138668276,
+              11.328636166801235
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": -1.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.6230901858916437,
+            "step": 92,
+            "t": 9.3
+          },
+          {
+            "goal_distance": 3.6837421565054878,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.8792422413825989,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.9306639654277853,
+            "no_admissible": false,
+            "position": [
+              19.89399949129517,
+              11.384602860123628
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": -1.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.7230901858916424,
+            "step": 93,
+            "t": 9.4
+          }
+        ],
+        "terminal_window": [
+          {
+            "goal_distance": 28.730065047088086,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 1.2058945894241333,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 11.069322466548783,
+            "no_admissible": false,
+            "position": [
+              43.304326380027156,
+              20.66509680857027
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.5000000000000207,
+            "step": 314,
+            "t": 31.5
+          },
+          {
+            "goal_distance": 28.833797972956983,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 1.2408945560455322,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 11.156023490424523,
+            "no_admissible": false,
+            "position": [
+              43.3553947685504,
+              20.80613588008465
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.4999999999999811,
+            "step": 315,
+            "t": 31.6
+          },
+          {
+            "goal_distance": 28.93465734690436,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 1.2658945322036743,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 11.241209270050337,
+            "no_admissible": false,
+            "position": [
+              43.40220964052414,
+              20.948643310635067
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.4999999999999978,
+            "step": 316,
+            "t": 31.700000000000003
+          },
+          {
+            "goal_distance": 29.033712233199065,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 1.2808946371078491,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 11.32584482099077,
+            "no_admissible": false,
+            "position": [
+              43.44616519123068,
+              21.092058475670306
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.500000000000015,
+            "step": 317,
+            "t": 31.8
+          },
+          {
+            "goal_distance": 29.132077043730416,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 1.2858946323394775,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 11.410904979497403,
+            "no_admissible": false,
+            "position": [
+              43.48868441643006,
+              21.235906018188224
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.4999999999999853,
+            "step": 318,
+            "t": 31.900000000000002
+          },
+          {
+            "goal_distance": 29.23031599780385,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 1.290894627571106,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 11.496839590653169,
+            "no_admissible": false,
+            "position": [
+              43.53048387542446,
+              21.37996435785579
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 1.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.500000000000007,
+            "step": 319,
+            "t": 32.0
+          }
+        ]
+      },
+      "before": "S",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Clearance-driven steering changes produce longer sustained stasis and lose completion.",
+      "classification_detail": "First command divergence at step 87, base (0.0000,0.0000) -> PR (0.5198,0.4917), recovery=least_bad_clearance. Longest physical freeze 0 -> 116 steps; terminal active-waypoint distance 29.230 -> 19.105 m. PR still exhausts the unchanged authored step budget. Clearance-driven steering changes produce longer sustained stasis and lose completion. The first three changed commands are infeasible recovery; the final 116-step zero-command stall has no_admissible=False, showing a later finite-arbitration stasis state on the altered trajectory. Base brake commands coast without reaching rest.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 87,
+      "first_divergence_base": {
+        "goal_distance": 3.3181067301218485,
+        "goal_progress": 0.0,
+        "guard_label": "unknown",
+        "heading": 0.7998185753822327,
+        "infeasible_branch": true,
+        "min_obs_clear": null,
+        "min_ped_clear": null,
+        "nearest_ped_center": 2.99568272132254,
+        "no_admissible": true,
+        "position": [
+          19.65218711800285,
+          11.099660263758743
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "speed": 0.8230901858916403,
+        "step": 87,
+        "t": 8.8
+      },
+      "first_divergence_pr": {
+        "goal_distance": 3.3180910123123555,
+        "goal_progress": 0.0,
+        "guard_label": "unknown",
+        "heading": 0.802786648273468,
+        "infeasible_branch": true,
+        "min_obs_clear": null,
+        "min_ped_clear": null,
+        "nearest_ped_center": 2.995616161817123,
+        "no_admissible": true,
+        "position": [
+          19.652101522384154,
+          11.099747406496233
+        ],
+        "recovery_count": 0,
+        "recovery_kind": "least_bad_clearance",
+        "selected": {
+          "angular_velocity": 0.4917341157173776,
+          "linear_velocity": 0.5198041856709908
+        },
+        "speed": 0.8230901858916488,
+        "step": 87,
+        "t": 8.8
+      },
+      "mechanism_support": "First command divergence is in the infeasible branch.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "finite_frozen_steps": 299,
+        "infeasible_frozen_steps": 0,
+        "longest_frozen_steps": 116,
+        "min_ped_center_m": 2.7245392754168622,
+        "path_travelled_m": 25.651149179570744,
+        "recovery_kinds": {
+          "least_bad_clearance": 3
+        },
+        "terminal_active_waypoint_distance_m": 19.10510754063879,
+        "terminal_command": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "terminal_position_m": [
+          32.99474944219106,
+          19.555441857222416
+        ],
+        "terminal_speed_m_s": 0.0
+      },
+      "pr_frozen_fraction": 0.49833333333333335,
+      "pr_no_admissible_fraction": 0.005,
+      "pr_steps": 600,
+      "pr_trace": {
+        "first_divergence_window": [
+          {
+            "goal_distance": 3.052179134576393,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.6251067519187927,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.077074370849118,
+            "no_admissible": false,
+            "position": [
+              19.451208583630773,
+              10.924448589376572
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.8230901858916473,
+            "step": 84,
+            "t": 8.5
+          },
+          {
+            "goal_distance": 3.144473777593387,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.6933440566062927,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.05059901132094,
+            "no_admissible": false,
+            "position": [
+              19.524175808471785,
+              10.980988301189562
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.9230901858916445,
+            "step": 85,
+            "t": 8.6
+          },
+          {
+            "goal_distance": 3.2364914752131497,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.7515813112258911,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.020403455952013,
+            "no_admissible": false,
+            "position": [
+              19.593424150821754,
+              11.042026174634469
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": -0.8434059985298413,
+              "linear_velocity": 0.8109761585007332
+            },
+            "speed": 0.9230901858916545,
+            "step": 86,
+            "t": 8.700000000000001
+          },
+          {
+            "goal_distance": 3.3180910123123555,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.802786648273468,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.995616161817123,
+            "no_admissible": true,
+            "position": [
+              19.652101522384154,
+              11.099747406496233
+            ],
+            "recovery_count": 0,
+            "recovery_kind": "least_bad_clearance",
+            "selected": {
+              "angular_velocity": 0.4917341157173776,
+              "linear_velocity": 0.5198041856709908
+            },
+            "speed": 0.8230901858916488,
+            "step": 87,
+            "t": 8.8
+          },
+          {
+            "goal_distance": 3.3892252748824934,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.8569600582122803,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.977162976205781,
+            "no_admissible": true,
+            "position": [
+              19.70090788280602,
+              11.153100319740954
+            ],
+            "recovery_count": 0,
+            "recovery_kind": "least_bad_clearance",
+            "selected": {
+              "angular_velocity": 0.7563012535763558,
+              "linear_velocity": 0.6490801281878243
+            },
+            "speed": 0.723090185891632,
+            "step": 88,
+            "t": 8.9
+          },
+          {
+            "goal_distance": 3.4498127696833927,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.9211334586143494,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.9656643708898707,
+            "no_admissible": true,
+            "position": [
+              19.740172064190784,
+              11.201481492295256
+            ],
+            "recovery_count": 0,
+            "recovery_kind": "least_bad_clearance",
+            "selected": {
+              "angular_velocity": 0.7283618037549419,
+              "linear_velocity": 0.29119034581354314
+            },
+            "speed": 0.6230901858916345,
+            "step": 89,
+            "t": 9.0
+          },
+          {
+            "goal_distance": 3.509429174255666,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.9853069186210632,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.95259460293829,
+            "no_admissible": false,
+            "position": [
+              19.776252769614278,
+              11.252281064081718
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": -1.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.6230901858916399,
+            "step": 90,
+            "t": 9.1
+          },
+          {
+            "goal_distance": 3.5774003366027425,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 1.0394803285598755,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.928855295449475,
+            "no_admissible": false,
+            "position": [
+              19.81456441746904,
+              11.313606522155677
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": -1.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.7230901858916515,
+            "step": 91,
+            "t": 9.200000000000001
+          },
+          {
+            "goal_distance": 3.6535442696351166,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 1.0836536884307861,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.8945660911871767,
+            "no_admissible": false,
+            "position": [
+              19.85469043344297,
+              11.385472212044325
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": -1.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.8230901858916401,
+            "step": 92,
+            "t": 9.3
+          },
+          {
+            "goal_distance": 3.7287061774660972,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 1.1178271770477295,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.8597175779168733,
+            "no_admissible": false,
+            "position": [
+              19.891971161257874,
+              11.458854238963063
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": -1.0,
+              "linear_velocity": 0.75
+            },
+            "speed": 0.8230901858916492,
+            "step": 93,
+            "t": 9.4
+          }
+        ],
+        "terminal_window": [
+          {
+            "goal_distance": 19.10510754063879,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.47043970227241516,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 7.178080668003918,
+            "no_admissible": false,
+            "position": [
+              32.99474944219106,
+              19.555441857222416
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 594,
+            "t": 59.5
+          },
+          {
+            "goal_distance": 19.10510754063879,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.47043970227241516,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 7.2267278386185945,
+            "no_admissible": false,
+            "position": [
+              32.99474944219106,
+              19.555441857222416
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 595,
+            "t": 59.6
+          },
+          {
+            "goal_distance": 19.10510754063879,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.47043970227241516,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 7.276313447957499,
+            "no_admissible": false,
+            "position": [
+              32.99474944219106,
+              19.555441857222416
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 596,
+            "t": 59.7
+          },
+          {
+            "goal_distance": 19.10510754063879,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.47043970227241516,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 7.326666769857272,
+            "no_admissible": false,
+            "position": [
+              32.99474944219106,
+              19.555441857222416
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 597,
+            "t": 59.800000000000004
+          },
+          {
+            "goal_distance": 19.10510754063879,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.47043970227241516,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 7.377647397298452,
+            "no_admissible": false,
+            "position": [
+              32.99474944219106,
+              19.555441857222416
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 598,
+            "t": 59.900000000000006
+          },
+          {
+            "goal_distance": 19.10510754063879,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.47043970227241516,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 7.429139285453445,
+            "no_admissible": false,
+            "position": [
+              32.99474944219106,
+              19.555441857222416
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 599,
+            "t": 60.0
+          }
+        ]
+      },
+      "review_note": "At step 87 the baseline reachable brake command coasts at 0.8231 m/s while PR selects (0.5198,0.4917), followed by two more infeasible recovery turns. The trajectories then diverge. Base never physically freezes and succeeds at 320 steps; PR freezes 299/600 steps overall, including the final 116 consecutive steps at (32.9947,19.5554), and times out. Those final zero commands have no_admissible=False: the changed trajectory reaches a later finite-score stasis state in the otherwise unchanged MPPI arbitration. This is a real individual regression; fewer no-admissible steps do not guarantee less freezing.",
+      "scenario": "classic_overtaking_low",
+      "seed": 1003
+    },
+    {
+      "after": "S",
+      "arm": "predictive_mppi",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "base_features": {
+        "finite_frozen_steps": 46,
+        "infeasible_frozen_steps": 268,
+        "longest_frozen_steps": 314,
+        "min_ped_center_m": 2.051337956161885,
+        "path_travelled_m": 7.39022756951287,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 4.777946598762988,
+        "terminal_command": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "terminal_position_m": [
+          12.732291927589216,
+          2.3410714661628735
+        ],
+        "terminal_speed_m_s": 0.0
+      },
+      "base_frozen_fraction": 0.785,
+      "base_no_admissible_fraction": 0.6925,
+      "base_steps": 400,
+      "base_trace": {
+        "first_divergence_window": [
+          {
+            "goal_distance": 4.207844107266659,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.05000000074505806,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.518273126540477,
+            "no_admissible": false,
+            "position": [
+              12.158877881750636,
+              2.359932194416797
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.975000000000004,
+            "step": 74,
+            "t": 7.5
+          },
+          {
+            "goal_distance": 4.304829379507737,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.04744755104184151,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.5395993802293932,
+            "no_admissible": false,
+            "position": [
+              12.25626217183912,
+              2.3551835057597352
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.05104899267294627,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.9749999999999922,
+            "step": 75,
+            "t": 7.6000000000000005
+          },
+          {
+            "goal_distance": 4.396802140596869,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.037342652678489685,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.5564675562972665,
+            "no_admissible": false,
+            "position": [
+              12.348679057102874,
+              2.3512631335648724
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.23672069738826557,
+              "linear_velocity": 0.8734240781468041
+            },
+            "speed": 0.9250000000000059,
+            "step": 76,
+            "t": 7.7
+          },
+          {
+            "goal_distance": 4.478759774112412,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.027237752452492714,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.564578414284478,
+            "no_admissible": true,
+            "position": [
+              12.43113605123395,
+              2.3485996548494548
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.8249999999999935,
+            "step": 77,
+            "t": 7.800000000000001
+          },
+          {
+            "goal_distance": 4.5507466910400565,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.02468530274927616,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.5641566390674617,
+            "no_admissible": true,
+            "position": [
+              12.503611620074137,
+              2.346717655569027
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.7250000000000084,
+            "step": 78,
+            "t": 7.9
+          },
+          {
+            "goal_distance": 4.612807956148486,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.02468530274927616,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.5554187300964486,
+            "no_admissible": true,
+            "position": [
+              12.56609257841159,
+              2.3451749808678923
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.6250000000000029,
+            "step": 79,
+            "t": 8.0
+          },
+          {
+            "goal_distance": 4.664948472117817,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.02468530274927616,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.53845235073732,
+            "no_admissible": true,
+            "position": [
+              12.61857658341505,
+              2.343879134118939
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.5250000000000039,
+            "step": 80,
+            "t": 8.1
+          },
+          {
+            "goal_distance": 4.707163314315192,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.02468530274927616,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.5132967887986237,
+            "no_admissible": true,
+            "position": [
+              12.661063635084519,
+              2.342830115322167
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.4250000000000048,
+            "step": 81,
+            "t": 8.200000000000001
+          },
+          {
+            "goal_distance": 4.739448691637884,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.02468530274927616,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.479943191807357,
+            "no_admissible": true,
+            "position": [
+              12.693553733419995,
+              2.342027924477577
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.3250000000000058,
+            "step": 82,
+            "t": 8.3
+          },
+          {
+            "goal_distance": 4.7618018172341205,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.02468530274927616,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.4384093727972926,
+            "no_admissible": true,
+            "position": [
+              12.716046878421478,
+              2.3414725615851686
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.2250000000000067,
+            "step": 83,
+            "t": 8.4
+          }
+        ],
+        "terminal_window": [
+          {
+            "goal_distance": 4.777946598762988,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.02468530274927616,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.051743477599155,
+            "no_admissible": true,
+            "position": [
+              12.732291927589216,
+              2.3410714661628735
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 394,
+            "t": 39.5
+          },
+          {
+            "goal_distance": 4.777946598762988,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.02468530274927616,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.0517434949001254,
+            "no_admissible": true,
+            "position": [
+              12.732291927589216,
+              2.3410714661628735
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 395,
+            "t": 39.6
+          },
+          {
+            "goal_distance": 4.777946598762988,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.02468530274927616,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.0517435114956846,
+            "no_admissible": true,
+            "position": [
+              12.732291927589216,
+              2.3410714661628735
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 396,
+            "t": 39.7
+          },
+          {
+            "goal_distance": 4.777946598762988,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.02468530274927616,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.0517435274145823,
+            "no_admissible": true,
+            "position": [
+              12.732291927589216,
+              2.3410714661628735
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 397,
+            "t": 39.800000000000004
+          },
+          {
+            "goal_distance": 4.777946598762988,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.02468530274927616,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.0517435426843944,
+            "no_admissible": true,
+            "position": [
+              12.732291927589216,
+              2.3410714661628735
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 398,
+            "t": 39.900000000000006
+          },
+          {
+            "goal_distance": 4.777946598762988,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.02468530274927616,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.051743557331577,
+            "no_admissible": true,
+            "position": [
+              12.732291927589216,
+              2.3410714661628735
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 399,
+            "t": 40.0
+          }
+        ]
+      },
+      "before": "T",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "classification_detail": "First command divergence at step 77, base (0.0000,0.0000) -> PR (0.6149,0.5745), recovery=least_bad_clearance. Longest physical freeze 314 -> 0 steps; terminal active-waypoint distance 4.778 -> 28.010 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 77,
+      "first_divergence_base": {
+        "goal_distance": 4.478759774112412,
+        "goal_progress": 0.0,
+        "guard_label": "unknown",
+        "heading": -0.027237752452492714,
+        "infeasible_branch": true,
+        "min_obs_clear": null,
+        "min_ped_clear": null,
+        "nearest_ped_center": 3.564578414284478,
+        "no_admissible": true,
+        "position": [
+          12.43113605123395,
+          2.3485996548494548
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "speed": 0.8249999999999935,
+        "step": 77,
+        "t": 7.800000000000001
+      },
+      "first_divergence_pr": {
+        "goal_distance": 4.4787119806392095,
+        "goal_progress": 0.0,
+        "guard_label": "unknown",
+        "heading": -0.017237752676010132,
+        "infeasible_branch": true,
+        "min_obs_clear": null,
+        "min_ped_clear": null,
+        "nearest_ped_center": 3.56435077629129,
+        "no_admissible": true,
+        "position": [
+          12.43114833786176,
+          2.349011971395673
+        ],
+        "recovery_count": 0,
+        "recovery_kind": "least_bad_clearance",
+        "selected": {
+          "angular_velocity": 0.5744721648674238,
+          "linear_velocity": 0.6149024924950119
+        },
+        "speed": 0.8250000000000003,
+        "step": 77,
+        "t": 7.800000000000001
+      },
+      "mechanism_support": "First command divergence is in the infeasible branch.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "finite_frozen_steps": 0,
+        "infeasible_frozen_steps": 0,
+        "longest_frozen_steps": 0,
+        "min_ped_center_m": 2.4379119469583315,
+        "path_travelled_m": 30.75737873122937,
+        "recovery_kinds": {
+          "least_bad_clearance": 2
+        },
+        "terminal_active_waypoint_distance_m": 28.010263608329822,
+        "terminal_command": {
+          "angular_velocity": -0.3650789325609543,
+          "linear_velocity": 1.4150404964601875
+        },
+        "terminal_position_m": [
+          36.000341296597725,
+          3.7454895587262476
+        ],
+        "terminal_speed_m_s": 1.3745541196251092
+      },
+      "pr_frozen_fraction": 0.0,
+      "pr_no_admissible_fraction": 0.007633587786259542,
+      "pr_steps": 262,
+      "pr_trace": {
+        "first_divergence_window": [
+          {
+            "goal_distance": 4.207844107266659,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.05000000074505806,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.518273126540477,
+            "no_admissible": false,
+            "position": [
+              12.158877881750636,
+              2.359932194416797
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.975000000000004,
+            "step": 74,
+            "t": 7.5
+          },
+          {
+            "goal_distance": 4.304829379507737,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.04744755104184151,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.5395993802293932,
+            "no_admissible": false,
+            "position": [
+              12.25626217183912,
+              2.3551835057597352
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.05104899267294627,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.9749999999999922,
+            "step": 75,
+            "t": 7.6000000000000005
+          },
+          {
+            "goal_distance": 4.396802140596869,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.037342652678489685,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.5564675562972665,
+            "no_admissible": false,
+            "position": [
+              12.348679057102874,
+              2.3512631335648724
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.23672069738826557,
+              "linear_velocity": 0.8734240781468041
+            },
+            "speed": 0.9250000000000059,
+            "step": 76,
+            "t": 7.7
+          },
+          {
+            "goal_distance": 4.4787119806392095,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.017237752676010132,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.56435077629129,
+            "no_admissible": true,
+            "position": [
+              12.43114833786176,
+              2.349011971395673
+            ],
+            "recovery_count": 0,
+            "recovery_kind": "least_bad_clearance",
+            "selected": {
+              "angular_velocity": 0.5744721648674238,
+              "linear_velocity": 0.6149024924950119
+            },
+            "speed": 0.8250000000000003,
+            "step": 77,
+            "t": 7.800000000000001
+          },
+          {
+            "goal_distance": 4.550476734142448,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.012867147102952003,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.5629615157212924,
+            "no_admissible": true,
+            "position": [
+              12.503648164748297,
+              2.3488535371124115
+            ],
+            "recovery_count": 0,
+            "recovery_kind": "least_bad_clearance",
+            "selected": {
+              "angular_velocity": 1.0,
+              "linear_velocity": 0.25068401351466874
+            },
+            "speed": 0.724999999999993,
+            "step": 78,
+            "t": 7.9
+          },
+          {
+            "goal_distance": 4.62192963146701,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.04297204688191414,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.560410850846455,
+            "no_admissible": false,
+            "position": [
+              12.576119909567394,
+              2.350877444935339
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.7250000000000038,
+            "step": 79,
+            "t": 8.0
+          },
+          {
+            "goal_distance": 4.702909929018646,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.0630769431591034,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.564940002489835,
+            "no_admissible": false,
+            "position": [
+              12.658503958353572,
+              2.35524991627277
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.8250000000000007,
+            "step": 80,
+            "t": 8.1
+          },
+          {
+            "goal_distance": 4.793497869572782,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.07318184524774551,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.5770266082674187,
+            "no_admissible": false,
+            "position": [
+              12.750789366704428,
+              2.3615470112788697
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.9250000000000024,
+            "step": 81,
+            "t": 8.200000000000001
+          },
+          {
+            "goal_distance": 4.8889368836294915,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.07573429495096207,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.593245522187003,
+            "no_admissible": false,
+            "position": [
+              12.848019221341719,
+              2.3687999670357445
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.9749999999999976,
+            "step": 82,
+            "t": 8.3
+          },
+          {
+            "goal_distance": 4.984430882291522,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.07573429495096207,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.6099690873865056,
+            "no_admissible": false,
+            "position": [
+              12.945239740397849,
+              2.3761770040057346
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.974999999999994,
+            "step": 83,
+            "t": 8.4
+          }
+        ],
+        "terminal_window": [
+          {
+            "goal_distance": 27.331908990543948,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.196816086769104,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 14.230305026622394,
+            "no_admissible": false,
+            "position": [
+              35.315146958593395,
+              3.957076641561768
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": -0.5320511931204039,
+              "linear_velocity": 1.4125509081033905
+            },
+            "speed": 1.4062754540516615,
+            "step": 256,
+            "t": 25.700000000000003
+          },
+          {
+            "goal_distance": 27.472817468393153,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.24502120912075043,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 14.309464308176244,
+            "no_admissible": false,
+            "position": [
+              35.45723525397791,
+              3.9251658550553836
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.4562754540516731,
+            "step": 257,
+            "t": 25.8
+          },
+          {
+            "goal_distance": 27.61624993401506,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.2832263112068176,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 14.3918345085382,
+            "no_admissible": false,
+            "position": [
+              35.602033497665026,
+              3.886006327158235
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.5000000000000038,
+            "step": 258,
+            "t": 25.900000000000002
+          },
+          {
+            "goal_distance": 27.754867979557883,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.3214314579963684,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 14.46984849903541,
+            "no_admissible": false,
+            "position": [
+              35.74208325050578,
+              3.842326234124367
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": -0.7018164682162428,
+              "linear_velocity": 1.4340677427900945
+            },
+            "speed": 1.467033871395043,
+            "step": 259,
+            "t": 26.0
+          },
+          {
+            "goal_distance": 27.883909057168054,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.3596365749835968,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 14.538579211829404,
+            "no_admissible": false,
+            "position": [
+              35.8725422161849,
+              3.7960996893664576
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": -0.2736273599036525,
+              "linear_velocity": 0.55
+            },
+            "speed": 1.38406774279008,
+            "step": 260,
+            "t": 26.1
+          },
+          {
+            "goal_distance": 28.010263608329822,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.39449307322502136,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 14.605095735467048,
+            "no_admissible": false,
+            "position": [
+              36.000341296597725,
+              3.7454895587262476
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": -0.3650789325609543,
+              "linear_velocity": 1.4150404964601875
+            },
+            "speed": 1.3745541196251092,
+            "step": 261,
+            "t": 26.200000000000003
+          }
+        ]
+      },
+      "review_note": "At step 77 base zero command decelerates to rest by step 86, then stalls for 314 consecutive steps with 277 infeasible steps overall. PR selects (0.6149,0.5745) and a second recovery turn; ordinary finite commands resume at step 79. It never physically freezes and succeeds at step 262. The observed recovery prevents a long baseline stasis state.",
+      "scenario": "francis2023_accompanying_peer",
+      "seed": 1001
+    },
+    {
+      "after": "S",
+      "arm": "predictive_mppi",
       "base_collision_counts": {
         "agent_collision_count": 0,
         "obstacle_collision_count": 0,
         "ped_collision_count": 1
       },
       "base_features": {
+        "finite_frozen_steps": 0,
+        "infeasible_frozen_steps": 3,
         "longest_frozen_steps": 3,
         "min_ped_center_m": 1.3843065119021487,
         "path_travelled_m": 0.0,
@@ -9429,7 +12170,1493 @@
       "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
       "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
       "classification": "Recovery changes the trajectory and avoids the baseline collision while completing.",
-      "classification_detail": "First command divergence at step0, base(0.0000,0.0000) -> PR(0.1000,0.1000), recovery=least_bad_clearance. Longest physical freeze 3 -> 0 steps; terminal active-waypoint distance 2.781 -> 9.069 m. PR completes within the unchanged authored step budget. Recovery changes the trajectory and avoids the baseline collision while completing.",
+      "classification_detail": "First command divergence at step 0, base (0.0000,0.0000) -> PR (0.9750,0.5489), recovery=least_bad_clearance. Longest physical freeze 3 -> 0 steps; terminal active-waypoint distance 2.781 -> 9.127 m. PR completes within the unchanged authored step budget. Recovery changes the trajectory and avoids the baseline collision while completing.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 0,
+      "first_divergence_base": {
+        "goal_distance": 2.7811243705972286,
+        "goal_progress": 0.0,
+        "guard_label": "unknown",
+        "heading": 0.0,
+        "infeasible_branch": true,
+        "min_obs_clear": null,
+        "min_ped_clear": null,
+        "nearest_ped_center": 1.4567306087223237,
+        "no_admissible": true,
+        "position": [
+          4.387535640902389,
+          9.04622710398411
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "speed": 0.0,
+        "step": 0,
+        "t": 0.1
+      },
+      "first_divergence_pr": {
+        "goal_distance": 2.776423843450557,
+        "goal_progress": 0.0,
+        "guard_label": "unknown",
+        "heading": 0.004999999888241291,
+        "infeasible_branch": true,
+        "min_obs_clear": null,
+        "min_ped_clear": null,
+        "nearest_ped_center": 1.460511870605693,
+        "no_admissible": true,
+        "position": [
+          4.392535625277397,
+          9.04623960397109
+        ],
+        "recovery_count": 0,
+        "recovery_kind": "least_bad_clearance",
+        "selected": {
+          "angular_velocity": 0.5488503738154581,
+          "linear_velocity": 0.9750000000000001
+        },
+        "speed": 0.0499999999999979,
+        "step": 0,
+        "t": 0.1
+      },
+      "mechanism_support": "First command divergence is in the infeasible branch.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "finite_frozen_steps": 0,
+        "infeasible_frozen_steps": 0,
+        "longest_frozen_steps": 0,
+        "min_ped_center_m": 1.4205068308070279,
+        "path_travelled_m": 12.666082325053097,
+        "recovery_kinds": {
+          "least_bad_clearance": 13,
+          "progress_escape": 1
+        },
+        "terminal_active_waypoint_distance_m": 9.126635279557272,
+        "terminal_command": {
+          "angular_velocity": -0.12134481148465254,
+          "linear_velocity": 1.398977719143109
+        },
+        "terminal_position_m": [
+          16.081037665269196,
+          10.911167628936415
+        ],
+        "terminal_speed_m_s": 1.4500000000000035
+      },
+      "pr_frozen_fraction": 0.0,
+      "pr_no_admissible_fraction": 0.12727272727272726,
+      "pr_steps": 110,
+      "pr_trace": {
+        "first_divergence_window": [
+          {
+            "goal_distance": 2.776423843450557,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.004999999888241291,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 1.460511870605693,
+            "no_admissible": true,
+            "position": [
+              4.392535625277397,
+              9.04623960397109
+            ],
+            "recovery_count": 0,
+            "recovery_kind": "least_bad_clearance",
+            "selected": {
+              "angular_velocity": 0.5488503738154581,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.0499999999999979,
+            "step": 0,
+            "t": 0.1
+          },
+          {
+            "goal_distance": 2.762277844021057,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.019999999552965164,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 1.4336526470745998,
+            "no_admissible": true,
+            "position": [
+              4.4075344534176555,
+              9.046427099088316
+            ],
+            "recovery_count": 0,
+            "recovery_kind": "progress_escape",
+            "selected": {
+              "angular_velocity": 0.51849541423058,
+              "linear_velocity": 0.55
+            },
+            "speed": 0.15000000000000172,
+            "step": 1,
+            "t": 0.2
+          },
+          {
+            "goal_distance": 2.738557974247836,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.04500000178813934,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 1.4205068308070279,
+            "no_admissible": true,
+            "position": [
+              4.432521251454765,
+              9.047239456062016
+            ],
+            "recovery_count": 0,
+            "recovery_kind": "least_bad_clearance",
+            "selected": {
+              "angular_velocity": 0.4183122872506366,
+              "linear_velocity": 0.5747745074481164
+            },
+            "speed": 0.2500000000000033,
+            "step": 2,
+            "t": 0.30000000000000004
+          },
+          {
+            "goal_distance": 2.7050668309670725,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.07999999821186066,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 1.4229927168783916,
+            "no_admissible": true,
+            "position": [
+              4.467452914329268,
+              9.049425532186499
+            ],
+            "recovery_count": 0,
+            "recovery_kind": "least_bad_clearance",
+            "selected": {
+              "angular_velocity": 0.6086798905790247,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.34999999999999604,
+            "step": 3,
+            "t": 0.4
+          },
+          {
+            "goal_distance": 2.6615643731790986,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.125,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 1.4422970586638693,
+            "no_admissible": true,
+            "position": [
+              4.512216730596718,
+              9.054029959748531
+            ],
+            "recovery_count": 0,
+            "recovery_kind": "least_bad_clearance",
+            "selected": {
+              "angular_velocity": 1.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.4500000000000003,
+            "step": 4,
+            "t": 0.5
+          },
+          {
+            "goal_distance": 2.60780798514604,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.18000000715255737,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 1.4782784864738439,
+            "no_admissible": true,
+            "position": [
+              4.566578422216448,
+              9.062384987231509
+            ],
+            "recovery_count": 0,
+            "recovery_kind": "least_bad_clearance",
+            "selected": {
+              "angular_velocity": 1.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.5499999999999987,
+            "step": 5,
+            "t": 0.6000000000000001
+          },
+          {
+            "goal_distance": 2.5436098757925247,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.24500000476837158,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 1.5295061962203962,
+            "no_admissible": true,
+            "position": [
+              4.6301163583126534,
+              9.0760937682362
+            ],
+            "recovery_count": 0,
+            "recovery_kind": "least_bad_clearance",
+            "selected": {
+              "angular_velocity": 0.9070976309599111,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.6500000000000031,
+            "step": 6,
+            "t": 0.7000000000000001
+          }
+        ],
+        "terminal_window": [
+          {
+            "goal_distance": 8.619093131666256,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.6549999713897705,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 9.479289375263312,
+            "no_admissible": false,
+            "position": [
+              15.50694455041207,
+              11.385879081504156
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.5000000000000018,
+            "step": 104,
+            "t": 10.5
+          },
+          {
+            "goal_distance": 8.721137109487326,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.6800000071525574,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 9.504749233554541,
+            "no_admissible": false,
+            "position": [
+              15.62475030238055,
+              11.293025407354227
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.499999999999999,
+            "step": 105,
+            "t": 10.600000000000001
+          },
+          {
+            "goal_distance": 8.822370208152035,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.6949999928474426,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 9.532103109160694,
+            "no_admissible": false,
+            "position": [
+              15.74067554430342,
+              11.197834345351936
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.499999999999999,
+            "step": 106,
+            "t": 10.700000000000001
+          },
+          {
+            "goal_distance": 8.923883248262484,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.699999988079071,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 9.562848800344463,
+            "no_admissible": false,
+            "position": [
+              15.855643095257571,
+              11.10148880976463
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.500000000000007,
+            "step": 107,
+            "t": 10.8
+          },
+          {
+            "goal_distance": 9.0264756958069,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.699999988079071,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 9.598093300459958,
+            "no_admissible": false,
+            "position": [
+              15.970369423350245,
+              11.004856156678976
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 1.5
+            },
+            "speed": 1.500000000000011,
+            "step": 108,
+            "t": 10.9
+          },
+          {
+            "goal_distance": 9.126635279557272,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.7049999833106995,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 9.637529160191768,
+            "no_admissible": false,
+            "position": [
+              16.081037665269196,
+              10.911167628936415
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": -0.12134481148465254,
+              "linear_velocity": 1.398977719143109
+            },
+            "speed": 1.4500000000000035,
+            "step": 109,
+            "t": 11.0
+          }
+        ]
+      },
+      "review_note": "At the same near-pedestrian reset where base collides after 3 stationary steps, MPPI PR selects (0.975,0.5489), physically accelerates, stays moving and completes without any collision counter. This is a native collision-to-success witness on identical reset geometry.",
+      "scenario": "francis2023_circular_crossing",
+      "seed": 1001
+    },
+    {
+      "after": "S",
+      "arm": "predictive_mppi",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "base_features": {
+        "finite_frozen_steps": 236,
+        "infeasible_frozen_steps": 0,
+        "longest_frozen_steps": 236,
+        "min_ped_center_m": 2.3452718479590353,
+        "path_travelled_m": 14.964551875392418,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 11.810971954110935,
+        "terminal_command": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "terminal_position_m": [
+          18.505392710146324,
+          2.330730982814422
+        ],
+        "terminal_speed_m_s": 0.0
+      },
+      "base_frozen_fraction": 0.59,
+      "base_no_admissible_fraction": 0.025,
+      "base_steps": 400,
+      "base_trace": {
+        "first_divergence_window": [
+          {
+            "goal_distance": 11.156473290034825,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.049876149743795395,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.384005759490494,
+            "no_admissible": false,
+            "position": [
+              17.839824130547292,
+              2.360850688182816
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.41671426225174646,
+              "linear_velocity": 0.8533099341821453
+            },
+            "speed": 0.9250000000000015,
+            "step": 151,
+            "t": 15.200000000000001
+          },
+          {
+            "goal_distance": 11.247297110298431,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.04487615078687668,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.379656743215483,
+            "no_admissible": false,
+            "position": [
+              17.93222034185104,
+              2.356470033355821
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.9249999999999955,
+            "step": 152,
+            "t": 15.3
+          },
+          {
+            "goal_distance": 11.343013738312989,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.04487615078687668,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.3765885523215036,
+            "no_admissible": false,
+            "position": [
+              18.029622182214943,
+              2.3520960770546684
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.9749999999999945,
+            "step": 153,
+            "t": 15.4
+          },
+          {
+            "goal_distance": 11.433849679343632,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.04487615078687668,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.3723267568611397,
+            "no_admissible": true,
+            "position": [
+              18.12202905640634,
+              2.3479464262048566
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.9250000000000013,
+            "step": 154,
+            "t": 15.5
+          },
+          {
+            "goal_distance": 11.514887871628401,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.04487615078687668,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.365613601000413,
+            "no_admissible": true,
+            "position": [
+              18.204445998252723,
+              2.3442453862577275
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.8250000000000144,
+            "step": 155,
+            "t": 15.600000000000001
+          },
+          {
+            "goal_distance": 11.586120286213246,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.04487615078687668,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.3566242685183316,
+            "no_admissible": true,
+            "position": [
+              18.276873007754087,
+              2.3409929572132806
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.7249999999999923,
+            "step": 156,
+            "t": 15.700000000000001
+          },
+          {
+            "goal_distance": 11.647540094848715,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.04487615078687668,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.3456206901207954,
+            "no_admissible": true,
+            "position": [
+              18.339310084910437,
+              2.338189139071516
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.6250000000000057,
+            "step": 157,
+            "t": 15.8
+          },
+          {
+            "goal_distance": 11.699141576188127,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.04487615078687668,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.3356078137058094,
+            "no_admissible": true,
+            "position": [
+              18.39175722972177,
+              2.3358339318324335
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.5249999999999835,
+            "step": 158,
+            "t": 15.9
+          },
+          {
+            "goal_distance": 11.740920039007074,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.04487615078687668,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.326516009839321,
+            "no_admissible": true,
+            "position": [
+              18.434214442188086,
+              2.3339273354960337
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.42499999999999666,
+            "step": 159,
+            "t": 16.0
+          },
+          {
+            "goal_distance": 11.772871760496722,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.04487615078687668,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.3184618492142732,
+            "no_admissible": true,
+            "position": [
+              18.46668172230939,
+              2.332469350062316
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.32500000000001,
+            "step": 160,
+            "t": 16.1
+          }
+        ],
+        "terminal_window": [
+          {
+            "goal_distance": 11.810971954110935,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.04487615078687668,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 16.732941407693975,
+            "no_admissible": false,
+            "position": [
+              18.505392710146324,
+              2.330730982814422
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 394,
+            "t": 39.5
+          },
+          {
+            "goal_distance": 11.810971954110935,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.04487615078687668,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 16.738823071717334,
+            "no_admissible": false,
+            "position": [
+              18.505392710146324,
+              2.330730982814422
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 395,
+            "t": 39.6
+          },
+          {
+            "goal_distance": 11.810971954110935,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.04487615078687668,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 16.740528487857723,
+            "no_admissible": false,
+            "position": [
+              18.505392710146324,
+              2.330730982814422
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 396,
+            "t": 39.7
+          },
+          {
+            "goal_distance": 11.810971954110935,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.04487615078687668,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 16.738889965287957,
+            "no_admissible": false,
+            "position": [
+              18.505392710146324,
+              2.330730982814422
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 397,
+            "t": 39.800000000000004
+          },
+          {
+            "goal_distance": 11.810971954110935,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.04487615078687668,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 16.734579117828492,
+            "no_admissible": false,
+            "position": [
+              18.505392710146324,
+              2.330730982814422
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 398,
+            "t": 39.900000000000006
+          },
+          {
+            "goal_distance": 11.810971954110935,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.04487615078687668,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 16.728137710543212,
+            "no_admissible": false,
+            "position": [
+              18.505392710146324,
+              2.330730982814422
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 399,
+            "t": 40.0
+          }
+        ]
+      },
+      "before": "T",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "classification_detail": "First command divergence at step 154, base (0.0000,0.0000) -> PR (0.6206,0.9633), recovery=least_bad_clearance. Longest physical freeze 236 -> 0 steps; terminal active-waypoint distance 11.811 -> 29.978 m. PR completes within the unchanged authored step budget. Clearance recovery reduces sustained stasis and completes within the unchanged budget.",
+      "clearance_convention": "surface_clearance",
+      "distance_convention": "center_center",
+      "first_command_divergence_step": 154,
+      "first_divergence_base": {
+        "goal_distance": 11.433849679343632,
+        "goal_progress": 0.0,
+        "guard_label": "unknown",
+        "heading": -0.04487615078687668,
+        "infeasible_branch": true,
+        "min_obs_clear": null,
+        "min_ped_clear": null,
+        "nearest_ped_center": 3.3723267568611397,
+        "no_admissible": true,
+        "position": [
+          18.12202905640634,
+          2.3479464262048566
+        ],
+        "recovery_count": 0,
+        "recovery_kind": null,
+        "selected": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "speed": 0.9250000000000013,
+        "step": 154,
+        "t": 15.5
+      },
+      "first_divergence_pr": {
+        "goal_distance": 11.433805905073465,
+        "goal_progress": 0.0,
+        "guard_label": "unknown",
+        "heading": -0.03987615182995796,
+        "infeasible_branch": true,
+        "min_obs_clear": null,
+        "min_ped_clear": null,
+        "nearest_ped_center": 3.3721037360267734,
+        "no_admissible": true,
+        "position": [
+          18.122039141751326,
+          2.3481774561173445
+        ],
+        "recovery_count": 0,
+        "recovery_kind": "least_bad_clearance",
+        "selected": {
+          "angular_velocity": 0.9633415754315802,
+          "linear_velocity": 0.6206018543819748
+        },
+        "speed": 0.9249999999999923,
+        "step": 154,
+        "t": 15.5
+      },
+      "mechanism_support": "First command divergence is in the infeasible branch.",
+      "pr_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 0
+      },
+      "pr_features": {
+        "finite_frozen_steps": 0,
+        "infeasible_frozen_steps": 0,
+        "longest_frozen_steps": 0,
+        "min_ped_center_m": 2.3452718479590353,
+        "path_travelled_m": 33.778361381974186,
+        "recovery_kinds": {
+          "least_bad_clearance": 2,
+          "progress_escape": 1
+        },
+        "terminal_active_waypoint_distance_m": 29.97830718491532,
+        "terminal_command": {
+          "angular_velocity": 0.5215624988867062,
+          "linear_velocity": 0.853068565343442
+        },
+        "terminal_position_m": [
+          36.962463727103014,
+          4.025490341155197
+        ],
+        "terminal_speed_m_s": 0.8764459020698461
+      },
+      "pr_frozen_fraction": 0.0,
+      "pr_no_admissible_fraction": 0.0084985835694051,
+      "pr_steps": 353,
+      "pr_trace": {
+        "first_divergence_window": [
+          {
+            "goal_distance": 11.156473290034825,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.049876149743795395,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.384005759490494,
+            "no_admissible": false,
+            "position": [
+              17.839824130547292,
+              2.360850688182816
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.41671426225174646,
+              "linear_velocity": 0.8533099341821453
+            },
+            "speed": 0.9250000000000015,
+            "step": 151,
+            "t": 15.200000000000001
+          },
+          {
+            "goal_distance": 11.247297110298431,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.04487615078687668,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.379656743215483,
+            "no_admissible": false,
+            "position": [
+              17.93222034185104,
+              2.356470033355821
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.9249999999999955,
+            "step": 152,
+            "t": 15.3
+          },
+          {
+            "goal_distance": 11.343013738312989,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.04487615078687668,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.3765885523215036,
+            "no_admissible": false,
+            "position": [
+              18.029622182214943,
+              2.3520960770546684
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.9749999999999945,
+            "step": 153,
+            "t": 15.4
+          },
+          {
+            "goal_distance": 11.433805905073465,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.03987615182995796,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.3721037360267734,
+            "no_admissible": true,
+            "position": [
+              18.122039141751326,
+              2.3481774561173445
+            ],
+            "recovery_count": 0,
+            "recovery_kind": "least_bad_clearance",
+            "selected": {
+              "angular_velocity": 0.9633415754315802,
+              "linear_velocity": 0.6206018543819748
+            },
+            "speed": 0.9249999999999923,
+            "step": 154,
+            "t": 15.5
+          },
+          {
+            "goal_distance": 11.514645552159957,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.024876151233911514,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.3643927222199483,
+            "no_admissible": true,
+            "position": [
+              18.204495906652546,
+              2.345506890255054
+            ],
+            "recovery_count": 0,
+            "recovery_kind": "least_bad_clearance",
+            "selected": {
+              "angular_velocity": 0.7416707137114883,
+              "linear_velocity": 0.7231441785621717
+            },
+            "speed": 0.8249999999999961,
+            "step": 155,
+            "t": 15.600000000000001
+          },
+          {
+            "goal_distance": 11.585425513497416,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": -0.0024877667892724276,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.3532029904659426,
+            "no_admissible": true,
+            "position": [
+              18.276989120903327,
+              2.3445149791752002
+            ],
+            "recovery_count": 0,
+            "recovery_kind": "progress_escape",
+            "selected": {
+              "angular_velocity": 0.24776768798329707,
+              "linear_velocity": 0.55
+            },
+            "speed": 0.7249999999999919,
+            "step": 156,
+            "t": 15.700000000000001
+          },
+          {
+            "goal_distance": 11.655883050033781,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.017289001494646072,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.3409015199536967,
+            "no_admissible": false,
+            "position": [
+              18.34948713553103,
+              2.3450515190534458
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.7249999999999892,
+            "step": 157,
+            "t": 15.8
+          },
+          {
+            "goal_distance": 11.735795943440564,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.02706577070057392,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.3322906486242654,
+            "no_admissible": false,
+            "position": [
+              18.431966848108278,
+              2.346881003454748
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.8249999999999859,
+            "step": 158,
+            "t": 15.9
+          },
+          {
+            "goal_distance": 11.825297593719013,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.029454154893755913,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.3271732942514287,
+            "no_admissible": false,
+            "position": [
+              18.52442991413664,
+              2.349494702105049
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.9249999999999887,
+            "step": 159,
+            "t": 16.0
+          },
+          {
+            "goal_distance": 11.919657603895999,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.029454154893755913,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 3.3245990129675826,
+            "no_admissible": false,
+            "position": [
+              18.6218876242653,
+              2.3523660670204567
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.9749999999999868,
+            "step": 160,
+            "t": 16.1
+          }
+        ],
+        "terminal_window": [
+          {
+            "goal_distance": 29.63442972461419,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.6794541478157043,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.866968706725302,
+            "no_admissible": false,
+            "position": [
+              36.607022523534816,
+              3.7257777297507237
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.9750000000000035,
+            "step": 347,
+            "t": 34.800000000000004
+          },
+          {
+            "goal_distance": 29.707642012680125,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.6794541478157043,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.8789947470563417,
+            "no_admissible": false,
+            "position": [
+              36.68286931659922,
+              3.7870436581436326
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.9750000000000001
+            },
+            "speed": 0.9750000000000035,
+            "step": 348,
+            "t": 34.9
+          },
+          {
+            "goal_distance": 29.780358142129714,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.6844541430473328,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.8953756087554154,
+            "no_admissible": false,
+            "position": [
+              36.75807216834237,
+              3.8481007434507553
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.31834512330668474,
+              "linear_velocity": 0.9623628030396308
+            },
+            "speed": 0.9686814015197883,
+            "step": 349,
+            "t": 35.0
+          },
+          {
+            "goal_distance": 29.849748772528187,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.699454128742218,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.9150897607809267,
+            "no_admissible": false,
+            "position": [
+              36.82974912437712,
+              3.907494183187037
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.35219106844053033,
+              "linear_velocity": 0.8993747413113093
+            },
+            "speed": 0.9308687721754779,
+            "step": 350,
+            "t": 35.1
+          },
+          {
+            "goal_distance": 29.915722161034,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.7244541645050049,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.9368164736179527,
+            "no_admissible": false,
+            "position": [
+              36.89785656245149,
+              3.9662662880328314
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.41658682953512327,
+              "linear_velocity": 0.8998232387962758
+            },
+            "speed": 0.8995989900538109,
+            "step": 351,
+            "t": 35.2
+          },
+          {
+            "goal_distance": 29.97830718491532,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.7594541311264038,
+            "infeasible_branch": false,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 2.959417044542981,
+            "no_admissible": false,
+            "position": [
+              36.962463727103014,
+              4.025490341155197
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.5215624988867062,
+              "linear_velocity": 0.853068565343442
+            },
+            "speed": 0.8764459020698461,
+            "step": 352,
+            "t": 35.300000000000004
+          }
+        ]
+      },
+      "review_note": "At step 154 base selects zero and later remains frozen for 236 consecutive steps. PR selects (0.6206,0.9633), then another least-bad command and progress_escape (0.55,0.2478). Its speed stays positive, ordinary finite commands resume at step 157, and it succeeds at step 353 without physical frozen steps.",
+      "scenario": "francis2023_pedestrian_overtaking",
+      "seed": 1005
+    },
+    {
+      "after": "S",
+      "arm": "risk_dwa",
+      "base_collision_counts": {
+        "agent_collision_count": 0,
+        "obstacle_collision_count": 0,
+        "ped_collision_count": 1
+      },
+      "base_features": {
+        "finite_frozen_steps": 0,
+        "infeasible_frozen_steps": 3,
+        "longest_frozen_steps": 3,
+        "min_ped_center_m": 1.3843065119021487,
+        "path_travelled_m": 0.0,
+        "recovery_kinds": {},
+        "terminal_active_waypoint_distance_m": 2.7811243705972286,
+        "terminal_command": {
+          "angular_velocity": 0.0,
+          "linear_velocity": 0.0
+        },
+        "terminal_position_m": [
+          4.387535640902389,
+          9.04622710398411
+        ],
+        "terminal_speed_m_s": 0.0
+      },
+      "base_frozen_fraction": 1.0,
+      "base_no_admissible_fraction": 1.0,
+      "base_steps": 3,
+      "base_trace": {
+        "first_divergence_window": [
+          {
+            "goal_distance": 2.7811243705972286,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.0,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 1.4567306087223237,
+            "no_admissible": true,
+            "position": [
+              4.387535640902389,
+              9.04622710398411
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 0,
+            "t": 0.1
+          },
+          {
+            "goal_distance": 2.7811243705972286,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.0,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 1.4180211819904136,
+            "no_admissible": true,
+            "position": [
+              4.387535640902389,
+              9.04622710398411
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 1,
+            "t": 0.2
+          },
+          {
+            "goal_distance": 2.7811243705972286,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.0,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 1.3843065119021487,
+            "no_admissible": true,
+            "position": [
+              4.387535640902389,
+              9.04622710398411
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 2,
+            "t": 0.30000000000000004
+          }
+        ],
+        "terminal_window": [
+          {
+            "goal_distance": 2.7811243705972286,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.0,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 1.4567306087223237,
+            "no_admissible": true,
+            "position": [
+              4.387535640902389,
+              9.04622710398411
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 0,
+            "t": 0.1
+          },
+          {
+            "goal_distance": 2.7811243705972286,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.0,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 1.4180211819904136,
+            "no_admissible": true,
+            "position": [
+              4.387535640902389,
+              9.04622710398411
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 1,
+            "t": 0.2
+          },
+          {
+            "goal_distance": 2.7811243705972286,
+            "goal_progress": 0.0,
+            "guard_label": "unknown",
+            "heading": 0.0,
+            "infeasible_branch": true,
+            "min_obs_clear": null,
+            "min_ped_clear": null,
+            "nearest_ped_center": 1.3843065119021487,
+            "no_admissible": true,
+            "position": [
+              4.387535640902389,
+              9.04622710398411
+            ],
+            "recovery_count": 0,
+            "recovery_kind": null,
+            "selected": {
+              "angular_velocity": 0.0,
+              "linear_velocity": 0.0
+            },
+            "speed": 0.0,
+            "step": 2,
+            "t": 0.30000000000000004
+          }
+        ]
+      },
+      "before": "C",
+      "causal_limit": "Association from paired identical resets and first command divergence in infeasible selection; later trajectory differences are not isolated counterfactual experiments.",
+      "cause_confidence": "diagnostic trace association, not a counterfactual safety certificate",
+      "classification": "Recovery changes the trajectory and avoids the baseline collision while completing.",
+      "classification_detail": "First command divergence at step 0, base (0.0000,0.0000) -> PR (0.1000,0.1000), recovery=least_bad_clearance. Longest physical freeze 3 -> 0 steps; terminal active-waypoint distance 2.781 -> 9.069 m. PR completes within the unchanged authored step budget. Recovery changes the trajectory and avoids the baseline collision while completing.",
       "clearance_convention": "surface_clearance",
       "distance_convention": "center_center",
       "first_command_divergence_step": 0,
@@ -9488,6 +13715,8 @@
         "ped_collision_count": 0
       },
       "pr_features": {
+        "finite_frozen_steps": 0,
+        "infeasible_frozen_steps": 0,
         "longest_frozen_steps": 0,
         "min_ped_center_m": 1.4205068308070279,
         "path_travelled_m": 11.760000000596047,

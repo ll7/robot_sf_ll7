@@ -379,7 +379,7 @@
       "artifact_hash_mismatch": 4
     }
   },
-  "generated_at": "2026-10-01T01:59:57Z",
+  "generated_at": "2026-10-01T03:47:51Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {

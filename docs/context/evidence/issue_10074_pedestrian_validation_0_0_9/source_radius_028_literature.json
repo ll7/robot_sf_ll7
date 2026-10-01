@@ -1,0 +1,2383 @@
+{
+  "identity": {
+    "baseline_trial_n": 450,
+    "config_sha256": "42a8b4d90871ad192ba9704a9b4fe3d5a95d621605606c46b4bf661204600b86",
+    "diagnostic_only": true,
+    "episode_n": 750,
+    "force_radius_m": 0.28,
+    "installed_files": {
+      "config.py": "e1062d3a702b815c3af0bda94e929d5ad0d56fa0849c14aef55154677246b26d",
+      "forces.py": "59adf658fd6e439732829e2a04a98aed3debe07c6a690dacebb7edb8c34296e0",
+      "scene.py": "229371ec27c21df2315735daafcf957a9a3da8c8538c31a2ee938836117458d6"
+    },
+    "mode": "radius",
+    "model": {
+      "baseline_physical_radius_m": 0.4,
+      "force_radius_m": 0.35,
+      "native_free_speed_m_s": 0.65,
+      "pair_kernel": "wrapped_v2",
+      "robot_activation_threshold_m": 2.0,
+      "wall_factor": 10.0,
+      "wall_law": "legacy_v1",
+      "wall_offset_m": -0.57,
+      "wall_sigma": 0.0
+    },
+    "protocol": "source",
+    "radius_m": 0.28,
+    "seeds": [
+      1001,
+      1002,
+      1003,
+      1004,
+      1005,
+      1006,
+      1007,
+      1008,
+      1009,
+      1010,
+      1011,
+      1012,
+      1013,
+      1014,
+      1015,
+      1016,
+      1017,
+      1018,
+      1019,
+      1020,
+      1021,
+      1022,
+      1023,
+      1024,
+      1025,
+      1026,
+      1027,
+      1028,
+      1029,
+      1030
+    ],
+    "slurm_job": "16121",
+    "source_files": {
+      "fast-pysf/pysocialforce/config.py": "e1062d3a702b815c3af0bda94e929d5ad0d56fa0849c14aef55154677246b26d",
+      "fast-pysf/pysocialforce/forces.py": "59adf658fd6e439732829e2a04a98aed3debe07c6a690dacebb7edb8c34296e0",
+      "robot_sf/research/pedestrian_validation.py": "8964a2f8bfb5a51ce40fcb3b73f5ca49e213a19f0c9a0fa43f4aab733f23598c",
+      "scripts/validation/compare_obstacle_laws_10061.py": "75c4bb5f132d316eb4a93888da64bba8ae80558d42d7044bbbeb8d8cc9f395ea",
+      "scripts/validation/pedestrian_validation_10074.py": "d1f479e264b9e7682f8b1c71101c29fc581bbd47bc312547d02a08b403dadf22"
+    },
+    "source_sha": "29ae9ae76cda09d911da63513ec141a002671d48",
+    "speed_tier": "literature",
+    "wall_profile": "legacy_v1",
+    "workers": 8
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "rows": [
+    {
+      "attempted_n": 30,
+      "case": "V1",
+      "censored_specific_flow": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "crossed": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "diagnostic_passed_n": 0,
+      "difference": -0.02672850532953719,
+      "estimator_status": "documented_equivalent",
+      "initial_pair_overlaps": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "known_reason": "Equation 4.1 desired speed fitted from first 3 s of acceleration after a .35 s clock shift; simulator velocities replace supplementary marker preprocessing; tau is fitted, not imposed.; documented_equivalent",
+      "location": "Moussaid 2009 Fig. 1b and section 4(a); Huber 2014 Table 1",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        }
+      },
+      "published_value": {
+        "mean_m_s": 1.29,
+        "sd_m_s": 0.19,
+        "slow_normal_fast_m_s": [
+          1.15,
+          1.42,
+          1.78
+        ]
+      },
+      "quantity": "fitted_desired_speed_m_s",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": 1.2632714946704628,
+        "n": 30,
+        "spread_sd": 0.20451939363119143
+      },
+      "source": "Moussaid et al. 2009; Huber et al. 2014",
+      "unavailable_reasons": [],
+      "variant": "native",
+      "wall_penetration_max_m": 0.0
+    },
+    {
+      "attempted_n": 30,
+      "case": "V2",
+      "censored_specific_flow": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "crossed": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "documented_equivalent",
+      "initial_pair_overlaps": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "known_reason": "4 m capture origin, first 2 s approach, >3 approach-SD reduction event; cubic LS speed trend and CM replace unpublished Higuchi construction, Woltring and C7; .46 m shoulder proxy independent of disc radius; rigid disc cannot rotate.; documented_equivalent; no complete capture-to-passage interval longer than approach phase",
+      "location": "Fig. 3, typically developing group, graphical reading",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        }
+      },
+      "passed_n": 0,
+      "published_value": 0.4,
+      "quantity": "speed_drop_m_s",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "source": "Wilmut et al. 2015",
+      "unavailable_reasons": [
+        "no complete capture-to-passage interval longer than approach phase"
+      ],
+      "variant": "0.9",
+      "wall_penetration_max_m": 0.0
+    },
+    {
+      "attempted_n": 30,
+      "case": "V2",
+      "censored_specific_flow": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "crossed": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "documented_equivalent",
+      "initial_pair_overlaps": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "known_reason": "4 m capture origin, first 2 s approach, >3 approach-SD reduction event; cubic LS speed trend and CM replace unpublished Higuchi construction, Woltring and C7; .46 m shoulder proxy independent of disc radius; rigid disc cannot rotate.; documented_equivalent; no complete capture-to-passage interval longer than approach phase",
+      "location": "Fig. 3, typically developing group, graphical reading",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        }
+      },
+      "passed_n": 0,
+      "published_value": "graphical value not extracted",
+      "quantity": "speed_drop_m_s",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "source": "Wilmut et al. 2015",
+      "unavailable_reasons": [
+        "no complete capture-to-passage interval longer than approach phase"
+      ],
+      "variant": "1.1",
+      "wall_penetration_max_m": 0.0
+    },
+    {
+      "attempted_n": 30,
+      "case": "V2",
+      "censored_specific_flow": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "crossed": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "documented_equivalent",
+      "initial_pair_overlaps": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "known_reason": "4 m capture origin, first 2 s approach, >3 approach-SD reduction event; cubic LS speed trend and CM replace unpublished Higuchi construction, Woltring and C7; .46 m shoulder proxy independent of disc radius; rigid disc cannot rotate.; documented_equivalent; no complete capture-to-passage interval longer than approach phase",
+      "location": "Fig. 3, typically developing group, graphical reading",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        }
+      },
+      "passed_n": 0,
+      "published_value": [
+        0.12,
+        0.16
+      ],
+      "quantity": "speed_drop_m_s",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "source": "Wilmut et al. 2015",
+      "unavailable_reasons": [
+        "no complete capture-to-passage interval longer than approach phase"
+      ],
+      "variant": "1.3",
+      "wall_penetration_max_m": 0.0
+    },
+    {
+      "attempted_n": 30,
+      "case": "V2",
+      "censored_specific_flow": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "crossed": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "documented_equivalent",
+      "initial_pair_overlaps": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "known_reason": "4 m capture origin, first 2 s approach, >3 approach-SD reduction event; cubic LS speed trend and CM replace unpublished Higuchi construction, Woltring and C7; .46 m shoulder proxy independent of disc radius; rigid disc cannot rotate.; documented_equivalent; no complete capture-to-passage interval longer than approach phase",
+      "location": "Fig. 3, typically developing group, graphical reading",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        }
+      },
+      "passed_n": 0,
+      "published_value": [
+        0.12,
+        0.16
+      ],
+      "quantity": "speed_drop_m_s",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "source": "Wilmut et al. 2015",
+      "unavailable_reasons": [
+        "no complete capture-to-passage interval longer than approach phase"
+      ],
+      "variant": "1.5",
+      "wall_penetration_max_m": 0.0
+    },
+    {
+      "attempted_n": 30,
+      "case": "V2",
+      "censored_specific_flow": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "crossed": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "documented_equivalent",
+      "initial_pair_overlaps": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "known_reason": "4 m capture origin, first 2 s approach, >3 approach-SD reduction event; cubic LS speed trend and CM replace unpublished Higuchi construction, Woltring and C7; .46 m shoulder proxy independent of disc radius; rigid disc cannot rotate.; documented_equivalent; no complete capture-to-passage interval longer than approach phase",
+      "location": "Fig. 3, typically developing group, graphical reading",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        }
+      },
+      "passed_n": 0,
+      "published_value": [
+        0.12,
+        0.16
+      ],
+      "quantity": "speed_drop_m_s",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "source": "Wilmut et al. 2015",
+      "unavailable_reasons": [
+        "no complete capture-to-passage interval longer than approach phase"
+      ],
+      "variant": "1.7",
+      "wall_penetration_max_m": 0.0
+    },
+    {
+      "attempted_n": 30,
+      "case": "V2",
+      "censored_specific_flow": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "crossed": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "documented_equivalent",
+      "initial_pair_overlaps": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "known_reason": "4 m capture origin, first 2 s approach, >3 approach-SD reduction event; cubic LS speed trend and CM replace unpublished Higuchi construction, Woltring and C7; .46 m shoulder proxy independent of disc radius; rigid disc cannot rotate.; documented_equivalent; no complete capture-to-passage interval longer than approach phase",
+      "location": "Fig. 3, typically developing group, graphical reading",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        }
+      },
+      "passed_n": 0,
+      "published_value": [
+        0.12,
+        0.16
+      ],
+      "quantity": "speed_drop_m_s",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "source": "Wilmut et al. 2015",
+      "unavailable_reasons": [
+        "no complete capture-to-passage interval longer than approach phase"
+      ],
+      "variant": "1.9",
+      "wall_penetration_max_m": 0.0
+    },
+    {
+      "attempted_n": 30,
+      "case": "V2",
+      "censored_specific_flow": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "crossed": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "documented_equivalent",
+      "initial_pair_overlaps": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "known_reason": "4 m capture origin, first 2 s approach, >3 approach-SD reduction event; cubic LS speed trend and CM replace unpublished Higuchi construction, Woltring and C7; .46 m shoulder proxy independent of disc radius; rigid disc cannot rotate.; documented_equivalent; no complete capture-to-passage interval longer than approach phase",
+      "location": "Fig. 3, typically developing group, graphical reading",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        }
+      },
+      "passed_n": 0,
+      "published_value": [
+        0.12,
+        0.16
+      ],
+      "quantity": "speed_drop_m_s",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "source": "Wilmut et al. 2015",
+      "unavailable_reasons": [
+        "no complete capture-to-passage interval longer than approach phase"
+      ],
+      "variant": "2.1",
+      "wall_penetration_max_m": 0.0
+    },
+    {
+      "attempted_n": 30,
+      "case": "V3",
+      "censored_specific_flow": {
+        "mean": 0.6488109509119869,
+        "n": 30,
+        "spread_sd": 0.34927808985036474
+      },
+      "crossed": {
+        "mean": 31.766666666666666,
+        "n": 30,
+        "spread_sd": 1.1043279539543756
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "source_equivalent_estimator",
+      "initial_pair_overlaps": {
+        "mean": 54.0,
+        "n": 30,
+        "spread_sd": 0.0
+      },
+      "known_reason": "Channel-centre interpolated crossings, 60/((last-first)*width); incomplete supply is censored; source-density starts may overlap and do not recreate individual human starts.; source_equivalent_estimator",
+      "location": "Table 2, N=60; Fig. 2",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": 0.06190355517966158,
+          "pair_steps": 84960000,
+          "share_below_0_45": 0.0053473399246704335,
+          "share_below_2r": 0.01807684792843691
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": 0.06190355517966158,
+          "pair_steps": 84960000,
+          "share_below_0_45": 0.0053473399246704335,
+          "share_below_2r": 0.01807684792843691
+        }
+      },
+      "published_value": 1.61,
+      "quantity": "specific_flow_persons_m_s",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "source": "Seyfried et al. 2009",
+      "unavailable_reasons": [],
+      "variant": "0.8",
+      "wall_penetration_max_m": 0.27998572587068377
+    },
+    {
+      "attempted_n": 30,
+      "case": "V3",
+      "censored_specific_flow": {
+        "mean": 0.565440996072136,
+        "n": 30,
+        "spread_sd": 0.335178557125947
+      },
+      "crossed": {
+        "mean": 31.566666666666666,
+        "n": 30,
+        "spread_sd": 1.2780193008453873
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "source_equivalent_estimator",
+      "initial_pair_overlaps": {
+        "mean": 54.0,
+        "n": 30,
+        "spread_sd": 0.0
+      },
+      "known_reason": "Channel-centre interpolated crossings, 60/((last-first)*width); incomplete supply is censored; source-density starts may overlap and do not recreate individual human starts.; source_equivalent_estimator",
+      "location": "Table 2, N=60; Fig. 2",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": 0.05210293791248421,
+          "pair_steps": 84960000,
+          "share_below_0_45": 0.005261028719397364,
+          "share_below_2r": 0.01776271186440678
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": 0.05210293791248421,
+          "pair_steps": 84960000,
+          "share_below_0_45": 0.005261028719397364,
+          "share_below_2r": 0.01776271186440678
+        }
+      },
+      "published_value": 1.86,
+      "quantity": "specific_flow_persons_m_s",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "source": "Seyfried et al. 2009",
+      "unavailable_reasons": [],
+      "variant": "0.9",
+      "wall_penetration_max_m": 0.27990190182687796
+    },
+    {
+      "attempted_n": 30,
+      "case": "V3",
+      "censored_specific_flow": {
+        "mean": 0.5196348242019285,
+        "n": 30,
+        "spread_sd": 0.32654683406718904
+      },
+      "crossed": {
+        "mean": 31.066666666666666,
+        "n": 30,
+        "spread_sd": 1.2015315896469556
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "source_equivalent_estimator",
+      "initial_pair_overlaps": {
+        "mean": 54.0,
+        "n": 30,
+        "spread_sd": 0.0
+      },
+      "known_reason": "Channel-centre interpolated crossings, 60/((last-first)*width); incomplete supply is censored; source-density starts may overlap and do not recreate individual human starts.; source_equivalent_estimator",
+      "location": "Table 2, N=60; Fig. 2",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": 0.06120611904061272,
+          "pair_steps": 84960000,
+          "share_below_0_45": 0.005006438323917137,
+          "share_below_2r": 0.01736324152542373
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": 0.06120611904061272,
+          "pair_steps": 84960000,
+          "share_below_0_45": 0.005006438323917137,
+          "share_below_2r": 0.01736324152542373
+        }
+      },
+      "published_value": 1.9,
+      "quantity": "specific_flow_persons_m_s",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "source": "Seyfried et al. 2009",
+      "unavailable_reasons": [],
+      "variant": "1.0",
+      "wall_penetration_max_m": 0.2799125580928668
+    },
+    {
+      "attempted_n": 30,
+      "case": "V3",
+      "censored_specific_flow": {
+        "mean": 0.4205827075419697,
+        "n": 30,
+        "spread_sd": 0.240885150479584
+      },
+      "crossed": {
+        "mean": 31.033333333333335,
+        "n": 30,
+        "spread_sd": 1.4259499757471625
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "source_equivalent_estimator",
+      "initial_pair_overlaps": {
+        "mean": 54.0,
+        "n": 30,
+        "spread_sd": 0.0
+      },
+      "known_reason": "Channel-centre interpolated crossings, 60/((last-first)*width); incomplete supply is censored; source-density starts may overlap and do not recreate individual human starts.; source_equivalent_estimator",
+      "location": "Table 2, N=60; Fig. 2",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": 0.0877674307922938,
+          "pair_steps": 84960000,
+          "share_below_0_45": 0.00495290725047081,
+          "share_below_2r": 0.017190136534839924
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": 0.0877674307922938,
+          "pair_steps": 84960000,
+          "share_below_0_45": 0.00495290725047081,
+          "share_below_2r": 0.017190136534839924
+        }
+      },
+      "published_value": 1.93,
+      "quantity": "specific_flow_persons_m_s",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "source": "Seyfried et al. 2009",
+      "unavailable_reasons": [],
+      "variant": "1.1",
+      "wall_penetration_max_m": 0.27998476047506915
+    },
+    {
+      "attempted_n": 30,
+      "case": "V3",
+      "censored_specific_flow": {
+        "mean": 0.2579719156876766,
+        "n": 30,
+        "spread_sd": 0.06137458507541995
+      },
+      "crossed": {
+        "mean": 32.5,
+        "n": 30,
+        "spread_sd": 1.5701965613830997
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "source_equivalent_estimator",
+      "initial_pair_overlaps": {
+        "mean": 54.0,
+        "n": 30,
+        "spread_sd": 0.0
+      },
+      "known_reason": "Channel-centre interpolated crossings, 60/((last-first)*width); incomplete supply is censored; source-density starts may overlap and do not recreate individual human starts.; source_equivalent_estimator",
+      "location": "Table 2, N=60; Fig. 2",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": 0.10438709863716941,
+          "pair_steps": 84960000,
+          "share_below_0_45": 0.004866772598870056,
+          "share_below_2r": 0.016658639359698683
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": 0.10438709863716941,
+          "pair_steps": 84960000,
+          "share_below_0_45": 0.004866772598870056,
+          "share_below_2r": 0.016658639359698683
+        }
+      },
+      "published_value": 1.97,
+      "quantity": "specific_flow_persons_m_s",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "source": "Seyfried et al. 2009",
+      "unavailable_reasons": [],
+      "variant": "1.2",
+      "wall_penetration_max_m": 0.27989031870958225
+    },
+    {
+      "attempted_n": 30,
+      "case": "V4",
+      "censored_specific_flow": {
+        "mean": 1.0356798801068179,
+        "n": 30,
+        "spread_sd": 0.07596113201751213
+      },
+      "crossed": {
+        "mean": 346.3333333333333,
+        "n": 30,
+        "spread_sd": 0.7111590022187595
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "documented_equivalent",
+      "initial_pair_overlaps": {
+        "mean": 0.2,
+        "n": 30,
+        "spread_sd": 0.4068381021724863
+      },
+      "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent; finite-N all-data flow right-censored",
+      "location": "Section 4; Fig. 9a caption reverses labels",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": 0.001193649225959833,
+          "pair_steps": 2931600000,
+          "share_below_0_45": 0.001151202756174103,
+          "share_below_2r": 0.0037214101514531314
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": 0.001193649225959833,
+          "pair_steps": 2931600000,
+          "share_below_0_45": 0.001151202756174103,
+          "share_below_2r": 0.0037214101514531314
+        }
+      },
+      "published_value": {
+        "all_data": 2.3,
+        "steady_state": 2.5
+      },
+      "quantity": "all_data_specific_flow_persons_m_s",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "source": "Liao et al. 2014",
+      "steady_specific_flow": {
+        "mean": 6.1157648775930085,
+        "n": 30,
+        "spread_sd": 2.520126344892347
+      },
+      "unavailable_reasons": [
+        "finite-N all-data flow right-censored"
+      ],
+      "variant": "2.4",
+      "wall_penetration_max_m": 0.27997755687478887
+    },
+    {
+      "attempted_n": 30,
+      "case": "V4",
+      "censored_specific_flow": {
+        "mean": 1.0543406963531534,
+        "n": 30,
+        "spread_sd": 0.23300144019901428
+      },
+      "crossed": {
+        "mean": 348.8333333333333,
+        "n": 30,
+        "spread_sd": 0.7466399831028446
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "documented_equivalent",
+      "initial_pair_overlaps": {
+        "mean": 0.2,
+        "n": 30,
+        "spread_sd": 0.4068381021724863
+      },
+      "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent; finite-N all-data flow right-censored",
+      "location": "Section 4; Fig. 9a caption reverses labels",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": 0.0014791647461528203,
+          "pair_steps": 2931600000,
+          "share_below_0_45": 0.001168353458862055,
+          "share_below_2r": 0.0037611239596124983
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": 0.0014791647461528203,
+          "pair_steps": 2931600000,
+          "share_below_0_45": 0.001168353458862055,
+          "share_below_2r": 0.0037611239596124983
+        }
+      },
+      "published_value": {
+        "all_data": 2.3,
+        "steady_state": 2.5
+      },
+      "quantity": "all_data_specific_flow_persons_m_s",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": 0.8683682902618434,
+        "n": 6,
+        "spread_sd": 0.1005255164814383
+      },
+      "source": "Liao et al. 2014",
+      "steady_specific_flow": {
+        "mean": 4.652023206300291,
+        "n": 30,
+        "spread_sd": 1.6390147313393486
+      },
+      "unavailable_reasons": [
+        "finite-N all-data flow right-censored"
+      ],
+      "variant": "3.0",
+      "wall_penetration_max_m": 0.279997844065609
+    },
+    {
+      "attempted_n": 30,
+      "case": "V4",
+      "censored_specific_flow": {
+        "mean": 1.0030592188445504,
+        "n": 30,
+        "spread_sd": 0.18125126735379404
+      },
+      "crossed": {
+        "mean": 349.8333333333333,
+        "n": 30,
+        "spread_sd": 0.461133037377414
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "documented_equivalent",
+      "initial_pair_overlaps": {
+        "mean": 0.2,
+        "n": 30,
+        "spread_sd": 0.4068381021724863
+      },
+      "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent; finite-N all-data flow right-censored",
+      "location": "Section 4; Fig. 9a caption reverses labels",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": 0.0012544932686451309,
+          "pair_steps": 2931600000,
+          "share_below_0_45": 0.001173971892481921,
+          "share_below_2r": 0.003771692249965889
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": 0.0012544932686451309,
+          "pair_steps": 2931600000,
+          "share_below_0_45": 0.001173971892481921,
+          "share_below_2r": 0.003771692249965889
+        }
+      },
+      "published_value": {
+        "all_data": 2.3,
+        "steady_state": 2.5
+      },
+      "quantity": "all_data_specific_flow_persons_m_s",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": 0.9879128277013921,
+        "n": 26,
+        "spread_sd": 0.17893539055928853
+      },
+      "source": "Liao et al. 2014",
+      "steady_specific_flow": {
+        "mean": 3.6597144650551154,
+        "n": 30,
+        "spread_sd": 1.3887627813851675
+      },
+      "unavailable_reasons": [
+        "finite-N all-data flow right-censored"
+      ],
+      "variant": "3.6",
+      "wall_penetration_max_m": 0.2799933967709868
+    },
+    {
+      "attempted_n": 30,
+      "case": "V4",
+      "censored_specific_flow": {
+        "mean": 1.0820111826510002,
+        "n": 30,
+        "spread_sd": 0.1262469241326267
+      },
+      "crossed": {
+        "mean": 350.0,
+        "n": 30,
+        "spread_sd": 0.0
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "documented_equivalent",
+      "initial_pair_overlaps": {
+        "mean": 0.2,
+        "n": 30,
+        "spread_sd": 0.4068381021724863
+      },
+      "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent",
+      "location": "Section 4; Fig. 9a caption reverses labels",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": 0.0014066191467760332,
+          "pair_steps": 2931600000,
+          "share_below_0_45": 0.001165416837221995,
+          "share_below_2r": 0.0037539589302769817
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": 0.0014066191467760332,
+          "pair_steps": 2931600000,
+          "share_below_0_45": 0.001165416837221995,
+          "share_below_2r": 0.0037539589302769817
+        }
+      },
+      "published_value": {
+        "all_data": 2.3,
+        "steady_state": 2.5
+      },
+      "quantity": "all_data_specific_flow_persons_m_s",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": 1.0820111826510002,
+        "n": 30,
+        "spread_sd": 0.12624692413262675
+      },
+      "source": "Liao et al. 2014",
+      "steady_specific_flow": {
+        "mean": 3.1814670967600516,
+        "n": 30,
+        "spread_sd": 1.3693375447481302
+      },
+      "unavailable_reasons": [],
+      "variant": "4.4",
+      "wall_penetration_max_m": 0.27999846588380817
+    },
+    {
+      "attempted_n": 30,
+      "case": "V4",
+      "censored_specific_flow": {
+        "mean": 1.0228535262372893,
+        "n": 30,
+        "spread_sd": 0.09803475174477345
+      },
+      "crossed": {
+        "mean": 350.0,
+        "n": 30,
+        "spread_sd": 0.0
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "documented_equivalent",
+      "initial_pair_overlaps": {
+        "mean": 0.2,
+        "n": 30,
+        "spread_sd": 0.4068381021724863
+      },
+      "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent",
+      "location": "Section 4; Fig. 9a caption reverses labels",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": 0.0017991459160190406,
+          "pair_steps": 2931600000,
+          "share_below_0_45": 0.0011561079274116524,
+          "share_below_2r": 0.003732427684540865
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": 0.0017991459160190406,
+          "pair_steps": 2931600000,
+          "share_below_0_45": 0.0011561079274116524,
+          "share_below_2r": 0.003732427684540865
+        }
+      },
+      "published_value": {
+        "all_data": 2.3,
+        "steady_state": 2.5
+      },
+      "quantity": "all_data_specific_flow_persons_m_s",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": 1.0228535262372893,
+        "n": 30,
+        "spread_sd": 0.09803475174477343
+      },
+      "source": "Liao et al. 2014",
+      "steady_specific_flow": {
+        "mean": 2.623961268366,
+        "n": 30,
+        "spread_sd": 1.5168850174919124
+      },
+      "unavailable_reasons": [],
+      "variant": "5.0",
+      "wall_penetration_max_m": 0.2799967636198181
+    },
+    {
+      "attempted_n": 30,
+      "case": "V5",
+      "censored_specific_flow": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "crossed": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "diagnostic_passed_n": 30,
+      "difference": 4.326659251564161,
+      "estimator_status": "documented_equivalent",
+      "initial_pair_overlaps": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "known_reason": "CM-to-cylinder edge; abeam lateral clearance, .25 m radius 32-edge cylinder; exact source geometry/ellipse reconstruction unavailable; no longitudinal ellipse radius inferred.; documented_equivalent",
+      "location": "2008 p.240",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        }
+      },
+      "published_value": {
+        "lateral_m": 0.5,
+        "longitudinal_m": "2 m ellipse radius; not measured by lateral clearance"
+      },
+      "quantity": "lateral_cm_to_edge_m",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": 4.826659251564161,
+        "n": 30,
+        "spread_sd": 0.26784092292070344
+      },
+      "source": "Gerin-Lajoie et al. 2005, cited in 2008",
+      "unavailable_reasons": [],
+      "variant": "diagnostic",
+      "wall_penetration_max_m": 0.0
+    },
+    {
+      "attempted_n": 30,
+      "case": "V6",
+      "censored_specific_flow": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "crossed": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "diagnostic_passed_n": 0,
+      "difference": 0.8385057596275751,
+      "estimator_status": "documented_equivalent",
+      "initial_pair_overlaps": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "known_reason": "Straight prescribed matching-speed nonreactive interferer; mean maximum angular speed from five no-interferer trials; own X distance to synchronized PoMD; 0.5 Hz -3dB Gaussian then five-sample median with linear endpoint padding; source filter normalization/endpoints unspecified; deterministic CM baselines lack trunk sway.; documented_equivalent",
+      "location": "Table 1",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": 0.5921285006823784,
+          "pair_steps": 3150,
+          "share_below_0_45": 0.0,
+          "share_below_2r": 0.0
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": 0.5921285006823784,
+          "pair_steps": 3150,
+          "share_below_0_45": 0.0,
+          "share_below_2r": 0.0
+        }
+      },
+      "published_value": 2.1,
+      "quantity": "onset_m",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": 2.938505759627575,
+        "n": 30,
+        "spread_sd": 0.000819758739133175
+      },
+      "source": "Huber et al. 2014",
+      "unavailable_reasons": [],
+      "variant": "1.15",
+      "wall_penetration_max_m": 0.0
+    },
+    {
+      "attempted_n": 30,
+      "case": "V6",
+      "censored_specific_flow": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "crossed": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "diagnostic_passed_n": 0,
+      "difference": 0.5288097972922476,
+      "estimator_status": "documented_equivalent",
+      "initial_pair_overlaps": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "known_reason": "Straight prescribed matching-speed nonreactive interferer; mean maximum angular speed from five no-interferer trials; own X distance to synchronized PoMD; 0.5 Hz -3dB Gaussian then five-sample median with linear endpoint padding; source filter normalization/endpoints unspecified; deterministic CM baselines lack trunk sway.; documented_equivalent",
+      "location": "Table 1",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": 0.5697845397425434,
+          "pair_steps": 2550,
+          "share_below_0_45": 0.0,
+          "share_below_2r": 0.0
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": 0.5697845397425434,
+          "pair_steps": 2550,
+          "share_below_0_45": 0.0,
+          "share_below_2r": 0.0
+        }
+      },
+      "published_value": 2.4,
+      "quantity": "onset_m",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": 2.9288097972922476,
+        "n": 30,
+        "spread_sd": 0.0007753253365855276
+      },
+      "source": "Huber et al. 2014",
+      "unavailable_reasons": [],
+      "variant": "1.42",
+      "wall_penetration_max_m": 0.0
+    },
+    {
+      "attempted_n": 30,
+      "case": "V6",
+      "censored_specific_flow": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "crossed": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "diagnostic_passed_n": 0,
+      "difference": 0.23013649833148087,
+      "estimator_status": "documented_equivalent",
+      "initial_pair_overlaps": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "known_reason": "Straight prescribed matching-speed nonreactive interferer; mean maximum angular speed from five no-interferer trials; own X distance to synchronized PoMD; 0.5 Hz -3dB Gaussian then five-sample median with linear endpoint padding; source filter normalization/endpoints unspecified; deterministic CM baselines lack trunk sway.; documented_equivalent",
+      "location": "Table 1",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": 0.540192042950747,
+          "pair_steps": 2040,
+          "share_below_0_45": 0.0,
+          "share_below_2r": 0.014705882352941176
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": 0.540192042950747,
+          "pair_steps": 2040,
+          "share_below_0_45": 0.0,
+          "share_below_2r": 0.014705882352941176
+        }
+      },
+      "published_value": 2.7,
+      "quantity": "onset_m",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": 2.930136498331481,
+        "n": 30,
+        "spread_sd": 0.0007114408343297864
+      },
+      "source": "Huber et al. 2014",
+      "unavailable_reasons": [],
+      "variant": "1.78",
+      "wall_penetration_max_m": 0.0
+    },
+    {
+      "attempted_n": 30,
+      "case": "V7",
+      "censored_specific_flow": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "crossed": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "engineering_diagnostic",
+      "initial_pair_overlaps": {
+        "mean": 27.833333333333332,
+        "n": 30,
+        "spread_sd": 5.730037812557028
+      },
+      "known_reason": "Existing direction/lateral segregation; no verified numeric target.; engineering_diagnostic",
+      "location": "target not yet verified",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": 0.08151874978734835,
+          "pair_steps": 13536000,
+          "share_below_0_45": 0.006964539007092199,
+          "share_below_2r": 0.017915189125295508
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": 0.08151874978734835,
+          "pair_steps": 13536000,
+          "share_below_0_45": 0.006964539007092199,
+          "share_below_2r": 0.017915189125295508
+        }
+      },
+      "published_value": "target not yet verified",
+      "quantity": "segregation",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": 0.07104700075319498,
+        "n": 30,
+        "spread_sd": 0.04663454246449653
+      },
+      "source": "Zhang et al. 2012; Feliciani and Nishinari 2016",
+      "unavailable_reasons": [],
+      "variant": "3.0",
+      "wall_penetration_max_m": 0.27350759238804634
+    },
+    {
+      "attempted_n": 30,
+      "case": "V7",
+      "censored_specific_flow": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "crossed": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "engineering_diagnostic",
+      "initial_pair_overlaps": {
+        "mean": 23.7,
+        "n": 30,
+        "spread_sd": 4.594974766355989
+      },
+      "known_reason": "Existing direction/lateral segregation; no verified numeric target.; engineering_diagnostic",
+      "location": "target not yet verified",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": 0.10084715282281345,
+          "pair_steps": 13536000,
+          "share_below_0_45": 0.0058735963356974,
+          "share_below_2r": 0.015276004728132387
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": 0.10084715282281345,
+          "pair_steps": 13536000,
+          "share_below_0_45": 0.0058735963356974,
+          "share_below_2r": 0.015276004728132387
+        }
+      },
+      "published_value": "target not yet verified",
+      "quantity": "segregation",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "mean": 0.06819339906295688,
+        "n": 30,
+        "spread_sd": 0.03823521321488837
+      },
+      "source": "Zhang et al. 2012; Feliciani and Nishinari 2016",
+      "unavailable_reasons": [],
+      "variant": "3.6",
+      "wall_penetration_max_m": 0.028235319929889036
+    },
+    {
+      "attempted_n": 30,
+      "case": "V8",
+      "censored_specific_flow": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "crossed": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "diagnostic_passed_n": 0,
+      "difference": null,
+      "estimator_status": "unresolved_origin",
+      "initial_pair_overlaps": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "known_reason": "Retain CM-to-wall and signed disc-edge-to-wall distances; source abstract does not settle origin; no target difference.; unresolved_origin",
+      "location": "abstract only",
+      "pair_overlap": {
+        "all": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        },
+        "non_group": {
+          "minimum_centre_distance_m": null,
+          "pair_steps": 0,
+          "share_below_0_45": null,
+          "share_below_2r": null
+        }
+      },
+      "published_value": 0.4,
+      "quantity": "steady_center_distance_m",
+      "seeds": [
+        1001,
+        1002,
+        1003,
+        1004,
+        1005,
+        1006,
+        1007,
+        1008,
+        1009,
+        1010,
+        1011,
+        1012,
+        1013,
+        1014,
+        1015,
+        1016,
+        1017,
+        1018,
+        1019,
+        1020,
+        1021,
+        1022,
+        1023,
+        1024,
+        1025,
+        1026,
+        1027,
+        1028,
+        1029,
+        1030
+      ],
+      "simulated": {
+        "edge": {
+          "mean": 0.8737465108393553,
+          "n": 30,
+          "spread_sd": 0.06402988084563298
+        },
+        "mean": 1.153746510839355,
+        "n": 30,
+        "spread_sd": 0.06402988084563298
+      },
+      "source": "Ma et al. 2010",
+      "unavailable_reasons": [],
+      "variant": "both origins",
+      "wall_penetration_max_m": 0.0
+    },
+    {
+      "attempted_n": 30,
+      "case": "V4",
+      "difference": null,
+      "estimator_status": "documented_equivalent",
+      "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent; through-origin fit; complete width banks only",
+      "location": "Section 4; Fig. 9a caption reverses labels",
+      "published_value": 2.3,
+      "quantity": "persons/(m s)",
+      "simulated": {
+        "mean": null,
+        "n": 0,
+        "spread_sd": null
+      },
+      "source": "Liao et al. 2014",
+      "variant": "all_data_flow_persons_s width slope"
+    },
+    {
+      "attempted_n": 30,
+      "case": "V4",
+      "difference": 0.9921912974636125,
+      "estimator_status": "documented_equivalent",
+      "known_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width.; documented_equivalent; through-origin fit; complete width banks only",
+      "location": "Section 4; Fig. 9a caption reverses labels",
+      "published_value": 2.5,
+      "quantity": "persons/(m s)",
+      "simulated": {
+        "mean": 3.4921912974636125,
+        "n": 30,
+        "spread_sd": 0.7547396862016796
+      },
+      "source": "Liao et al. 2014",
+      "variant": "steady_flow_persons_s width slope"
+    }
+  ],
+  "schema": "pedval.table.v2"
+}

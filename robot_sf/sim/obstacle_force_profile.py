@@ -46,7 +46,9 @@ def resolve_obstacle_force_profile(value: str | None = None) -> _ResolvedProfile
     return _ResolvedProfile(value, True)
 
 
-def apply_obstacle_force_profile(config: ObstacleForceConfig, value: str | None) -> None:
+def apply_obstacle_force_profile(
+    config: ObstacleForceConfig, value: str | None, pedestrian_radius_m: float | None = None
+) -> None:
     """Apply a fitted parameter set without changing the legacy/default path."""
     profile = resolve_obstacle_force_profile(value)
     if profile == LEGACY_PROFILE:
@@ -62,7 +64,8 @@ def apply_obstacle_force_profile(config: ObstacleForceConfig, value: str | None)
         # Development Pareto candidate; matched-flow and release adoption remain gated.
         config.law_version = SURFACE_DISTANCE_UNIT_NORMAL_V2
         config.factor = 0.001
-        config.threshold = 0.4
+        # This profile measures clearance from the body edge, unlike fitted legacy offsets.
+        config.threshold = 0.4 if pedestrian_radius_m is None else pedestrian_radius_m
         config.sigma = 0.0
         return
     if config.law_version != LEGACY_SHIFTED_GRADIENT_V1:

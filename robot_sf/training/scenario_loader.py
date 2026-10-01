@@ -2947,6 +2947,7 @@ def _apply_simulation_overrides(
         "oracle_force_trace_enabled",
         "sampler_capture_enabled",
         "ped_radius",
+        "pedestrian_radius_m",
         "pedestrian_uncertainty_envelope_enabled",
         "pedestrian_uncertainty_alpha_mps",
         "goal_radius",

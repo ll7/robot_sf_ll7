@@ -23,6 +23,13 @@ def _write_shard(path: Path, root: str, rel: str, lines: list[int]) -> None:
 
 def test_paths_config_combines_self_hosted_and_github_hosted_roots(tmp_path: Path) -> None:
     """Both workspace roots map onto the repository source and merge into one file."""
+    # Coverage resolves the first, relative alias against the combine cwd.
+    # Give it its own source tree: the real checkout may itself be SELF_HOSTED.
+    canonical = tmp_path / "canonical"
+    for relative in ("robot_sf/__init__.py", "fast-pysf/pysocialforce/__init__.py"):
+        source = canonical / relative
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text("# synthetic coverage source\n", encoding="utf-8")
     shards = tmp_path / "shards"
     shards.mkdir()
     _write_shard(shards / ".coverage.a", SELF_HOSTED, "robot_sf/__init__.py", [1, 2])
@@ -44,7 +51,7 @@ def test_paths_config_combines_self_hosted_and_github_hosted_roots(tmp_path: Pat
             f"--data-file={out}",
             str(shards),
         ],
-        cwd=REPO_ROOT,
+        cwd=canonical,
         check=True,
         capture_output=True,
         text=True,
@@ -52,8 +59,10 @@ def test_paths_config_combines_self_hosted_and_github_hosted_roots(tmp_path: Pat
     data = coverage.CoverageData(basename=str(out))
     data.read()
     files = {Path(f).resolve() for f in data.measured_files()}
-    init = (REPO_ROOT / "robot_sf" / "__init__.py").resolve()
+    init = (canonical / "robot_sf" / "__init__.py").resolve()
     assert init in files
-    assert (REPO_ROOT / "fast-pysf/pysocialforce/__init__.py").resolve() in files
-    assert not any("/home/runner" in f for f in data.measured_files())
+    assert files == {init, (canonical / "fast-pysf/pysocialforce/__init__.py").resolve()}
+    assert not any(
+        f.startswith((SELF_HOSTED + "/", GITHUB_HOSTED + "/")) for f in data.measured_files()
+    )
     assert sorted(data.lines(str(init)) or []) == [1, 2, 3]

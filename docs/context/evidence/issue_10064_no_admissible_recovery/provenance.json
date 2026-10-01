@@ -1,0 +1,271 @@
+{
+  "all_matrix_pairs_reset_config_map_identical": true,
+  "base_importer_failure": "Unchanged issue_5303 v2 preregistration algorithm_metadata digest; reproduced on exact base; frozen contract not edited",
+  "base_sha": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+  "behavior_sha": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+  "changed_outcomes_classified": 63,
+  "command_behavior_equivalence": {
+    "all_compared_bytes_equal": true,
+    "behavior_source_sha": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+    "exact_replacement_assertion_passed": true,
+    "only_production_delta": "Replace tuple(map(float, two-value-command)) with explicit two float elements. Fallback adapter command contract is tuple[float, float].",
+    "recorded_command_pair_cast_ieee_comparisons": 168869,
+    "tested_sha": "1620663b6ea868d48153a699ee0a3382cab92f1a",
+    "type_baseline_disposition": "Both base and PR have 6063 general / 168 optional findings; committed general baseline 5704 is already exceeded on base.",
+    "type_diagnostics_new_relative_to_exact_base": 0
+  },
+  "comparators": [
+    {
+      "commit": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b",
+      "role": "requested_main"
+    },
+    {
+      "commit": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+      "role": "PR_command_implementation"
+    }
+  ],
+  "dev_seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005
+  ],
+  "distance_convention": "surface_clearance",
+  "empty_pr_planner_bytes_match_behavior_source": true,
+  "empty_pr_source": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+  "empty_seeds": [
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010
+  ],
+  "evidence_parent_head": "1620663b6ea868d48153a699ee0a3382cab92f1a",
+  "external_horizon_schedule": {
+    "path": "admfix_horizons.yaml",
+    "sha256": "3b3d9716746f877b1fe5ba019af6edba56a17038f48c341f138210295c10e650",
+    "source": "rehearsal authored schedule; absent on requested base; same bytes both conditions"
+  },
+  "field_distance_conventions": {
+    "planner_clearance": "surface_clearance",
+    "trace_goal_distance": "center_center",
+    "trace_nearest_ped_dist": "center_center",
+    "unit_probe_clearances": "surface_clearance"
+  },
+  "gate_status": "paired_matrix_complete",
+  "held_out_evaluation": false,
+  "job_constraints": {
+    "maximum_cpus_per_job": 16,
+    "maximum_hours_per_job": 4,
+    "partition": "a30",
+    "qos": "a30-cpu",
+    "scheduler_commands": [
+      "sbatch",
+      "squeue"
+    ],
+    "submit_host": "imech192"
+  },
+  "location": "Local validation artifacts /home/luttkule/admfix_evidence; Slurm source artifacts imech192:/home/luttkule/admfix; compact evidence tracked in this bundle; raw artifacts have no durable shared archive.",
+  "manually_inspected_trace_pairs": 17,
+  "paired_analysis_artifact_sha256": {
+    "changed_outcome_classifications.json": "534d2efbe38ef06b558be3e781e2d2cfa5fef0accc59f508bff1007ac6eb840c",
+    "inner_infeasible_verification.json": "b6a3b088af421d15d11fc7f941c6ad539848a5c72e73eb3d7f4b36511f29d0a5",
+    "manual_trace_inspections.json": "e2c6fc7e1c73b724f93f6a267d74ab1def7726bef4bf15f7caef2d11c251936a",
+    "paired_analysis.json": "24ca7d28cbe1a7bac99a8e72f642d03a97bfbce1fdd32b0a1de7f4c0951760d3"
+  },
+  "paired_gate_episodes": 1440,
+  "paired_raw_artifact_sha256": {
+    "base_guarded_ppo.jsonl.gz": "177a3abe66bd968a6484309e4b902a749041274cbe217c433b2025ecf12e33ad",
+    "base_predictive_mppi.jsonl.gz": "637082e46f8ae589d59324494ef508c117152ce5bb8d13dd9abe0fa959078169",
+    "base_risk_dwa.jsonl.gz": "cba20a0b735ca5adeed98d6f9d86049ca0a370160d1f3bcecdb6b22923f6e3b7",
+    "empty_base_guarded_ppo.jsonl.gz": "bd834d2c6b9fdd478f99c074d06b3ac1ebd9b65cb8892c662658be31b3845ca7",
+    "empty_base_predictive_mppi.jsonl.gz": "12bae5aedafc531d5d88a2bfb7ecef198d1d68cd65f4fc49ecb9531bd5899935",
+    "empty_base_risk_dwa.jsonl.gz": "c9b4f34ffe94fa1c48d3d533168fa2c4629f2409aa96de74eb77da8d6858de0a",
+    "empty_guarded_ppo.jsonl.gz": "1ba18be42fcf710336858957cc7e4241299c147e3f53c4d221bd1e175db3efd1",
+    "empty_predictive_mppi.jsonl.gz": "04aee1f202c7426973699ddf43a55da859f6562d1a425affbb224c62a5cd58af",
+    "empty_risk_dwa.jsonl.gz": "d2492a1718a35e7fd604eed55d157e3fb422956c397be17d2e45ee7925521230",
+    "inner_base.v2.jsonl.gz": "23d577ec15b227e2646d897dcede5fc375c89a4220214f43501b014d1d63a3ee",
+    "inner_pr.v2.jsonl.gz": "4cac32d88b720665f83f90c5081504109a3216a63c8e2803dc879b386ac6a909",
+    "pr_guarded_ppo.jsonl.gz": "208123ec039097a6c02be1cffed4d79a457820465a035fc26cbdbbad2af390cc",
+    "pr_predictive_mppi.jsonl.gz": "7e80e933cf40da59f7bbe0c1e20be5d3947710a5e4526c0f75875dbc26b412f0",
+    "pr_risk_dwa.jsonl.gz": "20e4adef6fc5b31e09501fe07999c000c1def370095d1cc93448bd260f61c508"
+  },
+  "planner_sha256": {
+    "robot_sf/benchmark/map_runner/map_runner.py": "5966fa621659d5a816c9ebf32fab5f22532d8aff6caaf5cd37fe2cb656f30b48",
+    "robot_sf/benchmark/map_runner/map_runner_episode.py": "5e17dea3b243a855e741fcc75e0b180cf287ef06df5d47ec6b65e8dffcd2489b",
+    "robot_sf/planner/clearance_geometry.py": "aa7c2257766999bf95346bfe7def8c182fcc7f4e439b742f97f4cfb754fa03ce",
+    "robot_sf/planner/guarded_ppo.py": "5805182501285225a16ebe7c1a01e0f6ce4a2f8af58bb271d2eeeaaadd9c8ff0",
+    "robot_sf/planner/predictive_mppi.py": "6622f6c2414363bbebe45fbcd2331ae1ced42a4c5b3c754c648e1f9e83aae36c",
+    "robot_sf/planner/risk_dwa.py": "ad942a12a83a76faa09e6d41e42db05dc2597aec3a91f63c20fe5469d1095698"
+  },
+  "production_bytes_match_behavior_source": false,
+  "release_claim": false,
+  "release_inputs": [
+    {
+      "identical_on_base": true,
+      "path": "configs/algos/risk_dwa_release_v0_0_8.yaml",
+      "resolved_path": "configs/algos/risk_dwa_release_v0_0_8.yaml",
+      "sha256": "27d0b269e5a65572bdf2f5af069a5e0037eb0728d501ea12438597404e7e1527"
+    },
+    {
+      "historical_source_commit": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+      "identical_on_base": true,
+      "integration_note": "Exact MPPI config blob for the #10064 measurements. Main/TRAIN1 changed the live config; the historical checksum and outcomes remain unchanged.",
+      "path": "configs/algos/predictive_mppi_release_v0_0_8.yaml",
+      "resolved_path": "docs/context/evidence/issue_10064_no_admissible_recovery/source_predictive_mppi.yaml",
+      "sha256": "6d81ba685927a64959702b35d327d772f6652086c1c7b4ffb1d6d83ab2d75af0"
+    },
+    {
+      "identical_on_base": true,
+      "path": "configs/algos/guarded_ppo_release_v0_0_8.yaml",
+      "resolved_path": "configs/algos/guarded_ppo_release_v0_0_8.yaml",
+      "sha256": "330982edb9a5dd4cbaf192232418f7d35171a410e582c4c3d76ca2fb4362464c"
+    },
+    {
+      "identical_on_base": true,
+      "path": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "resolved_path": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "sha256": "8b16cb1ba6155567f31855ec453d596e17e4ed859caf60b6e1092f49b4766ac8"
+    },
+    {
+      "identical_on_base": true,
+      "path": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+      "resolved_path": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+      "sha256": "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2"
+    },
+    {
+      "identical_on_base": true,
+      "path": "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+      "resolved_path": "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+      "sha256": "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a"
+    }
+  ],
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "issue_10064_dev_gate.v1",
+  "seed_audit": {
+    "evidence": "Absent from full_files.txt, default_collection.log, safe_collection.log, full.xml and all importer selections",
+    "executed": false,
+    "guard_refusals_before_reset": [
+      111,
+      120
+    ],
+    "held_out_steps_detected": false,
+    "refused_file": "tests/benchmark/test_hybrid_rule_v4_doorway_regression.py",
+    "static_candidate_disposition": "Other synthetic held literals in selected files are bootstrap, fabricated records or mocked execution; no seeded planner/environment stepping",
+    "synthetic_retired_seed_candidate": "tests/test_runner_resume_parallel.py"
+  },
+  "slurm_jobs": {
+    "base_direct_audit": 15965,
+    "empty_main": 15959,
+    "empty_pr": 15980,
+    "main_matrix": 15954,
+    "pr_matrix": 15966,
+    "superseded_before_simulation": [
+      15955,
+      15961
+    ]
+  },
+  "source_commit": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
+  "tested_files_identical_on_evidence_parent": true,
+  "unexplained_first_finite_divergences": 0,
+  "unit_probe_base": {
+    "module_path": "/home/luttkule/admfix-base/robot_sf/planner/risk_dwa.py",
+    "rows": [
+      {
+        "brake_min_surface_clearance": -1.2591987215967126,
+        "case": "rear",
+        "clearance_improvement_over_brake": 0.0,
+        "command": [
+          0.0,
+          0.0
+        ],
+        "no_admissible": true,
+        "recovery_kind": null,
+        "selected_min_surface_clearance": -1.2591987215967126
+      },
+      {
+        "brake_min_surface_clearance": -1.08,
+        "case": "lateral",
+        "clearance_improvement_over_brake": 0.0,
+        "command": [
+          0.0,
+          0.0
+        ],
+        "no_admissible": true,
+        "recovery_kind": null,
+        "selected_min_surface_clearance": -1.08
+      }
+    ],
+    "source": "93ba0d75fbecc69ddeb62bbf77a435de385caa3b"
+  },
+  "unit_probe_pr": {
+    "module_path": "/home/luttkule/admfix/robot_sf/planner/risk_dwa.py",
+    "rows": [
+      {
+        "brake_min_surface_clearance": -1.2591987215967126,
+        "case": "rear",
+        "clearance_improvement_over_brake": 0.03023870540849405,
+        "command": [
+          0.1,
+          -0.1
+        ],
+        "no_admissible": true,
+        "recovery_kind": "least_bad_clearance",
+        "selected_min_surface_clearance": -1.2289600161882186
+      },
+      {
+        "brake_min_surface_clearance": -1.08,
+        "case": "lateral",
+        "clearance_improvement_over_brake": 0.04825303581312834,
+        "command": [
+          0.1,
+          -0.1
+        ],
+        "no_admissible": true,
+        "recovery_kind": "least_bad_clearance",
+        "selected_min_surface_clearance": -1.0317469641868717
+      }
+    ],
+    "source": "a2611129e79c5e27ee235481cec1b3c318e44e5e"
+  },
+  "validated_code_head": "1620663b6ea868d48153a699ee0a3382cab92f1a",
+  "validated_test_head": "a2611129e79c5e27ee235481cec1b3c318e44e5e",
+  "validation_artifacts": {
+    "all_importing_162.log": "0c660fe7e75120cd1b3a404ccfb565771357391a12827f0df1753352aa5f5fed",
+    "all_importing_162.xml": "e0fb1c0f4157493501329a0ae085467106a08cc91637fd4efe562ca35774cbf0",
+    "all_importing_final.log": "b73532fe5a8a9b0061b938e46e0225b50f74ae75c761a0899ba74498b1944611",
+    "coverage_162.json": "e65f985429eeb0f6a7cad74317fef28761d1a79a56a0eaa87b92dcf7b45f08fa",
+    "coverage_162_own.json": "06fb8a513c6756739ca5bcc9418fc68dcf19db55ae455a036de5534531ce4cb6",
+    "coverage_a261.json": "98bcf3a7c5af3104af926b9fb83d71e7e880ae5296a1e551384efce1fecfc123",
+    "digest_pin_audit.json": "d7f69fa63e21b6f8bd049647398339602e2307f4b4925610b1454556af37a837",
+    "empty_parity.json": "d3597f5e68360a395b28401bef4dd828ba6856d39927072f7563b40db9da62e1",
+    "fail_on_base_final.log": "d697a43bf04e0d56af4092fc0c3ef8d678640a004f3a802fdfc9d698747754d0",
+    "full.log": "fef7d2e1ad8077bc69aaf2cdb90e6c17616e169e20a5bdc4687c119c9b1cd62b",
+    "full.xml": "be7932a3e943cc463adfd14696a494a62fe39012d7b88ff582fd5dd8da1a437e",
+    "full_162.log": "d13d4c40f62859f46c50880fdd8dad381af2185b0fa326e6198c0c1c2181f475",
+    "full_162.xml": "39a54167a1a6dec3a03c44f8056582b1e7e0db75529bdfe5d004bb4467fe0ea2",
+    "held_ci_audit.json": "e43b139fcf890bc11ffaf34abf6c113a7cb76205572d576f3dc1211d8bc22abe",
+    "hosted_held_collection.log": "c2830ac6761e9be7b1d76a84512fab32a5e905d25a7ac20a6f8848989a58539c",
+    "own_162.log": "cb32c05ae375dd6ebd9d367ecbcad0d6d2e6e81b48ca77c87c17bd8d1b68f36f",
+    "own_final_physical.log": "e1960388807ddd37f45fc366b01d2b9fda6745e94b7fff086303de11db9978ce",
+    "preexisting_base_failure.log": "d35dbe5ef21a4e3b128bb3172a5cf5dee400abac2a92277f88a6899f840f1df9",
+    "remote_model_runtime_hashes.log": "b3032dbc37df380c82d947076cdadc49c3c8f0f41e4fd062847bc8aaf37a3022",
+    "routing_162.json": "4007cfc4ea09fc0ed563de377b5f242a1e3f43e1672ea3e27e0584a53ed4292c",
+    "routing_a261.json": "d8b0855937f2e0cac558e0bf08ad9a7e260eb0f463f936c80bbb74fb3da840f5",
+    "runtime_base_verified.log": "0f849ef1328a477bbe60f46ee549df16bd3afb161713e89569e7777c261f19bb",
+    "runtime_pr_verified.log": "0f849ef1328a477bbe60f46ee549df16bd3afb161713e89569e7777c261f19bb",
+    "safe_collection_162.log": "abe26b124e33e00285b7d78dd40d011661405a7db3ee312538cc9623aef31e31",
+    "seed_audit_confirmation.json": "eea578d5f5ad8367e12ac4c75736e5c14444a8e10cbbb94c7f1defdc22e9d62e",
+    "serial_162.log": "cc69ed745486935737daff6f651dba996e5f558be88014d94912dd4cb2d3ca87",
+    "serial_latest.log": "c52e81429e8c21f014e3796fd366a50aa7f3fed4f7a320eec8fef215ba36e9e6",
+    "ty_base_compare.log": "6e78d751a84d4e5723dcd40f7b1e1724a3f9a973ab0ba37c7f33b3b6686dfce4",
+    "ty_pr_fixed.log": "6e78d751a84d4e5723dcd40f7b1e1724a3f9a973ab0ba37c7f33b3b6686dfce4",
+    "typed_pair_equivalence.json": "bd041472d5f7fa8a22cfb258ec21741445b38b8eec52f1c91ab02e84160d1fbe"
+  }
+}

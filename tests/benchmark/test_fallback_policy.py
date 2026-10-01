@@ -913,3 +913,96 @@ def test_unverified_best_effort_decision_retains_rejection(label, binding) -> No
         f"guard_stats.{label}",
         "1",
     )
+
+
+@pytest.mark.parametrize("key", ["fallback_events", "route_fallback_count", "sampler_fallback"])
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (3, "3"),
+        (float("nan"), "invalid"),
+        (-1, "invalid"),
+        ("used", "invalid"),
+        ({}, "invalid"),
+        (None, "invalid"),
+    ],
+)
+@pytest.mark.parametrize("location", ["top", "nested", "list"])
+def test_undeclared_fallback_counters_fail_closed(key, value, expected, location):
+    payload = {key: value}
+    path = key
+    if location == "nested":
+        payload = {"decision_counts": payload}
+        path = "decision_counts." + path
+    elif location == "list":
+        payload = {"events": [payload]}
+        path = "events[0]." + path
+    assert runtime_fallback_or_degraded_marker(payload) == (path, expected)
+
+
+@pytest.mark.parametrize("value", [5, "used", [], None, False])
+def test_fallback_diagnostics_requires_mapping(value):
+    assert runtime_fallback_or_degraded_marker({"fallback_diagnostics": value}) == (
+        "fallback_diagnostics",
+        "invalid",
+    )
+
+
+def test_fallback_diagnostics_mapping_is_recursively_scanned():
+    from collections import UserDict
+
+    assert runtime_fallback_or_degraded_marker(
+        {"fallback_diagnostics": UserDict({"route_fallback_count": 2})}
+    ) == ("fallback_diagnostics.route_fallback_count", "2")
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (2, "2"),
+        (float("nan"), "invalid"),
+        (-1, "invalid"),
+        ("used", "invalid"),
+        ({}, "invalid"),
+        (True, "true"),
+    ],
+)
+def test_undeclared_degraded_counters_fail_closed(value, expected):
+    assert runtime_fallback_or_degraded_marker({"events": [{"step_degraded": value}]}) == (
+        "events[0].step_degraded",
+        expected,
+    )
+
+
+@pytest.mark.parametrize("key", ["step_degraded", "ever_degraded", "unknown_degraded_marker"])
+@pytest.mark.parametrize("value", [False, True])
+def test_degraded_substring_booleans_are_markers(key, value):
+    payload = {"events": [{key: value}]}
+    expected = (f"events[0].{key}", "true") if value else None
+    assert runtime_fallback_or_degraded_marker(payload) == expected
+
+
+@pytest.mark.parametrize(
+    "key,value,expected",
+    [
+        ("degraded_reason", None, None),
+        ("degraded_reason", "", None),
+        ("degraded_reason", " NONE ", None),
+        ("degraded_reason", "missing visibility", ("degraded_reason", "missing visibility")),
+        ("degraded_reason", [], ("degraded_reason", "invalid")),
+        ("degraded_statuses", [], None),
+        ("degraded_statuses", ["ok", "native", "none"], None),
+        ("degraded_statuses", ["ok", "Degraded"], ("degraded_statuses[1]", "degraded")),
+        ("degraded_statuses", ["fallback"], ("degraded_statuses[0]", "fallback")),
+        ("degraded_statuses", ["unavailable"], ("degraded_statuses[0]", "unavailable")),
+        ("degraded_statuses", ["used"], ("degraded_statuses[0]", "invalid")),
+        ("degraded_statuses", [{}], ("degraded_statuses[0]", "invalid")),
+        ("degraded_statuses", "none", ("degraded_statuses", "invalid")),
+        ("degraded_statuses", None, ("degraded_statuses", "invalid")),
+        ("degraded_count", 0, None),
+        ("degraded_count", [], ("degraded_count", "invalid")),
+        ("degraded_count", "none", ("degraded_count", "invalid")),
+    ],
+)
+def test_typed_degraded_reasons_and_statuses_fail_closed(key, value, expected):
+    assert runtime_fallback_or_degraded_marker({key: value}) == expected

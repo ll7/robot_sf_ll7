@@ -94,7 +94,9 @@ def test_guard_selects_executable_forward_recovery_over_vetoed_ppo(row):
     assert decision.selected_evaluation["min_obs_clear"] >= row["clearance"]
     assert decision.selected_evaluation["progress"] > 0
     assert decision.hard_constraint_violation
-    assert not guard.diagnostics()["no_admissible_command"]
+    # Recovery is executable best effort; it does not become a hard-feasible command.
+    assert guard.diagnostics()["no_admissible_command"]
+    assert guard.diagnostics()["fallback_diagnostics"]["recovery_command"]
 
 
 @pytest.mark.parametrize("command", [(2.0, -1.0), (0.1, -0.1), (0.0, 0.0)])

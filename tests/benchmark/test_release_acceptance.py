@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -1715,10 +1716,12 @@ def test_full_release_acceptance_checks_independent_mixed_authored_budgets(
 ):
     """The full 20,160-row gate accepts mixed authored budgets and rejects drift.
 
-    Synthetic JSONL rows use the old held-out band as identity data only; this
+    Synthetic JSONL rows use dev seeds as diagnostic identity data only; this
     test never constructs an environment or calls a planner.
     """
     from collections import Counter
+
+    monkeypatch.setattr(sys.modules[__name__], "_SEEDS", tuple(range(1001, 1031)))
 
     budgets = dict(
         zip(_SCENARIO_IDS, [400] * 25 + [500] * 13 + [600] * 8 + [650, 700], strict=True)
@@ -1729,7 +1732,8 @@ def test_full_release_acceptance_checks_independent_mixed_authored_budgets(
     )
     manifest = _full_manifest()
     manifest.expected_horizon_steps = None
-    manifest.release_tag = "0.0.8"
+    manifest.release_tag = "diagnostic-authored-budget-contract"
+    config.protocol_version = "0.0.8"
     manifest.scenario_horizons_path = config.scenario_horizons_path
     manifest.scenario_horizons_sha256 = config.scenario_horizons_sha256
     expected = None
@@ -1771,3 +1775,128 @@ def test_full_release_acceptance_checks_independent_mixed_authored_budgets(
     else:
         assert report["status"] == "invalid"
         assert any(expected in blocker for blocker in report["blockers"]), report["blockers"]
+
+
+@pytest.mark.parametrize("case", ["eligible", "foresight", "spawn", "missing"])
+def test_planned_counts_and_exclusion_admission(tmp_path, monkeypatch, case):
+    """Full admission reports expected foresight exclusions and separately rejects spawn defects."""
+    monkeypatch.setattr(sys.modules[__name__], "_SEEDS", tuple(range(1001, 1031)))
+    campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
+    summary_path = campaign_root / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text())
+    # Exercise the guarded arm with real persisted rows and byte-bound provenance.
+    path = campaign_root / "runs/planner_11__differential_drive/episodes.jsonl"
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    if case == "foresight":
+        rows[0]["algorithm_metadata"]["foresight_prediction"] = {"evidence_eligible": False}
+    elif case == "spawn":
+        rows[0]["spawn_validity"] = {"invalid_run": True, "invalid_reason": "spawn_overlap"}
+    elif case == "missing":
+        rows.pop()
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    sidecar_path = path.with_name(path.name + ".provenance.json")
+    sidecar = json.loads(sidecar_path.read_text())
+    sidecar["raw_artifacts"][0]["sha256"] = sha256_file(path)
+    sidecar_path.write_text(json.dumps(sidecar))
+    planner = summary["planner_rows"][11]
+    planner.update(
+        episodes=1440 - int(case != "eligible"),
+        episodes_total=len(rows),
+        episodes_excluded=int(case in {"spawn", "foresight"}),
+    )
+    summary_path.write_text(json.dumps(summary))
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+    if case in {"eligible", "foresight"}:
+        assert result["status"] == "valid", result["blockers"]
+        assert result["exclusion_reasons"] == (
+            {"foresight_ineligible": 1} if case == "foresight" else {}
+        )
+        assert result["episodes_excluded"] == int(case == "foresight")
+    elif case == "spawn":
+        assert result["status"] == "invalid"
+        assert (
+            "runs[11] spawn_exclusion_defect: K=1 invalid_or_unmeasured_spawn" in result["blockers"]
+        )
+        assert not any("total episode count" in blocker for blocker in result["blockers"])
+    else:
+        assert result["status"] == "invalid"
+        assert "planner_rows[11] total episode count is not 1440" in result["blockers"]
+
+
+def test_full_release_008_rejects_complete_retired_seed_fixture(tmp_path, monkeypatch):
+    """Real acceptance rejects otherwise valid synthetic rows on the retired band."""
+    campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
+    manifest = _full_manifest()
+    manifest.release_tag = "paper-matrix-v2-h600-s30-2026-09-" + _SOURCE_SHA
+    manifest.scenario_matrix_path = Path("scenarios_release_0_0_8_v1.yaml")
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=manifest,
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+    assert "0.0.8 requires the exact sealed evaluation seeds (D-049)" in result["blockers"]
+
+
+@pytest.mark.heldout_seed_ok(
+    reason="Static release identities only; no RNG, environment or planner"
+)
+def test_three_width_v02_binds_merged_authored_h400_schedule():
+    """Real v0.2 template pins H400 independently and still refuses unfrozen execution."""
+    # seed-holdout: setup-only begin
+    from hashlib import sha256
+
+    import yaml
+
+    from robot_sf.benchmark.camera_ready._config import load_campaign_config
+
+    root = Path(__file__).resolve().parents[2]
+    template = (
+        root / "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.template.yaml"
+    )
+    payload = yaml.safe_load(template.read_text())
+    assert payload["width_slice_contract"]["requested_horizon_steps"] == 400
+    assert payload["width_slice_contract"]["scenario_horizon_cap_steps"] == 400
+    assert payload["matrix"].get("horizon_steps") is None
+    campaign = (template.parent / payload["canonical_campaign_config"]).resolve()
+    assert payload["campaign_config_sha256"] == sha256(campaign.read_bytes()).hexdigest()
+    matrix = (template.parent / payload["scenario"]["matrix_path"]).resolve()
+    assert payload["scenario"]["matrix_sha256"] == sha256(matrix.read_bytes()).hexdigest()
+    schedule = (template.parent / payload["matrix"]["scenario_horizons"]).resolve()
+    assert (
+        payload["matrix"]["scenario_horizons_sha256"] == sha256(schedule.read_bytes()).hexdigest()
+    )
+    from robot_sf.benchmark.release_protocol import (
+        resolve_release_horizon_budgets,
+        sealed_seed_execution_problem,
+    )
+
+    cfg = load_campaign_config(campaign, repository_root=root)
+    manifest = SimpleNamespace(
+        scenario_horizons_path=schedule,
+        scenario_horizons_sha256=payload["matrix"]["scenario_horizons_sha256"],
+        expected_horizon_steps=None,
+        canonical_campaign_config_path=campaign,
+        scenario_matrix_path=matrix,
+        release_kind=payload["release_kind"],
+        release_id=payload["release_id"],
+        source_sha=None,
+    )
+    assert resolve_release_horizon_budgets(manifest, cfg) == {
+        "francis2023_narrow_doorway_width_2p20": 400,
+        "francis2023_narrow_doorway_width_2p80": 400,
+        "francis2023_narrow_doorway_width_3p60": 400,
+    }
+    assert payload["matrix"]["expected_episode_cells"] == 14 * 3 * 30 == 1260
+    resolved_seeds = tuple(payload["seed_policy"]["resolved_seeds"])
+    seed_sets = yaml.safe_load(cfg.seed_policy.seed_sets_path.read_text())
+    assert resolved_seeds == tuple(seed_sets[cfg.seed_policy.seed_set])
+    assert "require source_sha equal to HEAD" in sealed_seed_execution_problem(
+        manifest, resolved_seeds, repository_root=root
+    )
+    # seed-holdout: setup-only end

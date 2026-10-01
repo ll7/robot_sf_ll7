@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_10064_no_admissible_recovery/portable/inner_checkpoints.json",
+  "artifact_sha256": "5571695cdf34924b762e9e110cc960cab47a812735c1a379a53693d0d748065c",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

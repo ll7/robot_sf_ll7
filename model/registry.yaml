@@ -44,6 +44,9 @@ models:
     Local synced artifact root:
     output/slurm/issue1474-shielded-ppo-repair-job-12674.
 - model_id: ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
+  action_semantics_source: PPOS identified the era's single env pipeline at launch-config commit 0202ccfab592090ec1cca12b266d3131ed484b37; differential_drive.py is identical to 9fb131b6d7ff062887caab33ca8713ae05167ebe and adds unscaled velocity deltas. Exact training commit remains unknown (commit null).
+  action_semantics: velocity_delta
+  action_adapter_version: ppo-target-velocity.v2
   display_name: PPO issue-791 leader, eval-aligned large-capacity grid_socnav (2026-04-17,
     promoted)
   local_path: output/model_cache/ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417/model.zip
@@ -222,6 +225,9 @@ models:
   notes:
   - Retired from runnable baseline configs by issue 1764 on 2026-06-29.
 - model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
+  action_semantics: velocity_delta
+  action_adapter_version: ppo-target-velocity.v2
+  action_semantics_source: training drive at 9fb131b6d7ff062887caab33ca8713ae05167ebe adds unscaled velocity deltas before speed clipping.
   display_name: PPO BR-06 v3 all-maps randomized (2026-03-04, issue-576 closeout)
   local_path: output/model_cache/ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200/model.zip
   config_path: configs/training/ppo/expert_ppo_issue_576_br06_v3_15m_all_maps_randomized.yaml

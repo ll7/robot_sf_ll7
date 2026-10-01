@@ -97,7 +97,9 @@ def _apply_scenario_uncertainty_envelope_config(
     return merged
 
 
-def _resolve_config_path(anchor: Path | None, raw_path: Any) -> Path | None:
+def _resolve_config_path(
+    anchor: Path | None, raw_path: Any, *, config_root: Path | None = None
+) -> Path | None:
     """Resolve candidate-manifest config paths from manifest-local or repo-root form.
 
     Returns:
@@ -112,7 +114,7 @@ def _resolve_config_path(anchor: Path | None, raw_path: Any) -> Path | None:
         anchored = (anchor / path).resolve()
         if anchored.exists():
             return anchored
-    return path.resolve()
+    return ((config_root / path) if config_root is not None else path).resolve()
 
 
 def _is_policy_search_candidate_manifest(config: dict[str, Any]) -> bool:
@@ -178,6 +180,7 @@ def _resolve_policy_search_candidate_runtime(
     algo_config_path: str | None,
     scenario: dict[str, Any],
     algo_config: dict[str, Any] | None = None,
+    config_root: Path | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Resolve a policy-search candidate manifest to the runtime algo/config for a scenario.
 
@@ -190,7 +193,7 @@ def _resolve_policy_search_candidate_runtime(
     config_anchor = Path(algo_config_path).resolve().parent if algo_config_path else None
 
     def load_config(config_path: object) -> dict[str, Any]:
-        resolved_path = _resolve_config_path(config_anchor, config_path)
+        resolved_path = _resolve_config_path(config_anchor, config_path, config_root=config_root)
         if resolved_path is None:
             return {}
         return _parse_algo_config(str(resolved_path))
@@ -227,6 +230,32 @@ def _apply_planner_selector_v2_context(
             }
         },
     )
+
+
+def resolve_episode_policy_runtime(
+    *,
+    default_algo: str,
+    algo_config_path: str | None,
+    scenario: dict[str, Any],
+    seed: int,
+    algo_config: dict[str, Any] | None = None,
+    config_root: Path | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """Resolve the complete episode planner contract for execution and validation.
+
+    Returns:
+        Effective algorithm and config, including selector and uncertainty context.
+    """
+    root_kwargs = {"config_root": config_root} if config_root is not None else {}
+    algo, config = _resolve_policy_search_candidate_runtime(
+        default_algo=default_algo,
+        algo_config_path=algo_config_path,
+        scenario=scenario,
+        algo_config=algo_config,
+        **root_kwargs,
+    )
+    config = _apply_planner_selector_v2_context(algo, config, scenario=scenario, seed=seed)
+    return algo, _apply_scenario_uncertainty_envelope_config(algo, config, scenario)
 
 
 def _build_socnav_config(cfg: dict[str, Any]) -> SocNavPlannerConfig:

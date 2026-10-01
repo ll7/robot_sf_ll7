@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_9952_auditor/aud2/test_value.md",
+  "artifact_sha256": "2ed1fd10dd93c1946847e5cb298a77db70e0933d756c6e4ecec938dca0222987",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

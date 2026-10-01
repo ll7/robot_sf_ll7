@@ -107,10 +107,8 @@ from robot_sf.benchmark.map_runner_policies.map_runner_policy_metadata import (
     finalize_feasibility_metadata as _finalize_feasibility_metadata,
 )
 from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
-    _apply_planner_selector_v2_context,
-    _apply_scenario_uncertainty_envelope_config,
     _parse_algo_config,
-    _resolve_policy_search_candidate_runtime,
+    resolve_episode_policy_runtime,
 )
 from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
     load_latency_profile as _load_latency_stress_profile,
@@ -118,6 +116,7 @@ from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
 from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
     load_synthetic_actuation_profile as _load_synthetic_actuation_profile,
 )
+from robot_sf.benchmark.metric_definitions import METRIC_SCHEMA_VERSION
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.observation_noise import (
     ObservationNoiseState,
@@ -131,7 +130,10 @@ from robot_sf.benchmark.observation_noise import (
 )
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.paired_effect_metric_contract import evaluate_paired_effect_metric_fields
-from robot_sf.benchmark.path_utils import compute_shortest_path_length
+from robot_sf.benchmark.path_utils import (
+    compute_completion_reference_length,
+    compute_shortest_path_length,
+)
 from robot_sf.benchmark.ped_model_sensitivity import (
     attach_pedestrian_model_fields,
     build_pedestrian_model_provenance,
@@ -221,7 +223,7 @@ PedestrianControlTraceLabelBuilder = Callable[[int], list[dict[str, Any]]]
 # only persists its mapping payload in algorithm metadata.
 _PairResetHook = Callable[[object, object], Mapping[str, str]]
 _OBSTACLE_FORCE_LAW_RUNTIME_RECORD_SCHEMA = "obstacle_force_law_runtime_record.v1"
-_PAIRED_EFFECT_NATIVE_TRACE_SCHEMA = "paired_effect_native_trace.v1"
+_PAIRED_EFFECT_NATIVE_TRACE_SCHEMA = "paired_effect_native_trace.v2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -1502,19 +1504,13 @@ def _resolve_episode_run_context(  # noqa: PLR0913
     raw_policy_cfg = (
         dict(algo_config) if algo_config is not None else _parse_algo_config(algo_config_path)
     )
-    algo, policy_cfg = _resolve_policy_search_candidate_runtime(
+    algo, policy_cfg = resolve_episode_policy_runtime(
         default_algo=algo,
         algo_config_path=algo_config_path,
         algo_config=raw_policy_cfg,
         scenario=scenario,
-    )
-    policy_cfg = _apply_planner_selector_v2_context(
-        algo,
-        policy_cfg,
-        scenario=scenario,
         seed=int(seed),
     )
-    policy_cfg = _apply_scenario_uncertainty_envelope_config(algo, policy_cfg, scenario)
     return _EpisodeRunContext(
         scenario=scenario,
         scenario_id=scenario_id,
@@ -1580,6 +1576,11 @@ class _MetadataFinalizationOptions:
 def _compute_post_loop_metrics(  # noqa: PLR0913
     *,
     robot_positions: list[np.ndarray],
+    initial_robot_pos: np.ndarray | None = None,
+    route_waypoints: np.ndarray | None = None,
+    goal_zone: np.ndarray | None = None,
+    completion_policy: str = "waypoint_radius_v1",
+    seed: int | None = None,
     robot_headings: list[float],
     hybrid_command_sources: list[str | None] | None = None,
     ped_positions: list[np.ndarray],
@@ -1662,7 +1663,23 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
         sample_obstacle_points(map_def.obstacles, map_def.bounds) if map_def is not None else None
     )
     if robot_pos_arr.size:
-        shortest_path = compute_shortest_path_length(map_def, robot_pos_arr[0], goal_vec)
+        shortest_path = (
+            compute_completion_reference_length(
+                map_def,
+                initial_robot_pos if initial_robot_pos is not None else robot_pos_arr[0],
+                goal_vec,
+                goal_zone=goal_zone,
+                completion_policy=completion_policy,
+                scenario_id=str(scenario.get("name", "")),
+                seed=seed,
+            )
+            if completion_policy == "goal_zone_entry_v1"
+            else compute_shortest_path_length(
+                map_def,
+                initial_robot_pos if initial_robot_pos is not None else robot_pos_arr[0],
+                goal_vec,
+            )
+        )
     else:
         shortest_path = float("nan")
 
@@ -1684,6 +1701,9 @@ def _compute_post_loop_metrics(  # noqa: PLR0913
             goal=goal_vec,
             dt=float(config.sim_config.time_per_step_in_secs),
             reached_goal_step=reached_goal_step,
+            initial_robot_pos=initial_robot_pos,
+            route_waypoints=route_waypoints,
+            collision_event=collision_seen,
             robot_radius=float(getattr(robot_config, "radius", 1.0)),
             ped_radius=float(getattr(config.sim_config, "ped_radius", 0.4)),
             episode_metadata=_episode_metadata_for_benchmark_metrics(scenario, map_def),
@@ -1946,6 +1966,9 @@ class _EpisodeStepLoopResult:
     reset_spawn_clearance: dict[str, Any] | None = None
     reset_spawn_clearance_error: str | None = None
     respawn_overlap_events: list[dict[str, Any]] = field(default_factory=list)
+    route_waypoints: np.ndarray | None = None
+    goal_zone: np.ndarray | None = None
+    completion_policy: str = "waypoint_radius_v1"
 
 
 @dataclass(slots=True)
@@ -2007,6 +2030,9 @@ class _StepLoopState:
     reset_spawn_clearance: dict[str, Any] | None = None
     reset_spawn_clearance_error: str | None = None
     respawn_overlap_events: list[dict[str, Any]] = field(default_factory=list)
+    route_waypoints: np.ndarray | None = None
+    goal_zone: np.ndarray | None = None
+    completion_policy: str = "waypoint_radius_v1"
 
 
 def _read_reset_spawn_clearance(simulator: Any) -> tuple[dict[str, Any] | None, str | None]:
@@ -2211,6 +2237,32 @@ class _StepSimResult:
     action_conversion_payload: dict[str, Any] | None
     actuation_step: Any
     planner_step_decision: dict[str, Any] | None
+    # Goals the planner acted on this step (read before the env step); trace-only (#9979).
+    goal_current: list[float] | None = None
+    goal_next: list[float] | None = None
+
+
+def _read_step_goals(env: Any) -> tuple[list[float] | None, list[float] | None]:
+    """Return the robot's (current, next) goal positions, or ``None`` when unavailable.
+
+    Returns:
+        Pair of ``[x, y]`` lists; ``next`` is ``None`` when no next waypoint exists.
+    """
+    simulator = getattr(env, "simulator", None)
+    if simulator is None:
+        return None, None
+    try:
+        current = [float(v) for v in np.asarray(simulator.goal_pos[0], dtype=float).reshape(2)]
+    except (AttributeError, IndexError, TypeError, ValueError):
+        return None, None
+    try:
+        nxt = simulator.next_goal_pos[0]
+        next_goal = (
+            None if nxt is None else [float(v) for v in np.asarray(nxt, dtype=float).reshape(2)]
+        )
+    except (AttributeError, IndexError, TypeError, ValueError):
+        next_goal = None
+    return current, next_goal
 
 
 def _prepare_episode_env(  # noqa: C901
@@ -2262,8 +2314,11 @@ def _prepare_episode_env(  # noqa: C901
             # Record the *instantiated* count so the readiness gate and any
             # future triage can see declared-vs-actual without re-running.
             simulation_config["population_size"] = instantiated_count
-            simulation_config["instantiated_population_size"] = instantiated_count
-            simulation_config["declared_population_size"] = expected_population_size
+            metadata = scenario.setdefault("metadata", {})
+            metadata["population_realization"] = {
+                "instantiated_population_size": instantiated_count,
+                "declared_population_size": expected_population_size,
+            }
     if callable(planner_bind_env):
         planner_bind_env(env)
     if callable(planner_reset):
@@ -2284,8 +2339,14 @@ def _init_step_loop_state(
         _StepLoopState: Initialized mutable state bundle.
     """
     map_def = getattr(env.simulator, "map_def", None)
-    goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
-    initial_robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
+    navigators = getattr(env.simulator, "robot_navs", None)
+    if navigators is not None:
+        # Freeze the sampled terminal target; waypoint handoffs and route reset
+        # after success must not alter episode metric/trace denominators.
+        goal_vec = np.array(navigators[0].waypoints[-1], dtype=float, copy=True)
+    else:
+        goal_vec = np.array(env.simulator.goal_pos[0], dtype=float, copy=True)
+    initial_robot_pos = np.array(env.simulator.robot_pos[0], dtype=float, copy=True)
     initial_ped_positions = np.array(env.simulator.ped_pos, dtype=float, copy=True).reshape(-1, 2)
     initial_robot_velocity = _initial_robot_velocity(env.simulator)
     initial_ped_velocities = _initial_ped_velocities(env.simulator, len(initial_ped_positions))
@@ -2304,6 +2365,13 @@ def _init_step_loop_state(
     state.goal_vec = goal_vec
     state.initial_goal_vec = np.array(goal_vec, dtype=float, copy=True)
     state.initial_robot_pos = initial_robot_pos
+    if navigators:
+        state.route_waypoints = np.array(navigators[0].waypoints, dtype=float, copy=True)
+        if not np.array_equal(state.route_waypoints[0], initial_robot_pos):
+            state.route_waypoints = np.vstack([initial_robot_pos, state.route_waypoints])
+        zone = getattr(navigators[0], "goal_zone", None)
+        state.goal_zone = np.array(zone, dtype=float, copy=True) if zone is not None else None
+        state.completion_policy = getattr(navigators[0], "completion_policy", "waypoint_radius_v1")
     state.initial_ped_positions = initial_ped_positions
     state.initial_robot_velocity = initial_robot_velocity
     state.initial_ped_velocities = initial_ped_velocities
@@ -2904,6 +2972,26 @@ def _surface_clearances_m(
     return clearance
 
 
+def _simulation_trace_decision_fields(decision: Any) -> dict[str, Any]:
+    """Copy the available planner decision counters into a simulation trace.
+
+    Returns:
+        Available counters, or an empty mapping when the decision is unavailable.
+    """
+    if not isinstance(decision, dict):
+        return {}
+    return {
+        key: decision[key]
+        for key in (
+            "no_admissible_command",
+            "no_admissible_command_count",
+            "recovery_command",
+            "recovery_command_count",
+        )
+        if key in decision
+    }
+
+
 def _step_build_simulation_trace(
     state: _StepLoopState,
     slc: _StepLoopConfig,
@@ -2926,16 +3014,12 @@ def _step_build_simulation_trace(
         "selected_action": sim.selected_action_payload,
         "applied_environment_action": sim.applied_environment_action_payload,
     }
+    planner_payload.update(
+        _simulation_trace_decision_fields(getattr(sim, "planner_step_decision", None))
+    )
     decision = getattr(sim, "planner_step_decision", None)
-    if isinstance(decision, dict):
-        for key in (
-            "no_admissible_command",
-            "no_admissible_command_count",
-            "recovery_command",
-            "recovery_command_count",
-        ):
-            if key in decision:
-                planner_payload[key] = decision[key]
+    if isinstance(decision, dict) and "recovery_kind" in decision:
+        planner_payload["recovery_kind"] = decision["recovery_kind"]
     if sim.action_conversion_payload:
         planner_payload["action_conversion"] = sim.action_conversion_payload
     if sim.actuation_step is not None:
@@ -2994,6 +3078,16 @@ def _step_build_simulation_trace(
         },
     }
     sim_info = getattr(sim, "info", None)
+    goal_current = getattr(sim, "goal_current", None)
+    if goal_current is not None:
+        trace_entry["goal"] = {"current": goal_current, "next": getattr(sim, "goal_next", None)}
+    sim_meta = sim_info.get("meta") if isinstance(sim_info, dict) else None
+    if isinstance(sim_meta, dict):
+        trace_entry["collision"] = {
+            "pedestrian": bool(sim_meta.get("is_pedestrian_collision", False)),
+            "obstacle": bool(sim_meta.get("is_obstacle_collision", False)),
+            "robot": bool(sim_meta.get("is_robot_collision", False)),
+        }
     oracle_trace = sim_info.get("oracle_transition_trace") if isinstance(sim_info, dict) else None
     if oracle_trace is not None:
         # Preserve the evaluator-only trace as a sibling of planner data. It is
@@ -3233,6 +3327,7 @@ def _step_planner_decision_dwa_keys(
     planners' traces are unchanged.
     """
     for dwa_key in (
+        "recovery_kind",
         "no_admissible_command",
         "no_admissible_command_count",
         "recovery_command",
@@ -3458,6 +3553,9 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
         goal_vec=state.goal_vec,
         initial_goal_vec=state.initial_goal_vec,
         initial_robot_pos=state.initial_robot_pos,
+        route_waypoints=state.route_waypoints,
+        goal_zone=state.goal_zone,
+        completion_policy=state.completion_policy,
         initial_robot_heading=state.initial_robot_heading,
         initial_ped_positions=state.initial_ped_positions,
         initial_robot_velocity=state.initial_robot_velocity,
@@ -3573,6 +3671,9 @@ def _execute_step_loop(
     for step_idx in range(horizon_val):
         if slc.active_harness is not None:
             slc.active_harness.start_cycle()
+        step_goal_current, step_goal_next = (
+            _read_step_goals(env) if slc.record_simulation_step_trace else (None, None)
+        )
         policy_command, _ = _step_policy_inference(state, slc, env=env)
         step_is_native, planner_step_decision = _step_hybrid_and_planner_stats(
             state,
@@ -3636,6 +3737,8 @@ def _execute_step_loop(
             action_conversion_payload=action_conversion_payload,
             actuation_step=actuation_step,
             planner_step_decision=planner_step_decision,
+            goal_current=step_goal_current,
+            goal_next=step_goal_next,
         )
         _step_build_simulation_trace(state, slc, step_idx=step_idx, sim=sim)
         _step_build_actuation_trace(state, step_idx=step_idx, sim=sim)
@@ -3726,7 +3829,6 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
             state.respawn_overlap_events = _read_respawn_overlap_events(env.simulator)
             state.simulator_obstacle_force_law_metadata = _read_obstacle_force_law_metadata(env)
             state.map_def = env.simulator.map_def
-            state.goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
     finally:
         _teardown_step_loop(
             env,
@@ -4225,7 +4327,7 @@ def _finalize_trace_metadata(  # noqa: PLR0913
     if record_simulation_step_trace:
         reset_robot_radius_m, reset_ped_radius_m = _trace_surface_radii_m(config)
         algo_meta["simulation_step_trace"] = {
-            "schema_version": "simulation-step-trace.v1",
+            "schema_version": "simulation-step-trace.v2",
             "dt": float(config.sim_config.time_per_step_in_secs),
             "initial_goal_distance_m": initial_goal_distance,
             "steps": simulation_step_trace,
@@ -4585,6 +4687,7 @@ def _build_episode_record_dict(  # noqa: PLR0913
         retained_metric_values = {}
     return {
         "version": "v1",
+        "metric_schema_version": METRIC_SCHEMA_VERSION,
         "episode_id": _compute_map_episode_id(scenario_params, seed),
         "scenario_id": scenario_id,
         "seed": seed,
@@ -5589,6 +5692,11 @@ def run_map_episode(  # noqa: PLR0913
     )
     post_loop = _compute_post_loop_metrics(
         robot_positions=loop_result.robot_positions,
+        initial_robot_pos=loop_result.initial_robot_pos,
+        route_waypoints=loop_result.route_waypoints,
+        goal_zone=loop_result.goal_zone,
+        completion_policy=loop_result.completion_policy,
+        seed=seed,
         robot_headings=loop_result.robot_headings,
         hybrid_command_sources=loop_result.hybrid_command_sources,
         ped_positions=loop_result.ped_positions,

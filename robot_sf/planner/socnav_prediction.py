@@ -917,12 +917,23 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         )
         max_v = float(self.config.max_linear_speed) * float(np.clip(cap_ratio, 0.1, 1.0))
         candidates: list[tuple[float, float]] = []
+        heading_duration = dt
+        if self.config.predictive_heading_lattice_version == "horizon_scaled_v2":
+            steps = self._effective_rollout_steps(future_peds=future_peds, mask=mask)
+            # Treat deltas as horizon yaw changes. Uniformly scale the whole set
+            # when outer deltas exceed reachable yaw, preserving distinct options.
+            # This scales robot controls only; it does not extend pedestrian forecasts.
+            heading_duration = max(
+                steps * dt,
+                max((abs(delta) for delta in heading_deltas), default=0.0)
+                / max(float(self.config.max_angular_speed), self._EPS),
+            )
         for ratio in speed_ratios:
             v = float(np.clip(ratio * self.config.max_linear_speed, min_v, max_v))
             for delta in heading_deltas:
                 omega = float(
                     np.clip(
-                        delta / dt,
+                        delta / heading_duration,
                         -self.config.max_angular_speed,
                         self.config.max_angular_speed,
                     )
@@ -1270,6 +1281,8 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
         candidate_heading = robot_heading + w * dt
         direction = np.array([np.cos(candidate_heading), np.sin(candidate_heading)], dtype=float)
+        # Method limitation: retain the historical pedestrian-only occupancy cost.
+        # The centre-line probe is not effective footprint-aware wall avoidance.
         _, occ_penalty = self._path_penalty(
             robot_pos=robot_pos,
             direction=direction,
@@ -1402,6 +1415,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         direction = final_world - robot_pos
         if np.linalg.norm(direction) <= self._EPS:
             direction = np.array([np.cos(robot_heading), np.sin(robot_heading)], dtype=float)
+        # Keep the same pedestrian-only cost as action scoring (weight 1.0).
         _, occ_penalty = self._path_penalty(
             robot_pos=robot_pos,
             direction=direction,

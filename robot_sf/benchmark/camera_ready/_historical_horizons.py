@@ -1,4 +1,4 @@
-"""Exact immutable historical campaign content admitted by corrected D-050.
+"""Exact immutable historical campaign content admitted by D-064.
 
 Versions identify the historical protocol, not the date of a later rerun.
 Names are documentation only; admission uses the complete source byte digest.

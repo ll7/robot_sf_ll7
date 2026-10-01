@@ -20,7 +20,7 @@ the authored-budget contract to the runner and resume identity. Historical
 scheduled rows keep their original episode IDs, timeout labels and row fields,
 including the absence of an automatically added `scenario_params.run_horizon`.
 
-Corrected D-050 preserves main's historical behavior. `horizon: 600` capped the
+D-064 preserves main's historical behavior. `horizon: 600` capped the
 runner loop; it never extended a shorter authored simulator limit. Historical
 configs use `legacy_runner_cap`: the simulator retains its authored limit, the
 runner cap is 600, and the effective budget is `min(authored, 600)`. A timeout

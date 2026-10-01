@@ -468,7 +468,7 @@ def test_run_map_episode_records_native_pairing_trace_for_wrapper_off(monkeypatc
     assert summary["enabled"] is False
     assert summary["arm_key"] == "wrapper_off"
     assert record["metrics"]["wrapper_intervention_rate"] == 0.0
-    assert native["schema_version"] == "paired_effect_native_trace.v1"
+    assert native["schema_version"] == "paired_effect_native_trace.v2"
     assert native["arm_key"] == "wrapper_off"
     assert native["declared_timeout"] is False
     assert step_record["time_s"] == pytest.approx(0.1)

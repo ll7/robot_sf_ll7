@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_10064_no_admissible_recovery/portable/provenance.json",
+  "artifact_sha256": "0bc30f50b1469e4b7c148b4807dc70406d2b22956248f474477d83d98c712e69",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

@@ -559,7 +559,13 @@ def paired_actuation_feasibility_ranking(
                 }
             )
             continue
-        rows_by_pair.setdefault((scenario_id, seed), {})[variant] = record
+        variants = rows_by_pair.setdefault((scenario_id, seed), {})
+        if variant in variants:
+            raise ValueError(
+                f"duplicate (scenario_id, seed, variant) key: {(scenario_id, seed, variant)!r}; "
+                "reduce repeats under a declared policy before pairing"
+            )
+        variants[variant] = record
 
     pair_rows: list[dict[str, Any]] = []
     incomplete_pairs: list[dict[str, Any]] = []

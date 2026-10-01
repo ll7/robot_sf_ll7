@@ -239,11 +239,20 @@ def _scenario_with_episode_seed_defaults(
     Some scenario-level generators use their own NumPy ``default_rng`` instances. When those
     fields are left unset they bypass the episode seed and make benchmark rows depend on process
     history. Fill only missing values here so explicit scenario provenance remains unchanged.
+
+    ``archetype_seed`` is filled only when the scenario opts into ``archetype_composition``;
+    scenarios without archetypes keep their identity payload unchanged.
     """
     updated = deepcopy(scenario)
     sim_config = updated.setdefault("simulation_config", {})
     if isinstance(sim_config, dict) and sim_config.get("route_spawn_seed") is None:
         sim_config["route_spawn_seed"] = int(seed)
+    if (
+        isinstance(sim_config, dict)
+        and sim_config.get("archetype_composition") is not None
+        and sim_config.get("archetype_seed") is None
+    ):
+        sim_config["archetype_seed"] = int(seed)
     return updated
 
 

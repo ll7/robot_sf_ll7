@@ -115,7 +115,9 @@ def test_historical_stress_h600_registry_records_non_extending_budgets() -> None
     scenarios = load_scenarios(campaign_config.scenario_matrix_path)
     scenario_ids = tuple(str(scenario["name"]) for scenario in scenarios)
     assert scenario_ids == EXPECTED_SCENARIOS
-    assert campaign_config.seed_policy.seeds == (116,)
+    from robot_sf.benchmark.camera_ready._config import _resolved_seed_inventory
+
+    assert _resolved_seed_inventory(scenarios) == [1001]
     assert campaign_config.horizon == 600
     assert campaign_config.dt == pytest.approx(0.1)
     assert tuple(planner.key for planner in campaign_config.planners) == EXPECTED_PLANNER_ARMS
@@ -154,7 +156,7 @@ def test_stress_contract_pins_source_axes_and_fail_closed_policy() -> None:
 
     cells = contract["representative_cells"]
     assert [(cell["scenario_id"], cell["seed"]) for cell in cells] == [
-        (scenario, 116) for scenario in EXPECTED_SCENARIOS
+        (scenario, 1001) for scenario in EXPECTED_SCENARIOS
     ]
     assert {cell["mechanism"] for cell in cells} == {
         "urban-crossing",
@@ -533,7 +535,7 @@ def test_stress_source_provenance_rejects_mixed_campaign_rows(tmp_path: Path) ->
         (root / name).write_text(json.dumps(payload), encoding="utf-8")
     episodes = root / "runs" / "goal__differential_drive" / "episodes.jsonl"
     episodes.write_text(
-        json.dumps({"git_hash": wrong, "scenario_id": "s", "seed": 116}) + "\n",
+        json.dumps({"git_hash": wrong, "scenario_id": "s", "seed": 1001}) + "\n",
         encoding="utf-8",
     )
     (root / "reports" / "campaign_summary.json").write_text(

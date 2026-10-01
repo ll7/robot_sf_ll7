@@ -15,6 +15,7 @@ import numpy as np
 from robot_sf.common.math_utils import wrap_angle_pi_array
 from robot_sf.planner.clearance_geometry import (
     CENTER_CLEARANCE_V1,
+    least_bad_clearance_rank,
     obstacle_rollout_admissible,
     occupied_cell_clearance,
     pedestrian_clearance,
@@ -58,7 +59,7 @@ class PredictiveMPPIConfig:
 
     socnav: SocNavPlannerConfig
     random_seed: int = 42
-    horizon_steps: int = 12
+    horizon_steps: int = 8
     rollout_dt: float = 0.2
     sample_count: int = 128
     iterations: int = _DEFAULT_ITERATIONS
@@ -232,12 +233,14 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         """
         state, mask, _robot_pos, _robot_heading = self._predictor._build_model_input(observation)
         future = self._predictor._predict_trajectories(state, mask)
-        learned_steps = self._predictor._effective_rollout_steps(future_peds=future, mask=mask)
-        steps = min(
-            max(1, int(self.config.horizon_steps)),
-            max(1, int(future.shape[1])),
-        )
-        steps = min(max(steps, learned_steps), int(future.shape[1]))
+        steps = int(self.config.horizon_steps)
+        supported_steps = int(future.shape[1])
+        if steps < 1 or steps > supported_steps:
+            raise ValueError(
+                f"predictive_mppi horizon_steps={steps} exceeds or is outside the model's "
+                f"supported horizon of {supported_steps} steps; use 1..{supported_steps}. "
+                "Longer forecasts require a validated predictor, not silent capping or extrapolation."
+            )
         return future, mask, steps
 
     def _speed_cap(self, future: np.ndarray, mask: np.ndarray) -> float:
@@ -753,9 +756,59 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         )
         return np.asarray(rotation), cost
 
+    def _infeasible_command_rank(  # noqa: PLR0913
+        self, command, *, horizon, robot_pos, heading, goal, future, mask, observation, grid_payload
+    ) -> tuple[float, float]:
+        """Rank executable constant commands using forecast and native drive clearance.
+
+        Returns:
+            tuple: Worst clearance margin and goal progress, in metres.
+        """
+        sequence = self._constant_sequence(command, horizon)
+        local_pos = np.zeros(2)
+        local_heading = 0.0
+        min_ped = min_obs = float("inf")
+        drive = None
+        if self._native_rollout_available():
+            drive = self._recovery_drive_rollout(sequence, observation, robot_pos, heading)
+            min_obs = drive[2]
+        rotation = np.array(
+            [[np.cos(heading), -np.sin(heading)], [np.sin(heading), np.cos(heading)]]
+        )
+        previous = robot_pos
+        valid = np.where(mask > 0.5)[0]
+        for step, action in enumerate(sequence):
+            if drive is None:
+                local_pos = local_pos + action[0] * float(self.config.rollout_dt) * np.array(
+                    [np.cos(local_heading), np.sin(local_heading)]
+                )
+                local_heading = _wrap_angle(
+                    local_heading + action[1] * float(self.config.rollout_dt)
+                )
+            else:
+                local_pos = drive[0][step]
+            if valid.size:
+                centers = np.linalg.norm(
+                    future[valid, min(step, future.shape[1] - 1), :] - local_pos, axis=1
+                )
+                min_ped = min(min_ped, float(np.min(self._pedestrian_clearance(centers))))
+            world = robot_pos + rotation @ local_pos
+            min_obs = min(
+                min_obs, self._obstacle_motion_clearance(world, previous, observation, grid_payload)
+            )
+            previous = world
+        return least_bad_clearance_rank(
+            min_ped,
+            min_obs,
+            ped_threshold=float(self.config.hard_ped_clearance),
+            obstacle_threshold=float(self.config.hard_obstacle_clearance),
+            progress=float(np.linalg.norm(goal - robot_pos) - np.linalg.norm(goal - world)),
+        )
+
     def plan(self, observation: dict[str, object]) -> tuple[float, float]:  # noqa: PLR0915
         """Return the first action from the best sampled control sequence."""
         self._no_admissible_command = False
+        self._recovery_kind = None
         self._recovery_command = False
         # Recovery rollouts consume observed speed and yaw rate, including
         # sampled/anchor/stop sequences, rather than assuming the body is at rest.
@@ -905,11 +958,16 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
             # Prefer a feasible turn over stasis. Its score already includes
             # constrained braking from the actual observed drive velocity.
             action, selected_cost = recovery_rotation
+        recovery_candidates = [
+            (tuple(item[0]), "brake" if np.all(item[0] == 0.0) else "least_bad_clearance")
+            for item in arbitration
+        ]
+        recovery_candidates[2] = ((0.0, 0.0), "brake")
         if bool(self.config.progress_escape_enabled):
             goal_dist = float(np.linalg.norm(goal - robot_pos))
-            if (
-                goal_dist > float(self.config.progress_escape_distance)
-                and float(action[0]) < float(self.config.progress_escape_speed) * 0.6
+            if goal_dist > float(self.config.progress_escape_distance) and (
+                float(action[0]) < float(self.config.progress_escape_speed) * 0.6
+                or selected_cost >= float(self.config.invalid_sequence_cost)
             ):
                 goal_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
                 heading_err = _wrap_angle(goal_heading - heading)
@@ -922,6 +980,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                         float(self.config.max_angular_speed),
                     )
                 )
+                recovery_candidates.append((tuple(forced_action), "progress_escape"))
                 forced_cost = self._sequence_rollout(
                     self._constant_sequence(
                         (float(forced_action[0]), float(forced_action[1])),
@@ -941,7 +1000,20 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                     selected_cost = forced_cost
         self._record_admissibility(current_obs, selected_cost)
         if self._no_admissible_command:
-            action = np.zeros(2)
+            action, self._recovery_kind = max(
+                recovery_candidates,
+                key=lambda item: self._infeasible_command_rank(
+                    item[0],
+                    horizon=horizon,
+                    robot_pos=robot_pos,
+                    heading=heading,
+                    goal=goal,
+                    future=future,
+                    mask=mask,
+                    observation=observation,
+                    grid_payload=grid_payload,
+                ),
+            )
         return float(action[0]), float(action[1])
 
     def _record_admissibility(self, current_obs: float, selected_cost: float) -> None:
@@ -956,6 +1028,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""
         decision = {
+            "recovery_kind": getattr(self, "_recovery_kind", None),
             "no_admissible_command": self._no_admissible_command,
             "no_admissible_command_count": self._no_admissible_command_count,
             "recovery_command": self._recovery_command,
@@ -996,7 +1069,7 @@ def build_predictive_mppi_config(cfg: dict[str, object] | None) -> PredictiveMPP
     return PredictiveMPPIConfig(
         socnav=socnav,
         random_seed=int(cfg.get("random_seed", 42)),
-        horizon_steps=int(cfg.get("horizon_steps", 12)),
+        horizon_steps=int(cfg.get("horizon_steps", 8)),
         rollout_dt=float(cfg.get("rollout_dt", socnav.predictive_rollout_dt)),
         sample_count=int(cfg.get("sample_count", 128)),
         iterations=int(cfg.get("iterations", _DEFAULT_ITERATIONS)),

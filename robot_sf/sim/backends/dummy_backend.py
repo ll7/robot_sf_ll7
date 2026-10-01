@@ -101,13 +101,13 @@ class DummySimulator:
         )
         self.robots[0].reset_state((route[0], navigator.initial_orientation))
 
-    def repopulate_crowd(self) -> None:
+    def repopulate_crowd(self, seed: int | None = None) -> None:
         """Re-sample the pedestrian crowd (issue #9760 protocol hook).
 
         The dummy backend holds no crowd (``ped_pos`` is always empty), so
         there is nothing to re-sample; the method exists so directly-constructed
-        envs running on this backend support the same first-seeded-reset path
-        as the full simulator.
+        envs running on this backend support the same seeded-reset protocol
+        as the full simulator. The seed has no effect on an empty population.
         """
 
     def step_once(self, actions) -> None:

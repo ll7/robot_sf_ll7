@@ -25,8 +25,8 @@ amv_profile:
 
 seed_policy:
   mode: seed-set
-  seed_set: paper_eval_s30
-  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+  seed_set: release_eval_0_0_8
+  seed_sets_path: configs/benchmarks/seed_sets_0_0_8.yaml
 
 snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
 snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
@@ -92,7 +92,7 @@ planners:
     algo: orca
     planner_group: core
     benchmark_profile: baseline-safe
-    algo_config: configs/algos/socnav_release_v0_0_8.yaml
+    algo_config: configs/algos/orca_release_v0_0_8.yaml
     socnav_missing_prereq_policy: fail-fast
 
   - key: ppo

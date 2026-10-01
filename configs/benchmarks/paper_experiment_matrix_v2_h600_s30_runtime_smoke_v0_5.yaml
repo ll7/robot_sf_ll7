@@ -4,7 +4,7 @@ name: paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5
 protocol_version: 0.0.8
 derived_from:
   config: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml
-  config_sha256: 41d4bcdbed9b72406dfa02611f4aa8e58a2c65bc7e2db452446b88d3a5bfeead
+  config_sha256: 29c2c3c6af8e81725109c98c700c63501a3729d07f9311f5fc1b81df6a5dbfb1
 paper_facing: true
 paper_profile_version: paper-matrix-v1
 scenario_matrix: configs/scenarios/single/francis2023_blind_corner_release_0_0_8_v1.yaml
@@ -96,7 +96,7 @@ planners:
     algo: orca
     planner_group: core
     benchmark_profile: baseline-safe
-    algo_config: configs/algos/socnav_release_v0_0_8.yaml
+    algo_config: configs/algos/orca_release_v0_0_8.yaml
     socnav_missing_prereq_policy: fail-fast
   - key: ppo
     algo: ppo

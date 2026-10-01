@@ -1909,3 +1909,5 @@ why a change was made rather than a full issue execution transcript.
   records the assessment-only boundary for an Actor-Critic Model Predictive Control inspired
   learned-MPC local planner, including adapter burden, benchmark claim limits, and a conditional
   design-child recommendation.
+
+The checkpoint-bound PPO velocity-delta adapter and shared release plant limitation are documented in [ppo_checkpoint_action_semantics.md](ppo_checkpoint_action_semantics.md).

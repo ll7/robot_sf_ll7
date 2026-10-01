@@ -19,7 +19,7 @@ measurement error; four physical boolean nodes report unavailable; one unnamed
 Mapping node reports clear; two 1%-shift nodes report clear; five new-channel
 nodes fail the explicit public-default-scan assertion that the independent
 channel is present. No import, fixture or collection failures occurred in this
-final proof. [Full red output](red.txt), [green output](green.txt).
+final proof. [Full red output](../red.txt), [green output](green.txt).
 
 The four reviewer nodes retain their names, input, public scan call and assertions
 from `rv10-evidence/test_refutations.py`; only formatting/docstring were added.

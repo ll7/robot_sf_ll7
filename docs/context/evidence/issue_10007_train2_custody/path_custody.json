@@ -135,10 +135,10 @@
       }
     },
     {
-      "normalization": "Only home/root path prefixes change; numeric observations and other strings unchanged.",
+      "normalization": "Only home/root path prefixes change; numeric observations and other strings unchanged. Relative red-output citation points to the preserved source packet.",
       "portable": {
         "path": "docs/context/evidence/issue_9952_auditor/aud2/portable/test_value.md",
-        "sha256": "e87750cf241777fe22f72377d98e1f3998388f3bfee451f8a551f45a9a75e7bc"
+        "sha256": "1c91e4e8ff3d21075eaeabbf3b7e43cfbf9e6ad07e81c3d6c34820ebc80f2883"
       },
       "source": {
         "path": "docs/context/evidence/issue_9952_auditor/aud2/test_value.md",

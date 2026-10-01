@@ -168,6 +168,34 @@ def test_child_custom_environment_cannot_drop_guard():
     assert "child sentinel" in result.stderr
 
 
+def test_child_guard_preserves_application_startup_hook(tmp_path):
+    """Child protection must coexist with the application's Python startup hook."""
+    import subprocess
+    import sys
+
+    from robot_sf.evidence.writers import write_text
+
+    write_text(
+        tmp_path / "sitecustomize.py",
+        "# AI-GENERATED NEEDS-REVIEW\nimport os, sys\n"
+        "assert sys.modules['tests.support.seedguard_boundaries']._ACTIVE\n"
+        "os.environ['TRAIN2_APPLICATION_HOOK'] = 'active'\n",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import os; assert os.environ['TRAIN2_APPLICATION_HOOK'] == 'active'",
+        ],
+        env={"PYTHONPATH": str(tmp_path)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 @pytest.mark.parametrize("flag", ["-I", "-S", "-E", "-IS"])
 def test_isolated_child_rejects_before_any_user_step(flag, tmp_path):
     """Isolation flags cannot remove the guard from a Python simulation child."""
@@ -264,6 +292,10 @@ def test_standalone_static_rng_only_rejects_at_simulation_boundary():
 # seed-holdout: synthetic-fixture end
 
 
+# seed-holdout: synthetic-fixture begin
+# Refusal witnesses use uninitialized sentinels and must abort before reset/step.
+
+
 def _multiprocessing_boundary_probe(connection):
     """Report missing protection before ever requesting a held-out reset."""
     import os
@@ -346,3 +378,6 @@ def test_worker_guard_active(tmp_path):
     if proof:
         worker = os.environ.get("PYTEST_XDIST_WORKER", "main")
         write_json(Path(proof, f"{worker}.json"), {"worker": worker, "active": True})
+
+
+# seed-holdout: synthetic-fixture end

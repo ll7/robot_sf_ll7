@@ -48,7 +48,7 @@ FALLBACK_HELD_OUT_SEEDS = frozenset(range(111, 141)) | frozenset(
         59019,
     }
 )
-HELD_OUT_SEEDS = FALLBACK_HELD_OUT_SEEDS
+HELD_OUT_SEEDS = FALLBACK_HELD_OUT_SEEDS  # seed-holdout: setup-only (guard policy metadata)
 _POLICY_RESOLVED = False
 _ACTIVE = False
 _CURRENT_ITEM = None
@@ -64,10 +64,12 @@ def resolve_held_out_seeds():
     Eager project imports would bind isolated lineage checks to the editable
     install before their target script inserts the pinned checkout path.
     """
-    global HELD_OUT_SEEDS, _POLICY_RESOLVED
+    global HELD_OUT_SEEDS, _POLICY_RESOLVED  # seed-holdout: setup-only (guard policy metadata)
     if not _POLICY_RESOLVED:
         try:
-            from robot_sf.benchmark.seed_bands import HELD_OUT_SEEDS as canonical
+            from robot_sf.benchmark.seed_bands import (
+                HELD_OUT_SEEDS as canonical,  # seed-holdout: setup-only (guard policy metadata)
+            )
         except ModuleNotFoundError as error:
             if error.name not in {
                 "robot_sf",
@@ -76,9 +78,11 @@ def resolve_held_out_seeds():
             }:
                 raise
         else:
-            HELD_OUT_SEEDS = frozenset(canonical)
+            HELD_OUT_SEEDS = frozenset(
+                canonical
+            )  # seed-holdout: setup-only (guard policy metadata)
             _POLICY_RESOLVED = True
-    return HELD_OUT_SEEDS
+    return HELD_OUT_SEEDS  # seed-holdout: setup-only (guard policy metadata)
 
 
 class HeldoutSeedError(BaseException):

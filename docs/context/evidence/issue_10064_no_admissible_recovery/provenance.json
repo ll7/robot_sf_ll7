@@ -126,9 +126,11 @@
       "sha256": "330982edb9a5dd4cbaf192232418f7d35171a410e582c4c3d76ca2fb4362464c"
     },
     {
+      "historical_source_commit": "de8f8a105ab91ad665773bbed204d7d25c9c6c30",
       "identical_on_base": true,
+      "integration_note": "Exact historical config blob retained for the #10064 dev receipt; combo #10024/#10026 changes the live config, not these measurements.",
       "path": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
-      "resolved_path": "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml",
+      "resolved_path": "docs/context/evidence/issue_10064_no_admissible_recovery/source_release_matrix.yaml",
       "sha256": "8b16cb1ba6155567f31855ec453d596e17e4ed859caf60b6e1092f49b4766ac8"
     },
     {

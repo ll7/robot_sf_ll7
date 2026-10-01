@@ -141,3 +141,29 @@ def test_slice_loader_preserves_template_bytes_and_uses_h400():
     bound = replace(legacy, schema_version="benchmark-release-manifest.v0.2")
     assert load_release_campaign_config(bound).horizon == 400
     assert legacy.canonical_campaign_config_path.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "kind,horizon",
+    [("benchmark-width-slice", 401), ("benchmark-doorway-width-slice.v1", 600)],
+)
+def test_materialization_refuses_wrong_template_horizon(kind, horizon):
+    """Identity normalization must not silently repair a tampered declaration."""
+    from robot_sf.benchmark import release_protocol as protocol
+
+    payload = yaml.safe_load(TEMPLATE.read_text())
+    payload["release_kind"] = kind
+    payload["matrix"]["horizon_steps"] = horizon
+    with pytest.raises(ValueError, match="template horizon"):
+        protocol._materialize_release_template_payload(
+            payload,
+            template_path=TEMPLATE,
+            metadata_path=TEMPLATE,
+            metadata_sha256="0" * 64,
+            source_commit="0" * 40,
+            latest_main_base_commit="0" * 40,
+            release_tag="diagnostic-static-fixture",
+            concept_doi="10.5281/zenodo.99000001",
+            version_doi="10.5281/zenodo.99000002",
+            repository_root=ROOT,
+        )

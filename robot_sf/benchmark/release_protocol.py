@@ -3126,6 +3126,19 @@ def _absolute_template_file(
     )
 
 
+def _bind_doorway_template_horizon(payload: dict[str, Any]) -> None:
+    """Validate the declaration before emitting the versioned H400 slice identity."""
+    if payload.get("release_kind") in DOORWAY_RELEASE_KINDS:
+        matrix = payload.get("matrix")
+        template_horizon = (
+            DOORWAY_RELEASE_HORIZON if payload["release_kind"] == DOORWAY_RELEASE_KIND else 600
+        )
+        if not isinstance(matrix, dict) or matrix.get("horizon_steps") != template_horizon:
+            raise ValueError(f"doorway slice template horizon must be H{template_horizon}")
+        payload["release_kind"] = DOORWAY_RELEASE_KIND
+        matrix["horizon_steps"] = DOORWAY_RELEASE_HORIZON
+
+
 def _materialize_release_template_payload(  # noqa: PLR0913
     template_payload: Mapping[str, Any],
     *,
@@ -3152,9 +3165,7 @@ def _materialize_release_template_payload(  # noqa: PLR0913
         "version_doi": version_doi,
     }
     payload = _replace_identity_tokens(copy.deepcopy(dict(template_payload)), replacements)
-    if payload.get("release_kind") in DOORWAY_RELEASE_KINDS:
-        payload["release_kind"] = DOORWAY_RELEASE_KIND
-        payload["matrix"]["horizon_steps"] = DOORWAY_RELEASE_HORIZON
+    _bind_doorway_template_horizon(payload)
     payload.pop("identity_resolution", None)
     payload["release_tag"] = release_tag
     payload["source_sha"] = source_commit

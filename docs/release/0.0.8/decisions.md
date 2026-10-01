@@ -978,3 +978,70 @@ D-049. Their historical pins are for static archived-artifact validation only.
 
 **Reopen:** Only new material evidence or an explicit author decision reopens
 this ruling; never reuse an observed evaluation band for a fresh release claim.
+
+## D-050 — Accept the corrected combo crowd distribution as the 0.0.8 world
+
+- **Date:** 2026-10-01
+- **Question:** Accept the combo #10024/#10026 world-generation correction knowing
+  that method-faithful release socnav_sampling loses success and gains pedestrian
+  collisions on development seeds, or tune the planner to recover those outcomes?
+- **Choice:** Accept the combo crowd distribution as the 0.0.8 world. Keep the
+  planner and `configs/algos/socnav_sampling_release_v0_0_8.yaml` unchanged.
+  The release configuration deliberately mirrors SocNavBench: no pedestrian
+  prediction, no footprint margin, and no repulsion enhancement (#9926).
+  The measured loss is a property of this method in the corrected world, not a
+  defect to tune away.
+- **Decided by:** The orchestrator issued this delegated ruling on 2026-10-01 in
+  TRAIN2 fix round 1 for PR #10080, following refute review rr10080, finding F1.
+- **Reason:** The reviewed combo corrects private per-episode pedestrian streams,
+  group-member probabilities, the spawn reaction buffer, and velocity toward the
+  current route goal when pedestrians are relocated. No sampler planner bytes
+  changed. This world correction exposes the release method's omission of
+  pedestrian motion prediction.
+- **Paired evidence:** rr10080 compared 48 release scenarios from
+  `configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml`
+  on dev seeds 1001-1030, 1440 paired cells per arm, with authored per-scenario
+  budgets. The review reports 17,280 episodes and zero errors. Against main
+  `7ecb1ce5c5c96b607d3eb52b0c8200160e9ddb4a`, train head
+  `26daa3947f030d5bcb4541540c0454ebfc3101e7` changes socnav_sampling success by
+  **-2.0 percentage points [95% CI -3.5, -0.8]** and pedestrian collisions by
+  **+1.5 percentage points [95% CI +0.5, +2.8]**. Success is 1321/1440 (91.7%)
+  on main and 1292/1440 (89.7%) on the train; pedestrian collisions are 37/1440
+  (2.6%) and 59/1440 (4.1%). These are paired deltas with scenario-cluster
+  bootstrap intervals (B=4000), not sealed evaluation results. Loss concentrates
+  in `doorway_high`, `station_platform_medium`, `robot_crowding`,
+  `crowd_navigation`, `doorway_low`, and `merging_medium`. ORCA and goal show
+  no statistically significant change; they do not establish an offsetting gain.
+- **Distribution bisect:** The whole delta is introduced by combo merge
+  `126e438dda94144c52ae0df89efd2cc8f9a0f63d`: main and pre-combo
+  `fef9a94ebc23f1b23d5bd67096356f351f83171d` have zero differing outcomes across
+  1440 cells, and post-combo and the reviewed train head have zero differences,
+  for both socnav_sampling and ORCA. **#10008 is not the cause at distribution
+  level**; its interaction with the combo is not statistically significant.
+- **Mechanism probe:** All 40 new collision cells are pedestrian contacts at
+  centre distances 1.31-1.40 m; 24 occur by step 66. Enabling pedestrian
+  prediction on those selected cells rescues 35/40 (five still collide).
+  This is a selected mechanism probe, not a fix or an unbiased performance
+  estimate. It does not authorize enabling prediction in the release config.
+- **Earlier sampler ruling re-scoped:** The earlier 2026-10-01 moving-timeout
+  ruling, implemented in `ea0f729e265e04a5d56ab95b0586fc486125e832`, concerns
+  only the non-release `classic_interactions_francis2023_goal_zone_entry_v1.yaml`
+  / `socnav_sampling_bounded_v2.yaml` test cell. Its 182-to-400-step change is
+  not release evidence. In the release configuration, `robot_crowding` / dev
+  seed 1004 changes from main success at step 325 to a train **pedestrian
+  collision at step 32**, minimum distance 1.39 m. The non-release safety,
+  freeze, and progress checks remain; they make no release-success claim.
+- **Enforcing evidence:** `rr10080_report.md`, finding F1 and claim 4, supplied
+  with the delegated ruling; retained sweep evidence is
+  `~/claude_lanes/rr10080/sweep/analysis_all.txt` on the review host (imech036),
+  with `all/*.jsonl`, `analyze.py`, `rr10080_sweep.py`, `*.sbatch`,
+  `pred_on_*.jsonl`, and `smoke_{main,head,head_old}.jsonl` in that directory.
+  The review binds Slurm jobs 16110, 16112, and 16117 to development seeds only.
+  The local supplied review is preserved at `~/train2_evidence/fix1/rr10080_report.md`.
+  The renamed `test_non_release_goal_zone_entry_v1_bounded_v2_replay_safety`
+  in `tests/benchmark/test_issue_9727_socnav_sampling.py` enforces only the
+  earlier non-release safety contract, not this distributional acceptance.
+- **Reopen:** New material evidence about the corrected world or method
+  fidelity, or an explicit author/orchestrator decision, may reopen this ruling.
+  Keep the dev-seed disclosure separate from sealed release evaluation; other
+  roster arms were not distribution-swept by this review.

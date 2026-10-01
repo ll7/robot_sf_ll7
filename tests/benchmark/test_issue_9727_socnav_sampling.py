@@ -260,13 +260,14 @@ def test_braking_helpers_are_consistent() -> None:
     ("scenario_id", "seed"),
     [("francis2023_crowd_navigation", 1001), ("francis2023_robot_crowding", 1004)],
 )
-def test_release_cell_replay_reaches_goal_without_wall_contact(
+def test_non_release_goal_zone_entry_v1_bounded_v2_replay_safety(
     scenario_id: str, seed: int, record_property: Callable[[str, object], None]
 ) -> None:
-    """Protect collision-free replay and retain completion checks outside the ruled timeout.
+    """Protect the non-release goal_zone_entry_v1 / bounded_v2 replay cells.
 
     Legacy_v1 contacts walls in these dev-seed cells (#9727, #9746). Crowding1004
     may consume its authored budget while moving safely; other cells must finish.
+    This does not exercise the release matrix or socnav_sampling_release_v0_0_8.yaml.
     """
     from robot_sf.benchmark.classic_interactions_loader import (
         load_classic_matrix,

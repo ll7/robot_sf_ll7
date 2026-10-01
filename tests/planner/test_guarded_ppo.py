@@ -497,7 +497,7 @@ def test_guarded_ppo_uses_safe_prior_before_fallback_when_ppo_is_unsafe() -> Non
     )
     evaluations = iter(
         [
-            {"safe": False, "min_ped_clear": 0.2},
+            {"safe": False, "min_ped_clear": 0.2, "min_obs_clear": float("inf"), "progress": 0.0},
             {"safe": True, "min_ped_clear": 0.9},
         ]
     )
@@ -528,7 +528,7 @@ def test_guarded_ppo_near_field_only_prior_skips_clear_scenes() -> None:
     )
     evaluations = iter(
         [
-            {"safe": False, "min_ped_clear": 0.2},
+            {"safe": False, "min_ped_clear": 0.2, "min_obs_clear": float("inf"), "progress": 0.0},
             {"safe": True, "min_ped_clear": 0.9},
         ]
     )
@@ -663,9 +663,9 @@ def test_guarded_ppo_best_effort_prefers_fallback_when_clearer() -> None:
     )
     evaluations = iter(
         [
-            {"safe": False, "min_ped_clear": 0.2},
-            {"safe": False, "min_ped_clear": 0.8},
-            {"safe": False, "min_ped_clear": 0.5},
+            {"safe": False, "min_ped_clear": 0.2, "min_obs_clear": float("inf"), "progress": 0.0},
+            {"safe": False, "min_ped_clear": 0.8, "min_obs_clear": float("inf"), "progress": 0.0},
+            {"safe": False, "min_ped_clear": 0.5, "min_obs_clear": float("inf"), "progress": 0.0},
         ]
     )
     guard._evaluate_command = lambda observation, command, **kwargs: next(evaluations)  # type: ignore[method-assign]
@@ -882,9 +882,9 @@ def test_guarded_ppo_no_peds_and_stop_best_effort_branch() -> None:
     )
     evaluations = iter(
         [
-            {"safe": False, "min_ped_clear": 0.6},
-            {"safe": False, "min_ped_clear": 0.5},
-            {"safe": False, "min_ped_clear": 0.7},
+            {"safe": False, "min_ped_clear": 0.6, "min_obs_clear": float("inf"), "progress": 0.0},
+            {"safe": False, "min_ped_clear": 0.5, "min_obs_clear": float("inf"), "progress": 0.0},
+            {"safe": False, "min_ped_clear": 0.7, "min_obs_clear": float("inf"), "progress": 0.0},
         ]
     )
     blocked_guard._evaluate_command = lambda observation, command, **kwargs: next(evaluations)  # type: ignore[method-assign]

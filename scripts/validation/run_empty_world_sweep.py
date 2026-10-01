@@ -83,7 +83,7 @@ def assert_dev_seeds(seeds: Any) -> list[int]:
         if not DEV_SEED_MIN <= seed <= DEV_SEED_MAX:
             raise SeedGuardError(
                 f"seed {seed} is outside the development range {DEV_SEED_MIN}-{DEV_SEED_MAX} "
-                "(111-140 is the evaluation holdout); aborting"
+                "(retired 111-140 and the sealed 0.0.8 seeds remain held out); aborting"
             )
         checked.append(seed)
     return checked
@@ -449,7 +449,10 @@ def _trace_complete(row: dict[str, Any]) -> bool:
         True for a finite, complete simulation trace, including empty actor lists.
     """
     trace = _trace_of(row)
-    if trace is None or trace.get("schema_version") != "simulation-step-trace.v1":
+    if trace is None or trace.get("schema_version") not in {
+        "simulation-step-trace.v1",
+        "simulation-step-trace.v2",
+    }:
         return False
     steps = trace.get("steps")
     dt = _num(trace.get("dt"))

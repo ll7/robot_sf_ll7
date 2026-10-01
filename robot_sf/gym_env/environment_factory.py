@@ -205,6 +205,7 @@ class EnvironmentFactory:
         jsonl_recording_options: JsonlRecordingOptions | None = None,
         telemetry_options: TelemetryOptions | None = None,
         asymmetric_critic: bool = False,
+        seed: int | None = None,
     ) -> SingleAgentEnv:
         """Construct a robot environment with specified observation and recording configuration.
 
@@ -214,6 +215,7 @@ class EnvironmentFactory:
 
         Args:
             config: RobotSimulationConfig instance defining physics, maps, and sensors.
+            seed: Episode seed for the private pedestrian generator.
             use_image_obs: If True, select image-capable environment; else standard lidar-only.
             peds_have_obstacle_forces: (Deprecated) Controls static obstacle forces for pedestrians.
             reward_func: Custom reward function; falls back to internal default if None.
@@ -235,6 +237,8 @@ class EnvironmentFactory:
         """
         if config is None:
             config = ImageRobotConfig() if use_image_obs else RobotSimulationConfig()
+        if seed is not None:
+            config.sim_config.pedestrian_seed = seed
         config.use_image_obs = use_image_obs
         legacy_override = None if peds_have_obstacle_forces is True else peds_have_obstacle_forces
         sync_pedestrian_obstacle_force_alias(config, legacy_override)
@@ -286,6 +290,7 @@ class EnvironmentFactory:
         video_path: str | None = None,
         video_fps: float | None = None,
         peds_have_obstacle_forces: bool = True,
+        seed: int | None = None,
     ) -> SingleAgentEnv:
         """Construct a pedestrian (adversarial) environment.
 
@@ -293,6 +298,7 @@ class EnvironmentFactory:
         agent navigating among crowds controlled by a provided robot policy.
 
         Args:
+            seed: Episode seed for private pedestrian sampling.
             robot_model: Trained policy or model providing robot actions in the scene.
             config: PedestrianSimulationConfig instance; defaults to standard if None.
             reward_func: Custom reward function for pedestrian agent; uses canonical
@@ -309,6 +315,8 @@ class EnvironmentFactory:
         """
         if config is None:
             config = PedestrianSimulationConfig()
+        if seed is not None:
+            config.sim_config.pedestrian_seed = seed
         PedestrianEnv = _load_pedestrian_env()
 
         # Allow None to be passed through from ergonomic factories and
@@ -365,6 +373,8 @@ class EnvironmentFactory:
         """
         if config is None:
             config = MultiRobotConfig()
+        if seed is not None:
+            config.sim_config.pedestrian_seed = seed
         if config.num_robots != num_robots:
             config.num_robots = num_robots
         _apply_global_seed(seed)
@@ -662,6 +672,7 @@ def make_robot_env(  # noqa: PLR0913
         jsonl_recording_options=jsonl_recording_options,
         telemetry_options=telemetry_options,
         asymmetric_critic=asymmetric_critic,
+        seed=seed,
     )
     env.applied_seed = seed
     return env
@@ -757,6 +768,7 @@ def make_image_robot_env(  # noqa: PLR0913
         video_fps=eff_video_fps,
         jsonl_recording_options=jsonl_recording_options,
         asymmetric_critic=asymmetric_critic,
+        seed=seed,
     )
     env.applied_seed = seed
     return env
@@ -852,6 +864,7 @@ def make_pedestrian_env(  # noqa: PLR0913
         video_path=eff_video_path,
         video_fps=eff_video_fps,
         peds_have_obstacle_forces=peds_have_obstacle_forces,
+        seed=seed,
     )
     env.applied_seed = seed
     return env

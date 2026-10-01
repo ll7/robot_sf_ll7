@@ -1708,3 +1708,18 @@ def test_planned_counts_and_exclusion_admission(tmp_path, monkeypatch, case):
     else:
         assert result["status"] == "invalid"
         assert "planner_rows[11] total episode count is not 1440" in result["blockers"]
+
+
+def test_full_release_008_rejects_complete_retired_seed_fixture(tmp_path, monkeypatch):
+    """Real acceptance rejects otherwise valid synthetic rows on the retired band."""
+    campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
+    manifest = _full_manifest()
+    manifest.release_tag = "paper-matrix-v2-h600-s30-2026-09-" + _SOURCE_SHA
+    manifest.scenario_matrix_path = Path("scenarios_release_0_0_8_v1.yaml")
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=manifest,
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+    assert "0.0.8 requires the exact sealed evaluation seeds (D-049)" in result["blockers"]

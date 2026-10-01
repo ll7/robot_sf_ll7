@@ -516,7 +516,10 @@
                     ],
                     "properties": {
                         "schema_version": {
-                            "const": "deadlock-stall.v1"
+                            "enum": [
+                                "deadlock-stall.v1",
+                                "deadlock-stall.v2"
+                            ]
                         },
                         "window_steps": {
                             "type": "integer",
@@ -1288,6 +1291,24 @@
                             "social_force_config"
                         ]
                     }
+                },
+                "metric_schema_version": {
+                    "type": "string",
+                    "enum": [
+                        "robot-sf-metrics.v1",
+                        "robot-sf-metrics.v2"
+                    ]
+                },
+                "path_efficiency": {
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "description": "Metric-v2 success-only shortest completion reference / travelled path; null represents undefined (NaN). Unclipped; a success above one flags path_efficiency_reference_violation."
+                },
+                "path_efficiency_reference_violation": {
+                    "type": "boolean",
+                    "description": "True when successful path efficiency exceeds one; retained for reference-integrity review."
                 }
             },
             "additionalProperties": {
@@ -1493,6 +1514,13 @@
                 "renderer"
             ],
             "additionalProperties": true
+        },
+        "metric_schema_version": {
+            "type": "string",
+            "enum": [
+                "robot-sf-metrics.v1",
+                "robot-sf-metrics.v2"
+            ]
         }
     }
 }

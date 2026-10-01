@@ -28,26 +28,61 @@ import tokenize
 from dataclasses import dataclass
 from pathlib import Path
 
+from robot_sf.benchmark.seed_bands import HELD_OUT_SEEDS
+
 RELEASE_CONFIGS = frozenset(
     {
         "configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml",
         "configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml",
     }
 )
+# Explicit consumers of release identities. New executable consumers require review.
+SEALED_REFERENCE_ALLOWLIST = frozenset(
+    [
+        "robot_sf/benchmark/seed_bands.py",
+        "robot_sf/benchmark/release_protocol.py",
+        "robot_sf/benchmark/spawn_preflight.py",
+        "robot_sf/benchmark/release_acceptance.py",
+        "robot_sf/benchmark/release_candidate.py",
+        "scripts/validation/check_seed_holdout_diff.py",
+        "scripts/validation/check_issue_9748_dev_split.py",
+        "scripts/benchmark/run_issue_9748_v4_tuning.py",
+        "configs/benchmarks/seed_sets_0_0_8.yaml",
+        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml",
+        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_v0_0_8_candidate.yaml",
+        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml",
+        "configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml",
+        "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.yaml",
+        "configs/benchmarks/releases/three_width_doorway_release_0_0_8_v1.template.yaml",
+        "tests/analysis/test_pinned_successor_lineage.py",
+        "tests/analysis/test_compare_issue_9431_release.py",
+        "tests/validation/test_check_seed_holdout_diff.py",
+        "tests/benchmark/test_newseeds.py",
+        "tests/benchmark/test_release_candidate.py",
+        "tests/benchmark/test_release_resolved_identity.py",
+        "tests/benchmark/test_sealed_source_pins.py",
+        "tests/benchmark/test_sealed_runtime_sources.py",
+        "tests/benchmark/test_s30_h600_runtime_smoke_contract.py",
+    ]
+)
+SEALED_REFERENCE = re.compile(
+    r"\b(?:release_eval_0_0_8|seed_sets_0_0_8\.yaml|EVAL_SEEDS_0_0_8|"
+    r"EVAL_SEED_SET_0_0_8|HELD_OUT_SEEDS|RETIRED_EVAL_SEEDS_0_0_7|paper_eval_s30)\b"
+)
+
 MARKER_KINDS = "setup-only|synthetic-fixture|release-evaluation"
 MARKER = re.compile(rf"#\s*seed-holdout:\s*(?P<kind>{MARKER_KINDS})\b")
 BLOCK_MARKER = re.compile(rf"\s*#\s*seed-holdout:\s*({MARKER_KINDS})\s+(begin|end)\s*")
 # The release-evaluation marker is valid only in release evaluation manifests,
-# where the held-out seeds 111-140 are the intended evaluation set. Anywhere
+# where sealed evaluation seeds are the intended release set. Anywhere
 # else it is an error, so it cannot become a blanket escape.
 RELEASE_EVALUATION_KIND = "release-evaluation"
 RELEASE_EVALUATION_PREFIXES = (
     "configs/benchmarks/releases/",
     "configs/benchmarks/paper_experiment_matrix_",
 )
-SEED = re.compile(
-    r"(?<![\w.])(?:11[1-9]|12\d|13\d|140)(?![\w.])"  # seed-holdout: synthetic-fixture
-)
+SEALED_SEED_PATTERN = "(?:" + "|".join(map(str, sorted(HELD_OUT_SEEDS))) + ")"
+SEED = re.compile(rf"(?<![\w.]){SEALED_SEED_PATTERN}(?![\w.])")
 SEED_FIELD = re.compile(
     r"(?i)(?:^|[\s,({])['\"]?(?:seed|seeds|seed_list|seed_set|resolved_seeds|"
     r"eval_seeds|evaluation_seeds|pilot_seeds|diagnostic_seeds|base_seed|"
@@ -118,7 +153,7 @@ def _eligible(path: str) -> bool:
     if path.startswith("tests/analysis/fixtures/") and path.endswith(".jsonl"):
         return False
     return path.startswith(
-        ("configs/", "tests/", "scripts/", "docs/plan/", "docs/context/evidence/")
+        ("robot_sf/", "configs/", "tests/", "scripts/", "docs/plan/", "docs/context/evidence/")
     )
 
 
@@ -218,15 +253,8 @@ def _range_overlaps_holdout(text: str) -> bool:
             start = first
         if step == 0:
             continue
-        if step > 0:
-            candidate = start + max(0, (111 - start + step - 1) // step) * step
-            if 111 <= candidate <= 140 and candidate < stop:
-                return True
-        else:
-            magnitude = -step
-            candidate = start - max(0, (start - 140 + magnitude - 1) // magnitude) * magnitude
-            if 111 <= candidate <= 140 and candidate > stop:
-                return True
+        if any(seed in range(start, stop, step) for seed in HELD_OUT_SEEDS):
+            return True
     return False
 
 
@@ -312,6 +340,10 @@ def _yaml_seed_range_bound(path: str, text: str, before: list[str]) -> bool:
 def _seed_context(path: str, text: str, before: list[str], after: list[str]) -> bool:
     if CLI_SEED.search(text):
         return True
+    # Every value in a seed inventory is a seed, irrespective of the set name
+    # or whether YAML uses a flow list or a block list.
+    if path.startswith("configs/") and re.fullmatch(r"seed_(?:set|list).*\.ya?ml", Path(path).name):
+        return True
     if path.startswith("docs/") or _non_episode_seed(path, text, before, after):
         return False
     if (
@@ -328,11 +360,9 @@ def _seed_context(path: str, text: str, before: list[str], after: list[str]) -> 
     # YAML block lists and multiline pytest parametrizations put the value on
     # a separate line from the seed key. Use the closest enclosing declaration.
     if re.match(
-        r"^\s*(?:-\s*)?\[?\s*(?:11[1-9]|12\d|13\d|140)(?:\s*,\s*\d+)*\s*\]?,?\s*(?:#.*)?$",
+        rf"^\s*(?:-\s*)?\[?\s*{SEALED_SEED_PATTERN}(?:\s*,\s*\d+)*\s*\]?,?\s*(?:#.*)?$",
         text,
     ):
-        if path == "configs/benchmarks/seed_list_v1.yaml":
-            return True
         if any("parametrize" in line for line in before[-12:]) and any(
             re.search(r"['\"]seed['\"]", line) for line in before[-12:]
         ):
@@ -348,6 +378,73 @@ def _seed_context(path: str, text: str, before: list[str], after: list[str]) -> 
     return False
 
 
+def _normalize_integer_spellings(text: str) -> str:
+    """Normalize whole integer tokens, leaving floats and identifiers alone."""
+    pattern = rf"(?<![\w.])(?:{PYTHON_INT_LITERAL})(?![\w.])"
+    return re.sub(pattern, lambda m: str(_parse_python_int_literal(m[0])), text)
+
+
+def _yaml_bounds_overlap(path: str, text: str, before: list[str], after: list[str]) -> bool:
+    """Join bounds inside one YAML seed mapping, including unchanged diff context."""
+    if not path.startswith("configs/") or not path.endswith((".yaml", ".yml")):
+        return False
+    if SEED_FIELD.search(text) and "{" in text:
+        block = text
+    elif _yaml_seed_range_bound(path, text, before):
+        indentation = len(text) - len(text.lstrip())
+        siblings = [text]
+        for lines in (reversed(before), iter(after)):
+            for line in lines:
+                if not line.strip() or line.lstrip().startswith("#"):
+                    continue
+                if len(line) - len(line.lstrip()) < indentation:
+                    break
+                if len(line) - len(line.lstrip()) == indentation:
+                    siblings.append(line)
+        block = "\n".join(siblings)
+    else:
+        return False
+    bounds = dict(re.findall(rf"\b(min|max|low|high)\s*:\s*({PYTHON_INT_LITERAL})(?![\w.])", block))
+    lower = bounds.get("min", bounds.get("low"))
+    upper = bounds.get("max", bounds.get("high"))
+    if lower is None or upper is None:
+        return False
+    low, high = _parse_python_int_literal(lower), _parse_python_int_literal(upper)
+    return (
+        low is not None and high is not None and any(low <= seed <= high for seed in HELD_OUT_SEEDS)
+    )
+
+
+def _unallowlisted_sealed_reference(path: str, content: str) -> bool:
+    """Named release identities need explicit review outside their static consumers."""
+    return bool(
+        _eligible(path)
+        and SEALED_REFERENCE.search(content)
+        and path not in SEALED_REFERENCE_ALLOWLIST
+        and not path.startswith("docs/")
+    )
+
+
+def _diff_file_context(root: Path, path: str) -> tuple[list[str], set[int]]:
+    """Read full context so unchanged seed bounds participate in the gate."""
+    file_path = root / path
+    lines = file_path.read_text(errors="replace").splitlines() if file_path.is_file() else []
+    return lines, _marked_block_lines(lines, path)
+
+
+def _reference_finding(path: str, number: int, content: str) -> Finding | None:
+    """Report misplaced markers and unreviewed named release-seed consumers."""
+    if _eligible(path) and _misplaced_release_marker(path, content):
+        return Finding(
+            path,
+            number,
+            f"{content.strip()}  [release-evaluation marker outside release manifests]",
+        )
+    if _unallowlisted_sealed_reference(path, content):
+        return Finding(path, number, content.strip())
+    return None
+
+
 def check_diff(diff: str, root: Path) -> list[Finding]:
     """Return violations on added lines; root supplies complete file context."""
     findings: list[Finding] = []
@@ -359,11 +456,7 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
     for row in diff.splitlines():
         if row.startswith("+++ b/"):
             path = row[6:]
-            file_path = root / path
-            file_lines = (
-                file_path.read_text(errors="replace").splitlines() if file_path.is_file() else []
-            )
-            marked_block_lines = _marked_block_lines(file_lines, path)
+            file_lines, marked_block_lines = _diff_file_context(root, path)
             before = []
         elif row.startswith("@@ "):
             match = HUNK.match(row)
@@ -373,25 +466,23 @@ def check_diff(diff: str, root: Path) -> list[Finding]:
                     before = file_lines[: line_number - 1]
         elif row.startswith("+") and not row.startswith("+++ "):
             content = row[1:]
-            if _eligible(path) and _misplaced_release_marker(path, content):
-                findings.append(
-                    Finding(
-                        path,
-                        line_number,
-                        f"{content.strip()}  [release-evaluation marker outside release manifests]",
-                    )
-                )
+            reference = _reference_finding(path, line_number, content)
+            if reference is not None:
+                findings.append(reference)
             elif (
                 _eligible(path)
                 and path not in RELEASE_CONFIGS
                 and line_number not in marked_block_lines
                 and not _line_marker_exempts(path, content)
                 and (
-                    SEED.search(RANGE.sub("", content))
+                    SEED.search(_normalize_integer_spellings(RANGE.sub("", content)))
                     or _range_overlaps_holdout(content)
                     or _episode_range_context(content, before, file_lines[line_number:])
+                    or _yaml_bounds_overlap(path, content, before, file_lines[line_number:])
                 )
-                and _seed_context(path, content, before, file_lines[line_number:])
+                and _seed_context(
+                    path, _normalize_integer_spellings(content), before, file_lines[line_number:]
+                )
             ):
                 findings.append(Finding(path, line_number, content.strip()))
             before.append(content)
@@ -418,6 +509,7 @@ def main() -> int:
         args.base_ref,
         args.head_ref,
         "--",
+        "robot_sf/",
         "configs/",
         "tests/",
         "scripts/",

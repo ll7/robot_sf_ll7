@@ -67,6 +67,7 @@ from robot_sf.benchmark.release_protocol import (
 )
 from robot_sf.benchmark.result_provenance import validate_result_provenance_manifest
 from robot_sf.benchmark.spawn_validity import record_has_invalid_spawn
+from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
 from robot_sf.benchmark.utils import _config_hash
 from robot_sf.common.artifact_paths import get_repository_root
 
@@ -2378,7 +2379,7 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
     if tuple(scenario_ids) != STRESS_SMOKE_EXPECTED_SCENARIO_IDS:
         _append_blocker(blockers, "diagnostic stress smoke must resolve the fixed five scenarios")
     if tuple(seeds) != (STRESS_SMOKE_EXPECTED_SEED,):
-        _append_blocker(blockers, "diagnostic stress smoke must resolve exactly seed 116")
+        _append_blocker(blockers, "diagnostic stress smoke must resolve exactly seed 1001")
     if expected_cells != STRESS_SMOKE_EXPECTED_EPISODE_CELLS:
         _append_blocker(blockers, "diagnostic stress smoke must resolve exactly 70 episode cells")
     if (
@@ -2835,6 +2836,12 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         _append_blocker(blockers, blocker)
     if len(scenario_ids) != 48:
         _append_blocker(blockers, "manifest-resolved campaign must contain exactly 48 scenarios")
+    if (
+        "0.0.8" in str(getattr(manifest, "release_tag", ""))
+        or "0_0_8" in str(getattr(manifest, "scenario_matrix_path", ""))
+        or "0_0_8" in str(getattr(manifest, "canonical_campaign_config_path", ""))
+    ) and tuple(resolved_seeds) != EVAL_SEEDS_0_0_8:
+        _append_blocker(blockers, "0.0.8 requires the exact sealed evaluation seeds (D-049)")
     if len(resolved_seeds) != 30:
         _append_blocker(blockers, "manifest-resolved campaign must contain exactly 30 seeds")
     if len(planner_keys) * len(scenario_ids) * len(resolved_seeds) != expected_cells:

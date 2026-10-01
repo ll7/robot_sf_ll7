@@ -210,7 +210,7 @@ def _build_stress_fixture(
             "mode": seed_policy.mode,
             "seed_set": seed_policy.seed_set,
             "seeds": list(seed_policy.seeds),
-            "resolved_seeds": [seed],
+            "resolved_seeds": [1001 if seed == 116 else seed],
             "seed_sets_path": _repo_relative(seed_policy.seed_sets_path),
         },
         "route_clearance_certifications_path": _repo_relative(
@@ -325,7 +325,7 @@ def _build_stress_fixture(
     integrity = validate_campaign_integrity(
         runs,
         scenarios=scenarios,
-        resolved_seeds=[seed],
+        resolved_seeds=[fixture_seed],
         campaign_root=root,
         campaign_manifest=campaign_manifest,
     )

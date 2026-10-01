@@ -27,13 +27,14 @@ from robot_sf.benchmark.release_protocol import (
     _scenario_matrix_include_paths,
     load_release_manifest,
 )
+from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
 from robot_sf.common.artifact_paths import get_repository_root
 from robot_sf.training.scenario_loader import load_scenarios_for_validation
 
 CANDIDATE_SCHEMA = "benchmark-release-prepublication-candidate.v1"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
-_EXPECTED_SEEDS = tuple(range(111, 141))
+_EXPECTED_SEEDS = EVAL_SEEDS_0_0_8
 _HISTORICAL_SCENARIO_MATRIX = (
     "configs/scenarios/classic_interactions_francis2023_goal_zone_entry_v1.yaml"
 )
@@ -429,7 +430,7 @@ def _candidate_seed_policy(
     policy = _require_mapping(payload.get("seed_policy"), "seed_policy")
     seeds = policy.get("resolved_seeds")
     if not isinstance(seeds, list) or tuple(seeds) != _EXPECTED_SEEDS:
-        raise ValueError("seed_policy.resolved_seeds must be seeds 111 through 140")
+        raise ValueError("seed_policy.resolved_seeds must be the sealed 0.0.8 evaluation seeds")
     if policy.get("mode") != "seed-set" or not isinstance(policy.get("seed_set"), str):
         raise ValueError("seed_policy must name a seed-set")
     _nonempty(policy["seed_set"], "seed_policy.seed_set")

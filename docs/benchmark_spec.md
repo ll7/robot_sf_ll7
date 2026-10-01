@@ -557,3 +557,14 @@ no metric samples, and explicit total/excluded counts. Seed lists/counts describ
 eligible seeds; per-seed rows also retain excluded-only seeds with zero eligible N.
 
 Release acceptance checks planned counts against `episodes_total` (legacy fallback: `episodes`); `invalid_or_unmeasured_spawn` exclusions are named campaign-defect blockers with K, while `foresight_ineligible` exclusions are reported counts and do not themselves block acceptance.
+
+## Sealed 0.0.8 evaluation schedule (D-049)
+
+0.0.8 uses `release_eval_0_0_8` from `configs/benchmarks/seed_sets_0_0_8.yaml`.
+The source of truth is `robot_sf.benchmark.seed_bands.EVAL_SEEDS_0_0_8`; static
+tests bind the YAML to the approved SHA-256 derivation. Both that set and retired
+0.0.7 seeds 111..140 remain forbidden for tuning, development and calibration.
+Development episodes use 1001..1030. Historical `paper_eval_s30` remains unchanged for static validation of archived
+0.0.7 artifacts only; seeds 111..140 must never be stepped again (D-049). The release grid has 48 x 30 = 1,440 identities per arm
+and 14 x 1,440 = 20,160 total; these counts are computed without running episodes.
+See [D-049](release/0.0.8/decisions.md) and the [runbook](release/0.0.8/runbook.md).

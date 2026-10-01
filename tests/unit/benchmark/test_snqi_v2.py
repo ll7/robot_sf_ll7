@@ -87,7 +87,7 @@ def test_development_calibration_matches_candidate_and_preserves_frozen_007():
     assert calibration["seed_policy"] == {
         "mode": "fixed-list",
         "seeds": [101, 102],
-        "seed_sets_path": template["seed_policy"]["seed_sets_path"],
+        "seed_sets_path": "configs/benchmarks/seed_sets_v1.yaml",
     }
     assert calibration["name"] == "snqi_v2_calibration_dev101_102"
     assert calibration["paper_facing"] is False

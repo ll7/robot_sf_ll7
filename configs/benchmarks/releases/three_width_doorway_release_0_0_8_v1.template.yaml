@@ -1,8 +1,9 @@
-# Full-roster three-width slice; the 2.0 m probe remains in the main grid.
-schema_version: benchmark-release-manifest.v0.1
+# Materialize at the freeze commit with resolve_benchmark_release_identity.py generate.
+# seed-holdout: release-evaluation begin
+schema_version: benchmark-release-manifest.v0.2
 benchmark_protocol_version: 0.1.0
 release_id: three_width_doorway_0_0_8_v1
-release_tag: three-width-doorway-0.0.8-v1
+release_tag: '{{release_tag}}'
 maturity: pre-1.0
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml
 campaign_config_sha256: c5f99c5542c410fff0cd4c5cd3b3d19641377b3063b4533dafa7fc5e793a6200
@@ -11,6 +12,10 @@ expected_paper_interpretation_profile: doorway-width-slice
 scenario:
   matrix_path: ../../scenarios/francis2023_narrow_doorway_three_width_release_0_0_8_v1.yaml
   matrix_sha256: 9de1d058c6a9145f76c84be63787d5c704be1db288b47fd9c1d31f3f56367778
+  suite_policy_path: paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml
+  suite_policy_sha256: b5eb0a0cd6e07c7ef285781adcda207457e423f3bfb381cc78cd313c62dd6395
+  route_certification_path: ../route_clearance_certifications_v1.yaml
+  route_certification_sha256: 8923d0560d17e92133e74792931539bd9a650629ae94d57798adb809046c567a
 seed_policy:
   mode: seed-set
   seed_set: release_eval_0_0_8
@@ -18,7 +23,6 @@ seed_policy:
   seed_sets_path: ../../benchmarks/seed_sets_0_0_8.yaml
   seed_sets_sha256: a8803bade9f39d504d508ba530208ca66acc343376304afd586b82d3308ce706
   resolved_seeds:
-  # seed-holdout: release-evaluation begin
   - 50036
   - 50140
   - 50331
@@ -49,12 +53,12 @@ seed_policy:
   - 57494
   - 57943
   - 59019
-  # seed-holdout: release-evaluation end
 metrics:
   snqi_weights_path: ../snqi_weights_camera_ready_v3.json
   snqi_weights_sha256: 71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2
   snqi_baseline_path: ../snqi_baseline_camera_ready_v3.json
   snqi_baseline_sha256: 329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a
+  snqi_claim_policy: advisory_no_ranking
 planners:
   keys:
   - prediction_planner
@@ -103,7 +107,7 @@ artifacts:
   - reports/snqi_diagnostics.json
 provenance:
   repository_url: https://github.com/ll7/robot_sf_ll7
-  doi: diagnostic-only-unpublished
+  doi: '{{version_doi}}'
 citation_path: ../../../CITATION.cff
 release_checklist_path: ../../../docs/RELEASE.md
 release_kind: benchmark-width-slice
@@ -121,3 +125,24 @@ width_slice_contract:
   dt: 0.1
   pairing: same_seed_across_widths_requires_initial_actor_and_external_rng_identity_receipts
   source_preregistration: configs/benchmarks/issue_9348_three_width_doorway_v1.yaml
+identity_resolution:
+  schema_version: benchmark-release-identity-template.v1
+latest_main_base_commit: '{{latest_main_base_commit}}'
+planning_base_sha: '{{latest_main_base_commit}}'
+publication:
+  channel: direct_zenodo_benchmark_dataset
+  concept_doi: '{{concept_doi}}'
+  version_doi: '{{version_doi}}'
+  reservation_status: reserved_unpublished
+  metadata_path: three_width_doorway_release_0_0_8_v1_zenodo_metadata.template.json
+  metadata_sha256: f3806581db53a826857ca9091e9fbc27f15303a37f3a154d313dab66f1c134dd
+  github_zenodo_webhook_policy: disable_before_publication_and_leave_disabled
+source_sha: '{{source_sha}}'
+matrix:
+  planner_arms: 14
+  scenarios: 3
+  seeds: 30
+  expected_episode_cells: 1260
+  horizon_steps: 600
+  dt: 0.1
+# seed-holdout: release-evaluation end

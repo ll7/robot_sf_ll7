@@ -26,6 +26,7 @@ from typing import Any
 import yaml
 
 from robot_sf._numerical_thread_env import pin_thread_env_for_determinism
+from robot_sf.benchmark.seed_bands import HELD_OUT_SEEDS
 
 pin_thread_env_for_determinism()
 
@@ -108,6 +109,10 @@ def _validate_trial(trial: Any) -> str:
 
 
 def _choose(requested: list[Any], available: list[Any], *, label: str) -> list[Any]:
+    if label == "seed" and set(requested or available) & HELD_OUT_SEEDS:
+        raise ValueError(
+            "seed must be a member of the frozen development set; both evaluation bands are sealed"
+        )
     if not requested:
         return available
     if len(requested) != len(set(requested)) or set(requested) - set(available):

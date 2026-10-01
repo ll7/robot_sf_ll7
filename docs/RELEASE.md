@@ -23,7 +23,7 @@ concept DOI `10.5281/zenodo.22227034`, version DOI `10.5281/zenodo.22265925`
 (tag `...-erratum.1`), frozen in
 `configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json`.
 The bounded one-scenario/one-seed preflight and runtime smoke is tracked by
-`configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`.
+`configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml`.
 The separate fallback-prone hybrid stress gate is tracked by
 `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_hybrid_stress_smoke_v0_1.yaml`
 and documented in [`benchmark_release_hybrid_stress_smoke.md`](./benchmark_release_hybrid_stress_smoke.md).
@@ -37,7 +37,7 @@ The smoke is execution evidence only: the Social Navigation Quality Index
   `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml`; do not
   substitute the historical v1 seven-planner/S3 manifest
 - confirm the bounded smoke manifest is correct:
-  - `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`
+  - `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml`
 - confirm the fallback-prone hybrid stress manifest is correct:
   - `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_hybrid_stress_smoke_v0_1.yaml`
 - confirm manifest hashes still match referenced config and assets
@@ -105,7 +105,7 @@ Run:
 
 ```bash
 uv run python scripts/tools/run_benchmark_release.py \
-  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml \
+  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml \
   --mode preflight
 ```
 
@@ -122,7 +122,7 @@ the fresh receipt during preflight as well:
 
 ```bash
 uv run python scripts/tools/run_benchmark_release.py \
-  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml \
+  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml \
   --mode preflight \
   --checkpoint-receipt output/release/checkpoints/runtime_smoke_staging_receipt.json
 ```
@@ -177,7 +177,7 @@ commit:
 
 ```bash
 uv run python scripts/benchmark/preflight_campaign_checkpoints.py \
-  --config configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke.yaml \
+  --config configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml \
   --stage \
   --report-path output/release/checkpoints/runtime_smoke_staging_receipt.json
 ```
@@ -187,14 +187,14 @@ campaign id:
 
 ```bash
 uv run python scripts/tools/run_benchmark_release.py \
-  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml \
+  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_5.yaml \
   --mode run \
-  --campaign-id issue7742_runtime_smoke_v0_2 \
+  --campaign-id issue7742_runtime_smoke_v0_5 \
   --checkpoint-receipt output/release/checkpoints/runtime_smoke_staging_receipt.json
 ```
 
 The expected output is
-`output/benchmarks/camera_ready/issue7742_runtime_smoke_v0_2/release/release_result.json`
+`output/benchmarks/camera_ready/issue7742_runtime_smoke_v0_5/release/release_result.json`
 (also referenced as `<smoke_id>` below). Runtime-smoke output is
 release-admission evidence only and is **not** full benchmark evidence.
 

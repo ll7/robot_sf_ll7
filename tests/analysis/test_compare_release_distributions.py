@@ -149,7 +149,7 @@ def test_bootstrap_and_outputs_byte_reproducible(tmp_path):
     )
 
 
-def test_two_stage_bootstrap_retains_between_scenario_variation():
+def test_fixed_scenario_seed_bootstrap_excludes_between_scenario_variation():
     """The ruled fixed-suite primary excludes between-scenario resampling variation."""
     groups = [np.zeros(30), np.ones(30)]
     draws = cmp._bootstrap(groups, np.random.default_rng(20260930), 10000, pooled=True)
@@ -284,7 +284,7 @@ def test_null_split_half_fixed_suite_has_zero_difference_and_narrow_interval():
 
 def test_paired_scenario_sensitivity_preserves_fixed_suite_primary():
     old, new = {}, {}
-    for scenario_index, (old_success, new_success) in enumerate([(0, 30), (30, 30)]):
+    for scenario_index, (old_success, new_success) in enumerate([(0, 30), (15, 0)]):
         for target, release, successes in [
             (old, "0.0.7", old_success),
             (new, "0.0.8", new_success),
@@ -293,10 +293,15 @@ def test_paired_scenario_sensitivity_preserves_fixed_suite_primary():
                 target[slot[0], slot[1], f"fixed_{scenario_index}", slot[3], slot[4]] = row
     report = cmp.compare_samples(old, new)
     primary = cell(report, "success", "arm")
-    assert primary["difference"] == 0.5
-    assert primary["difference_ci"] == [0.5, 0.5]
-    # Joint scenario draws select the common-effect strata together: effects are 1 and 0.
-    assert primary["sensitivity_difference_ci"] == [0.0, 1.0]
+    # Old scenario rates [0, .5], new [1, 0]: fixed-suite difference = .25.
+    assert primary["difference"] == 0.25
+    lo, hi = primary["difference_ci"]
+    assert 0 < lo <= 0.25 <= hi < 0.5
+    # Paired effects are [1, -.5]; reversing new scenarios gives [0, .5].
+    # The true sensitivity can select only the negative stratum or only the +1 stratum.
+    sensitivity_lo, sensitivity_hi = primary["sensitivity_difference_ci"]
+    assert sensitivity_lo < -0.4
+    assert sensitivity_hi == 1.0
     assert primary["changed"]  # sensitivity is reported; the primary drives this decision
 
 
@@ -373,3 +378,54 @@ def test_holm_predeclared_family_uses_step_down_monotonicity():
     # 28*.001=.028, 27*.01=.27, 26*.0101=.2626: forward maximum retains .27.
     assert [c["adjusted_p_value"] for c in cells] == pytest.approx([0.028, 0.27, 0.27])
     assert [c["changed"] for c in cells] == [True, False, False]
+
+
+@pytest.mark.parametrize("thin_release", ["0.0.7", "0.0.8"])
+@pytest.mark.parametrize("thin_n", [1, 2])
+def test_degenerate_seed_support_is_flagged_per_scenario_in_all_outputs(
+    tmp_path, thin_release, thin_n
+):
+    """A larger scenario cannot hide single-seed support in either release."""
+    import csv
+
+    old, new = {}, {}
+    for target, release, successes, speed in [
+        (old, "0.0.7", 0, 0.0),
+        (new, "0.0.8", 30, 1.0),
+    ]:
+        for scenario in ("scenario_a", "scenario_b"):
+            n = thin_n if release == thin_release and scenario == "scenario_b" else 15
+            for index, (slot, row) in enumerate(
+                rows(successes=successes, release=release, metrics={"avg_speed": speed}).items()
+            ):
+                if index >= n:
+                    break
+                # Synthetic, disjoint development seed IDs; no reset or step.
+                seed = 1001 + index + (15 if release == "0.0.8" else 0)
+                target[slot[0], slot[1], scenario, seed, slot[4]] = row
+    report = cmp.compare_samples(old, new, diagnostic_partial=True)
+    primary = cell(report, "success", "arm")
+    assert primary["difference_ci"] == [1.0, 1.0]
+    assert primary["changed"]  # the warning qualifies, rather than changes, the ruled method
+    assert primary["release_0_0_7"]["n_defined"] >= 16
+    assert primary["release_0_0_8"]["n_defined"] >= 16
+    warning = "degenerate: fewer than 2 seeds per scenario"
+    cmp.write_report(report, tmp_path)
+    json_cells = json.loads((tmp_path / "distribution.json").read_text())["cells"]
+    csv_cells = list(csv.DictReader((tmp_path / "distribution.csv").open()))
+    md_lines = (tmp_path / "distribution.md").read_text().splitlines()
+    for c, j, flat in zip(report["cells"], json_cells, csv_cells, strict=True):
+        expected = thin_n == 1 and c["scenario_id"] in ("scenario_b", "__pooled_non_probe__")
+        # Use only rates and avg_speed, all fully defined in the synthetic input.
+        if c["metric"] not in (*cmp.RATES, "avg_speed"):
+            continue
+        assert c["degenerate"] is expected
+        assert c["degeneracy"] == (warning if expected else "")
+        assert j["degenerate"] is expected and j["degeneracy"] == c["degeneracy"]
+        assert flat["degenerate"] == str(expected) and flat["degeneracy"] == c["degeneracy"]
+        line = next(
+            line
+            for line in md_lines
+            if f"| {c['scenario_id']} | {c['name_0_0_7']} /" in line and f"| {c['level']} |" in line
+        )
+        assert (warning in line) is expected

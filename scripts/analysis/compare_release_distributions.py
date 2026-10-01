@@ -342,9 +342,13 @@ def _cell(
             "wilson_ci": None,
             "sufficient": False,
         }
+    support_groups = groups[1:] if status == "0.0.8-only" else groups
+    degenerate = any(len(array) < 2 for arrays in support_groups for array in arrays)
     return {
         **identity,
         "metric": metric,
+        "degenerate": degenerate,
+        "degeneracy": "degenerate: fewer than 2 seeds per scenario" if degenerate else "",
         "conditioning": SUCCESS_CONDITIONING
         if metric.split(".", maxsplit=1)[0] in SUCCESS_ONLY
         else "",
@@ -601,9 +605,12 @@ def write_report(report: dict, output: Path) -> None:
     for cell in report["cells"]:
         a, b = cell["release_0_0_7"], cell["release_0_0_8"]
         flags = ", ".join(
-            key
-            for key in ("arm_replaced", "scenario_changed", "planner_config_changed")
-            if cell[key]
+            [
+                key
+                for key in ("arm_replaced", "scenario_changed", "planner_config_changed")
+                if cell[key]
+            ]
+            + ([cell["degeneracy"]] if cell["degenerate"] else [])
         )
         lines.append(
             f"| {cell['inference_family']} | {cell['level']} | {cell['arm_0_0_7']} → {cell['arm_0_0_8']} | {cell['scenario_id']} | {cell['name_0_0_7']} / {cell['name_0_0_8']} ({cell['definition_status']}) | {a['n_defined']} / {b['n_defined']} | {a['estimate']} {a['ci']} | {b['estimate']} {b['ci']} | {cell['difference']} {cell['difference_ci']} | {cell['sensitivity_difference_ci']} | {cell['adjusted_p_value']} | {cell['changed']} | {flags} | {cell['conditioning']} |"

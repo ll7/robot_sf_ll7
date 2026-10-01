@@ -112,6 +112,14 @@ adjustment; `q_value` is populated only for BH exploratory cells. `changed` requ
 both a passing family-adjusted threshold and a primary difference interval strictly
 excluding zero. Changed-definition and successor-only fields are never tested.
 
+Every cell reports `degenerate` and `degeneracy` in JSON and CSV. If either release
+has fewer than two defined, eligible seed samples in any contributing scenario,
+the cell carries **degenerate: fewer than 2 seeds per scenario**, also visible in
+the Markdown Flags column. Successor-only cells check successor support only.
+Support is checked per scenario, not against the pooled total. This flag qualifies
+diagnostic point intervals and any `changed` label; it does not change the approved
+estimand or decision rule. Such cells do not establish replicated seed uncertainty.
+
 `distribution.json` preserves input paths, both source commits, archive/manifest and
 row-file SHA-256 values, schemas, registry/digest, RNG seed, methods, support, missing
 counts, fingerprints, probe classes and adjusted tests. `distribution.csv` and

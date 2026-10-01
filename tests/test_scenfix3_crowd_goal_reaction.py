@@ -15,9 +15,8 @@ from robot_sf.training.scenario_loader import load_scenarios
 MATRIX = Path("configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml")
 
 
-@pytest.mark.parametrize("release_map", [False, True], ids=["historical", "safe-release"])
-def test_robot_crowding_goal_occupancy_matches_authored_map(release_map: bool) -> None:
-    """Crowding permits goals generally; the release map clears both robot endpoints."""
+def _crowding_goal_hits(*, release_map: bool) -> dict[str, int]:
+    """Sample authored crowd endpoints with the real simulator on development seeds."""
     scenario = next(
         row for row in load_scenarios(MATRIX) if row["name"] == "francis2023_robot_crowding"
     )
@@ -52,11 +51,20 @@ def test_robot_crowding_goal_occupancy_matches_authored_map(release_map: bool) -
                 hits[kind] += sum(goal_zone.contains(Point(point)) for point in points)
         finally:
             env.close()
-    # Many deterministic draws distinguish a permitted goal rectangle from an excluded island.
-    if release_map:
-        assert all(count == 0 for count in hits.values()), hits
-    else:
-        assert all(count > 0 for count in hits.values()), hits
+    return hits
+
+
+def test_robot_crowding_spawns_and_goals_can_occupy_robot_goal_zone() -> None:
+    """Keep the SCENFIX3 sampler witness on the original goal-populated map."""
+    hits = _crowding_goal_hits(release_map=False)
+    # Many deterministic draws distinguish a permitted rectangle from an excluded island.
+    assert all(count > 0 for count in hits.values()), hits
+
+
+def test_release_robot_crowding_clears_goal_and_retains_population() -> None:
+    """The successor clears robot endpoints while retaining its 24-person crowd."""
+    hits = _crowding_goal_hits(release_map=True)
+    assert all(count == 0 for count in hits.values()), hits
 
 
 @pytest.mark.parametrize("desired_speed,buffer", [(None, 0.75), (1.1, 1.2)])

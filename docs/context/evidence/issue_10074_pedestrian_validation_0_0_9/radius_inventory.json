@@ -1,0 +1,517 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "rows": [
+    {
+      "classification": "planner/guard assumption",
+      "line": 43,
+      "literal": "pedestrian_radius_m: 0.4",
+      "path": "configs/algos/guarded_ppo_release_v0_0_8.yaml"
+    },
+    {
+      "classification": "planner/guard assumption",
+      "line": 54,
+      "literal": "guard_pedestrian_radius_m: 0.4",
+      "path": "configs/algos/guarded_ppo_release_v0_0_8.yaml"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 44,
+      "literal": "pedestrian_radius_default: 0.4",
+      "path": "configs/algos/hybrid_rule_v4_clearance_braking.yaml"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 45,
+      "literal": "predictive_pedestrian_radius: 0.4",
+      "path": "configs/algos/prediction_planner_release_v0_0_8.yaml"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 62,
+      "literal": "predictive_pedestrian_radius: 0.4",
+      "path": "configs/algos/predictive_mppi_release_v0_0_8.yaml"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 36,
+      "literal": "pedestrian_radius_m: 0.4",
+      "path": "configs/algos/risk_dwa_release_v0_0_8.yaml"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 8,
+      "literal": "social_force_ped_v3_default_ped_radius: 0.4",
+      "path": "configs/algos/social_force_release_v0_0_8.yaml"
+    },
+    {
+      "classification": "simulation truth; population body-size setup",
+      "line": 62,
+      "literal": "radius_m: 0.35",
+      "path": "configs/benchmarks/issue_3574_mean_matched_harness_full_s30.yaml"
+    },
+    {
+      "classification": "simulation truth; population body-size setup",
+      "line": 17,
+      "literal": "cautious: {desired_speed_factor: 0.7, radius_m: 0.35}",
+      "path": "configs/benchmarks/issue_3574_mean_matched_harness_full_s30_goal.yaml"
+    },
+    {
+      "classification": "simulation truth; population body-size setup",
+      "line": 17,
+      "literal": "cautious: {desired_speed_factor: 0.7, radius_m: 0.35}",
+      "path": "configs/benchmarks/issue_3574_mean_matched_harness_full_s30_orca.yaml"
+    },
+    {
+      "classification": "simulation truth; population body-size setup",
+      "line": 17,
+      "literal": "cautious: {desired_speed_factor: 0.7, radius_m: 0.35}",
+      "path": "configs/benchmarks/issue_3574_mean_matched_harness_full_s30_social_force.yaml"
+    },
+    {
+      "classification": "simulation truth; population body-size setup",
+      "line": 41,
+      "literal": "radius_m: 0.35",
+      "path": "configs/benchmarks/issue_3574_mean_matched_harness_smoke.yaml"
+    },
+    {
+      "classification": "simulation truth; population body-size setup",
+      "line": 29,
+      "literal": "radius_m: 0.35",
+      "path": "configs/benchmarks/issue_5504_mean_matched_harness_scenario_matrix_smoke.yaml"
+    },
+    {
+      "classification": "simulation truth; population body-size setup",
+      "line": 29,
+      "literal": "radius_m: 0.35",
+      "path": "configs/benchmarks/issue_5829_geometryless_forced_population_smoke.yaml"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 7,
+      "literal": "pedestrian_false_positive_radius: 0.35",
+      "path": "configs/benchmarks/observation_noise/issue_3300_false_positive_actor_injection_v1.yaml"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 8,
+      "literal": "pedestrian_false_positive_radius: 0.35",
+      "path": "configs/benchmarks/observation_noise/issue_3952_robustness_smoke_v1.yaml"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 11,
+      "literal": "pedestrian_false_positive_radius: 0.35",
+      "path": "configs/benchmarks/observation_noise/robustness_smoke_v1.yaml"
+    },
+    {
+      "classification": "diagnostic baseline force calibration",
+      "line": 47,
+      "literal": "\"force_radius_m\": 0.35,",
+      "path": "configs/benchmarks/pedestrian_validation_0_0_9.json"
+    },
+    {
+      "classification": "diagnostic physical truth",
+      "line": 48,
+      "literal": "\"baseline_physical_radius_m\": 0.4,",
+      "path": "configs/benchmarks/pedestrian_validation_0_0_9.json"
+    },
+    {
+      "classification": "simulation/metric truth; sensitivity setup",
+      "line": 138,
+      "literal": "ped_radius: 0.40",
+      "path": "configs/research/fidelity_sensitivity_v1.yaml"
+    },
+    {
+      "classification": "simulation/metric truth; sensitivity setup",
+      "line": 183,
+      "literal": "pedestrian_radius_m: 0.40",
+      "path": "configs/research/fidelity_sensitivity_v1.yaml"
+    },
+    {
+      "classification": "simulation/metric truth; sensitivity setup",
+      "line": 192,
+      "literal": "pedestrian_radius_m: [0.30, 0.40, 0.50]",
+      "path": "configs/research/fidelity_sensitivity_v1.yaml"
+    },
+    {
+      "classification": "simulation/metric truth; sensitivity setup",
+      "line": 112,
+      "literal": "ped_radius: 0.40",
+      "path": "configs/research/issue_3207_fidelity_sensitivity_full_fixed_scope.yaml"
+    },
+    {
+      "classification": "simulation force-kernel calibration (distinct from physical truth)",
+      "line": 389,
+      "literal": "agent_radius: float = 0.35",
+      "path": "fast-pysf/pysocialforce/config.py"
+    },
+    {
+      "classification": "rendering assumption",
+      "line": 88,
+      "literal": "ped_radius: float = 0.4",
+      "path": "fast-pysf/pysocialforce/sim_view.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 83,
+      "literal": "ped_radius: float = 0.4",
+      "path": "robot_sf/adversarial/matched_compute.py"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 382,
+      "literal": "radius = float(obs.agents[0].get(\"radius\", 0.35)) if obs.agents else 0.35",
+      "path": "robot_sf/baselines/ppo.py"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 340,
+      "literal": "agent_radius=0.35,",
+      "path": "robot_sf/baselines/social_force.py"
+    },
+    {
+      "classification": "diagnostic/fixture assumption; inspect caller before treating as truth",
+      "line": 52,
+      "literal": "DEFAULT_PED_RADIUS: float = 0.4",
+      "path": "robot_sf/benchmark/collision/collision_definition_inventory.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 1029,
+      "literal": "ped_radius=float(getattr(sim_cfg, \"ped_radius\", 0.4)),",
+      "path": "robot_sf/benchmark/full_classic/orchestrator.py"
+    },
+    {
+      "classification": "diagnostic combined contact threshold, not a pedestrian body radius",
+      "line": 866,
+      "literal": "physical_collision_radius=0.4,  # true physical radius",
+      "path": "robot_sf/benchmark/last_avoidable_fixtures.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 1650,
+      "literal": "ped_radius=float(getattr(config.sim_config, \"ped_radius\", 0.4)),",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 2459,
+      "literal": "ped_radius_val = getattr(config.sim_config, \"ped_radius\", 0.4)",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 2460,
+      "literal": "ped_radius = float(ped_radius_val if ped_radius_val is not None else 0.4)",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 2833,
+      "literal": "ped_radius = float(getattr(config.sim_config, \"ped_radius\", 0.4))",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 2835,
+      "literal": "ped_radius = 0.4",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 2839,
+      "literal": "ped_radius = 0.4",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 4199,
+      "literal": "ped_radius=float(getattr(config.sim_config, \"ped_radius\", 0.4)),",
+      "path": "robot_sf/benchmark/map_runner/map_runner_episode.py"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 113,
+      "literal": "ped_radius_source = _default_if_none(pedestrians.get(\"radius\"), [0.35])",
+      "path": "robot_sf/benchmark/map_runner/map_runner_observations.py"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 115,
+      "literal": "ped_radius = float(ped_radius_raw[0]) if ped_radius_raw.size else 0.35",
+      "path": "robot_sf/benchmark/map_runner/map_runner_observations.py"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 270,
+      "literal": "actor_radius_m = _metadata_float(vru, \"actor_radius_m\", default=0.35)",
+      "path": "robot_sf/benchmark/map_runner/map_runner_trace.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 147,
+      "literal": "ped_radius: float = 0.4",
+      "path": "robot_sf/benchmark/metrics.py"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 35,
+      "literal": "\"pedestrian_false_positive_radius\": 0.35,",
+      "path": "robot_sf/benchmark/observation_noise.py"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 423,
+      "literal": "radii = np.full((positions.shape[0],), 0.35, dtype=float)",
+      "path": "robot_sf/benchmark/observation_noise.py"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 455,
+      "literal": "np.asarray([float(spec.get(\"pedestrian_false_positive_radius\", 0.35))]),",
+      "path": "robot_sf/benchmark/observation_noise.py"
+    },
+    {
+      "classification": "planner/observation assumption; multiline range-occlusion radius",
+      "line": 501,
+      "literal": "np.full((positions.shape[0],), 0.35, dtype=float),",
+      "path": "robot_sf/benchmark/observation_noise.py"
+    },
+    {
+      "classification": "historical audit constant; not live radius control",
+      "line": 152,
+      "literal": "METRICS_EPISODE_DATA_DEFAULT_PED_RADIUS_M = 0.4",
+      "path": "robot_sf/benchmark/radius_sensitivity_gate0_audit.py"
+    },
+    {
+      "classification": "historical audit constant; not live radius control",
+      "line": 154,
+      "literal": "RUNNER_DEFAULT_PED_RADIUS_M = 0.35",
+      "path": "robot_sf/benchmark/radius_sensitivity_gate0_audit.py"
+    },
+    {
+      "classification": "alternate runner geometry default (simulation/metric truth; legacy mismatch)",
+      "line": 138,
+      "literal": "DEFAULT_BENCHMARK_PED_RADIUS_M = 0.35",
+      "path": "robot_sf/benchmark/runner.py"
+    },
+    {
+      "classification": "planner/guard assumption",
+      "line": 371,
+      "literal": "ped_radius = _radius(config, \"ped_radius\", \"pedestrian_radius\", default=0.4)",
+      "path": "robot_sf/benchmark/safety/safety_wrapper_runtime.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 1089,
+      "literal": "getattr(getattr(self.sim, \"pysf_sim\", None), \"peds\", None), \"agent_radius\", 0.4",
+      "path": "robot_sf/benchmark/simulator_counterfactual_adapter.py"
+    },
+    {
+      "classification": "diagnostic/fixture assumption; inspect caller before treating as truth",
+      "line": 354,
+      "literal": "ped_radius=0.4,",
+      "path": "robot_sf/benchmark/socnavbench_canary.py"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 1138,
+      "literal": "ped_radii = np.full(len(ped_positions), 0.35)",
+      "path": "robot_sf/gym_env/robot_env.py"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 1266,
+      "literal": "ped_radii = np.full(len(ped_positions), 0.35)",
+      "path": "robot_sf/gym_env/robot_env.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 18,
+      "literal": "_DEFAULT_PED_RADIUS = 0.4",
+      "path": "robot_sf/gym_env/snqi_proxy.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 262,
+      "literal": "ped_radius: float = 0.4",
+      "path": "robot_sf/nav/occupancy.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 19,
+      "literal": "radius: float = 0.4  # Collision radius, not relevant for kinematics",
+      "path": "robot_sf/ped_ego/unicycle_drive.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 1343,
+      "literal": "ped_radius: float = 0.4,",
+      "path": "robot_sf/ped_npc/ped_population.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 1196,
+      "literal": "ped_radius: float = 0.4",
+      "path": "robot_sf/ped_npc/residual_adversary.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 1601,
+      "literal": "ped_radius: float = 0.4,",
+      "path": "robot_sf/ped_npc/residual_adversary.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 236,
+      "literal": "ped_radius: float = 0.4",
+      "path": "robot_sf/ped_npc/residual_search.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 457,
+      "literal": "ped_radius: float = 0.4,",
+      "path": "robot_sf/ped_npc/residual_search.py"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 99,
+      "literal": "pedestrian_radius_m: float = 0.4",
+      "path": "robot_sf/planner/risk_dwa.py"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 692,
+      "literal": "pedestrian_radius_m=float(cfg.get(\"pedestrian_radius_m\", 0.4)),",
+      "path": "robot_sf/planner/risk_dwa.py"
+    },
+    {
+      "classification": "planner/observation assumption",
+      "line": 462,
+      "literal": "social_force_ped_v3_default_ped_radius: float = field(default=0.4, kw_only=True)",
+      "path": "robot_sf/planner/socnav_base.py"
+    },
+    {
+      "classification": "rendering assumption",
+      "line": 176,
+      "literal": "ego_ped_radius: float = 0.4",
+      "path": "robot_sf/render/sim_view.py"
+    },
+    {
+      "classification": "rendering assumption",
+      "line": 177,
+      "literal": "ped_radius: float = 0.4",
+      "path": "robot_sf/render/sim_view.py"
+    },
+    {
+      "classification": "simulation force-kernel calibration (distinct from physical truth)",
+      "line": 152,
+      "literal": "agent_radius=0.35,",
+      "path": "robot_sf/research/emergent_phenomena.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 565,
+      "literal": "ped_radius = float(getattr(config.sim_config, \"ped_radius\", 0.4))",
+      "path": "robot_sf/scenario_certification/v1.py"
+    },
+    {
+      "classification": "simulation truth",
+      "line": 318,
+      "literal": "ped_radius: float = 0.4",
+      "path": "robot_sf/sim/sim_config.py"
+    },
+    {
+      "classification": "diagnostic/fixture assumption; inspect caller before treating as truth",
+      "line": 55,
+      "literal": "PED_RADIUS = 0.4",
+      "path": "scripts/perf/raycast_numba_toggle_benchmark.py"
+    },
+    {
+      "classification": "diagnostic/fixture assumption; inspect caller before treating as truth",
+      "line": 268,
+      "literal": "ped_radius=float(getattr(config.sim_config, \"ped_radius\", 0.4)),",
+      "path": "scripts/tools/density_runtime_smoke.py"
+    },
+    {
+      "classification": "diagnostic/fixture assumption; inspect caller before treating as truth",
+      "line": 1772,
+      "literal": "ped_radius = float(getattr(config.sim_config, \"ped_radius\", 0.4))",
+      "path": "scripts/tools/policy_analysis_run.py"
+    },
+    {
+      "classification": "diagnostic/fixture assumption; inspect caller before treating as truth",
+      "line": 59,
+      "literal": "\"radius\": np.array([0.4], dtype=np.float32),",
+      "path": "scripts/tools/probe_python_rvo2_integration.py"
+    },
+    {
+      "classification": "diagnostic/fixture assumption; inspect caller before treating as truth",
+      "line": 33,
+      "literal": "FOOTPRINT_RADIUS = 0.4",
+      "path": "scripts/validation/calibrate_obstacle_force_10061.py"
+    },
+    {
+      "classification": "diagnostic/fixture assumption; inspect caller before treating as truth",
+      "line": 45,
+      "literal": "\"force_radius_m\": 0.35,",
+      "path": "scripts/validation/pedestrian_validation_10074.py"
+    },
+    {
+      "classification": "diagnostic/fixture assumption; inspect caller before treating as truth",
+      "line": 46,
+      "literal": "\"baseline_physical_radius_m\": 0.40,",
+      "path": "scripts/validation/pedestrian_validation_10074.py"
+    },
+    {
+      "classification": "diagnostic/fixture assumption; inspect caller before treating as truth",
+      "line": 323,
+      "literal": "parser.add_argument(\"--radius\", type=float, default=0.4)",
+      "path": "scripts/validation/pedestrian_validation_10074.py"
+    },
+    {
+      "classification": "diagnostic/fixture assumption; inspect caller before treating as truth",
+      "line": 327,
+      "literal": "if args.radius not in config[\"radii_m\"] or (args.mode == \"baseline\" and args.radius != 0.4):",
+      "path": "scripts/validation/pedestrian_validation_10074.py"
+    },
+    {
+      "classification": "diagnostic/fixture assumption; inspect caller before treating as truth",
+      "line": 349,
+      "literal": "\"resolved_force_radius_m\": 0.35 if args.mode == \"baseline\" else args.radius,",
+      "path": "scripts/validation/pedestrian_validation_10074.py"
+    },
+    {
+      "classification": "diagnostic/fixture assumption; inspect caller before treating as truth",
+      "line": 66,
+      "literal": "config=SimpleNamespace(ped_radius=0.4),",
+      "path": "scripts/validation/run_issue_9735_fault_injection.py"
+    },
+    {
+      "classification": "diagnostic/fixture assumption; inspect caller before treating as truth",
+      "line": 402,
+      "literal": "ped_radius = float(getattr(config.sim_config, \"ped_radius\", 0.4))",
+      "path": "scripts/validation/run_scenario_perturbation_trace_response.py"
+    },
+    {
+      "classification": "diagnostic/fixture assumption; inspect caller before treating as truth",
+      "line": 293,
+      "literal": "radius = _first_float(pedestrians.get(\"radius\"), 0.35)",
+      "path": "scripts/validation/run_topology_hypothesis_diagnostics.py"
+    },
+    {
+      "classification": "diagnostic/fixture assumption; inspect caller before treating as truth",
+      "line": 295,
+      "literal": "radius = 0.35",
+      "path": "scripts/validation/run_topology_hypothesis_diagnostics.py"
+    },
+    {
+      "classification": "diagnostic/fixture assumption; inspect caller before treating as truth",
+      "line": 67,
+      "literal": "\"radius\": np.array([0.35, 0.35, 0.35], dtype=np.float32),",
+      "path": "scripts/validation/validate_forecast_planner_consumer.py"
+    }
+  ],
+  "scope": "tracked operational Python/YAML/JSON; excludes tests, evidence copies and non-radius 0.4/0.35 weights/speeds",
+  "source_sha": "013b4ce01e87dd5247ef913ffa09d418ae5a8457"
+}

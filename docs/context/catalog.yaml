@@ -7927,3 +7927,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_10074_pedestrian_validation_0_0_9
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

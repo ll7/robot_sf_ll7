@@ -18,6 +18,25 @@ latest_reconciliation_issue: 9645
 latest_reviewed_date: 2026-09-28
 latest_reviewed_by: Codex autonomous lead; exact packet checksums and combined-tree inventory verified; no maintainer sign-off is claimed.
 evidence_tree_refresh_addenda:
+  - issue: 10074
+    reviewed_date: 2026-10-01
+    previous:
+      count: 2831
+      sha256: d20880ec21ef414ec97a068b6a559c248213686a352c2266036ec364799a62af
+    candidate:
+      count: 2851
+      sha256: 468e7c76b1d63e1b63eb032eb6169f43441607be150b6c6a8b15deefd87da430
+    files_added: 20
+    finding_delta: none
+    decision: >-
+      Preserve the five PEDVAL table pairs, raw scientific archive and exact-byte sidecar,
+      source audit, radius inventory, recommendation, censor probe, default measurement
+      identity and compute receipts. All 3750 development episodes are retained. The linter
+      retains 446 findings across 100 files with no new or increased finding; this refresh
+      binds the path set only. No finding grandfathering, exclusion, domain approval or
+      scientific admission is added. This is a Codex-prepared review disposition, not
+      maintainer sign-off. Production single-radius integration and source protocols remain
+      explicitly blocked in issue 10074.
   - issue: 9647
     reviewed_date: 2026-09-26
     previous:

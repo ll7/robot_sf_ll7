@@ -1,0 +1,8 @@
+{
+  "artifact_path": "docs/context/evidence/issue_10074_pedestrian_validation_0_0_9/raw_science.tar.gz",
+  "artifact_sha256": "7ffce1d4bb1f43142a307f95f87ecd9cf36b522f736d5517b4ae10f86b6dc3ba",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "review_status": "needs-review",
+  "schema_version": "evidence-review-marker.v1"
+}

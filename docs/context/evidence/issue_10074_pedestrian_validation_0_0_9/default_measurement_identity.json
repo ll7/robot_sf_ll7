@@ -1,0 +1,14 @@
+{
+  "baseline_config_sha256": "fc97c6922eb25d5b7e10e54ea55eb2bd3802aae5fe680360ce3bf9445326c8b7",
+  "baseline_producer_sha": "01760eaae98af1f40351c83e667fd4013d28f35b",
+  "candidate_config_sha256": "fc97c6922eb25d5b7e10e54ea55eb2bd3802aae5fe680360ce3bf9445326c8b7",
+  "candidate_producer_sha": "cb80f275db20ace8b5a58e18858cff57cc494c24",
+  "canonical_measurement_rows_byte_identical_n": 750,
+  "compared_n": 750,
+  "differing_measurement_files": [],
+  "excluded_field": "mode only (baseline versus radius invocation); no numeric field, unit, seed, radius, setup, trajectory hash or review marker removed",
+  "measurement_row_bank_sha256": "7cc84d9b51585919b905b1e35f0ced5aeb41c9c60b742a06f289188a4455b929",
+  "raw_files_byte_identical_n": 0,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "scope": "robot-free V1-V8 only; does not establish production pedestrian-robot activation compatibility"
+}

@@ -57,3 +57,12 @@ def test_radius_roundtrip_and_unset_default_hash_payload():
 def test_invalid_radius_is_rejected_before_simulation(radius):
     with pytest.raises((TypeError, ValueError), match="pedestrian_radius_m"):
         SimulationSettings(pedestrian_radius_m=radius)
+
+
+def test_scenario_loader_forwards_shared_radius_to_actual_simulation_config():
+    from robot_sf.gym_env.unified_config import RobotSimulationConfig
+    from robot_sf.training.scenario_loader import _apply_simulation_overrides
+
+    config = RobotSimulationConfig()
+    _apply_simulation_overrides(config, {"pedestrian_radius_m": 0.28})
+    assert config.sim_config.ped_radius == 0.28, "scenario radius was silently dropped"

@@ -42,6 +42,8 @@ def _development_search_space(source: Path, destination: Path) -> Path:
     payload["variables"]["scenario_seed"] = {"min": 1001, "max": 1030}
     write_text(destination, "# AI-GENERATED NEEDS-REVIEW\n" + yaml.safe_dump(payload))
     return destination
+
+
 EMPIRICAL_ROOT_SEED = 1003
 # TODO: import the canonical bands from robot_sf.benchmark.seed_bands when it
 # lands on main. These are the retired and sealed 0.0.8 evaluation seeds.

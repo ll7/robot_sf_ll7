@@ -447,7 +447,6 @@ def test_station_platform_successor_separates_the_respawn_zone_from_robot_spawns
     assert successor_respawn.disjoint(successor_robot.buffer(1.0 + 0.4 + 0.75))
 
 
-
 def _reset_free_release_geometry(name: str):
     """Load real release geometry without constructing, resetting, or stepping an env."""
     from robot_sf.gym_env.robot_env import RobotEnv

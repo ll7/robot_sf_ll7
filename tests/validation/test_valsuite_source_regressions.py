@@ -106,6 +106,7 @@ def test_gate_reports_censoring_contact_and_unapproved_tolerances():
         "variant": "native",
         "seed": 1001,
         "fitted_desired_speed_m_s": 1.3,
+        "fitted_tau_s": 0.54,
         "pair_overlap": {"all": {"below_2r_count": 0}},
     }
     assert suite.acceptance_gate([row])["exit_code"] == 5
@@ -242,3 +243,18 @@ def test_acquisition_cli_writes_replayable_known_answer_raw_trace(tmp_path, monk
     trace_path = out / row["raw_trajectory"]
     trace_path.write_bytes(trace_path.read_bytes() + b"corrupt")
     assert suite.source_main(["--out", str(out), "--config", str(config_path), "--gate-only"]) == 4
+
+
+def test_gate_rejects_incomplete_all_data_even_with_a_steady_window():
+    row = {
+        "case": "V4",
+        "variant": "2.4",
+        "seed": 1001,
+        "all_data_specific_flow_persons_m_s": None,
+        "steady_specific_flow_persons_m_s": 2.5,
+        "pair_overlap": {"all": {"below_2r_count": 0}},
+    }
+    assert suite.acceptance_gate([row])["exit_code"] == 2
+    row["all_data_specific_flow_persons_m_s"] = float("nan")
+    assert suite.acceptance_gate([row])["exit_code"] == 2
+    assert suite.acceptance_gate([])["exit_code"] == 4

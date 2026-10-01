@@ -731,20 +731,21 @@ def acceptance_gate(rows):
     numerical acceptance tolerances/domain approval. Published SDs are not
     acceptance tolerances. No release pass is inferred from complete measurements.
     """
+    required = {
+        "V1": ("fitted_desired_speed_m_s", "fitted_tau_s"),
+        "V2": ("speed_drop_m_s",),
+        "V3": ("specific_flow_persons_m_s",),
+        "V4": ("all_data_specific_flow_persons_m_s", "steady_specific_flow_persons_m_s"),
+        "V5": ("lateral_cm_to_edge_m",),
+        "V6": ("onset_m",),
+    }
     missing = [
         f"{r['case']}/{r['variant']}/{r['seed']}"
         for r in rows
-        if r.get(
-            {
-                "V1": "fitted_desired_speed_m_s",
-                "V2": "speed_drop_m_s",
-                "V3": "specific_flow_persons_m_s",
-                "V4": "steady_specific_flow_persons_m_s",
-                "V5": "lateral_cm_to_edge_m",
-                "V6": "onset_m",
-            }.get(r["case"], "seed")
+        if any(
+            r.get(key) is None or not np.isfinite(r[key])
+            for key in required.get(r["case"], ("seed",))
         )
-        is None
     ]
     physical = [
         f"{r['case']}/{r['variant']}/{r['seed']}"
@@ -755,7 +756,7 @@ def acceptance_gate(rows):
         "schema": "valsuite.gate.v1",
         "measurement_missing": missing,
         "physical_violations": physical,
-        "exit_code": 2 if missing else (3 if physical else 5),
+        "exit_code": 4 if not rows else (2 if missing else (3 if physical else 5)),
         "release_admission": "blocked pending domain review and numeric tolerances for documented equivalents",
     }
 

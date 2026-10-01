@@ -1530,7 +1530,9 @@ Historical measurements below are attributed to the named review report; they we
   orchestrator ruling; #10047's body says "Author directed" for private
   D-057 untraced release rows. No author ruling on traces was found in the
   chat extract. The policy is recorded; author attribution remains unresolved
-  pending confirmation.
+  pending confirmation of the original attribution. D-081 now records the
+  orchestrator's explicit delegated approval of untraced release rows for the
+  0.0.7-vs-0.0.8 comparison at #10047 head 31d09675.
 - **Alternatives:** trace all release rows.
 - **Evidence:** #10047 body and review RR10047; rr10047_report.md, private-ops review archive.
 - **Implemented in:** #10047 (open).
@@ -1728,6 +1730,90 @@ Historical measurements below are attributed to the named review report; they we
 | D-049 | D-051, D-052 | Existing tests may execute retired seeds; refusal witnesses must stop before reset/step. Sealed seeds remain forbidden outside the sealed campaign. |
 | D-039 | D-057 | Scripted input speed and crowd-derived desired speed are distinct paths; crowd target and cap are both 0.65 m/s. |
 | D-038, D-040 | 0.1.0 D-001 | Historical references to the planned 0.0.9 release now mean 0.1.0. |
+
+### D-081: Benchmark-domain approval for the release comparator at #10047 head 31d09675
+- **Date:** 2026-10-01
+- **Question:** Are D4, D6, untraced release rows and the publication-field
+  overlay in #10047 approved at the reviewed head?
+- **Choice:** APPROVED for #10047 at
+  `31d09675bfcd7bdf91ee5c7ca6c27e82279867a5`, based on the rr10047c
+  benchmark-domain review (section C):
+  - **D4, the complete pinned-payload row binding:** approved. It binds
+    configuration identity.
+  - **D6, schema v2 plus reset angular velocity:** approved. It is metadata
+    only, and trace steps, metrics and outcomes are byte-identical.
+  - **D-057 (private label = public D-069), untraced release rows:** approved
+    for the 0.0.7-vs-0.0.8 comparison. Recorded cost: release rows carry no
+    trace-only fields (`progress_at_timeout`, `robot_force_samples`). Any
+    analysis needing them must use the separate dev-seed trace slice.
+  - **The release_tag/doi overlay:** approved as identity-only. It does not
+    verify release identity.
+  Conditions for the release step, owned by the release chain and not
+  blocking this merge: (1) bind the successor rows to the published 0.0.8
+  bundle SHA256SUMS (rr10047c P3-b); (2) exercise parsing of the real
+  resolved-identity file at the release gate (P3-c).
+- **Decided by:** orchestrator (delegated), 2026-10-01 17:08 UTC.
+- **Reason:** The domain review accepts configuration binding and the
+  metadata-only changes within their stated boundaries. Untraced rows save
+  tracing cost while giving up trace-only fields; the identity-only overlay
+  does not establish published release identity. The two release-step
+  conditions preserve that distinction.
+- **Alternatives:** Leave benchmark-domain approval pending; require every
+  release row to carry trace-only fields; treat the publication-field overlay
+  as verification of release identity. None was adopted by this ruling.
+- **Evidence:** rr10047c review, private-ops review archive, section C and
+  findings P3-b/P3-c; [delegated benchmark-domain ruling for #10047](https://github.com/ll7/robot_sf_ll7/pull/10047#issuecomment-5936508831).
+- **Enforced by:** The strict v2 PR contract's `domain_approval` for #10047.
+  none yet: the 0.0.8 runbook release-identity admission gate must bind successor rows to the
+  published bundle SHA256SUMS and exercise parsing of the real
+  resolved-identity file before the release step. The ruling also requires
+  the held-out guard on the development trace script and the string-valued
+  extra-key overlay test killing M3 in #10047's fix round before MERGE;
+  approval is not a claim that those fixes or the release gates have run.
+- **Reopen:** New material evidence, a changed implementation head, or an
+  explicit author/orchestrator ruling.
+
+### D-082: The release-distribution comparison uses a scenario-conditional primary estimand
+- **Date:** 2026-10-01
+- **Question:** What resampling, multiplicity and conditioning rules should
+  #10058 use for the 0.0.7-vs-0.0.8 release comparison?
+- **Choice:** The comparison asks whether the release changed outcomes on
+  this fixed benchmark suite. The primary estimand is therefore
+  scenario-conditional: the 48 scenarios are fixed, seeds are resampled
+  within each scenario, and the two releases are resampled independently
+  because their seed sets are disjoint. Report the paired joint scenario
+  resample (one set of scenario indices for both releases, matched by
+  scenario_id) as a sensitivity column.
+  The 28 predeclared primaries form their own family, corrected with Holm at
+  alpha 0.05. Unit and arm cells form a separate exploratory family with BH
+  at q = 0.05, labelled as exploratory. Success-conditioned metrics carry a
+  visible "conditional on success; estimands differ when success rates
+  differ" marker in the md and csv outputs. After the fix round,
+  `domain_approval` becomes approved at the new head, given a delta review.
+- **Decided by:** orchestrator (delegated), 2026-10-01 17:08 UTC.
+- **Reason:** The current independent two-stage scenario resample counts
+  between-scenario variance twice and is not acceptable as the primary;
+  rr10047c's null split-half widths are reported as 1.4-5.4x. The fixed-suite
+  question motivates the scenario-conditional primary, with the paired
+  joint resample retained to show sensitivity to scenario sampling. Holm
+  protects the predeclared primary family; BH results remain exploratory.
+- **Alternatives:** The current independent two-stage scenario resample as
+  primary; the paired joint scenario resample as primary. Both were rejected.
+- **Evidence:** rr10047c review, private-ops review archive, P2-A and
+  P3-a/P3-b/P3-c; [delegated comparison-method ruling for #10058](https://github.com/ll7/robot_sf_ll7/pull/10058#issuecomment-5936509251).
+- **Enforced by:** none yet: pending in #10058's fix round in
+  `tests/analysis/test_compare_release_distributions.py`: update
+  `test_two_stage_bootstrap_retains_between_scenario_variation` to pin the
+  new primary; add the null split-half known-difference-zero regression with
+  a width bound, the Holm-28-primary/separate-BH-exploratory-family check,
+  the M5 BH step-up monotonicity test, the M6 test that `changed` requires
+  the difference CI to exclude 0, and the md/csv conditional-on-success
+  marker check. These named intended checks are pending, not enforcement
+  already present on main; new node IDs are not yet committed. The strict
+  v2 PR contract must require benchmark `domain_approval` at the new head
+  after the fix round and delta review.
+- **Reopen:** New material evidence, a changed estimand or implementation,
+  or an explicit author/orchestrator ruling.
 
 ## Private working labels
 

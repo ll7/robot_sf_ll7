@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -535,3 +536,51 @@ def test_release_cli_doctor_propagates_report_status(
     assert release_cli.handle(args) == (0 if status == "pass" else 2)
     assert captured["expected_campaign_id"] == "campaign-1"
     assert status in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("module_name", "function_name"),
+    [
+        ("robot_sf.benchmark.release_doctor", "collect_release_doctor_report"),
+        (
+            "robot_sf.benchmark.post_execution_release_doctor",
+            "collect_post_execution_release_doctor_report",
+        ),
+    ],
+)
+def test_lazy_doctor_dispatch_resolves_current_collector(module_name, function_name, monkeypatch):
+    """The lazy wrapper imports the active collector at invocation and forwards all inputs."""
+    diagnostics = importlib.import_module(module_name)
+    observed = []
+    expected = {"status": "blocked", "findings": [{"code": "missing_receipt"}]}
+
+    def collect(**kwargs):
+        observed.append(kwargs)
+        return expected
+
+    monkeypatch.setattr(diagnostics, function_name, collect)
+    inputs = {
+        "repo": Path(__file__).resolve().parents[2],
+        "manifest_path": Path("fixture-manifest.yaml"),
+    }
+    if function_name == "collect_release_doctor_report":
+        inputs.update(
+            expected_release_sha="5" * 40,
+            expected_base_sha="6" * 40,
+            tag="fixture-tag",
+            checkpoint_receipt=None,
+            private_launch_packet=None,
+            dissertation=None,
+            token_file=None,
+        )
+    else:
+        inputs.update(
+            derived_revalidation_receipt=None,
+            publication_bundle=None,
+            publication_archive=None,
+            publication_preflight=None,
+            private_queue=None,
+            private_jobs=None,
+        )
+    assert getattr(release_cli, function_name)(**inputs) is expected
+    assert observed == [inputs]

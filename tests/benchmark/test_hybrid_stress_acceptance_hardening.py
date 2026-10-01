@@ -165,9 +165,26 @@ def _row(*, algo: str, algo_config: dict[str, Any], scenario_id: str, seed: int)
 
 @pytest.fixture
 def stress_fixture(tmp_path: Path) -> tuple[Path, Any, Any]:
+    """Build the existing fixed-seed stress contract without rollouts."""
+    return _build_stress_fixture(tmp_path)
+
+
+def _build_stress_fixture(
+    tmp_path: Path,
+    *,
+    seed: int = 116,  # seed-holdout: synthetic-fixture
+) -> tuple[Path, Any, Any]:
     """Build a complete accepted 14-arm stress campaign with tiny JSONL files."""
     manifest = load_release_manifest(MANIFEST_PATH)
     campaign_config = load_campaign_config(manifest.canonical_campaign_config_path)
+    if seed != 116:
+        campaign_config = replace(
+            campaign_config,
+            seed_policy=replace(
+                campaign_config.seed_policy, mode="fixed-list", seed_set=None, seeds=(seed,)
+            ),
+        )
+        manifest = replace(manifest, resolved_seeds=(seed,))
     scenarios = _load_campaign_scenarios(campaign_config)
     effective_scenarios = [
         _scenario_with_kinematics(
@@ -193,7 +210,7 @@ def stress_fixture(tmp_path: Path) -> tuple[Path, Any, Any]:
             "mode": seed_policy.mode,
             "seed_set": seed_policy.seed_set,
             "seeds": list(seed_policy.seeds),
-            "resolved_seeds": [116],
+            "resolved_seeds": [seed],
             "seed_sets_path": _repo_relative(seed_policy.seed_sets_path),
         },
         "route_clearance_certifications_path": _repo_relative(
@@ -308,7 +325,7 @@ def stress_fixture(tmp_path: Path) -> tuple[Path, Any, Any]:
     integrity = validate_campaign_integrity(
         runs,
         scenarios=scenarios,
-        resolved_seeds=[116],
+        resolved_seeds=[seed],
         campaign_root=root,
         campaign_manifest=campaign_manifest,
     )
@@ -1321,3 +1338,46 @@ def test_private_runtime_identity_requires_exact_launch_pin_and_clean_worktree()
     assert missing_pin["status"] == "invalid"
     assert dirty["status"] == "invalid"
     assert local_dirty["status"] == "invalid"
+
+
+@pytest.mark.parametrize("case", ["eligible", "foresight", "spawn", "missing"])
+def test_stress_planned_counts_and_exclusions(tmp_path, monkeypatch, case):
+    """Stress admission reports expected exclusions separately from missing planned cells."""
+    monkeypatch.setattr(release_acceptance, "STRESS_SMOKE_EXPECTED_SEED", 1001)
+    root, manifest, config = _build_stress_fixture(tmp_path, seed=1001)
+    path = _first_row_path(root, "guarded_ppo")
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    if case == "foresight":
+        rows[0]["algorithm_metadata"]["foresight_prediction"] = {"evidence_eligible": False}
+    elif case == "spawn":
+        rows[0]["spawn_validity"] = {"invalid_run": True, "invalid_reason": "spawn_overlap"}
+    elif case == "missing":
+        rows.pop()
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    _refresh_sidecar_raw_hash(path)
+    summary_path = root / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text())
+    planner_row = next(
+        row for row in summary["planner_rows"] if row["planner_key"] == "guarded_ppo"
+    )
+    planner_row.update(
+        episodes=5 - int(case != "eligible"),
+        episodes_total=len(rows),
+        episodes_excluded=int(case in {"spawn", "foresight"}),
+    )
+    _write_json(summary_path, summary)
+    report = _acceptance(root, manifest, config)
+    if case in {"eligible", "foresight"}:
+        assert report["status"] == "valid", report["blockers"]
+        assert report["episodes_excluded"] == int(case == "foresight")
+        assert report["exclusion_reasons"] == (
+            {"foresight_ineligible": 1} if case == "foresight" else {}
+        )
+    else:
+        assert report["status"] == "invalid"
+        message = (
+            "spawn_exclusion_defect: K=1 invalid_or_unmeasured_spawn"
+            if case == "spawn"
+            else "total episode count is not 5"
+        )
+        assert any(message in blocker for blocker in report["blockers"])

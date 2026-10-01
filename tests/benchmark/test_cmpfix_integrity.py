@@ -81,7 +81,7 @@ def test_cmpfix_wrong_runtime_identity(tmp_path, corruption):
 
 
 def test_cmpfix_resume_refuses_wrong_runtime_identity(tmp_path):
-    scenario = {"name": "S", "seeds": [1001], "repeats": 1}
+    scenario = {"name": "S", "id": "S", "map_file": "fixture.svg", "seeds": [1001]}
     path = tmp_path / "social_force__differential_drive/episodes.jsonl"
     path.parent.mkdir()
     path.write_text(json.dumps(_row(scenario, 1001, algo="goal", config={"wrong": True})) + "\n")

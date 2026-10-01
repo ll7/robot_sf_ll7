@@ -315,6 +315,10 @@ disposition_legend:
     Finding to be fixed in the evidence file itself; not applicable to this refresh because no
     file admitted a trivial, in-repo repair.
 reviewed_files:
+  - path: docs/context/evidence/issue_10007_fxs2_summary.json
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: "Under #10011 integration authorization, grandfather four findings in #10008's diagnostic-only FXS2 summary; preserve evidence bytes without scientific admission."
   - path: docs/context/evidence/issue_1496_oracle_trace_collection_job_13520/registration.json
     codes: [hash_without_artifact_path]
     disposition: baseline

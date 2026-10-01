@@ -4238,7 +4238,7 @@ def test_planner_report_row_uses_nested_planner_kinematics_execution_mode() -> N
 
 
 def test_planner_report_row_preserves_serialized_key_order() -> None:
-    """Planner-row JSON keeps the pre-refactor identity, metric, and metadata order."""
+    """Planner-row JSON retains field order with cohort counts beside eligible N."""
     summary = {
         "status": "ok",
         "written": 1,
@@ -4268,6 +4268,8 @@ def test_planner_report_row_preserves_serialized_key_order() -> None:
         "policy_source",
         "status",
         "episodes",
+        "episodes_total",
+        "episodes_excluded",
         "started_at_utc",
         "finished_at_utc",
         "runtime_sec",

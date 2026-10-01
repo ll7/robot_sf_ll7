@@ -672,8 +672,29 @@ def records():
             "metrics": metrics(success=success),
         }
         for key, success in (("a", 1), ("b", 0))
-        for seed in (111, 112)
+        for seed in (1001, 1002)
     ]
+
+
+def test_f4_family_rejects_reviewers_uneven_77_cell_seed_grid():
+    """Complete arm pairing alone cannot align episode means with seed-mean CIs."""
+    rows = [
+        {
+            "algo": f"planner_{arm:02d}",
+            "scenario_id": f"s{scenario}",
+            "seed": seed,
+            "steps": 100,
+            "metrics": metrics(success=int(seed == 1001)),
+        }
+        for arm in range(14)
+        for scenario, seed in (
+            [(i, 1001) for i in range(48)] + [(0, seed) for seed in range(1002, 1031)]
+        )
+    ]
+    # All inputs traverse real validation and scoring. No scored-input mock.
+    assert sum(row["metrics"]["success"] for row in rows) / len(rows) == pytest.approx(48 / 77)
+    with pytest.raises(ValueError, match="equal.*coverage.*seed"):
+        build_family_report(rows, fixture_spec(), bootstrap_samples=2000)
 
 
 def test_legacy_values_preserved_and_legacy_functions_unmodified():
@@ -1447,7 +1468,7 @@ def test_calibration_exact_grid_and_no_imputation():
         derive_calibration_anchors(rows[:-1], **kwargs)
     with pytest.raises(ValueError, match="duplicate"):
         derive_calibration_anchors(rows[:-1] + rows[:1], **kwargs)
-    rows[0]["seed"] = 111
+    rows[0]["seed"] = 1001
     with pytest.raises(ValueError, match="out-of-split"):
         derive_calibration_anchors(rows, **kwargs)
 

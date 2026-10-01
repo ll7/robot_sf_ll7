@@ -413,6 +413,32 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    # Train coverage repair: deterministic SA-CADRL checkpoint capacity (#10008).
+    "test_socnav_sacadrl_module.py",
+    # Train coverage repair: deterministic physical PPO drive contracts (#9995).
+    "test_runner_ppo_drive_observation.py",
+    # Train coverage repair: deterministic explicit bootstrap defaults (#10019).
+    "test_unit_edge_cases.py",
+    # Train coverage repair: deterministic resume job identity contracts (#10029).
+    "test_resume_plan.py",
+    # Train coverage repair: deterministic PPO action contracts (#9995).
+    "test_ppo_action_semantics.py",
+    # TRAIN1 deterministic benchmark contracts from PR #10019.
+    "test_multi_amv.py",
+    "test_rank_metrics.py",
+    "test_scenario_difficulty.py",
+    # Optional encoder import contracts execute isolated modules without episodes.
+    "test_optional_moviepy_imports.py",
+    # Runner isolation and resource contracts must run before a PR changes CI.
+    "test_self_hosted_routing.py",
+    # Constructor-state, optimized-guard, and inventory drift checks must run on
+    # PR shards when planner code or shared provenance inputs change.
+    "test_diagnostics_conformance.py",
+    "test_optimized_assert_guards.py",
+    "test_issue_5303_search_promotion_contract_v2.py",
+    "test_issue_7330_assert_inventory.py",
+    "test_issue_7331_benchmark_namespace_inventory.py",
+    "test_coverage_paths_remap.py",
     # Clearance and LiDAR tracking contracts use fixed arrays without environment steps.
     "test_clearance_geometry.py",
     "test_lidar_tracked_agents.py",
@@ -437,6 +463,8 @@ _FAST_FILES = {
     # Social-force v2 planner contracts (issue #9724) are deterministic adapter
     # checks on synthetic grids; the four episode tests stay marked slow.
     "test_issue_9724_social_force_resolution_independent.py",
+    # FXB regressions replay captured dev observation bytes; no map episodes.
+    "test_issue_10007_fxb.py",
     # The #9645 constraints-first objective is a pure episode projection/scoring
     # contract; run it in PR shards so changed objective branches receive coverage.
     "test_constraints_first_lexicographic_objective.py",
@@ -1529,7 +1557,7 @@ def sample_baseline_data():
 
 
 # =====================================================================# Occupancy Grid Fixtures
-# =====================================================================
+# ==============================================================
 
 
 @pytest.fixture
@@ -1677,7 +1705,7 @@ def pre_generated_grid(occupancy_grid, simple_obstacles, simple_pedestrians, rob
 
 
 # =====================================================================# Shared Subprocess Mock Fixture
-# =====================================================================
+# ==============================================================
 
 
 def _build_matcher_predicate(

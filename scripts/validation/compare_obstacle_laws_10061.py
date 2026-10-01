@@ -159,9 +159,10 @@ def screen(candidate):
     return {"candidate": candidate, "aperture": rows, "wall_cases": walls}
 
 
-def bottleneck(candidate, seed, width, wide=False):
+def bottleneck(candidate, seed, width, wide=False, physical_radius_m=None):
     """Finite-N flow with explicit experiment geometry/supply and density mismatch."""
     rng = np.random.default_rng(seed)
+    margin = 0.45 if physical_radius_m is None else physical_radius_m + 0.05
     n = 350 if wide else 60
     length = 1.0 if wide else 2.8
     # A soft-model 3.3/m² initial bulk, not feasible nonoverlapping 0.40 m discs.
@@ -191,9 +192,11 @@ def bottleneck(candidate, seed, width, wide=False):
         bulk_center = -3.0 - section_length
         xx, yy = np.meshgrid(
             np.linspace(
-                bulk_center - holding_length / 2 + 0.45, bulk_center + holding_length / 2 - 0.45, 10
+                bulk_center - holding_length / 2 + margin,
+                bulk_center + holding_length / 2 - margin,
+                10,
             ),
-            np.linspace(-1.55, 1.55, 6),
+            np.linspace(-2.0 + margin, 2.0 - margin, 6),
         )
         x, y = xx.ravel(), yy.ravel()
         half = 2.0

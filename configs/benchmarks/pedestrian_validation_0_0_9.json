@@ -34,6 +34,7 @@
   ],
   "radii_m": [
     0.25,
+    0.28,
     0.3,
     0.35,
     0.4
@@ -63,7 +64,9 @@
       10,
       20
     ],
-    "setup_status": "native asymptotic speed measured over 10-20 s; Moussaid target is fitted desired speed from acceleration, not this window; human population/marker protocol not reproduced"
+    "setup_status": "native asymptotic speed measured over 10-20 s; Moussaid target is fitted desired speed from acceleration, not this window; human population/marker protocol not reproduced",
+    "equivalence": "documented_equivalent",
+    "protocol_reason": "Equation 4.1 desired speed fitted from first 3 s of acceleration after a .35 s clock shift; simulator velocities replace supplementary marker preprocessing; tau is fitted, not imposed."
   },
   "V2": {
     "source": "Wilmut et al. 2015",
@@ -99,7 +102,10 @@
       2.2,
       2.8,
       3.6
-    ]
+    ],
+    "equivalence": "documented_equivalent",
+    "protocol_reason": "4 m capture origin, first 2 s approach, >3 approach-SD reduction event; cubic LS speed trend and CM replace unpublished Higuchi construction, Woltring and C7; .46 m shoulder proxy independent of disc radius; rigid disc cannot rotate.",
+    "shoulder_proxy_m": 0.46
   },
   "V3": {
     "source": "Seyfried et al. 2009",
@@ -120,7 +126,9 @@
     ],
     "plane": "channel centre; y=0.4 is local video coordinate",
     "window": "60/(t_last-t_first)/width; incomplete runs unavailable",
-    "setup_status": "nominal supply/density matched; archived initial sites adapted for 0.40 m margin; individual human starts unavailable"
+    "setup_status": "nominal supply/density matched; archived initial sites adapted for 0.40 m margin; individual human starts unavailable",
+    "equivalence": "source_equivalent_estimator",
+    "protocol_reason": "Channel-centre interpolated crossings, 60/((last-first)*width); incomplete supply is censored; source-density starts may overlap and do not recreate individual human starts."
   },
   "V4": {
     "source": "Liao et al. 2014",
@@ -139,7 +147,9 @@
     "counting_line": null,
     "all_data_window": "entire experiment; counting plane, clock origin and denominator unverified",
     "steady_state_window": null,
-    "setup_status": "original counting line/window not supplied; exit-plane finite-N and 20-80% diagnostics are explicitly not source estimators"
+    "setup_status": "original counting line/window not supplied; exit-plane finite-N and 20-80% diagnostics are explicitly not source estimators",
+    "equivalence": "documented_equivalent",
+    "protocol_reason": "Exit counting plane x=1 m; complete finite-N all-data and stable-density/velocity windows; original line, deterministic stationarity and clock unspecified; 1 s rectangle density/speed bins, five-bin CV<=.10, longest stable interval>=5 s; source Voronoi replaced by rectangle counts; specific flow = J/width."
   },
   "V5": {
     "source": "Gerin-Lajoie et al. 2005, cited in 2008",
@@ -148,7 +158,9 @@
     "published_lateral_m": 0.5,
     "distance_origin": "centre of mass to obstacle edge",
     "ellipse_extraction": null,
-    "setup_status": "original obstacle geometry and ellipse extraction not supplied; diagnostic closest lateral centre-to-edge distance only"
+    "setup_status": "original obstacle geometry and ellipse extraction not supplied; diagnostic closest lateral centre-to-edge distance only",
+    "equivalence": "documented_equivalent",
+    "protocol_reason": "CM-to-cylinder edge; abeam lateral clearance, .25 m radius 32-edge cylinder; exact source geometry/ellipse reconstruction unavailable; no longitudinal ellipse radius inferred."
   },
   "V6": {
     "source": "Huber et al. 2014",
@@ -164,7 +176,9 @@
       2.7
     ],
     "onset_definition": "first absolute angular speed above subject/speed mean maximum from five no-interferer trials; own X displacement to PoMD after marker filtering",
-    "setup_status": "source onset definition verified; source uses nonreactive interferer, 0.5 Hz Gaussian/5th-order median filtering and no-interferer baseline bank; reactive diagnostic does not reproduce this protocol, onset unavailable"
+    "setup_status": "source onset definition verified; source uses nonreactive interferer, 0.5 Hz Gaussian/5th-order median filtering and no-interferer baseline bank; reactive diagnostic does not reproduce this protocol, onset unavailable",
+    "equivalence": "documented_equivalent",
+    "protocol_reason": "Straight prescribed matching-speed nonreactive interferer; mean maximum angular speed from five no-interferer trials; own X distance to synchronized PoMD; 0.5 Hz -3dB Gaussian then five-sample median with linear endpoint padding; source filter normalization/endpoints unspecified; deterministic CM baselines lack trunk sway."
   },
   "V7": {
     "source": "Zhang et al. 2012; Feliciani and Nishinari 2016",
@@ -176,14 +190,18 @@
     "persons": 48,
     "duration_s": 40,
     "measure": "mean absolute Pearson correlation(direction,lateral position), second half of run",
-    "setup_status": "engineering segregation measure only; no universal numeric target"
+    "setup_status": "engineering segregation measure only; no universal numeric target",
+    "equivalence": "engineering_diagnostic",
+    "protocol_reason": "Existing direction/lateral segregation; no verified numeric target."
   },
   "V8": {
     "source": "Ma et al. 2010",
     "location": "abstract only",
     "published_distance_m": 0.4,
     "distance_origin": null,
-    "setup_status": "centre vs edge unresolved; retain both, no target difference"
+    "setup_status": "centre vs edge unresolved; retain both, no target difference",
+    "equivalence": "unresolved_origin",
+    "protocol_reason": "Retain CM-to-wall and signed disc-edge-to-wall distances; source abstract does not settle origin; no target difference."
   },
   "V9": {
     "status": "context only, skipped"

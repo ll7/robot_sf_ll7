@@ -446,6 +446,8 @@ def _build_pysf_simulation(  # noqa: PLR0913
     pysf_config.scene_config.integration_scheme = config.pedestrian_integration_scheme
     # Set this before PedState construction so delayed behaviors cache the configured cap.
     pysf_config.scene_config.max_speed_multiplier = config.peds_speed_mult
+    if config.pedestrian_radius_m is not None:
+        pysf_config.scene_config.agent_radius = config.pedestrian_radius_m
     pysf_config.obstacle_force_config.law_version = getattr(config, "obstacle_force_law", None)
     pysf_config.obstacle_force_config._obstacle_force_law_resolution_mode = getattr(
         config,

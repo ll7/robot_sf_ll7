@@ -480,7 +480,9 @@ def inspect_release_zones(matrices=RELEASE_MATRICES) -> list[dict]:
                         hits = []
                         for actor_kind, actor, shape, detail in actors:
                             distance = rectangle.distance(shape)
-                            if distance > radius:
+                            # Decimal contacts can round upward (4.9 - 4.5 > 0.4).
+                            # A nanometre allowance conservatively includes that contact.
+                            if distance > radius + 1e-9:
                                 continue
                             evidence = {
                                 "zone_wkt": rectangle.wkt,

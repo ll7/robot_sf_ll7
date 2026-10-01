@@ -80,7 +80,8 @@ uv run python scripts/validation/check_scenario_archetype_geometry.py \
 CI runs this blocking command. The JSON report lists every robot spawn and goal
 rectangle, including the implicit fourth corner, with single-pedestrian lanes
 (start through resolved trajectory/goal) and crowd spawn rectangles within the
-resolved pedestrian radius. Tangency and radius-only intersections count. It uses
+resolved pedestrian radius. Tangency and radius-only intersections count; a
+1e-9 m conservative comparison allowance includes floating-point contact error. It uses
 the scenario loader so YAML actor overrides are checked, and reports dormant
 crowd zones explicitly. The default scenario radius is 0.4 m, conservatively
 including the substrate's 0.35 m physical radius; this is a static lane check,

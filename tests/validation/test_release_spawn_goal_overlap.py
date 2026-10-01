@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pytest
 from shapely.geometry import LineString
 
 from robot_sf.evidence.writers import write_json
@@ -150,7 +151,8 @@ def test_original_overtaking_map_is_refused_without_a_disposition(tmp_path):
         enforce_release_zone_waivers(rows, waivers)
 
 
-def test_radius_only_intersection_and_trajectory_override_are_detected(tmp_path):
+@pytest.mark.parametrize("lane_y", [4.8, 4.9])
+def test_radius_only_intersection_and_trajectory_override_are_detected(tmp_path, lane_y):
 
     from scripts.validation.check_scenario_archetype_geometry import inspect_release_zones
 
@@ -168,7 +170,7 @@ def test_radius_only_intersection_and_trajectory_override_are_detected(tmp_path)
                     ),
                     "simulation_config": {"ped_density": 0.0},
                     "single_pedestrians": [
-                        {"id": "h1", "goal": None, "trajectory": [[2, 4.8], [8, 4.8]]}
+                        {"id": "h1", "goal": None, "trajectory": [[2, lane_y], [8, lane_y]]}
                     ],
                 }
             ]
@@ -177,8 +179,8 @@ def test_radius_only_intersection_and_trajectory_override_are_detected(tmp_path)
     rows = inspect_release_zones([manifest])
     hit = rows[0]["intersections"][0]
     assert hit["distance_m"] > 0
-    assert hit["distance_m"] < rows[0]["ped_radius_m"]
-    assert (2.0, 4.8) in hit["evidence"]["points"]
+    assert hit["distance_m"] == pytest.approx(lane_y - 4.5)
+    assert (2.0, lane_y) in hit["evidence"]["points"]
 
 
 def test_geometry_change_invalidates_intended_overlap_disposition(tmp_path, monkeypatch):

@@ -83,7 +83,7 @@ def _resolve_manifest_path(value: str) -> Path:
     return path if path.is_absolute() else (MANIFEST_PATH.parent / path).resolve()
 
 
-def test_historical_stress_h600_registry_records_non_extending_budgets() -> None:
+def test_dev_stress_h600_ordinary_runner_cap_preserves_authored_budgets() -> None:
     manifest = load_release_manifest(MANIFEST_PATH)
     campaign_config = load_campaign_config(manifest.canonical_campaign_config_path)
     report = validate_release_manifest(manifest, campaign_config=campaign_config)
@@ -91,14 +91,15 @@ def test_historical_stress_h600_registry_records_non_extending_budgets() -> None
     assert report["status"] == "valid", report["problems"]
     resolved = _load_campaign_scenarios(campaign_config)
     assert {s["simulation_config"]["max_episode_steps"] for s in resolved} == {400, 500, 600}
-    assert [s["metadata"]["scenario_horizon"]["authored_max_episode_steps"] for s in resolved] == [
+    assert campaign_config.horizon_policy is None
+    assert [s["simulation_config"]["max_episode_steps"] for s in resolved] == [
         600,
         600,
         500,
         400,
         400,
     ]
-    assert all(s["metadata"]["scenario_horizon"]["policy"] == "legacy_runner_cap" for s in resolved)
+    assert all("scenario_horizon" not in s.get("metadata", {}) for s in resolved)
     from dataclasses import replace
 
     ordinary = _load_campaign_scenarios(replace(campaign_config, horizon_policy=None))
@@ -117,7 +118,7 @@ def test_historical_stress_h600_registry_records_non_extending_budgets() -> None
     assert scenario_ids == EXPECTED_SCENARIOS
     from robot_sf.benchmark.camera_ready._config import _resolved_seed_inventory
 
-    assert _resolved_seed_inventory(scenarios) == [1001]
+    assert _resolved_seed_inventory(resolved) == [1001]
     assert campaign_config.horizon == 600
     assert campaign_config.dt == pytest.approx(0.1)
     assert tuple(planner.key for planner in campaign_config.planners) == EXPECTED_PLANNER_ARMS

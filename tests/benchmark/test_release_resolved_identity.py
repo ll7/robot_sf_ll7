@@ -26,6 +26,7 @@ from robot_sf.benchmark.release_protocol import (
 from robot_sf.benchmark.release_tag_identity import derive_sha_tag
 from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
 from robot_sf.benchmark.zenodo_publisher import build_release_binding
+from robot_sf.evidence.writers import write_text
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.tools import resolve_benchmark_release_identity as identity_cli
 from scripts.tools import run_benchmark_release
@@ -54,7 +55,7 @@ def _git(repo: Path, *args: str) -> str:
 
 def _write_yaml(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    write_text(path, "# AI-GENERATED NEEDS-REVIEW\n" + yaml.safe_dump(payload, sort_keys=False))
 
 
 def _write_canonical_json(path: Path, payload: object) -> None:
@@ -1019,12 +1020,15 @@ def test_resolved_mixed_budget_manifest_uses_independent_schedule_pins(tmp_path,
     from collections import Counter
 
     repo, template, _source = _release_template_repository(tmp_path)
+    payload = yaml.safe_load(template.read_text())
+    campaign_path = (template.parent / payload["canonical_campaign_config"]).resolve()
+    matrix_path = (template.parent / payload["scenario"]["matrix_path"]).resolve()
     budgets = [400] * 25 + [500] * 13 + [600] * 8 + [650, 700]
     scenarios = [
         {"name": f"scenario_{index:02d}", "simulation_config": {"max_episode_steps": budget}}
         for index, budget in enumerate(budgets)
     ]
-    _write_yaml(repo / "scenarios.yaml", scenarios)
+    _write_yaml(matrix_path, {"scenarios": scenarios})
     schedule = repo / "horizons.yaml"
     _write_yaml(
         schedule,
@@ -1038,18 +1042,16 @@ def test_resolved_mixed_budget_manifest_uses_independent_schedule_pins(tmp_path,
             },
         },
     )
-    campaign_path = repo / "campaign.yaml"
     campaign = yaml.safe_load(campaign_path.read_text())
     campaign.update(
         protocol_version="0.0.8",
         horizon=None,
-        scenario_horizons=schedule.name,
+        scenario_horizons=schedule.relative_to(repo).as_posix(),
         scenario_horizons_sha256=_sha256(schedule),
     )
     _write_yaml(campaign_path, campaign)
-    payload = yaml.safe_load(template.read_text())
     payload["campaign_config_sha256"] = _sha256(campaign_path)
-    payload["scenario"]["matrix_sha256"] = _sha256(repo / "scenarios.yaml")
+    payload["scenario"]["matrix_sha256"] = _sha256(matrix_path)
     payload["matrix"].update(
         horizon_steps=None,
         scenario_horizons=schedule.name,
@@ -1060,7 +1062,14 @@ def test_resolved_mixed_budget_manifest_uses_independent_schedule_pins(tmp_path,
     elif mutation == "fixed_horizon":
         payload["matrix"]["horizon_steps"] = 600
     _write_yaml(template, payload)
-    _git(repo, "add", "scenarios.yaml", "horizons.yaml", "campaign.yaml", "release.template.yaml")
+    _git(
+        repo,
+        "add",
+        matrix_path.relative_to(repo).as_posix(),
+        "horizons.yaml",
+        campaign_path.relative_to(repo).as_posix(),
+        template.relative_to(repo).as_posix(),
+    )
     _git(repo, "commit", "-qm", "fixture: freeze independent authored schedule")
     source = _git(repo, "rev-parse", "HEAD")
     output = repo / "output/mixed/release_identity.resolved.json"

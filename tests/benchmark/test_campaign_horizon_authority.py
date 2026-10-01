@@ -173,8 +173,9 @@ def test_rounding_sensitive_real_simulator_timeout(monkeypatch, name, dt, budget
             1001,
             400,
             "terminated",
-            0.24086784179045043,
-            230.0,
+            # Main 6fd6d463c (#10009): forward-axis ORCA projection.
+            0.24059849301207314,
+            232.0,
         ),
         (
             "benchmark_data_2026_08",
@@ -183,8 +184,10 @@ def test_rounding_sensitive_real_simulator_timeout(monkeypatch, name, dt, budget
             1002,
             400,
             "terminated",
-            0.23080397754459608,
-            262.0,
+            # Main 6fd6d463c (#10009): forward-axis ORCA projection.
+            0.23017620618943224,
+            # Main 977378cbd (#10014): freeze terminal goal for metric-v2 scoring.
+            241.0,
         ),
         (
             "runtime_smoke_v0_3",
@@ -213,15 +216,16 @@ def test_rounding_sensitive_real_simulator_timeout(monkeypatch, name, dt, budget
             1001,
             600,
             "max_steps",
-            1.452342043961671,
-            253.0,
+            # Main 6fd6d463c (#10009): observe dt=0.1 instead of relaxation tau=0.5.
+            0.21944634296423818,
+            308.0,
         ),
     ],
 )
 def test_historical_runner_cap_matches_main_oracle(
     config_name, name, algo, seed, steps, reason, avg_speed, failure_to_progress
 ):
-    """Literal oracle captured from main 93ba0d75 with native planners on dev seeds."""
+    """Native dev-seed oracle; changed planner values bisected through main 3a7a46a9."""
     from robot_sf.benchmark.map_runner.map_runner import _build_policy
     from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
 

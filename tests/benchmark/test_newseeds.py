@@ -174,6 +174,8 @@ def test_protocol_rejects_resolved_retired_seeds_in_every_mode(mode, anonymous, 
         load_release_manifest,
         validate_release_manifest,
     )
+    from robot_sf.evidence.writers import write_text
+    from robot_sf.training.scenario_loader import load_scenarios
 
     cfg = load_campaign_config(
         ROOT / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml"
@@ -184,12 +186,13 @@ def test_protocol_rejects_resolved_retired_seeds_in_every_mode(mode, anonymous, 
     # seed-holdout: synthetic-fixture begin
     retired = list(range(111, 141))
     seed_file = tmp_path / "seeds.yaml"
-    seed_file.write_text(yaml.safe_dump({"anonymous": [116]}))
+    write_text(seed_file, "# AI-GENERATED NEEDS-REVIEW\n" + yaml.safe_dump({"anonymous": [116]}))
     scenario_file = tmp_path / "matrix.yaml"
-    scenarios = _load_campaign_scenarios(cfg, repository_root=ROOT)
+    # Authored inputs cannot contain the horizon annotations added by admission.
+    scenarios = [dict(row) for row in load_scenarios(cfg.scenario_matrix_path)]
     for scenario in scenarios:
         scenario["seeds"] = retired
-    scenario_file.write_text(yaml.safe_dump(scenarios))
+    write_text(scenario_file, "# AI-GENERATED NEEDS-REVIEW\n" + yaml.safe_dump(scenarios))
     # seed-holdout: synthetic-fixture end
     config_path = tmp_path / ("campaign.yaml" if anonymous else "campaign_0_0_8.yaml")
     config_payload = yaml.safe_load(
@@ -205,7 +208,7 @@ def test_protocol_rejects_resolved_retired_seeds_in_every_mode(mode, anonymous, 
         "seed_sets_path": str(seed_file),
     }
     config_payload.update(scenario_matrix=str(scenario_file), seed_policy=policy)
-    config_path.write_text(yaml.safe_dump(config_payload))
+    write_text(config_path, "# AI-GENERATED NEEDS-REVIEW\n" + yaml.safe_dump(config_payload))
     cfg = replace(
         cfg,
         scenario_matrix_path=scenario_file,

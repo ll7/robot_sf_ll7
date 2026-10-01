@@ -1847,16 +1847,24 @@ def test_resolved_publication_config_hash_is_bound(tmp_path: Path, mismatch: boo
     "publication",
     [
         {"release_tag": "dev", "doi": "unpublished", "workers": 2},
+        {"release_tag": "dev", "doi": "unpublished", "scenario_matrix": "x"},
         {"release_tag": "dev"},
         {"release_tag": "dev", "doi": None},
     ],
 )
-def test_publication_binding_refuses_scientific_or_incomplete_overlays(tmp_path, publication):
+def test_publication_binding_refuses_scientific_or_incomplete_overlays(
+    tmp_path, publication, monkeypatch
+):
     """The pinned manifest permits exactly two nonempty publication fields."""
     path, _, source, _ = _successor_contract(tmp_path, rows=[_row("s1", 1001)])
     manifest = json.loads(path.read_text())
     manifest["campaign_config"]["publication_identity"] = publication
     path.write_text(json.dumps(manifest))
+
+    def forbidden_runtime(*args, **kwargs):
+        pytest.fail("invalid publication overlay reached detached runtime resolution")
+
+    monkeypatch.setattr(comparator, "_runtime_successor_identity", forbidden_runtime)
     with pytest.raises(ValueError, match="publication_identity requires only release_tag and doi"):
         comparator._verified_successor_manifest(
             path, sha256(path.read_bytes()).hexdigest(), source, {}

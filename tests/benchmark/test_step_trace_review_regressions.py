@@ -186,3 +186,43 @@ def test_new_v2_trace_can_have_complete_coverage():
     )
     coverage = invariant_coverage(row)
     assert all(c["eligible"] for c in coverage.values()), coverage
+
+
+@pytest.mark.parametrize("seed", [50036, 111])
+def test_trace_generator_refuses_held_out_before_scenario_or_reset(
+    monkeypatch, tmp_path, capsys, seed
+):
+    """CLI refusal happens before any scenario or episode code can reset an environment."""
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("held-out seed reached scenario/episode code before refusal")
+
+    monkeypatch.setattr(generator, "load_classic_matrix", forbidden)
+    monkeypatch.setattr(generator, "_run_map_episode", forbidden)
+    out = tmp_path / "forbidden.jsonl"
+    monkeypatch.setattr(
+        sys, "argv", ["generate", "--algo", "goal", "--seeds", str(seed), "--out", str(out)]
+    )
+    assert generator.main() == 2
+    assert "refusing" in capsys.readouterr().err
+    assert not out.exists()
+
+
+def test_trace_generator_accepts_dev_seed_at_episode_boundary(monkeypatch, tmp_path):
+    """The guard permits dev1001 and forwards it unchanged, without a test environment step."""
+    seen = []
+    monkeypatch.setattr(generator, "load_classic_matrix", lambda _: [{"name": "dev-canary"}])
+
+    def episode(scenario, seed, **kwargs):
+        seen.append(seed)
+        assert kwargs["record_simulation_step_trace"] is True
+        return {"termination_reason": "max_steps", "steps": 1}
+
+    monkeypatch.setattr(generator, "_run_map_episode", episode)
+    out = tmp_path / "dev.jsonl"
+    monkeypatch.setattr(
+        sys, "argv", ["generate", "--algo", "goal", "--seeds", "1001", "--out", str(out)]
+    )
+    assert generator.main() == 0
+    assert seen == [1001]
+    assert json.loads(out.read_text())["steps"] == 1

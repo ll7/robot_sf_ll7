@@ -462,6 +462,7 @@ class BenchmarkReleaseManifest:
     concept_doi: str | None = None
     version_doi: str | None = None
     release_kind: str | None = None
+    width_slice_contract: dict[str, Any] | None = None
     source_sha: str | None = None
     planning_base_sha: str | None = None
     metadata_path: Path | None = None
@@ -1504,9 +1505,130 @@ def load_release_manifest(
         citation_path=path_section["citation_path"],
         release_checklist_path=path_section["release_checklist_path"],
         release_kind=release_metadata["release_kind"],
+        width_slice_contract=payload.get("width_slice_contract"),
         **v02_contract,
         **stress_contract,
     )
+
+
+DOORWAY_RELEASE_KIND = "benchmark-doorway-width-slice.v1"
+DOORWAY_RELEASE_KINDS = frozenset({DOORWAY_RELEASE_KIND, "benchmark-width-slice"})
+DOORWAY_RELEASE_CELLS = 1_260
+DOORWAY_RELEASE_HORIZON = 400
+DOORWAY_RELEASE_PLANNERS = (
+    "prediction_planner",
+    "goal",
+    "social_force",
+    "orca",
+    "ppo",
+    "socnav_sampling",
+    "sacadrl",
+    "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4",
+    "scenario_adaptive_hybrid_orca_v2_collision_guard_v4",
+    "hybrid_rule_v4_fast_progress_static_escape",
+    "hybrid_rule_v4_fast_progress_static_escape_continuous",
+    "guarded_ppo",
+    "predictive_mppi",
+    "risk_dwa",
+)
+DOORWAY_RELEASE_SCENARIOS = {
+    "francis2023_narrow_doorway_width_2p20": (
+        2.2,
+        "issue_9348_francis2023_narrow_doorway_2p20_v1.svg",
+    ),
+    "francis2023_narrow_doorway_width_2p80": (
+        2.8,
+        "issue_9348_francis2023_narrow_doorway_2p80_v1.svg",
+    ),
+    "francis2023_narrow_doorway_width_3p60": (
+        3.6,
+        "issue_9728_francis2023_narrow_doorway_feasible_3p60_v1.svg",
+    ),
+}
+
+
+def is_doorway_width_slice(manifest: Any) -> bool:
+    """Identify the slice lane; its name alone never grants admission.
+
+    Returns:
+        Whether the manifest names a doorway slice release kind.
+    """
+    return getattr(manifest, "release_kind", None) in DOORWAY_RELEASE_KINDS
+
+
+def doorway_width_slice_blockers(
+    manifest: Any,
+    scenarios: list[dict[str, Any]],
+    seeds: tuple[int, ...],
+) -> list[str]:
+    """Bind the slice to the authored widths, roster, sealed inventory and H400.
+
+    Returns:
+        Public blockers; this function performs no simulator execution.
+    """
+    blockers: list[str] = []
+    contract = getattr(manifest, "width_slice_contract", None)
+    expected_contract = {
+        "schema_version": DOORWAY_RELEASE_KIND,
+        "widths_m": [2.2, 2.8, 3.6],
+        "planner_arms": 14,
+        "evaluation_seeds": 30,
+        "expected_episode_rows": 1260,
+        "requested_horizon_steps": 600,
+        "scenario_horizon_cap_steps": 400,
+        "dt": 0.1,
+    }
+    if not isinstance(contract, Mapping) or any(
+        contract.get(key) != value for key, value in expected_contract.items()
+    ):
+        blockers.append("doorway slice requires the exact benchmark-doorway-width-slice.v1 binding")
+    if tuple(getattr(manifest, "planner_keys", ())) != DOORWAY_RELEASE_PLANNERS:
+        blockers.append("doorway slice requires the exact main-campaign 14-arm roster")
+    if (
+        seeds != EVAL_SEEDS_0_0_8
+        or tuple(getattr(manifest, "resolved_seeds", ())) != EVAL_SEEDS_0_0_8
+    ):
+        blockers.append("doorway slice requires the exact sealed 30-seed inventory")
+    if getattr(manifest, "expected_episode_cells", None) != DOORWAY_RELEASE_CELLS:
+        blockers.append("doorway slice requires exactly 1260 cells")
+    if getattr(manifest, "expected_horizon_steps", None) != 600:
+        blockers.append("doorway slice requires requested H600 with the authored H400 cap")
+    names = [str(item.get("name", item.get("id", ""))) for item in scenarios]
+    if len(names) != 3 or set(names) != set(DOORWAY_RELEASE_SCENARIOS):
+        blockers.append("doorway slice requires exactly the authored 2.2/2.8/3.6 m scenarios")
+    for scenario in scenarios:
+        name = str(scenario.get("name", scenario.get("id", "")))
+        expected = DOORWAY_RELEASE_SCENARIOS.get(name)
+        metadata = scenario.get("metadata")
+        metadata = metadata if isinstance(metadata, Mapping) else {}
+        simulation = scenario.get("simulation_config")
+        simulation = simulation if isinstance(simulation, Mapping) else {}
+        if expected is None or (
+            metadata.get("width_slice_m") != expected[0]
+            or str(scenario.get("map_file", "")) != f"maps/successor_svg_maps/{expected[1]}"
+            or simulation.get("max_episode_steps") != DOORWAY_RELEASE_HORIZON
+        ):
+            blockers.append(
+                "doorway slice scenario width, map or H400 cap differs from its binding"
+            )
+    return blockers
+
+
+def _release_campaign_horizon(manifest: Any, cfg: CampaignConfig) -> CampaignConfig:
+    """Apply the bound slice's authored cap without modifying tracked config bytes.
+
+    Returns:
+        The effective H400 slice config, or the original configuration.
+    """
+    if manifest.schema_version == RELEASE_MANIFEST_SCHEMA_VERSION_V0_2 and is_doorway_width_slice(
+        manifest
+    ):
+        if cfg.horizon != 600:
+            raise ValueError(
+                "doorway slice canonical config must request H600 with the authored H400 cap"
+            )
+        return replace(cfg, horizon=DOORWAY_RELEASE_HORIZON)
+    return cfg
 
 
 def load_release_campaign_config(
@@ -1524,9 +1646,12 @@ def load_release_campaign_config(
         Validated campaign configuration for this release identity.
     """
     if getattr(manifest, "resolved_identity_path", None) is None:
-        return load_campaign_config(
-            manifest.canonical_campaign_config_path,
-            repository_root=repository_root,
+        return _release_campaign_horizon(
+            manifest,
+            load_campaign_config(
+                manifest.canonical_campaign_config_path,
+                repository_root=repository_root,
+            ),
         )
     root = (repository_root or get_repository_root()).resolve()
     resolved_payload = manifest.resolved_manifest_payload
@@ -1543,7 +1668,9 @@ def load_release_campaign_config(
     if _sha256_file(config_path) != manifest.campaign_config_sha256:
         raise ValueError("canonical campaign config hash does not match resolved identity")
     cfg = load_campaign_config(config_path, repository_root=root)
-    return replace(cfg, release_tag=manifest.release_tag, doi=manifest.doi)
+    return _release_campaign_horizon(
+        manifest, replace(cfg, release_tag=manifest.release_tag, doi=manifest.doi)
+    )
 
 
 def validate_release_manifest(
@@ -1590,6 +1717,17 @@ def validate_release_manifest(
     _validate_release_planners(manifest, cfg, problems)
     _validate_v02_contract(manifest, cfg, problems, repository_root=repository_root)
     _validate_release_metadata_contract(manifest, problems)
+    if manifest.schema_version == RELEASE_MANIFEST_SCHEMA_VERSION_V0_2 and is_doorway_width_slice(
+        manifest
+    ):
+        scenarios = _load_campaign_scenarios(cfg, repository_root=repository_root)
+        problems.extend(
+            doorway_width_slice_blockers(
+                manifest,
+                scenarios,
+                tuple(_resolved_seed_inventory(scenarios)),
+            )
+        )
 
     return {
         "manifest_path": _repo_relative(manifest.path, repository_root),
@@ -2128,7 +2266,7 @@ def sealed_seed_execution_problem(
         == "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
     )
     doorway_slice = (
-        manifest.release_kind == "benchmark-width-slice"
+        is_doorway_width_slice(manifest)
         and manifest.release_id == "three_width_doorway_0_0_8_v1"
         and config_name
         == "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_three_width_doorway_v1.yaml"
@@ -2367,9 +2505,14 @@ def _validate_v02_contract(  # noqa: C901, PLR0912
     cells = len(scenarios) * len(resolved_seeds) * enabled_planners
     if cells != manifest.expected_episode_cells:
         problems.append("matrix.expected_episode_cells does not match resolved matrix")
+    effective_horizon = (
+        DOORWAY_RELEASE_HORIZON
+        if is_doorway_width_slice(manifest)
+        else manifest.expected_horizon_steps
+    )
     if manifest.expected_horizon_steps is None:
         problems.append("matrix.horizon_steps is missing")
-    elif cfg.horizon != manifest.expected_horizon_steps:
+    elif cfg.horizon != effective_horizon:
         problems.append("matrix.horizon_steps does not match campaign config")
     else:
         overridden_horizons = {
@@ -2377,7 +2520,7 @@ def _validate_v02_contract(  # noqa: C901, PLR0912
             for planner in cfg.planners
             if planner.enabled
             and planner.horizon_override is not None
-            and planner.horizon_override != manifest.expected_horizon_steps
+            and planner.horizon_override != effective_horizon
         }
         if overridden_horizons:
             problems.append(
@@ -2895,9 +3038,9 @@ def _identity_template_payload(  # noqa: C901, PLR0912
     if payload.get("schema_version") != RELEASE_MANIFEST_SCHEMA_VERSION_V0_2:
         raise ValueError("release identity template must describe a v0.2 release manifest")
     kind = payload.get("release_kind")
-    if kind not in {"benchmark-data", "benchmark-width-slice"}:
+    if kind not in {"benchmark-data", *DOORWAY_RELEASE_KINDS}:
         raise ValueError("release identity template must describe benchmark-data or a width slice")
-    slice_template = kind == "benchmark-width-slice"
+    slice_template = kind in DOORWAY_RELEASE_KINDS
     if payload.get("source_sha") != ("{{source_sha}}" if slice_template else None):
         raise ValueError(
             "width slice template must use {{source_sha}}; benchmark-data template must omit it"
@@ -3157,7 +3300,9 @@ def _build_resolved_release_identity(
             manifest.canonical_campaign_config_path,
             repository_root=repository_root,
         )
-        cfg = replace(cfg, release_tag=release_tag, doi=version_doi)
+        cfg = _release_campaign_horizon(
+            manifest, replace(cfg, release_tag=release_tag, doi=version_doi)
+        )
         validation = validate_release_manifest(
             manifest,
             campaign_config=cfg,

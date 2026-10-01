@@ -98,7 +98,7 @@ def test_full_release_roster_resolution_helpers_fail_closed(
     assert any("has unexpected ['unexpected']" in blocker for blocker in roster_blockers)
 
 
-def _write_full_campaign(tmp_path: Path) -> Path:
+def _write_full_campaign(tmp_path: Path, *, horizon: int = 600) -> Path:
     """Write a complete 14-arm fixture with 48 scenarios and 30 seeds."""
     campaign_root = tmp_path / "campaign"
     runs: list[dict[str, Any]] = []
@@ -118,7 +118,7 @@ def _write_full_campaign(tmp_path: Path) -> Path:
                             "episode_id": f"{planner_key}-{scenario_id}-{seed}",
                             "scenario_id": scenario_id,
                             "seed": seed,
-                            "horizon": 600,
+                            "horizon": horizon,
                             "status": "success",
                             "algo": expected_algo,
                             "git_hash": _SOURCE_SHA,
@@ -127,7 +127,7 @@ def _write_full_campaign(tmp_path: Path) -> Path:
                                 "config_hash": f"{scenario_index:016x}",
                                 "scenario_id": scenario_id,
                                 "seed": seed,
-                                "simulator_settings": {"horizon": 600},
+                                "simulator_settings": {"horizon": horizon},
                             },
                             "algorithm_metadata": {
                                 "algorithm": metadata_algorithm,
@@ -144,11 +144,11 @@ def _write_full_campaign(tmp_path: Path) -> Path:
                 "planner": {
                     "key": planner_key,
                     "kinematics": "differential_drive",
-                    "horizon": 600,
+                    "horizon": horizon,
                 },
                 "status": "ok",
                 "episodes_path": relative_path.as_posix(),
-                "summary": {"episodes_total": 1440, "written": 1440},
+                "summary": {"episodes_total": len(lines), "written": len(lines)},
             }
         )
         planner_rows.append(
@@ -159,7 +159,7 @@ def _write_full_campaign(tmp_path: Path) -> Path:
                 "readiness_status": "available",
                 "availability_status": "available",
                 "benchmark_success": "true",
-                "episodes": 1440,
+                "episodes": len(lines),
             }
         )
     (campaign_root / "reports").mkdir(parents=True, exist_ok=True)
@@ -198,9 +198,11 @@ def _write_provenance_bound_full_campaign(
     *,
     shared_first_algorithm: bool = False,
     telemetry: dict[str, str] | None = None,
+    horizon: int = 600,
+    scenarios: list[dict[str, Any]] | None = None,
 ) -> tuple[Path, SimpleNamespace]:
     """Write a full fixture with the same sidecars and arm paths as production."""
-    campaign_root = _write_full_campaign(tmp_path)
+    campaign_root = _write_full_campaign(tmp_path, horizon=horizon)
     summary_path = campaign_root / "reports" / "campaign_summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     source_repository_root = tmp_path / "frozen-source"
@@ -214,7 +216,7 @@ def _write_provenance_bound_full_campaign(
     )
     scenario_path.parent.mkdir(parents=True, exist_ok=True)
     scenario_path.write_text("scenarios: []\n", encoding="utf-8")
-    resolved_scenarios = [{"id": scenario_id} for scenario_id in _SCENARIO_IDS]
+    resolved_scenarios = scenarios or [{"id": scenario_id} for scenario_id in _SCENARIO_IDS]
     monkeypatch.setattr(
         release_acceptance, "_load_campaign_scenarios", lambda _cfg: resolved_scenarios
     )
@@ -285,7 +287,7 @@ def _write_provenance_bound_full_campaign(
             suite_key="classic_interactions",
             total_jobs=len(rows),
             written=len(rows),
-            horizon=600,
+            horizon=horizon,
             dt=0.1,
             record_forces=False,
             active_observation_mode=None,

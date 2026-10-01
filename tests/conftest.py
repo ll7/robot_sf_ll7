@@ -413,6 +413,7 @@ _FAST_FILE_PREFIXES = (
     "test_types",
 )
 _FAST_FILES = {
+    "test_doorway_release_acceptance.py",
     # Static runtime-copy admission: small Git fixtures, no environment or episode.
     "test_sealed_runtime_sources.py",
     # Clearance and LiDAR tracking contracts use fixed arrays without environment steps.

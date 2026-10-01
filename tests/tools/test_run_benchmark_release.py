@@ -2213,3 +2213,95 @@ def test_public_campaign_result_rejects_nested_private_paths() -> None:
                 "warnings": ["diagnostic file: /home/example/private/result.json"],
             }
         )
+
+
+@pytest.mark.parametrize(
+    "gate", ["manifest", "runtime_smoke", "checkpoint_identity", "resume", "privacy"]
+)
+def test_doorway_slice_retains_all_strict_runner_gates(monkeypatch, capsys, tmp_path, gate):
+    """A slice kind cannot bypass any strict runner gate before accepting artifacts."""
+    manifest, cfg, checkpoint, smoke = _rehearsal_fixture(tmp_path)
+    manifest.release_kind = "benchmark-doorway-width-slice.v1"
+    cfg.name = "doorway-gate-fixture"
+    cfg.export_publication_bundle = False
+    cfg.resume = False
+    _patch_valid_rehearsal_admissions(monkeypatch, tmp_path)
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda _: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_release_campaign_config", lambda _: cfg)
+    monkeypatch.setattr(
+        run_benchmark_release, "build_resolved_release_manifest", lambda *a, **kw: {}
+    )
+    reached = []
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "run_campaign",
+        lambda *a, **kw: (
+            reached.append("run")
+            or {
+                "status": "benchmark_success",
+                "benchmark_success": True,
+                "warnings": ["diagnostic path /home/private/result.json"],
+                "campaign_root": str(tmp_path / "campaigns" / "doorway-gate"),
+            }
+        ),
+    )
+    if gate == "manifest":
+        monkeypatch.setattr(
+            run_benchmark_release,
+            "validate_release_manifest",
+            lambda *a, **kw: {
+                "status": "invalid",
+                "problems": ["width binding differs"],
+            },
+        )
+    elif gate == "runtime_smoke":
+
+        def refuse_smoke(*a, **kw):
+            raise run_benchmark_release.RuntimeSmokeAdmissionError("same-source smoke missing")
+
+        monkeypatch.setattr(run_benchmark_release, "validate_runtime_smoke_result", refuse_smoke)
+    elif gate == "checkpoint_identity":
+        runtime_checkpoint = tmp_path / "runtime-receipt.json"
+        payload = run_benchmark_release._read_json(runtime_checkpoint)
+        payload["arms"][0]["checkpoint_sha256"] = "e" * 64
+        _write_json(runtime_checkpoint, payload)
+        payload = run_benchmark_release._read_json(smoke)
+        payload["checkpoint_staging_receipt"]["sha256"] = run_benchmark_release.sha256_file(
+            runtime_checkpoint
+        )
+        _write_json(smoke, payload)
+    elif gate == "resume":
+
+        def refuse_resume(**kw):
+            raise run_benchmark_release.ReleaseResumeAdmissionError("no infrastructure-only ruling")
+
+        monkeypatch.setattr(run_benchmark_release, "_admit_release_resume", refuse_resume)
+    rc = run_benchmark_release.main(
+        [
+            "--manifest",
+            str(manifest.path),
+            "--checkpoint-receipt",
+            str(checkpoint),
+            "--runtime-smoke-receipt",
+            str(smoke),
+            "--campaign-id",
+            "doorway-gate",
+            "--output-root",
+            str(tmp_path / "campaigns"),
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    expected = {
+        "manifest": "invalid_manifest",
+        "runtime_smoke": "runtime_smoke_receipt_rejected",
+        "checkpoint_identity": "checkpoint_identity_mismatch",
+        "resume": "resume_admission_rejected",
+        "privacy": "release_result_privacy_rejected",
+    }
+    assert rc == 2
+    assert payload["status"] == expected[gate]
+    assert reached == (["run"] if gate == "privacy" else [])
+    if gate == "privacy":
+        assert payload["checkpoint_identity_admission"]["status"] == "admitted"
+        assert payload["resume_admission"]["status"] == "fresh_campaign"
+        assert "/home/private" not in json.dumps(payload)

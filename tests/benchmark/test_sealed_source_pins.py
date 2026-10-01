@@ -365,6 +365,10 @@ def test_real_materialized_identity_passes_frozen_guard(
     validation = protocol.validate_release_manifest(manifest, repository_root=repo)
     assert validation["status"] == "valid", validation
     assert manifest.expected_episode_cells == cells
+    if kind == "slice":
+        assert manifest.release_kind == protocol.DOORWAY_RELEASE_KIND
+        assert manifest.expected_horizon_steps == 400
+        assert protocol.load_release_campaign_config(manifest).horizon == 400
     spawn.guard_manifest_execution(
         manifest, source_commit=git(repo, "rev-parse", "HEAD"), repository_root=repo
     )

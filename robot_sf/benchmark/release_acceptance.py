@@ -55,6 +55,7 @@ from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import 
 from robot_sf.benchmark.release_protocol import (
     DOORWAY_RELEASE_CELLS,
     DOORWAY_RELEASE_HORIZON,
+    DOORWAY_RELEASE_KIND,
     STRESS_SMOKE_EXPECTED_DT,
     STRESS_SMOKE_EXPECTED_EPISODE_CELLS,
     STRESS_SMOKE_EXPECTED_HORIZON_STEPS,
@@ -2784,10 +2785,15 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
             blockers,
             f"manifest expected_episode_cells must be {required_cells}",
         )
-    if expected_horizon != FULL_RELEASE_EXPECTED_HORIZON_STEPS:
+    declared_horizon = (
+        DOORWAY_RELEASE_HORIZON
+        if getattr(manifest, "release_kind", None) == DOORWAY_RELEASE_KIND
+        else FULL_RELEASE_EXPECTED_HORIZON_STEPS
+    )
+    if expected_horizon != declared_horizon:
         _append_blocker(
             blockers,
-            f"manifest expected_horizon_steps must be {FULL_RELEASE_EXPECTED_HORIZON_STEPS}",
+            f"manifest expected_horizon_steps must be {declared_horizon}",
         )
     if kinematics != (FULL_RELEASE_KINEMATICS,):
         _append_blocker(

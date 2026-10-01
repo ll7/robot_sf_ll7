@@ -53,8 +53,7 @@ def doorway(tmp_path, monkeypatch):
     manifest.release_kind = "benchmark-doorway-width-slice.v1"
     manifest.width_slice_contract = deepcopy(payload["width_slice_contract"])
     manifest.expected_episode_cells = 1260
-    # Tracked template requests 600, but authored scenario caps and rows are 400.
-    manifest.expected_horizon_steps = 600
+    manifest.expected_horizon_steps = 400
     # seed-holdout: synthetic-fixture end
     return campaign, cfg, manifest, scenarios
 
@@ -82,13 +81,15 @@ def test_bound_doorway_slice_accepted(doorway):
 def test_tracked_legacy_kind_requires_bound_slice_contract(doorway):
     """The unchanged template kind is compatible only with its exact v1 binding."""
     doorway[2].release_kind = "benchmark-width-slice"
+    doorway[2].expected_horizon_steps = 600
     assert acceptance(doorway)["status"] == "valid"
     doorway[2].width_slice_contract = None
     assert acceptance(doorway)["status"] == "invalid"
 
 
 @pytest.mark.parametrize(
-    "mutation", ["width", "scenario", "roster", "seeds", "horizon", "count", "cap", "contract"]
+    "mutation",
+    ["width", "scenario", "roster", "seeds", "horizon", "horizon600", "count", "cap", "contract"],
 )
 def test_slice_refuses_mutated_axes(doorway, mutation):
     """A self-declared width kind must not admit any altered frozen axis."""
@@ -103,6 +104,8 @@ def test_slice_refuses_mutated_axes(doorway, mutation):
         manifest.resolved_seeds = tuple(range(1001, 1031))
     elif mutation == "horizon":
         manifest.expected_horizon_steps = 601
+    elif mutation == "horizon600":
+        manifest.expected_horizon_steps = 600
     elif mutation == "count":
         manifest.expected_episode_cells = 1259
     elif mutation == "cap":

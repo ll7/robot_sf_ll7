@@ -1591,8 +1591,11 @@ def doorway_width_slice_blockers(
         blockers.append("doorway slice requires the exact sealed 30-seed inventory")
     if getattr(manifest, "expected_episode_cells", None) != DOORWAY_RELEASE_CELLS:
         blockers.append("doorway slice requires exactly 1260 cells")
-    if getattr(manifest, "expected_horizon_steps", None) != 600:
-        blockers.append("doorway slice requires requested H600 with the authored H400 cap")
+    declared_horizon = (
+        DOORWAY_RELEASE_HORIZON if manifest.release_kind == DOORWAY_RELEASE_KIND else 600
+    )
+    if getattr(manifest, "expected_horizon_steps", None) != declared_horizon:
+        blockers.append(f"doorway slice must declare H{declared_horizon}")
     names = [str(item.get("name", item.get("id", ""))) for item in scenarios]
     if len(names) != 3 or set(names) != set(DOORWAY_RELEASE_SCENARIOS):
         blockers.append("doorway slice requires exactly the authored 2.2/2.8/3.6 m scenarios")
@@ -3149,6 +3152,9 @@ def _materialize_release_template_payload(  # noqa: PLR0913
         "version_doi": version_doi,
     }
     payload = _replace_identity_tokens(copy.deepcopy(dict(template_payload)), replacements)
+    if payload.get("release_kind") in DOORWAY_RELEASE_KINDS:
+        payload["release_kind"] = DOORWAY_RELEASE_KIND
+        payload["matrix"]["horizon_steps"] = DOORWAY_RELEASE_HORIZON
     payload.pop("identity_resolution", None)
     payload["release_tag"] = release_tag
     payload["source_sha"] = source_commit

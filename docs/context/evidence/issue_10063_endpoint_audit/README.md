@@ -7,7 +7,7 @@ stored cohorts, hashes, lane geometry and seed-exclusion receipts describe those
 historical checkouts. PR #10067's OVTFIX2 follow-up moves h1's goal to (33.5, 8.4),
 retains the original room, and runs the full suite under the author's updated
 2026-10-01 seed rule. Its new overtaking cohorts and validation receipts are
-reported separately in PR #10067 and `/home/luttkule/ovtfix2_report.md`.
+reported separately in PR #10067 and the local `ovtfix2_report.md`.
 
 `overlaps.json` lists all 48 release scenarios and three doorway widths: 102 full
 robot spawn/goal rectangles, with 58 intersections before and 53 after. Five
@@ -55,7 +55,14 @@ checks. It also inventories the 30 Q3 archive files read without re-stepping.
 Q3's 11/30 early risk_dwa collisions are historical; fresh pinned base yields
 3/30 because #10024 adds a stronger reset reaction buffer. The final cohort
 covers all three changed scenarios, three planners and dev seeds 1001–1030 only.
-`reproduction.json` includes exact producer/launcher bodies, resource limits,
+These JSON companions normalize host-specific path display using `${SOURCE_HOME}`.
+Numeric outcomes, raw hashes, input hashes and measured source identities remain
+unchanged. Each document binds its original f2ff302b Git document and checksum;
+producer/launcher bodies are referenced by JSON pointer and UTF-8 checksum rather
+than rewritten as executable source. Exact originals are also preserved in the
+checksummed `verbatim_f2_evidence.tar.gz` recovery archive. This normalization
+changes presentation, not the measured input or episode records.
+`reproduction.json` includes producer/launcher references, resource limits,
 source identities and checksummed raw archives. Recovery copies are on the local
 host and imech192; this is not a durable publication or sealed evaluation.
 Raw later collisions and timeouts in the dense crowd/platform interactions remain
@@ -70,5 +77,5 @@ release identities after integrating the approved combination base. Historical
 SVGs, frozen candidates and 0.0.2/0.0.7 artifacts remain intact.
 
 Final full-suite, exact-SHA routing/coverage and hosted-CI receipts are reported
-in PR #10067 and `/home/luttkule/ovtfix_report.md`; this bundle does not admit
+in PR #10067 and the local `ovtfix_report.md`; this bundle does not admit
 scientific, safety, performance or release claims.

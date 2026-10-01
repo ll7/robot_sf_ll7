@@ -15,11 +15,19 @@ from robot_sf.training.scenario_loader import load_scenarios
 MATRIX = Path("configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml")
 
 
-def test_robot_crowding_spawns_and_goals_can_occupy_robot_goal_zone() -> None:
-    """The real crowding map reserves the robot start, while keeping its goal populated."""
+@pytest.mark.parametrize("release_map", [False, True], ids=["historical", "safe-release"])
+def test_robot_crowding_goal_occupancy_matches_authored_map(release_map: bool) -> None:
+    """Crowding permits goals generally; the release map clears both robot endpoints."""
     scenario = next(
         row for row in load_scenarios(MATRIX) if row["name"] == "francis2023_robot_crowding"
     )
+    if not release_map:
+        # Retain the original SCENFIX3 sampler regression on its original map.
+        # #10063 authors a successor whose central crowd excludes the robot endpoints.
+        scenario["map_id"] = None
+        scenario["map_file"] = str(
+            Path("maps/svg_maps/francis2023/francis2023_robot_crowding.svg").resolve()
+        )
     hits = {"spawn": 0, "initial_goal": 0, "later_goal": 0}
     for seed in range(1001, 1031):
         config = build_env_config(
@@ -29,6 +37,8 @@ def test_robot_crowding_spawns_and_goals_can_occupy_robot_goal_zone() -> None:
         try:
             env.reset(seed=seed)
             sim = env.simulator
+            if release_map:
+                assert len(sim.pysf_state.ped_positions) == 24
             # Zone's authored B corner joins two perpendicular rectangle edges.
             a, b, c = np.asarray(sim.map_def.robot_goal_zones[0])
             goal_zone = Polygon([a, b, c, a + c - b])
@@ -43,7 +53,10 @@ def test_robot_crowding_spawns_and_goals_can_occupy_robot_goal_zone() -> None:
         finally:
             env.close()
     # Many deterministic draws distinguish a permitted goal rectangle from an excluded island.
-    assert all(count > 0 for count in hits.values()), hits
+    if release_map:
+        assert all(count == 0 for count in hits.values()), hits
+    else:
+        assert all(count > 0 for count in hits.values()), hits
 
 
 @pytest.mark.parametrize("desired_speed,buffer", [(None, 0.75), (1.1, 1.2)])

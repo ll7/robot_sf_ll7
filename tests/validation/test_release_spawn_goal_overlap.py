@@ -19,7 +19,8 @@ def test_overtaking_parked_pedestrian_clears_robot_goal_and_final_approach():
     )
     config = build_robot_config_from_scenario(scenario, scenario_path=MATRIX.resolve())
     definition = next(iter(config.map_pool.map_defs.values()))
-    parked = Point(definition.single_pedestrians[0].goal)
+    pedestrian = definition.single_pedestrians[0]
+    parked = Point(pedestrian.trajectory[-1] if pedestrian.trajectory else pedestrian.goal)
     # The review's stalled robots were within 3 m of the goal. Protect the whole
     # destination rectangle and authored approach, not one RNG draw.
     goals = [_rect_polygon(zone) for zone in definition.robot_goal_zones]
@@ -33,6 +34,23 @@ def test_overtaking_parked_pedestrian_clears_robot_goal_and_final_approach():
         )
 
 
+def test_overtaking_preserves_the_passing_lane_before_turning_away():
+    """The endpoint repair must keep the pedestrian's parallel passing segment."""
+    scenario = next(
+        row for row in load_scenarios(MATRIX) if row["name"] == "francis2023_pedestrian_overtaking"
+    )
+    config = build_robot_config_from_scenario(scenario, scenario_path=MATRIX.resolve())
+    definition = next(iter(config.map_pool.map_defs.values()))
+    pedestrian = definition.single_pedestrians[0]
+    assert pedestrian.trajectory and len(pedestrian.trajectory) >= 2, (
+        "overtaking pedestrian needs a departure waypoint before parking"
+    )
+    departure, parked = pedestrian.trajectory[0], pedestrian.trajectory[-1]
+    assert departure[0] >= 30.0, "the walker must complete the passing lane before departing"
+    assert departure[1] == pedestrian.start[1], "preserve the parallel overtaking lane"
+    assert parked[1] > departure[1], "the walker must turn away from the robot approach"
+
+
 def test_overtaking_lane_cannot_intersect_full_robot_spawn_rectangle():
     scenario = next(
         row for row in load_scenarios(MATRIX) if row["name"] == "francis2023_pedestrian_overtaking"
@@ -40,7 +58,7 @@ def test_overtaking_lane_cannot_intersect_full_robot_spawn_rectangle():
     config = build_robot_config_from_scenario(scenario, scenario_path=MATRIX.resolve())
     definition = next(iter(config.map_pool.map_defs.values()))
     pedestrian = definition.single_pedestrians[0]
-    lane = LineString([pedestrian.start, pedestrian.goal])
+    lane = LineString([pedestrian.start, *(pedestrian.trajectory or [pedestrian.goal])])
     assert all(
         _rect_polygon(zone).distance(lane) > config.sim_config.ped_radius
         for zone in definition.robot_spawn_zones

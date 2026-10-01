@@ -73,6 +73,7 @@ def test_historical_scheduled_episode_matches_main_row_contract(protocol, name):
     # Check the real stop first so the timeout case exposes the label regression.
     assert row["steps"] == expected["steps"]
     assert row["termination_reason"] == expected["termination_reason"]
+    assert sorted(row) == expected["row_fields"]
     assert row["config_hash"] == expected["config_hash"]
     assert row["episode_id"] == expected["episode_id"]
     assert "run_horizon" not in row["scenario_params"]

@@ -4883,14 +4883,20 @@ def _finalize_record_provenance(  # noqa: PLR0913
     track_schema_version: str | None,
 ) -> None:
     """Attach provenance, evidence, event ledger, and track fields to the record."""
-    record["effective_budget_steps"] = min(horizon_val, int(config.sim_config.max_sim_steps))
     horizon_metadata = scenario.get("metadata", {}).get("scenario_horizon", {})
+    authored_schedule = _has_authored_horizon_schedule(scenario)
+    if (
+        not horizon_metadata
+        or authored_schedule
+        or horizon_metadata.get("policy") == "legacy_runner_cap"
+    ):
+        record["effective_budget_steps"] = min(horizon_val, int(config.sim_config.max_sim_steps))
     if horizon_metadata.get("policy") == "legacy_runner_cap":
         record.setdefault("metadata", {})["scenario_horizon"] = {
             **horizon_metadata,
             "applied_max_episode_steps": record["effective_budget_steps"],
         }
-    if _has_authored_horizon_schedule(scenario):
+    if authored_schedule:
         scenario_params["run_horizon"] = record["effective_budget_steps"]
     pedestrian_model_provenance = build_pedestrian_model_provenance(
         sim_config=config.sim_config,

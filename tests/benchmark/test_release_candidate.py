@@ -136,6 +136,79 @@ def test_doi_free_candidate_loads_but_publication_loader_rejects(candidate_repo)
         load_release_manifest(path, repository_root=root)
 
 
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("fixed", None),
+        ("fixed_wrong_budget", "campaign horizon differs from candidate H600 contract"),
+        ("mixed", "scenario_horizons cannot be combined with fixed horizon"),
+        ("missing_pin", "candidate requires scenario_horizons_sha256"),
+        ("extended_schedule", "candidate scenario_horizons must preserve authored limits"),
+        ("matrix", "candidate matrix differs from declared campaign budget contract"),
+    ],
+)
+def test_candidate_budget_contract_rechecks_mutated_real_inputs(candidate_repo, mutation, message):
+    """Admitted real scheduled bytes are the positive control for each budget mutation."""
+    from robot_sf.evidence.writers import write_json, write_text
+
+    root, path, payload = candidate_repo
+    control = load_prepublication_candidate(path, repository_root=root)
+    assert control.expected_horizon_steps is None
+    assert control.expected_episode_cells == 20160
+    config_path = root / payload["canonical_campaign_config"]
+    config = yaml.safe_load(config_path.read_text())
+    if mutation.startswith("fixed"):
+        config.pop("scenario_horizons")
+        config.pop("scenario_horizons_sha256")
+        config["horizon"] = 600 if mutation == "fixed" else 599
+        payload["matrix"] = {"expected_episode_cells": 20160, "horizon_steps": 600}
+        # Fixed admission has a smaller closure, including no schedule sidecar.
+        for item, _digest in control.pinned_files:
+            if item.name == "release_0_0_8_authored_v1.yaml":
+                payload["sha256_files"].pop(item.relative_to(root).as_posix())
+    elif mutation == "mixed":
+        config["horizon"] = 600
+    elif mutation == "missing_pin":
+        config.pop("scenario_horizons_sha256")
+    elif mutation == "extended_schedule":
+        schedule_path = root / config["scenario_horizons"]
+        schedule = yaml.safe_load(schedule_path.read_text())
+        schedule["scenarios"]["francis2023_blind_corner"]["recommended_horizon_steps"] = 401
+        write_text(schedule_path, "# AI-GENERATED NEEDS-REVIEW\n" + yaml.safe_dump(schedule))
+        digest = hashlib.sha256(schedule_path.read_bytes()).hexdigest()
+        config["scenario_horizons_sha256"] = digest
+        payload["matrix"]["scenario_horizons_sha256"] = digest
+        payload["sha256_files"][config["scenario_horizons"]] = digest
+    else:
+        payload["matrix"]["expected_episode_cells"] = 20159
+    if mutation != "matrix":
+        write_text(config_path, "# AI-GENERATED NEEDS-REVIEW\n" + yaml.safe_dump(config))
+        payload["sha256_files"][payload["canonical_campaign_config"]] = hashlib.sha256(
+            config_path.read_bytes()
+        ).hexdigest()
+        _git(root, "add", payload["canonical_campaign_config"])
+        if mutation == "extended_schedule":
+            _git(root, "add", config["scenario_horizons"])
+        _git(
+            root,
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-qm",
+            mutation,
+        )
+        payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    write_json(path, payload)
+    if message is None:
+        candidate = load_prepublication_candidate(path, repository_root=root)
+        assert candidate.expected_horizon_steps == 600
+    else:
+        with pytest.raises(ValueError, match=message):
+            load_prepublication_candidate(path, repository_root=root)
+
+
 def _replace_campaign_algorithm(candidate_repo, arm: str) -> dict:
     """Change only one algo value in real template bytes, then re-pin the checkout."""
     root, path, payload = candidate_repo

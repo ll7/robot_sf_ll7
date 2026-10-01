@@ -323,3 +323,69 @@ def test_retired_legacy_extension_policy_has_no_alias():
 
     with pytest.raises(ValueError, match="Unknown horizon_policy"):
         _validate_horizon_policy("legacy_fixed_extends_authored", "0.0.7")
+
+
+@pytest.mark.parametrize("consumer", ["state", "critic"])
+def test_integer_budget_reaches_state_and_critic_without_duration_roundtrip(monkeypatch, consumer):
+    """A real authored H400 at dt=.052 must not turn into ceil(400.00000000000006)."""
+    import numpy as np
+    from gymnasium import spaces
+
+    from robot_sf.gym_env import robot_env
+    from robot_sf.robot.robot_state import RobotState
+    from robot_sf.training.scenario_loader import load_scenarios_for_validation
+
+    matrix = ROOT / "configs/scenarios/classic_interactions_francis2023_release_0_0_8_v1.yaml"
+    loaded = load_scenarios_for_validation(matrix, base_dir=ROOT)
+    scenario = next(s for s in loaded.scenarios if s["name"] == "francis2023_blind_corner")
+    assert scenario["simulation_config"]["max_episode_steps"] == 400
+    config = build_env_config(dict(scenario), scenario_path=ROOT / "scoped_scenarios.json")
+    config.sim_config.time_per_step_in_secs = 0.052
+    config.sim_config.sim_time_in_secs = 400 * 0.052
+    config.sim_config.episode_step_limit = 400
+    if consumer == "state":
+        state = RobotState(None, None, None, 0.052, 400 * 0.052)
+        state.episode_step_limit = config.sim_config.episode_step_limit
+        assert state.max_sim_steps == 400
+    else:
+        # Exercise the real consumer without constructing or stepping an environment.
+        env = robot_env.RobotEnv.__new__(robot_env.RobotEnv)
+        env._asymmetric_critic_enabled = True
+        env._critic_privileged_state_key = "critic_state"
+        env.observation_space = spaces.Dict({"position": spaces.Box(-1, 1, (2,), np.float32)})
+        observed = []
+        original = robot_env._asymmetric_critic_state_spec
+
+        def observe(space, **kwargs):
+            observed.append(kwargs["max_sim_steps"])
+            return original(space, **kwargs)
+
+        monkeypatch.setattr(robot_env, "_asymmetric_critic_state_spec", observe)
+        env._apply_asymmetric_critic_observation_space(config)
+        assert observed == [400]
+        assert "critic_state" in env.observation_space.spaces
+
+
+def test_budget_timeout_normalization_preserves_terminal_precedence():
+    """A terminated budget timeout is max_steps; collisions, success and early exits win."""
+    from inspect import signature
+
+    from robot_sf.benchmark.termination_reason import resolve_termination_reason
+
+    flags = {
+        "terminated": True,
+        "truncated": False,
+        "success": False,
+        "collision": False,
+    }
+    # Call the older signature too, so fail-on-base observes its wrong label, not TypeError.
+    if "timeout" in signature(resolve_termination_reason).parameters:
+        flags["timeout"] = True
+    assert resolve_termination_reason(**flags, reached_max_steps=True) == "max_steps"
+    assert resolve_termination_reason(**flags, reached_max_steps=False) == "terminated"
+    assert resolve_termination_reason(**{**flags, "collision": True}, reached_max_steps=True) == (
+        "collision"
+    )
+    assert resolve_termination_reason(**{**flags, "success": True}, reached_max_steps=True) == (
+        "success"
+    )

@@ -528,7 +528,7 @@ def _assert_versioned_kernel_and_v4_freeze(
 
 
 def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> None:
-    """Runnable inputs and all four frozen v4 slots resolve identically (#9850)."""
+    """Runnable inputs match, with protocol-scoped admission provenance (#9850)."""
     assert _sha256(CAMPAIGN_TEMPLATE_PATH) == CAMPAIGN_TEMPLATE_SHA256
     paths = (CALIBRATION_CONFIG_PATH, RUNTIME_SMOKE_V05_CONFIG_PATH, CAMPAIGN_TEMPLATE_PATH)
     raw = [_load_yaml(path) for path in paths]
@@ -608,9 +608,29 @@ def test_calibration_smoke_and_template_match_inputs_and_frozen_v4_slots() -> No
             right_scenario = dict(reference)
             left_scenario.pop("seeds", None)
             right_scenario.pop("seeds", None)
-            if left_scenario != right_scenario:
+            expected_scenario_differences = (
+                {
+                    "metadata.scenario_horizon.sha256",
+                    "metadata.scenario_horizon.authored_max_episode_steps",
+                }
+                if index == 0
+                else set()
+            )
+            actual_scenario_differences = _diff_paths(left_scenario, right_scenario)
+            if actual_scenario_differences != expected_scenario_differences:
                 mismatches.append(
-                    f"{label}.{name}.scenario: {_diff_paths(left_scenario, right_scenario)}"
+                    f"{label}.{name}.scenario: {actual_scenario_differences} "
+                    f"!= {expected_scenario_differences}"
+                )
+            if index == 0:
+                historical_schedule = scenario["metadata"]["scenario_horizon"]
+                current_schedule = reference["metadata"]["scenario_horizon"]
+                assert "sha256" not in historical_schedule
+                assert "authored_max_episode_steps" not in historical_schedule
+                assert current_schedule["sha256"] == configs[2].scenario_horizons_sha256
+                assert (
+                    current_schedule["authored_max_episode_steps"]
+                    == (reference["simulation_config"]["max_episode_steps"])
                 )
             map_file = scenario.get("map_file")
             if map_file:

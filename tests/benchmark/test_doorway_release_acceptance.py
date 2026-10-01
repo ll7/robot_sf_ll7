@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.release_acceptance import validate_full_benchmark_release_acceptance
-from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8
+from robot_sf.benchmark.seed_bands import EVAL_SEEDS_0_0_8  # seed-holdout: synthetic-fixture
 from tests.benchmark import test_release_acceptance as fixtures
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -22,7 +22,7 @@ def doorway(tmp_path, monkeypatch):
     scenarios = yaml.safe_load(MATRIX.read_text())["scenarios"]
     # seed-holdout: synthetic-fixture begin
     for scenario in scenarios:
-        scenario["seeds"] = list(EVAL_SEEDS_0_0_8)
+        scenario["seeds"] = list(EVAL_SEEDS_0_0_8)  # seed-holdout: synthetic-fixture
         scenario["map_file"] = (
             (MATRIX.parent / scenario["map_file"]).resolve().relative_to(ROOT).as_posix()
         )
@@ -31,7 +31,7 @@ def doorway(tmp_path, monkeypatch):
     monkeypatch.setattr(fixtures, "_PLANNER_KEYS", roster)
     monkeypatch.setattr(fixtures, "_PLANNER_ALGORITHMS", algorithms)
     monkeypatch.setattr(fixtures, "_SCENARIO_IDS", tuple(s["name"] for s in scenarios))
-    monkeypatch.setattr(fixtures, "_SEEDS", EVAL_SEEDS_0_0_8)
+    monkeypatch.setattr(fixtures, "_SEEDS", EVAL_SEEDS_0_0_8)  # seed-holdout: synthetic-fixture
     campaign, cfg = fixtures._write_provenance_bound_full_campaign(
         tmp_path,
         monkeypatch,

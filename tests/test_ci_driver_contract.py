@@ -787,9 +787,34 @@ def test_wheel_install_smoke_uses_dependency_resolution_and_runtime_env_step() -
     assert "--no-deps" not in smoke_text
     assert "wheel_with_dependency_resolution" in smoke_text
     assert "make_crowd_sim_env" in smoke_text
-    assert "env.reset(seed=123)" in smoke_text
+    assert "env.reset(seed=1001)" in smoke_text
     assert "env.step()" in smoke_text
     assert "PYTHONPATH= PYTHONNOUSERSITE=1" in smoke_text
+
+
+def test_benchmark_reproducibility_smoke_uses_development_seed_defaults() -> None:
+    """The hosted episode-generating smoke must never default to retired seeds."""
+    import ast
+
+    tree = ast.parse((ROOT / "scripts" / "benchmark_repro_check.py").read_text())
+    pipeline = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "run_benchmark_pipeline"
+    )
+    assert ast.literal_eval(pipeline.args.defaults[-1]) == 1001
+    episode_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "run_benchmark_pipeline"
+    ]
+    assert len(episode_calls) == 2
+    assert all(
+        ast.literal_eval(next(kw.value for kw in call.keywords if kw.arg == "seed")) == 1001
+        for call in episode_calls
+    ), "hosted reproducibility smoke must resolve dev seeds 1001 and 1002"
 
 
 def test_wheel_install_smoke_tests_optional_extras_independently() -> None:

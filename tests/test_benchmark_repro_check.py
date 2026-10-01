@@ -18,7 +18,7 @@ SPEC.loader.exec_module(MODULE)
 
 def test_minimal_simple_policy_run_matches_current_aggregate_contract(tmp_path: Path):
     """A real minimal run passes schema validation and emits the required aggregate shape."""
-    result = MODULE.run_benchmark_pipeline(tmp_path, seed=123)
+    result = MODULE.run_benchmark_pipeline(tmp_path, seed=1001)
     assert result["status"] == "passed"
     assert result["episodes_count"] == 2
 

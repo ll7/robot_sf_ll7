@@ -126,7 +126,8 @@ def _write_reproducibility_report(
     return report_path
 
 
-def run_benchmark_pipeline(work_dir: Path, seed: int = 123) -> dict[str, Any]:
+# #10063: both generated episodes use development seeds 1001 and 1002.
+def run_benchmark_pipeline(work_dir: Path, seed: int = 1001) -> dict[str, Any]:
     """Run complete benchmark pipeline in isolated directory."""
     from robot_sf.benchmark.aggregate import compute_aggregates_with_ci, read_jsonl
     from robot_sf.benchmark.runner import run_batch
@@ -135,6 +136,7 @@ def run_benchmark_pipeline(work_dir: Path, seed: int = 123) -> dict[str, Any]:
 
     # Create scenario configuration
     scenario = create_minimal_scenario()
+    print(f"RESOLVED EPISODE SEEDS: {[seed + i for i in range(scenario['repeats'])]}")
     episodes_path = work_dir / "episodes.jsonl"
     schema_path = EPISODE_SCHEMA_PATH
 
@@ -296,8 +298,8 @@ def main() -> int:
 
             # Run the same seeded pipeline twice in fresh directories. Different seeds
             # represent different stochastic episodes, not a reproducibility failure.
-            print("\n=== Run 1 (seed=123) ===")
-            results1 = run_benchmark_pipeline(work_dir1, seed=123)
+            print("\n=== Run 1 (seed=1001) ===")
+            results1 = run_benchmark_pipeline(work_dir1, seed=1001)
             if results1["status"] != "passed":
                 _write_reproducibility_report(
                     results_base,
@@ -309,8 +311,8 @@ def main() -> int:
                 )
                 return 1
 
-            print("\n=== Run 2 (seed=123) ===")
-            results2 = run_benchmark_pipeline(work_dir2, seed=123)
+            print("\n=== Run 2 (seed=1001) ===")
+            results2 = run_benchmark_pipeline(work_dir2, seed=1001)
             if results2["status"] != "passed":
                 _write_reproducibility_report(
                     results_base,

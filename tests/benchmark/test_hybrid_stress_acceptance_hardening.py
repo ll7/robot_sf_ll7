@@ -19,6 +19,9 @@ from robot_sf.benchmark.camera_ready._preflight import _config_hash_payload, _sc
 from robot_sf.benchmark.camera_ready._run_state import validate_campaign_integrity
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
+    resolve_episode_policy_runtime,
+)
 from robot_sf.benchmark.release_acceptance import (
     _stress_effective_branch_coverage,
     validate_diagnostic_stress_smoke_acceptance,
@@ -113,9 +116,10 @@ def _repo_relative(path: Path) -> str:
     return path.resolve().relative_to(REPO_ROOT).as_posix()
 
 
-def _row(*, algo: str, scenario_id: str, seed: int) -> dict[str, Any]:
+def _row(*, algo: str, algo_config: dict[str, Any], scenario_id: str, seed: int) -> dict[str, Any]:
     scenario_params = {
         "algo": algo,
+        "algo_config_hash": _config_hash(algo_config),
         "id": scenario_id,
         "robot_config": {"type": "differential_drive"},
         "run_dt": 0.1,
@@ -238,10 +242,25 @@ def _build_stress_fixture(
         arm = f"{planner.key}__differential_drive"
         episodes_path = root / "runs" / arm / "episodes.jsonl"
         summary_path = root / "runs" / arm / "summary.json"
-        rows = [
-            _row(algo=planner.algo, scenario_id=scenario_id, seed=seed)
-            for scenario_id in scenario_ids
-        ]
+        rows = []
+        fixture_seed = campaign_manifest["seed_policy"]["resolved_seeds"][0]
+        for scenario in effective_scenarios:
+            algo, algo_config = resolve_episode_policy_runtime(
+                default_algo=planner.algo,
+                algo_config_path=str(planner.algo_config_path)
+                if planner.algo_config_path
+                else None,
+                scenario=scenario,
+                seed=fixture_seed,
+            )
+            rows.append(
+                _row(
+                    algo=algo,
+                    algo_config=algo_config,
+                    scenario_id=str(scenario["name"]),
+                    seed=fixture_seed,
+                )
+            )
         episodes_path.parent.mkdir(parents=True, exist_ok=True)
         episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
         provenance = build_result_provenance_manifest(
@@ -272,6 +291,9 @@ def _build_stress_fixture(
                 "planner": {
                     "key": planner.key,
                     "algo": planner.algo,
+                    "algo_config_path": str(planner.algo_config_path)
+                    if planner.algo_config_path
+                    else None,
                     "kinematics": "differential_drive",
                     "horizon": 600,
                     "dt": 0.1,

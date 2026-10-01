@@ -170,7 +170,7 @@ def test_duplicate_or_unexpected_rows_cannot_replace_missing_identity(
         row["seed"] = 1004
         substitute = (json.dumps(row) + "\n").encode()
     episodes.write_bytes(b"".join(rows[:-1] + [substitute]))
-    with pytest.raises(ResumeMismatchError, match=f"{replacement}.*identity"):
+    with pytest.raises(ResumeMismatchError, match=rf"{replacement} resume job identity \("):
         _plan(cfg, campaign, scenarios)
 
 

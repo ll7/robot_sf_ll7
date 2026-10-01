@@ -1716,6 +1716,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
             resolved_seeds=[seed],
             campaign_root=campaign_root,
             campaign_manifest={"git": {"commit": expected_source_commit}},
+            config_root=resolved_repo,
         )
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
         problems.append(f"runtime smoke raw integrity recomputation failed: {exc}")

@@ -57,6 +57,7 @@ from robot_sf.benchmark.camera_ready._reporting import (
 )
 from robot_sf.benchmark.camera_ready._resume_plan import (
     ArmResumeVerdict,
+    _validate_resume_runtime_identities,
     build_resume_plan,
     emit_resume_plan_log,
     verify_resume_context,
@@ -117,7 +118,9 @@ from robot_sf.benchmark.snqi.campaign_contract import (
 )
 from robot_sf.benchmark.snqi.v2_reports import enrich_campaign_v2
 from robot_sf.benchmark.utils import load_optional_json
-from robot_sf.common.artifact_paths import get_artifact_category_path, get_repository_root
+
+# get_artifact_category_path remains part of the legacy facade export contract.
+from robot_sf.common.artifact_paths import get_artifact_category_path, get_repository_root  # noqa: F401
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -155,6 +158,8 @@ _CAMPAIGN_TABLE_HEADERS = (
     "socnav_prereq_policy",
     "status",
     "episodes",
+    "episodes_total",
+    "episodes_excluded",
     "commands_evaluated",
     "projection_rate",
     "infeasible_rate",
@@ -187,6 +192,8 @@ _CORE_EXPERIMENTAL_TABLE_HEADERS = (
     "readiness_tier",
     "status",
     "episodes",
+    "episodes_total",
+    "episodes_excluded",
     "success_mean",
     "collisions_mean",
     "ped_collision_count_mean",
@@ -217,6 +224,8 @@ _SCENARIO_BREAKDOWN_HEADERS = (
     "speed_regime",
     "maneuver_type",
     "episodes",
+    "episodes_total",
+    "episodes_excluded",
     "success_mean",
     "collisions_mean",
     "ped_collision_count_mean",
@@ -240,6 +249,8 @@ _FAMILY_BREAKDOWN_HEADERS = (
     "speed_regime",
     "maneuver_type",
     "episodes",
+    "episodes_total",
+    "episodes_excluded",
     "success_mean",
     "collisions_mean",
     "ped_collision_count_mean",
@@ -754,6 +765,15 @@ def _resolve_campaign_planner_batch_result(
                 "resume-plan episodes path does not match scheduler arm path: "
                 f"{resume_verdict.episodes_path} != {run.episodes_path}"
             )
+        _validate_resume_runtime_identities(
+            run.episodes_path,
+            {
+                "key": planner.key,
+                "algo": planner.algo,
+                "algo_config_path": planner.algo_config_path,
+            },
+            run.scoped_scenarios,
+        )
         logger.info(
             "Skipping completed campaign arm: planner={} kinematics={} episodes={}/{}",
             planner.key,
@@ -1662,6 +1682,8 @@ def _emit_resume_plan_preflight(
     planners = [
         {
             "key": planner.key,
+            "algo": planner.algo,
+            "algo_config_path": planner.algo_config_path,
             "enabled": planner.enabled,
         }
         for planner in cfg.planners
@@ -1672,6 +1694,7 @@ def _emit_resume_plan_preflight(
         planners=planners,
         kinematics_matrix=list(kinematics),
         scenarios=scenarios,
+        scenario_path=getattr(cfg, "scenario_matrix_path", None),
     )
 
     emit_resume_plan_log(verdicts)
@@ -1896,6 +1919,9 @@ def _write_campaign_table_artifacts(
         experimental_csv_path, experimental_md_path, arm_identity_csv_path,
         arm_identity_md_path).
     """
+    # Ship the count contract beside CSV/MD/JSON through the publication payload.
+    schema_path = Path(__file__).resolve().parents[1] / "schemas/campaign-table-row.v2.json"
+    _write_json(reports_dir / "campaign_table.schema.json", json.loads(schema_path.read_text()))
     csv_path, md_table_path = _write_table_artifacts(
         reports_dir,
         "campaign_table",
@@ -2003,6 +2029,8 @@ def _write_parity_table(reports_dir: Path, planner_rows: list[dict[str, Any]]) -
                 "execution_mode": str(row.get("execution_mode", "unknown")),
                 "status": str(row.get("status", "unknown")),
                 "episodes": int(row.get("episodes", 0)),
+                "episodes_total": int(row.get("episodes_total", row.get("episodes", 0))),
+                "episodes_excluded": int(row.get("episodes_excluded", 0)),
                 "success_mean": str(row.get("success_mean", "nan")),
                 "success_ci_low": str(row.get("success_ci_low", "nan")),
                 "success_ci_high": str(row.get("success_ci_high", "nan")),
@@ -2040,6 +2068,8 @@ def _write_parity_table(reports_dir: Path, planner_rows: list[dict[str, Any]]) -
             "execution_mode",
             "status",
             "episodes",
+            "episodes_total",
+            "episodes_excluded",
             "success_mean",
             "success_ci_low",
             "success_ci_high",
@@ -2260,7 +2290,10 @@ def _build_and_write_snqi_section(  # noqa: PLR0913
     Returns:
         SNQI section result with paths, contract evaluation, and warning flags.
     """
-    episodes = collect_episodes_from_campaign_runs(run_entries, repo_root=get_repository_root())
+    cohort_metadata: dict[str, Any] = {}
+    episodes = collect_episodes_from_campaign_runs(
+        run_entries, repo_root=get_repository_root(), cohort_metadata=cohort_metadata
+    )
     configured_weights, baseline_for_eval, baseline_source, baseline_adjustments = (
         _resolve_snqi_baseline_and_weights(snqi_weights, snqi_baseline, episodes, warnings)
     )
@@ -2283,7 +2316,6 @@ def _build_and_write_snqi_section(  # noqa: PLR0913
     positioning_results = _compute_snqi_positioning(
         planner_rows, episodes, baseline_for_eval, configured_weights, cfg
     )
-    positioning = dict(positioning_results["positioning"])
     weights_sha256, baseline_sha256 = _compute_snqi_hashes(
         cfg, configured_weights, baseline_for_eval
     )
@@ -2300,6 +2332,7 @@ def _build_and_write_snqi_section(  # noqa: PLR0913
         weights_sha256=weights_sha256,
         baseline_sha256=baseline_sha256,
     )
+    snqi_diagnostics_payload["evidence_cohort"] = cohort_metadata
     snqi_diagnostics_json_path, snqi_diagnostics_md_path, snqi_sensitivity_csv_path = (
         _write_snqi_diagnostics_artifacts(reports_dir, snqi_diagnostics_payload)
     )
@@ -2311,7 +2344,7 @@ def _build_and_write_snqi_section(  # noqa: PLR0913
         snqi_diagnostics_md_path=snqi_diagnostics_md_path,
         snqi_sensitivity_csv_path=snqi_sensitivity_csv_path,
         contract_eval=contract_eval,
-        positioning=positioning,
+        positioning=dict(positioning_results["positioning"]),
         snqi_hard_fail=snqi_hard_fail,
         soft_contract_warning=soft_contract_warning,
         weights_sha256=weights_sha256,
@@ -3139,7 +3172,7 @@ def _export_publication_bundle_section(  # noqa: PLR0913
         and not snqi_hard_fail
         and benchmark_success
     ):
-        publication_dir = get_artifact_category_path("benchmarks") / "publication"
+        publication_dir = campaign_root.parent / "publication"
         bundle_name = f"{campaign_id}_publication_bundle"
         try:
             bundle = dependencies.export_publication_bundle(

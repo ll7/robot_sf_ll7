@@ -57,7 +57,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from robot_sf.benchmark.aggregate import read_jsonl
+from robot_sf.benchmark.aggregate import filter_evidence_eligible_records, read_jsonl
 from robot_sf.benchmark.artifact_publication import (
     PublicationPreflightError,
     export_publication_bundle,
@@ -375,7 +375,8 @@ def _reconcile_snqi_diagnostics(campaign_root: Path, cfg: Any) -> None:
                 raise ValueError(
                     f"{episodes_path}: stored SNQI does not match the pinned curvature-aware basis"
                 )
-            grouped[(planner_key, kinematics)].append(recomputed_value)
+            if filter_evidence_eligible_records([record])[0]:
+                grouped[(planner_key, kinematics)].append(recomputed_value)
             row_count += 1
 
     ordering = [

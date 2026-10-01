@@ -110,9 +110,12 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         self._filtered_target = None
         self._surface_v3_contact = False
 
+        self._last_simulation_timestep = None
+
     def reset(self, *, seed: int | None = None) -> None:
         """Reset episode-local obstacle-force application diagnostics."""
         del seed
+        self._last_simulation_timestep = None
         self._obstacle_force_applied = False
         self._obstacle_force_runtime_parameters = {}
         self._goal_approach_applied = False
@@ -471,12 +474,8 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         return max(0.0, min(max_speed, float(self.config.social_force_desired_speed)))
 
     def _resolve_dt(self, observation: dict) -> float:
-        """Return the simulation timestep (fallback to config defaults)."""
-        sim = observation.get("sim", {})
-        timestep = self._as_1d_float(sim.get("timestep", [0.0]), pad=1)[0]
-        if timestep <= 0.0:
-            return float(self.config.social_force_tau)
-        return float(timestep)
+        """Return the observed simulation timestep; relaxation tau is not a clock."""
+        return self._simulation_timestep(observation)
 
     @staticmethod
     def _rotate_velocities_to_world(velocities: np.ndarray, heading: float) -> np.ndarray:
@@ -1098,6 +1097,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""
         diagnostics: dict[str, Any] = {
+            "simulation_timestep": getattr(self, "_last_simulation_timestep", None),
             "planner_type": "SocialForcePlannerAdapter",
             "planner_version": self._planner_version()
             if getattr(self, "config", None) is not None

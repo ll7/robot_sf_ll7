@@ -28,6 +28,7 @@ from robot_sf.planner.clearance_geometry import (
     validate_surface_clearance_radii,
 )
 from robot_sf.planner.socnav_occupancy import OccupancyAwarePlannerMixin
+from robot_sf.robot.differential_drive import DifferentialDriveSettings
 
 _SOCNAV_ROOT_ENV = "ROBOT_SF_SOCNAV_ROOT"
 _SOCNAV_ALLOW_UNTRUSTED_ENV = "ROBOT_SF_SOCNAV_ALLOW_UNTRUSTED_ROOT"
@@ -44,8 +45,34 @@ _SACADRL_MODEL_ID = "ga3c_cadrl_iros18"
 _PREDICTIVE_MODEL_ID = "predictive_proxy_selected_v1"
 _SOCNAV_IMPORT_LOCK = threading.Lock()
 _SOCNAV_CONFIG_INIT_KEYS = frozenset(
-    {"social_force_kernel_version", "predictive_clearance_model", "sampling_repulsion_weight"}
+    {
+        "social_force_kernel_version",
+        "predictive_clearance_model",
+        "sampling_repulsion_weight",
+        "predictive_occupancy_version",
+        "predictive_heading_lattice_version",
+    }
 )
+
+_PREDICTIVE_SCORING_VERSIONS = {
+    "predictive_occupancy_version": frozenset({"pedestrians_v1"}),
+    "predictive_heading_lattice_version": frozenset({"per_step_v1", "horizon_scaled_v2"}),
+}
+
+_SOCNAV_PRIVATE_SELECTORS = frozenset(_PREDICTIVE_SCORING_VERSIONS) | {"sampling_repulsion_weight"}
+
+
+def _resolve_private_selector(name: str, value: Any) -> Any:
+    """Validate versioned prediction selectors; retain legacy sampling weight behavior.
+
+    Returns:
+        Any: The explicit selector value after validation.
+    """
+    versions = _PREDICTIVE_SCORING_VERSIONS.get(name)
+    if versions is not None and value not in versions:
+        raise ValueError(f"Unsupported {name}: {value!r}")
+    return value
+
 
 # Goal-approach correction versions are deliberately separate from the
 # obstacle-force law versions.  The default is the historical planner path;
@@ -467,6 +494,10 @@ class SocNavPlannerConfig:
     # reference-aligned 0.0.8 candidate selects zero (the upstream sampler has
     # no additive pedestrian repulsion vector).
     sampling_repulsion_weight: InitVar[float | None] = field(default=None, kw_only=True)
+    # A2 retains only the base pedestrian cost; its default is absent from config hashes.
+    predictive_occupancy_version: InitVar[str] = field(default="pedestrians_v1", kw_only=True)
+    # A4: distinct horizon headings without changing historical config identity.
+    predictive_heading_lattice_version: InitVar[str] = field(default="per_step_v1", kw_only=True)
     # Pedestrians whose surface distance (centre distance minus robot and
     # pedestrian radius) is at most this value keep the full, uncapped legacy
     # repulsion.  1.6 m equals a 3.0 m centre distance at the release radii
@@ -537,8 +568,8 @@ class SocNavPlannerConfig:
             )
             object.__setattr__(self, name, value)
             return
-        if name == "sampling_repulsion_weight":
-            object.__setattr__(self, "_sampling_repulsion_weight", value)
+        if name in _SOCNAV_PRIVATE_SELECTORS:
+            object.__setattr__(self, "_" + name, _resolve_private_selector(name, value))
             return
         if name == "social_force_obstacle_law":
             resolved, mode = resolve_obstacle_force_law_with_mode(value)
@@ -560,6 +591,10 @@ class SocNavPlannerConfig:
             self.predictive_clearance_model = init_vars[1]
         if len(init_vars) > 2:
             self.sampling_repulsion_weight = init_vars[2]
+        if len(init_vars) > 3:
+            self.predictive_occupancy_version = init_vars[3]
+        if len(init_vars) > 4:
+            self.predictive_heading_lattice_version = init_vars[4]
 
     def __getattribute__(self, name: str) -> Any:
         """Expose the resolved kernel selector without serializing its default.
@@ -582,6 +617,11 @@ class SocNavPlannerConfig:
                 return object.__getattribute__(self, "_sampling_repulsion_weight")
             except AttributeError:
                 return None
+        if name in {"predictive_occupancy_version", "predictive_heading_lattice_version"}:
+            try:
+                return object.__getattribute__(self, "_" + name)
+            except AttributeError:
+                return "pedestrians_v1" if name == "predictive_occupancy_version" else "per_step_v1"
         return object.__getattribute__(self, name)
 
     def _config_hash_overrides(self) -> dict[str, Any]:
@@ -597,6 +637,12 @@ class SocNavPlannerConfig:
             overrides["predictive_clearance_model"] = self.predictive_clearance_model
         if self.sampling_repulsion_weight is not None:
             overrides["sampling_repulsion_weight"] = self.sampling_repulsion_weight
+        if self.predictive_occupancy_version != "pedestrians_v1":
+            overrides["predictive_occupancy_version"] = self.predictive_occupancy_version
+        if self.predictive_heading_lattice_version != "per_step_v1":
+            overrides["predictive_heading_lattice_version"] = (
+                self.predictive_heading_lattice_version
+            )
         return overrides
 
     def to_dict(self) -> dict[str, Any]:
@@ -1295,11 +1341,25 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         if robot_config is None:
             return
         limits: dict[str, float] = {}
-        for key in ("max_linear_speed", "max_linear_decel", "max_linear_accel", "radius"):
+        for key in (
+            "max_linear_speed",
+            "max_linear_decel",
+            "max_linear_accel",
+            "radius",
+            "max_angular_speed",
+            "max_angular_accel",
+            "wheel_radius",
+            "interaxis_length",
+        ):
             value = getattr(robot_config, key, None)
             if isinstance(value, int | float) and not isinstance(value, bool) and value > 0:
                 limits[key] = float(value)
         self._sampling_drive_limits = limits
+        settings = dict(limits)
+        backwards = getattr(robot_config, "allow_backwards", None)
+        if isinstance(backwards, bool):
+            settings["allow_backwards"] = backwards
+        self._sampling_drive_settings = DifferentialDriveSettings(**settings)
         self._sampling_path_fields = {}
         self._sampling_obstacle_segments = None
         if self._sampling_version() == SOCNAV_SAMPLING_LEGACY_V1:

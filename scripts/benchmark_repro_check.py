@@ -21,6 +21,13 @@ EPISODE_SCHEMA_PATH = (
     REPOSITORY_ROOT / "robot_sf" / "benchmark" / "schemas" / "episode.schema.v1.json"
 )
 REQUIRED_AGGREGATE_METRICS = ("collisions", "path_efficiency", "success")
+SUCCESS_ONLY_METRICS = (
+    "path_efficiency",
+    "time_to_goal_norm_success_only",
+    "time_to_goal_ideal_ratio",
+    "time_to_goal",
+    "aggregated_time",
+)
 REQUIRED_AGGREGATE_STATISTICS = ("mean", "median", "p95")
 
 
@@ -60,7 +67,13 @@ def validate_simple_policy_aggregate(summary: dict[str, Any]) -> dict[str, Any]:
         diagnostic["missing_group"] = "simple_policy"
         return diagnostic
 
+    success_data = group_data.get("success", {})
+    success_mean = success_data.get("mean") if isinstance(success_data, dict) else None
+    has_success = isinstance(success_mean, int | float) and success_mean > 0
+    diagnostic["success_only_statistics_required"] = has_success
     for metric in REQUIRED_AGGREGATE_METRICS:
+        if metric == "path_efficiency" and not has_success:
+            continue
         metric_data = group_data.get(metric)
         if not isinstance(metric_data, dict):
             diagnostic["missing_metrics"].append(metric)
@@ -126,7 +139,7 @@ def _write_reproducibility_report(
     return report_path
 
 
-def run_benchmark_pipeline(work_dir: Path, seed: int = 123) -> dict[str, Any]:
+def run_benchmark_pipeline(work_dir: Path, seed: int = 1001) -> dict[str, Any]:
     """Run complete benchmark pipeline in isolated directory."""
     from robot_sf.benchmark.aggregate import compute_aggregates_with_ci, read_jsonl
     from robot_sf.benchmark.runner import run_batch
@@ -212,6 +225,40 @@ def run_benchmark_pipeline(work_dir: Path, seed: int = 123) -> dict[str, Any]:
     }
 
 
+def _episode_support(results: dict[str, Any]) -> dict[str, Any]:
+    """Read per-group success counts and identity-aligned null patterns from episode bytes.
+
+    Returns:
+        Support evidence for all success-only and goal-completion metrics.
+    """
+    with results["episodes_file"].open(encoding="utf-8") as file:
+        records = [json.loads(line) for line in file if line.strip()]
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for record in records:
+        group = str(record.get("scenario_params", {}).get("algo", "unknown"))
+        groups.setdefault(group, []).append(record)
+    support = {}
+    for group, rows in groups.items():
+        rows.sort(
+            key=lambda row: (
+                str(row.get("scenario_id", "")),
+                row.get("seed", 0),
+                str(row.get("episode_id", "")),
+            )
+        )
+        support[group] = {
+            "success_count": sum(row.get("metrics", {}).get("success") == 1 for row in rows),
+            "identities": [
+                (row.get("scenario_id"), row.get("seed"), row.get("episode_id")) for row in rows
+            ],
+            "null_patterns": {
+                metric: [row.get("metrics", {}).get(metric) is None for row in rows]
+                for metric in SUCCESS_ONLY_METRICS
+            },
+        }
+    return support
+
+
 def compare_reproducibility(results1: dict[str, Any], results2: dict[str, Any]) -> bool:
     """Compare two benchmark runs for reproducibility."""
     print("\n=== Reproducibility Analysis ===")
@@ -242,10 +289,23 @@ def compare_reproducibility(results1: dict[str, Any], results2: dict[str, Any]) 
 
     print(f"✅ Groups match: {list(groups1)}")
 
+    support1, support2 = _episode_support(results1), _episode_support(results2)
+    if support1 != support2:
+        print(
+            f"❌ Episode success counts or success-only null patterns differ: {support1} vs {support2}"
+        )
+        return False
+    print(f"✅ Episode support matches: {support1}")
+
     # Compare metric values (should be identical for deterministic algorithms)
     reproducible = True
 
     for metric in REQUIRED_AGGREGATE_METRICS:
+        if (
+            metric == "path_efficiency"
+            and support1.get("simple_policy", {}).get("success_count", 0) == 0
+        ):
+            continue
         metric1 = summary1.get("simple_policy", {}).get(metric)
         metric2 = summary2.get("simple_policy", {}).get(metric)
         if not isinstance(metric1, dict) or not isinstance(metric2, dict):
@@ -296,8 +356,8 @@ def main() -> int:
 
             # Run the same seeded pipeline twice in fresh directories. Different seeds
             # represent different stochastic episodes, not a reproducibility failure.
-            print("\n=== Run 1 (seed=123) ===")
-            results1 = run_benchmark_pipeline(work_dir1, seed=123)
+            print("\n=== Run 1 (seed=1001) ===")
+            results1 = run_benchmark_pipeline(work_dir1, seed=1001)
             if results1["status"] != "passed":
                 _write_reproducibility_report(
                     results_base,
@@ -309,8 +369,8 @@ def main() -> int:
                 )
                 return 1
 
-            print("\n=== Run 2 (seed=123) ===")
-            results2 = run_benchmark_pipeline(work_dir2, seed=123)
+            print("\n=== Run 2 (seed=1001) ===")
+            results2 = run_benchmark_pipeline(work_dir2, seed=1001)
             if results2["status"] != "passed":
                 _write_reproducibility_report(
                     results_base,

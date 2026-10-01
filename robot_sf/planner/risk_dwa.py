@@ -15,6 +15,7 @@ import numpy as np
 from robot_sf.common.math_utils import wrap_angle_pi as _wrap_angle
 from robot_sf.planner.clearance_geometry import (
     CENTER_CLEARANCE_V1,
+    least_bad_clearance_rank,
     obstacle_rollout_admissible,
     occupied_cell_clearance,
     pedestrian_clearance,
@@ -518,9 +519,46 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             )
         return min_ped_clear, min_obs_clear
 
+    def _infeasible_command_rank(
+        self, command, *, robot_pos, heading, goal, ped_pos, ped_vel, observation, grid_payload
+    ) -> tuple[float, float]:
+        """Evaluate rejected commands with the same rollout and swept geometry.
+
+        Returns:
+            tuple: Worst clearance margin and goal progress, in metres.
+        """
+        steps = max(int(self.config.rollout_steps), 1)
+        trajectory, _ = self._rollout_trajectory(
+            robot_pos=robot_pos, heading=heading, command=command, steps=steps
+        )
+        ped_clear, obs_clear = self._rollout_min_clearance(
+            positions=trajectory,
+            steps=steps,
+            ped_pos=ped_pos,
+            ped_vel=ped_vel,
+            observation=observation,
+            grid_payload=grid_payload,
+        )
+        previous = robot_pos
+        for point in trajectory:
+            swept = self._exact_obstacle_clearance(point, previous=previous)
+            if swept is not None:
+                obs_clear = min(obs_clear, swept)
+            previous = point
+        return least_bad_clearance_rank(
+            ped_clear,
+            obs_clear,
+            ped_threshold=float(self.config.safe_distance),
+            obstacle_threshold=float(self.config.hard_obstacle_clearance),
+            progress=float(
+                np.linalg.norm(goal - robot_pos) - np.linalg.norm(goal - trajectory[-1])
+            ),
+        )
+
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return best unicycle command `(v, omega)` for the current observation."""
         self._no_admissible_command = False
+        self._recovery_kind = None
         self._recovery_command = False
         robot_pos, heading, goal, ped_pos, ped_vel = self._extract_robot_goal_ped(observation)
         self._last_target_xy = (float(goal[0]), float(goal[1]))
@@ -552,10 +590,12 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         if self.config.dynamic_window_version == "drive_limited_v2":
             linear_candidates = (*linear_candidates, linear_min, linear_max)
             angular_candidates = (*angular_candidates, angular_min, angular_max)
+        recovery_candidates = [(braking_cmd, "brake")]
         for v_raw in linear_candidates:
             v = float(np.clip(v_raw, linear_min, linear_max))
             for w_raw in angular_candidates:
                 w = float(np.clip(w_raw, angular_min, angular_max))
+                recovery_candidates.append(((v, w), "least_bad_clearance"))
                 score = self._rollout_score(
                     robot_pos=robot_pos,
                     heading=heading,
@@ -572,9 +612,9 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
                     best_cmd = (v, w)
 
         if bool(self.config.progress_escape_enabled):
-            if (
-                to_goal > float(self.config.progress_escape_distance)
-                and best_cmd[0] < float(self.config.progress_escape_speed) * 0.6
+            if to_goal > float(self.config.progress_escape_distance) and (
+                best_cmd[0] < float(self.config.progress_escape_speed) * 0.6
+                or best_score == float("-inf")
             ):
                 goal_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
                 heading_err = _wrap_angle(goal_heading - heading)
@@ -586,6 +626,7 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
                         angular_max,
                     )
                 )
+                recovery_candidates.append(((escape_v, escape_w), "progress_escape"))
                 escape_score = self._rollout_score(
                     robot_pos=robot_pos,
                     heading=heading,
@@ -600,11 +641,23 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
                 if escape_score > best_score:
                     best_score = escape_score
                     best_cmd = (escape_v, escape_w)
-        # With no admissible trajectory, return the reachable maximum brake.
-        # This emergency actuator fallback is distinct from DWA selection.
+        # Keep finite-score arbitration unchanged. Rank only the infeasible state.
         if best_score == float("-inf"):
             self._no_admissible_command = True
             self._no_admissible_command_count += 1
+            best_cmd, self._recovery_kind = max(
+                recovery_candidates,
+                key=lambda item: self._infeasible_command_rank(
+                    item[0],
+                    robot_pos=robot_pos,
+                    heading=heading,
+                    goal=goal,
+                    ped_pos=ped_pos,
+                    ped_vel=ped_vel,
+                    observation=observation,
+                    grid_payload=grid_payload,
+                ),
+            )
         current_clearance = self._min_obstacle_clearance(
             robot_pos, observation=observation, grid_payload=grid_payload
         )
@@ -619,6 +672,7 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""
         decision = {
+            "recovery_kind": getattr(self, "_recovery_kind", None),
             "recovery_command": self._recovery_command,
             "recovery_command_count": self._recovery_command_count,
             "no_admissible_command": getattr(self, "_no_admissible_command", False),

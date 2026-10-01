@@ -286,6 +286,44 @@ def _historical_compare_reaches_target(
     return isinstance(last_compare_commit, dict) and last_compare_commit.get("sha") == target_sha
 
 
+def _read_historical_compare_pages(repo: str, base_sha: str, target_sha: str) -> object:
+    """Read every commit page while retaining the first page's complete file stats."""
+    endpoint = f"repos/{repo}/compare/{base_sha}...{target_sha}?per_page=100"
+    response = subprocess.run(
+        ["gh", "api", endpoint], capture_output=True, text=True, timeout=15, check=True
+    )
+    comparison = json.loads(response.stdout)
+    if not isinstance(comparison, dict):
+        return comparison
+    total = comparison.get("total_commits")
+    commits = comparison.get("commits")
+    if isinstance(total, bool) or not isinstance(total, int) or not isinstance(commits, list):
+        return comparison
+    page = 1
+    while len(commits) < total:
+        if len(commits) != page * 100:
+            return None
+        page += 1
+        response = subprocess.run(
+            ["gh", "api", f"{endpoint}&page={page}"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=True,
+        )
+        continuation = json.loads(response.stdout)
+        if not isinstance(continuation, dict) or any(
+            continuation.get(key) != comparison.get(key)
+            for key in ("base_commit", "merge_base_commit", "total_commits")
+        ):
+            return None
+        more = continuation.get("commits")
+        if not isinstance(more, list) or len(more) != min(100, total - len(commits)):
+            return None
+        commits.extend(more)
+    return comparison
+
+
 def _fetch_historical_compare(
     repo: str, base_sha: str, head_sha: str, *, expected_file_count: int
 ) -> tuple[tuple[str, ...], pr_contract_check.HistoricalNumstatEvidence] | None:
@@ -298,14 +336,7 @@ def _fetch_historical_compare(
     ):
         return None
     try:
-        compare_response = subprocess.run(
-            ["gh", "api", f"repos/{repo}/compare/{base_sha}...{head_sha}?per_page=100"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=True,
-        )
-        comparison = json.loads(compare_response.stdout)
+        comparison = _read_historical_compare_pages(repo, base_sha, head_sha)
         if not isinstance(comparison, dict):
             return None
         if not _historical_compare_reaches_target(comparison, base_sha, head_sha):
@@ -385,14 +416,7 @@ def _fetch_historical_merge_binding(
         # binds the same base -> merge target. Squash/rebase merges may have a
         # different direct parent, so the compare's merge-base is the relation
         # checked here instead of assuming base is a direct merge parent.
-        merge_compare_response = subprocess.run(
-            ["gh", "api", f"repos/{repo}/compare/{base_sha}...{merge_commit_sha}?per_page=100"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=True,
-        )
-        merge_comparison = json.loads(merge_compare_response.stdout)
+        merge_comparison = _read_historical_compare_pages(repo, base_sha, merge_commit_sha)
         if not _historical_compare_reaches_target(
             merge_comparison,
             base_sha,
@@ -1478,6 +1502,47 @@ def test_fetch_historical_pr_evidence_renders_authoritative_numstat(
     assert "compare/" in mock_run.call_args_list[1].args[0][2]
     assert f"commits/{'c' * 40}" in mock_run.call_args_list[2].args[0][2]
     assert f"compare/{'a' * 40}...{'c' * 40}" in mock_run.call_args_list[3].args[0][2]
+
+
+@pytest.mark.parametrize("corruption", [None, "base", "merge_base", "total", "duplicate", "empty"])
+@patch("subprocess.run")
+def test_historical_compare_reads_all_merge_train_commit_pages(mock_run, corruption):
+    """Train #10046 exceeds 100 commits; complete identities remain mandatory."""
+    base_sha, head_sha = "a" * 40, "b" * 40
+    first = {
+        "base_commit": {"sha": base_sha},
+        "merge_base_commit": {"sha": base_sha},
+        "total_commits": 101,
+        "commits": [{"sha": f"{index:040x}"} for index in range(100)],
+        "files": [{"filename": "a.py", "additions": 4, "deletions": 1}],
+    }
+    last = {**first, "commits": [{"sha": head_sha}], "files": []}
+    if corruption == "base":
+        last["base_commit"] = {"sha": "c" * 40}
+    elif corruption == "merge_base":
+        last["merge_base_commit"] = {"sha": "c" * 40}
+    elif corruption == "total":
+        last["total_commits"] = 102
+    elif corruption == "duplicate":
+        last["commits"] = [first["commits"][0]]
+    elif corruption == "empty":
+        last["commits"] = []
+    mock_run.side_effect = [
+        MagicMock(stdout=json.dumps(first)),
+        MagicMock(stdout=json.dumps(last)),
+    ]
+
+    evidence = _fetch_historical_compare(
+        "ll7/robot_sf_ll7", base_sha, head_sha, expected_file_count=1
+    )
+
+    if corruption is not None:
+        assert evidence is None
+    else:
+        assert evidence is not None
+        assert evidence[0] == ("a.py",)
+        assert evidence[1].numstat == "4\t1\ta.py\n"
+        assert "&page=2" in mock_run.call_args_list[1].args[0][2]
 
 
 @patch("subprocess.run")

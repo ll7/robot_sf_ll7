@@ -449,7 +449,10 @@ def _trace_complete(row: dict[str, Any]) -> bool:
         True for a finite, complete simulation trace, including empty actor lists.
     """
     trace = _trace_of(row)
-    if trace is None or trace.get("schema_version") != "simulation-step-trace.v1":
+    if trace is None or trace.get("schema_version") not in {
+        "simulation-step-trace.v1",
+        "simulation-step-trace.v2",
+    }:
         return False
     steps = trace.get("steps")
     dt = _num(trace.get("dt"))

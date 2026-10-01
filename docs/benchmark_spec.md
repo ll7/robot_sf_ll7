@@ -292,6 +292,17 @@ Below is the credibility scorecard emitted for the camera-ready campaign `paper_
 Full details live in
 [`docs/dev/issues/social-navigation-benchmark/metrics_spec.md`](./dev/issues/social-navigation-benchmark/metrics_spec.md).
 
+Metric meaning is versioned separately from the episode envelope:
+`robot-sf-metrics.v2` fixes route-goal references, window deadlock, physical jerk,
+and completed-step time/path geometry. Route stalls use projected remaining arclength;
+path efficiency is success-only, NaN/JSON null on failure, and unclipped with an explicit
+reference-violation flag. Zone-entry shortest/ideal references terminate at the goal polygon;
+waypoint-radius completion retains the point reference. Unmarked 0.0.7 rows are v1; changed metrics
+have no direct cross-version release contrast, and SNQI requires matching anchors. Unmarked
+v2-only fields fail closed. Simulation-step/native paired trace schemas are v2; readers accept
+each historical version separately and refuse mixed pairs/cohorts.
+See [the metric migration](context/issue_10007_fxm_metrics.md).
+
 **Core metrics**
 * `success`: goal reached before horizon without collision.
 * `time_to_goal_norm`: backward-compatible horizon normalization (clamped to `1.0` on failure).
@@ -313,7 +324,8 @@ Full details live in
   outputs it must agree with `outcome.collision_event`: positive when the canonical event is true
   and zero when the canonical event is false.
 * `near_misses`: count based on distance thresholds.
-* `min_distance`,  `path_efficiency`: closest approach and shortest/actual path ratio.
+* `min_distance`: closest approach. `path_efficiency`: shortest completion reference / actual
+  travel, among successful runs only; undefined failures are excluded from its mean.
 * `aggregated_time`: implementation-only cooperative completion-time diagnostic. When
   `cooperative_agents` is provided, it returns the maximum first goal-reaching step times
   `EpisodeData.dt` from the explicit `EpisodeData.cooperative_goal_steps` mapping. The legacy
@@ -448,7 +460,9 @@ Unit or source-channel metadata that the registry does not own remains explicitl
 When bootstrap sampling is enabled, aggregate output also includes an additive
 `pairwise_contrasts` block when at least two planner groups share paired episode identities. The
 contrast pairing key is `(scenario_id, seed)` with `seed_index` as a fallback, the reported delta is
-`right_minus_left`, and each
+`right_minus_left`. Duplicate keys within either comparison group are rejected;
+repeated episodes must first be reduced under an explicitly declared repeat policy.
+Each
 metric contrast includes the paired mean delta, percentile bootstrap interval, two-sided bootstrap
 sign p-value, Holm-adjusted p-value, and paired Cohen's dz effect size. Holm correction is applied
 within the current aggregate family (`family="all"`) separately for each metric; run aggregation on
@@ -519,6 +533,30 @@ difference (floored at zero for overlap). Velocity uses backward differences, wi
 first sample. At least two samples are required. It is a counterfactual, never applied to dynamics
 or included automatically in the Social Navigation Quality Index. Its reductions use the same
 reference and units. Validation campaign evidence remains separate from release evaluation.
+
+### Campaign reporting cohort counts
+
+New campaign tables use `episodes` for the evidence-eligible N that contributes to
+metric means. `episodes_total` counts all object episode rows run, and
+`episodes_excluded = episodes_total - episodes`. These columns appear in the main,
+core/experimental, parity and scenario/family tables, campaign summary JSON and
+publication payload. The count schema is
+[`campaign-table-row.v2.json`](../robot_sf/benchmark/schemas/campaign-table-row.v2.json)
+and is exported as `reports/campaign_table.schema.json` alongside the tables.
+Historical reports with absent eligibility markers retain their previous N and
+means; readers of old tables default total to `episodes` and excluded to zero.
+
+Legacy SNQI diagnostics filter at the campaign episode collector before baseline
+construction, contract evaluation, calibration, ordering and sensitivity. Their
+`evidence_cohort` block records total, eligible and excluded counts plus exclusion
+reason counts. Invalid or unmeasured spawn takes precedence over foresight
+ineligibility when both apply, so reasons sum to the excluded N.
+
+Scenario/family breakdowns and seed variability retain all-excluded arms with N=0,
+no metric samples, and explicit total/excluded counts. Seed lists/counts describe
+eligible seeds; per-seed rows also retain excluded-only seeds with zero eligible N.
+
+Release acceptance checks planned counts against `episodes_total` (legacy fallback: `episodes`); `invalid_or_unmeasured_spawn` exclusions are named campaign-defect blockers with K, while `foresight_ineligible` exclusions are reported counts and do not themselves block acceptance.
 
 ## Sealed 0.0.8 evaluation schedule (D-049)
 

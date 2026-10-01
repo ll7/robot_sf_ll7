@@ -90,6 +90,7 @@ planners:
   - key: orca
     algo: orca
     planner_group: core
+    algo_config: configs/algos/orca_release_v0_0_8.yaml
     benchmark_profile: baseline-safe
     socnav_missing_prereq_policy: fail-fast
 

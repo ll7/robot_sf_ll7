@@ -723,3 +723,38 @@ def test_preflight_cli_refuses_sealed_candidate_before_workers(
     report = json.loads(json_output.read_text())
     assert "sealed evaluation seeds require" in report["input_error"]
     assert reached == []
+
+
+def test_cmpfix_candidate_refuses_nonhybrid_scenario_algo_override(candidate_repo) -> None:
+    root, path, payload = candidate_repo
+    config_path = CONFIG.relative_to(SOURCE_ROOT).as_posix()
+    campaign_path = root / config_path
+    campaign = yaml.safe_load(campaign_path.read_text())
+    planner = next(row for row in campaign["planners"] if row["key"] == "social_force")
+    planner_path = planner["algo_config"]
+    manifest_path = root / planner_path
+    manifest = {
+        "scenario_algo_overrides": {
+            "francis2023_leave_group": {
+                "algo": "orca",
+                "base_config_path": "configs/algos/issue707_orca_tuned.yaml",
+            }
+        }
+    }
+    manifest_path.write_text(yaml.safe_dump(manifest))
+    payload["sha256_files"][planner_path] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    _git(root, "add", planner_path)
+    _git(
+        root,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "counterexample",
+    )
+    payload["source_commit"] = _git(root, "rev-parse", "HEAD")
+    path.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="unapproved scenario algorithm override"):
+        load_prepublication_candidate(path, repository_root=root)

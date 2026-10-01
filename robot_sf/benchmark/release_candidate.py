@@ -102,6 +102,7 @@ _APPROVED_008_ACTIVE_WAYPOINT_CONFIGS = {
     "predictive_mppi": "configs/algos/predictive_mppi_release_v0_0_8.yaml",
     "guarded_ppo": "configs/algos/guarded_ppo_release_v0_0_8.yaml",
 }
+# Single reviewed override table for every slot. Non-hybrid additions require approval.
 _APPROVED_008_HYBRID_ALGO_OVERRIDES = {
     "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_v4": {
         "francis2023_leave_group": ("orca", "configs/algos/issue707_orca_tuned.yaml")
@@ -201,7 +202,7 @@ def _planner_config_paths(root: Path, config_path: Path) -> set[Path]:
     return paths
 
 
-def _validate_v4_hybrid_runtime(
+def _validate_planner_scenario_runtime(
     planner_key: str,
     planner_algo: str,
     manifest: dict[str, Any],
@@ -209,14 +210,27 @@ def _validate_v4_hybrid_runtime(
     root: Path,
     scenarios: list[dict[str, Any]],
 ) -> None:
-    """Resolve every release scenario before admitting a v4-named slot."""
+    """Reject unreviewed overrides and resolve every scenario for every release slot."""
+
+    overrides = manifest.get("scenario_algo_overrides", {})
+    if not isinstance(overrides, dict) or any(
+        not isinstance(override, dict) for override in overrides.values()
+    ):
+        raise ValueError("candidate scenario algorithm overrides must be mappings")
+    observed = {
+        scenario_id: (override.get("algo"), override.get("base_config_path"))
+        for scenario_id, override in overrides.items()
+    }
+    approved = _APPROVED_008_HYBRID_ALGO_OVERRIDES.get(planner_key, {})
+    if observed != approved:
+        raise ValueError(f"slot {planner_key} has an unapproved scenario algorithm override")
 
     def load_config(value: object) -> dict[str, Any]:
         path = _full_release_nested_config_path(
             value,
             config_anchor=config_path.parent,
             source_repository_root=root,
-            label="v4 hybrid runtime base_config_path",
+            label="candidate runtime base_config_path",
         )
         return _load_mapping(path)
 
@@ -227,12 +241,23 @@ def _validate_v4_hybrid_runtime(
             scenario=scenario,
             load_config=load_config,
         )
-        if algo == "orca":
-            continue  # The exact reviewed ORCA hand-off is checked below.
-        if algo != "hybrid_rule_local_planner" or (
-            effective.get("planner_variant") != "hybrid_rule_v4_clearance_braking"
+        scenario_id = str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id"))
+        if (
+            planner_key in _APPROVED_008_HYBRID_CONFIGS
+            and scenario_id not in approved
+            and (
+                algo != "hybrid_rule_local_planner"
+                or effective.get("planner_variant") != "hybrid_rule_v4_clearance_braking"
+            )
         ):
             raise ValueError(f"v4 hybrid slot {planner_key} resolves to a non-v4 planner variant")
+        expected_algo = approved.get(
+            scenario_id, (_APPROVED_008_PLANNER_ALGOS.get(planner_key, planner_algo), None)
+        )[0]
+        if algo != expected_algo:
+            raise ValueError(
+                f"slot {planner_key} resolves to an unapproved algorithm at {scenario_id}"
+            )
 
 
 def _validate_v4_hybrid_manifest(
@@ -257,21 +282,6 @@ def _validate_v4_hybrid_manifest(
         for override in section.values():
             if not isinstance(override, dict):
                 raise ValueError(f"v4 hybrid {section_name} entries must be mappings")
-    overrides = manifest.get("scenario_algo_overrides") or {}
-    if not isinstance(overrides, dict) or any(
-        not isinstance(override, dict) for override in overrides.values()
-    ):
-        raise ValueError("v4 hybrid scenario algorithm overrides must be mappings")
-    observed_overrides = {
-        scenario_id: (override.get("algo"), override.get("base_config_path"))
-        for scenario_id, override in overrides.items()
-    }
-    expected_overrides = _APPROVED_008_HYBRID_ALGO_OVERRIDES.get(planner_key, {})
-    if observed_overrides != expected_overrides:
-        raise ValueError(
-            f"v4 hybrid slot {planner_key} has an unapproved scenario algorithm override"
-        )
-    _validate_v4_hybrid_runtime(planner_key, planner_algo, manifest, config_path, root, scenarios)
 
 
 def _expected_input_paths(
@@ -307,7 +317,19 @@ def _expected_input_paths(
             _validate_v4_hybrid_manifest(
                 planner["key"], planner["algo"], planner_config_path, root, scenarios
             )
+            _validate_planner_scenario_runtime(
+                planner["key"],
+                planner["algo"],
+                _load_mapping(planner_config_path),
+                planner_config_path,
+                root,
+                scenarios,
+            )
             paths.update(_planner_config_paths(root, planner_config_path))
+        else:
+            _validate_planner_scenario_runtime(
+                planner["key"], planner["algo"], {}, config_path, root, scenarios
+            )
     for scenario in scenarios:
         if scenario.get("map_id"):
             raise ValueError("candidate scenarios must resolve to explicit map_file paths")

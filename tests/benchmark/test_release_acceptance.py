@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -1662,6 +1663,57 @@ def test_campaign_summary_reader_reports_invalid_json_without_private_path(
     assert payload is None
     assert error == "campaign summary contains invalid JSON"
     assert str(tmp_path) not in error
+
+
+@pytest.mark.parametrize("case", ["eligible", "foresight", "spawn", "missing"])
+def test_planned_counts_and_exclusion_admission(tmp_path, monkeypatch, case):
+    """Full admission reports expected foresight exclusions and separately rejects spawn defects."""
+    monkeypatch.setattr(sys.modules[__name__], "_SEEDS", tuple(range(1001, 1031)))
+    campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
+    summary_path = campaign_root / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text())
+    # Exercise the guarded arm with real persisted rows and byte-bound provenance.
+    path = campaign_root / "runs/planner_11__differential_drive/episodes.jsonl"
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    if case == "foresight":
+        rows[0]["algorithm_metadata"]["foresight_prediction"] = {"evidence_eligible": False}
+    elif case == "spawn":
+        rows[0]["spawn_validity"] = {"invalid_run": True, "invalid_reason": "spawn_overlap"}
+    elif case == "missing":
+        rows.pop()
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    sidecar_path = path.with_name(path.name + ".provenance.json")
+    sidecar = json.loads(sidecar_path.read_text())
+    sidecar["raw_artifacts"][0]["sha256"] = sha256_file(path)
+    sidecar_path.write_text(json.dumps(sidecar))
+    planner = summary["planner_rows"][11]
+    planner.update(
+        episodes=1440 - int(case != "eligible"),
+        episodes_total=len(rows),
+        episodes_excluded=int(case in {"spawn", "foresight"}),
+    )
+    summary_path.write_text(json.dumps(summary))
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+    if case in {"eligible", "foresight"}:
+        assert result["status"] == "valid", result["blockers"]
+        assert result["exclusion_reasons"] == (
+            {"foresight_ineligible": 1} if case == "foresight" else {}
+        )
+        assert result["episodes_excluded"] == int(case == "foresight")
+    elif case == "spawn":
+        assert result["status"] == "invalid"
+        assert (
+            "runs[11] spawn_exclusion_defect: K=1 invalid_or_unmeasured_spawn" in result["blockers"]
+        )
+        assert not any("total episode count" in blocker for blocker in result["blockers"])
+    else:
+        assert result["status"] == "invalid"
+        assert "planner_rows[11] total episode count is not 1440" in result["blockers"]
 
 
 def test_full_release_008_rejects_complete_retired_seed_fixture(tmp_path, monkeypatch):

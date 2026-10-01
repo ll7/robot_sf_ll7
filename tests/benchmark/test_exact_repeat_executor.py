@@ -1055,7 +1055,8 @@ def test_native_ppo_target_runs_deterministically_with_real_runner(
     # behavior with deliberately small budgets.
     monkeypatch.setattr("robot_sf.benchmark.runner.POLICY_STEP_TIMEOUT_SECS", 2.0)
 
-    ppo_target = next(t for t in resolved_bundle["targets"] if t["planner"] == "ppo")
+    ppo_target = copy.deepcopy(next(t for t in resolved_bundle["targets"] if t["planner"] == "ppo"))
+    ppo_target["seed"] = 1001  # Execution input; retained release fixtures remain static.
     ppo_bundle = {k: v for k, v in resolved_bundle.items() if k != "bundle_sha256"}
     ppo_bundle["targets"] = [ppo_target]
     ppo_bundle["bundle_sha256"] = canonical_sha256(ppo_bundle)
@@ -1163,7 +1164,8 @@ def test_native_ppo_runs_offline_after_model_preflight(tmp_path, resolved_bundle
     from robot_sf.models import registry as model_registry
     from robot_sf.models.preflight import ModelPreflightError
 
-    ppo_target = next(t for t in resolved_bundle["targets"] if t["planner"] == "ppo")
+    ppo_target = copy.deepcopy(next(t for t in resolved_bundle["targets"] if t["planner"] == "ppo"))
+    ppo_target["seed"] = 1001  # Execution input; retained release fixtures remain static.
     ppo_bundle = {k: v for k, v in resolved_bundle.items() if k != "bundle_sha256"}
     ppo_bundle["targets"] = [ppo_target]
     ppo_bundle["bundle_sha256"] = canonical_sha256(ppo_bundle)

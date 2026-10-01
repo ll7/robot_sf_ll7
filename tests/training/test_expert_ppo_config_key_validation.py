@@ -288,7 +288,9 @@ def test_all_tracked_canonical_expert_configs_load() -> None:
     # runnable-leaf inventory is one smaller without dropping a config file.
     # Issue #7849 keeps the original four candidates and adds four manifest-
     # bound successor leaves for the exact shared evaluation-seed contract.
-    assert len(config_paths) == 143
+    # Release-contract recipes add four leaves and promote the issue-791 large-
+    # capacity recipe to an intermediate base: 143 + 4 - 1 = 146 runnable leaves.
+    assert len(config_paths) == 146
 
     failures: list[str] = []
     for config_path in config_paths:

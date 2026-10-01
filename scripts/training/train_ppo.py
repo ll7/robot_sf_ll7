@@ -583,6 +583,7 @@ def _apply_simple_overrides(env_config, overrides: Mapping[str, object]) -> None
         "peds_have_static_obstacle_forces",
         "peds_have_robot_repulsion",
         "map_id",
+        "ppo_action_semantics",
         "predictive_foresight_enabled",
         "predictive_foresight_model_id",
         "predictive_foresight_checkpoint_path",
@@ -992,11 +993,12 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
     training_seeds = common.ensure_seed_tuple(data.get("seeds", []))
 
     convergence_raw = data.get("convergence", {})
-    evaluation_raw = data.get("evaluation", {})
-    step_schedule = _parse_step_schedule(evaluation_raw.get("step_schedule"))
+    # Consume a copy so shared-schema dataclass fields cannot silently become no-ops.
+    evaluation_raw = dict(data.get("evaluation", {}))
+    step_schedule = _parse_step_schedule(evaluation_raw.pop("step_schedule", None))
     evaluation_seed_manifest = _resolve_optional_path(
         path,
-        evaluation_raw.get("evaluation_seed_manifest"),
+        evaluation_raw.pop("evaluation_seed_manifest", None),
         field_name="evaluation.evaluation_seed_manifest",
     )
     evaluation_seeds = _load_evaluation_seed_manifest(
@@ -1018,24 +1020,30 @@ def load_expert_training_config(config_path: str | Path) -> ExpertTrainingConfig
         collision_rate=float(convergence_raw["collision_rate"]),
         plateau_window=int(convergence_raw["plateau_window"]),
     )
-    frequency_episodes = int(evaluation_raw.get("frequency_episodes", 0))
+    frequency_episodes = int(evaluation_raw.pop("frequency_episodes", 0))
     evaluation = EvaluationSchedule(
         frequency_episodes=frequency_episodes,
-        evaluation_episodes=int(evaluation_raw["evaluation_episodes"]),
-        hold_out_scenarios=tuple(evaluation_raw.get("hold_out_scenarios", ())),
+        evaluation_episodes=int(evaluation_raw.pop("evaluation_episodes")),
+        hold_out_scenarios=tuple(evaluation_raw.pop("hold_out_scenarios", ())),
         step_schedule=step_schedule,
         randomize_seeds=bool(
-            evaluation_raw.get("randomize_seeds", data.get("randomize_seeds", False))
+            evaluation_raw.pop("randomize_seeds", data.get("randomize_seeds", False))
         ),
         scenario_config=_resolve_optional_path(
             path,
-            evaluation_raw.get("scenario_config"),
+            evaluation_raw.pop("scenario_config", None),
             field_name="evaluation.scenario_config",
         ),
         evaluation_seed_manifest=evaluation_seed_manifest,
         evaluation_seeds=evaluation_seeds,
     )
-    if "frequency_episodes" in evaluation_raw:
+    # Preserve the historical no-op behavior of legacy switches in tracked recipes.
+    # Release-contract launchers enforce their stricter disabled-only policy.
+    for legacy_key in ("full_policy_analysis_on_new_best", "full_policy_analysis_videos"):
+        evaluation_raw.pop(legacy_key, None)
+    if evaluation_raw:
+        raise ValueError(f"Unconsumed evaluation keys: {', '.join(sorted(evaluation_raw))}")
+    if "frequency_episodes" in data.get("evaluation", {}):
         _warn_frequency_episodes_deprecated(evaluation.frequency_episodes)
     if not evaluation.step_schedule:
         raise ValueError(

@@ -8,7 +8,10 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from robot_sf.planner.classic_planner_adapter import PlannerActionAdapter
-from robot_sf.robot.action_adapters import holonomic_to_diff_drive_action
+from robot_sf.robot.action_adapters import (
+    holonomic_to_diff_drive_action,
+    unicycle_velocity_target_to_acceleration,
+)
 
 if TYPE_CHECKING:
     from robot_sf.gym_env.unified_config import RobotSimulationConfig
@@ -209,8 +212,11 @@ def policy_command_to_env_action(  # noqa: C901
 
     current_linear, current_angular = robot.current_speed
     step_dt = max(float(config.sim_config.time_per_step_in_secs), 1e-6)
-    linear_accel = (float(command[0]) - float(current_linear)) / step_dt
-    angular_accel = (float(command[1]) - float(current_angular)) / step_dt
+    linear_accel, angular_accel = unicycle_velocity_target_to_acceleration(
+        np.asarray(command),
+        np.asarray([current_linear, current_angular]),
+        step_dt,
+    )
     if conversion_trace is not None:
         conversion_trace.update(
             {

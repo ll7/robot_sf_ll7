@@ -2199,6 +2199,32 @@ class _StepSimResult:
     action_conversion_payload: dict[str, Any] | None
     actuation_step: Any
     planner_step_decision: dict[str, Any] | None
+    # Goals the planner acted on this step (read before the env step); trace-only (#9979).
+    goal_current: list[float] | None = None
+    goal_next: list[float] | None = None
+
+
+def _read_step_goals(env: Any) -> tuple[list[float] | None, list[float] | None]:
+    """Return the robot's (current, next) goal positions, or ``None`` when unavailable.
+
+    Returns:
+        Pair of ``[x, y]`` lists; ``next`` is ``None`` when no next waypoint exists.
+    """
+    simulator = getattr(env, "simulator", None)
+    if simulator is None:
+        return None, None
+    try:
+        current = [float(v) for v in np.asarray(simulator.goal_pos[0], dtype=float).reshape(2)]
+    except (AttributeError, IndexError, TypeError, ValueError):
+        return None, None
+    try:
+        nxt = simulator.next_goal_pos[0]
+        next_goal = (
+            None if nxt is None else [float(v) for v in np.asarray(nxt, dtype=float).reshape(2)]
+        )
+    except (AttributeError, IndexError, TypeError, ValueError):
+        next_goal = None
+    return current, next_goal
 
 
 def _prepare_episode_env(  # noqa: C901
@@ -2905,6 +2931,26 @@ def _surface_clearances_m(
     return clearance
 
 
+def _simulation_trace_decision_fields(decision: Any) -> dict[str, Any]:
+    """Copy the available planner decision counters into a simulation trace.
+
+    Returns:
+        Available counters, or an empty mapping when the decision is unavailable.
+    """
+    if not isinstance(decision, dict):
+        return {}
+    return {
+        key: decision[key]
+        for key in (
+            "no_admissible_command",
+            "no_admissible_command_count",
+            "recovery_command",
+            "recovery_command_count",
+        )
+        if key in decision
+    }
+
+
 def _step_build_simulation_trace(
     state: _StepLoopState,
     slc: _StepLoopConfig,
@@ -2927,16 +2973,9 @@ def _step_build_simulation_trace(
         "selected_action": sim.selected_action_payload,
         "applied_environment_action": sim.applied_environment_action_payload,
     }
-    decision = getattr(sim, "planner_step_decision", None)
-    if isinstance(decision, dict):
-        for key in (
-            "no_admissible_command",
-            "no_admissible_command_count",
-            "recovery_command",
-            "recovery_command_count",
-        ):
-            if key in decision:
-                planner_payload[key] = decision[key]
+    planner_payload.update(
+        _simulation_trace_decision_fields(getattr(sim, "planner_step_decision", None))
+    )
     if sim.action_conversion_payload:
         planner_payload["action_conversion"] = sim.action_conversion_payload
     if sim.actuation_step is not None:
@@ -2995,6 +3034,16 @@ def _step_build_simulation_trace(
         },
     }
     sim_info = getattr(sim, "info", None)
+    goal_current = getattr(sim, "goal_current", None)
+    if goal_current is not None:
+        trace_entry["goal"] = {"current": goal_current, "next": getattr(sim, "goal_next", None)}
+    sim_meta = sim_info.get("meta") if isinstance(sim_info, dict) else None
+    if isinstance(sim_meta, dict):
+        trace_entry["collision"] = {
+            "pedestrian": bool(sim_meta.get("is_pedestrian_collision", False)),
+            "obstacle": bool(sim_meta.get("is_obstacle_collision", False)),
+            "robot": bool(sim_meta.get("is_robot_collision", False)),
+        }
     oracle_trace = sim_info.get("oracle_transition_trace") if isinstance(sim_info, dict) else None
     if oracle_trace is not None:
         # Preserve the evaluator-only trace as a sibling of planner data. It is
@@ -3573,6 +3622,9 @@ def _execute_step_loop(
     for step_idx in range(horizon_val):
         if slc.active_harness is not None:
             slc.active_harness.start_cycle()
+        step_goal_current, step_goal_next = (
+            _read_step_goals(env) if slc.record_simulation_step_trace else (None, None)
+        )
         policy_command, _ = _step_policy_inference(state, slc, env=env)
         step_is_native, planner_step_decision = _step_hybrid_and_planner_stats(
             state,
@@ -3636,6 +3688,8 @@ def _execute_step_loop(
             action_conversion_payload=action_conversion_payload,
             actuation_step=actuation_step,
             planner_step_decision=planner_step_decision,
+            goal_current=step_goal_current,
+            goal_next=step_goal_next,
         )
         _step_build_simulation_trace(state, slc, step_idx=step_idx, sim=sim)
         _step_build_actuation_trace(state, step_idx=step_idx, sim=sim)

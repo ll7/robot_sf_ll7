@@ -137,18 +137,20 @@ def test_doi_free_candidate_loads_but_publication_loader_rejects(candidate_repo)
 
 
 @pytest.mark.parametrize(
-    ("mutation", "message"),
+    ("mutation", "message", "protocol"),
     [
-        ("fixed", None),
-        ("fixed_current_conflict", "authored limit.*below fixed horizon"),
-        ("fixed_wrong_budget", "campaign horizon differs from candidate H600 contract"),
-        ("mixed", "scenario_horizons cannot be combined with fixed horizon"),
-        ("missing_pin", "candidate requires scenario_horizons_sha256"),
-        ("extended_schedule", "candidate scenario_horizons must preserve authored limits"),
-        ("matrix", "candidate matrix differs from declared campaign budget contract"),
+        ("fixed", None, None),
+        ("fixed_current_conflict", "authored limit.*below fixed horizon", "0.0.8"),
+        ("fixed_wrong_budget", "campaign horizon differs from candidate H600 contract", "0.0.8"),
+        ("mixed", "scenario_horizons cannot be combined with fixed horizon", "0.0.8"),
+        ("missing_pin", "candidate requires scenario_horizons_sha256", "0.0.8"),
+        ("extended_schedule", "candidate scenario_horizons must preserve authored limits", "0.0.8"),
+        ("matrix", "candidate matrix differs from declared campaign budget contract", "0.0.8"),
     ],
 )
-def test_candidate_budget_contract_rechecks_mutated_real_inputs(candidate_repo, mutation, message):
+def test_candidate_budget_contract_rechecks_mutated_real_inputs(
+    candidate_repo, mutation, message, protocol
+):
     """Admitted real scheduled bytes are the positive control for each budget mutation."""
     from robot_sf.evidence.writers import write_json, write_text
 
@@ -158,13 +160,12 @@ def test_candidate_budget_contract_rechecks_mutated_real_inputs(candidate_repo, 
     assert control.expected_episode_cells == 20160
     config_path = root / payload["canonical_campaign_config"]
     config = yaml.safe_load(config_path.read_text())
+    # The fixed positive control is unidentified: main's runner-only cap remains valid.
+    config["protocol_version"] = protocol
     if mutation.startswith("fixed"):
         config.pop("scenario_horizons")
         config.pop("scenario_horizons_sha256")
         config["horizon"] = 599 if mutation == "fixed_wrong_budget" else 600
-        if mutation == "fixed":
-            # Unidentified historical inputs retain main's runner-only H600 cap.
-            config.pop("protocol_version")
         payload["matrix"] = {"expected_episode_cells": 20160, "horizon_steps": 600}
         # Fixed admission has a smaller closure, including no schedule sidecar.
         for item, _digest in control.pinned_files:

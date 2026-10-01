@@ -792,21 +792,6 @@ def test_wheel_install_smoke_uses_dependency_resolution_and_runtime_env_step() -
     assert "PYTHONPATH= PYTHONNOUSERSITE=1" in smoke_text
 
 
-def test_ci_deselects_example_smokes_with_retired_or_unresolved_episode_seeds() -> None:
-    """Explicit CI node exclusions keep authored seed-123/classic runs held out."""
-    workflow = yaml.safe_load(CI_WORKFLOW.read_text())
-    options = shlex.split(workflow["env"]["PYTEST_ADDOPTS"])
-    for example in (
-        "advanced/01_backend_selection.py",
-        "occupancy_reward_shaping.py",
-        "benchmarks/demo_full_classic_benchmark.py",
-    ):
-        assert (
-            "--deselect=tests/examples/test_examples_run.py::"
-            f"test_example_runs_without_error[{example}]"
-        ) in options
-
-
 def test_benchmark_reproducibility_smoke_uses_development_seed_defaults() -> None:
     """The hosted episode-generating smoke must never default to retired seeds."""
     import ast

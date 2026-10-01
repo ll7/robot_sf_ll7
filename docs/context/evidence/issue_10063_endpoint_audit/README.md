@@ -2,6 +2,13 @@
 # Endpoint audit for issue #10063
 
 Diagnostic development evidence; author review and release admission remain separate.
+This bundle records the original #10063 endpoint repair, before OVTFIX2. Its
+stored cohorts, hashes, lane geometry and seed-exclusion receipts describe those
+historical checkouts. PR #10067's OVTFIX2 follow-up moves h1's goal to (33.5, 8.4),
+retains the original room, and runs the full suite under the author's updated
+2026-10-01 seed rule. Its new overtaking cohorts and validation receipts are
+reported separately in PR #10067 and `/home/luttkule/ovtfix2_report.md`.
+
 `overlaps.json` lists all 48 release scenarios and three doorway widths: 102 full
 robot spawn/goal rectangles, with 58 intersections before and 53 after. Five
 unintended intersections are removed in three release-only successor maps.

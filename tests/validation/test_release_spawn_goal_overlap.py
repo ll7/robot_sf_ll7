@@ -34,21 +34,23 @@ def test_overtaking_parked_pedestrian_clears_robot_goal_and_final_approach():
         )
 
 
-def test_overtaking_preserves_the_passing_lane_before_turning_away():
-    """The endpoint repair must keep the pedestrian's parallel passing segment."""
+def test_overtaking_exit_goal_retains_forward_overtaking_speed():
+    """Moving the goal aside must preserve the walker's longitudinal advantage."""
+    from math import hypot
+
     scenario = next(
         row for row in load_scenarios(MATRIX) if row["name"] == "francis2023_pedestrian_overtaking"
     )
     config = build_robot_config_from_scenario(scenario, scenario_path=MATRIX.resolve())
     definition = next(iter(config.map_pool.map_defs.values()))
     pedestrian = definition.single_pedestrians[0]
-    assert pedestrian.trajectory and len(pedestrian.trajectory) >= 2, (
-        "overtaking pedestrian needs a departure waypoint before parking"
+    target = pedestrian.trajectory[0] if pedestrian.trajectory else pedestrian.goal
+    dx, dy = target[0] - pedestrian.start[0], target[1] - pedestrian.start[1]
+    assert dx > 0, "the overtaking pedestrian must continue toward the robot destination"
+    forward_speed = scenario["single_pedestrians"][0]["speed_m_s"] * dx / hypot(dx, dy)
+    assert forward_speed > config.robot_config.max_linear_speed, (
+        "the exit goal must leave the pedestrian faster along the robot route"
     )
-    departure, parked = pedestrian.trajectory[0], pedestrian.trajectory[-1]
-    assert departure[0] >= 30.0, "the walker must complete the passing lane before departing"
-    assert departure[1] == pedestrian.start[1], "preserve the parallel overtaking lane"
-    assert parked[1] > departure[1], "the walker must turn away from the robot approach"
 
 
 def test_overtaking_lane_cannot_intersect_full_robot_spawn_rectangle():
